@@ -527,17 +527,32 @@ bool shouldSkipRecursiveInline(
     return false;
 }
 
+/// A direct call examined and left, while the graphs are still at hand (see InlineDeclined).
+struct DeclinedCall {
+    const GCGraph *caller;
+    const GCGraph *callee;
+    InlineDecline why;
+    size_t calleeNodes;
+    size_t callerNodes;
+    size_t callSites;
+};
+
 /// The rewritten root, or nullptr when nothing changed. `growthSpent` counts the nodes copied
-/// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudgetNodes).
+/// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudgetNodes). `declinedOut`
+/// receives the direct calls the last round examined and did not inline, with the reason: the
+/// last round of a session that changes nothing examines every call that is left.
 GCGraph *applyRuntimeOptimizeRewrite(
     const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot,
-    const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent) {
+    const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
+    std::vector<InlineDeclined> &declinedOut) {
     camel::runtime::RuntimeGraphDraftSession session(context, runtimeRoot);
     bool changed              = false;
     size_t appliedInlineCount = 0;
+    std::vector<DeclinedCall> declined;
     CAMEL_LOG_INFO_S("OptimizePass", "Runtime rewrite session started.");
 
     while (true) {
+        declined.clear();
         const std::vector<GCGraph *> closure = session.collectReachableRuntimeGraphs();
         CAMEL_LOG_INFO_S(
             "OptimizePass",
@@ -701,19 +716,27 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 if (!body->calleeGraph || body->calleeGraph == nextGraph) {
                     continue;
                 }
+                // Growth: the copy must fit the pass's budget and the owner's size cap. Both are
+                // checked last (below), so that a call they stop is known to be one the engine
+                // would otherwise have inlined.
+                const size_t copied = inlinedNodeCount(body->calleeGraph);
+                const size_t calls =
+                    callCounts.contains(body->calleeGraph) ? callCounts.at(body->calleeGraph) : 0;
+                const auto decline = [&](InlineDecline why) {
+                    declined.push_back(
+                        {nextGraph, body->calleeGraph, why, copied, draft.nodeCount(), calls});
+                };
                 if (shouldSkipRecursiveInline(
                         nextGraph,
                         body->calleeGraph,
                         sccInfo,
                         config.inlineConfig)) {
+                    decline(InlineDecline::Recursive);
                     continue;
                 }
-                // Growth: the copy must fit the pass's budget and the owner's size cap.
-                const size_t copied = inlinedNodeCount(body->calleeGraph);
-                if (growthSpent + copied > growthBudget ||
-                    draft.nodeCount() + copied > config.inlineConfig.maxOwnerNodes) {
-                    continue;
-                }
+                const bool overBudget = growthSpent + copied > growthBudget;
+                const bool overOwner =
+                    draft.nodeCount() + copied > config.inlineConfig.maxOwnerNodes;
 
                 // Beyond small graphs, inlining a callee that reaches no recursion pays when it
                 // cannot duplicate code (a graph with one call site) or duplicates little (see
@@ -723,14 +746,11 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 // the call-graph analysis yet; they qualify in the next session.
                 const bool acyclic = sccInfo.componentOf.contains(body->calleeGraph) &&
                                      !sccInfo.reachesRecursion.contains(body->calleeGraph);
-                const size_t calls =
-                    callCounts.contains(body->calleeGraph) ? callCounts.at(body->calleeGraph) : 0;
                 const bool isSmall =
                     isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig) ||
                     (acyclic && calls == 1) || (acyclic && returnsClosure(body->calleeGraph)) ||
                     (acyclic && calls > 1 &&
-                     (calls - 1) * inlinedNodeCount(body->calleeGraph) <=
-                         config.inlineConfig.duplicationBudgetNodes);
+                     (calls - 1) * copied <= config.inlineConfig.duplicationBudgetNodes);
                 CAMEL_LOG_INFO_S(
                     "OptimizePass",
                     "Inline probe '{}' -> '{}': small={} acyclic={} calls={} closure={}.",
@@ -738,7 +758,7 @@ GCGraph *applyRuntimeOptimizeRewrite(
                     body->calleeGraph->name(),
                     isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig),
                     acyclic,
-                    callCounts.contains(body->calleeGraph) ? callCounts.at(body->calleeGraph) : 0,
+                    calls,
                     returnsClosure(body->calleeGraph));
                 const bool isArm = isDraftBranchArmHead(draft, id);
                 const bool suppressNonRecursiveArmInlining =
@@ -747,11 +767,22 @@ GCGraph *applyRuntimeOptimizeRewrite(
                     sccInfo.externallyCalledGraphs.contains(nextGraph) &&
                     !sccInfo.recursiveGraphs.contains(nextGraph);
                 if (suppressNonRecursiveArmInlining && isArm) {
+                    decline(InlineDecline::Strategy);
                     continue;
                 }
-                if (shouldInlineTarget(isSmall, isArm, config.inlineConfig)) {
-                    candidates.push_back(id);
+                if (!shouldInlineTarget(isSmall, isArm, config.inlineConfig)) {
+                    decline(
+                        isSmall     ? InlineDecline::Strategy
+                        : !acyclic  ? InlineDecline::ReachesRecursion
+                        : calls > 1 ? InlineDecline::Duplication
+                                    : InlineDecline::Strategy);
+                    continue;
                 }
+                if (overOwner || overBudget) {
+                    decline(overOwner ? InlineDecline::OwnerSize : InlineDecline::GrowthBudget);
+                    continue;
+                }
+                candidates.push_back(id);
             }
 
             CAMEL_LOG_INFO_S(
@@ -799,6 +830,19 @@ GCGraph *applyRuntimeOptimizeRewrite(
         if (!roundChanged) {
             break;
         }
+    }
+
+    // By name: the commit below replaces the graphs.
+    declinedOut.clear();
+    declinedOut.reserve(declined.size());
+    for (const DeclinedCall &call : declined) {
+        declinedOut.push_back(
+            {call.caller->name(),
+             call.callee->name(),
+             call.why,
+             call.calleeNodes,
+             call.callerNodes,
+             call.callSites});
     }
 
     if (!changed) {
@@ -933,14 +977,31 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     // nothing changes; the bound only guards against a rewrite that never settles.
     constexpr size_t kMaxSessions = 32;
     bool changed                  = false;
+    std::vector<InlineDeclined> declined;
     for (size_t i = 0; i < kMaxSessions; ++i) {
-        GCGraph *rewritten =
-            applyRuntimeOptimizeRewrite(context, graph, config, growthBudget, growthSpent);
+        GCGraph *rewritten = applyRuntimeOptimizeRewrite(
+            context,
+            graph,
+            config,
+            growthBudget,
+            growthSpent,
+            declined);
         if (!rewritten) {
             break;
         }
         changed = true;
         graph   = rewritten;
+    }
+    if (config.enableInlining && context) {
+        // For a later pass that has to explain a call this one left (see InlineReport).
+        auto report                   = std::make_shared<InlineReport>();
+        report->growthBudget          = growthBudget;
+        report->growthSpent           = growthSpent;
+        report->budgetFromEnvironment = growthBudget != config.growthBudgetNodes;
+        report->maxOwnerNodes         = config.inlineConfig.maxOwnerNodes;
+        report->smallNodes            = config.inlineConfig.smallSubgraphMaxNonDataPortNodes;
+        report->declined              = std::move(declined);
+        context->setPassFact(kInlineReportFactKey, std::move(report));
     }
     if (hadBudget && growthSpent >= growthBudget) {
         CAMEL_LOG_WARN_S(

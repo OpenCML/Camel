@@ -1,0 +1,34 @@
+/**
+ * The export request is written in a `main` that also runs a loop (a recursion whose depth is
+ * read from the environment) and does some more work. The inliner copies a function that
+ * reaches a recursion only while it is small, so the call of `main` stays, and onnx::export
+ * sees no request. std::opt::simplify did run: the refusal, at `main` (line 22), says why the
+ * call was left instead of asking for the pass.
+ */
+module main_reaches_loop
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func double(t: Tensor): Tensor {
+    return t * 2.0
+}
+
+func countdown(remaining: int): int sync {
+    println(remaining)
+    return if remaining <= 0 then 0 else countdown(remaining - 1)
+}
+
+func main(): int sync {
+    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_reaches_loop.onnx')
+    let first = get_env('P7_FIRST')
+    let second = get_env('P7_SECOND')
+    println(first)
+    println(second)
+    println(first + second)
+    println(second + first)
+    println(first + first)
+    println(second + second)
+    return countdown(int(get_env('P7_STEPS')))
+}
