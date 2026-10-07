@@ -3280,6 +3280,91 @@ void checkArity(GCGraph *graph, size_t examples) {
     }
 }
 
+/// Whether a value of type `have` (the exact type of an example) can be the argument of a
+/// parameter declared `want`: a tensor where a tensor is declared, of an element type and a
+/// shape the declaration does not contradict, and the same through tuples and structs. Only
+/// what the two types contradict is refused; a declaration that says less than the example
+/// (a plain `Tensor`) accepts it.
+bool exampleFits(type::Type *want, type::Type *have) {
+    if (!want || !have || want == have) {
+        return true;
+    }
+    if (tensor::asTensorType(want)) {
+        return tensor::asTensorType(have) &&
+               want->castSafetyFrom(have) != type::CastSafety::Forbidden;
+    }
+    if (want->code() == TypeCode::Tuple) {
+        auto *w = static_cast<type::TupleType *>(want);
+        if (have->code() != TypeCode::Tuple) {
+            return false;
+        }
+        auto *h = static_cast<type::TupleType *>(have);
+        if (w->size() != h->size()) {
+            return false;
+        }
+        for (size_t i = 0; i < w->size(); ++i) {
+            if (!exampleFits(w->typeAt(i), h->typeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (want->code() == TypeCode::Struct) {
+        if (have->code() != TypeCode::Struct) {
+            return false;
+        }
+        auto *w = static_cast<type::StructType *>(want);
+        auto *h = static_cast<type::StructType *>(have);
+        for (size_t i = 0; i < w->size(); ++i) {
+            const auto field = h->findField(w->fieldName(i));
+            if (!field || !exampleFits(w->typeAt(i), h->typeAt(*field))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return true;
+}
+
+/// Refuses an example that cannot be the argument of the parameter it is given for. The
+/// function is specialized for the examples' types whatever its parameters declare, so without
+/// this a tuple given where a tensor is declared surfaces later, as a failure of whatever
+/// operator first uses the parameter.
+void checkExamples(GCGraph *graph, std::span<type::Type *const> exact) {
+    const auto *funcType = graph->funcType();
+    if (!funcType) {
+        return;
+    }
+    const std::string fn = graph->name().substr(0, graph->name().find('$'));
+    for (size_t i = 0; i < exact.size() && i < funcType->normTypesCount(); ++i) {
+        type::Type *declared = funcType->normTypeAt(i);
+        if (exampleFits(declared, exact[i])) {
+            continue;
+        }
+        const size_t nameIndex = funcType->withTypesCount() + i;
+        const std::string param =
+            nameIndex < funcType->argNamesCount()
+                ? std::format("parameter '{}'", std::string(funcType->argNameAt(nameIndex)))
+                : std::format("parameter {}", i);
+        std::string hint;
+        if (exact.size() == 1 && exact[0]->code() == TypeCode::Tuple) {
+            auto *tuple = static_cast<type::TupleType *>(exact[0]);
+            if (tuple->size() == 1 && exampleFits(declared, tuple->typeAt(0))) {
+                hint = "; the example of a function of one parameter is its argument itself, "
+                       "not a tuple of arguments: pass the value, not a tuple that holds it";
+            }
+        }
+        throw ExportError(
+            std::format(
+                "the example given for {}{} is a '{}', but the parameter is declared '{}'{}",
+                param,
+                isSourceName(fn) ? std::format(" of '{}'", fn) : std::string(),
+                exact[i]->toString(),
+                declared->toString(),
+                hint));
+    }
+}
+
 struct BoundInputs {
     std::vector<Value> values;
     std::vector<type::Type *> types; // the exact type of each input (dtypes and shapes)
@@ -3425,6 +3510,7 @@ Model exportBound(
     const BoundInputs bound                     = bindInputs(emitter, options, examples);
     const std::vector<Value> &inputs            = bound.values;
     const std::vector<type::Type *> &inputTypes = bound.types;
+    checkExamples(graph, inputTypes);
 
     // The function applied to inputs of the examples' types, with its captures bound, is a
     // program of its own: simplification specializes it for the input shapes, inlines its

@@ -2273,3 +2273,60 @@ expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_output_contains = ["this conversion of a constant always fails: conversion to 'Tensor<float32, [3, 2]>' failed: the tensor has shape [2, 3]", "as_constant_fails.cml:16:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "example_refusal.tuple.pass"
+desc = "The example of a one-parameter function is its argument itself; a tuple that holds the tensor is an argument of tuple type that the parameter (declared a tensor) cannot take: refused at the export_model call with the parameter, both types and what to write. It used to bind the tuple to the parameter and fail at the first operator using it, with a message about a tuple that depends on the model input being used where a tensor is expected. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/tuple_example.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 5
+expect_output_contains = ["the example given for parameter 'x' is a '(Tensor<float32, [2, 3]>)', but the parameter is declared 'Tensor<float32, [2, 3]>'", "pass the value, not a tuple that holds it"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "is used where a tensor is expected"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "example_refusal.tuple.operator"
+desc = "The example of a one-parameter function is its argument itself; a tuple that holds the tensor is an argument of tuple type that the parameter (declared a tensor) cannot take: refused at the export_model call with the parameter, both types and what to write. It used to bind the tuple to the parameter and fail at the first operator using it, with a message about a tuple that depends on the model input being used where a tensor is expected. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/tuple_example.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["the example given for parameter 'x' is a '(Tensor<float32, [2, 3]>)', but the parameter is declared 'Tensor<float32, [2, 3]>'"]
+expect_output_not_contains = ["is used where a tensor is expected"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "example_refusal.shape.pass"
+desc = "An example whose shape contradicts the declared type of the parameter it is given for ([2, 3] for a parameter declared [4, 3]) is refused at the export_model call. The function is specialized for the example's type whatever the parameter declares, so the model used to be written for [2, 3] without a word. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/example_mismatch.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 5
+expect_output_contains = ["the example given for parameter 'x' is a 'Tensor<float32, [2, 3]>', but the parameter is declared 'Tensor<float32, [4, 3]>'"]
+expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "example_refusal.shape.operator"
+desc = "An example whose shape contradicts the declared type of the parameter it is given for ([2, 3] for a parameter declared [4, 3]) is refused at the export_model call. The function is specialized for the example's type whatever the parameter declares, so the model used to be written for [2, 3] without a word. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+kind = "negative"
+case = "../../../cases/modules/onnx/refusals/example_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["the example given for parameter 'x' is a 'Tensor<float32, [2, 3]>', but the parameter is declared 'Tensor<float32, [4, 3]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
