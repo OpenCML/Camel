@@ -3295,13 +3295,13 @@ timeout_ms = 8000
 
 [[tests]]
 name = "var_pipelines"
-desc = "Generated programs that write variables (fixed seed): recursions writing a var on the way down and up at depths 0 to 7, and straight-line functions with snapshots of the variable interleaved with writes, a snapshot feeding an argument the callee ignores while the callee writes, and a branch whose arms write. Each of 8 programs runs on 8 pipelines and is compared with a reference computed by simulation (not only with the default run). Two silent defects of std::opt::simplify (a dropped write; a read moved behind later writes) are in this class."
+desc = "Generated programs that write variables (fixed seed): recursions writing a var on the way down and up at depths 0 to 7, and straight-line functions with snapshots of the variable interleaved with writes, a snapshot feeding an argument the callee ignores while the callee writes, and a branch whose arms write; and, in 8 more programs, nested branches on a run-time integer (depth 1 to 3) whose innermost arm calls a self-tail-recursive function with literal or run-time bounds, where the arm ending the recursion, the sibling arms and the calling arm print and / or write the variable. Each of 16 programs runs on 11 pipelines (every scheduler also after std::opt::simplify) and is compared with a reference computed by simulation (not only with the default run). Three silent defects are in this class: two of std::opt::simplify (a dropped write; a read moved behind later writes) and one of the execution order (an arm of a branch ran into its sibling arm after an inner branch was removed)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/linear/byref/var_pipelines.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["64 program-pipeline cells, 0 wrong", "PASS"]
+expect_stdout_contains = ["176 program-pipeline cells, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000

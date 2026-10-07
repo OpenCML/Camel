@@ -16,7 +16,19 @@ in a recursion whose last call returned a constant, and once let a read of a var
 writes (the read fed an argument the inlined callee did not use). The first version of this
 generator had only recursions and passed while the second defect existed.
 
-Usage: python var_pipelines.py [--seed N] [--programs N]
+Nested branches add the third shape (`arms<j>`): one to three nested `if`s whose tests are only
+known when the program runs (an integer read from the environment), where the innermost arm calls
+a self-tail-recursive function with literal bounds (so the test of the unrolled recursion becomes
+known and its branch is removed inside the arm of the run-time branch) or with a run-time bound.
+The arm that ends the recursion, the sibling arms of the run-time branches and the calling arm
+itself print and / or write the variable, varied by the seed, as is the arm taken. The execution
+order once laid out part of one arm, then the sibling arm, then the rest (the JOIN waited on nodes
+inside an arm after an inner branch was removed): under std::opt::simplify an arm ran into its
+sibling (a line printed twice on NodeVM and Taskflow; a wrong number on FastVM and the JIT), exit 0.
+These functions are in programs of their own (a<k>.cml beside p<k>.cml) and draw from their own
+random stream, so the programs of the first two shapes are the same as before they were added.
+
+Usage: python var_pipelines.py [--seed N] [--programs N] [--keep DIR] [--warnings]
 The compiler is REPO_ROOT/out/latest unless CAMEL_EXE / CAMEL_HOME are set.
 """
 
@@ -42,7 +54,14 @@ PIPELINES = [
     ["std::inline", "std::inline", "std::inline", "std::inline", "std::inline"],
     ["std::opt", "std::opt::fold", "std::opt", "std::opt::fold", "std::opt", "std::opt::fold", "std::opt", "std::opt::fold", "std::opt::dce"],
     ["std::opt::simplify", "std::tf"],
+    ["std::opt::simplify", "std::nvm"],
+    ["std::opt::simplify", "std::fvm"],
+    ["std::opt::simplify", "std::jit"],
 ]
+
+# The run-time integer the programs read (`int(get_env(...))`): no pass knows it.
+ENV_NAME, ENV_VALUE = "VAR_PIPELINES_K", 3
+ARMS_FUNCTIONS = 2   # per program of the third shape
 
 
 def make_function(rng: random.Random, j: int):
@@ -106,6 +125,112 @@ def make_straight(rng: random.Random, j: int, rec_sims):
     return "\n".join(lines), simulate
 
 
+def make_arms(rng: random.Random, j: int):
+    """Nested run-time branches around a call of a self-tail-recursive function (see the module text).
+    Returns the source and simulate(k, x, c) -> (result, c, printed lines)."""
+    var_flavor = rng.random() < 0.3       # the recursion writes the variable (a sync function)
+    mul, step = rng.choice([2, 3]), rng.choice([1, 5])
+    base = rng.choice(["tap", "tap", "mul", "acc"])                # pure flavor: what ends the recursion
+    base_write, level_write, base_print = rng.choice([0, 7]), rng.choice([0, 1]), rng.random() < 0.5
+    i0 = rng.choice([0, 0, 1])
+    run_bound = rng.random() < 0.25                                # the bound: literal, or `k - d`
+    span, d = rng.choice([0, 1, 2, 2, 3, 3]), rng.choice([1, 2])
+    bound = f"k - {d}" if run_bound else str(i0 + span)
+    pre_print, post_print = rng.random() < 0.25, rng.random() < 0.4
+    depth = rng.randint(1, 3)
+    levels = []                                                    # outermost first
+    for _ in range(depth):
+        # `k > t` with k = 3 in the first call: the arm towards the recursion is taken 3 times in 4
+        deep_then, towards = rng.random() < 0.6, rng.random() < 0.75
+        levels.append({"t": rng.choice([1, 2] if towards == deep_then else [4, 5]), "deep_then": deep_then,
+                       "side": rng.choice(["val", "print", "write", "both"]), "q": rng.choice([0, 4]),
+                       "w": rng.choice([10, 100])})
+
+    if var_flavor:
+        ends = [f"println('basev{j} {{}}'->format<acc>)"] if base_print else []
+        ends += [f"c += {base_write}"] if base_write else []
+        ends.append(f"acc * {mul}")
+        lines = [f"sync func loop{j}(i: int, n: int, acc: int, var c: int): int sync {{",
+                 "    return if i >= n then sync { " + "; ".join(ends) + " } else sync {"]
+        if level_write:
+            lines.append(f"        c += {level_write}")
+        lines += [f"        let a2 = acc + {step}", f"        wait loop{j}(i + 1, n, a2, c)", "    }", "}", ""]
+        call = f"wait loop{j}({i0}, {bound}, x, c)"
+    else:
+        end = {"tap": f"tap{j}(acc)", "mul": f"acc * {mul}", "acc": "acc"}[base]
+        lines = [f"func tap{j}(a: int): int sync {{", f"    println('tap{j} {{}}'->format<a>)", f"    return a * {mul}", "}", "",
+                 f"func loop{j}(i: int, n: int, acc: int): int {{", f"    return if i >= n then {end} else {{",
+                 f"        let a2 = acc + {step}", f"        loop{j}(i + 1, n, a2)", "    }", "}", ""]
+        call = f"loop{j}({i0}, {bound}, x)"
+
+    inner = ([f"println('in{j}')"] if pre_print else []) + [f"let a = {call}"]
+    inner += [f"println('out{j} {{}}'->format<a>)"] if post_print else []
+    effects = var_flavor or pre_print or post_print
+    text = ("sync " if effects else "") + "{\n" + "\n".join(inner + ["a"]) + "\n}"
+    for depth_index in range(depth - 1, -1, -1):
+        lv = levels[depth_index]
+        acts = ([f"println('side{j}.{depth_index}')"] if lv["side"] in ("print", "both") else []) + \
+               ([f"c += {lv['w']}"] if lv["side"] in ("write", "both") else [])
+        value = f"x + {lv['q']}" if lv["q"] else "x"
+        side = "sync { " + "; ".join(acts + [value]) + " }" if acts else value
+        effects = effects or bool(acts)
+        branch = f"if k > {lv['t']} then " + (f"{text} else {side}" if lv["deep_then"] else f"{side} else {text}")
+        if depth_index:
+            text = ("sync " if effects else "") + "{\n" + f"let q{depth_index} = {branch}\nq{depth_index}\n" + "}"
+        else:
+            text = f"let r = {branch}"
+    lines += [f"sync func arms{j}(k: int, x: int, var c: int): int sync {{", text, "    return r", "}", ""]
+
+    def simulate(k: int, x: int, c: int):
+        out = []
+        for depth_index, lv in enumerate(levels):
+            if (k > lv["t"]) != lv["deep_then"]:                   # the sibling arm is taken
+                if lv["side"] in ("print", "both"):
+                    out.append(f"side{j}.{depth_index}")
+                if lv["side"] in ("write", "both"):
+                    c += lv["w"]
+                return x + lv["q"], c, out
+        if pre_print:
+            out.append(f"in{j}")
+        turns = max(0, (k - d if run_bound else i0 + span) - i0)
+        acc = x + step * turns
+        if var_flavor:
+            c += level_write * turns + base_write
+            if base_print:
+                out.append(f"basev{j} {acc}")
+            a = acc * mul
+        else:
+            if base == "tap":
+                out.append(f"tap{j} {acc}")
+            a = acc * mul if base in ("tap", "mul") else acc
+        if post_print:
+            out.append(f"out{j} {a}")
+        return a, c, out
+
+    return "\n".join(lines), simulate
+
+
+def make_arms_program(rng: random.Random, k: int):
+    """A program of its own for the third shape: each function is called twice, the second time
+    with a larger run-time integer (another arm may be taken) and a run-time or a literal `x`."""
+    functions, body, expected = [], [f"    let k = int(get_env('{ENV_NAME}'))"], []
+    v = 0
+    for j in range(ARMS_FUNCTIONS):
+        text, sim = make_arms(rng, j)
+        functions.append(text)
+        for dk in (0, rng.choice([1, 2, 3])):
+            v += 1
+            start, runtime_x = rng.choice([0, 5]), dk == 0 or rng.random() < 0.5
+            x_text, x = ("k * 10 + 7", ENV_VALUE * 10 + 7) if runtime_x else ("9", 9)
+            body.append(f"    var v{v} = {start}")
+            body.append(f"    let x{v} = wait arms{j}(k + {dk}, {x_text}, v{v})")
+            body.append(f"    println('arms{j} +{dk}: {{}} {{}}'->format<x{v}, v{v}>)")
+            r, c, printed = sim(ENV_VALUE + dk, x, start)
+            expected += printed + [f"arms{j} +{dk}: {r} {c}"]
+    source = f"module var_pipelines_arms_{k}\n\nimport {{ get_env }} from sys\n\n" + "\n".join(functions) + "func main(): int sync {\n" + "\n".join(body) + "\n    return 0\n}\n"
+    return source, expected
+
+
 def make_program(rng: random.Random, k: int):
     functions, sims = [], []
     for j in range(3):
@@ -142,6 +267,7 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20261008)
     ap.add_argument("--programs", type=int, default=8)
     ap.add_argument("--keep")
+    ap.add_argument("--warnings", action="store_true", help="also show compiler warnings of correct cells")
     args = ap.parse_args()
     rng = random.Random(args.seed)
     home = os.environ.get("CAMEL_HOME") or str(REPO_ROOT / "out" / "latest")
@@ -150,12 +276,13 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as t:
         work = Path(args.keep or t)
         work.mkdir(parents=True, exist_ok=True)
-        for k in range(args.programs):
-            source, expected = make_program(rng, k)
-            (work / f"p{k}.cml").write_text(source, encoding="utf-8")
+        programs = [(f"p{k}", *make_program(rng, k)) for k in range(args.programs)]
+        programs += [(f"a{k}", *make_arms_program(random.Random(f"{args.seed} arms {k}"), k)) for k in range(args.programs)]
+        for k, source, expected in programs:
+            (work / f"{k}.cml").write_text(source, encoding="utf-8")
             for passes in PIPELINES:
                 cells += 1
-                proc = subprocess.run([exe, f"p{k}.cml", *passes], cwd=work, env={**os.environ, "CAMEL_HOME": home},
+                proc = subprocess.run([exe, f"{k}.cml", *passes], cwd=work, env={**os.environ, "CAMEL_HOME": home, ENV_NAME: str(ENV_VALUE)},
                                       capture_output=True, text=True, timeout=120)
                 got = [line for line in proc.stdout.splitlines() if line.strip()]
                 if proc.returncode != 0 or got != expected:
@@ -163,6 +290,8 @@ def main() -> int:
                     diff = [f"{g!r} (expected {e!r})" for g, e in zip(got, expected) if g != e][:3]
                     print(f"program {k} [{' '.join(passes) or 'default'}]: exit {proc.returncode}; "
                           f"{len(got)} of {len(expected)} lines; first differences: {diff}; stderr: {proc.stderr[-200:]!r}")
+                elif "Warn" in proc.stderr and args.warnings:
+                    print(f"program {k} [{' '.join(passes) or 'default'}]: {proc.stderr[:300]!r}")
     print(f"var pipelines: seed {args.seed}, {cells} program-pipeline cells, {bad} wrong")
     print("PASS" if bad == 0 and cells > 0 else "FAIL")
     return 0 if bad == 0 and cells > 0 else 1
