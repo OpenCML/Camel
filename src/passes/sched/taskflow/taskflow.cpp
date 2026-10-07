@@ -41,6 +41,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -437,6 +438,58 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
 // Graph plans
 // ---------------------------------------------------------------------------------------------
 
+bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
+    if (graph == nullptr) {
+        return true; // unknown callee
+    }
+    {
+        std::lock_guard lock(heavyMutex_);
+        if (auto it = heavyGraphs_.find(graph); it != heavyGraphs_.end()) {
+            return it->second;
+        }
+    }
+    // Is a graph with a heavy body reachable through direct calls? A plain search: a cycle of
+    // light graphs (a recursion) stays light.
+    std::vector<GCGraph *> work{graph};
+    std::unordered_set<GCGraph *> seen{graph};
+    bool heavy = false;
+    while (!heavy && !work.empty()) {
+        GCGraph *current = work.back();
+        work.pop_back();
+        for (auto it = current->nodes().begin(); it != current->nodes().end() && !heavy; ++it) {
+            const auto *node = *it;
+            if (node == nullptr) {
+                continue;
+            }
+            if (node->kind == GCNodeKind::Call) {
+                heavy = true;
+            } else if (node->kind == GCNodeKind::Oper) {
+                const auto *body = current->nodeBodyAs<GCOperBody>(it.ref());
+                // Built-in operators have an empty protocol (":op/add_l"); ":mark/..." are
+                // the higher-order ones.
+                heavy = body == nullptr || !body->uri().starts_with(":") ||
+                        body->uri().starts_with(":mark/");
+            } else if (node->kind == GCNodeKind::Func) {
+                GCGraph *callee = current->directCalleeGraphOf(it.ref());
+                if (callee == nullptr) {
+                    heavy = true;
+                } else if (seen.insert(callee).second) {
+                    work.push_back(callee);
+                }
+            }
+        }
+    }
+    std::lock_guard lock(heavyMutex_);
+    heavyGraphs_[graph] = heavy;
+    if (!heavy) {
+        // Everything reachable from a light graph is light.
+        for (GCGraph *reached : seen) {
+            heavyGraphs_[reached] = false;
+        }
+    }
+    return heavy;
+}
+
 TaskflowExecSchedPass::GraphPlan *TaskflowExecSchedPass::planFor(GCGraph *graph) {
     ASSERT(graph != nullptr, "Taskflow plan lookup requires a runtime graph.");
     {
@@ -766,6 +819,38 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
         }
     }
 
+    // Granularity (see graphIsHeavy in the header): which items are worth a task. Arm scopes
+    // have larger indices than the scope of their branch, so they are decided first.
+    std::vector<std::vector<uint8_t>> worthTask(plan.scopes.size());
+    std::vector<uint8_t> scopeHasWorthyItem(plan.scopes.size(), 0);
+    for (size_t s = plan.scopes.size(); s-- > 0;) {
+        const PlanScope &scope = *plan.scopes[s];
+        worthTask[s].resize(scope.items.size(), 0);
+        for (size_t i = 0; i < scope.items.size(); ++i) {
+            const PlanItem &item = scope.items[i];
+            bool worth           = false;
+            switch (item.kind) {
+            case ItemKind::Mark:
+                worth = true;
+                break;
+            case ItemKind::Call:
+                worth = requireNode(graph, item.node)->kind != GCNodeKind::Func ||
+                        graphIsHeavy(graph->directCalleeGraphOf(item.node));
+                break;
+            case ItemKind::Branch:
+                for (int32_t armScope : plan.branches[item.branch].armScopes) {
+                    worth = worth ||
+                            (armScope >= 0 && scopeHasWorthyItem[static_cast<size_t>(armScope)]);
+                }
+                break;
+            case ItemKind::Leaf:
+                break;
+            }
+            worthTask[s][i]       = worth ? 1 : 0;
+            scopeHasWorthyItem[s] = scopeHasWorthyItem[s] || worth;
+        }
+    }
+
     for (size_t s = 0; s < plan.scopes.size(); ++s) {
         PlanScope &scope = *plan.scopes[s];
         auto &next       = succs[s];
@@ -788,6 +873,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
 
         // Transitive reduction, so that a chain is recognised as one even when the graph also
         // carries the edges its path implies.
+        bool twoUnorderedWorthyItems = n > 4096 || fanOutAll_;
         if (n <= 4096) {
             const size_t words = (n + 63) / 64;
             std::vector<uint64_t> reach(n * words, 0);
@@ -807,6 +893,26 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                 }
                 next[i] = std::move(kept);
             }
+            // reach[i] now holds everything ordered after item i.
+            std::vector<uint32_t> worthy;
+            for (size_t i = 0; i < n && !twoUnorderedWorthyItems; ++i) {
+                if (worthTask[s][i] == 0) {
+                    continue;
+                }
+                for (uint32_t earlier : worthy) {
+                    const uint64_t *after = reach.data() + static_cast<size_t>(earlier) * words;
+                    if (((after[i / 64] >> (i % 64)) & 1U) == 0) {
+                        twoUnorderedWorthyItems = true;
+                        break;
+                    }
+                }
+                worthy.push_back(static_cast<uint32_t>(i));
+            }
+        }
+        if (!twoUnorderedWorthyItems) {
+            // Nothing here is worth a task of its own next to another: run inline.
+            scope.sequential = true;
+            continue;
         }
 
         std::vector<uint32_t> predCount(n, 0);
@@ -850,6 +956,12 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
 
     forceLinear_ = envSwitch("CAMEL_TF_LINEAR");
+    fanOutAll_   = envSwitch("CAMEL_TF_FANOUT_ALL");
+    taskGraphsRun_.store(0, std::memory_order_relaxed);
+    {
+        std::lock_guard lock(heavyMutex_);
+        heavyGraphs_.clear();
+    }
     aborting_.store(false, std::memory_order_relaxed);
     {
         std::unique_lock lock(plansMutex_);
@@ -872,6 +984,9 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     }
     if (gcStats) {
         TaskflowGcGate::instance().reportStats(std::cerr);
+        std::cerr << std::format(
+            "[taskflow] run: task_graphs={}\n",
+            taskGraphsRun_.load(std::memory_order_relaxed));
     }
     return nullptr;
 }
@@ -996,6 +1111,7 @@ void TaskflowExecSchedPass::runScope(
         }
     }
 
+    taskGraphsRun_.fetch_add(1, std::memory_order_relaxed);
     instance->frame    = frame;
     instance->tailNode = &tailNode;
     region.leave(); // the calling thread waits for (and helps with) the tasks from here on

@@ -302,6 +302,9 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     };
     struct PlanScope {
         std::vector<PlanItem> items; // linear order
+        // Runs inline on the calling thread, in linear order: its items are totally ordered,
+        // or it has no two unordered items worth a task each (see the granularity rule at
+        // graphIsHeavy).
         bool sequential = true;
         std::vector<std::vector<PlanItem>> chains;             // parallel scopes only
         std::vector<std::pair<uint32_t, uint32_t>> chainEdges; // chain -> chain
@@ -344,6 +347,30 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // CAMEL_TF_LINEAR=1: evaluate every graph node by node (the behaviour between commit
     // 1559559a and the restore of graph-level tasks). For comparison and diagnosis.
     bool forceLinear_ = false;
+
+    // ---- Granularity ----------------------------------------------------------------------
+    //
+    // A scope runs as a task graph only when it has at least two items with no path between
+    // them that are each worth a task: a higher-order operator, a call of a heavy graph, or a
+    // branch one of whose arms contains such an item. Every other scope runs inline.
+    //
+    // A graph is heavy when its body, or the body of a graph it calls directly or indirectly,
+    // contains a higher-order operator (`:mark/...`), an operator of a module (a URI with a
+    // protocol, `tensor:matmul`, `algo:sort`: anything but the built-in `:...` operators), or
+    // a call of a function value (the callee is not known when the plan is built). A graph
+    // that only does built-in arithmetic, comparisons and calls of such graphs (the body of
+    // `fib`) is light: a task per call costs more than the call. A recursive graph is
+    // therefore heavy exactly when its body is heavy apart from the recursive calls.
+    //
+    // Decided once per graph when its plan is built; nothing is measured at run time.
+    // CAMEL_TF_FANOUT_ALL=1 switches the rule off (every scope that is not totally ordered
+    // runs as a task graph), for comparison.
+    bool fanOutAll_ = false;
+    std::mutex heavyMutex_;
+    std::unordered_map<camel::runtime::GCGraph *, bool> heavyGraphs_;
+    bool graphIsHeavy(camel::runtime::GCGraph *graph);
+    // Scopes run as task graphs since the pass started (reported with CAMEL_TF_GC_STATS).
+    std::atomic<uint64_t> taskGraphsRun_{0};
 
     GraphPlan *planFor(camel::runtime::GCGraph *graph);
     std::unique_ptr<GraphPlan> buildGraphPlan(camel::runtime::GCGraph *graph);
