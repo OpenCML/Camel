@@ -267,3 +267,25 @@ assert(Number(m[1]) >= 30, `only ${m[1]} collection(s) ran while a flow was runn
 }
 """
 timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.live_table_fvm"
+desc = "A table of 56,000 rows that stays alive, built by one map whose element function also drops a temporary array per row: the elder space fills with live rows alternating with dead temporaries, and the sweep has 56,000 scattered blocks to free. Freeing them took one walk of the free list from its head per block (over 100 s for this program); it is one pass now. The program takes about a second; the timeout is the only bound, set two orders of magnitude below the old cost. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_table.cml"
+args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_table total=11231"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_elder_exhaustion.live_table_nvm"
+desc = "A table of 56,000 rows that stays alive, built by one map whose element function also drops a temporary array per row: the elder space fills with live rows alternating with dead temporaries, and the sweep has 56,000 scattered blocks to free. Freeing them took one walk of the free list from its head per block (over 100 s for this program); it is one pass now. The program takes about a second; the timeout is the only bound, set two orders of magnitude below the old cost. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_table.cml"
+args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_table total=11231"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
