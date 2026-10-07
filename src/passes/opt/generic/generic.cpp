@@ -363,9 +363,17 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
     }
 
-    const std::vector<gc_node_ref_t> brchPreds(
+    std::vector<gc_node_ref_t> brchPreds(
         draft.ctrlInputsOf(brch).begin(),
         draft.ctrlInputsOf(brch).end());
+    // The branch also ran after what its condition was ordered after: a condition whose value
+    // is known may still wait on an effect (the result of a call that prints, seen through a
+    // GATE). With the BRCH gone nothing else may reach that effect, and it was silently dropped.
+    for (gc_node_ref_t source : orderedSources(draft, brch)) {
+        if (source != brch && std::ranges::find(brchPreds, source) == brchPreds.end()) {
+            brchPreds.push_back(source);
+        }
+    }
 
     // What ran after the BRCH (the taken arm's head, and any other control user outside the
     // removed arms) now runs after the BRCH's predecessors. With none, it waits on nothing; GATEs

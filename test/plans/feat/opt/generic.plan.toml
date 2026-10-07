@@ -937,3 +937,99 @@ assert(!out.includes('main start'), `the program ran: ${out}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.default"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.opt_fold"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.simplify"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.macro_simplify_fvm"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.simplify_jit"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.simplify_tf"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
