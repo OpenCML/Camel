@@ -837,12 +837,20 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::FUNC: {
-#if defined(_WIN32) || defined(_WIN64)
             bool handledByNativeJitCall = false;
             if (unit.poolTopAddr && !unit.runtimeGraph->funcType()->modifiers().sync()) {
                 auto *targetRuntimeGraph = getFuncExtraRuntimeGraph(&bc);
                 bool sameGraph           = (targetRuntimeGraph == unit.runtimeGraph);
-                if (!(sameGraph && !canUseFramelessSelfFunc)) {
+#if defined(_WIN32) || defined(_WIN64)
+                const bool nativeCallEncodable = !(sameGraph && !canUseFramelessSelfFunc);
+#else
+                // Under SysV only the frameless self-call is encoded natively: it stays in
+                // the JIT's own convention (rdi = slots, rsi = ctx restored from r13). The
+                // frame-based path hands its slow-path helper the arguments in the Win64
+                // registers, so every other call keeps the trampoline below.
+                const bool nativeCallEncodable = sameGraph && canUseFramelessSelfFunc;
+#endif
+                if (nativeCallEncodable) {
                     // NativeJitCallParams is the bridge between MIR lowering and the
                     // encoder's call expander. Everything the encoder needs for fast
                     // path / slow path selection is packed here once.
@@ -906,7 +914,6 @@ bool X64Backend::compileBytecode(
             }
             if (handledByNativeJitCall)
                 break;
-#endif
             if (!unit.trampolineFunc)
                 return fail("pc=" + std::to_string(pc) + " no FUNC trampoline");
             uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
