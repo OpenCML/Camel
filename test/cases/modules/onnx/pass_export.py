@@ -54,6 +54,7 @@ PROGRAMS = [
     "export_grad_mean.cml",
     "export_grad_matmul_vector.cml",
     "export_linear_recursion.cml",
+    "export_loop_values.cml",
 ]
 # (program, passes, expected fragment of the message, expected 1-based line of the position)
 REFUSALS = [

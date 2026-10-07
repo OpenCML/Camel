@@ -718,7 +718,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "pass_export_equals_export_model"
-desc = "For twenty-four programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul) the model written by `std::macro std::opt::simplify onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
+desc = "For twenty-five programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt::simplify onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/pass_export.py"
@@ -1538,6 +1538,20 @@ args = ["${case}"]
 skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
 expect_exit = 0
 expect_stdout_contains = ["ort loop values: worst", "steps [0, 1, 2, 3, 5, 6]", "PASS"]
+expect_output_not_contains = ["FAIL", "MISMATCH"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "ort_grad_loop_values"
+desc = "The gradient of tail recursions that return a tensor state together with an integer counter (as a tuple, with the counter entering the loss as a number, as a struct, and with two more differentiable carried values, a tensor and a float) exports as paired ONNX Loops: the pullback of such a recursion takes a tuple or struct of cotangents. The model passes onnx.checker's full check; on ONNX Runtime, for loops of 0, 1, 2, 3, 5 and 6 (the maximum) steps, values and gradients match a NumPy reverse sweep and Camel's native run, and the counter, an int64 output, is exact. The exporter used to refuse the call of the pullback."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_grad_loop_values.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort grad loop values: worst", "steps [0, 1, 2, 3, 5, 6]", "PASS"]
 expect_output_not_contains = ["FAIL", "MISMATCH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000

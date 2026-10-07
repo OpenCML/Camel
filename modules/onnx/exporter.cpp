@@ -333,6 +333,8 @@ class Evaluator {
     Value evalIndirectCall(Activation &act, gc_node_ref_t ref);
     Value callClosure(Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
     Value callLoopClosure(Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount);
+    /// Refuses a linear recursion for a condition it fails, at its recursive call.
+    [[noreturn]] void refuseLinear(const LinearFrame &f, std::string_view what);
     Value mergeValues(Activation &act, const std::string &cond, const Value &a, const Value &b);
     Value evalEagerBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
     std::optional<Value> probeSpecialClosure(Activation &act, gc_node_ref_t ref);
@@ -1540,7 +1542,9 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
 //     shape; when the result also holds a function, those leaves are passed through unchanged
 //     by E (true of autodiff's (value, pullback));
 //   - a function in the result calls the function returned by the recursive call exactly once
-//     and with its own arguments unchanged, and returns tensors or scalars (tuples of them).
+//     and with its own arguments unchanged, and returns tensors or scalars (tuples of them);
+//     its arguments are tensors, scalars, constants, or tuples / structs of these (the pullback
+//     of a recursion that returns several values takes one cotangent per differentiable one).
 // Everything else is refused with a diagnostic.
 
 std::vector<Value> Evaluator::emitLoop(
@@ -2152,16 +2156,39 @@ Value Evaluator::callClosure(
     }
 }
 
+void Evaluator::refuseLinear(const LinearFrame &f, std::string_view what) {
+    // A condition on the function a recursion returns is reported at the recursive call, not
+    // at the place where that function happens to be called (for a pullback: the
+    // value_and_grad expression). Without a position there, the caller's node locates it.
+    const std::string graph = f.fn->name().substr(0, f.fn->name().find('$'));
+    const std::string text =
+        isSourceName(graph) ? std::format("in '{}': {}", graph, what) : std::string(what);
+    const uint64_t origin = f.fn->nodeOrigin(f.site);
+    throw ExportError(text, locationOf(origin), origin, ExportError::Kind::Other);
+}
+
 Value Evaluator::callLoopClosure(
     Activation &act, const Value &fn, const std::vector<Value> &args, size_t withCount) {
     const LoopClosureRef where = loopClosures_.at(fn.closureRef);
     const LinearFrame &f       = linearFrames_.at(where.frame);
-    for (const Value &a : args) {
-        if (!isCarriable(a)) {
-            unsupported(
-                act,
-                "the function returned by a linear recursion is called with something other "
-                "than tensors and scalars");
+    // The arguments (the cotangents, for a pullback) may be tuples or structs: they are not
+    // carried by a Loop, every call of the chain receives them unchanged. Their leaves must be
+    // values a Loop body can read: tensors, scalars and export-time constants.
+    for (size_t k = 0; k < args.size(); ++k) {
+        std::vector<Value> leaves;
+        flattenValue(args[k], leaves);
+        for (const Value &leaf : leaves) {
+            if (leaf.isClosure() || (leaf.isSymbolic() && !isCarriable(leaf))) {
+                refuseLinear(
+                    f,
+                    std::format(
+                        "the function returned by a linear recursion is called with {} "
+                        "(argument {}); its arguments can be tensors, scalars, constants and "
+                        "tuples or structs of them",
+                        leaf.isClosure() ? "a function"
+                                         : "an array whose elements depend on the model input",
+                        k));
+            }
         }
     }
     std::vector<Value> baseLeaves;
@@ -2211,17 +2238,25 @@ Value Evaluator::callLoopClosure(
         }
         std::vector<Value> probeArgs;
         for (const Value &a : args) {
-            probeArgs.push_back(placeholderLike(a, emitter_.fresh("probe")));
+            std::vector<Value> leaves;
+            flattenValue(a, leaves);
+            for (Value &leaf : leaves) {
+                if (leaf.isSymbolic()) {
+                    leaf = placeholderLike(leaf, emitter_.fresh("probe"));
+                }
+            }
+            size_t next = 0;
+            probeArgs.push_back(rebuildValue(a, leaves, next));
         }
         const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
-            unsupported(act, "the function of the call that ends a recursion calls a function of the recursion");
+            refuseLinear(f, "the function of the call that ends a recursion calls a function of the recursion");
         };
         shapeLike = withHole(none, [&] { return callClosure(act, baseLeaves.at(where.leaf), probeArgs, withCount); });
         flattenValue(shapeLike, shape);
         for (Value &leaf : shape) {
             if (!isCarriable(leaf)) {
-                unsupported(
-                    act,
+                refuseLinear(
+                    f,
                     "the function returned by a linear recursion returns something other than "
                     "tensors and scalars");
             }
@@ -2229,7 +2264,7 @@ Value Evaluator::callLoopClosure(
         }
         const HoleCall count = [&](size_t leaf, const std::vector<Value> &inner) -> Value {
             if (leaf != where.leaf) {
-                unsupported(act, "a function of a linear recursion calls another function of the same recursion");
+                refuseLinear(f, "a function of a linear recursion calls another function of the same recursion");
             }
             ++calls;
             sameArguments = sameArguments && inner.size() == probeArgs.size();
@@ -2244,7 +2279,7 @@ Value Evaluator::callLoopClosure(
             withHole(count, [&] { return callClosure(act, closureAt(state), probeArgs, withCount); }),
             result);
         if (calls > 0 && result.size() != shape.size()) {
-            unsupported(act, "the functions of a linear recursion return values of different structure");
+            refuseLinear(f, "the functions of a linear recursion return values of different structure");
         }
         emitter_.popScope();
     } catch (...) {
@@ -2254,13 +2289,13 @@ Value Evaluator::callLoopClosure(
     if (calls == 0) {
         // It never calls the function below it: the first call's function is the whole answer.
         const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
-            unsupported(act, "a function of a linear recursion calls the one below it on some paths only");
+            refuseLinear(f, "a function of a linear recursion calls the one below it on some paths only");
         };
         return withHole(none, [&] { return callClosure(act, closureAt(f.args), args, withCount); });
     }
     if (calls != 1 || !sameArguments) {
-        unsupported(
-            act,
+        refuseLinear(
+            f,
             "the function returned by a linear recursion calls the function of the next call "
             "more than once or with changed arguments; only one call with the same arguments "
             "can be exported");
@@ -2268,7 +2303,7 @@ Value Evaluator::callLoopClosure(
 
     // Bottom: the function of the last call.
     const HoleCall none = [&](size_t, const std::vector<Value> &) -> Value {
-        unsupported(act, "the function of the call that ends a recursion calls a function of the recursion");
+        refuseLinear(f, "the function of the call that ends a recursion calls a function of the recursion");
     };
     const Value bottom =
         withHole(none, [&] { return callClosure(act, baseLeaves.at(where.leaf), args, withCount); });
