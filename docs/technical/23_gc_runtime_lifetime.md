@@ -134,10 +134,24 @@ deterministic runtime error and a later GC finalizer only releases the control-b
 Large-object pacing: objects above the generational threshold (4 KB) bypass the birth and elder
 spaces, so they never exhaust a space and never trigger a collection on their own. The allocator
 therefore counts large-object bytes since the last sweep and requests a major collection at the
-next safepoint once they exceed a budget (the larger of `CAMEL_GC_LARGE_BUDGET_MB`, default 4 MB,
-and the live large-object volume after the previous sweep). Freed large blocks are kept in a
-size-class cache (up to 256 MB) and reused, so steady-state tensor workloads recycle hot memory
-instead of faulting fresh pages in.
+next safepoint once they exceed a budget. After every sweep the budget is the larger of a floor
+(`CAMEL_GC_LARGE_BUDGET_MB`, default 4 MB) and `CAMEL_GC_GROWTH_PERCENT` percent (default 100) of
+the large-object volume the sweep left alive. This is the usual heap-growth rule: with a live
+volume `L` and a growth of `g` percent, a program is collected once per `L * g / 100` bytes it
+allocates and the space holds at most `L * (1 + g / 100)`, plus whatever is allocated between the
+request and the next safepoint (a whole operator: one array can be larger than the budget). The
+floor only matters while `L * g / 100` is below it; a program that keeps hundreds of megabytes
+alive is paced by the growth setting alone, whatever the floor. With the default, the space
+doubles between two collections: a merge sort of 2e7 integers (2 GB of arrays allocated, about
+750 MB alive at the deepest point) is collected 4 times and peaks a third above what it needs.
+A lower setting trades collections for memory in proportion (25: four times the collections, a
+quarter of the garbage). The collector's own work is proportional to the number of objects, not
+to their bytes, so for a few large arrays the collections themselves cost almost nothing; under
+`std::tf` each one also waits for the other workers to leave their operators (see the safepoint
+contract above), and that wait is what a lower setting pays for. Freed large blocks are kept in
+a size-class cache (up to 256 MB) and reused, so steady-state tensor workloads recycle hot memory
+instead of faulting fresh pages in; cached blocks stay resident, so the resident peak sits up to
+256 MB above what the space holds.
 
 GC finalization now runs before mark-sweep frees unreachable elder or large objects. In the
 young-copying path, dead nursery/from-space wrappers are finalized before the semispace reset, while
@@ -192,6 +206,13 @@ do not need source changes:
   tests. It is off by default.
 - `CAMEL_GC_PRINT_CONFIG=1` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.
+- `CAMEL_GC_STATS=1` prints one line of pacing statistics to stderr at exit (`[camel] gc: ...`):
+  collections performed, requests by cause (large-object budget, elder space exhausted, other),
+  megabytes allocated per space, the large-object volume the last sweep left, the high-water mark
+  of the large-object space, and the budget and growth setting in force. `CAMEL_GC_STATS=2` also
+  prints one line per major collection (`[camel] gc collection: ...`) with the budget that was in
+  force, the bytes allocated since the previous sweep, the volume before and after the sweep, and
+  the next budget. The numbers depend only on the allocation order, not on time.
 
 The verifier checks allocator structure, object header validity, region tags, and every typed
 GC-traced reference reachable from the named root sources. External roots are registered with stable

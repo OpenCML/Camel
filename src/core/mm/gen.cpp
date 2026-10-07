@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <cstring>
 #include <format>
+#include <iostream>
 #include <mutex>
 #include <new>
 #include <stdexcept>
@@ -43,6 +44,15 @@
 
 namespace camel::core::mm {
 
+namespace {
+
+constexpr std::string_view kCauseLargeBudget    = "large object budget";
+constexpr std::string_view kCauseElderExhausted = "elder space exhausted";
+
+double megabytes(uint64_t bytes) { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
+
+} // namespace
+
 GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
     : birthSpace_(config.birthSize, "auto.birth"), havenSpace_(config.havenSize, "auto.haven"),
       cacheSpace_(config.havenSize, "auto.cache"),
@@ -50,6 +60,7 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
       promotionAgeThreshold_(config.promotionAgeThreshold),
       largeObjThreshold_(config.largeObjThreshold),
       largeObjMinBudget_(config.largeObjCollectionBudget),
+      largeObjGrowthPercent_(config.largeObjGrowthPercent),
       largeObjBudget_(config.largeObjCollectionBudget),
       elderRefillThreshold_(config.elderGenSize / 4),
       minorGCTriggerRatio_(config.minorGCTriggerRatio),
@@ -184,6 +195,7 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
     pendingSafepointCollection_     = CollectionKind::None;
     const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
     collectAtSafepointUnlocked(requested, gcReason);
+    pendingCause_ = {};
     detail::autoSpaceSafepointSlowPath.store(
         debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
             pendingSafepointCollection_ != CollectionKind::None,
@@ -197,6 +209,7 @@ void GenerationalAllocatorWithGC::minorGC() {
     CollectionKind requested    = pendingSafepointCollection_;
     pendingSafepointCollection_ = CollectionKind::None;
     collectAtSafepointUnlocked(requested, "manual minor GC");
+    pendingCause_ = {};
     detail::autoSpaceSafepointSlowPath.store(
         debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
             pendingSafepointCollection_ != CollectionKind::None,
@@ -210,6 +223,7 @@ void GenerationalAllocatorWithGC::majorGC() {
     CollectionKind requested    = pendingSafepointCollection_;
     pendingSafepointCollection_ = CollectionKind::None;
     collectAtSafepointUnlocked(requested, "manual major GC");
+    pendingCause_ = {};
     detail::autoSpaceSafepointSlowPath.store(
         debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
             pendingSafepointCollection_ != CollectionKind::None,
@@ -336,6 +350,7 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
         return allocElderUnlocked(payloadSize, align);
     }
 
+    stats_.youngBytesAllocated += payloadSize;
     auto *header = headerOf(ptr);
     header->setRegion(AllocRegion::YoungGen);
     objectTypes_.erase(header);
@@ -353,8 +368,11 @@ void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t
     // Large objects never exhaust a space, so pace their reclamation by volume:
     // once the budget is spent, ask for a major collection at the next safepoint.
     largeBytesSinceSweep_ += payloadSize;
+    stats_.largeBytesAllocated += payloadSize;
+    stats_.largeHighWaterMark =
+        std::max(stats_.largeHighWaterMark, largeLiveBytes_ + largeBytesSinceSweep_);
     if (largeBytesSinceSweep_ >= largeObjBudget_) {
-        requestCollectionAtSafepointUnlocked(CollectionKind::Major, "large object budget");
+        requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseLargeBudget);
     }
     return ptr;
 }
@@ -365,7 +383,8 @@ void *GenerationalAllocatorWithGC::allocElderUnlocked(size_t payloadSize, size_t
     if (LIKELY(payloadSize < elderFullFromSize_)) {
         if (void *ptr = elderGenSpace_.alloc(payloadSize, align)) {
             elderBytesSinceSweep_ += payloadSize;
-            auto *header           = headerOf(ptr);
+            stats_.elderBytesAllocated += payloadSize;
+            auto *header = headerOf(ptr);
             header->setRegion(AllocRegion::ElderGen);
             objectTypes_.erase(header);
             return ptr;
@@ -383,11 +402,12 @@ void *GenerationalAllocatorWithGC::allocElderUnlocked(size_t payloadSize, size_t
         // the overflow is then paced by the large-object budget alone, which grows with the
         // surviving volume.
         if (elderFullFromSize_ == kElderNotFull && elderBytesSinceSweep_ >= elderRefillThreshold_) {
-            requestCollectionAtSafepointUnlocked(CollectionKind::Major, "elder space exhausted");
+            requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
         }
         elderFullFromSize_ = payloadSize;
     }
     ++stats_.elderOverflowAllocations;
+    stats_.elderOverflowBytes += payloadSize;
     return allocLargeUnlocked(payloadSize, align);
 }
 
@@ -408,11 +428,20 @@ void GenerationalAllocatorWithGC::requestStressCollectionUnlocked(std::string_vi
 
 void GenerationalAllocatorWithGC::requestCollectionAtSafepointUnlocked(
     CollectionKind kind, std::string_view reason) {
-    (void)reason;
     if (kind == CollectionKind::None) {
         return;
     }
     ++stats_.deferredCollections;
+    if (pendingSafepointCollection_ == CollectionKind::None) {
+        pendingCause_ = reason;
+        if (reason == kCauseLargeBudget) {
+            ++stats_.largeBudgetRequests;
+        } else if (reason == kCauseElderExhausted) {
+            ++stats_.elderExhaustedRequests;
+        } else {
+            ++stats_.otherRequests;
+        }
+    }
     pendingSafepointCollection_ = combineCollectionKinds(pendingSafepointCollection_, kind);
     // Allocation and stress sites only request moving-capable GC. The actual collection must wait
     // for an explicit safepoint where roots can be relocated, so publish that pending work to
@@ -925,13 +954,69 @@ void GenerationalAllocatorWithGC::sweepLargeObjects() {
     }
     largeObjSpace_.freeBulk(unreachable);
 
-    // The next budget scales with the surviving large-object volume, so the
-    // amortized sweep cost stays proportional to allocation.
-    size_t liveBytes = 0;
-    largeObjSpace_.iterateAllocated(
-        [&liveBytes](ObjectHeader *header) { liveBytes += header->size(); });
-    largeBytesSinceSweep_ = 0;
-    largeObjBudget_       = std::max(largeObjMinBudget_, liveBytes);
+    // The next budget scales with the surviving large-object volume, so the amortized cost of
+    // collecting stays proportional to allocation: with a growth of g percent a program whose
+    // live volume is L is collected once per L * g / 100 bytes it allocates, and holds at most
+    // L * (1 + g / 100) plus what it allocates between the request and the next safepoint.
+    size_t liveBytes   = 0;
+    size_t liveObjects = 0;
+    largeObjSpace_.iterateAllocated([&](ObjectHeader *header) {
+        liveBytes += header->size();
+        ++liveObjects;
+    });
+    const size_t heldBefore   = largeLiveBytes_ + largeBytesSinceSweep_;
+    const size_t sinceSweep   = largeBytesSinceSweep_;
+    const size_t budgetBefore = largeObjBudget_;
+    largeBytesSinceSweep_     = 0;
+    largeLiveBytes_           = liveBytes;
+    // live * percent / 100, split so that it neither overflows nor rounds (100 gives live).
+    const size_t growth =
+        liveBytes / 100 * largeObjGrowthPercent_ + liveBytes % 100 * largeObjGrowthPercent_ / 100;
+    largeObjBudget_ = std::max(largeObjMinBudget_, growth);
+    if (statsLevel_ >= 2) {
+        std::cerr << std::format(
+            "[camel] gc collection: n={} cause=\"{}\" budget_mb={:.1f} since_sweep_mb={:.1f} "
+            "large_before_mb={:.1f} large_live_mb={:.1f} large_live_objects={} "
+            "freed_large_objects={} next_budget_mb={:.1f}\n",
+            stats_.majorCollections,
+            pendingCause_.empty() ? std::string_view{"explicit"} : pendingCause_,
+            megabytes(budgetBefore),
+            megabytes(sinceSweep),
+            megabytes(heldBefore),
+            megabytes(liveBytes),
+            liveObjects,
+            unreachable.size(),
+            megabytes(largeObjBudget_));
+    }
+}
+
+void GenerationalAllocatorWithGC::setStatsLevel(int level) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    statsLevel_ = level;
+}
+
+void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
+    const RuntimeStats s = stats();
+    os << std::format(
+        "[camel] gc: major={} requested={} deferred={} by_large_budget={} by_elder_exhausted={} "
+        "by_other={} alloc_young_mb={:.1f} alloc_elder_mb={:.1f} alloc_large_mb={:.1f} "
+        "elder_overflow_objects={} elder_overflow_mb={:.1f} large_live_mb={:.1f} "
+        "large_high_water_mb={:.1f} budget_mb={:.1f} growth_percent={}\n",
+        s.majorCollections,
+        s.requestedCollections,
+        s.deferredCollections,
+        s.largeBudgetRequests,
+        s.elderExhaustedRequests,
+        s.otherRequests,
+        megabytes(s.youngBytesAllocated),
+        megabytes(s.elderBytesAllocated),
+        megabytes(s.largeBytesAllocated),
+        s.elderOverflowAllocations,
+        megabytes(s.elderOverflowBytes),
+        megabytes(s.largeLiveBytes),
+        megabytes(s.largeHighWaterMark),
+        megabytes(s.largeBudgetBytes),
+        s.largeGrowthPercent);
 }
 
 } // namespace camel::core::mm
