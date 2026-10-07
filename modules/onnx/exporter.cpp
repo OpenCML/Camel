@@ -2851,15 +2851,20 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
         values[k] = eval(act, refs[k]);
         allConst  = allConst && values[k].isConstant();
     }
-    if (source.isConstant() && !allConst && isIntArrayType(targetType)) {
+    // (Also when every element is a constant: simplification folds an array literal only where
+    // replacing it is execution-safe, and one inside a branch arm, e.g. `[k, k + 1]` in the
+    // first, specialised call of a recursion, reaches the export unfolded.)
+    if (source.isConstant() && isIntArrayType(targetType)) {
         return symbolicIntArray(act, ref, source, values);
     }
-    if (source.isConstant() && !allConst && isFloatArrayType(targetType)) {
+    if (source.isConstant() && isFloatArrayType(targetType)) {
         return symbolicFloatArray(act, ref, source, values);
     }
-    if (source.isConstant() && (sawDeferred || !allConst) && isAggregate) {
+    if (source.isConstant() && isAggregate) {
         // A tuple or struct of input-dependent values (e.g. gradients) exists only at export
-        // time; its elements are read back by accesses or become graph outputs.
+        // time; its elements are read back by accesses or become graph outputs. One whose
+        // elements are all constants and that simplification left in a branch arm (the zero
+        // gradient of the path on which a loop takes no step) is kept the same way.
         std::vector<Value> fields = elementsOf(source.slot, targetType);
         for (size_t k = 0; k < slots.size(); ++k) {
             fields[static_cast<size_t>(slots[k])] = values[k];

@@ -1557,6 +1557,43 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
 
 [[tests]]
+name = "ort_loop_values_dynamic"
+desc = "A loop that returns its state with a counter, and the gradient of a loss over it with respect to captured weights, export with a dynamic batch axis: one model, on ONNX Runtime for batches of 1, 2, 3, 5 and 7 rows and loops of 0, some and the maximum number of steps, matches NumPy and the native run (counter exactly). On the path without a step the gradient is a struct of constants in a branch arm, which the exporter used to refuse as 'a tuple, struct or array of constants was not folded'."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_loop_values_dynamic.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort loop values dynamic: worst", "batches [1, 2, 3, 5, 7]", "PASS"]
+expect_output_not_contains = ["FAIL", "MISMATCH"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "export_loop_values_array"
+desc = "A tail recursion whose depth depends on the model input and which returns, next to its state, an int array built from the counter is refused by export_model at the recursive call, with a diagnostic that names the element of the result and says what a loop can return. (In the first, specialised call the array literal has constant elements inside a branch arm; that used to stop the export earlier with 'a tuple, struct or array of constants was not folded' at the if.)"
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_loop_values_array.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_loop_values_array.onnx"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('fs')
+const path = await import('path')
+const text = input.normalized.output
+assert(text.includes('returns an int array whose elements depend on the model input (element 1 of its result) on a path next to a recursive call'), 'missing detail: ' + text)
+assert(text.includes('it can return tensors and scalars (float, int, bool) and tuples or structs of them'), 'missing what is accepted: ' + text)
+assert(/[(]at [^ ]*export_loop_values_array[.]cml:12:68[)]/.test(text), 'missing source position of the recursive call: ' + text)
+assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
+assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/export_loop_values_array.onnx')), 'a refused export must not write a model')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
 name = "export_train_step_vjp"
 desc = "A training step (value_and_grad + sgd) through a function declared with a custom derivative rule (@vjp<rule>) exports: loss and the two updated parameters; the model contains the rule's operators and nothing derived from the body's `where`."
 kind = "behavior"
