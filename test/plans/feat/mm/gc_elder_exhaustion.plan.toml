@@ -194,48 +194,76 @@ timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_map_tf_stress"
-desc = "A table built by a map inside a map element, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf."
+desc = "A table built by a map inside a map element, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 10 collections ran while a flow was running (measured: 40 to 86 in 12 runs at 1, 2 and 18 workers, load 16; the floor is about a quarter of the lowest), read from the scheduler's statistics line (CAMEL_TF_GC_STATS)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
 args = ["${case}", "--arg", "reps=3", "std::tf"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major", "CAMEL_TF_GC_STATS=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_map total=148608"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /in_flow=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 10, `only ${m[1]} collection(s) ran while a flow was running, expected at least 10`)
+}
+"""
 timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_filter_tf_stress"
-desc = "filter nested with map both ways, the element functions building rows, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf."
+desc = "filter nested with map both ways, the element functions building rows, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 35 collections ran while a flow was running (measured: 140 to 253 in 12 runs at 1, 2 and 18 workers, load 16; the floor is about a quarter of the lowest), read from the scheduler's statistics line (CAMEL_TF_GC_STATS)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
 args = ["${case}", "--arg", "reps=3", "std::tf"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major", "CAMEL_TF_GC_STATS=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_filter total=131904"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /in_flow=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 35, `only ${m[1]} collection(s) ran while a flow was running, expected at least 35`)
+}
+"""
 timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_reduce_tf_stress"
-desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf."
+desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 150 collections ran while a flow was running (measured: 665 to 1297 in 12 runs at 1, 2 and 18 workers, load 16; the floor is about a quarter of the lowest), read from the scheduler's statistics line (CAMEL_TF_GC_STATS)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_reduce.cml"
 args = ["${case}", "--arg", "reps=3", "std::tf"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major", "CAMEL_TF_GC_STATS=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_reduce total=9584448"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /in_flow=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 150, `only ${m[1]} collection(s) ran while a flow was running, expected at least 150`)
+}
+"""
 timeout_ms = 240000
 
 [[tests]]
 name = "gc_elder_exhaustion.nested_foreach_tf_stress"
-desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf."
+desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 30 collections ran while a flow was running (measured: 116 to 323 in 12 runs at 1, 2 and 18 workers, load 16; the floor is about a quarter of the lowest), read from the scheduler's statistics line (CAMEL_TF_GC_STATS)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_nested_foreach.cml"
 args = ["${case}", "--arg", "reps=3", "std::tf"]
-envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major", "CAMEL_TF_GC_STATS=1"]
 expect_exit = 0
 expect_stdout_contains = ["gc_nested_foreach total=296832"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /in_flow=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 30, `only ${m[1]} collection(s) ran while a flow was running, expected at least 30`)
+}
+"""
 timeout_ms = 240000

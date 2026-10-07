@@ -30,6 +30,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <ostream>
 #include <shared_mutex>
 #include <span>
 #include <string_view>
@@ -145,12 +146,40 @@ class TaskflowGcGate {
         }
     }
 
+    // What the gate did since the last resetStats(). Printed at the end of a run of the
+    // scheduler when CAMEL_TF_GC_STATS is set (see reportStats), so that a test can check that
+    // collections really ran while flows were running.
+    struct Stats {
+        std::atomic<uint64_t> pendingPolls{0};      // polls that found work for the collector
+        std::atomic<uint64_t> collections{0};       // collections the allocator performed
+        std::atomic<uint64_t> collectionsInFlow{0}; // ... while a flow was running
+        std::atomic<uint64_t> emptySafepoints{0};   // world stopped, allocator had nothing to do
+        std::atomic<uint64_t> cappedPolls{0};       // skipped: too soon after the last collection
+        std::atomic<uint64_t> gaveUp{0};            // another thread stayed in a region for 500 ms
+        std::atomic<uint64_t> backoffPolls{0};      // skipped: backing off after giving up
+        std::atomic<int64_t> waitNs{0};             // time spent waiting for the other threads
+        std::atomic<int64_t> maxWaitNs{0};
+        std::atomic<int64_t> collectNs{0}; // time spent inside the allocator's safepoint
+    };
+    void resetStats();
+    // One line: "[taskflow] gc: pending_polls=.. collections=.. in_flow=.. ...".
+    void reportStats(std::ostream &os) const;
+    // A flow is running on the executor (nested flows count once each). Statistics only: the
+    // gate does not decide by it.
+    void flowStarted() { flowsRunning_.fetch_add(1, std::memory_order_relaxed); }
+    void flowEnded() { flowsRunning_.fetch_sub(1, std::memory_order_relaxed); }
+
   private:
     void collect(ThreadState &ts, std::string_view reason);
     void waitForCollector();
 
     std::atomic<bool> stopRequested_{false};
+    // No poll before this time: backing off after the collector gave up.
     std::atomic<int64_t> retryAfterNs_{0};
+    // No collection before this time: the cap after a collection.
+    std::atomic<int64_t> capUntilNs_{0};
+    std::atomic<int64_t> flowsRunning_{0};
+    Stats stats_;
     std::mutex collectorMutex_;
     std::mutex registryMutex_;
     std::vector<std::unique_ptr<ThreadState>> threads_;

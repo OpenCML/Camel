@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <format>
 #include <functional>
@@ -210,6 +211,73 @@ struct PlanMismatch {
 
 } // namespace
 
+namespace {
+
+// CAMEL_TF_GC_STATS=2: one line per collection, and per time the collector gave up.
+bool gcTraceEnabled() {
+    static const bool enabled = [] {
+        const char *raw = std::getenv("CAMEL_TF_GC_STATS");
+        return raw != nullptr && raw[0] == '2';
+    }();
+    return enabled;
+}
+
+// Resident set of the process in MB (0 where /proc is not available).
+long residentMegabytes() {
+    long pages = 0;
+#if defined(__linux__)
+    if (std::FILE *statm = std::fopen("/proc/self/statm", "r")) {
+        long total = 0;
+        if (std::fscanf(statm, "%ld %ld", &total, &pages) != 2) {
+            pages = 0;
+        }
+        std::fclose(statm);
+    }
+#endif
+    return pages * 4096 / (1024 * 1024);
+}
+
+} // namespace
+
+void TaskflowGcGate::resetStats() {
+    for (auto *counter :
+         {&stats_.pendingPolls,
+          &stats_.collections,
+          &stats_.collectionsInFlow,
+          &stats_.emptySafepoints,
+          &stats_.cappedPolls,
+          &stats_.gaveUp,
+          &stats_.backoffPolls}) {
+        counter->store(0, std::memory_order_relaxed);
+    }
+    for (auto *counter : {&stats_.waitNs, &stats_.maxWaitNs, &stats_.collectNs}) {
+        counter->store(0, std::memory_order_relaxed);
+    }
+}
+
+void TaskflowGcGate::reportStats(std::ostream &os) const {
+    const auto heap = camel::core::mm::autoSpace().stats();
+    os << std::format(
+        "[taskflow] gc: pending_polls={} collections={} in_flow={} empty={} capped={} "
+        "gave_up={} backoff={} wait_ms={:.1f} max_wait_ms={:.1f} collect_ms={:.1f} "
+        "heap_major={} heap_requested={} heap_deferred={} heap_elder_overflow={} rss_mb={}\n",
+        stats_.pendingPolls.load(),
+        stats_.collections.load(),
+        stats_.collectionsInFlow.load(),
+        stats_.emptySafepoints.load(),
+        stats_.cappedPolls.load(),
+        stats_.gaveUp.load(),
+        stats_.backoffPolls.load(),
+        static_cast<double>(stats_.waitNs.load()) / 1e6,
+        static_cast<double>(stats_.maxWaitNs.load()) / 1e6,
+        static_cast<double>(stats_.collectNs.load()) / 1e6,
+        heap.majorCollections,
+        heap.requestedCollections,
+        heap.deferredCollections,
+        heap.elderOverflowAllocations,
+        residentMegabytes());
+}
+
 TaskflowGcGate &TaskflowGcGate::instance() {
     // Never destroyed: worker threads may still hold their state while statics are torn down.
     static TaskflowGcGate *gate = new TaskflowGcGate();
@@ -242,17 +310,31 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
     constexpr int64_t kMaxBackoffNs    = 1'000'000'000;
     static std::atomic<int64_t> backoffNs{kFirstBackoffNs};
 
-    if (steadyNowNs() < retryAfterNs_.load(std::memory_order_relaxed)) {
+    stats_.pendingPolls.fetch_add(1, std::memory_order_relaxed);
+    const auto tooSoon = [this]() {
+        const int64_t now = steadyNowNs();
+        if (now < capUntilNs_.load(std::memory_order_relaxed)) {
+            stats_.cappedPolls.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        if (now < retryAfterNs_.load(std::memory_order_relaxed)) {
+            stats_.backoffPolls.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
+    };
+    if (tooSoon()) {
         return;
     }
     std::lock_guard collector(collectorMutex_);
     if (!camel::core::mm::detail::autoSpaceSafepointSlowPath.load(std::memory_order_acquire) ||
-        steadyNowNs() < retryAfterNs_.load(std::memory_order_relaxed)) {
+        tooSoon()) {
         return; // another thread collected, or gave up, while this one waited for the mutex
     }
 
     stopRequested_.store(true, std::memory_order_seq_cst);
     bool quiet = false;
+    const int64_t waitBegin = steadyNowNs();
     {
         std::lock_guard registry(registryMutex_);
         const auto deadline = std::chrono::steady_clock::now() + kPatience;
@@ -274,19 +356,56 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
             }
         }
     }
+    {
+        const int64_t waited = steadyNowNs() - waitBegin;
+        stats_.waitNs.fetch_add(waited, std::memory_order_relaxed);
+        if (waited > stats_.maxWaitNs.load(std::memory_order_relaxed)) {
+            stats_.maxWaitNs.store(waited, std::memory_order_relaxed);
+        }
+    }
     try {
         if (quiet) {
-            const int64_t begin = steadyNowNs();
+            const auto collectionsSoFar = []() {
+                const auto heap = camel::core::mm::autoSpace().stats();
+                return heap.minorCollections + heap.majorCollections;
+            };
+            const uint64_t before = collectionsSoFar();
+            const int64_t begin   = steadyNowNs();
             camel::core::mm::safepoint(reason);
             const int64_t end = steadyNowNs();
+            stats_.collectNs.fetch_add(end - begin, std::memory_order_relaxed);
+            if (const uint64_t ran = collectionsSoFar() - before; ran != 0) {
+                stats_.collections.fetch_add(ran, std::memory_order_relaxed);
+                if (flowsRunning_.load(std::memory_order_relaxed) > 0) {
+                    stats_.collectionsInFlow.fetch_add(ran, std::memory_order_relaxed);
+                }
+                if (gcTraceEnabled()) {
+                    std::cerr << std::format(
+                        "[taskflow] gc collection: flows={} waited_ms={:.2f} took_ms={:.2f} "
+                        "rss_mb={}\n",
+                        flowsRunning_.load(std::memory_order_relaxed),
+                        static_cast<double>(begin - waitBegin) / 1e6,
+                        static_cast<double>(end - begin) / 1e6,
+                        residentMegabytes());
+                }
+            } else {
+                stats_.emptySafepoints.fetch_add(1, std::memory_order_relaxed);
+            }
             // The next collection starts no sooner than twice the time this one took, so the
             // collector takes at most a third of the run however often the workers poll
             // (every graph boundary of every worker: with a collection forced at every
             // safepoint, as the GC stress modes do, that was thousands of full collections
             // for a small program). A poll that found nothing to do costs nothing here.
-            retryAfterNs_.store(end + 2 * (end - begin), std::memory_order_relaxed);
+            capUntilNs_.store(end + 2 * (end - begin), std::memory_order_relaxed);
             backoffNs.store(kFirstBackoffNs, std::memory_order_relaxed);
         } else {
+            stats_.gaveUp.fetch_add(1, std::memory_order_relaxed);
+            if (gcTraceEnabled()) {
+                std::cerr << std::format(
+                    "[taskflow] gc gave up: flows={} rss_mb={}\n",
+                    flowsRunning_.load(std::memory_order_relaxed),
+                    residentMegabytes());
+            }
             const int64_t wait = backoffNs.load(std::memory_order_relaxed);
             retryAfterNs_.store(steadyNowNs() + wait, std::memory_order_relaxed);
             backoffNs.store(std::min(wait * 2, kMaxBackoffNs), std::memory_order_relaxed);
@@ -679,6 +798,8 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
         plans_.clear();
     }
     linearArmEntryCache_.clear();
+    const bool gcStats = envSwitch("CAMEL_TF_GC_STATS");
+    TaskflowGcGate::instance().resetStats();
     Frame *rootFrame = framePool_.acquire(graph);
     try {
         slot_t result = evalGraphTF(graph, rootFrame);
@@ -686,7 +807,13 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
         framePool_.release(rootFrame);
     } catch (...) {
         framePool_.release(rootFrame);
+        if (gcStats) {
+            TaskflowGcGate::instance().reportStats(std::cerr);
+        }
         throw;
+    }
+    if (gcStats) {
+        TaskflowGcGate::instance().reportStats(std::cerr);
     }
     return nullptr;
 }
@@ -1044,6 +1171,10 @@ void TaskflowExecSchedPass::runOnExecutor(tf::Taskflow &flow) {
     // map element) is run cooperatively by the calling worker. A fresh executor per nested flow
     // meant a full set of worker threads for every inner map (thousands of threads) and
     // ignored the thread limit.
+    struct RunningFlow {
+        RunningFlow() { TaskflowGcGate::instance().flowStarted(); }
+        ~RunningFlow() { TaskflowGcGate::instance().flowEnded(); }
+    } runningFlow;
     if (executor_.this_worker_id() >= 0) {
         executor_.corun(flow);
     } else {
