@@ -305,6 +305,30 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ArgumentNeedsConversion,
+            {
+                "ArgumentNeedsConversion",
+                "The call to '{0}' needs an explicit conversion: {1}.",
+                "A type that leaves open what a parameter fixes is never accepted implicitly, "
+                "and nothing is checked on its behalf. {2} A conversion written with 'as' is "
+                "checked when it runs; a value that does not fit stops the program at that "
+                "position.",
+            },
+        },
+        {
+            SemanticDiag::ReturnNeedsConversion,
+            {
+                "ReturnNeedsConversion",
+                "The returned value needs an explicit conversion to the function's declared "
+                "return type '{0}': {1}.",
+                "A type that leaves open what the declared return type fixes is never accepted "
+                "implicitly, and nothing is checked on its behalf (function signature: {3}). "
+                "Where the value is known to fit, write the conversion: {2}. A conversion "
+                "written with 'as' is checked when it runs; a value that does not fit stops the "
+                "program at that position.",
+            },
+        },
+        {
             SemanticDiag::ImmutablePassedToVarParam,
             {
                 "ImmutablePassedToVarParam",

@@ -29,6 +29,7 @@
 #include "core/module/entity_internal.h"
 
 #include "camel/core/operator_traits.h"
+#include "camel/core/type/other.h"
 
 #include <atomic>
 #define DEBUG_LEVEL -1
@@ -265,6 +266,157 @@ node_handle_t throughCopy(node_handle_t node) {
         }
     }
     return node;
+}
+
+/// A place where a value of type `have` goes where `want` is declared and only a checked
+/// conversion (`as`) leads from one to the other: `have` leaves open what `want` fixes.
+struct ConversionGap {
+    std::string path; // "" for the value itself, ".0" / ".name" for an element of it
+    Type *have;
+    Type *want;
+};
+
+/// Collects the conversion gaps between `have` and `want`, through tuples and structs. False
+/// when the types differ in any other way (then no conversion written with `as` helps). The
+/// rule is the one of a CAST node: an Unsafe conversion into a module type is checked when it
+/// runs (Type::castSlotFrom), every other conversion that is not Safe is refused.
+bool collectConversionGaps(
+    Type *want, Type *have, const std::string &path, std::vector<ConversionGap> &gaps) {
+    if (want == nullptr || have == nullptr) {
+        return false;
+    }
+    if (want == have || want->assignableFrom(have)) {
+        return true;
+    }
+    if (want->isOtherType()) {
+        if (want->castSafetyFrom(have) != CastSafety::Unsafe) {
+            return false;
+        }
+        gaps.push_back({path, have, want});
+        return true;
+    }
+    if (want->code() == TypeCode::Tuple && have->code() == TypeCode::Tuple) {
+        auto *w = tt::as_ptr<TupleType>(want);
+        auto *h = tt::as_ptr<TupleType>(have);
+        if (w->isCell() || h->isCell() || w->size() != h->size()) {
+            return false;
+        }
+        for (size_t i = 0; i < w->size(); ++i) {
+            if (!collectConversionGaps(
+                    w->typeAt(i),
+                    h->typeAt(i),
+                    path + "." + std::to_string(i),
+                    gaps)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (want->code() == TypeCode::Struct && have->code() == TypeCode::Struct) {
+        auto *w = tt::as_ptr<StructType>(want);
+        auto *h = tt::as_ptr<StructType>(have);
+        if (w->size() != h->size()) {
+            return false;
+        }
+        for (size_t i = 0; i < w->size(); ++i) {
+            const auto field = h->findField(w->fieldName(i));
+            if (!field || !collectConversionGaps(
+                              w->typeAt(i),
+                              h->typeAt(*field),
+                              path + "." + std::string(w->fieldName(i)),
+                              gaps)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+/// How a program writes a type in a conversion.
+std::string spellingOf(Type *type) {
+    return type->isOtherType() ? static_cast<OtherType *>(type)->spelling() : type->toString();
+}
+
+/// The elements of `text` when it is a parenthesised list written on the spot, `(a, b)`.
+std::vector<std::string> tupleElementTexts(const std::string &text) {
+    std::vector<std::string> parts;
+    if (text.size() < 2 || text.front() != '(' || text.back() != ')') {
+        return parts;
+    }
+    int depth = 0;
+    std::string current;
+    for (size_t i = 1; i + 1 < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '(' || c == '[' || c == '{' || c == '<') {
+            ++depth;
+        } else if (c == ')' || c == ']' || c == '}' || c == '>') {
+            if (--depth < 0) {
+                return {}; // "(a) + (b)": not one list
+            }
+        }
+        if (c == ',' && depth == 0) {
+            parts.push_back(current);
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+    parts.push_back(current);
+    for (std::string &part : parts) {
+        const auto first = part.find_first_not_of(' ');
+        const auto last  = part.find_last_not_of(' ');
+        part = first == std::string::npos ? std::string() : part.substr(first, last - first + 1);
+        if (part.empty()) {
+            return {};
+        }
+    }
+    return parts;
+}
+
+/// The conversion a program would write for `gap` on the expression whose text is `text`.
+std::string conversionTextOf(const std::string &text, const ConversionGap &gap) {
+    std::string operand = text;
+    if (!gap.path.empty()) {
+        // An element of a tuple written on the spot is converted where it stands.
+        const auto parts = tupleElementTexts(text);
+        const bool index = gap.path.find_first_not_of("0123456789", 1) == std::string::npos;
+        if (index && !parts.empty() && std::stoul(gap.path.substr(1)) < parts.size()) {
+            operand = parts[std::stoul(gap.path.substr(1))];
+        } else {
+            operand = text + gap.path;
+        }
+    }
+    // Only a name, an access or a call binds tighter than `as` for certain (a placeholder
+    // such as <argument> stands for whatever the program wrote).
+    bool simple = !operand.empty();
+    if (!operand.empty() && operand.front() == '<' && operand.find('>') != std::string::npos) {
+        return "'" + operand + " as " + spellingOf(gap.want) + "'";
+    }
+    int depth = 0;
+    for (const char c : operand) {
+        if (c == '(' || c == '[') {
+            ++depth;
+        } else if (c == ')' || c == ']') {
+            --depth;
+        } else if (
+            depth == 0 && !(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.')) {
+            simple = false;
+        }
+    }
+    return "'" + (simple ? operand : "(" + operand + ")") + " as " + spellingOf(gap.want) + "'";
+}
+
+/// "it has type 'A', less exact than 'B'" for each gap, the subject naming the element.
+std::string describeGaps(const std::string &subject, const std::vector<ConversionGap> &gaps) {
+    std::string out;
+    for (const ConversionGap &gap : gaps) {
+        out += out.empty() ? "" : "; ";
+        out += (gap.path.empty() ? subject : "element " + gap.path + " of " + subject) +
+               " has type '" + gap.have->toString() + "', which is less exact than '" +
+               gap.want->toString() + "'";
+    }
+    return out;
 }
 
 void setNodeType(node_handle_t node, Type *type) {
@@ -1830,6 +1982,62 @@ StaticArg Builder::staticArgOf(node_handle_t node) const {
     return arg;
 }
 
+std::string Builder::sourceTextOf(const GCT::node_ptr_t &expr) const {
+    const auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr;
+    if (sourceContext == nullptr || expr == nullptr) {
+        return {};
+    }
+    // The span of a node covers what the node itself was made from (the argument list of a
+    // call, the operator of an expression): the expression is the union with its operands.
+    camel::source::source_file_id_t fileId = camel::source::kInvalidSourceFileId;
+    size_t start = 0, end = 0;
+    bool consistent                                         = true;
+    std::function<void(const GCT::node_ptr_t &, int)> cover = [&](const GCT::node_ptr_t &node,
+                                                                  int depth) {
+        if (node == nullptr || depth > 32) {
+            return;
+        }
+        const auto *record = sourceContext->origin(node->load()->origin());
+        const auto *span   = record ? sourceContext->span(record->primarySpan) : nullptr;
+        if (span != nullptr && span->valid() && span->endOffset > span->startOffset) {
+            if (fileId == camel::source::kInvalidSourceFileId) {
+                fileId = span->fileId;
+                start  = span->startOffset;
+                end    = span->endOffset;
+            } else if (fileId != span->fileId) {
+                consistent = false;
+            } else {
+                start = std::min(start, span->startOffset);
+                end   = std::max(end, span->endOffset);
+            }
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            cover(node->at(i), depth + 1);
+        }
+    };
+    cover(expr, 0);
+    const auto *file =
+        fileId != camel::source::kInvalidSourceFileId ? sourceContext->sourceFile(fileId) : nullptr;
+    if (!consistent || file == nullptr || end > file->content.size() || end - start > 60) {
+        return {};
+    }
+    const std::string text = file->content.substr(start, end - start);
+    // Quoted only when it is certainly one expression on one line.
+    int depth = 0;
+    for (const char c : text) {
+        if (c == '\r' || c == '\n') {
+            return {};
+        }
+        depth += (c == '(' || c == '[' || c == '{')   ? 1
+                 : (c == ')' || c == ']' || c == '}') ? -1
+                                                      : 0;
+        if (depth < 0) {
+            return {};
+        }
+    }
+    return depth == 0 ? text : std::string();
+}
+
 node_handle_t Builder::variableOperator(const std::string &group, node_handle_t input) {
     const auto entity = module_->getImportedEntity(group);
     ASSERT(entity.has_value() && entity->isOperGroup(), "Variable operators are not available.");
@@ -1975,6 +2183,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!targetGraph) {
+                std::vector<std::pair<std::string, FunctionType *>> candidates;
+                for (const auto &g : *graphs) {
+                    candidates.emplace_back(g->name(), g->funcType());
+                }
+                reportConversionGaps(
+                    candidates,
+                    withInputs,
+                    normInputs,
+                    withInputTypes,
+                    normInputTypes,
+                    gct);
                 std::string argTypesStr = std::format(
                     "<{}> ({})",
                     strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
@@ -2133,6 +2352,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
         StaticFuncTypeResolver resolver(funcType);
         if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+            reportConversionGaps(
+                {{std::string(), funcType}},
+                withInputs,
+                normInputs,
+                withInputTypes,
+                normInputTypes,
+                gct);
             std::string argTypesStr = std::format(
                 "<{}> ({})",
                 strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
@@ -2650,7 +2876,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
-    checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->load()->origin());
+    checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->load()->origin(), gct->at(0));
     setGraphReturnFromResult(
         currGraph_,
         nodeIdOf(outputAnchor),
@@ -2696,8 +2922,96 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
     setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));
 }
 
+void Builder::reportConversionGaps(
+    const std::vector<std::pair<std::string, FunctionType *>> &candidates,
+    const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs,
+    const type_vec_t &withTypes, const type_vec_t &normTypes, const GCT::node_ptr_t &call) {
+    // Reported only when exactly one overload is a conversion away: with several, which one
+    // the program means is not the compiler's to choose.
+    const std::pair<std::string, FunctionType *> *target = nullptr;
+    std::string what, fixes;
+    for (const auto &candidate : candidates) {
+        FunctionType *funcType = candidate.second;
+        if (funcType->withTypesCount() != withTypes.size() ||
+            funcType->normTypesCount() != normTypes.size()) {
+            continue;
+        }
+        bool fits = true;
+        std::string graphWhat, graphFixes;
+        const auto check = [&](const std::vector<Argument> &inputs,
+                               const type_vec_t &types,
+                               bool isWith) {
+            for (size_t i = 0; i < types.size() && fits; ++i) {
+                Type *want       = isWith ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+                const bool isVar = isWith ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
+                std::vector<ConversionGap> gaps;
+                if (!collectConversionGaps(want, valueTypeOf(types[i]), "", gaps)) {
+                    fits = false;
+                    return;
+                }
+                if (gaps.empty()) {
+                    continue;
+                }
+                const size_t nameIndex = (isWith ? 0 : funcType->withTypesCount()) + i;
+                const std::string name = nameIndex < funcType->argNamesCount()
+                                             ? std::string(funcType->argNameAt(nameIndex))
+                                             : std::string();
+                const std::string text = sourceTextOf(inputs[i].expr);
+                std::string subject =
+                    std::string(isWith ? "with-argument " : "argument ") + std::to_string(i + 1);
+                if (!text.empty() || !name.empty()) {
+                    subject += " (" + (text.empty() ? "" : "'" + text + "'") +
+                               (text.empty() || name.empty() ? "" : ", ") +
+                               (name.empty() ? "" : "for parameter '" + name + "'") + ")";
+                }
+                graphWhat += (graphWhat.empty() ? "" : "; ") + describeGaps(subject, gaps);
+                if (isVar) {
+                    // A conversion yields a value; a var parameter takes the variable itself.
+                    graphFixes += std::string(graphFixes.empty() ? "" : " ") +
+                                  "No conversion applies to argument " + std::to_string(i + 1) +
+                                  ": a var parameter takes the variable itself, and a variable " +
+                                  "has the widened type of its first value. Pass the value to a " +
+                                  "parameter that is not var, or declare the var parameter with " +
+                                  "the variable's type and convert the value where it is read.";
+                    continue;
+                }
+                std::string conversions;
+                for (const ConversionGap &gap : gaps) {
+                    conversions += (conversions.empty() ? "" : ", ") +
+                                   conversionTextOf(text.empty() ? "<argument>" : text, gap);
+                }
+                graphFixes +=
+                    std::string(graphFixes.empty() ? "" : " ") +
+                    "Where the value is known to fit, write the conversion: " + conversions + ".";
+            }
+        };
+        check(withInputs, withTypes, true);
+        check(normInputs, normTypes, false);
+        if (!fits || graphWhat.empty()) {
+            continue;
+        }
+        if (target) {
+            return;
+        }
+        target = &candidate;
+        what   = std::move(graphWhat);
+        fixes  = std::move(graphFixes);
+    }
+    if (!target) {
+        return;
+    }
+    diags_->of(SemanticDiag::ArgumentNeedsConversion)
+        .atOrigin(call->load()->origin())
+        .commit(
+            (target->first.empty() ? "" : target->first + ": ") + target->second->toString(),
+            what,
+            fixes);
+    throw BuildAbortException();
+}
+
 void Builder::checkDeclaredReturn(
-    const compile_graph_ptr_t &graph, Type *resultType, uint64_t origin) {
+    const compile_graph_ptr_t &graph, Type *resultType, uint64_t origin,
+    const GCT::node_ptr_t &value) {
     // Only a DECLARED type is checked: an undeclared one is set from the first value returned,
     // after which hasExitType() is true as well, so the check runs before that happens.
     if (graph == nullptr || graph->draft().exitNode() != runtime::kInvalidNodeRef) {
@@ -2717,11 +3031,28 @@ void Builder::checkDeclaredReturn(
     if (declared->assignableFrom(resultType)) {
         return;
     }
-    auto diag = diags_->of(SemanticDiag::ReturnTypeMismatch);
+    std::vector<ConversionGap> gaps;
+    const bool convertible = collectConversionGaps(declared, resultType, "", gaps) && !gaps.empty();
+    auto diag              = diags_->of(
+        convertible ? SemanticDiag::ReturnNeedsConversion : SemanticDiag::ReturnTypeMismatch);
     if (origin != 0) {
         diag.atOrigin(origin);
     } else if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         diag.atOrigin(sourceContext->debugMap().graphOrigin(graph->stableId()));
+    }
+    if (convertible) {
+        const std::string text = sourceTextOf(value);
+        std::string fixes;
+        for (const ConversionGap &gap : gaps) {
+            fixes += (fixes.empty() ? "" : ", ") +
+                     conversionTextOf(text.empty() ? "<returned expression>" : text, gap);
+        }
+        diag.commit(
+            declared->toString(),
+            describeGaps(text.empty() ? "the value" : "the value ('" + text + "')", gaps),
+            fixes,
+            funcType->toString());
+        throw BuildAbortException();
     }
     diag.commit(resultType->toString(), declared->toString(), funcType->toString());
     throw BuildAbortException();

@@ -104,6 +104,10 @@ class OtherType : public Type {
     virtual OtherType *
     cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const;
 
+    /// The type as a program writes it, for diagnostics that suggest source text (`x as T`).
+    /// toString() is the default; a type whose printed form is not its source form overrides.
+    virtual std::string spelling() const { return toString(); }
+
     virtual std::string toString() const override                      = 0;
     virtual std::string mangle() const override                        = 0;
     virtual Type *clone(bool deep = false) const override              = 0;

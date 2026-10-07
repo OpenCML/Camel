@@ -113,6 +113,9 @@ class Builder {
     std::unordered_map<node_handle_t, std::vector<std::optional<slot_t>>> arrayElementStatics_;
     std::deque<camel::core::mm::RootHandle> typeFoldedRoots_;
     camel::core::type::StaticArg staticArgOf(node_handle_t node) const;
+    // The source text of the expression `expr` when it is short and on one line; empty
+    // otherwise. For diagnostics that suggest source text.
+    std::string sourceTextOf(const GCT::node_ptr_t &expr) const;
     // A use of a variable that no writer has been ordered after yet. A read (`:var/get`) hands
     // the value on, so the operations that take the read's result are the direct users of the
     // value; an operation that uses the variable itself (a call of a function that captured
@@ -322,11 +325,23 @@ class Builder {
     node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
     // Makes `result` the result of `graph` when its body set none with `return`.
     void setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result);
+    /// Reports SemanticDiag::ArgumentNeedsConversion (and aborts) when the arguments of `call`
+    /// fit exactly one of `candidates` but for types that leave open what a parameter fixes,
+    /// i.e. when writing `as` at those arguments makes the call compile. Returns otherwise.
+    void reportConversionGaps(
+        const std::vector<std::pair<std::string, camel::core::type::FunctionType *>> &candidates,
+        const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
     /// Reports SemanticDiag::ReturnTypeMismatch when `graph` declares a return type that the
-    /// value it returns cannot be assigned to (the rule arguments are held to: Type::assignableFrom,
-    /// no numeric conversion). `origin` locates the returned expression, or 0 for the function.
+    /// value it returns cannot be assigned to (the rule arguments are held to:
+    /// Type::assignableFrom, no numeric conversion), or SemanticDiag::ReturnNeedsConversion when a
+    /// conversion written with `as` leads there. `origin` locates the returned expression, or 0 for
+    /// the function; `value` is the returned expression when it is known (its text is quoted in the
+    /// suggested conversion).
     void checkDeclaredReturn(
-        const compile_graph_ptr_t &graph, camel::core::type::Type *resultType, uint64_t origin);
+        const compile_graph_ptr_t &graph, camel::core::type::Type *resultType, uint64_t origin,
+        const GCT::node_ptr_t &value = nullptr);
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 

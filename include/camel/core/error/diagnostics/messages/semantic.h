@@ -61,6 +61,8 @@ enum class SemanticDiag : uint32_t {
     AssignmentTargetNotVariable  = 0x00001E,
     ConstructNotSupported        = 0x00001F,
     InvalidTypeArgument          = 0x000020,
+    ArgumentNeedsConversion      = 0x000021,
+    ReturnNeedsConversion        = 0x000022,
 
     // Warnings
     FeatureNotSupported     = 0x100000,
