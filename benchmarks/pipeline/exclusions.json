@@ -4,7 +4,8 @@
  "criteria": {
   "a": "The zero-pass repeats of the program differed in the first run (records of Camel 623f5145, 13 programs) or in the after-run (records of Camel 0586a0a6, 16 entries of 13 files), under the frozen determinism check (CLASSIFIER-RULES.md section 5).",
   "b": "Source review. Candidates were every program whose archived zero-pass trace contains an operator matching ^time:|rand|random, or whose source imports time, random, os or perf, or calls now(, random(, rand*(, seed(, sleep(. A candidate is excluded when a clock value or a random value drawn before any seed operator reaches the printed output, a written file, an effect payload or the exit code. The review was done by the harness maintainer (an AI agent) by reading each source file; it was not checked by a second reader.",
-  "c": "Source review: the program observes by design whether calls with no order between them run at the same time, or in which order they do. Its output (or its effect trace) on a pipeline ending in the parallel scheduler differs from the default run without either being wrong, so pipeline invariance against the default run does not apply to it. Its own test (test/plans/feat/para/core.plan.toml) asserts the expected values under std::prl."
+  "c": "Source review: the program observes by design whether calls with no order between them run at the same time, or in which order they do. Its output (or its effect trace) on a pipeline ending in the parallel scheduler differs from the default run without either being wrong, so pipeline invariance against the default run does not apply to it. Its own test (test/plans/feat/para/core.plan.toml) asserts the expected values under std::prl.",
+  "d": "Owner ruling (2026-10-07): the program prints a value whose static type is `any`. Camel has no run-time type test, so such a value prints as `<any>`; a pass that inlines the call makes the static type of the printed value known and it then prints as that type. Both outputs are by design (printing `<any>` is the safest behaviour for a value of unknown type), so the output of a pipeline that inlines differs from the default run without either being wrong, and pipeline invariance against the default run does not apply to the program."
  },
  "how_to_extend": "Add an entry with path (relative to the repository root, all environment variants of the file are excluded), reason, criteria and evidence. A program that runs clock/random operators and stays judged goes into reviewed_not_excluded with the reason; classify.py reports programs with such operators that are in neither list.",
  "excluded": [
@@ -76,7 +77,10 @@
    "evidence": "source review; harness run on the std::tf pipelines: EFFECT_MISMATCH with equal counts (468 effects) and equal output on all five"},
   {"path": "test/cases/para/core/unordered_foreach_timing.cml", "criteria": ["b"],
    "reason": "prints a wall-clock duration and returns exit code 1 when the duration is 0.5 s or more",
-   "evidence": "source review; its zero-pass run exits 1 on this machine (INVALID_REF in both runs), and the printed duration differed between repeats in the after-run"}
+   "evidence": "source review; its zero-pass run exits 1 on this machine (INVALID_REF in both runs), and the printed duration differed between repeats in the after-run"},
+  {"path": "test/cases/compile/return_type/accepted.cml", "criteria": ["d"],
+   "reason": "println(a(2)) prints the result of a function declared to return `any`: `<any>` on the default run, `2` on a pipeline whose passes inline the call",
+   "evidence": "owner ruling: normal, by design; no compiler change. Source review of the program; the difference was reported from pipeline runs and was not re-measured for this entry"}
  ],
  "reviewed_not_excluded": [
   {"path": "benchmarks/gru/model.cml", "reason": "prints wall-clock timings only as the values of keys ending in _ms on CAMEL_BENCH lines; these are masked (output mask camel_bench_ms, rules section 3)"},
