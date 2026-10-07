@@ -32,6 +32,7 @@
 #include "emitter.h"
 #include "lowering.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
@@ -619,12 +620,56 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         return it->second;
     }
     case GCNodeKind::Cast: {
-        Value src = eval(act, g->normInputsOf(ref).front());
+        // `e as T` is a checked conversion. Of a constant it is performed now. Of a tensor that
+        // depends on the model input it is an assertion about element type and shape, and an
+        // ONNX model checks none when it runs: it is exported (as nothing) only when what is
+        // known of the value at export time already proves it, and refused otherwise.
+        const gc_node_ref_t source = g->normInputsOf(ref).front();
+        Value src                  = eval(act, source);
         if (src.isConstant()) {
-            return keep(n->dataType->castSlotFrom(src.slot, src.ty), n->dataType);
+            try {
+                return keep(n->dataType->castSlotFrom(src.slot, src.ty), n->dataType);
+            } catch (const core::error::RuntimeFault &fault) {
+                // What the conversion says itself ("conversion to 'T' failed: ...").
+                unsupported(
+                    act,
+                    std::format(
+                        "this conversion of a constant always fails: {}",
+                        fault.formatArgs().empty() ? std::string(fault.what())
+                                                   : fault.formatArgs().front()));
+            }
         }
         if (tensor::asTensorType(n->dataType)) {
-            return src;
+            const TensorFacts facts = factsOf(src);
+            type::Type *known       = src.form == Value::Form::Tensor
+                                          ? tensor::TensorType::get(facts.dtype, facts.shape)
+                                          : inferenceTypeOf(src);
+            type::Type *declared    = g->node(source)->dataType;
+            const auto safety       = n->dataType->castSafetyFrom(known);
+            if (safety == type::CastSafety::Safe ||
+                (declared && n->dataType->castSafetyFrom(declared) == type::CastSafety::Safe)) {
+                return src;
+            }
+            const std::string have = known ? known->toString() : std::string("a value of unknown type");
+            if (safety == type::CastSafety::Forbidden) {
+                unsupported(
+                    act,
+                    std::format(
+                        "this conversion to '{}' always fails: for the exported inputs the "
+                        "value is a '{}'",
+                        n->dataType->toString(),
+                        have));
+            }
+            unsupported(
+                act,
+                std::format(
+                    "the conversion to '{}' of a value that depends on the model input cannot "
+                    "be checked when the model is exported: the value is only known to be a "
+                    "'{}', and an ONNX model does not check a shape or an element type when it "
+                    "runs. Convert to a type that leaves open what the inputs leave open (a "
+                    "negative extent for a dynamic axis), or export with inputs that fix it",
+                    n->dataType->toString(),
+                    have));
         }
         if (src.form == Value::Form::Scalar &&
             tensor::isSupportedTensorScalar(n->dataType->code())) {

@@ -1891,3 +1891,54 @@ assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call 
 }
 """
 timeout_ms = 12000
+
+[[tests]]
+name = "grad_through_as.runtime.nvm"
+desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and value_and_grad give 2 * x * w. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_through_as.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes('FAIL'), `gradient check failed: ${out}`)
+assert(out.includes('grad ok') && out.includes('value_and_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_through_as.macro.nvm"
+desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and value_and_grad give 2 * x * w. (grad expanded by std::macro)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_through_as.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes('FAIL'), `gradient check failed: ${out}`)
+assert(out.includes('grad ok') && out.includes('value_and_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_through_as.simplified.nvm"
+desc = "The gradient of a function that converts tensors with `as` (a constant to a shaped type, a computed value to its shape and to a type that leaves an extent open): a conversion of a tensor is the identity for the derivative, so grad and value_and_grad give 2 * x * w. (std::macro, then std::opt::simplify, which folds the conversion of the constant)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_through_as.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(!out.includes('FAIL'), `gradient check failed: ${out}`)
+assert(out.includes('grad ok') && out.includes('value_and_grad ok') && out.includes('value 88.75'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000

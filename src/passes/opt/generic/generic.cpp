@@ -556,6 +556,54 @@ bool foldStaticFill(
     return true;
 }
 
+/**
+ * Replaces a conversion (`e as T`, a CAST node) of a constant by the converted constant: a
+ * constant under `as` is still a constant. The conversion is the one the schedulers run
+ * (Type::castSlotFrom of the target type), under the rule the graph builder admits a CAST by:
+ * a Safe conversion between primitive types, or a conversion into a module type, which checks
+ * the value (a tensor's element type and shape). A checked conversion that fails is left in the
+ * graph, to fail with its own located error when the program runs.
+ */
+bool foldStaticCast(
+    GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
+    const auto sources = draft.normInputsOf(id);
+    type::Type *target = draft.header(id)->dataType;
+    if (sources.size() != 1 || !target || !draft.withInputsOf(id).empty()) {
+        return false;
+    }
+    const auto source = staticValueOf(draft, sources[0]);
+    if (!source || !source->second) {
+        return false;
+    }
+    const type::CastSafety safety = target->castSafetyFrom(source->second);
+    // A module type checks a value of its own kind (the constant's type says it is one).
+    const bool checkedByTarget    = target->isOtherType() && safety != type::CastSafety::Forbidden &&
+                                    source->second->code() == target->code() &&
+                                    source->first != NullSlot;
+    const bool safePrimitive      = safety == type::CastSafety::Safe &&
+                                    type::isPrimitive(target->code()) &&
+                                    type::isPrimitive(source->second->code());
+    if (!checkedByTarget && !safePrimitive) {
+        return false;
+    }
+    slot_t result = NullSlot;
+    try {
+        result = target->castSlotFrom(source->first, source->second);
+    } catch (...) {
+        return false; // the conversion fails: left to be reported when the program runs
+    }
+    if (type::isGCTraced(target->code()) && result != NullSlot && result != source->first) {
+        // Keep a value the conversion made alive until commit moves it into the static area.
+        roots.emplace_back(
+            camel::core::mm::autoSpace(),
+            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(result),
+            target,
+            "std::opt::fold");
+    }
+    replaceNode(draft, id, draft.materializeStaticValue(result, target));
+    return true;
+}
+
 /// Replaces a pure operator by the constant its argument types fix, through the operator's
 /// registered type folder. Returns false when there is none or the types do not fix the result.
 bool foldFromTypes(
@@ -627,6 +675,15 @@ size_t foldDraft(
             if (const auto *h = draft.header(id);
                 h && h->kind == GCNodeKind::Fill && isFoldable(draft, id)) {
                 if (foldStaticFill(draft, id, roots)) {
+                    ++folded;
+                    changed = true;
+                }
+                continue;
+            }
+            // A conversion of a constant is a constant, when the conversion succeeds.
+            if (const auto *h = draft.header(id);
+                h && h->kind == GCNodeKind::Cast && isFoldable(draft, id)) {
+                if (foldStaticCast(draft, id, roots)) {
                     ++folded;
                     changed = true;
                 }
