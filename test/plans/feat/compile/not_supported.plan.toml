@@ -275,3 +275,18 @@ expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+[[tests]]
+name = "bounds.array_member_access"
+desc = "`.N` on an array is a compile-time error; it used to read the array as a tuple without a bounds check and print garbage on every back end."
+kind = "negative"
+case = "../../../cases/compile/bounds/array_member_access.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeNotIndexable"
+expect_diagnostic_code = "0x0300000E"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 13
+expect_output_contains = ["Type 'i64[]' does not support index access."]
+expect_output_not_contains = ["never printed", "42949672963"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

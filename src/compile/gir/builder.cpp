@@ -2556,9 +2556,13 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         break;
     }
     case TypeCode::Array: {
-        const auto *arrTy = tt::as_ptr<camel::core::type::ArrayType>(tgtType);
-        elemType          = arrTy->elemType();
-        break;
+        // `.N` reads a tuple element and `.name` a struct field. On an array no back end
+        // implements either: the array was read as if it were a tuple, without a bounds
+        // check, and the program printed whatever was there. An element is read with `[N]`.
+        diags_->of(SemanticDiag::TypeNotIndexable)
+            .atOrigin(gct->load()->origin())
+            .commit(tgtType->toString());
+        throw BuildAbortException();
     }
     case TypeCode::Struct: {
         const auto *strTy    = tt::as_ptr<camel::core::type::StructType>(tgtType);
