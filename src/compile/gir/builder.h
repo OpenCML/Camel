@@ -33,6 +33,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/typevar.h"
 
 namespace camel::compile::gir {
 
@@ -180,6 +181,86 @@ class Builder {
     std::vector<compile_graph_ptr_t> builtBodies_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
+
+    // ---- Generic functions (design principles 2.9) ----
+    //
+    // A function whose signature binds type variables (`typeas T`) is a subgraph template:
+    // no graph is built for its declaration. Each direct call binds the variables from the
+    // argument types and asks for the instance of those types, which is built once from the
+    // function's GCT with the variables replaced (typeBindings_) wherever the body names a
+    // type, and then called like any other function. So the body is typed and its overloads
+    // are chosen at instantiation, and only concrete types reach a graph.
+    struct GenericInstance {
+        camel::core::type::type_bindings_t bindings;
+        compile_graph_ptr_t graph;
+        // An error was found in the body: later calls with the same types fail quietly.
+        bool failed = false;
+    };
+    struct GenericTemplate {
+        std::string name;
+        GCT::node_ptr_t func;
+        // The declared type with the variables of enclosing instances replaced; the function's
+        // own variables remain.
+        FunctionType *funcType = nullptr;
+        // The bindings in force where the template was declared (a generic function declared
+        // inside an instance of another one).
+        camel::core::type::type_bindings_t outerBindings;
+        // Where the function was declared: instances are built there, not at the call.
+        compile_graph_ptr_t ownerGraph;
+        node_scope_ptr_t nodeScope;
+        graph_scope_ptr_t graphScope;
+        decorated_scope_ptr_t decoratedScope;
+        std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
+        std::vector<GenericInstance> instances;
+        // Instances whose bodies are being built right now, one inside another.
+        size_t openInstances = 0;
+    };
+    using template_ptr_t       = std::shared_ptr<GenericTemplate>;
+    using template_scope_t     = Scope<std::string, template_ptr_t>;
+    using template_scope_ptr_t = std::shared_ptr<template_scope_t>;
+    // Bounds on instantiation. A generic function that calls itself with ever larger types
+    // (`f(x) = f([x])`) would never stop building instances, so the instances of ONE function
+    // being built inside one another are limited; the number is small because such types
+    // may double at every step (`f((x, x))`). A chain of different generic functions calling
+    // each other is ordinary code and only meets the far larger overall bound.
+    static constexpr size_t kMaxOpenInstancesOfOne = 8;
+    static constexpr size_t kMaxInstantiationDepth = 128;
+
+    template_scope_ptr_t templateScope_;
+    // The type variables of the instance being built and their types; empty outside one.
+    camel::core::type::type_bindings_t typeBindings_;
+    size_t instantiationDepth_ = 0;
+    // Set while the callee of a call is visited: the one place the name of a generic function
+    // may stand. The DREF nodes that name one, and the template each names.
+    bool genericCalleeAllowed_ = false;
+    std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
+
+    // A type read from the GCT, with the type variables of the current instance replaced.
+    Type *boundType(Type *type) const {
+        return camel::core::type::substituteTypeVars(type, typeBindings_);
+    }
+    // Whether a declared function type is still generic under the current bindings.
+    bool isGenericHere(Type *type) const {
+        return camel::core::type::containsTypeVar(type) &&
+               camel::core::type::containsTypeVar(boundType(type));
+    }
+    // Registers the generic functions declared directly in the block `exec`, before anything
+    // in the block is built: a call may precede the declaration.
+    void registerGenericTemplates(const GCT::node_ptr_t &exec);
+    // The instance of `tmpl` that the arguments of `call` ask for: binds the type variables,
+    // checks every argument against its parameter, and builds the instance unless it exists.
+    compile_graph_ptr_t resolveGenericCall(
+        const template_ptr_t &tmpl, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    compile_graph_ptr_t instantiateGeneric(
+        const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
+        const GCT::node_ptr_t &call);
+    // Enters the scope of `graph`, an existing graph, as enterScope does for one it finds.
+    void enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name);
+    // Builds the body of the function `gct` into `graph`, whose scope has been entered.
+    void buildFuncBody(
+        const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
+        const std::string &name);
 
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({

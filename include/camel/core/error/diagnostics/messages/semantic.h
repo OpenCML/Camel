@@ -67,6 +67,15 @@ enum class SemanticDiag : uint32_t {
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
     // dropped while the rest of the program went on.
     FeatureNotSupported          = 0x000040,
+    // Generic functions and type functions (design principles 2.9).
+    TypeVariableNotAllowed       = 0x000050,
+    TypeVariableRedeclared       = 0x000051,
+    TypeVariableNotBindable      = 0x000052,
+    GenericArgumentsMismatch     = 0x000053,
+    GenericFunctionAsValue       = 0x000054,
+    GenericInstantiationTooDeep  = 0x000055,
+    TypeFunctionArguments        = 0x000056,
+    GenericFunctionUnsupported   = 0x000057,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

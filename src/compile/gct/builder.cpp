@@ -23,6 +23,7 @@
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
 #include "camel/utils/scope.h"
@@ -556,7 +557,18 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(i);
                     Type *type              = visitType(typeASTNode);
                     // Try a static type conversion first.
-                    if (dataNode->type() == LoadType::DATA) {
+                    if (dataNode->type() == LoadType::DATA && containsTypeVar(type)) {
+                        // Decided when the generic function is instantiated.
+                        node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
+                        *castNode << dataNode;
+                        setOriginFromAst(
+                            context_,
+                            castNode,
+                            ast,
+                            camel::source::OriginKind::GctNode,
+                            "gct.cast");
+                        dataNode = castNode;
+                    } else if (dataNode->type() == LoadType::DATA) {
                         const auto &dataLoad = dataNode->loadAs<DataLoad>();
                         const auto &data     = dataLoad->data();
                         auto convertedData   = data->convertTo(type);
@@ -606,7 +618,18 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
                     Type *type              = visitType(typeASTNode);
                     // Try a static type conversion first.
-                    if (dataNode->type() == LoadType::DATA) {
+                    if (dataNode->type() == LoadType::DATA && containsTypeVar(type)) {
+                        // Decided when the generic function is instantiated.
+                        node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
+                        *castNode << dataNode;
+                        setOriginFromAst(
+                            context_,
+                            castNode,
+                            ast,
+                            camel::source::OriginKind::GctNode,
+                            "gct.cast");
+                        dataNode = castNode;
+                    } else if (dataNode->type() == LoadType::DATA) {
                         const auto &dataLoad = dataNode->loadAs<DataLoad>();
                         const auto &data     = dataLoad->data();
                         auto convertedData   = data->convertTo(type);
@@ -706,6 +729,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->size() >= 1, "FuncDecl AST should have at least one child.");
 
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(ast->size() - 1);
+    funcDeclPending_         = true;
     node_ptr_t funcNode      = visitFuncData(funcDataNode);
 
     // Decorator annotations are lowered to ANNO nodes attached after FUNC payload.
@@ -1359,7 +1383,9 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         const auto &rhsASTNode = ast->atAs<AST::TypeLoad>(1);
         const auto &dataNode   = visitData(lhsASTNode);
         const auto &dstType    = visitType(rhsASTNode);
-        if (dataNode->type() == LoadType::DATA) {
+        // A conversion to a type written with a type variable is decided when the generic
+        // function is instantiated, for a literal as for any other value.
+        if (dataNode->type() == LoadType::DATA && !containsTypeVar(dstType)) {
             const auto &dataLoad = dataNode->loadAs<DataLoad>();
             const auto &data     = dataLoad->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
@@ -1827,8 +1853,44 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     ENTER("FuncData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
+    // The type variables a declaration binds are in scope in the rest of its signature and in
+    // its body, and nowhere else.
+    const bool isDecl = std::exchange(funcDeclPending_, false);
+    struct TypeScopeGuard {
+        Builder &self;
+        scope_ptr_t<Reference, Type *> outer;
+        std::vector<std::string> outerVars;
+        ~TypeScopeGuard() {
+            self.typeScope_        = outer;
+            self.declaredTypeVars_ = std::move(outerVars);
+        }
+    } typeScopeGuard{*this, typeScope_, std::exchange(declaredTypeVars_, {})};
+    pushScope();
+    declSignature_ = isDecl;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    if (!declaredTypeVars_.empty()) {
+        // Every variable needs a position in an argument type to take its type from.
+        std::vector<std::string> bindable;
+        for (Type *param : funcType->withTypesSpan()) {
+            collectBindableTypeVars(param, bindable);
+        }
+        for (Type *param : funcType->normTypesSpan()) {
+            collectBindableTypeVars(param, bindable);
+        }
+        for (const std::string &name : declaredTypeVars_) {
+            if (std::find(bindable.begin(), bindable.end(), name) == bindable.end()) {
+                diags_->of(SemanticDiag::TypeVariableNotBindable)
+                    .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                    .commit(
+                        name,
+                        funcData->ref().toString(),
+                        "its 'typeas' is inside a union, or is the argument of a type function "
+                        "that does not use it");
+                throw BuildAbortException();
+            }
+        }
+    }
     node_ptr_t typeNode  = createNodeAs<TypeLoad>(funcType, funcType->implMark());
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().toString());
@@ -2029,10 +2091,27 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::TypeOp::TypeAs: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::TypeAs");
-        throw BuildAbortException();
+        // `typeas T`: the type found at this position of an argument type becomes `T`.
+        const Reference &ref = ast->atAs<AST::TypeLoad>(0)->loadAs<AST::RefTypeLoad>()->ref();
+        const string name    = ref.toString();
+        if (!typeasAllowed_) {
+            diags_->of(SemanticDiag::TypeVariableNotAllowed)
+                .at(ast->load()->tokenRange())
+                .commit(
+                    name,
+                    inDeclReturnType_ ? "a return type has no argument to take the type from"
+                                      : "this is not a parameter of a function declaration");
+            throw BuildAbortException();
+        }
+        if (typeScope_->get(ref).has_value() || module_->getImportedType(ref).has_value()) {
+            diags_->of(SemanticDiag::TypeVariableRedeclared)
+                .at(ast->load()->tokenRange())
+                .commit(name);
+            throw BuildAbortException();
+        }
+        typeScope_->insert(ref, TypeVarType::create(name, false));
+        declaredTypeVars_.push_back(name);
+        res = TypeVarType::create(name, true);
     } break;
 
     default:
@@ -2116,17 +2195,24 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // Extract the function type load from the AST node
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
-    // Initialize the exit type (return type) as nullptr
-    Type *exitType = nullptr;
-
-    // Process the optional exit type node
-    const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
-    if (exitTypeNode) {
-        exitType = visitType(exitTypeNode);
+    // The signature of a function declaration may bind type variables among its parameters
+    // (`typeas T`), not in its return type. In a function type written inside such a
+    // parameter both positions bind: `f: (x: T) => typeas U`.
+    const bool signature = std::exchange(declSignature_, false);
+    struct FlagGuard {
+        bool &allowed, &inReturn;
+        bool outerAllowed, outerInReturn;
+        ~FlagGuard() {
+            allowed  = outerAllowed;
+            inReturn = outerInReturn;
+        }
+    } flagGuard{typeasAllowed_, inDeclReturnType_, typeasAllowed_, inDeclReturnType_};
+    if (signature) {
+        typeasAllowed_    = true;
+        inDeclReturnType_ = false;
     }
 
     FunctionTypeFactory factory;
-    factory.setExitType(exitType);
     factory.setImplMark(typeLoad->implMark());
     factory.setModifiers(typeLoad->modifiers());
 
@@ -2220,6 +2306,16 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         factory.addNormArg(name, type, isVar);
+    }
+
+    // The return type comes after the parameters: it may name the type variables they bind.
+    const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
+    if (exitTypeNode) {
+        if (signature) {
+            typeasAllowed_    = false;
+            inDeclReturnType_ = true;
+        }
+        factory.setExitType(visitType(exitTypeNode));
     }
 
     LEAVE("FuncType");

@@ -315,10 +315,17 @@ class CaseLoad : public Load {
 
 class CastLoad : public Load {
     Type *targetType_;
+    bool annotation_;
 
   public:
-    CastLoad(Type *targetType) : Load(LoadType::CAST), targetType_(targetType) {}
+    /// `annotation`: the conversion is the type written on a declaration (`let x: T = 0`),
+    /// not an `as` expression. It only matters for a literal converted to a type written
+    /// with a type variable, which is converted when the generic function is instantiated
+    /// by the rule the GCT applies to the same literal and a concrete type.
+    CastLoad(Type *targetType, bool annotation = false)
+        : Load(LoadType::CAST), targetType_(targetType), annotation_(annotation) {}
     Type *targetType() const { return targetType_; }
+    bool annotation() const { return annotation_; }
 
     const std::string toString() const override { return "CAST: " + targetType_->toString(); }
 };

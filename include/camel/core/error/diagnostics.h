@@ -174,6 +174,13 @@ class Diagnostics {
 
     // Statistics.
     size_t count() const;
+    /// Appends `note` to the message of every error recorded at index `from` or later. For
+    /// context that is only known where the failing work was requested, e.g. the call that
+    /// asked for the instantiation of a generic function in whose body an error was found.
+    /// A message that already holds `limit` notes starting with `marker` gets " [...]" once
+    /// instead of one more note (0: no limit).
+    void annotateErrorsFrom(
+        size_t from, const std::string &note, const std::string &marker = "", size_t limit = 0);
     size_t count(Severity severity) const;
     size_t count(DiagType type) const;
     std::unordered_map<Severity, size_t> countBySeverity() const;

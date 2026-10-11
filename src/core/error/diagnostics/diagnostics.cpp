@@ -313,6 +313,32 @@ size_t Diagnostics::count() const {
     return storage_.size();
 }
 
+void Diagnostics::annotateErrorsFrom(
+    size_t from, const std::string &note, const std::string &marker, size_t limit) {
+    static const std::string kElided = " [...]";
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (size_t i = from; i < storage_.size(); ++i) {
+        std::string &message = storage_[i].message;
+        if (storage_[i].severity != Severity::Error) {
+            continue;
+        }
+        if (limit > 0 && !marker.empty()) {
+            size_t notes = 0;
+            for (size_t at = message.find(marker); at != std::string::npos;
+                 at        = message.find(marker, at + marker.size())) {
+                ++notes;
+            }
+            if (notes >= limit) {
+                if (!message.ends_with(kElided)) {
+                    message += kElided;
+                }
+                continue;
+            }
+        }
+        message += note;
+    }
+}
+
 size_t Diagnostics::count(Severity severity) const {
     std::lock_guard<std::mutex> lk(mtx_);
     return countBySeverityInternal(severity);

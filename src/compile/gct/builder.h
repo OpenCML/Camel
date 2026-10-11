@@ -76,6 +76,20 @@ class Builder {
     std::pair<data_ptr_t, bool>
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
+    // Type variables and type functions (design principles 2.9; camel/core/type/typevar.h).
+    // `typeas T` binds a variable only among the parameters of a function declaration: the
+    // builder notes that the function type it is about to visit is such a signature
+    // (declSignature_, set from funcDeclPending_), allows binding while it visits the
+    // parameters (typeasAllowed_), and records what was bound (declaredTypeVars_) so the
+    // declaration can be checked. A type function may only appear as the base of
+    // `Name<...>` (typeFunctionBase_).
+    bool funcDeclPending_  = false;
+    bool declSignature_    = false;
+    bool typeasAllowed_    = false;
+    bool inDeclReturnType_ = false;
+    bool typeFunctionBase_ = false;
+    std::vector<std::string> declaredTypeVars_;
+
     void pushScope() { typeScope_ = std::make_shared<Scope<Reference, Type *>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
 

@@ -701,10 +701,15 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     builtBodies_.clear();
     typeDecls_.clear();
     syntheticRefIndex_ = 0;
+    typeBindings_.clear();
+    genericDrefs_.clear();
+    instantiationDepth_   = 0;
+    genericCalleeAllowed_ = false;
 
     nodeScope_      = node_scope_t::create();
     graphScope_     = graph_scope_t::create();
     decoratedScope_ = decorated_scope_t::create();
+    templateScope_  = template_scope_t::create();
     rootGraph_      = createCompileGraph(FunctionType::create(), nullptr, "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
@@ -829,6 +834,12 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
             insertGraph(name, currGraph_);
         }
     }
+    enterGraphScope(currGraph_, name);
+    return currGraph_;
+}
+
+void Builder::enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name) {
+    currGraph_ = graph;
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         currGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
@@ -836,13 +847,14 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
     nodeScope_      = nodeScope_->enter(name);
     graphScope_     = graphScope_->enter(name);
     decoratedScope_ = decoratedScope_->enter(name);
-    return currGraph_;
+    templateScope_  = templateScope_->enter(name);
 }
 
 void Builder::leaveScope() {
     nodeScope_      = nodeScope_->leave();
     graphScope_     = graphScope_->leave();
     decoratedScope_ = decoratedScope_->leave();
+    templateScope_  = templateScope_->leave();
     currGraph_      = currGraph_ ? currGraph_->outerGraph() : nullptr;
 }
 
@@ -990,6 +1002,11 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
 
+    if (isGenericHere(type)) {
+        // A generic function is a template: its graphs are its instances.
+        LEAVE("DECL");
+        return nullptr;
+    }
     FunctionType *funcType    = tt::as_ptr<FunctionType>(type);
     compile_graph_ptr_t graph = enterScope(funcType, declLoad->ref().toString());
     leaveScope();
@@ -1000,11 +1017,45 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 
 compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
-    std::string name          = gct->loadAs<GCT::FuncLoad>()->name();
-    GCT::node_ptr_t typeLoad  = gct->atAs<GCT::TypeLoad>(0);
-    Type *type                = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
-    FunctionType *funcType    = tt::as_ptr<FunctionType>(type);
+    std::string name         = gct->loadAs<GCT::FuncLoad>()->name();
+    GCT::node_ptr_t typeLoad = gct->atAs<GCT::TypeLoad>(0);
+    Type *type               = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
+    FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
+    if (isGenericHere(type)) {
+        // A generic function: registered as a template when its block was entered
+        // (registerGenericTemplates), built when a call asks for an instance.
+        LEAVE("FUNC");
+        return nullptr;
+    }
+    if (instantiationDepth_ > 0) {
+        // Inside an instance every function and lambda of the body is built once per
+        // instance, and a graph completes its function type in place: each needs its own,
+        // with the type variables replaced.
+        funcType = instantiateFunctionType(funcType, typeBindings_);
+    }
     compile_graph_ptr_t graph = enterScope(funcType, name);
+    buildFuncBody(gct, graph, funcType, name);
+    leaveScope();
+
+    std::vector<GCT::node_ptr_t> annoNodes;
+    for (size_t i = 2; i < gct->size(); ++i) {
+        const auto &annoNode = gct->at(i);
+        if (annoNode && annoNode->type() == GCT::LoadType::ANNO) {
+            annoNodes.push_back(annoNode);
+        }
+    }
+    if (!annoNodes.empty()) {
+        graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
+        insertDecoratedGraph(name, decorated);
+    }
+
+    LEAVE("FUNC");
+    return graph;
+}
+
+void Builder::buildFuncBody(
+    const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
+    const std::string &name) {
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -1029,25 +1080,275 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
         builtBodies_.push_back(graph);
     } catch (...) {
+        // The caller entered the scope of `graph`; an error leaves it on the way out.
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
         throw;
     }
-    leaveScope();
+}
 
-    std::vector<GCT::node_ptr_t> annoNodes;
-    for (size_t i = 2; i < gct->size(); ++i) {
-        const auto &annoNode = gct->at(i);
-        if (annoNode && annoNode->type() == GCT::LoadType::ANNO) {
-            annoNodes.push_back(annoNode);
+void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
+    std::unordered_set<std::string> plainNames;
+    for (size_t i = 0; i < exec->size(); ++i) {
+        const auto &child = exec->at(i);
+        if (child->type() != GCT::LoadType::FUNC) {
+            continue;
+        }
+        const std::string name = child->loadAs<GCT::FuncLoad>()->name();
+        Type *type             = child->atAs<GCT::TypeLoad>(0)->loadAs<GCT::TypeLoad>()->dataType();
+        if (!name.empty() && !isGenericHere(type)) {
+            plainNames.insert(name);
         }
     }
-    if (!annoNodes.empty()) {
-        graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
-        insertDecoratedGraph(name, decorated);
+    for (size_t i = 0; i < exec->size(); ++i) {
+        const auto &child = exec->at(i);
+        if (child->type() != GCT::LoadType::FUNC) {
+            continue;
+        }
+        const std::string name = child->loadAs<GCT::FuncLoad>()->name();
+        Type *type             = child->atAs<GCT::TypeLoad>(0)->loadAs<GCT::TypeLoad>()->dataType();
+        if (name.empty() || !isGenericHere(type)) {
+            continue;
+        }
+        // One name is either a generic function or a set of ordinary ones: which of two
+        // generic functions, or of a generic and an ordinary one, a call means is not defined.
+        if (templateScope_->has(name, false) || plainNames.contains(name)) {
+            diags_->of(SemanticDiag::Redeclaration).atOrigin(child->load()->origin()).commit(name);
+            continue;
+        }
+        for (size_t k = 2; k < child->size(); ++k) {
+            if (child->at(k) && child->at(k)->type() == GCT::LoadType::ANNO) {
+                diags_->of(SemanticDiag::GenericFunctionUnsupported)
+                    .atOrigin(child->load()->origin())
+                    .commit(name, "decorated: a decorator takes a function value");
+                break;
+            }
+        }
+        auto tmpl            = std::make_shared<GenericTemplate>();
+        tmpl->name           = name;
+        tmpl->func           = child;
+        tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
+        tmpl->outerBindings  = typeBindings_;
+        tmpl->ownerGraph     = currGraph_;
+        tmpl->nodeScope      = nodeScope_;
+        tmpl->graphScope     = graphScope_;
+        tmpl->decoratedScope = decoratedScope_;
+        tmpl->templateScope  = templateScope_;
+        templateScope_->insert(name, tmpl);
+    }
+}
+
+compile_graph_ptr_t Builder::resolveGenericCall(
+    const template_ptr_t &tmpl, const type_vec_t &withTypes, const type_vec_t &normTypes,
+    const GCT::node_ptr_t &call) {
+    FunctionType *signature = tmpl->funcType;
+    const auto typesText    = [](const type_vec_t &types) {
+        return strutil::join(types, ", ", [](Type *t) { return t->toString(); });
+    };
+    const std::string argTypesStr =
+        withTypes.empty() ? std::format("({})", typesText(normTypes))
+                          : std::format("<{}> ({})", typesText(withTypes), typesText(normTypes));
+    const auto reject = [&](const std::string &why) {
+        diags_->of(SemanticDiag::GenericArgumentsMismatch)
+            .atOrigin(call->load()->origin())
+            .commit(tmpl->name, argTypesStr, why, tmpl->name + ": " + signature->toString());
+        throw BuildAbortException();
+    };
+    const size_t withCount = signature->withTypesCount();
+    const size_t normCount = signature->normTypesCount();
+    if (withCount != withTypes.size()) {
+        reject(std::format(
+            "it takes {} with-argument(s) and {} were given",
+            withCount,
+            withTypes.size()));
+    }
+    if (normCount != normTypes.size()) {
+        reject(
+            std::format("it takes {} argument(s) and {} were given", normCount, normTypes.size()));
+    }
+    // A parameter by its position among all parameters (`with` ones first).
+    const auto patternAt = [&](size_t i) {
+        return i < withCount ? signature->withTypeAt(i) : signature->normTypeAt(i - withCount);
+    };
+    const auto actualAt = [&](size_t i) {
+        return valueTypeOf(i < withCount ? withTypes[i] : normTypes[i - withCount]);
+    };
+    const auto describe = [&](size_t i) {
+        const std::string paramName =
+            i < signature->argNamesCount() ? std::string(signature->argNameAt(i)) : "?";
+        return std::format(
+            "{} {} has type '{}', but its parameter '{}: {}'",
+            i < withCount ? "with-argument" : "argument",
+            (i < withCount ? i : i - withCount) + 1,
+            actualAt(i)->toString(),
+            paramName,
+            patternAt(i)->toString());
+    };
+    // Each variable takes the type found at its `typeas` position...
+    type_bindings_t bindings;
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        if (!bindTypeVars(patternAt(i), actualAt(i), bindings)) {
+            reject(describe(i) + " needs a type of that form to bind its type variables");
+        }
+    }
+    // ...and then every argument is held to its parameter exactly as for an ordinary function.
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        Type *wanted = substituteTypeVars(patternAt(i), bindings);
+        if (containsTypeVar(wanted)) {
+            reject(describe(i) + " leaves a type variable without a type");
+        }
+        if (!wanted->assignableFrom(actualAt(i))) {
+            reject(std::format(
+                "{} is '{}' here ({})",
+                describe(i),
+                wanted->toString(),
+                typeBindingsToString(bindings)));
+        }
+    }
+    return instantiateGeneric(tmpl, bindings, call);
+}
+
+compile_graph_ptr_t Builder::instantiateGeneric(
+    const template_ptr_t &tmpl, const type_bindings_t &bindings, const GCT::node_ptr_t &call) {
+    const auto sameBindings = [&](const type_bindings_t &other) {
+        if (other.size() != bindings.size()) {
+            return false;
+        }
+        for (const auto &[name, type] : bindings) {
+            Type *bound = findTypeBinding(other, name);
+            if (bound == nullptr || !bound->equals(type)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    // One instance per set of types. An instance whose body is still being built is found
+    // here too: that is a recursive call.
+    for (const GenericInstance &instance : tmpl->instances) {
+        if (sameBindings(instance.bindings)) {
+            if (instance.failed) {
+                throw BuildAbortException();
+            }
+            return instance.graph;
+        }
+    }
+    const std::string instanceName = std::format(
+        "{}<{}>",
+        tmpl->name,
+        strutil::join(bindings, ", ", [](const std::pair<std::string, Type *> &b) {
+            return b.second->toString();
+        }));
+    if (tmpl->openInstances >= kMaxOpenInstancesOfOne ||
+        instantiationDepth_ >= kMaxInstantiationDepth) {
+        diags_->of(SemanticDiag::GenericInstantiationTooDeep)
+            .atOrigin(call->load()->origin())
+            .commit(
+                tmpl->name,
+                typeBindingsToString(bindings),
+                tmpl->openInstances >= kMaxOpenInstancesOfOne
+                    ? std::format(
+                          "{} instances of it are already being built inside one another",
+                          tmpl->openInstances)
+                    : std::format(
+                          "{} instantiations are already nested inside one another",
+                          instantiationDepth_));
+        throw BuildAbortException();
     }
 
-    LEAVE("FUNC");
+    // Where an error in the body is reported it also says which call asked for the instance.
+    std::string note = std::format(
+        " [in the instance '{}' of the generic function '{}' with {}",
+        instanceName,
+        tmpl->name,
+        typeBindingsToString(bindings));
+    if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+        const CharRange at = sourceContext->resolveOrigin(call->load()->origin());
+        note += std::format(
+            ", instantiated by the call at {}:{}",
+            at.start.line + 1,
+            at.start.character + 1);
+    }
+    note += "]";
+
+    // The instance is built where the function was declared, not where it is called.
+    struct BuildState {
+        Builder &self;
+        compile_graph_ptr_t graph;
+        node_scope_ptr_t nodeScope;
+        graph_scope_ptr_t graphScope;
+        decorated_scope_ptr_t decoratedScope;
+        template_scope_ptr_t templateScope;
+        type_bindings_t bindings;
+        bool waited, synced, varied, declaresVariable, calleeAllowed;
+        node_handle_t lastSynced;
+        GenericTemplate &opened;
+        BuildState(Builder &b, GenericTemplate &t)
+            : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
+              decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
+              bindings(b.typeBindings_), waited(b.waited_), synced(b.synced_), varied(b.varied_),
+              declaresVariable(b.declaresVariable_), calleeAllowed(b.genericCalleeAllowed_),
+              lastSynced(b.lastSyncedNode_), opened(t) {
+            ++self.instantiationDepth_;
+            ++opened.openInstances;
+        }
+        ~BuildState() {
+            --opened.openInstances;
+            self.currGraph_            = graph;
+            self.nodeScope_            = nodeScope;
+            self.graphScope_           = graphScope;
+            self.decoratedScope_       = decoratedScope;
+            self.templateScope_        = templateScope;
+            self.typeBindings_         = std::move(bindings);
+            self.waited_               = waited;
+            self.synced_               = synced;
+            self.varied_               = varied;
+            self.declaresVariable_     = declaresVariable;
+            self.genericCalleeAllowed_ = calleeAllowed;
+            self.lastSyncedNode_       = lastSynced;
+            --self.instantiationDepth_;
+        }
+    };
+
+    const size_t instanceIndex = tmpl->instances.size();
+    const size_t diagsBefore   = diags_->count();
+    const size_t errorsBefore  = diags_->count(Severity::Error);
+    compile_graph_ptr_t graph;
+    try {
+        BuildState saved(*this, *tmpl);
+        currGraph_      = tmpl->ownerGraph;
+        nodeScope_      = tmpl->nodeScope;
+        graphScope_     = tmpl->graphScope;
+        decoratedScope_ = tmpl->decoratedScope;
+        templateScope_  = tmpl->templateScope;
+        typeBindings_   = tmpl->outerBindings;
+        typeBindings_.insert(typeBindings_.end(), bindings.begin(), bindings.end());
+        waited_               = false;
+        synced_               = false;
+        varied_               = false;
+        declaresVariable_     = false;
+        genericCalleeAllowed_ = false;
+        lastSyncedNode_       = {};
+
+        FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings);
+        graph                  = createCompileGraph(funcType, currGraph_, instanceName);
+        tmpl->instances.push_back({bindings, graph, false});
+        enterGraphScope(graph, instanceName);
+        buildFuncBody(tmpl->func, graph, funcType, instanceName);
+        leaveScope();
+    } catch (...) {
+        if (instanceIndex < tmpl->instances.size()) {
+            tmpl->instances[instanceIndex].failed = true;
+        }
+        diags_->annotateErrorsFrom(diagsBefore, note, " [in the instance", 3);
+        throw;
+    }
+    // A statement of the body that fails is skipped so that the rest is still checked; the
+    // instance is unusable all the same.
+    if (diags_->count(Severity::Error) > errorsBefore) {
+        tmpl->instances[instanceIndex].failed = true;
+        diags_->annotateErrorsFrom(diagsBefore, note, " [in the instance", 3);
+        throw BuildAbortException();
+    }
     return graph;
 }
 
@@ -1159,7 +1460,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
 
 Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     ENTER("TYPE");
-    Type *type = gct->loadAs<GCT::TypeLoad>()->dataType();
+    Type *type = boundType(gct->loadAs<GCT::TypeLoad>()->dataType());
     LEAVE("TYPE");
     return type;
 }
@@ -1565,6 +1866,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
     const string name = gct->loadAs<GCT::DRefLoad>()->ref().toString();
+    const bool callee = std::exchange(genericCalleeAllowed_, false);
     auto optNode      = nodeAt(name);
     if (optNode.has_value()) {
         node_handle_t node = optNode.value();
@@ -1576,6 +1878,23 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return valueOf(node);
     }
     auto &graph       = currGraph_;
+    if (auto optTemplate = templateScope_->get(name); optTemplate.has_value()) {
+        // The name of a generic function stands for a template, which has no graph and so
+        // no function value: it can only be called.
+        if (!callee) {
+            diags_->of(SemanticDiag::GenericFunctionAsValue)
+                .atOrigin(gct->load()->origin())
+                .commit(name);
+            throw BuildAbortException();
+        }
+        node_handle_t drefNode = graph->addDrefNode(
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
+                std::make_shared<graph_set_t>()});
+        genericDrefs_[drefNode] = optTemplate.value();
+        registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
+        LEAVE("DREF");
+        return drefNode;
+    }
     auto optDecorated = decoratedGraphAt(name);
     if (optDecorated.has_value()) {
         node_handle_t drefNode = graph->addDrefNode(
@@ -1641,12 +1960,46 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
+    if (const auto &operand = gct->at(0);
+        operand->type() == GCT::LoadType::DATA &&
+        containsTypeVar(gct->loadAs<GCT::CastLoad>()->targetType())) {
+        // A literal converted to a type written with a type variable (`let zero: T = 0`,
+        // `0 as T`). The GCT converts a literal to a concrete type itself; here the type is
+        // only known now, so the same conversion is applied now.
+        const auto &castLoad   = gct->loadAs<GCT::CastLoad>();
+        const data_ptr_t &data = operand->loadAs<GCT::DataLoad>()->data();
+        Type *targetType       = boundType(castLoad->targetType());
+        const bool literal     = !isComposite(data->type()->code()) ||
+                                 tt::as_shared<CompositeData>(data)->resolved();
+        if (literal) {
+            data_ptr_t converted;
+            if (castLoad->annotation() ||
+                targetType->castSafetyFrom(data->type()) == CastSafety::Safe) {
+                converted = data->convertTo(targetType);
+            }
+            if (!converted) {
+                diags_->of(SemanticDiag::LiteralStaticCastFailed)
+                    .atOrigin(gct->load()->origin())
+                    .commit(data->toString(), targetType->toString());
+                throw BuildAbortException();
+            }
+            node_handle_t node = currGraph_->addStaticDataNode(converted);
+            if (varied_ && currGraph_->outerGraph().get() != nullptr) {
+                node_handle_t copyNode = currGraph_->addCopyNode(converted->type());
+                linkNodes(LinkType::Norm, node, copyNode);
+                node = copyNode;
+            }
+            registerNodeOrigin(context_, node, gct, "gir.data");
+            LEAVE("CAST");
+            return node;
+        }
+    }
     const auto &res = visit(gct->at(0));
     ASSERT(res.type() == typeid(node_handle_t), "Unexpected result type from child of CAST node.");
     node_handle_t valueNode = any_cast<node_handle_t>(res);
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     const auto &castLoad = gct->loadAs<GCT::CastLoad>();
-    Type *targetType     = castLoad->targetType();
+    Type *targetType     = boundType(castLoad->targetType());
     Type *sourceType     = nodeTypeOf(valueNode);
     // Safe conversions always; an Unsafe one only into a module type, which then checks the
     // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
@@ -2115,7 +2468,10 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
-    any targetNodeRes = visit(gct->at(0));
+    genericCalleeAllowed_ = gct->at(0)->type() == GCT::LoadType::DREF ||
+                            gct->at(0)->type() == GCT::LoadType::WITH;
+    any targetNodeRes     = visit(gct->at(0));
+    genericCalleeAllowed_ = false;
     ASSERT(
         targetNodeRes.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of LINK node.");
@@ -2164,7 +2520,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
     }
 
-    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+    if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
+        // A call of a generic function: the argument types select (and, the first time,
+        // build) the instance, which is then called like any other function.
+        targetGraph = resolveGenericCall(generic->second, withInputTypes, normInputTypes, gct);
+        if (!targetGraph->funcType()->hasExitType()) {
+            diags_->of(SemanticDiag::CallingIncompleteFunction)
+                .atOrigin(gct->load()->origin())
+                .commit(targetGraph->name(), targetGraph->funcType()->toString());
+            throw BuildAbortException();
+        }
+        currGraph_->addDependencyGraph(targetGraph);
+        targetNode     = createFuncDataNode(targetGraph, false, true);
+        targetFuncType = targetGraph->funcType();
+    } else if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
             auto graphs = asCompileGraphVec(drefTarget);
@@ -2507,7 +2876,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     ENTER("WITH");
-    any targetNodeRes = visit(gct->at(0));
+    // `f<w>(x)`: the callee of the call is the target of the binding.
+    genericCalleeAllowed_ = std::exchange(genericCalleeAllowed_, false) &&
+                            gct->at(0)->type() == GCT::LoadType::DREF;
+    any targetNodeRes     = visit(gct->at(0));
+    genericCalleeAllowed_ = false;
     ASSERT(
         targetNodeRes.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of WITH node.");
@@ -3076,6 +3449,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
         synced_         = execLoad->synced();
         lastSyncedNode_ = {};
     }
+    registerGenericTemplates(gct);
     node_handle_t res{};
     for (size_t i = 0; i < gct->size(); i++) {
         try {
@@ -3149,6 +3523,15 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
                 camel::core::module::detail::EntityAccess::makeGraphSet(
                     eraseCompileGraphSet(optGraph.value())));
             continue;
+        }
+        if (templateScope_->get(ref.toString()).has_value()) {
+            diags_->of(SemanticDiag::GenericFunctionUnsupported)
+                .atOrigin(gct->load()->origin())
+                .commit(
+                    ref.toString(),
+                    "exported: a module exports graphs, a generic function has one per set of "
+                    "types it is called with, and an importing module cannot build them yet");
+            throw BuildAbortException();
         }
         diags_->of(SemanticDiag::UnresolvedReference)
             .atOrigin(gct->load()->origin())

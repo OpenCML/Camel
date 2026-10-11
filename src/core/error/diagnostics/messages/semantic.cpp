@@ -337,6 +337,82 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Declare it with 'var', or bind the new value to a new name.",
             },
         },
+        {
+            SemanticDiag::TypeVariableNotAllowed,
+            {
+                "TypeVariableNotAllowed",
+                "'typeas {0}' cannot bind a type variable here: {1}.",
+                "A type variable is bound where its type first appears among the parameters of "
+                "a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is "
+                "written as plain '{0}' everywhere after that.",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableRedeclared,
+            {
+                "TypeVariableRedeclared",
+                "'typeas {0}' cannot bind '{0}': the name already denotes a type here.",
+                "Write 'typeas' only at the first occurrence of a type variable and plain "
+                "'{0}' afterwards, or choose a name that is not a type in scope.",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableNotBindable,
+            {
+                "TypeVariableNotBindable",
+                "The type variable '{0}' of '{1}' can never be bound: {2}.",
+                "A type variable takes the type found at the position of 'typeas {0}' in the "
+                "type of an argument. That position must be reachable through arrays, tuples, "
+                "structs and function types.",
+            },
+        },
+        {
+            SemanticDiag::GenericArgumentsMismatch,
+            {
+                "GenericArgumentsMismatch",
+                "The generic function '{0}' cannot be called with argument types {1}: {2}.",
+                "A type variable is bound once, at its 'typeas' position, from the type of the "
+                "argument found there; every other parameter is then checked against its type "
+                "with the variables replaced. Nothing is converted implicitly. Signature: {3}",
+            },
+        },
+        {
+            SemanticDiag::GenericFunctionAsValue,
+            {
+                "GenericFunctionAsValue",
+                "The generic function '{0}' is used as a value, but it is only a template until "
+                "it is called with arguments that fix its type variables.",
+                "Call it directly, or wrap the call in a function whose parameter types are "
+                "written out, e.g. '(x: int) => {0}(x)'.",
+            },
+        },
+        {
+            SemanticDiag::GenericInstantiationTooDeep,
+            {
+                "GenericInstantiationTooDeep",
+                "Instantiating the generic function '{0}' with {1} is refused: {2}.",
+                "Each call of a generic function with a new set of types builds a new "
+                "subgraph. A generic function that calls itself with ever larger types never "
+                "stops doing so.",
+            },
+        },
+        {
+            SemanticDiag::TypeFunctionArguments,
+            {
+                "TypeFunctionArguments",
+                "The type function '{0}' cannot be used this way: {1}.",
+                "A type declared with parameters, e.g. 'type Pair<T> = (T, T)', is used with "
+                "one type argument per parameter between '<' and '>', e.g. 'Pair<int>'.",
+            },
+        },
+        {
+            SemanticDiag::GenericFunctionUnsupported,
+            {
+                "GenericFunctionUnsupported",
+                "The generic function '{0}' cannot be {1}.",
+                "This use of a generic function is not supported.",
+            },
+        },
 
         {
             SemanticDiag::FeatureNotSupported,
