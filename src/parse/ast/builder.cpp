@@ -2404,6 +2404,14 @@ tupleData
 */
 any Builder::visitTupleData(OpenCMLParser::TupleDataContext *context) {
     ENTER("TupleData");
+    // `(e)`: a parenthesized expression, not a tuple (three children: the brackets and the
+    // list; a trailing comma would be a fourth).
+    if (context->dataList() && context->dataList()->dataExpr().size() == 1 &&
+        context->children.size() == 3) {
+        any inner = visitDataExpr(context->dataList()->dataExpr(0));
+        LEAVE("TupleData");
+        return inner;
+    }
     node_ptr_t dataNode = createNodeAs<TupleDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->dataList()) {
@@ -2421,7 +2429,6 @@ primaryData
     | literal
     | arrayData
     | structData
-    | '(' dataExpr ')'
     | tupleData
     | funcData
     ;
@@ -2437,8 +2444,6 @@ any Builder::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
         Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
         res             = createNodeAs<LiteralLoad>(literal);
         setNodeTokenRangeByContext(res, context->literal());
-    } else if (context->dataExpr()) {
-        res = any2node(visitDataExpr(context->dataExpr()));
     } else {
         res = any2node(visit(context->children[0]));
     }

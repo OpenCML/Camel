@@ -68,7 +68,7 @@
 | **compExpr** | annoExpr (**.. \| ?..** annoExpr)* |
 | **annoExpr** | accessExpr (相邻时：indices \| parentArgues \| angledValues \| **!**)* |
 | **accessExpr** | primaryData (**.** (IDENTIFIER \| INTEGER))* |
-| **primaryData** | identRef \| literal \| arrayData \| structData \| **(** dataExpr **)** \| tupleData \| funcData |
+| **primaryData** | identRef \| literal \| arrayData \| structData \| tupleData \| funcData（`(e)` 是括号表达式，`(e,)` 是单元素元组，二者同属 tupleData） |
 
 **ctrlExpr**（控制表达式，在 dataExpr 中）：
 

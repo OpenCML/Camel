@@ -224,6 +224,11 @@ arrayData
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 
+// Also the parenthesized expression: `(e)`, one element and no comma, is `e`; `(e,)` is the
+// one-element tuple. The two are one rule so that the parser does not have to choose between
+// them by looking ahead. It used to, across the whole bracket, and prediction looks ahead
+// without evaluating isAdjacent(): in `(a < 2, f<b>)` it took `a<2, f<b>` for a call with
+// angled arguments, chose the parenthesized expression and then failed at the comma.
 tupleData
     : '(' dataList? ','? ')'
     ;
@@ -233,7 +238,6 @@ primaryData
     | literal
     | arrayData
     | structData
-    | '(' dataExpr ')'
     | tupleData
     | funcData
     ;
