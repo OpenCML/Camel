@@ -52,6 +52,8 @@ null
 
 - **`[ indexValues ]`** 或 **`[ dataExpr for identRef in dataExpr (if dataExpr)? ]`**（列表推导）。
 
+> **未实现。** 列表推导、元素前的展开记号 `...`（数组、结构体字面量与实参表中）语法接受，但含义尚未规定：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该字面量或 `...` 处）。列表推导请写成 `map` 与 `filter`。反引号的格式化字符串同样未实现，同一诊断。
+
 ```cml
 []
 [(1, 2), (10, 20)]
@@ -113,7 +115,8 @@ null
 
 - **`primaryData ('.' (IDENTIFIER | INTEGER))*`**。
   - **IDENTIFIER**：字段名，如 **`p.x`**、**`now_head.y`**。
-  - **INTEGER**：元组下标，如 **`signal.0`**、**`signal.1`**、**`e.0`**、**`e.1`**。
+  - **INTEGER**：元组下标，如 **`signal.0`**、**`signal.1`**、**`e.0`**、**`e.1`**。超出元组长度是编译期错误。
+  - 对数组不能用 `.`：`xs.1` 是编译期错误 `SemanticDiag::TypeNotIndexable`，数组元素用 `xs[1]` 读取。
 
 ```cml
 p.x
@@ -131,6 +134,7 @@ shape(X)[1]
 ### 6.3.2 下标
 
 - **`expr [ dataExpr ]`** 或 **`[ start : end : step? ]`**（若实现支持切片）。
+- 数组下标在运行期检查：越界（包括负数）是带位置的故障 `RuntimeDiag::IndexOutOfRange`，消息带下标与长度，各执行后端一致。
 
 ```cml
 signals[0]
@@ -212,8 +216,8 @@ append<p>
 ## 6.4 管道与组合
 
 - **`a->b`**：将 **a** 的求值结果作为参数传给 **b**（方法或函数）；左结合。
-- **`?->`**：可选管道（若 **a** 为 null 则短路等，依实现）。
-- **`..`** / **`?..`**：范围或组合（若实现支持）。
+- **`?->`**：可选管道。**未实现**：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在运算符处）。
+- **`..`**：组合。**`?..`** **未实现**，同一诊断。
 
 **示例**
 
@@ -239,7 +243,7 @@ cleaned->contains<p>
 ## 6.5 一元与类型断言
 
 - **一元**：**`!`**、**`-`**、**`~`** 后接 **linkExpr**。
-- **类型**：**`linkExpr (as | is) typeExpr`**，表示类型转换或类型判断。
+- **类型**：**`linkExpr (as | is) typeExpr`**，表示类型转换或类型判断。**`is` 未实现**（没有运行期类型判断）：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在 `is` 处）。后缀的非空断言 `x!` 同样未实现，同一诊断。
 
 ```cml
 !condition
@@ -255,7 +259,9 @@ v is int
 ## 6.6 可空
 
 - **`a ?? b`**：若 **a** 为 null 则取 **b**。
-- **`a !! b`**：非空断言或错误则取右（依实现）。
+- **`a !! b`**：若 **a** 出错则取 **b**。
+
+> **未实现。** 可空值与错误值尚未实现（见设计原则 2.9）：使用 `??`、`!!`，或写可空类型 `T?`，是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在运算符或类型处）。此前它们只给出警告，右侧被丢弃，`T?` 被当作 `T`。
 
 ---
 
@@ -388,6 +394,8 @@ return if snake->contains<p> then "O" else "."
 - **`match identRef '{' matchCase+ '}'`**。
 - **matchCase**：**`case pattern ('|' pattern)* '=>' blockExpr`**。
 - **pattern**：**identRef**、字面量、**`( dataList | identList )`**、**`{ pairedValues | identList }`**、**`_`**（通配符）。
+- 已实现的模式只有字面量与 `_`。标识符、元组、结构体模式**未实现**：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该模式处）。
+- `case a | b => body`：任一模式匹配即进入该分支。按书写顺序取第一个匹配的分支，`_` 之后的分支不可达。
 
 ```cml
 let new_head = match dir {
