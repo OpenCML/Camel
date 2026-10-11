@@ -1,0 +1,70 @@
+digraph GraphIR {
+    graph [rankdir=LR, fontsize=18];
+    node [fixedsize=true, width=1, height=1, fontsize=18];
+    edge [minlen=2];
+    subgraph cluster_F01 {
+        label="main";
+        tooltip="() => i64";
+        subgraph cluster_F02 {
+            label="pick";
+            tooltip="(a: i64?, b: i64) => i64";
+            subgraph cluster_F03 {
+                label="__g_4__";
+                tooltip="() => i64";
+                F03 [label="ARGS", type="ARGS", style=dashed, shape=circle];
+                O03 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+                N00 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_4__::node#1"];
+                F03 -> N00 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
+                N00 -> O03 [label="0", type="EXIT", style=solid];
+            }
+            subgraph cluster_F04 {
+                label="__g_6__";
+                tooltip="() => i64";
+                F04 [label="ARGS", type="ARGS", style=dashed, shape=circle];
+                O04 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+                N01 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_6__::node#1"];
+                N02 [label=":op/tag\n_nul...", type="OPER", shape=diamond, style=solid, tooltip=":op/tag_null_value\n__g_6__::node#2"];
+                F04 -> N01 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
+                N02 -> O04 [label="0", type="EXIT", style=solid];
+                N01 -> N02 [label="0|0", type="NORM"];
+            }
+            F02 [label="ARGS", type="ARGS", style=dashed, shape=circle];
+            O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+            N03 [label="a", type="PORT", shape=circle, style=solid, tooltip="a\npick::node#1"];
+            N04 [label="b", type="PORT", shape=circle, style=solid, tooltip="b\npick::node#2"];
+            N05 [label=":op/tag\n_is_...", type="OPER", shape=diamond, style=solid, tooltip=":op/tag_is_null\npick::node#3"];
+            N06 [label="JOIN", type="JOIN", shape=diamond, style=solid, tooltip="JOIN\npick::node#7"];
+            N07 [label="BRCH", type="BRCH", shape=diamond, style=solid, tooltip="BRCH\npick::node#4"];
+            N08 [label="__g_4__", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="__g_4__\npick::node#5"];
+            N09 [label="__g_6__", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="__g_6__\npick::node#6"];
+            F02 -> N03 [label="0", type="NORM_PORT", style=solid];
+            F02 -> N04 [label="1", type="NORM_PORT", style=solid];
+            N06 -> O02 [label="0", type="EXIT", style=solid];
+            N03 -> N05 [label="0|0", type="NORM"];
+            N08 -> N06 [label="0|0", type="WITH", style=dashed];
+            N09 -> N06 [label="0|1", type="WITH", style=dashed];
+            N07 -> N06 [label="0|0", type="NORM"];
+            N05 -> N07 [label="0|0", type="NORM"];
+            N04 -> N07 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+            N03 -> N07 [label="0|1", type="CTRL", style=dashed, arrowhead=empty];
+            N04 -> N08 [label="0|0", type="WITH", style=dashed];
+            N07 -> N08 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+            N03 -> N09 [label="0|0", type="WITH", style=dashed];
+            N07 -> N09 [label="1|0", type="CTRL", style=dashed, arrowhead=empty];
+        }
+        O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+        N0A [label="3", type="DATA", shape=circle, style=solid, tooltip="3\nmain::node#-1"];
+        N0B [label="CAST", type="CAST", shape=diamond, style=solid, tooltip="CAST\nmain::node#1"];
+        N0C [label="4", type="DATA", shape=circle, style=solid, tooltip="4\nmain::node#-2"];
+        N0D [label="pick", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="pick\nmain::node#2"];
+        N0D -> O01 [label="0", type="EXIT", style=solid];
+        N0A -> N0B [label="0|0", type="NORM"];
+        N0B -> N0D [label="0|0", type="NORM"];
+        N0C -> N0D [label="0|1", type="NORM"];
+    }
+    O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
+    N0E [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
+    N0F [label="CALL", type="CALL", shape=diamond, style=solid, tooltip="CALL\n__root__::node#1"];
+    N0F -> O00 [label="0", type="EXIT", style=solid];
+    N0E -> N0F [label="0|0", type="WITH", style=dashed];
+}

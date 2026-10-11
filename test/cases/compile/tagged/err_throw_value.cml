@@ -1,0 +1,16 @@
+/**
+ * `throw` takes an error value: ThrowNotAnError for anything else.
+ */
+module err_throw_value
+
+func check(x: int): int! {
+    if x > 0 then { return x } else {
+        throw 'x is not positive'
+    }
+}
+
+func main(): int sync {
+    println('never printed')
+    println(check(1) !! 0)
+    return 0
+}

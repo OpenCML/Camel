@@ -1,0 +1,13 @@
+/**
+ * The same mark twice is rejected: TaggedTypeNesting. `T?!` and `T!?` are allowed.
+ */
+module err_nesting
+
+func ok(x: int?!): int { return 1 }
+
+func f(x: (int?)?): int { return 1 }
+
+func main(): int sync {
+    println('never printed')
+    return 0
+}

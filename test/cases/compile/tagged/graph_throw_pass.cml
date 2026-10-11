@@ -1,0 +1,18 @@
+/**
+ * The graphs of `throw e` (an exit) and of `x ?-> f` (a branch on the tag of `x`).
+ */
+module graph_throw_pass
+
+func inc(x: int): int { return x + 1 }
+
+func g(x: int): int! {
+    throw error('K', 'm')
+}
+
+func f(x: int!): int! {
+    return x ?-> inc
+}
+
+func main(): int! {
+    return f(g(1))
+}

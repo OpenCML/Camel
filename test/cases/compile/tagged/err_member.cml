@@ -1,0 +1,12 @@
+/**
+ * A tagged value has the layout of a tuple and is not one: reading a member is
+ * TaggedValueNotOpened.
+ */
+module err_member
+
+func main(): int sync {
+    println('never printed')
+    let r = parse_int('1')
+    println(r.0)
+    return 0
+}
