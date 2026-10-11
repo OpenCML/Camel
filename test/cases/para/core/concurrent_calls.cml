@@ -1,0 +1,30 @@
+/**
+ * Two calls with no path between them in the graph run at the same time under a parallel
+ * scheduler. Each call waits at a rendezvous for one peer: `rendezvous(2, t)` returns 2 when
+ * two calls were waiting together, and 1 after `t` milliseconds when the call stayed alone.
+ * A scheduler that runs the two calls one after the other therefore prints 1 + 1 = 2 (after
+ * two timeouts); one that runs them concurrently prints 2 + 2 = 4. Nothing is timed.
+ */
+module concurrent_calls
+
+import { rendezvous } from para
+
+func left(timeout_ms: int): int sync {
+    return rendezvous(2, timeout_ms)
+}
+
+func right(timeout_ms: int): int sync {
+    return rendezvous(2, timeout_ms)
+}
+
+// Not a sync block: nothing orders the two calls.
+func both(timeout_ms: int): int {
+    let a = left(timeout_ms)
+    let b = right(timeout_ms)
+    return a + b
+}
+
+func main(): int sync {
+    println('calls that met a peer: {}'->format<both(3000) - 2>)
+    return 0
+}

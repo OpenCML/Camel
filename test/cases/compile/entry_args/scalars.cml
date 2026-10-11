@@ -1,0 +1,10 @@
+/**
+ * `main` takes parameters: they are the inputs of the program and get their values from the
+ * command line (`--arg name=value`). The result is the exit code, as for any `main`.
+ */
+module scalars
+
+func main(n: int, rate: float, name: string, loud: bool): int sync {
+    println(name, n, rate, loud)
+    return n + 1
+}

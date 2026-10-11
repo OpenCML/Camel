@@ -1,0 +1,38 @@
+/**
+ * Concurrent calls that allocate, for runs with the collector forced at every safepoint and
+ * every few allocations (see the test plan): a value a worker has just produced (the result of
+ * a call on its way into the caller's frame, an array being filled by a map) must survive a
+ * collection started by another worker, and must be found again after the collector moved it.
+ * The program sorts by a recursive merge sort whose two halves run concurrently, inside the
+ * elements of a map, and folds the results with reduce and filter.
+ */
+module concurrent_alloc
+
+import { seed, shuffle } from random
+import { merge_sorted, merge_sorted_arrays } from algo
+
+func mergesort(arr: int[]): int[] {
+    return if len(arr) <= 4 then merge_sorted(arr) else {
+        let mid = len(arr) / 2
+        let lhs = arr->slice<0, mid>->mergesort
+        let rhs = arr->slice<mid, len(arr)>->mergesort
+        return merge_sorted_arrays(lhs, rhs)
+    }
+}
+
+func checksum(arr: int[]): int {
+    return range(0, len(arr))->map<(i: int): int => arr[i] * (i + 1)>->reduce<(a: int, b: int): int => a + b, 0>
+}
+
+func main(): int sync {
+    seed(7)
+    let data = range(0, 96)->shuffle
+    let sums = range(0, 12)->map<(k: int): int => {
+        let part = data->slice<k * 8, 96>
+        return checksum(mergesort(part))
+    }>
+    sums->println
+    sums->filter<(s: int): bool => s > 100000>->println
+    mergesort(data)->println
+    return 0
+}

@@ -1,0 +1,12 @@
+/**
+ * A backquoted (formatted) string is in the grammar but not implemented: a compile-time error
+ * at the literal (line 9, column 13). It used to be compiled as a plain string.
+ */
+module formatted_string
+
+func main(): int sync {
+    let x = 5
+    println(`x is {x}`)
+    println('never printed')
+    return 0
+}

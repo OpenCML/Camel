@@ -1,0 +1,25 @@
+/**
+ * Refused: the variable is passed to a call that assigns it.
+ */
+module var_param
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+sync func bump(var acc: Tensor): int sync {
+    acc = acc + 1.0
+    return 0
+}
+
+func forward(x: Tensor): Tensor sync {
+    var acc = x * 2.0
+    wait bump(acc)
+    return acc
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
+    export_model((x: Tensor): Tensor => forward(x), x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

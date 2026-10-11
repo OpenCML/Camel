@@ -20,6 +20,7 @@
 #include "builder.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/execute/entry_args.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
@@ -28,6 +29,7 @@
 #include "core/module/entity_internal.h"
 
 #include "camel/core/operator_traits.h"
+#include "camel/core/type/other.h"
 
 #include <atomic>
 #define DEBUG_LEVEL -1
@@ -253,6 +255,168 @@ std::optional<slot_t> staticValueOf(node_handle_t node) {
     const auto slots = nodeDraftOf(node)->staticSlots();
     const auto index = static_cast<size_t>(-node->header.dataIndex);
     return index < slots.size() ? std::optional<slot_t>(slots[index]) : std::nullopt;
+}
+
+/// The node behind a COPY of it (the argument of a call is copied when it is a constant).
+node_handle_t throughCopy(node_handle_t node) {
+    if (nodeIsKind(node, runtime::GCNodeKind::Copy)) {
+        const auto inputs = normInputsOf(node);
+        if (inputs.size() == 1) {
+            return nodeDraftOf(node)->node(inputs.front());
+        }
+    }
+    return node;
+}
+
+/// A place where a value of type `have` goes where `want` is declared and only a checked
+/// conversion (`as`) leads from one to the other: `have` leaves open what `want` fixes.
+struct ConversionGap {
+    std::string path; // "" for the value itself, ".0" / ".name" for an element of it
+    Type *have;
+    Type *want;
+};
+
+/// Collects the conversion gaps between `have` and `want`, through tuples and structs. False
+/// when the types differ in any other way (then no conversion written with `as` helps). The
+/// rule is the one of a CAST node: an Unsafe conversion into a module type is checked when it
+/// runs (Type::castSlotFrom), every other conversion that is not Safe is refused.
+bool collectConversionGaps(
+    Type *want, Type *have, const std::string &path, std::vector<ConversionGap> &gaps) {
+    if (want == nullptr || have == nullptr) {
+        return false;
+    }
+    if (want == have || want->assignableFrom(have)) {
+        return true;
+    }
+    if (want->isOtherType()) {
+        if (want->castSafetyFrom(have) != CastSafety::Unsafe) {
+            return false;
+        }
+        gaps.push_back({path, have, want});
+        return true;
+    }
+    if (want->code() == TypeCode::Tuple && have->code() == TypeCode::Tuple) {
+        auto *w = tt::as_ptr<TupleType>(want);
+        auto *h = tt::as_ptr<TupleType>(have);
+        if (w->isCell() || h->isCell() || w->size() != h->size()) {
+            return false;
+        }
+        for (size_t i = 0; i < w->size(); ++i) {
+            if (!collectConversionGaps(
+                    w->typeAt(i),
+                    h->typeAt(i),
+                    path + "." + std::to_string(i),
+                    gaps)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (want->code() == TypeCode::Struct && have->code() == TypeCode::Struct) {
+        auto *w = tt::as_ptr<StructType>(want);
+        auto *h = tt::as_ptr<StructType>(have);
+        if (w->size() != h->size()) {
+            return false;
+        }
+        for (size_t i = 0; i < w->size(); ++i) {
+            const auto field = h->findField(w->fieldName(i));
+            if (!field || !collectConversionGaps(
+                              w->typeAt(i),
+                              h->typeAt(*field),
+                              path + "." + std::string(w->fieldName(i)),
+                              gaps)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+/// How a program writes a type in a conversion.
+std::string spellingOf(Type *type) {
+    return type->isOtherType() ? static_cast<OtherType *>(type)->spelling() : type->toString();
+}
+
+/// The elements of `text` when it is a parenthesised list written on the spot, `(a, b)`.
+std::vector<std::string> tupleElementTexts(const std::string &text) {
+    std::vector<std::string> parts;
+    if (text.size() < 2 || text.front() != '(' || text.back() != ')') {
+        return parts;
+    }
+    int depth = 0;
+    std::string current;
+    for (size_t i = 1; i + 1 < text.size(); ++i) {
+        const char c = text[i];
+        if (c == '(' || c == '[' || c == '{' || c == '<') {
+            ++depth;
+        } else if (c == ')' || c == ']' || c == '}' || c == '>') {
+            if (--depth < 0) {
+                return {}; // "(a) + (b)": not one list
+            }
+        }
+        if (c == ',' && depth == 0) {
+            parts.push_back(current);
+            current.clear();
+        } else {
+            current += c;
+        }
+    }
+    parts.push_back(current);
+    for (std::string &part : parts) {
+        const auto first = part.find_first_not_of(' ');
+        const auto last  = part.find_last_not_of(' ');
+        part = first == std::string::npos ? std::string() : part.substr(first, last - first + 1);
+        if (part.empty()) {
+            return {};
+        }
+    }
+    return parts;
+}
+
+/// The conversion a program would write for `gap` on the expression whose text is `text`.
+std::string conversionTextOf(const std::string &text, const ConversionGap &gap) {
+    std::string operand = text;
+    if (!gap.path.empty()) {
+        // An element of a tuple written on the spot is converted where it stands.
+        const auto parts = tupleElementTexts(text);
+        const bool index = gap.path.find_first_not_of("0123456789", 1) == std::string::npos;
+        if (index && !parts.empty() && std::stoul(gap.path.substr(1)) < parts.size()) {
+            operand = parts[std::stoul(gap.path.substr(1))];
+        } else {
+            operand = text + gap.path;
+        }
+    }
+    // Only a name, an access or a call binds tighter than `as` for certain (a placeholder
+    // such as <argument> stands for whatever the program wrote).
+    bool simple = !operand.empty();
+    if (!operand.empty() && operand.front() == '<' && operand.find('>') != std::string::npos) {
+        return "'" + operand + " as " + spellingOf(gap.want) + "'";
+    }
+    int depth = 0;
+    for (const char c : operand) {
+        if (c == '(' || c == '[') {
+            ++depth;
+        } else if (c == ')' || c == ']') {
+            --depth;
+        } else if (
+            depth == 0 && !(std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.')) {
+            simple = false;
+        }
+    }
+    return "'" + (simple ? operand : "(" + operand + ")") + " as " + spellingOf(gap.want) + "'";
+}
+
+/// "it has type 'A', less exact than 'B'" for each gap, the subject naming the element.
+std::string describeGaps(const std::string &subject, const std::vector<ConversionGap> &gaps) {
+    std::string out;
+    for (const ConversionGap &gap : gaps) {
+        out += out.empty() ? "" : "; ";
+        out += (gap.path.empty() ? subject : "element " + gap.path + " of " + subject) +
+               " has type '" + gap.have->toString() + "', which is less exact than '" +
+               gap.want->toString() + "'";
+    }
+    return out;
 }
 
 void setNodeType(node_handle_t node, Type *type) {
@@ -534,6 +698,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     builtFunctions_.clear();
     effectfulGraphs_.clear();
     armGraphs_.clear();
+    builtBodies_.clear();
     typeDecls_.clear();
     syntheticRefIndex_ = 0;
 
@@ -551,6 +716,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
         visit(gct);
         reportIgnoredCapturedWrites();
         reportUndeclaredCapturedWrites();
+        reportDroppedEffectsOfBodies();
 
         compile_graph_ptr_t entryGraph = nullptr;
         if (auto decoratedMain = decoratedGraphAt("main")) {
@@ -571,11 +737,57 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
                     sourceContext->debugMap().registerGraphOrigin(
                         rootGraph_->stableId(),
                         mainOrigin);
+                    // Also under a fixed key: the entry graph is rewritten (and renamed) by
+                    // passes, the question "where is main" outlives that.
+                    sourceContext->debugMap().registerGraphOrigin(
+                        camel::execute::kEntryFunctionOriginKey,
+                        mainOrigin);
                 }
+            }
+            // `main` is a function like any other: its parameters are the inputs of the
+            // program. The entry graph takes the same parameters (`with` ones first) and
+            // passes them on, so it never calls `main` with fewer arguments than it takes.
+            // Who supplies them is not decided here: a run binds values given from outside
+            // (see camel/execute/entry_args.h), a translation takes them as the inputs of
+            // what it produces.
+            FunctionType *entryType = entryGraph->funcType();
+            std::vector<node_handle_t> entryWithArgs, entryNormArgs;
+            if (entryType->withTypesCount() + entryType->normTypesCount() > 0) {
+                FunctionTypeFactory rootTypeFactory;
+                const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
+                    return argIndex < entryType->argNamesCount()
+                               ? std::string(entryType->argNameAt(argIndex))
+                               : std::format("{}{}", prefix, i);
+                };
+                for (size_t i = 0; i < entryType->withTypesCount(); ++i) {
+                    const std::string name = nameAt(i, "__w", i);
+                    const bool isVar       = entryType->withIsVarAt(i);
+                    Type *type             = entryType->withTypeAt(i);
+                    rootTypeFactory.addWithArg(name, type, isVar);
+                    entryWithArgs.push_back(
+                        rootGraph_
+                            ->addPortNode(isVar ? TupleType::cell(type) : type, name, true, isVar));
+                }
+                for (size_t i = 0; i < entryType->normTypesCount(); ++i) {
+                    const std::string name = nameAt(entryType->withTypesCount() + i, "__n", i);
+                    const bool isVar       = entryType->normIsVarAt(i);
+                    Type *type             = entryType->normTypeAt(i);
+                    rootTypeFactory.addNormArg(name, type, isVar);
+                    entryNormArgs.push_back(
+                        rootGraph_
+                            ->addPortNode(isVar ? TupleType::cell(type) : type, name, false, isVar));
+                }
+                rootGraph_->setFuncType(rootTypeFactory.build());
             }
             auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
             auto entryCall      = rootGraph_->addCallNode(entryGraph->funcType()->exitType());
             linkNodes(LinkType::With, entryFuncValue, entryCall);
+            for (node_handle_t arg : entryWithArgs) {
+                linkNodes(LinkType::With, arg, entryCall);
+            }
+            for (node_handle_t arg : entryNormArgs) {
+                linkNodes(LinkType::Norm, arg, entryCall);
+            }
             setGraphReturnFromResult(
                 rootGraph_,
                 nodeIdOf(entryCall),
@@ -815,7 +1027,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
         bodyStates_[graph.get()] = BodyState::Built;
         builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
-        reportDroppedEffects(graph);
+        builtBodies_.push_back(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -868,6 +1080,38 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             node_handle_t srcNode = currGraph_->addStaticDataNode(data, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
             linkNodes(LinkType::Norm, srcNode, node);
+            // An array written in place with some elements computed: the constant elements
+            // stay known to the operators the array is passed to (StaticArg::elements).
+            if (auto array = std::dynamic_pointer_cast<ArrayData>(data);
+                array && filledType->code() == TypeCode::Array) {
+                Type *elemType = tt::as_ptr<ArrayType>(filledType)->elemType();
+                std::vector<std::optional<slot_t>> elements(array->raw().size());
+                for (size_t i = 0; i < elements.size(); ++i) {
+                    const auto &element = array->raw()[i];
+                    if (!element || element->type() != elemType) {
+                        continue;
+                    }
+                    if (auto l = std::dynamic_pointer_cast<LongData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(l->data());
+                    } else if (auto n = std::dynamic_pointer_cast<IntData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(n->data());
+                    } else if (auto d = std::dynamic_pointer_cast<DoubleData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(d->data());
+                    } else if (auto f = std::dynamic_pointer_cast<FloatData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(f->data());
+                    } else if (auto b = std::dynamic_pointer_cast<BoolData>(element)) {
+                        elements[i] = camel::core::rtdata::toSlot(b->data());
+                    }
+                }
+                for (size_t h = 0; h < holes.size(); ++h) {
+                    if (holes[h] < elements.size()) {
+                        elements[holes[h]] = nodeTypeOf(refNodes[h]) == elemType
+                                                 ? staticArgOf(refNodes[h]).value
+                                                 : std::nullopt;
+                    }
+                }
+                arrayElementStatics_[node] = std::move(elements);
+            }
             std::vector<camel::source::origin_id_t> mergedInputs;
             for (const auto &refNode : refNodes) {
                 linkNodes(LinkType::With, refNode, node);
@@ -1209,7 +1453,24 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
 }
 
-void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph) {
+void Builder::reportDroppedEffectsOfBodies() {
+    // Whether a call is an effect depends on its callee's body, which may be written later in
+    // the file (or be the caller itself): the set of effectful graphs is the least fixpoint
+    // over all bodies, and only then are the warnings issued, in the order the bodies were
+    // built.
+    for (size_t known = effectfulGraphs_.size() + 1; known != effectfulGraphs_.size();) {
+        known = effectfulGraphs_.size();
+        for (const compile_graph_ptr_t &graph : builtBodies_) {
+            reportDroppedEffects(graph, false);
+        }
+    }
+    for (const compile_graph_ptr_t &graph : builtBodies_) {
+        reportDroppedEffects(graph, true);
+    }
+    builtBodies_.clear();
+}
+
+void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report) {
     auto &draft = graph->draft();
     // What the exit depends on, through data and control edges.
     std::unordered_set<draft_node_ref_t> needed;
@@ -1243,6 +1504,9 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph) {
         } else {
             dropped.push_back(id);
         }
+    }
+    if (!report) {
+        return;
     }
     // One warning per dropped chain: an effect whose result feeds another dropped effect
     // (`println(log(1))`, the statements of a dropped sync block) is reported through the
@@ -1384,7 +1648,12 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     const auto &castLoad = gct->loadAs<GCT::CastLoad>();
     Type *targetType     = castLoad->targetType();
     Type *sourceType     = nodeTypeOf(valueNode);
-    if (targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
+    // Safe conversions always; an Unsafe one only into a module type, which then checks the
+    // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
+    // that may lose information stay refused.
+    const CastSafety safety = targetType->castSafetyFrom(sourceType);
+    if (safety != CastSafety::Safe &&
+        !(safety == CastSafety::Unsafe && targetType->isOtherType())) {
         diags_->of(SemanticDiag::DynamicCastForbidden)
             .atOrigin(gct->load()->origin())
             .commit(sourceType->toString(), targetType->toString());
@@ -1699,10 +1968,80 @@ node_handle_t Builder::argumentNodeOf(const std::any &res, const GCT::node_ptr_t
     return node;
 }
 
+StaticArg Builder::staticArgOf(node_handle_t node) const {
+    StaticArg arg(staticValueOf(node));
+    node = throughCopy(node);
+    if (!arg.value) {
+        if (auto it = typeFoldedValues_.find(node); it != typeFoldedValues_.end()) {
+            arg.value = it->second;
+        }
+    }
+    if (auto it = arrayElementStatics_.find(node); it != arrayElementStatics_.end()) {
+        arg.elements = it->second;
+    }
+    return arg;
+}
+
+std::string Builder::sourceTextOf(const GCT::node_ptr_t &expr) const {
+    const auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr;
+    if (sourceContext == nullptr || expr == nullptr) {
+        return {};
+    }
+    // The span of a node covers what the node itself was made from (the argument list of a
+    // call, the operator of an expression): the expression is the union with its operands.
+    camel::source::source_file_id_t fileId = camel::source::kInvalidSourceFileId;
+    size_t start = 0, end = 0;
+    bool consistent                                         = true;
+    std::function<void(const GCT::node_ptr_t &, int)> cover = [&](const GCT::node_ptr_t &node,
+                                                                  int depth) {
+        if (node == nullptr || depth > 32) {
+            return;
+        }
+        const auto *record = sourceContext->origin(node->load()->origin());
+        const auto *span   = record ? sourceContext->span(record->primarySpan) : nullptr;
+        if (span != nullptr && span->valid() && span->endOffset > span->startOffset) {
+            if (fileId == camel::source::kInvalidSourceFileId) {
+                fileId = span->fileId;
+                start  = span->startOffset;
+                end    = span->endOffset;
+            } else if (fileId != span->fileId) {
+                consistent = false;
+            } else {
+                start = std::min(start, span->startOffset);
+                end   = std::max(end, span->endOffset);
+            }
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            cover(node->at(i), depth + 1);
+        }
+    };
+    cover(expr, 0);
+    const auto *file =
+        fileId != camel::source::kInvalidSourceFileId ? sourceContext->sourceFile(fileId) : nullptr;
+    if (!consistent || file == nullptr || end > file->content.size() || end - start > 60) {
+        return {};
+    }
+    const std::string text = file->content.substr(start, end - start);
+    // Quoted only when it is certainly one expression on one line.
+    int depth = 0;
+    for (const char c : text) {
+        if (c == '\r' || c == '\n') {
+            return {};
+        }
+        depth += (c == '(' || c == '[' || c == '{')   ? 1
+                 : (c == ')' || c == ']' || c == '}') ? -1
+                                                      : 0;
+        if (depth < 0) {
+            return {};
+        }
+    }
+    return depth == 0 ? text : std::string();
+}
+
 node_handle_t Builder::variableOperator(const std::string &group, node_handle_t input) {
     const auto entity = module_->getImportedEntity(group);
     ASSERT(entity.has_value() && entity->isOperGroup(), "Variable operators are not available.");
-    const std::vector<std::optional<slot_t>> statics(1);
+    const std::vector<StaticArg> statics(1);
     const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
     ASSERT(op.has_value(), "Variable operator rejected its operand.");
     node_handle_t node = currGraph_->addOperNode(*op, 0);
@@ -1844,6 +2183,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!targetGraph) {
+                std::vector<std::pair<std::string, FunctionType *>> candidates;
+                for (const auto &g : *graphs) {
+                    candidates.emplace_back(g->name(), g->funcType());
+                }
+                reportConversionGaps(
+                    candidates,
+                    withInputs,
+                    normInputs,
+                    withInputTypes,
+                    normInputTypes,
+                    gct);
                 std::string argTypesStr = std::format(
                     "<{}> ({})",
                     strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
@@ -1868,10 +2218,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops        = std::get<oper_group_ptr_t>(drefTarget);
             // Constant arguments (shape literals, axes) let operators refine their result type.
-            std::vector<std::optional<slot_t>> normStatics;
+            std::vector<StaticArg> normStatics;
             normStatics.reserve(normInputs.size());
             for (const Argument &input : normInputs) {
-                normStatics.push_back(staticValueOf(input.node));
+                normStatics.push_back(staticArgOf(input.node));
             }
             const auto &res =
                 ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
@@ -1961,6 +2311,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
             targetFuncType = targetOperator->funcType();
+            // A result that the argument types fix (the shape of a tensor whose type carries
+            // it) is a constant for the operators it is passed to, as a literal would be.
+            if (const auto *folder =
+                    camel::core::OperatorTypeFolderRegistry::instance().find(targetOperator->uri());
+                folder != nullptr && withInputs.empty()) {
+                Type *resultType = targetFuncType->exitType();
+                std::optional<slot_t> value;
+                try {
+                    value = (*folder)(normInputTypes, normStatics, camel::core::mm::autoSpace());
+                } catch (const std::exception &) {
+                    value = std::nullopt;
+                }
+                if (value && resultType != nullptr) {
+                    if (isGCTraced(resultType->code()) && *value != NullSlot) {
+                        typeFoldedRoots_.emplace_back(
+                            camel::core::mm::autoSpace(),
+                            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*value),
+                            resultType,
+                            "gir.build.typefold");
+                    }
+                    typeFoldedValues_[targetNode] = *value;
+                }
+            }
         } else if (std::holds_alternative<graph_ptr_t>(drefTarget)) {
             auto decoratedGraph           = std::get<graph_ptr_t>(drefTarget);
             node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
@@ -1979,6 +2352,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
         StaticFuncTypeResolver resolver(funcType);
         if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+            reportConversionGaps(
+                {{std::string(), funcType}},
+                withInputs,
+                normInputs,
+                withInputTypes,
+                normInputTypes,
+                gct);
             std::string argTypesStr = std::format(
                 "<{}> ({})",
                 strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
@@ -2164,13 +2544,25 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
-        elemType              = tupleType->typeAt(accsLoad->index<size_t>());
+        // A tuple has a fixed length: an element past its end is a compile-time error (it was
+        // read unchecked, which crashed the compiler in release builds).
+        if (accsLoad->index<size_t>() >= tupleType->size()) {
+            diags_->of(SemanticDiag::InvalidAccessIndex)
+                .atOrigin(gct->load()->origin())
+                .commit(std::to_string(accsLoad->index<size_t>()));
+            throw BuildAbortException();
+        }
+        elemType = tupleType->typeAt(accsLoad->index<size_t>());
         break;
     }
     case TypeCode::Array: {
-        const auto *arrTy = tt::as_ptr<camel::core::type::ArrayType>(tgtType);
-        elemType          = arrTy->elemType();
-        break;
+        // `.N` reads a tuple element and `.name` a struct field. On an array no back end
+        // implements either: the array was read as if it were a tuple, without a bounds
+        // check, and the program printed whatever was there. An element is read with `[N]`.
+        diags_->of(SemanticDiag::TypeNotIndexable)
+            .atOrigin(gct->load()->origin())
+            .commit(tgtType->toString());
+        throw BuildAbortException();
     }
     case TypeCode::Struct: {
         const auto *strTy    = tt::as_ptr<camel::core::type::StructType>(tgtType);
@@ -2274,7 +2666,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         }
         bodyStates_[subGraph.get()] = BodyState::Built;
         armGraphs_.insert(subGraph.get());
-        reportDroppedEffects(subGraph);
+        builtBodies_.push_back(subGraph);
         leaveScope();
         armGraphs.push_back(subGraph.get());
         for (const CapturedUse &use : capturedUsesOf(subGraph)) {
@@ -2488,6 +2880,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
+    checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->load()->origin(), gct->at(0));
     setGraphReturnFromResult(
         currGraph_,
         nodeIdOf(outputAnchor),
@@ -2529,7 +2922,144 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
     if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
         value = nodeDraftOf(result)->node(normInputsOf(result).front());
     }
+    checkDeclaredReturn(graph, nodeTypeOf(value), 0);
     setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));
+}
+
+void Builder::reportConversionGaps(
+    const std::vector<std::pair<std::string, FunctionType *>> &candidates,
+    const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs,
+    const type_vec_t &withTypes, const type_vec_t &normTypes, const GCT::node_ptr_t &call) {
+    // Reported only when exactly one overload is a conversion away: with several, which one
+    // the program means is not the compiler's to choose.
+    const std::pair<std::string, FunctionType *> *target = nullptr;
+    std::string what, fixes;
+    for (const auto &candidate : candidates) {
+        FunctionType *funcType = candidate.second;
+        if (funcType->withTypesCount() != withTypes.size() ||
+            funcType->normTypesCount() != normTypes.size()) {
+            continue;
+        }
+        bool fits = true;
+        std::string graphWhat, graphFixes;
+        const auto check = [&](const std::vector<Argument> &inputs,
+                               const type_vec_t &types,
+                               bool isWith) {
+            for (size_t i = 0; i < types.size() && fits; ++i) {
+                Type *want       = isWith ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+                const bool isVar = isWith ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
+                std::vector<ConversionGap> gaps;
+                if (!collectConversionGaps(want, valueTypeOf(types[i]), "", gaps)) {
+                    fits = false;
+                    return;
+                }
+                if (gaps.empty()) {
+                    continue;
+                }
+                const size_t nameIndex = (isWith ? 0 : funcType->withTypesCount()) + i;
+                const std::string name = nameIndex < funcType->argNamesCount()
+                                             ? std::string(funcType->argNameAt(nameIndex))
+                                             : std::string();
+                const std::string text = sourceTextOf(inputs[i].expr);
+                std::string subject =
+                    std::string(isWith ? "with-argument " : "argument ") + std::to_string(i + 1);
+                if (!text.empty() || !name.empty()) {
+                    subject += " (" + (text.empty() ? "" : "'" + text + "'") +
+                               (text.empty() || name.empty() ? "" : ", ") +
+                               (name.empty() ? "" : "for parameter '" + name + "'") + ")";
+                }
+                graphWhat += (graphWhat.empty() ? "" : "; ") + describeGaps(subject, gaps);
+                if (isVar) {
+                    // A conversion yields a value; a var parameter takes the variable itself.
+                    graphFixes += std::string(graphFixes.empty() ? "" : " ") +
+                                  "No conversion applies to argument " + std::to_string(i + 1) +
+                                  ": a var parameter takes the variable itself, and a variable " +
+                                  "has the widened type of its first value. Pass the value to a " +
+                                  "parameter that is not var, or declare the var parameter with " +
+                                  "the variable's type and convert the value where it is read.";
+                    continue;
+                }
+                std::string conversions;
+                for (const ConversionGap &gap : gaps) {
+                    conversions += (conversions.empty() ? "" : ", ") +
+                                   conversionTextOf(text.empty() ? "<argument>" : text, gap);
+                }
+                graphFixes +=
+                    std::string(graphFixes.empty() ? "" : " ") +
+                    "Where the value is known to fit, write the conversion: " + conversions + ".";
+            }
+        };
+        check(withInputs, withTypes, true);
+        check(normInputs, normTypes, false);
+        if (!fits || graphWhat.empty()) {
+            continue;
+        }
+        if (target) {
+            return;
+        }
+        target = &candidate;
+        what   = std::move(graphWhat);
+        fixes  = std::move(graphFixes);
+    }
+    if (!target) {
+        return;
+    }
+    diags_->of(SemanticDiag::ArgumentNeedsConversion)
+        .atOrigin(call->load()->origin())
+        .commit(
+            (target->first.empty() ? "" : target->first + ": ") + target->second->toString(),
+            what,
+            fixes);
+    throw BuildAbortException();
+}
+
+void Builder::checkDeclaredReturn(
+    const compile_graph_ptr_t &graph, Type *resultType, uint64_t origin,
+    const GCT::node_ptr_t &value) {
+    // Only a DECLARED type is checked: an undeclared one is set from the first value returned,
+    // after which hasExitType() is true as well, so the check runs before that happens.
+    if (graph == nullptr || graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+        return;
+    }
+    FunctionType *funcType = graph->funcType();
+    if (funcType == nullptr || !funcType->hasExitType() || resultType == nullptr) {
+        return;
+    }
+    Type *declared = funcType->exitType();
+    // Not judged here: a body without a value (its last statement decides nothing about the
+    // type), and types that are not resolved yet.
+    if (declared == nullptr || declared == resultType || resultType->code() == TypeCode::Void ||
+        declared->code() == TypeCode::Ref || resultType->code() == TypeCode::Ref) {
+        return;
+    }
+    if (declared->assignableFrom(resultType)) {
+        return;
+    }
+    std::vector<ConversionGap> gaps;
+    const bool convertible = collectConversionGaps(declared, resultType, "", gaps) && !gaps.empty();
+    auto diag              = diags_->of(
+        convertible ? SemanticDiag::ReturnNeedsConversion : SemanticDiag::ReturnTypeMismatch);
+    if (origin != 0) {
+        diag.atOrigin(origin);
+    } else if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+        diag.atOrigin(sourceContext->debugMap().graphOrigin(graph->stableId()));
+    }
+    if (convertible) {
+        const std::string text = sourceTextOf(value);
+        std::string fixes;
+        for (const ConversionGap &gap : gaps) {
+            fixes += (fixes.empty() ? "" : ", ") +
+                     conversionTextOf(text.empty() ? "<returned expression>" : text, gap);
+        }
+        diag.commit(
+            declared->toString(),
+            describeGaps(text.empty() ? "the value" : "the value ('" + text + "')", gaps),
+            fixes,
+            funcType->toString());
+        throw BuildAbortException();
+    }
+    diag.commit(resultType->toString(), declared->toString(), funcType->toString());
+    throw BuildAbortException();
 }
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {

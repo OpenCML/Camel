@@ -1,0 +1,22 @@
+/**
+ * A conversion (`e as T`) of a constant is a constant: std::opt::fold evaluates it, with the
+ * check the conversion performs when it runs. `a` is converted to the shape the compiler
+ * already knows, `b` comes from a function declared to return a plain Tensor (the conversion
+ * is checked against the value), `n` is a number converted to another
+ * primitive type.
+ */
+module fold_cast
+
+import { Tensor, reshape, sum } from tensor
+
+func weights(): Tensor { return reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) }
+
+func three(): int { return 3 }
+
+func main(): int sync {
+    let a = reshape([0.5, 0.5, 0.5, 0.5, 0.5, 0.5], [2, 3]) as Tensor<f32, const [2, 3]>
+    let b = weights() as Tensor<f32, const [-1, 3]>
+    let n = three() as float
+    println(sum(a * b) * n)
+    return 0
+}

@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -29,6 +30,9 @@
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/mm.h"
+#include "camel/core/mm/root_handle.h"
+#include "camel/core/type/resolver.h"
 
 namespace camel::compile::gir {
 
@@ -99,6 +103,19 @@ class Builder {
     // and stored by the assignment operators. Every other named node is an immutable value
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
+    // What the compiler knows about a node's value beyond static data, for operators whose
+    // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
+    // operator result that its argument types fix (OperatorTypeFolderRegistry), e.g. the shape
+    // of a tensor whose type carries it. `arrayElementStatics_`: for an array written in place
+    // with some elements computed (`[n, 3]`), the elements that are constants. The graph is not
+    // changed by either: the operator and the FILL stay, std::opt folds them later.
+    std::unordered_map<node_handle_t, slot_t> typeFoldedValues_;
+    std::unordered_map<node_handle_t, std::vector<std::optional<slot_t>>> arrayElementStatics_;
+    std::deque<camel::core::mm::RootHandle> typeFoldedRoots_;
+    camel::core::type::StaticArg staticArgOf(node_handle_t node) const;
+    // The source text of the expression `expr` when it is short and on one line; empty
+    // otherwise. For diagnostics that suggest source text.
+    std::string sourceTextOf(const GCT::node_ptr_t &expr) const;
     // A use of a variable that no writer has been ordered after yet. A read (`:var/get`) hands
     // the value on, so the operations that take the read's result are the direct users of the
     // value; an operation that uses the variable itself (a call of a function that captured
@@ -159,6 +176,8 @@ class Builder {
     // graphs that are branch arms (reported through their branch, not as calls).
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
     std::unordered_set<DraftGraphBuilder *> armGraphs_;
+    // The function bodies and arms of the module, in the order they were built.
+    std::vector<compile_graph_ptr_t> builtBodies_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -251,7 +270,11 @@ class Builder {
     bool isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const;
     // Once the body of `graph` is built: records whether its exit depends on an effect, and
     // warns (EffectNotExecuted) about the effects that the exit does not depend on.
-    void reportDroppedEffects(const compile_graph_ptr_t &graph);
+    // With `report` false it only records whether the exit depends on an effect.
+    void reportDroppedEffects(const compile_graph_ptr_t &graph, bool report = true);
+    // Once every body is built: settles which graphs are effectful (a callee may be written
+    // after its caller) and then warns for each body.
+    void reportDroppedEffectsOfBodies();
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);
@@ -302,6 +325,23 @@ class Builder {
     node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
     // Makes `result` the result of `graph` when its body set none with `return`.
     void setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result);
+    /// Reports SemanticDiag::ArgumentNeedsConversion (and aborts) when the arguments of `call`
+    /// fit exactly one of `candidates` but for types that leave open what a parameter fixes,
+    /// i.e. when writing `as` at those arguments makes the call compile. Returns otherwise.
+    void reportConversionGaps(
+        const std::vector<std::pair<std::string, camel::core::type::FunctionType *>> &candidates,
+        const std::vector<Argument> &withInputs, const std::vector<Argument> &normInputs,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    /// Reports SemanticDiag::ReturnTypeMismatch when `graph` declares a return type that the
+    /// value it returns cannot be assigned to (the rule arguments are held to:
+    /// Type::assignableFrom, no numeric conversion), or SemanticDiag::ReturnNeedsConversion when a
+    /// conversion written with `as` leads there. `origin` locates the returned expression, or 0 for
+    /// the function; `value` is the returned expression when it is known (its text is quoted in the
+    /// suggested conversion).
+    void checkDeclaredReturn(
+        const compile_graph_ptr_t &graph, camel::core::type::Type *resultType, uint64_t origin,
+        const GCT::node_ptr_t &value = nullptr);
     void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 

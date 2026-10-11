@@ -30,6 +30,10 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <vector>
 
 /// Nothing is inlined into a graph that would then hold more nodes than this. A runtime graph
 /// addresses its nodes, node blocks and edges with 16 bits; the cap keeps a graph the rewrite
@@ -59,6 +63,49 @@ struct InlineRewriteConfig {
 /// overrides it for every pass built on the rewrite engine.
 inline constexpr size_t kDefaultGrowthBudgetNodes = 4096;
 inline constexpr const char *kGrowthBudgetEnvVar  = "CAMEL_OPT_GROWTH_BUDGET";
+
+/// Why the rewrite engine left a direct call as a call.
+enum class InlineDecline : uint8_t {
+    GrowthBudget,     // the copy does not fit what is left of the growth budget
+    OwnerSize,        // the caller would exceed InlineRewriteConfig::maxOwnerNodes
+    Recursive,        // the callee is recursive (it is not copied into its callers)
+    ReachesRecursion, // the callee is not small and reaches a recursive function
+    Duplication,      // the callee is not small and copying it to every call site costs too much
+    Strategy,         // the inline strategy does not select this call
+};
+
+/// One direct call the engine examined and did not inline, by the names of the two graphs.
+struct InlineDeclined {
+    std::string caller;
+    std::string callee;
+    InlineDecline why  = InlineDecline::Strategy;
+    size_t calleeNodes = 0; // nodes inlining would copy
+    size_t callerNodes = 0;
+    size_t callSites   = 0; // direct calls of the callee in the program
+};
+
+/// What the last run of the rewrite engine with inlining enabled decided about the calls it
+/// left, recorded on the context as the pass fact kInlineReportFactKey (Context::setPassFact).
+/// The graph a pass hands on does not show why a call in it is still a call; a pass that has to
+/// refuse such a graph (onnx::export: a request it cannot see) reads the reason here.
+struct InlineReport {
+    size_t growthBudget        = 0;
+    size_t growthSpent         = 0;
+    bool budgetFromEnvironment = false; // CAMEL_OPT_GROWTH_BUDGET set it
+    size_t maxOwnerNodes       = 0;
+    size_t smallNodes          = 0;       // InlineRewriteConfig::smallSubgraphMaxNonDataPortNodes
+    std::vector<InlineDeclined> declined; // the calls examined in the engine's last round
+
+    const InlineDeclined *find(std::string_view caller, std::string_view callee) const {
+        for (const InlineDeclined &entry : declined) {
+            if (entry.caller == caller && entry.callee == callee) {
+                return &entry;
+            }
+        }
+        return nullptr;
+    }
+};
+inline constexpr const char *kInlineReportFactKey = "std::opt/inline-report";
 
 struct OptimizeRewriteConfig {
     bool enableDevirtualization = true;

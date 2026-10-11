@@ -1,0 +1,48 @@
+/**
+ * A loop that returns its state with a counter, forward and differentiated, exported with a
+ * dynamic batch axis and the weights captured as constants. On the path where the loop takes no
+ * step the gradient is a struct of constants (zeros) inside a branch arm, which simplification
+ * does not fold there. Run by ort_loop_values_dynamic.py: x.npy is read from the working
+ * directory, the native results are saved there, and the model is exported when ONNX_OUT is set.
+ */
+module ort_loop_values_dynamic
+import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { value_and_grad } from autodiff
+import { export_model } from onnx
+import { get_env } from sys
+
+type P = { w: Tensor }
+
+with <m: P>
+func walk(h: Tensor, k: int): (Tensor, int) {
+    return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
+}
+
+with <m: P>
+func loss(x: Tensor): float {
+    let (h, k) = walk<m>(x, 0)
+    return sum(h * h)
+}
+
+with <m: P>
+func step(x: Tensor): (Tensor, int, Tensor, Tensor) {
+    let (h, k) = walk<m>(x, 0)
+    let g = value_and_grad(loss)<m>(x)
+    return (h, k, reshape([g.0], [1]), g.1.w)
+}
+
+func main(): int sync {
+    let m = { w: reshape([0.5, -0.25, 0.1, 0.3], [2, 2]) }
+    let x = load_npy('x.npy')
+    let r = step<m>(x)
+    save_npy(r.0, 'native_0.npy')
+    save_npy(reshape([r.1], [1]), 'native_1.npy')
+    save_npy(r.2, 'native_2.npy')
+    save_npy(r.3, 'native_3.npy')
+    let exported = if get_env('ONNX_OUT') != '' then sync {
+        export_model((x: Tensor): (Tensor, int, Tensor, Tensor) => step<m>(x), x, get_env('ONNX_OUT'), [0])
+        1
+    } else 0
+    println(exported)
+    return 0
+}

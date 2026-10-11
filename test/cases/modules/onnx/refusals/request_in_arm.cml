@@ -1,0 +1,24 @@
+/**
+ * The export request is made in an arm of a branch on an environment value: whether it is
+ * made is decided when the program runs. onnx::export does not run the program; it refuses at
+ * the branch (line 18) and says that the request is under a condition that is not known at
+ * compile time (it used to say that the example argument is "a value computed at run time").
+ */
+module request_in_arm
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func double(t: Tensor): Tensor {
+    return t * 2.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0], [2])
+    return if get_env('P7_MODE') == 'export' then sync {
+        export_model(double, x, 'tmp/test/onnx/refusal_request_in_arm.onnx')
+        println('exported')
+        return 0
+    } else 0
+}

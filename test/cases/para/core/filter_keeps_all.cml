@@ -1,0 +1,23 @@
+/**
+ * filter keeps every element whose predicate holds, also when the predicates run concurrently:
+ * the verdicts of neighbouring elements must not overwrite each other. Forty filters over 3000
+ * elements, most of them kept; the count and the sum of what was kept are both checked.
+ */
+module filter_keeps_all
+
+func kept(n: int, k: int): int[] {
+    return range(0, n)->filter<(i: int): bool => (i + k) % 3 != 0>
+}
+
+func weigh(xs: int[]): int {
+    return len(xs) * 1000000 + xs->reduce<(acc: int, x: int): int => acc + x, 0>
+}
+
+func repeat(n: int, left: int, total: int): int {
+    return if left == 0 then total else repeat(n, left - 1, total + weigh(kept(n, left)))
+}
+
+func main(): int sync {
+    println('filter_keeps_all total={}'->format<repeat(3000, 40, 0)>)
+    return 0
+}

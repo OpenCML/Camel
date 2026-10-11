@@ -109,3 +109,359 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "map_ordered_effects.nvm"
+desc = "map and filter are ordered: an element function with an effect runs for element 0, then 1, ... and filter keeps exactly the accepted elements. Under NodeVM."
+kind = "behavior"
+case = "../../../cases/para/core/map_ordered_effects.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 100 | 101 | 102 | 103 | 104 | 105 | 106 | 107 | 108 | 109 | 110 | 111 | 112 | 113 | 114 | 115 | 116 | 117 | 118 | 119 | 120 | 121 | 122 | 123 | 36', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "map_ordered_effects.fvm"
+desc = "map and filter are ordered: an element function with an effect runs for element 0, then 1, ... and filter keeps exactly the accepted elements. Under FastVM."
+kind = "behavior"
+case = "../../../cases/para/core/map_ordered_effects.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 100 | 101 | 102 | 103 | 104 | 105 | 106 | 107 | 108 | 109 | 110 | 111 | 112 | 113 | 114 | 115 | 116 | 117 | 118 | 119 | 120 | 121 | 122 | 123 | 36', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "map_result_order.nvm"
+desc = "The result of map and filter is in element order under every scheduler, also when the element functions run concurrently and finish out of order. (The order of EFFECTS inside element functions under a parallel scheduler is not asserted: it is not defined.)"
+kind = "behavior"
+case = "../../../cases/para/core/map_result_order.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '[0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529, 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, 1225, 1296, 1369, 1444, 1521] | [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39]', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "map_result_order.tf"
+desc = "The result of map and filter is in element order under every scheduler, also when the element functions run concurrently and finish out of order. (The order of EFFECTS inside element functions under a parallel scheduler is not asserted: it is not defined.)"
+kind = "behavior"
+case = "../../../cases/para/core/map_result_order.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '[0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529, 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, 1225, 1296, 1369, 1444, 1521] | [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39]', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "map_result_order.prl"
+desc = "The result of map and filter is in element order under every scheduler, also when the element functions run concurrently and finish out of order. (The order of EFFECTS inside element functions under a parallel scheduler is not asserted: it is not defined.)"
+kind = "behavior"
+case = "../../../cases/para/core/map_result_order.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '[0, 1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 225, 256, 289, 324, 361, 400, 441, 484, 529, 576, 625, 676, 729, 784, 841, 900, 961, 1024, 1089, 1156, 1225, 1296, 1369, 1444, 1521] | [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39]', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "filter_keeps_all.nvm"
+desc = "filter keeps every element whose predicate holds, also when the predicates run concurrently: forty filters over 3000 elements, count and sum of the kept elements checked. (The verdicts were bits of one std::vector<bool>, and concurrent writes to neighbouring bits lost some.)"
+kind = "behavior"
+case = "../../../cases/para/core/filter_keeps_all.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["filter_keeps_all total=80119959000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "filter_keeps_all.tf"
+desc = "filter keeps every element whose predicate holds, also when the predicates run concurrently: forty filters over 3000 elements, count and sum of the kept elements checked. (The verdicts were bits of one std::vector<bool>, and concurrent writes to neighbouring bits lost some.)"
+kind = "behavior"
+case = "../../../cases/para/core/filter_keeps_all.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+expect_stdout_contains = ["filter_keeps_all total=80119959000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "filter_keeps_all.prl"
+desc = "filter keeps every element whose predicate holds, also when the predicates run concurrently: forty filters over 3000 elements, count and sum of the kept elements checked. (The verdicts were bits of one std::vector<bool>, and concurrent writes to neighbouring bits lost some.)"
+kind = "behavior"
+case = "../../../cases/para/core/filter_keeps_all.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+expect_stdout_contains = ["filter_keeps_all total=80119959000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# Graph-level task execution: nodes of one graph with no path between them run concurrently
+# under PRL, calls included. The assertions are deterministic: calls wait for each other at a
+# rendezvous (module para) and report whether a peer arrived; nothing is timed. On a scheduler
+# that runs a graph node by node every rendezvous times out and the counts are 0.
+[[tests]]
+name = "concurrent_calls.prl"
+desc = "Two calls with no path between them in the graph run at the same time under PRL: both meet at a rendezvous."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_calls.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'calls that met a peer: 2', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "concurrent_recursion.prl"
+desc = "Tree recursion under PRL: the two recursive calls of every level run concurrently, so each of the 8 leaves meets a peer at a rendezvous."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_recursion.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'leaves that met a peer: 8 of 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "merge_sort_small.prl"
+desc = "merge_sort at a small size under PRL: the result is sorted and the two recursive calls of a split run concurrently (each of the 8 leaf sorts meets a peer at a rendezvous)."
+kind = "behavior"
+case = "../../../cases/para/core/merge_sort_small.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 2, `unexpected output: ${lines.join(' | ')}`)
+const expected = '[' + Array.from({ length: 64 }, (_, i) => i).join(', ') + ']'
+assert(lines[0] === expected, `not sorted: ${lines[0]}`)
+assert(lines[1] === 'leaf sorts that met a peer: 8 of 8', `unexpected output: ${lines[1]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "sync_order_with_tasks.prl"
+desc = "Under PRL a sync block keeps its written order (calls that sleep less and less still print 1, 2, 3; writes to a var through ordered calls land in order) while two independent calls of the same program run concurrently."
+kind = "behavior"
+case = "../../../cases/para/core/sync_order_with_tasks.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'step 1 | step 2 | step 3 | 6 | independent calls that met: 2 | step 1 | step 2 | step 3 | 6 | 1 4 11 | 11', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "concurrent_alloc.prl"
+desc = "Concurrent calls that allocate (a merge sort whose halves run concurrently, inside map elements, with reduce and filter) give the sequential result under PRL."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_alloc.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 3, `unexpected output: ${lines.join(' | ')}`)
+assert(lines[0] === '[294880, 250036, 203681, 167028, 133532, 99833, 74523, 50133, 31172, 18243, 7369, 1666]', `sums: ${lines[0]}`)
+assert(lines[1] === '[294880, 250036, 203681, 167028, 133532]', `filtered: ${lines[1]}`)
+assert(lines[2] === '[' + Array.from({ length: 96 }, (_, i) => i).join(', ') + ']', `not sorted: ${lines[2]}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "concurrent_alloc.prl_gc_stress"
+desc = "The same under PRL with a collection forced at every safepoint and every 5 allocations, heap verified before and after: values in flight on one worker survive a collection started by another."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_alloc.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 3, `unexpected output: ${lines.join(' | ')}`)
+assert(lines[0] === '[294880, 250036, 203681, 167028, 133532, 99833, 74523, 50133, 31172, 18243, 7369, 1666]', `sums: ${lines[0]}`)
+assert(lines[1] === '[294880, 250036, 203681, 167028, 133532]', `filtered: ${lines[1]}`)
+assert(lines[2] === '[' + Array.from({ length: 96 }, (_, i) => i).join(', ') + ']', `not sorted: ${lines[2]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "arm_reads_outer_value.opt_prl"
+desc = "A branch arm that reads values computed outside the branch (through GATE nodes that execute nothing, after std::opt inlined a loop round) waits for them under PRL. The program is scalar, so the granularity rule would run it inline: CAMEL_TF_FANOUT_ALL=1 makes every unordered scope a task graph, which is what this test is about."
+kind = "behavior"
+case = "../../../cases/para/core/arm_reads_outer_value.cml"
+args = ["-t", "4", "${case}", "std::opt", "${run_prl}"]
+envs = ["CAMEL_TF_FANOUT_ALL=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1010 | 9', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "arm_reads_outer_value.opt_prl_t1"
+desc = "The same with one worker: the order of the tasks of a graph then differs from the linear order without any concurrency."
+kind = "behavior"
+case = "../../../cases/para/core/arm_reads_outer_value.cml"
+args = ["-t", "1", "${case}", "std::opt", "${run_prl}"]
+envs = ["CAMEL_TF_FANOUT_ALL=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '1010 | 9', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "println_whole_lines.prl"
+desc = "Lines printed by concurrent calls under PRL come out whole, each exactly once, whatever their order."
+kind = "behavior"
+case = "../../../cases/para/core/println_whole_lines.cml"
+args = ["-t", "8", "${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10))
+if (lines[lines.length - 1] === '') lines.pop()
+assert(lines.length === 3000, `expected 3000 lines, got ${lines.length}`)
+const seen = new Set()
+for (const line of lines) {
+const m = /^line ([0-9]+) of the map$/.exec(line)
+assert(m !== null, `broken line: '${line}'`)
+seen.add(Number(m[1]))
+}
+assert(seen.size === 3000, `expected 3000 distinct lines, got ${seen.size}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "recursion_too_deep.prl"
+desc = "A non-tail recursion deeper than the native stack allows stops under PRL with MaxRecursionDepthExceeded (the scheduler has no fixed limit; it reserves stack space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(2000) printed before it, nothing after."
+kind = "negative"
+case = "../../../cases/para/core/recursion_too_deep.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_stdout_contains = ["2000", "Maximum recursion depth ("]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+# Granularity: a scope runs as a task graph only when it has two unordered items that are each
+# a higher-order operator or a call of a heavy graph (one that reaches a higher-order operator,
+# a module operator or a call of a function value). Asserted through the scheduler's statistics
+# line (CAMEL_TF_GC_STATS: "[taskflow] run: task_graphs=N"), not through time.
+[[tests]]
+name = "scalar_recursion_inline.prl"
+desc = "Light side of the granularity rule: fib and a mutual recursion, bodies of built-in arithmetic only, make unordered recursive calls but run inline under PRL: 0 task graphs."
+kind = "behavior"
+case = "../../../cases/para/core/scalar_recursion_inline.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '6765 | 987', `unexpected output: ${out}`)
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) === 0, `${m[1]} task graph(s) ran for a scalar recursion, expected 0`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "scalar_recursion_inline.prl_fanout_all"
+desc = "The same program with the rule switched off (CAMEL_TF_FANOUT_ALL=1) does run task graphs: the 0 above comes from the rule, not from the program."
+kind = "behavior"
+case = "../../../cases/para/core/scalar_recursion_inline.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1", "CAMEL_TF_FANOUT_ALL=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '6765 | 987', `unexpected output: ${out}`)
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null && Number(m[1]) > 1000, `expected many task graphs with the rule off: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "concurrent_alloc.prl_fans_out"
+desc = "Heavy side of the granularity rule: the two halves of a merge sort call module operators (algo), so each split runs as a task graph under PRL: at least 12 task graphs (the program sorts 13 arrays; measured 225)."
+kind = "behavior"
+case = "../../../cases/para/core/concurrent_alloc.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 12, `only ${m[1]} task graph(s) ran for the merge sort, expected at least 12`)
+}
+"""
+timeout_ms = 30000

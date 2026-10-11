@@ -368,7 +368,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
         opperf::ScopeTimer _timer(bc->opcode);
 
-        pc = static_cast<arr_size_t>(bc->fastop[0]);
+        pc = getJumpTargetPc(bc);
 
         JUMP();
     }

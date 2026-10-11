@@ -42,6 +42,15 @@ std::optional<StaticShape> shapeFromArg(const InferContext &ctx, size_t index) {
     if (auto values = ctx.constInts(index)) {
         return StaticShape(values->begin(), values->end());
     }
+    // A shape written in place with computed extents, `[n, 3]`: the rank and the constant
+    // extents are known, a computed extent is not.
+    if (auto partial = ctx.partialInts(index)) {
+        StaticShape shape;
+        for (const auto &extent : *partial) {
+            shape.push_back(extent && *extent >= 0 ? *extent : kUnknownDim);
+        }
+        return shape;
+    }
     return std::nullopt;
 }
 

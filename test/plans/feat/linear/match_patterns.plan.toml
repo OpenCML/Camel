@@ -1,0 +1,292 @@
+id = "linear.match_patterns"
+order = 343
+tier = "feat"
+tags = ["feat", "linear", "match"]
+
+[[tests]]
+name = "multi_pattern.nvm"
+desc = "`case a | b => body` enters the body when any pattern matches (only the first used to be read); a wildcard among the alternatives makes the case the default (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/match/multi_pattern.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === 'vowel\nvowel\nvowel\nboth\nrare\nrare\nother\n10\n20\n30\n-1\n-1', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "multi_pattern.fvm"
+desc = "`case a | b => body` enters the body when any pattern matches (only the first used to be read); a wildcard among the alternatives makes the case the default (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/match/multi_pattern.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === 'vowel\nvowel\nvowel\nboth\nrare\nrare\nother\n10\n20\n30\n-1\n-1', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "multi_pattern.jit"
+desc = "`case a | b => body` enters the body when any pattern matches (only the first used to be read); a wildcard among the alternatives makes the case the default (jit)."
+kind = "behavior"
+case = "../../../cases/linear/match/multi_pattern.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === 'vowel\nvowel\nvowel\nboth\nrare\nrare\nother\n10\n20\n30\n-1\n-1', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "multi_pattern.inline_jit"
+desc = "`case a | b => body` enters the body when any pattern matches (only the first used to be read); a wildcard among the alternatives makes the case the default (inline_jit)."
+kind = "behavior"
+case = "../../../cases/linear/match/multi_pattern.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === 'vowel\nvowel\nvowel\nboth\nrare\nrare\nother\n10\n20\n30\n-1\n-1', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "multi_pattern.prl"
+desc = "`case a | b => body` enters the body when any pattern matches (only the first used to be read); a wildcard among the alternatives makes the case the default (prl)."
+kind = "behavior"
+case = "../../../cases/linear/match/multi_pattern.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === 'vowel\nvowel\nvowel\nboth\nrare\nrare\nother\n10\n20\n30\n-1\n-1', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "multi_pattern.tf"
+desc = "`case a | b => body` enters the body when any pattern matches (only the first used to be read); a wildcard among the alternatives makes the case the default (tf)."
+kind = "behavior"
+case = "../../../cases/linear/match/multi_pattern.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === 'vowel\nvowel\nvowel\nboth\nrare\nrare\nother\n10\n20\n30\n-1\n-1', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "wildcard_first.nvm"
+desc = "Nothing after the wildcard case is reachable: the case after it used to be entered for every value that matched no pattern (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/match/wildcard_first.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '0\n0\n7\n7', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_multi_binding.nvm"
+desc = "`let a, b = 1, 2` and `var c, d = 3, 4` bind every name; only the last used to be bound (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/match/let_multi_binding.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '1\n2\n20', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "wildcard_first.fvm"
+desc = "Nothing after the wildcard case is reachable: the case after it used to be entered for every value that matched no pattern (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/match/wildcard_first.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '0\n0\n7\n7', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_multi_binding.fvm"
+desc = "`let a, b = 1, 2` and `var c, d = 3, 4` bind every name; only the last used to be bound (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/match/let_multi_binding.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '1\n2\n20', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "wildcard_first.jit"
+desc = "Nothing after the wildcard case is reachable: the case after it used to be entered for every value that matched no pattern (jit)."
+kind = "behavior"
+case = "../../../cases/linear/match/wildcard_first.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '0\n0\n7\n7', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_multi_binding.jit"
+desc = "`let a, b = 1, 2` and `var c, d = 3, 4` bind every name; only the last used to be bound (jit)."
+kind = "behavior"
+case = "../../../cases/linear/match/let_multi_binding.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '1\n2\n20', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "wildcard_first.inline_jit"
+desc = "Nothing after the wildcard case is reachable: the case after it used to be entered for every value that matched no pattern (inline_jit)."
+kind = "behavior"
+case = "../../../cases/linear/match/wildcard_first.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '0\n0\n7\n7', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_multi_binding.inline_jit"
+desc = "`let a, b = 1, 2` and `var c, d = 3, 4` bind every name; only the last used to be bound (inline_jit)."
+kind = "behavior"
+case = "../../../cases/linear/match/let_multi_binding.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '1\n2\n20', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "wildcard_first.prl"
+desc = "Nothing after the wildcard case is reachable: the case after it used to be entered for every value that matched no pattern (prl)."
+kind = "behavior"
+case = "../../../cases/linear/match/wildcard_first.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '0\n0\n7\n7', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_multi_binding.prl"
+desc = "`let a, b = 1, 2` and `var c, d = 3, 4` bind every name; only the last used to be bound (prl)."
+kind = "behavior"
+case = "../../../cases/linear/match/let_multi_binding.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '1\n2\n20', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "wildcard_first.tf"
+desc = "Nothing after the wildcard case is reachable: the case after it used to be entered for every value that matched no pattern (tf)."
+kind = "behavior"
+case = "../../../cases/linear/match/wildcard_first.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '0\n0\n7\n7', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "let_multi_binding.tf"
+desc = "`let a, b = 1, 2` and `var c, d = 3, 4` bind every name; only the last used to be bound (tf)."
+kind = "behavior"
+case = "../../../cases/linear/match/let_multi_binding.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout.trim()
+    assert(out === '1\n2\n20', `unexpected output: ${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

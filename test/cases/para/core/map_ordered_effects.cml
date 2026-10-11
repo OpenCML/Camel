@@ -1,0 +1,24 @@
+/**
+ * On the LINEAR schedulers map and filter run their element function for element 0, then 1,
+ * ...: an element function with an effect prints in element order. (Under a parallel scheduler
+ * the element functions may run concurrently and the order of their effects is not defined;
+ * see map_result_order.)
+ */
+module map_ordered_effects
+
+func show(i: int): int sync {
+    println(i)
+    return i * 2
+}
+
+func even(i: int): bool sync {
+    println(100 + i)
+    return i - (i / 2) * 2 == 0
+}
+
+func main(): int sync {
+    let doubled = range(0, 24)->map<show>
+    let kept = range(0, 24)->filter<even>
+    println(len(doubled) + len(kept))
+    return 0
+}

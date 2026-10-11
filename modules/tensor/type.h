@@ -72,6 +72,9 @@ class TensorType : public type::OtherType {
     bool isStaticShape() const;
 
     std::string toString() const override;
+    /// As a program writes the type: `Tensor<f32, const [2, -1]>` for what toString() prints as
+    /// `Tensor<float32, [2, ?]>`.
+    std::string spelling() const override;
     std::string mangle() const override;
     type::Type *clone(bool deep = false) const override;
     bool equals(type::Type *type) const override;
@@ -79,8 +82,16 @@ class TensorType : public type::OtherType {
     /// Mutable bindings hold any tensor: widening drops dtype and shape facts.
     type::Type *widened() const override;
     type::CastSafety castSafetyFrom(type::Type *sourceType) const override;
+    /// `t as Tensor<...>`: the tensor itself, after checking its element type and shape against
+    /// this type (what the static types left open is checked here, when the conversion runs).
+    slot_t castSlotFrom(slot_t value, type::Type *sourceType) const override;
     bool assignableFrom(type::Type *sourceType) const override;
     type::OtherType *cloneWithParams(std::span<type::Type *const> params) const override;
+    /// `Tensor<dtype>`, `Tensor<const [d0, d1, ...]>`, `Tensor<dtype, const [...]>`: the element
+    /// type and the shape. An extent written as a negative integer (conventionally -1) is
+    /// unknown; `const []` is a scalar tensor.
+    type::OtherType *cloneWithArguments(
+        std::span<const type::TypeArgument> arguments, std::string &error) const override;
 
   private:
     TensorType(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape);

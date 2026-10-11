@@ -6,7 +6,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: May. 24, 2026
+ * Updated: Oct. 06, 2026
  */
 
 #include "camel/core/mm.h"
@@ -210,7 +210,7 @@ std::string snapshotToJson() {
              {"safepoints", stats.safepoints},
              {"deferredCollections", stats.deferredCollections},
              {"requestedCollections", stats.requestedCollections},
-             {"allocationFailureCollections", stats.allocationFailureCollections},
+             {"elderOverflowAllocations", stats.elderOverflowAllocations},
              {"writeBarriers", stats.writeBarriers},
              {"minorCollections", stats.minorCollections},
              {"majorCollections", stats.majorCollections},
@@ -262,7 +262,7 @@ std::string summaryToText() {
        << " after=" << (debugConfig.verifyAfterGC ? "true" : "false") << "\n";
     os << "  collections: minor=" << stats.minorCollections << " major=" << stats.majorCollections
        << " requested=" << stats.requestedCollections << " deferred=" << stats.deferredCollections
-       << " emergency=" << stats.allocationFailureCollections << "\n";
+       << " elderOverflow=" << stats.elderOverflowAllocations << "\n";
     os << "  movement: moved=" << stats.movedObjects << " promoted=" << stats.promotedObjects
        << " rememberedSet=" << stats.rememberedSetSize << "\n";
     os << "  roots: sources=" << stats.rootSourceCount

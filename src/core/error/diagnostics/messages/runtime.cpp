@@ -43,7 +43,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             RuntimeDiag::IndexOutOfRange,
             {
                 "IndexOutOfRange",
-                "Index out of range: {0}.",
+                "Index {0} is out of range for {1} of length {2}.",
                 "Ensure the index is within the valid range of the collection.",
             },
         },
@@ -132,9 +132,39 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "MacroEvaluationFailed",
                 "'{0}' could not be evaluated by std::macro: {1}.",
                 "Every argument of this macro call is a constant, so std::macro evaluates it "
-                "ahead of time, and a failed evaluation is a compile-time error (provisional "
-                "rule). The program is rejected even if the call would never be reached at "
+                "ahead of time, and a failed evaluation is a compile-time error. The program "
+                "is rejected even if the call would never be reached at "
                 "run time. Without std::macro in the pipeline the call runs with the program.",
+            },
+        },
+        {
+            RuntimeDiag::EntryArgumentMissing,
+            {
+                "EntryArgumentMissing",
+                "No value was given for the {0} {1} of 'main'.",
+                "The parameters of 'main' are the inputs of the program. To run it, give each "
+                "one a value on the command line: --arg name=value (a number, true/false or "
+                "text for a scalar, a .npy file for a tensor, a directory of .npy files for a "
+                "struct of tensors). No default is assumed.",
+            },
+        },
+        {
+            RuntimeDiag::EntryArgumentInvalid,
+            {
+                "EntryArgumentInvalid",
+                "Cannot bind the argument '{0}' of 'main': {1}.",
+                "An argument is written --arg name=value, where name is a parameter of 'main' "
+                "and value is read according to the parameter's declared type.",
+            },
+        },
+        {
+            RuntimeDiag::EntryResultNotWritten,
+            {
+                "EntryResultNotWritten",
+                "Cannot write the result of 'main' to '{0}': {1}.",
+                "--output <file> (-o) writes the value 'main' returns: a number, bool or text as "
+                "a text file, a tensor as a .npy file, a struct or tuple as a directory with one "
+                "file per member. Without it the value is printed on standard output.",
             },
         },
         {
@@ -145,6 +175,20 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "A scheduling pass executes the program and a translation pass translates it; "
                 "neither hands a graph on, and the pipeline ends there. Remove the passes "
                 "written after it, or move them before it.",
+            },
+        },
+        {
+            RuntimeDiag::GraphTooLarge,
+            {
+                "GraphTooLarge",
+                "Pass '{0}' cannot build graph '{1}': it needs {2} {3}, and one graph holds at "
+                "most {4}.",
+                "A graph addresses its nodes, its node blocks and its edge table with 16 bits. "
+                "The function is not too large as written: the pass inlined or unrolled more "
+                "code into this one graph than fits (a recursion unrolled over many steps, a "
+                "function inlined at many call sites). Keep part of the computation out of "
+                "the graph (a smaller constant depth, fewer unrolled steps), or run the "
+                "pipeline without this pass.",
             },
         },
         {

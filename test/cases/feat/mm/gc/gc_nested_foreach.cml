@@ -1,0 +1,58 @@
+/**
+ * foreach nested with map both ways, with allocation in the element function, repeated `reps`
+ * times (--arg reps=N); about 100 repetitions fill the elder space (32 MB) more than once.
+ *   collect: a foreach whose body builds a row with map and appends it to a captured variable;
+ *   lasts: a map whose element function fills a captured row with a foreach.
+ * The innermost functions call a named function, so that every scheduler reaches a safepoint
+ * while the arrays built in the element function are still in use.
+ */
+module gc_nested_foreach
+
+type Row = int[]
+
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func collect(n: int, k: int): Row[] sync {
+    var out: Row[] = []
+    range(0, n)->foreach<sync (i: int) => sync {
+        out->append<range(0, n)->map<(j: int): int => add(i + j, k)>>
+        return null
+    }>
+    return out
+}
+
+func ends_of(n: int, i: int, k: int): int sync {
+    var row: int[] = []
+    range(0, n)->foreach<sync (j: int) => sync {
+        row->append<add(i + j, k)>
+        return null
+    }>
+    return row[0] + row[n - 1] + len(row)
+}
+
+func lasts(n: int, k: int): int[] sync {
+    return range(0, n)->map<sync (i: int): int => ends_of(n, i, k)>
+}
+
+func probe(t: Row[], n: int): int {
+    return range(0, n)
+        ->map<(i: int): int => t[i][0] + t[i][i] + t[i][n - 1]>
+        ->reduce<(acc: int, x: int): int => acc + x, 0>
+}
+
+func total_of(xs: int[]): int {
+    return xs->reduce<(acc: int, x: int): int => acc + x, 0>
+}
+
+func repeat(n: int, left: int, total: int): int sync {
+    return if left == 0
+        then total
+        else repeat(n, left - 1, total + probe(collect(n, left), n) + total_of(lasts(n, left)))
+}
+
+func main(reps: int): int sync {
+    println('gc_nested_foreach total={}'->format<repeat(128, reps, 0)>)
+    return 0
+}

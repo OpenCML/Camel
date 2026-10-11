@@ -29,6 +29,7 @@
  */
 
 #include "camel/runtime/graph.h"
+#include "camel/runtime/capacity.h"
 #include "camel/runtime/draft.h"
 #include "runtime/graph_build.h"
 
@@ -204,9 +205,15 @@ template <typename T> void pushUnique(std::vector<T *> &items, T *value) {
     }
 }
 
+/// `value` as the 16-bit quantity of a runtime graph it is stored as. A graph that needs more
+/// of `what` (a plural noun phrase) than that is too large for the representation, which is
+/// reported as such (see camel/runtime/capacity.h); the caller that knows the graph names it.
 template <typename T, typename U> T narrowIntegral(U value, const char *what) {
     if (value > static_cast<U>(std::numeric_limits<T>::max())) {
-        throw std::runtime_error(std::format("{} exceeds the target integral width.", what));
+        throw GraphCapacityError(
+            what,
+            static_cast<size_t>(value),
+            static_cast<size_t>(std::numeric_limits<T>::max()));
     }
     return static_cast<T>(value);
 }
@@ -572,6 +579,17 @@ gc_cnt_t draftNodeBlockCount(const DraftNodeHeader &header) {
     return blocksForBytes(sizeof(GCNode) + bodyBytes);
 }
 
+/// The edge table of a graph holds, for every node, its norm, with and ctrl inputs and its
+/// norm, with and ctrl users: two entries per edge. It is the first quantity a graph of
+/// ordinary operators exhausts (a node with two inputs that is used once costs three entries
+/// and one node), long before the node count.
+constexpr const char *kNodeBlocks =
+    "node blocks (the 8-byte units nodes are stored in: a node takes several, for its header "
+    "and for what it carries)";
+constexpr const char *kEdgeTableEntries =
+    "edge table entries (one for each input and one for each user of every node, that is two "
+    "per edge)";
+
 DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     auto requireAlive = [&](gc_node_ref_t owner, gc_node_ref_t ref, std::string_view lane) {
         if (ref == kInvalidNodeRef) {
@@ -614,9 +632,9 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         }
     }
 
-    gc_off_t currentNodeOffset = 0;
-    size_t edgeCount           = 0;
-    size_t branchArmCount      = 0;
+    size_t nodeBlocks     = 0;
+    size_t edgeCount      = 0;
+    size_t branchArmCount = 0;
     for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
         if (!draft.alive(draftId)) {
             continue;
@@ -639,16 +657,17 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
             }
         }
         const gc_cnt_t blockCount = draftNodeBlockCount(*header);
-        plan.nodes.push_back(
-            PlannedDraftNode{
+        // A graph that does not fit is measured to the end, so that the error states what
+        // it needs and not the point where the count stopped.
+        if (nodeBlocks + blockCount <= std::numeric_limits<gc_off_t>::max()) {
+            plan.nodes.push_back(PlannedDraftNode{
                 .draftId    = draftId,
-                .ref        = currentNodeOffset,
+                .ref        = static_cast<gc_off_t>(nodeBlocks),
                 .blockCount = blockCount,
             });
-        plan.runtimeRefsByDraftId[draftId] = currentNodeOffset;
-        currentNodeOffset                  = narrowIntegral<gc_off_t>(
-            static_cast<size_t>(currentNodeOffset) + blockCount,
-            "Draft runtime node blob size");
+            plan.runtimeRefsByDraftId[draftId] = static_cast<gc_off_t>(nodeBlocks);
+        }
+        nodeBlocks += blockCount;
         edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
                      draft.ctrlInputsOf(draftId).size() + plan.normUsersByDraftId[draftId].size() +
                      plan.withUsersByDraftId[draftId].size() +
@@ -672,25 +691,20 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     requireAlive(kInvalidNodeRef, draft.outputNode(), "output");
     requireAlive(kInvalidNodeRef, draft.returnNode(), "return");
 
-    plan.nodeBlockCount =
-        narrowIntegral<gc_cnt_t>(currentNodeOffset, "Draft runtime node-blob block count");
-    plan.edgeCount = narrowIntegral<gc_cnt_t>(edgeCount, "Draft runtime edge arena size");
-    plan.branchArmCount =
-        narrowIntegral<gc_cnt_t>(branchArmCount, "Draft runtime branch-arm arena size");
+    plan.nodeBlockCount = narrowIntegral<gc_cnt_t>(nodeBlocks, kNodeBlocks);
+    plan.edgeCount      = narrowIntegral<gc_cnt_t>(edgeCount, kEdgeTableEntries);
+    plan.branchArmCount = narrowIntegral<gc_cnt_t>(branchArmCount, "branch arms");
     return plan;
 }
 
 GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPayloadPlan &plan) {
     return GCGraphPayloadShape{
-        .nodeCount      = narrowIntegral<gc_cnt_t>(plan.nodes.size(), "Draft runtime node count"),
+        .nodeCount      = narrowIntegral<gc_cnt_t>(plan.nodes.size(), "nodes"),
         .nodeBlockCount = plan.nodeBlockCount,
         .edgeCount      = plan.edgeCount,
-        .normPortCount =
-            narrowIntegral<gc_cnt_t>(draft.normPorts().size(), "Draft runtime norm-port count"),
-        .withPortCount =
-            narrowIntegral<gc_cnt_t>(draft.withPorts().size(), "Draft runtime with-port count"),
-        .closureCount =
-            narrowIntegral<gc_cnt_t>(draft.closureNodes().size(), "Draft runtime closure count"),
+        .normPortCount  = narrowIntegral<gc_cnt_t>(draft.normPorts().size(), "parameters"),
+        .withPortCount  = narrowIntegral<gc_cnt_t>(draft.withPorts().size(), "'with' parameters"),
+        .closureCount   = narrowIntegral<gc_cnt_t>(draft.closureNodes().size(), "captured values"),
         .branchArmCount = plan.branchArmCount,
     };
 }
@@ -699,8 +713,7 @@ void emitDraftPayload(
     const GraphDraft &draft, const DraftPayloadPlan &plan, GCGraphPayloadArena &payload,
     const std::function<GCGraph *(GCGraph *)> &resolveRuntimeGraph) {
     ASSERT(
-        payload.nodeCount ==
-            narrowIntegral<gc_cnt_t>(plan.nodes.size(), "Draft runtime node count"),
+        payload.nodeCount == narrowIntegral<gc_cnt_t>(plan.nodes.size(), "nodes"),
         "Draft payload arena shape does not match the planned node count.");
 
     gc_off_t edgeCursor      = 0;
@@ -715,7 +728,7 @@ void emitDraftPayload(
             ASSERT(runtimeRef != kInvalidNodeRef, "Draft edge emission encountered a dead node.");
             payload.edges[edgeCursor++] = runtimeRef;
         }
-        slice.count = narrowIntegral<gc_cnt_t>(edgeCursor - slice.offset, "Draft edge slice count");
+        slice.count = narrowIntegral<gc_cnt_t>(edgeCursor - slice.offset, "edges of one node");
         return slice;
     };
 
@@ -1089,9 +1102,9 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
         dependencyStorage,
         subGraphStorage,
         staticRefStorage,
-        narrowIntegral<gc_cnt_t>(dependencies.size(), "Runtime dependency count"),
-        narrowIntegral<gc_cnt_t>(subGraphs.size(), "Runtime subgraph count"),
-        narrowIntegral<gc_cnt_t>(staticGraphRefs.size(), "Runtime static-graph-ref count"),
+        narrowIntegral<gc_cnt_t>(dependencies.size(), "called graphs"),
+        narrowIntegral<gc_cnt_t>(subGraphs.size(), "nested graphs"),
+        narrowIntegral<gc_cnt_t>(staticGraphRefs.size(), "graphs referenced by constants"),
         ownedPayload,
         staticArea);
 
@@ -1335,7 +1348,7 @@ gc_node_ref_t GCGraph::nodeRef(const GCNode *nodePtr) const {
     if ((byteOffset % kGCBlockBytes) != 0) {
         return kInvalidNodeRef;
     }
-    return narrowIntegral<gc_node_ref_t>(byteOffset / kGCBlockBytes, "Runtime node reference");
+    return narrowIntegral<gc_node_ref_t>(byteOffset / kGCBlockBytes, "node blocks");
 }
 
 GCGraph *GCGraph::directCalleeGraphOf(gc_node_ref_t ref) const {
@@ -1366,7 +1379,7 @@ gc_node_ref_t GCGraph::nextNodeRef(gc_node_ref_t ref) const {
     }
     return narrowIntegral<gc_node_ref_t>(
         static_cast<size_t>(ref) + current->blockCount,
-        "Runtime next-node reference");
+        "node blocks");
 }
 
 const GCNode *GCGraph::nextNode(gc_node_ref_t ref) const { return node(nextNodeRef(ref)); }

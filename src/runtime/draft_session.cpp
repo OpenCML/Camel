@@ -28,6 +28,7 @@
  */
 
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/capacity.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/mm.h"
@@ -509,13 +510,28 @@ size_t draftGraphBytes(
         staticSlots);
 }
 
+/// draftGraphBytes for the graph `identity`: a draft too large for one runtime graph is
+/// reported with the graph's name and a source position, which only the session knows. The
+/// position is the definition of the function the graph was compiled from; a graph a rewrite
+/// created (a specialization, a copy) has none and is reported at its first node that has one.
+size_t namedDraftGraphBytes(
+    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
+    const GraphDraft &draft, const GCGraph *fallback) {
+    try {
+        return draftGraphBytes(context, draft, fallback);
+    } catch (const GraphCapacityError &e) {
+        uint64_t origin = 0;
+        if (const auto source = context ? context->sourceContext() : nullptr) {
+            origin = source->debugMap().graphOrigin(identity.stableId);
+        }
+        throw e.inGraph(identity.name, origin != 0 ? origin : draft.firstNodeOrigin());
+    }
+}
+
 GCGraph *allocateGraph(size_t bytes, const std::string &name) {
     void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
     if (!mem) {
-        throw std::runtime_error(std::format(
-            "Runtime draft encoding failed to allocate {} bytes for graph '{}'.",
-            bytes,
-            name));
+        throw GraphSpaceExhausted(bytes, name);
     }
     return reinterpret_cast<GCGraph *>(mem);
 }
@@ -689,7 +705,7 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     allocatedBytes.reserve(closure.size());
     for (GCGraph *graph : closure) {
         const DraftEntry &entry = *drafts_.at(graph);
-        const size_t bytes      = draftGraphBytes(context_, *entry.draft, graph);
+        const size_t bytes = namedDraftGraphBytes(context_, entry.identity, *entry.draft, graph);
         rewritten.emplace(graph, allocateGraph(bytes, entry.identity.name));
         allocatedBytes.emplace(graph, bytes);
     }
@@ -761,7 +777,7 @@ void GraphDraftGroup::encode() {
     std::unordered_map<GCGraph *, size_t> bytes;
     for (GCGraph *key : order_) {
         const Member &m = member(key);
-        bytes.emplace(key, draftGraphBytes(context_, *m.draft, nullptr));
+        bytes.emplace(key, namedDraftGraphBytes(context_, m.identity, *m.draft, nullptr));
         rewritten.emplace(key, allocateGraph(bytes.at(key), m.identity.name));
     }
     // Graphs outside the group keep their identity.

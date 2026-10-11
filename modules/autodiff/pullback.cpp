@@ -25,6 +25,7 @@
 
 #include "rules.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/derivative.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
@@ -32,12 +33,17 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/source/manager.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/passes/opt/inline.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/type.h"
 
+#include <functional>
+#include <algorithm>
 #include <atomic>
 #include <deque>
 #include <format>
@@ -84,6 +90,44 @@ using type::TypeCode;
     throwRuntimeFault(RuntimeDiag::RuntimeError, "autodiff: " + message);
 }
 
+/// A refusal that belongs to one place of the program: the diagnostic is reported there, not at
+/// the grad call that happened to run the transformation.
+[[noreturn]] void failAt(uint64_t origin, const std::string &message) {
+    throw camel::core::error::RuntimeFault(
+        RuntimeDiag::RuntimeError,
+        {"autodiff: " + message},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(origin)});
+}
+
+/// The source of the program being differentiated, to say where a refused node is.
+thread_local camel::source::source_context_ptr_t currentSource;
+
+/// " (at file:line:column)" for a node origin, or nothing when it is unknown.
+std::string whereIs(uint64_t origin) {
+    if (!currentSource || origin == camel::source::kInvalidOriginId) {
+        return {};
+    }
+    const auto *file = currentSource->fileForOrigin(origin);
+    if (!file) {
+        return {};
+    }
+    const auto range = currentSource->resolveOrigin(origin);
+    return std::format(
+        " (at {}:{}:{})",
+        file->path,
+        range.start.line + 1,
+        range.start.character + 1);
+}
+
+/// A variable (`var`) is a cell; the graph passes the cell, not its content.
+bool isCellType(Type *type) {
+    return type != nullptr && type->code() == TypeCode::Tuple &&
+           tt::as_ptr<TupleType>(type)->isCell();
+}
+
 // ---------------------------------------------------------------- draft helpers
 
 Type *typeOf(const GraphDraft &draft, gc_node_ref_t node) {
@@ -108,6 +152,74 @@ std::optional<slot_t> staticValue(const GraphDraft &draft, gc_node_ref_t node) {
         return std::nullopt;
     }
     return draft.staticSlots()[static_cast<size_t>(-header->dataIndex)];
+}
+
+bool isFunctionType(Type *type) { return type != nullptr && type->code() == TypeCode::Function; }
+
+/// Whether a value of `type` is, or holds, a function value (a closure, a tuple of closures).
+bool holdsFunction(Type *type) {
+    if (isFunctionType(type)) {
+        return true;
+    }
+    if (type == nullptr || isCellType(type) || !isAggregate(type)) {
+        return false;
+    }
+    for (size_t i = 0; i < aggregateSize(type); ++i) {
+        if (holdsFunction(aggregateElement(type, i))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The value a chain of gates passes on. A gate orders a value after other nodes (an inlined
+/// call gates its arguments after what the call waited for); it does not change the value.
+gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
+    while (kindOf(draft, node) == GCNodeKind::Gate && !draft.normInputsOf(node).empty()) {
+        node = draft.normInputsOf(node).back();
+    }
+    return node;
+}
+
+/// What `node` and the gates it passes through wait for, the gated value's own ordering included.
+std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t node) {
+    std::vector<gc_node_ref_t> ctrl;
+    while (true) {
+        for (gc_node_ref_t before : draft.ctrlInputsOf(node)) {
+            if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+                ctrl.push_back(before);
+            }
+        }
+        if (kindOf(draft, node) != GCNodeKind::Gate || draft.normInputsOf(node).empty()) {
+            return ctrl;
+        }
+        node = draft.normInputsOf(node).back();
+    }
+}
+
+/// The function a function value is, where the graph itself says so: a constant function, or a
+/// closure built in this graph (FILL) over a constant function. Null for anything else (a
+/// port, the result of a branch or of a call, an element of a container).
+::Function *evidentFunction(const GraphDraft &draft, gc_node_ref_t node) {
+    node = ungated(draft, node);
+    if (!isFunctionType(typeOf(draft, node))) {
+        return nullptr;
+    }
+    gc_node_ref_t constant = node;
+    if (kindOf(draft, node) == GCNodeKind::Fill) {
+        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft.payloadOf(node).data());
+        if (body->fillKind != rt::GCFillKind::FunctionClosure ||
+            draft.normInputsOf(node).size() != 1) {
+            return nullptr;
+        }
+        constant = draft.normInputsOf(node).front();
+        if (!isFunctionType(typeOf(draft, constant))) {
+            return nullptr;
+        }
+    }
+    const auto value = staticValue(draft, constant);
+    auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
+    return function != nullptr && function->graph() != nullptr ? function : nullptr;
 }
 
 gc_node_ref_t funcCallee(const GraphDraft &draft, gc_node_ref_t node, GCGraph **callee) {
@@ -256,6 +368,27 @@ std::vector<gc_node_ref_t> valueOrder(const GraphDraft &draft, gc_node_ref_t roo
     return order;
 }
 
+/// Whether anything `node` runs after is ordered by a control edge (code with effects).
+bool hasOrdering(const GraphDraft &draft, gc_node_ref_t node) {
+    std::unordered_set<gc_node_ref_t> seen{node};
+    std::vector<gc_node_ref_t> work{node};
+    while (!work.empty()) {
+        const gc_node_ref_t current = work.back();
+        work.pop_back();
+        if (!draft.ctrlInputsOf(current).empty()) {
+            return true;
+        }
+        for (auto inputs : {draft.normInputsOf(current), draft.withInputsOf(current)}) {
+            for (gc_node_ref_t input : inputs) {
+                if (seen.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    }
+    return false;
+}
+
 /// Erases the nodes the graph's result does not depend on (backward nodes computing gradients
 /// of constants, forward values only the gradient needed not), keeping ports and closure nodes.
 void pruneUnreachable(GraphDraft &draft) {
@@ -396,6 +529,22 @@ struct CallSite {
     ::Function *rule = nullptr;
 };
 
+/// What a graph being differentiated is to the differentiated function: the reason a function
+/// value is not evident in it depends on that.
+enum class GraphRole { Differentiated, Callee, BranchArm };
+
+/// Where a graph being differentiated stands.
+struct GraphScope {
+    GraphRole role = GraphRole::Differentiated;
+    /// The functions this graph is inside a branch arm of, after their bodies were brought
+    /// into a graph to follow a function value. A call of one of them from here is that
+    /// function's recursion: it is not followed again (it would be without end), it stays a
+    /// call.
+    std::unordered_set<GCGraph *> enclosing;
+    /// Set when this graph is (an arm of) a function whose recursive call was left that way.
+    std::string recursive;
+};
+
 class Engine;
 
 // ---------------------------------------------------------------- forward rewrite
@@ -403,7 +552,8 @@ class Engine;
 /// Rewrites a graph so that each differentiable call also returns its pullback.
 class ForwardRewrite {
   public:
-    ForwardRewrite(Engine &engine, GraphDraft &draft) : engine_(engine), draft_(draft) {}
+    ForwardRewrite(Engine &engine, GraphDraft &draft, const GraphScope &scope)
+        : engine_(engine), draft_(draft), scope_(scope) {}
 
     void run();
 
@@ -411,11 +561,21 @@ class ForwardRewrite {
     const std::unordered_map<gc_node_ref_t, CallSite> &sites() const { return sites_; }
 
   private:
+    /// Brings the functions that function values stand for into this graph, so that the calls
+    /// of those values become calls of closures built here (see the definition).
+    void followFunctionValues();
+    bool carriesFunctionValue(gc_node_ref_t call) const;
     void rewriteBranch(gc_node_ref_t join);
     void rewriteCall(gc_node_ref_t call);
-    /// Calls of static function values: records custom-rule call sites, and turns calls of other
-    /// capture-free functions into direct calls. Returns the direct call created, if any.
+    /// Calls of function values whose callee is evident in the graph: records custom-rule call
+    /// sites, turns calls of capture-free static functions into direct calls (returned), and
+    /// differentiates calls of closures (a function with captured values) through the
+    /// function's graph with the captures as arguments.
     std::optional<gc_node_ref_t> rewriteIndirectCall(gc_node_ref_t call);
+    /// A call of the closure `function` with `captures` (caller nodes, in closure order).
+    void rewriteClosureCall(
+        gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
+        gc_node_ref_t calleeValue);
     /// The function `callee` computes when it applies one of autodiff's own macros (grad,
     /// value_and_grad, vjp) to static functions, else nullptr.
     ::Function *macroCallee(gc_node_ref_t callee);
@@ -425,6 +585,7 @@ class ForwardRewrite {
 
     Engine &engine_;
     GraphDraft &draft_;
+    const GraphScope &scope_;
     std::unordered_map<gc_node_ref_t, CallSite> sites_;
     std::deque<mm::RootHandle> roots_;
 };
@@ -451,6 +612,12 @@ struct Tangent {
     }
 };
 
+/// A call of a function value that the gradient has to pass and cannot.
+struct Refusal {
+    uint64_t origin = 0;
+    std::string reason;
+};
+
 /// Emits the backward pass of a forward graph into a target graph: the forward graph itself
 /// (grad of the top-level function), or a separate pullback graph that captures the primal
 /// values it reads.
@@ -458,8 +625,10 @@ class Backward final : public VjpBuilder {
   public:
     Backward(
         GraphDraft &forward, GraphDraft &target,
-        const std::unordered_map<gc_node_ref_t, CallSite> &sites)
-        : forward_(forward), target_(target), sites_(sites), inPlace_(&forward == &target) {}
+        const std::unordered_map<gc_node_ref_t, CallSite> &sites, const GraphScope &scope,
+        std::vector<Refusal> &refusals)
+        : forward_(forward), target_(target), sites_(sites), inPlace_(&forward == &target),
+          scope_(scope), refusals_(refusals) {}
 
     /// Target-graph node holding the primal value `primal`.
     gc_node_ref_t ref(gc_node_ref_t primal);
@@ -512,11 +681,24 @@ class Backward final : public VjpBuilder {
     void visitAccs(gc_node_ref_t node);
     void visitFill(gc_node_ref_t node);
     void visitForward(gc_node_ref_t node, bool convert);
+    void checkVariableReads(const std::vector<gc_node_ref_t> &order);
+    std::string_view operUri(gc_node_ref_t node) const;
+    /// Why the gradient cannot pass the call `call` (a CALL, or a FUNC left alone).
+    std::string refusalReason(gc_node_ref_t call) const;
+    /// Why the function the value `function` is is not known here.
+    std::string whyNotEvident(gc_node_ref_t function) const;
+    /// An input of `call` (for a closure call, a captured value as well) that is a function
+    /// value carrying an active value, or kInvalidNodeRef.
+    gc_node_ref_t activeFunctionInput(gc_node_ref_t call) const;
+    void reportRefusals(const std::vector<gc_node_ref_t> &order);
 
     GraphDraft &forward_;
     GraphDraft &target_;
     const std::unordered_map<gc_node_ref_t, CallSite> &sites_;
     const bool inPlace_;
+    const GraphScope &scope_;
+    std::vector<Refusal> &refusals_;
+    std::vector<gc_node_ref_t> refused_;
     std::unordered_set<gc_node_ref_t> primals_;
     std::unordered_set<gc_node_ref_t> active_;
     mutable std::unordered_map<gc_node_ref_t, Tangent> gradients_;
@@ -529,23 +711,60 @@ class Backward final : public VjpBuilder {
 
 class Engine {
   public:
-    explicit Engine(const camel::core::context::context_ptr_t &context)
-        : context_(context), group_(context) {}
+    Engine(const camel::core::context::context_ptr_t &context, GCGraph *function)
+        : context_(context), group_(context), inlining_(context, function),
+          outerSource_(currentSource) {
+        currentSource = context ? context->sourceContext() : nullptr;
+    }
+    ~Engine() { currentSource = outerSource_; }
 
     GCGraph *gradient(GCGraph *function, bool withValue);
     const camel::core::context::context_ptr_t &context() const { return context_; }
+
+    /// The session the inlining helpers of the runtime layer work in. Nothing is committed
+    /// through it: it only holds the lifted copies of closure graphs they make on the way.
+    rt::RuntimeGraphDraftSession &inlining() { return inlining_; }
+    /// Whether one more call may be brought into a graph to follow a function value. The bound
+    /// is on the whole transformation, so following ends for a recursion that passes on
+    /// function values without end.
+    bool mayFollow() {
+        if (followed_ >= kMaxFollowedCalls) {
+            return false;
+        }
+        ++followed_;
+        return true;
+    }
+    bool followingExhausted() const { return followed_ >= kMaxFollowedCalls; }
+    static constexpr size_t kMaxFollowedCalls = 256;
 
     /// The plan differentiating calls of `callee` (memoized; recursion reuses the plan).
     const PullbackPlan &planFor(GCGraph *callee);
     /// A plan for a synthesized graph (a branch arm) with the given types.
     PullbackPlan planForDraft(
-        std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types);
+        std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types,
+        GraphScope scope);
+
+    /// The functions whose bodies, brought into a graph, the branch arm `arm` came with.
+    const std::unordered_set<GCGraph *> &ownersOf(GCGraph *arm) const {
+        static const std::unordered_set<GCGraph *> none;
+        auto it = armOwners_.find(arm);
+        return it == armOwners_.end() ? none : it->second;
+    }
+    void noteArmOwner(GCGraph *arm, GCGraph *owner) { armOwners_[arm].insert(owner); }
+    /// `function` called itself from one of its own arms while it was being followed.
+    void noteRecursion(GCGraph *function) { recursions_.insert(function); }
+    /// The plan for calls of a closure over `graph`: the graph with its captured values turned
+    /// into trailing norm ports (memoized, so two calls of one lambda share the derivative).
+    const PullbackPlan &planForClosure(GCGraph *graph);
 
   private:
     struct Pending {
         PullbackPlan plan;
         std::unique_ptr<GraphDraft> source;
+        GraphScope scope;
+        GCGraph *graph = nullptr; // the function this is the graph of, for a callee
     };
+    [[noreturn]] void refuse();
 
     PullbackPlan reserve(const std::string &name, const PullbackPlan &types);
     void build(Pending &pending);
@@ -553,12 +772,152 @@ class Engine {
     camel::core::context::context_ptr_t context_;
     rt::GraphDraftGroup group_;
     std::unordered_map<GCGraph *, PullbackPlan> plans_;
+    std::unordered_map<GCGraph *, PullbackPlan> closurePlans_;
     std::deque<Pending> pending_;
+    rt::RuntimeGraphDraftSession inlining_;
+    size_t followed_ = 0;
+    std::unordered_map<GCGraph *, std::unordered_set<GCGraph *>> armOwners_;
+    std::unordered_set<GCGraph *> recursions_;
+    std::vector<Refusal> refusals_;
+    camel::source::source_context_ptr_t outerSource_;
 };
 
 // ---------------------------------------------------------------- forward rewrite impl
 
+// A function value is followed to the function it stands for by bringing the code between the
+// two into this graph: the body of a function that receives an evident function value (as an
+// argument or as a captured value), and the body of a function that returns a function value.
+// Afterwards a call of such a value is a call of a closure built in this graph, which
+// rewriteIndirectCall differentiates; a value that is still not evident (it is chosen by a
+// branch, read from a container, a parameter of the differentiated function) is refused at
+// its call as before. Inlining is std::inline's own (camel/passes/opt/inline.h), so the order
+// and the effects of the inlined body are kept by the same code as everywhere else.
+//
+// Bounded: only calls that carry function values are inlined, and a branch arm is never
+// inlined: it is a graph of its own, differentiated on its own (rewriteBranch), which knows
+// the functions whose bodies it came with (GraphScope::enclosing). A call of one of those from
+// inside the arm is the recursion of that function and is left a call, so a recursive function
+// is followed into once. Besides, the transformation as a whole follows at most
+// Engine::kMaxFollowedCalls calls.
+void ForwardRewrite::followFunctionValues() {
+    std::unordered_set<gc_node_ref_t> left; // calls that could not be inlined
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        std::unordered_set<gc_node_ref_t> arms;
+        for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
+            if (draft_.alive(id) && kindOf(draft_, id) == GCNodeKind::Join) {
+                arms.insert(draft_.withInputsOf(id).begin(), draft_.withInputsOf(id).end());
+            }
+        }
+        for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
+            if (!draft_.alive(id) || left.contains(id) || arms.contains(id)) {
+                continue;
+            }
+            const GCNodeKind kind = kindOf(draft_, id);
+            if ((kind != GCNodeKind::Func && kind != GCNodeKind::Call) ||
+                !carriesFunctionValue(id) || draft_.isBranchArmAnchor(id)) {
+                continue;
+            }
+            // The function whose body would come in (for a closure, the function it closes).
+            GCGraph *const function =
+                kind == GCNodeKind::Func
+                    ? calleeOf(draft_, id)
+                    : evidentFunction(draft_, draft_.withInputsOf(id).front())->graph();
+            if (scope_.enclosing.contains(function)) {
+                engine_.noteRecursion(function);
+                left.insert(id);
+                continue;
+            }
+            if (!engine_.mayFollow()) {
+                return;
+            }
+            const auto armGraphs = [&] {
+                std::unordered_set<GCGraph *> graphs;
+                for (gc_node_ref_t join = 0; join < draft_.nodeSlotCount(); ++join) {
+                    if (draft_.alive(join) && kindOf(draft_, join) == GCNodeKind::Join) {
+                        for (gc_node_ref_t arm : draft_.withInputsOf(join)) {
+                            if (kindOf(draft_, arm) == GCNodeKind::Func) {
+                                graphs.insert(calleeOf(draft_, arm));
+                            }
+                        }
+                    }
+                }
+                return graphs;
+            };
+            const auto armsBefore = armGraphs();
+            // A closure call first becomes a direct call of the closure's graph with the
+            // captured values as arguments. Should the inlining then fail, that direct call
+            // is an ordinary call and is differentiated as one.
+            if (kind == GCNodeKind::Call &&
+                !rt::devirtualizeStaticCallInDraft(engine_.inlining(), draft_, id, true)) {
+                left.insert(id);
+                continue;
+            }
+            if (camel::passes::opt::inlineCallInOrder(engine_.inlining(), draft_, id)) {
+                changed = true;
+                for (GCGraph *arm : armGraphs()) {
+                    if (!armsBefore.contains(arm)) {
+                        engine_.noteArmOwner(arm, function);
+                    }
+                }
+            } else {
+                left.insert(id);
+            }
+        }
+    }
+}
+
+/// Whether a call (FUNC, or CALL of an evident function) passes an evident function value to
+/// its callee, as an argument or a captured value, or gets a function value back from it.
+bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
+    const auto evident = [&](gc_node_ref_t node) {
+        return evidentFunction(draft_, node) != nullptr;
+    };
+    // A macro, and a function with a derivative rule of its own, are not differentiated
+    // through their bodies.
+    const auto opaque = [](const GCGraph *graph) {
+        return graph == nullptr || graph->funcType() == nullptr ||
+               graph->funcType()->modifiers().macro() || carriesRule(graph);
+    };
+    GCGraph *graph  = nullptr;
+    auto withInputs = draft_.withInputsOf(call);
+    if (kindOf(draft_, call) == GCNodeKind::Func) {
+        graph = calleeOf(draft_, call);
+        if (opaque(graph)) {
+            return false;
+        }
+    } else {
+        if (withInputs.empty()) {
+            return false;
+        }
+        const ::Function *function = evidentFunction(draft_, withInputs.front());
+        if (function == nullptr || opaque(function->graph())) {
+            return false;
+        }
+        graph = function->graph();
+        // Captured values: those the function value holds, and those filled in here.
+        if (const auto *held = function->tupleType()) {
+            for (size_t i = 0; i < held->size(); ++i) {
+                if (isFunctionType(held->typeAt(i))) {
+                    return true;
+                }
+            }
+        }
+        const gc_node_ref_t closure = ungated(draft_, withInputs.front());
+        if (kindOf(draft_, closure) == GCNodeKind::Fill &&
+            std::ranges::any_of(draft_.withInputsOf(closure), evident)) {
+            return true;
+        }
+        withInputs = withInputs.subspan(1);
+    }
+    return isFunctionType(graph->funcType()->exitType()) ||
+           std::ranges::any_of(withInputs, evident) ||
+           std::ranges::any_of(draft_.normInputsOf(call), evident);
+}
+
 void ForwardRewrite::run() {
+    followFunctionValues();
     std::vector<gc_node_ref_t> joins;
     std::vector<gc_node_ref_t> calls;
     std::vector<gc_node_ref_t> indirect;
@@ -610,6 +969,22 @@ void ForwardRewrite::split(
     gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs) {
     const gc_node_ref_t value = draft_.addAccsNode(plan.valueType, 0u);
     draft_.replaceAllValueUses(node, value);
+    // Call sites recorded earlier name their inputs by node. A site whose input is this call
+    // (a call rewritten before the call that produces its argument: closure calls are, and a
+    // direct call may be) must follow the value to the new node, or the gradient it sends
+    // back would be accumulated on the (value, pullback) pair and never reach this call.
+    for (auto &[site, recorded] : sites_) {
+        for (gc_node_ref_t &input : recorded.inputs) {
+            if (input == node) {
+                input = value;
+            }
+        }
+    }
+    for (gc_node_ref_t &input : inputs) {
+        if (input == node) {
+            input = value; // a call that passes its own result cannot occur; kept for symmetry
+        }
+    }
     // Control users (e.g. a later BRCH that must run after the values its arms capture) now wait
     // for the value, which itself waits for the call.
     // (Only the edges: the branch structure, e.g. BRCH -> JOIN, still names the JOIN itself.)
@@ -637,12 +1012,41 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     if (withInputs.empty()) {
         return std::nullopt;
     }
-    const auto calleeValue = staticValue(draft_, withInputs.front());
-    auto *function         = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
+    // The callee value, behind the gates that order it.
+    const gc_node_ref_t fill = ungated(draft_, withInputs.front());
+    auto calleeValue         = staticValue(draft_, fill);
+    auto *function           = calleeValue ? fromSlot<::Function *>(*calleeValue) : nullptr;
+    // A closure built in this graph: FILL(function, captured values...).
+    std::vector<gc_node_ref_t> filled; // captured values by closure slot, where filled here
+    bool builtHere = false;
+    if (function == nullptr && kindOf(draft_, fill) == GCNodeKind::Fill &&
+        draft_.normInputsOf(fill).size() == 1) {
+        const auto *body = reinterpret_cast<const rt::GCFillBody *>(draft_.payloadOf(fill).data());
+        const auto base  = staticValue(draft_, draft_.normInputsOf(fill).front());
+        auto *target     = base ? fromSlot<::Function *>(*base) : nullptr;
+        if (body->fillKind == rt::GCFillKind::FunctionClosure && target != nullptr &&
+            target->graph() != nullptr) {
+            const auto slots  = body->slots();
+            const auto values = draft_.withInputsOf(fill);
+            const size_t n    = target->graph()->closureNodes().size();
+            filled.assign(n, kInvalidNodeRef);
+            builtHere = slots.size() == values.size();
+            for (size_t k = 0; builtHere && k < slots.size(); ++k) {
+                const auto slot = static_cast<size_t>(slots[k]);
+                builtHere       = slot < n && filled[slot] == kInvalidNodeRef;
+                if (builtHere) {
+                    filled[slot] = values[k];
+                }
+            }
+            if (builtHere) {
+                function = target;
+            }
+        }
+    }
     if (function == nullptr) {
         // grad(f), value_and_grad(f) or vjp<rule>(f) of static functions that std::macro has
         // not expanded (autodiff applied inside a function being differentiated).
-        function = macroCallee(withInputs.front());
+        function = macroCallee(fill);
     }
     GCGraph *graph = nullptr;
     if (function != nullptr && function->graph() != nullptr) {
@@ -662,8 +1066,26 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
                 });
             return std::nullopt;
         }
-        if (function->tupleType()->size() != 0) {
-            return std::nullopt; // a closure: its graph cannot be called directly
+        const size_t captureCount = graph->closureNodes().size();
+        if (captureCount != 0 || builtHere) {
+            // A closure. Its captured values are inputs of the call like any other: those
+            // filled here are the nodes that were captured, the rest are the constants the
+            // function value already holds.
+            std::vector<gc_node_ref_t> captures(captureCount, kInvalidNodeRef);
+            const ::Tuple *held = function->tuple();
+            for (size_t i = 0; i < captureCount; ++i) {
+                if (i < filled.size() && filled[i] != kInvalidNodeRef) {
+                    captures[i] = filled[i];
+                } else if (held != nullptr && i < held->size()) {
+                    captures[i] = draft_.materializeStaticValue(
+                        held->get<slot_t>(i),
+                        graph->node(graph->closureNodes()[i])->dataType);
+                } else {
+                    return std::nullopt; // a capture with no value: left to the refusal
+                }
+            }
+            rewriteClosureCall(call, graph, std::move(captures), withInputs.front());
+            return std::nullopt;
         }
     } else {
         return std::nullopt; // a function computed at run time
@@ -672,7 +1094,14 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     const gc_node_ref_t direct = draft_.addFuncNode(graph, typeOf(draft_, call));
     draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
     draft_.setNormInputs(direct, copyOf(draft_.normInputsOf(call)));
-    draft_.setCtrlInputs(direct, copyOf(draft_.ctrlInputsOf(call)));
+    // The call ran after its callee value was there; keep what that value waited for.
+    std::vector<gc_node_ref_t> ctrl = copyOf(draft_.ctrlInputsOf(call));
+    for (gc_node_ref_t before : orderingOf(draft_, withInputs.front())) {
+        if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+            ctrl.push_back(before);
+        }
+    }
+    draft_.setCtrlInputs(direct, ctrl);
     draft_.replaceAllValueUses(call, direct);
     for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
         draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
@@ -688,6 +1117,64 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
     }
     draft_.eraseNode(call);
     return direct;
+}
+
+void ForwardRewrite::rewriteClosureCall(
+    gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
+    gc_node_ref_t calleeValue) {
+    FunctionType *type = graph->funcType();
+    std::vector<Type *> portTypes = portTypesOf(graph);
+    for (gc_node_ref_t capture : graph->closureNodes()) {
+        portTypes.push_back(graph->node(capture)->dataType);
+    }
+    const bool carriesFlow =
+        tangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
+    if (!carriesFlow || type->modifiers().macro()) {
+        return; // nothing to differentiate: the call stays, a constant to the reverse pass
+    }
+    const std::vector<gc_node_ref_t> withInputs = copyOf(draft_.withInputsOf(call));
+    std::vector<gc_node_ref_t> norm              = copyOf(draft_.normInputsOf(call));
+    norm.insert(norm.end(), captures.begin(), captures.end());
+    std::vector<gc_node_ref_t> inputs(withInputs.begin() + 1, withInputs.end());
+    inputs.insert(inputs.end(), norm.begin(), norm.end());
+    if (inputs.size() != portTypes.size()) {
+        fail(
+            std::format(
+                "call of a closure passes {} values to {} ports and captures{}",
+                inputs.size(),
+                portTypes.size(),
+                whereIs(draft_.nodeOrigin(call))));
+    }
+    const PullbackPlan &plan = engine_.planForClosure(graph);
+
+    const gc_node_ref_t direct = draft_.addFuncNode(graph, typeOf(draft_, call));
+    draft_.setNodeOrigin(direct, draft_.nodeOrigin(call));
+    draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
+    draft_.setNormInputs(direct, norm);
+    // The call ran after the closure was built; keep what the closure waited for.
+    std::vector<gc_node_ref_t> ctrl = copyOf(draft_.ctrlInputsOf(call));
+    for (gc_node_ref_t before : orderingOf(draft_, calleeValue)) {
+        if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+            ctrl.push_back(before);
+        }
+    }
+    draft_.setCtrlInputs(direct, ctrl);
+    draft_.replaceAllValueUses(call, direct);
+    for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
+        draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
+    }
+    if (draft_.outputNode() == call) {
+        draft_.setOutputNode(direct);
+    }
+    if (draft_.exitNode() == call) {
+        draft_.setExitNode(direct);
+    }
+    if (draft_.returnNode() == call) {
+        draft_.setReturnNode(direct, draft_.returnKind());
+    }
+    draft_.eraseNode(call);
+    retarget(direct, plan);
+    split(direct, plan, std::move(inputs));
 }
 
 ::Function *ForwardRewrite::macroCallee(gc_node_ref_t callee) {
@@ -786,6 +1273,27 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
             }
         }
     }
+    // A closure built in this graph that an arm reads is not evident inside the arm, where it
+    // is a port. The arm gets the values the closure captured as well and builds the closure
+    // again from them, in its own graph: what it then calls is a closure built there, and the
+    // gradient reaches the captured values through the arm like through any value it reads.
+    std::vector<std::pair<size_t, gc_node_ref_t>> closures; // (position in shared, FILL here)
+    for (size_t i = 0; i < shared.size(); ++i) {
+        const gc_node_ref_t closure = ungated(draft_, shared[i]);
+        if (evidentFunction(draft_, shared[i]) == nullptr ||
+            kindOf(draft_, closure) != GCNodeKind::Fill) {
+            continue;
+        }
+        closures.emplace_back(i, closure);
+        for (gc_node_ref_t captured : copyOf(draft_.withInputsOf(closure))) {
+            if (std::find(shared.begin(), shared.end(), captured) == shared.end()) {
+                shared.push_back(captured);
+            }
+        }
+    }
+    const auto sharedIndex = [&](gc_node_ref_t node) {
+        return static_cast<size_t>(std::find(shared.begin(), shared.end(), node) - shared.begin());
+    };
     std::vector<Type *> sharedTypes;
     for (gc_node_ref_t input : shared) {
         sharedTypes.push_back(typeOf(draft_, input));
@@ -802,13 +1310,36 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
             variant->removeWithPort(port);
         }
         param_vec_t withParams;
+        std::vector<gc_node_ref_t> ports;
         for (size_t i = 0; i < shared.size(); ++i) {
             auto it                  = std::find(oldInputs.begin(), oldInputs.end(), shared[i]);
             const gc_node_ref_t port = it != oldInputs.end()
                                            ? oldPorts[static_cast<size_t>(it - oldInputs.begin())]
                                            : addPort(*variant, sharedTypes[i]);
             variant->appendWithPort(port);
+            ports.push_back(port);
             withParams.emplace_back(sharedTypes[i], false);
+        }
+        std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> rebuilt; // (port, closure)
+        for (const auto &[index, closure] : closures) {
+            const gc_node_ref_t constant = draft_.normInputsOf(closure).front();
+            const gc_node_ref_t base     = variant->materializeStaticValue(
+                *staticValue(draft_, constant),
+                typeOf(draft_, constant));
+            std::vector<gc_node_ref_t> captured;
+            for (gc_node_ref_t value : draft_.withInputsOf(closure)) {
+                captured.push_back(ports[sharedIndex(value)]);
+            }
+            const gc_node_ref_t fill =
+                variant->addFillNode(typeOf(draft_, closure), draft_.payloadOf(closure));
+            variant->setNormInputs(fill, std::span<const gc_node_ref_t>(&base, 1));
+            variant->setWithInputs(fill, captured);
+            variant->setNodeOrigin(fill, draft_.nodeOrigin(closure));
+            rebuilt.emplace_back(ports[index], fill);
+        }
+        // Afterwards, so that a closure capturing another one captures the one built here.
+        for (const auto &[port, fill] : rebuilt) {
+            variant->replaceAllValueUses(port, fill);
         }
         FunctionType *armType = armGraph->funcType();
         param_vec_t normParams;
@@ -818,7 +1349,14 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         variant->setFuncType(
             FunctionType::create(withParams, normParams, valueType, armType->modifiers()));
 
-        joined = engine_.planForDraft(std::move(variant), armGraph->name(), types);
+        GraphScope scope{
+            .role      = GraphRole::BranchArm,
+            .enclosing = scope_.enclosing,
+            .recursive = scope_.recursive,
+        };
+        const auto &owners = engine_.ownersOf(armGraph);
+        scope.enclosing.insert(owners.begin(), owners.end());
+        joined = engine_.planForDraft(std::move(variant), armGraph->name(), types, scope);
         retarget(arm, joined);
         draft_.setWithInputs(arm, shared);
     }
@@ -993,11 +1531,25 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         forward_.withPorts().begin(),
         forward_.withPorts().end());
     ports.insert(forward_.normPorts().begin(), forward_.normPorts().end());
+    checkVariableReads(order);
+    //
+    // A function value has no tangent, but a closure carries the values it captured: one that
+    // captured an active value is active too, as a carrier. No gradient is ever accumulated
+    // on it; it only makes what is computed from it active, so that a call it is passed to is
+    // not mistaken for a constant (see visit, FUNC).
     for (gc_node_ref_t node : order) {
-        if (tangentTypeOf(typeOf(forward_, node)) == nullptr) {
+        Type *const type   = typeOf(forward_, node);
+        const bool carrier = holdsFunction(type);
+        // A variable is state, not a differentiable input: its cell is never active, and a
+        // read of it (checked above) is a constant of the call.
+        if ((tangentTypeOf(type) == nullptr && !carrier) || isCellType(type)) {
             continue;
         }
-        bool active = ports.contains(node);
+        if (kindOf(forward_, node) == GCNodeKind::Oper && operUri(node) == ":var/get") {
+            continue;
+        }
+        // A function passed in from outside is given: it does not depend on a parameter.
+        bool active = ports.contains(node) && tangentTypeOf(type) != nullptr;
         for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 active |= active_.contains(input);
@@ -1011,6 +1563,257 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         auto found = gradients_.find(*it);
         if (found != gradients_.end() && !found->second.empty()) {
             visit(*it);
+        }
+    }
+    reportRefusals(order);
+}
+
+// The gradient stops at a call it cannot pass, so the calls before it on the same path are
+// never reached, although they are refused for the same reason: they are reported with it, and
+// the engine names the first in source order.
+void Backward::reportRefusals(const std::vector<gc_node_ref_t> &order) {
+    if (refused_.empty()) {
+        return;
+    }
+    std::unordered_set<gc_node_ref_t> before(refused_.begin(), refused_.end());
+    std::vector<gc_node_ref_t> work = refused_;
+    while (!work.empty()) {
+        const gc_node_ref_t node = work.back();
+        work.pop_back();
+        for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+            for (gc_node_ref_t input : inputs) {
+                if (before.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    }
+    const std::unordered_set<gc_node_ref_t> met(refused_.begin(), refused_.end());
+    for (gc_node_ref_t node : order) {
+        const bool unreached = before.contains(node) && active_.contains(node) &&
+                               kindOf(forward_, node) == GCNodeKind::Call &&
+                               !sites_.contains(node) &&
+                               tangentTypeOf(typeOf(forward_, node)) != nullptr;
+        if (met.contains(node) || unreached) {
+            refusals_.push_back(
+                Refusal{.origin = forward_.nodeOrigin(node), .reason = refusalReason(node)});
+        }
+    }
+}
+
+gc_node_ref_t Backward::activeFunctionInput(gc_node_ref_t call) const {
+    const auto carries = [&](gc_node_ref_t node) {
+        return holdsFunction(typeOf(forward_, node)) && active_.contains(node);
+    };
+    auto withInputs = forward_.withInputsOf(call);
+    if (kindOf(forward_, call) == GCNodeKind::Call && !withInputs.empty()) {
+        const gc_node_ref_t closure = ungated(forward_, withInputs.front());
+        if (kindOf(forward_, closure) == GCNodeKind::Fill) {
+            for (gc_node_ref_t captured : forward_.withInputsOf(closure)) {
+                if (carries(captured)) {
+                    return captured;
+                }
+            }
+        }
+        withInputs = withInputs.subspan(1);
+    }
+    for (auto inputs : {withInputs, forward_.normInputsOf(call)}) {
+        for (gc_node_ref_t input : inputs) {
+            if (carries(input)) {
+                return input;
+            }
+        }
+    }
+    return kInvalidNodeRef;
+}
+
+std::string Backward::refusalReason(gc_node_ref_t call) const {
+    static constexpr std::string_view passed =
+        "it is passed (as an argument or a captured value) a function value that depends on a "
+        "differentiated parameter, and which function that is is not evident where it is "
+        "passed: ";
+    static constexpr std::string_view head =
+        "cannot differentiate through this call of a function value: ";
+    if (kindOf(forward_, call) == GCNodeKind::Func) {
+        return std::format(
+            "cannot differentiate through this call of '{}': {}{}",
+            calleeOf(forward_, call)->name(), // left alone, so its callee is a graph
+            passed,
+            whyNotEvident(activeFunctionInput(call)));
+    }
+    const auto withInputs = forward_.withInputsOf(call);
+    if (withInputs.empty()) {
+        return std::string(head) + "the call names no function";
+    }
+    const gc_node_ref_t callee = ungated(forward_, withInputs.front());
+    if (kindOf(forward_, callee) == GCNodeKind::Data ||
+        kindOf(forward_, callee) == GCNodeKind::Fill) {
+        // The function called is known; the call was left alone all the same.
+        if (const gc_node_ref_t input = activeFunctionInput(call); input != kInvalidNodeRef) {
+            return std::string(head) + std::string(passed) + whyNotEvident(input);
+        }
+        return std::string(head) +
+               "the function it calls is known, but cannot be differentiated through its body "
+               "(a macro, or a function value without a graph)";
+    }
+    return std::string(head) + "which function it calls is not evident where it is called: " +
+           whyNotEvident(callee);
+}
+
+std::string Backward::whyNotEvident(gc_node_ref_t function) const {
+    function = ungated(forward_, function);
+    switch (kindOf(forward_, function)) {
+    case GCNodeKind::Port:
+        if (!scope_.recursive.empty()) {
+            return std::format(
+                "the function is a parameter of '{}', a recursive function that passes it on "
+                "to itself: a function value is followed into such a function once, not "
+                "through its recursive call",
+                scope_.recursive);
+        }
+        switch (scope_.role) {
+        case GraphRole::Differentiated:
+            return "the function is a parameter, or a captured value, of the function being "
+                   "differentiated";
+        case GraphRole::BranchArm:
+            return "the call is inside a branch arm, and the function comes from outside "
+                   "that arm, where it is not a function that is named or built";
+        case GraphRole::Callee:
+            return "the function is a parameter, or a captured value, of the function making "
+                   "the call, and what is passed for it is not a function that is named or "
+                   "built where it is passed";
+        }
+        break;
+    case GCNodeKind::Join:
+        return "the function is chosen by a branch at run time";
+    case GCNodeKind::Accs:
+        return "the function is read from a tuple, a struct or an array";
+    case GCNodeKind::Oper:
+        if (operUri(function) == ":var/get") {
+            return "the function is read from a variable";
+        }
+        return std::format("the function is the result of '{}'", operUri(function));
+    case GCNodeKind::Func:
+        // A call that returns a function value is never retargeted: its callee is a graph.
+        return std::format(
+            "the function is the result of a call of '{}', and what that returns is not a "
+            "function that is named or built in it",
+            calleeOf(forward_, function)->name());
+    case GCNodeKind::Call:
+        return "the function is the result of a call of another function value";
+    case GCNodeKind::Data:
+    case GCNodeKind::Fill:
+        return "the function is known where it is passed, but could not be followed into the "
+               "function it is passed to (a macro, a function with a derivative rule of its "
+               "own, or a recursion)";
+    default:
+        break;
+    }
+    return "the function is computed at run time";
+}
+
+std::string_view Backward::operUri(gc_node_ref_t node) const {
+    const auto payload = forward_.payloadOf(node);
+    return reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
+}
+
+// Gradients do not flow through variables. A read of a variable of a differentiable type is
+// taken as a constant, which is only right when the content cannot depend on a differentiated
+// parameter. That is established here, and only for the differentiated function's own graph,
+// where a variable that comes in through a port (a `var` parameter, a captured variable) holds
+// plain data of the caller: every operation of this graph that writes the variable a value
+// depending on a parameter, or that may write it (a call, a branch arm or a closure that gets
+// the variable), must come after the read, i.e. depend on it. Everything else is refused:
+// treating such a read as a constant would give a wrong gradient without any sign of it.
+void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
+    std::unordered_map<gc_node_ref_t, bool> dependsMemo;
+    // Whether a value depends on a parameter that has a tangent (the content of variables
+    // aside): the question activity analysis answers for the nodes the result depends on,
+    // asked here for a stored value, which the result need not depend on.
+    const std::function<bool(gc_node_ref_t)> dependsOnParameter = [&](gc_node_ref_t node) {
+        if (auto known = dependsMemo.find(node); known != dependsMemo.end()) {
+            return known->second;
+        }
+        dependsMemo[node] = false; // bounds the recursion; data edges have no cycle
+        Type *type        = typeOf(forward_, node);
+        bool depends      = false;
+        if (!isCellType(type)) {
+            if (kindOf(forward_, node) == GCNodeKind::Port) {
+                depends = tangentTypeOf(type) != nullptr;
+            } else if (!(kindOf(forward_, node) == GCNodeKind::Oper &&
+                         operUri(node) == ":var/get")) {
+                for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+                    for (gc_node_ref_t input : inputs) {
+                        depends = depends || dependsOnParameter(input);
+                    }
+                }
+            }
+        }
+        dependsMemo[node] = depends;
+        return depends;
+    };
+    for (gc_node_ref_t read : order) {
+        if (kindOf(forward_, read) != GCNodeKind::Oper || operUri(read) != ":var/get" ||
+            tangentTypeOf(typeOf(forward_, read)) == nullptr) {
+            continue;
+        }
+        if (!inPlace_) {
+            fail(
+                "a variable of a differentiable type is read in a function or branch arm that "
+                "the differentiated function calls. Gradients do not flow through variables, "
+                "and only a read in the differentiated function itself, before the variable is "
+                "written there, can be taken as a constant. Pass the value instead of the "
+                "variable");
+        }
+        const gc_node_ref_t cell = forward_.normInputsOf(read).front();
+        if (kindOf(forward_, cell) != GCNodeKind::Port) {
+            fail(
+                "a variable of a differentiable type that is declared inside the differentiated "
+                "function is read there. Gradients do not flow through variables: bind the "
+                "value with let instead");
+        }
+        // Everything that depends on the read (data and control edges) runs after it.
+        std::unordered_set<gc_node_ref_t> after{read};
+        std::vector<gc_node_ref_t> work{read};
+        while (!work.empty()) {
+            const gc_node_ref_t node = work.back();
+            work.pop_back();
+            for (auto users : {forward_.normUsersOf(node), forward_.withUsersOf(node),
+                               forward_.ctrlUsersOf(node)}) {
+                for (gc_node_ref_t user : users) {
+                    if (after.insert(user).second) {
+                        work.push_back(user);
+                    }
+                }
+            }
+        }
+        for (auto users : {forward_.normUsersOf(cell), forward_.withUsersOf(cell)}) {
+            for (gc_node_ref_t user : users) {
+                if (after.contains(user)) {
+                    continue;
+                }
+                const bool isOper = kindOf(forward_, user) == GCNodeKind::Oper;
+                if (isOper && operUri(user) == ":var/get") {
+                    continue;
+                }
+                if (isOper && operUri(user).starts_with(":op/assn")) {
+                    const auto stored = forward_.normInputsOf(user);
+                    if (stored.size() > 1 && !dependsOnParameter(stored[1])) {
+                        continue; // plain data: whenever it is stored, the read is a constant
+                    }
+                    fail(
+                        "a variable is read that may hold a value computed from a "
+                        "differentiated parameter (the function assigns it one, and the read "
+                        "is not ordered before that assignment). Gradients do not flow "
+                        "through variables: use the value itself, or read the variable "
+                        "before it is assigned");
+                }
+                fail(
+                    "a variable of a differentiable type is read after, or unordered with, a "
+                    "call, branch or closure of the differentiated function that receives the "
+                    "variable and may write it. Gradients do not flow through variables: read "
+                    "it before that point, or pass the value instead of the variable");
+            }
         }
     }
 }
@@ -1043,12 +1846,20 @@ void Backward::visit(gc_node_ref_t node) {
     case GCNodeKind::Sync:
         return;
     case GCNodeKind::Func:
-        // Calls the forward rewrite left alone take no differentiable input: constants.
+        // Calls the forward rewrite left alone take no differentiable input: constants. Unless
+        // one is passed a function value that carries an active value: its result then depends
+        // on the differentiated parameter through a function that could not be followed into
+        // the callee. Taking the call for a constant would drop that part of the gradient
+        // without any sign of it.
+        if (activeFunctionInput(node) != kInvalidNodeRef) {
+            refused_.push_back(node);
+        }
         return;
     case GCNodeKind::Call:
-        fail(
-            "cannot differentiate through a call of a function value; the callee must be known "
-            "statically");
+        // Refused, by Engine::refuse once every graph has been looked at: the first such
+        // call in source order is the one reported.
+        refused_.push_back(node);
+        return;
     default:
         fail(
             std::format(
@@ -1227,22 +2038,117 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
     }
     PullbackPlan plan =
         reserve(callee->name(), makePlanTypes(portTypesOf(callee), callee->funcType()->exitType()));
-    pending_.push_back(Pending{.plan = plan, .source = GraphDraft::decode(callee)});
+    pending_.push_back(
+        Pending{
+            .plan   = plan,
+            .source = GraphDraft::decode(callee),
+            .scope  = GraphScope{.role = GraphRole::Callee},
+            .graph  = callee,
+        });
     return plans_.emplace(callee, plan).first->second;
 }
 
+const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
+    if (auto it = closurePlans_.find(graph); it != closurePlans_.end()) {
+        return it->second;
+    }
+    // The function's graph with its captured values as trailing norm ports: calling it with
+    // the captures as extra arguments equals calling the closure.
+    auto lifted        = GraphDraft::decode(graph);
+    FunctionType *type = lifted->funcType();
+    param_vec_t withParams, normParams;
+    for (size_t i = 0; i < type->withTypesCount(); ++i) {
+        withParams.emplace_back(type->withTypeAt(i), type->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < type->normTypesCount(); ++i) {
+        normParams.emplace_back(type->normTypeAt(i), type->normIsVarAt(i));
+    }
+    std::vector<Type *> portTypes = portTypesOf(graph);
+    for (gc_node_ref_t capture : copyOf(lifted->closureNodes())) {
+        Type *captured = lifted->header(capture)->dataType;
+        lifted->removeClosureNode(capture);
+        lifted->appendNormPort(capture);
+        normParams.emplace_back(captured, false);
+        portTypes.push_back(captured);
+    }
+    lifted->setFuncType(
+        FunctionType::create(withParams, normParams, type->exitType(), type->modifiers()));
+    lifted->setClosureType(nullptr);
+    PullbackPlan plan =
+        reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
+    pending_.push_back(
+        Pending{
+            .plan   = plan,
+            .source = std::move(lifted),
+            .scope  = GraphScope{.role = GraphRole::Callee},
+            .graph  = graph,
+        });
+    return closurePlans_.emplace(graph, plan).first->second;
+}
+
 PullbackPlan Engine::planForDraft(
-    std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types) {
+    std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types,
+    GraphScope scope) {
     PullbackPlan plan = reserve(name, types);
-    pending_.push_back(Pending{.plan = plan, .source = std::move(source)});
+    pending_.push_back(
+        Pending{.plan = plan, .source = std::move(source), .scope = std::move(scope)});
     return plan;
+}
+
+// Reports the first, in source order, of the calls of function values the gradient has to
+// pass and cannot. The diagnostic is located at that call.
+void Engine::refuse() {
+    struct Place {
+        std::string path;
+        size_t line   = 0;
+        size_t column = 0;
+        bool known    = false;
+        auto key() const { return std::tie(path, line, column); }
+    };
+    const auto placeOf = [&](uint64_t origin) {
+        Place place;
+        if (currentSource && origin != camel::source::kInvalidOriginId) {
+            if (const auto *file = currentSource->fileForOrigin(origin)) {
+                const auto range = currentSource->resolveOrigin(origin);
+                place = Place{file->path, range.start.line, range.start.character, true};
+            }
+        }
+        return place;
+    };
+    const Refusal *first = &refusals_.front();
+    Place firstPlace     = placeOf(first->origin);
+    for (const Refusal &refusal : refusals_) {
+        const Place place = placeOf(refusal.origin);
+        if (place.known && (!firstPlace.known || place.key() < firstPlace.key())) {
+            first      = &refusal;
+            firstPlace = place;
+        }
+    }
+    failAt(
+        first->origin,
+        std::format(
+            "{}{}{}. A call of a function value is differentiated when the function is named, "
+            "or built by a lambda, in the function being differentiated or in a function it "
+            "calls, and gets from there to the call by being bound, captured, passed as an "
+            "argument or returned",
+            first->reason,
+            followingExhausted()
+                ? std::format(
+                      " (function values were followed through {} calls, the limit, as "
+                      "happens when a recursive function passes function values on)",
+                      kMaxFollowedCalls)
+                : std::string(),
+            whereIs(first->origin)));
 }
 
 void Engine::build(Pending &pending) {
     const PullbackPlan &plan = pending.plan;
     GraphDraft &forward      = *pending.source;
 
-    ForwardRewrite rewrite(*this, forward);
+    if (pending.graph != nullptr && recursions_.contains(pending.graph)) {
+        pending.scope.recursive = pending.graph->name();
+    }
+    ForwardRewrite rewrite(*this, forward, pending.scope);
     rewrite.run();
     const gc_node_ref_t value = valueNode(forward);
 
@@ -1251,7 +2157,7 @@ void Engine::build(Pending &pending) {
     const gc_node_ref_t dy = addPort(*pullback, tangentTypeOf(plan.valueType));
     pullback->appendNormPort(dy);
 
-    Backward backward(forward, *pullback, rewrite.sites());
+    Backward backward(forward, *pullback, rewrite.sites(), pending.scope, refusals_);
     backward.seed(value, dy);
     backward.run(valueOrder(forward, value));
 
@@ -1310,13 +2216,14 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
                 type->toString()));
     }
 
+    const GraphScope scope{.role = GraphRole::Differentiated};
     auto draft = GraphDraft::decode(function);
-    ForwardRewrite rewrite(*this, *draft);
+    ForwardRewrite rewrite(*this, *draft, scope);
     rewrite.run();
     const gc_node_ref_t value              = valueNode(*draft);
     const std::vector<gc_node_ref_t> order = valueOrder(*draft, value);
 
-    Backward backward(*draft, *draft, rewrite.sites());
+    Backward backward(*draft, *draft, rewrite.sites(), scope, refusals_);
     const slot_t one = type->exitType()->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
                            : toSlot<camel::core::rtdata::Float64>(1.0);
@@ -1337,6 +2244,17 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
         const std::array<gc_node_ref_t, 2> pair{value, result};
         result = addAggregate(*draft, signature->functionType->exitType(), pair);
     }
+    // The gradient function runs the function. Its result is the gradient, which need not
+    // depend on everything the function did: what the function's own result waited for (a
+    // print after the last value the gradient reads) is not an input of the gradient. The
+    // gradient waits for it, so that the function's effects all happen, in their order.
+    const gc_node_ref_t ran = draft->exitNode();
+    if (ran != kInvalidNodeRef && ran != result && hasOrdering(*draft, ran)) {
+        const gc_node_ref_t gate = draft->addGateNode(typeOf(*draft, result));
+        draft->setNormInputs(gate, std::span<const gc_node_ref_t>(&result, 1));
+        draft->setCtrlInputs(gate, std::span<const gc_node_ref_t>(&ran, 1));
+        result = gate;
+    }
     setResult(*draft, result);
     pruneUnreachable(*draft);
     draft->setFuncType(signature->functionType);
@@ -1350,7 +2268,18 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     while (!pending_.empty()) {
         Pending pending = std::move(pending_.front());
         pending_.pop_front();
-        build(pending);
+        try {
+            build(pending);
+        } catch (const camel::core::error::RuntimeFault &) {
+            if (refusals_.empty()) {
+                throw;
+            }
+            // A graph that cannot be built behind a refused call: the refusal comes first.
+            break;
+        }
+    }
+    if (!refusals_.empty()) {
+        refuse();
     }
     group_.encode();
     return group_.encoded(key);
@@ -1366,7 +2295,12 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     }
     GradientSignature signature;
     std::vector<Type *> tangents;
+    // A `var` parameter is a variable, not a differentiable input: no gradient is taken with
+    // respect to it.
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
+        if (function->withIsVarAt(i)) {
+            continue;
+        }
         if (Type *tangent = tangentTypeOf(function->withTypeAt(i))) {
             signature.withPorts.push_back(i);
             tangents.push_back(tangent);
@@ -1374,6 +2308,9 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
     }
     if (signature.withPorts.empty()) {
         for (size_t i = 0; i < function->normTypesCount(); ++i) {
+            if (function->normIsVarAt(i)) {
+                continue;
+            }
             if (Type *tangent = tangentTypeOf(function->normTypeAt(i))) {
                 signature.normPorts.push_back(i);
                 tangents.push_back(tangent);
@@ -1403,7 +2340,7 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
 
 GCGraph *buildGradientGraph(
     const camel::core::context::context_ptr_t &context, GCGraph *function, bool withValue) {
-    Engine engine(context);
+    Engine engine(context, function);
     return engine.gradient(function, withValue);
 }
 

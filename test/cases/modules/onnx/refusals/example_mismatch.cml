@@ -1,0 +1,16 @@
+/**
+ * An example whose shape contradicts the declared type of the parameter it is given for (a
+ * [2, 3] tensor for a parameter declared [4, 3]) is refused at the export_model call (line
+ * 14), naming the parameter and the two types. The function is specialized for the example's
+ * type whatever the parameter declares, so this was exported for [2, 3] without a word.
+ */
+module example_mismatch
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+
+func main(): int sync {
+    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3])
+    export_model((x: Tensor<f32, const [4, 3]>): Tensor => x * 2.0, ex, 'tmp/test/onnx/refusal_example_mismatch.onnx')
+    return 0
+}

@@ -21,6 +21,9 @@
 #include "camel/common/scope.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/source/manager.h"
+#include "camel/execute/entry_args.h"
+#include "camel/runtime/capacity.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
@@ -394,7 +397,6 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::fvm", "std::fastvm"},
     {"std::jit", "std::fastvm::jit"},
     {"std::nvm", "std::nodevm"},
-    {"std::svm", "std::stackvm"},
     {"std::tf", "std::taskflow"},
     // Common translation and dump aliases
     // Common translation and dump aliases
@@ -524,6 +526,11 @@ PassFactory lookupPassFactory(const std::string &name) {
             return std::make_unique<DropCallArgumentTestPass>(ctx);
         };
     }
+    if (resolved == kOvergrowGraphPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<OvergrowGraphTestPass>(ctx);
+        };
+    }
     return nullptr;
 }
 
@@ -565,10 +572,30 @@ PassFactory findPassFactory(const std::string &name, std::ostream &os) {
     return factory;
 }
 
-void requireKnownPasses(const std::vector<std::string> &passes) {
+void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     for (const auto &name : passes) {
         if (lookupPassFactory(name)) {
             continue;
+        }
+        // `<module>::<pass>`: the pass is contributed by a module the program did not import.
+        // Loading the module registers it.
+        if (ctx) {
+            std::string resolved = name;
+            if (auto aliasIt = passAliases.find(name); aliasIt != passAliases.end()) {
+                resolved = aliasIt->second;
+            }
+            const size_t sep = resolved.find("::");
+            if (sep != std::string::npos && sep > 0 && resolved.substr(0, sep) != "std") {
+                try {
+                    (void)ctx->importModule(resolved.substr(0, sep));
+                } catch (const Diagnostic &) {
+                    // No such module: the name stays unknown and is reported below.
+                } catch (const std::exception &) {
+                }
+                if (lookupPassFactory(name)) {
+                    continue;
+                }
+            }
         }
         listAvailablePasses(name);
         setPipelineStage("pass:" + name);
@@ -627,7 +654,7 @@ PassApplyResult applyPassesDetailed(
     }
     // Every name is checked before the first pass runs: an unknown pass written after a
     // scheduling pass must not let the program execute first.
-    requireKnownPasses(passes);
+    requireKnownPasses(passes, ctx);
     size_t passOutputIndex = 0;
     for (const auto &p : passes) {
         if (graph == nullptr) {
@@ -647,10 +674,48 @@ PassApplyResult applyPassesDetailed(
             } stageScope(
                 dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
                                                                          : "pass:" + p);
+            // A program runs only when every parameter of `main` has a value. Parameters
+            // left open are fine for rewriting and translation (they are the inputs of what
+            // is translated); nothing may execute with a slot nobody filled.
+            if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
+                const auto open = camel::execute::unboundEntryParameters(graph);
+                if (!open.empty()) {
+                    std::string names;
+                    for (size_t i = 0; i < open.size(); ++i) {
+                        names += (i == 0 ? "'" : i + 1 == open.size() ? " and '" : ", '") +
+                                 open[i] + "'";
+                    }
+                    auto diag = ctx->rtmDiags()->of(RuntimeDiag::EntryArgumentMissing);
+                    if (const uint64_t origin = camel::execute::entryFunctionOrigin(*ctx);
+                        origin != camel::source::kInvalidOriginId) {
+                        diag.atOrigin(origin);
+                    }
+                    diag.commit(open.size() == 1 ? "parameter" : "parameters", names);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+            }
             try {
                 graph = pass->apply(graph, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
                 throw; // diagnostics already recorded; the caller dumps them
+            } catch (const camel::runtime::GraphCapacityError &e) {
+                // The pass built a graph larger than a graph can be. That is a limit of the
+                // representation the program ran into, not a broken graph: it is reported with
+                // the graph, the quantity, the size reached and the limit, at the function the
+                // graph was compiled from (or at one of its nodes).
+                setPipelineStage("pass:" + p);
+                auto diag = ctx->rtmDiags()->of(RuntimeDiag::GraphTooLarge);
+                if (e.origin() != camel::source::kInvalidOriginId) {
+                    diag.atOrigin(e.origin());
+                }
+                diag.commit(
+                    p,
+                    e.graph().empty() ? std::string("(unnamed)") : e.graph(),
+                    e.size(),
+                    e.quantity(),
+                    e.limit());
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (graph too large)", p);
+                return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
                 // A pass that gives up with a plain exception (graph validation at commit, the
                 // execution-order builder meeting a cycle, an arena limit) hit a defect of the

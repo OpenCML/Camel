@@ -1,0 +1,291 @@
+id = "mm.gc_elder_exhaustion"
+order = 366
+tier = "feat"
+tags = ["feat", "mm", "gc", "higher-order"]
+desc = """
+Programs that allocate more small arrays than the elder space holds (32 MB) inside the element
+functions of nested map, filter, reduce and foreach. An allocation that found the elder space full
+used to run a mark-sweep on the spot, which freed objects held only by C++ locals (an Array whose
+backing store was being allocated); the next collection then traced the freed object, or the
+program computed with reused memory. Every test checks the printed total against a value computed
+independently of Camel.
+
+Under std::tf a collection could also run while a flow was running: the other workers were inside
+operators, and a map held the results of its finished elements outside any frame. The std::tf
+tests cover that: the nested map at full size, and every program at a small size with a major
+collection, heap verification before and after, at every safepoint the scheduler polls.
+"""
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_default"
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: the default pipeline."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=200"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=17472000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_nvm"
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=200", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=17472000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_fvm"
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=200", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=17472000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_jit"
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=200", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=17472000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_simplify_nvm"
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::opt::simplify std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=200", "std::opt::simplify", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=17472000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_filter_nvm"
+desc = "filter nested with map both ways, the element functions building rows, 100 times over, across several elder-space collections. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
+args = ["${case}", "--arg", "reps=100", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_filter total=5638400"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_filter_fvm"
+desc = "filter nested with map both ways, the element functions building rows, 100 times over, across several elder-space collections. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
+args = ["${case}", "--arg", "reps=100", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_filter total=5638400"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_filter_jit"
+desc = "filter nested with map both ways, the element functions building rows, 100 times over, across several elder-space collections. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
+args = ["${case}", "--arg", "reps=100", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_filter total=5638400"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_filter_simplify_nvm"
+desc = "filter nested with map both ways, the element functions building rows, 100 times over, across several elder-space collections. Pipeline: std::opt::simplify std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
+args = ["${case}", "--arg", "reps=100", "std::opt::simplify", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_filter total=5638400"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_reduce_nvm"
+desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 300 times over, across several elder-space collections. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_reduce.cml"
+args = ["${case}", "--arg", "reps=300", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_reduce total=2418259200"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_reduce_fvm"
+desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 300 times over, across several elder-space collections. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_reduce.cml"
+args = ["${case}", "--arg", "reps=300", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_reduce total=2418259200"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_reduce_jit"
+desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 300 times over, across several elder-space collections. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_reduce.cml"
+args = ["${case}", "--arg", "reps=300", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_reduce total=2418259200"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_foreach_nvm"
+desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 200 times over, across several elder-space collections. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_foreach.cml"
+args = ["${case}", "--arg", "reps=200", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_foreach total=32396800"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_foreach_fvm"
+desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 200 times over, across several elder-space collections. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_foreach.cml"
+args = ["${case}", "--arg", "reps=200", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_foreach total=32396800"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_foreach_jit"
+desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 200 times over, across several elder-space collections. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_foreach.cml"
+args = ["${case}", "--arg", "reps=200", "${run_jit}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_foreach total=32396800"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_tf"
+desc = "A table built by a map inside a map element, 200 times over, across several elder-space collections. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=200", "std::tf"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=17472000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_map_tf_stress"
+desc = "A table built by a map inside a map element, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 10 collections ran while a flow was running (measured: 40 to 86 in 12 runs at 1, 2 and 18 workers, load 16; the floor is about a quarter of the lowest), read from the scheduler's statistics line (CAMEL_TF_GC_STATS)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_map.cml"
+args = ["${case}", "--arg", "reps=3", "std::tf"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major", "CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_map total=148608"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /in_flow=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 10, `only ${m[1]} collection(s) ran while a flow was running, expected at least 10`)
+}
+"""
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_filter_tf_stress"
+desc = "filter nested with map both ways, the element functions building rows, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 35 collections ran while a flow was running (measured: 140 to 253 in 12 runs at 1, 2 and 18 workers, load 16; the floor is about a quarter of the lowest), read from the scheduler's statistics line (CAMEL_TF_GC_STATS)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_filter.cml"
+args = ["${case}", "--arg", "reps=3", "std::tf"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major", "CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_filter total=131904"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /in_flow=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 35, `only ${m[1]} collection(s) ran while a flow was running, expected at least 35`)
+}
+"""
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_reduce_tf_stress"
+desc = "reduce nested with map both ways, one accumulator being an array rebuilt at every step, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 150 collections ran while a flow was running (measured: 665 to 1297 in 12 runs at 1, 2 and 18 workers, load 16; the floor is about a quarter of the lowest), read from the scheduler's statistics line (CAMEL_TF_GC_STATS)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_reduce.cml"
+args = ["${case}", "--arg", "reps=3", "std::tf"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major", "CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_reduce total=9584448"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /in_flow=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 150, `only ${m[1]} collection(s) ran while a flow was running, expected at least 150`)
+}
+"""
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.nested_foreach_tf_stress"
+desc = "foreach nested with map both ways, the bodies building rows and appending to captured variables, 3 times over, with a verified major collection at every safepoint the scheduler polls. Pipeline: std::tf. The scheduler caps the collector (after a collection the next starts no sooner than twice the time it took), so not every poll collects: the test also asserts that at least 30 collections ran while a flow was running (measured: 116 to 323 in 12 runs at 1, 2 and 18 workers, load 16; the floor is about a quarter of the lowest), read from the scheduler's statistics line (CAMEL_TF_GC_STATS)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_nested_foreach.cml"
+args = ["${case}", "--arg", "reps=3", "std::tf"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major", "CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_nested_foreach total=296832"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /in_flow=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 30, `only ${m[1]} collection(s) ran while a flow was running, expected at least 30`)
+}
+"""
+timeout_ms = 240000
+
+[[tests]]
+name = "gc_elder_exhaustion.live_table_fvm"
+desc = "A table of 56,000 rows that stays alive, built by one map whose element function also drops a temporary array per row: the elder space fills with live rows alternating with dead temporaries, and the sweep has 56,000 scattered blocks to free. Freeing them took one walk of the free list from its head per block (over 100 s for this program); it is one pass now. The program takes about a second; the timeout is the only bound, set two orders of magnitude below the old cost. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_table.cml"
+args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_table total=11231"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_elder_exhaustion.live_table_nvm"
+desc = "A table of 56,000 rows that stays alive, built by one map whose element function also drops a temporary array per row: the elder space fills with live rows alternating with dead temporaries, and the sweep has 56,000 scattered blocks to free. Freeing them took one walk of the free list from its head per block (over 100 s for this program); it is one pass now. The program takes about a second; the timeout is the only bound, set two orders of magnitude below the old cost. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_table.cml"
+args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_table total=11231"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

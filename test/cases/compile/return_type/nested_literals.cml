@@ -1,0 +1,54 @@
+/**
+ * A tuple, array or struct literal written inside another one and made of names (`(h, k)` in
+ * `((h, k), (e, k >= 6))`) is built from what the names stand for, like any other element
+ * expression. It used to be embedded in the enclosing literal as a constant whose names were
+ * never filled: its type stayed `(ref, ref)` (rejected against the declared return type), and
+ * an inner array could not be inserted into the outer one.
+ */
+module nested_literals
+
+func pairs(a: int, b: float): ((int, float), (float, int)) {
+    return ((a, b), (b, a))
+}
+
+func mixed(h: float, k: int, e: float): ((float, int), (float, bool)) {
+    return ((h, k), (e, k >= 6))
+}
+
+func deep(a: int, b: int): (((int, int), int), int) {
+    return (((a, b), a), 7)
+}
+
+func rows(a: int, b: int): int[][] {
+    return [[a, b], [b, a], [1, 2]]
+}
+
+func record(a: int, b: float): { p: (int, float), q: { x: float, y: int } } {
+    return { p: (a, b), q: { x: b, y: a } }
+}
+
+func every(a: int, b: int): ((int, int), int[], { x: int }) {
+    return ((a, 1), [b, 2], { x: a })
+}
+
+func main(): int sync {
+    let (p, q) = pairs(3, 0.5)
+    println('pairs {} {} {} {}'->format<p.0, p.1, q.0, q.1>)
+    let (m, n) = mixed(1.5, 6, 0.25)
+    println('mixed {} {} {} {}'->format<m.0, m.1, n.0, n.1>)
+    let (r, s) = deep(4, 5)
+    let r0 = r.0
+    println('deep {} {} {} {}'->format<r0.0, r0.1, r.1, s>)
+    println(rows(8, 9))
+    let o = record(1, 2.5)
+    let op = o.p
+    let oq = o.q
+    println('record {} {} {} {}'->format<op.0, op.1, oq.x, oq.y>)
+    let (u, v, w) = every(6, 7)
+    println('every {} {} {} {}'->format<u.0, u.1, v, w.x>)
+    let k = 11
+    let z = ((k, k + 1), [k, k])
+    let z0 = z.0
+    println('local {} {} {}'->format<z0.0, z0.1, z.1>)
+    return 0
+}

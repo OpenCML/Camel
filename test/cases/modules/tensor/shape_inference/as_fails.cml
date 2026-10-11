@@ -1,0 +1,11 @@
+module shape_inference_as_fails
+import { Tensor, concat, reshape, sum, load_npy } from tensor
+func h(a: Tensor<f32, const [4]>): float {
+    return sum(a)
+}
+func main(): int sync {
+    println('ran')
+    let t = reshape(load_npy('test/cases/modules/tensor/shape_types/x3.npy'), [-1])
+    println(h(concat(t, t, 0) as Tensor<f32, const [4]>))
+    return 0
+}

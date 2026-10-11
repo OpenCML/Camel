@@ -26,6 +26,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
+#include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/snapshot.h"
 #include "camel/init.h"
@@ -197,6 +198,7 @@ int main(int argc, char *argv[]) {
             .entryDir    = entryDir,
             .entryFile   = targetFile,
             .searchPaths = std::move(searchPaths),
+            .maxThreads  = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
         },
         DiagsConfig{
             .total_limit         = -1,
@@ -312,9 +314,22 @@ int main(int argc, char *argv[]) {
                     // All pass names, the fallback's included, are checked before the first
                     // snapshot is written and before any pass runs: an unknown name anywhere
                     // on the command line leaves no effect and no artefact.
-                    requireKnownPasses(Run::resolvedPassList);
-                    requireKnownPasses(Run::fallbackPasses);
+                    requireKnownPasses(Run::resolvedPassList, ctx);
+                    requireKnownPasses(Run::fallbackPasses, ctx);
                     auto *graph = ctx->runtimeRootGraph();
+                    // The values given for the parameters of `main` become constants of the
+                    // entry graph before the first pass sees it.
+                    graph = camel::execute::bindEntryArgumentSpecs(ctx, graph, Run::entryArgs);
+                    if (graph == nullptr) {
+                        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
+                        return 1;
+                    }
+                    // What `main` returns goes to the output: the file given with -o, else
+                    // standard output (where an exit code is not printed).
+                    camel::execute::writeEntryResultTo(
+                        ctx,
+                        Run::outputFile.empty() || Run::outputFile == "stdout" ? std::string()
+                                                                      : Run::outputFile);
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {
                         passDump.dir = Run::dumpAfterEachPassDir;

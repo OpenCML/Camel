@@ -1,0 +1,32 @@
+/**
+ * Self-recursive functions of several shapes (one, two and three arguments, a float argument and result) whose
+ * recursive calls are not tail calls. After std::inline each is a single graph that calls only itself, which is
+ * what the JIT compiles: the recursive call is then machine code calling machine code. The recursive arm reads
+ * parameters the other arm has read first, and passes them on in another order.
+ */
+module jit_self_recursion_shapes
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func paths(r: int, c: int): int {
+    return if r * c == 0 then 1 else paths(r - 1, c) + paths(r, c - 1)
+}
+
+func weave(a: int, b: int, c: int): int {
+    return if a <= 0 then b else weave(a - 1, c, b + a) + weave(a - 2, b + 1, c)
+}
+
+func halves(n: int, x: float): float {
+    return if n <= 0 then x else halves(n - 1, x * 0.5) + halves(n - 2, x + 1.0)
+}
+
+func main(): int sync {
+    let f = fib(20)
+    let p = paths(8, 7)
+    let w = weave(15, 3, 4)
+    let h = halves(12, 3.0)
+    'self_recursion_shapes fib={} paths={} weave={} halves={:.6f}'->format<f, p, w, h>->println
+    return 0
+}

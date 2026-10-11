@@ -1,0 +1,21 @@
+/**
+ * Refused: a tail recursion whose depth depends on the model input and whose state is ONE
+ * tuple argument that every call replaces. A loop carries tensors and scalars; the diagnostic
+ * names the argument and says to pass the elements separately (as export_loop_values does).
+ */
+module export_loop_tuple_argument
+import { Tensor, reshape, sum, tanh } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func walk(s: (Tensor, int)): (Tensor, int) {
+    return if s.1 >= 6 || sum(s.0 * s.0) < 1.0 then s else walk((tanh(s.0) * 0.3 + s.0 * 0.6, s.1 + 1))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    println(walk((x, 0)).1)
+    export_model((x: Tensor): (Tensor, int) => walk((x, 0)), (x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

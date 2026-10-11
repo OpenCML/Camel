@@ -121,6 +121,34 @@ std::optional<ConstArg> constArgOf(slot_t slot, type::Type *type) {
     }
 }
 
+std::optional<PartialInts> partialIntsOf(const type::StaticArg &arg, type::Type *type) {
+    if (!arg.elements || !type || type->code() != TypeCode::Array) {
+        return std::nullopt;
+    }
+    auto *elem = static_cast<ArrayType *>(type)->elemType();
+    if (!elem || (elem->code() != TypeCode::Int32 && elem->code() != TypeCode::Int64)) {
+        return std::nullopt;
+    }
+    PartialInts values;
+    values.reserve(arg.elements->size());
+    for (const auto &element : *arg.elements) {
+        values.push_back(
+            element ? std::optional<int64_t>(scalarToInt64(elem->code(), *element)) : std::nullopt);
+    }
+    return values;
+}
+
+StaticFacts::StaticFacts(std::span<type::Type *const> types, type::static_args_t statics)
+    : constants(types.size()), partials(types.size()) {
+    for (size_t i = 0; i < types.size() && i < statics.size(); ++i) {
+        if (statics[i]) {
+            constants[i] = constArgOf(*statics[i], types[i]);
+        } else {
+            partials[i] = partialIntsOf(statics[i], types[i]);
+        }
+    }
+}
+
 type::Type *tensorOf(const TensorFacts &facts) { return TensorType::get(facts.dtype, facts.shape); }
 
 type::Type *tensorOf(std::optional<TypeCode> dtype, std::optional<StaticShape> shape) {

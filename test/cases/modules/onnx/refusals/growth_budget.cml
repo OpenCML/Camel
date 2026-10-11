@@ -1,0 +1,19 @@
+/**
+ * The export request is written in `main`. With a growth budget too small to inline `main`
+ * into the entry graph (the test sets CAMEL_OPT_GROWTH_BUDGET=0), std::opt::simplify leaves
+ * the call of `main`, and onnx::export sees no request. The refusal, at `main` (line 14),
+ * says that the budget was exhausted, what it is and how to raise it.
+ */
+module growth_budget
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+
+func double(t: Tensor): Tensor {
+    return t * 2.0
+}
+
+func main(): int sync {
+    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_growth_budget.onnx')
+    return 0
+}

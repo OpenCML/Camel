@@ -1,0 +1,13 @@
+/**
+ * `.N` reads a tuple element. On an array it is a compile-time error (line 10, column 13): no
+ * back end implements it, and it used to read the array as a tuple without a bounds check
+ * (`xs.1` printed 42949672963 on the node VM and 0 on the bytecode VM).
+ */
+module array_member_access
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(xs.1)
+    println('never printed')
+    return 0
+}

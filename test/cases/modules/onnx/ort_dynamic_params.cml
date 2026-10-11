@@ -1,0 +1,49 @@
+/**
+ * A gradient step whose parameters are tensor arguments next to the data, exported with a
+ * dynamic axis 0. `dynamic_axes` cannot say which argument is data, so every argument gets its
+ * own symbolic size on that axis; naming them all "batch" declared the weights to have the
+ * batch's extent and the model failed on ONNX Runtime at other batch sizes.
+ *
+ * MODE=export: writes the model to ONNX_OUT (example batch 3, the same extent as the weights).
+ * MODE=run:    loads W, B and X and saves the value and the two gradients to OUT0, OUT1, OUT2.
+ * Driven by ort_dynamic_params.py.
+ */
+module ort_dynamic_params
+
+import { Tensor, load_npy, save_npy, reshape, sum, mean, tanh, transpose } from tensor
+import { value_and_grad } from autodiff
+import { export_model } from onnx
+import { get_env } from sys
+
+type P = { w: Tensor, b: Tensor }
+
+with <m: P>
+func loss(x: Tensor): float {
+    let h = tanh(x @ transpose(m.w) + m.b)
+    return sum(mean(h * h, 0))
+}
+
+func step(w: Tensor, b: Tensor, x: Tensor): (Tensor, Tensor, Tensor) {
+    let m = { w: w, b: b }
+    let vg = value_and_grad(loss)<m>(x)
+    return (reshape([vg.0], [1]), vg.1.w, vg.1.b)
+}
+
+func main(): int sync {
+    let mode = get_env('MODE')
+    return if mode == 'export' then sync {
+        let w = reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, 0.375, -0.625], [3, 3])
+        let b = reshape([0.1, -0.2, 0.3], [3])
+        let x = reshape([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], [3, 3])
+        export_model((w: Tensor, b: Tensor, x: Tensor): (Tensor, Tensor, Tensor) => step(w, b, x), (w, b, x), get_env('ONNX_OUT'), [0])
+        println('exported')
+        return 0
+    } else sync {
+        let r = step(load_npy(get_env('W')), load_npy(get_env('B')), load_npy(get_env('X')))
+        save_npy(r.0, get_env('OUT0'))
+        save_npy(r.1, get_env('OUT1'))
+        save_npy(r.2, get_env('OUT2'))
+        println('ran')
+        return 0
+    }
+}

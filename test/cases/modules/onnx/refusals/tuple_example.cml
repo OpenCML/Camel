@@ -1,0 +1,17 @@
+/**
+ * The example of a function of one parameter is its argument itself. A tuple that holds the
+ * tensor is an argument of tuple type, which the parameter (declared a tensor) cannot take:
+ * the export is refused at the export_model call (line 15) with the two types. It used to
+ * bind the tuple to the parameter and fail at the first operator that used it ("a
+ * '(Tensor<...>)' that depends on the model input is used where a tensor is expected").
+ */
+module tuple_example
+
+import { Tensor, reshape } from tensor
+import { export_model } from onnx
+
+func main(): int sync {
+    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3])
+    export_model((x: Tensor<f32, const [2, 3]>): Tensor => x * 2.0, (ex,), 'tmp/test/onnx/refusal_tuple_example.onnx')
+    return 0
+}

@@ -1,0 +1,119 @@
+/**
+ * Gradients through calls of function values whose function is named or built somewhere else
+ * than at the call, and gets to the call by being captured, passed as an argument or returned:
+ * a closure called inside a second closure that captured it, a closure returned by a factory,
+ * a closure (or a named function) passed to a function that calls it, and combinations. The
+ * library follows the value by bringing the code in between into the differentiated graph.
+ * In every case but 6 a captured value depends on the differentiated parameter, so part of the
+ * gradient reaches the parameter through the capture. The printed gradients were checked
+ * against central finite differences in float64 (grad_function_values_reference.py).
+ */
+module grad_function_values
+import { Tensor, reshape, sum, tanh } from tensor
+import { grad } from autodiff
+
+func make(s: float): (t: Tensor) => Tensor {
+    return (t: Tensor): Tensor => tanh(t * s)
+}
+
+func make_affine(q: Tensor): (t: Tensor) => Tensor {
+    return (t: Tensor): Tensor => t * q + q
+}
+
+func apply(f: (t: Tensor) => Tensor, p: Tensor): Tensor {
+    return f(p) + f(p * 0.5)
+}
+
+func apply_outer(f: (t: Tensor) => Tensor, p: Tensor): Tensor {
+    return apply(f, p * p) * 0.5
+}
+
+func square(t: Tensor): Tensor {
+    return t * t
+}
+
+func twice(f: (t: Tensor) => Tensor): (t: Tensor) => Tensor {
+    return (t: Tensor): Tensor => f(f(t))
+}
+
+// 1. a closure called, twice, inside a second closure that captured it
+func loss1(p: Tensor): float {
+    let s = sum(p)
+    let g = (t: Tensor): Tensor => tanh(t * s)
+    let h = (t: Tensor): Tensor => g(t) * 2.0 + g(t * 0.5)
+    return sum(h(p))
+}
+
+// 2. the same, three closures deep, the innermost called once
+func loss2(p: Tensor): float {
+    let s = sum(p * p)
+    let g = (t: Tensor): Tensor => tanh(t * s)
+    let h = (t: Tensor): Tensor => g(t) * s
+    let k = (t: Tensor): Tensor => h(t + 1.0) + t
+    return sum(k(p))
+}
+
+// 3. a closure returned by a factory, called twice
+func loss3(p: Tensor): float {
+    let s = sum(p)
+    let g = make(s)
+    return sum(g(p) * g(p * 0.5))
+}
+
+// 4. a factory whose closure captures a TENSOR that depends on the parameter
+func loss4(p: Tensor): float {
+    let g = make_affine(tanh(p) * 2.0)
+    return sum(g(p * p))
+}
+
+// 5. a closure passed to a function that calls it twice
+func loss5(p: Tensor): float {
+    let s = sum(p)
+    return sum(apply((t: Tensor): Tensor => tanh(t * s), p))
+}
+
+// 6. a named function passed to a function that calls it
+func loss6(p: Tensor): float {
+    return sum(apply(square, p))
+}
+
+// 7. a closure passed on through two functions
+func loss7(p: Tensor): float {
+    let s = sum(p)
+    return sum(apply_outer((t: Tensor): Tensor => tanh(t * s), p))
+}
+
+// 8. the closure of a factory passed to a function that calls it
+func loss8(p: Tensor): float {
+    return sum(apply(make(sum(p)), p))
+}
+
+// 9. a function that takes a closure and returns a closure capturing it
+func loss9(p: Tensor): float {
+    let s = sum(p)
+    let g = (t: Tensor): Tensor => tanh(t * s)
+    let h = twice(g)
+    return sum(h(p))
+}
+
+// 10. a lambda that returns a lambda
+func loss10(p: Tensor): float {
+    let s = sum(p)
+    let mk = (a: float) => (t: Tensor): Tensor => tanh(t * a) * s
+    return sum(mk(s * 0.5)(p))
+}
+
+func main(): int sync {
+    let x = reshape([0.5, 0.25, -0.35], [3])
+    println(grad(loss1)(x))
+    println(grad(loss2)(x))
+    println(grad(loss3)(x))
+    println(grad(loss4)(x))
+    println(grad(loss5)(x))
+    println(grad(loss6)(x))
+    println(grad(loss7)(x))
+    println(grad(loss8)(x))
+    println(grad(loss9)(x))
+    println(grad(loss10)(x))
+    return 0
+}

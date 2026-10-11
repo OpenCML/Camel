@@ -1,0 +1,15 @@
+module shape_inference_tuple_return_as
+import { Tensor, tanh, sum, ones } from tensor
+func g(x: Tensor<f32, const [3]>): (Tensor, Tensor) {
+    return (x, tanh(x))
+}
+func f(x: Tensor<f32, const [3]>): (Tensor<f32, const [3]>, float, Tensor<f32, const [3]>) {
+    let (a, b) = g(x)
+    return (a as Tensor<f32, const [3]>, sum(x), b as Tensor<f32, const [3]>)
+}
+func main(): int sync {
+    let r = f(ones([3]))
+    println(r.1)
+    println(sum(r.0))
+    return 0
+}

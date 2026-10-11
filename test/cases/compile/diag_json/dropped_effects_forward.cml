@@ -1,0 +1,26 @@
+/**
+ * A dropped call is reported whether its callee is written before or after the caller:
+ * `later` and `earlier_dropped` follow `caller` in the file.
+ */
+module dropped_effects_forward
+
+func caller(x: int): int {
+    later(x)
+    earlier_dropped(x)
+    return x + 1
+}
+
+func later(x: int): int sync {
+    println('later')
+    return x
+}
+
+func earlier_dropped(x: int): int sync {
+    println('earlier_dropped')
+    return x
+}
+
+func main(): int sync {
+    println(caller(1))
+    return 0
+}

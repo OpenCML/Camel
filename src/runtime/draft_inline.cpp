@@ -644,7 +644,8 @@ GCGraph *specializeGraphWithBindings(
 
 void bindFunctionCall(
     GraphDraft &draft, const Function *function,
-    std::span<camel::core::type::Type *const> normTypes) {
+    std::span<camel::core::type::Type *const> normTypes,
+    std::span<camel::core::type::Type *const> closureTypes) {
     ASSERT(function != nullptr, "bindFunctionCall requires a function.");
     if (const Tuple *closure = function->tuple()) {
         const auto *tupleType = function->tupleType();
@@ -657,7 +658,7 @@ void bindFunctionCall(
         for (size_t i = 0; i < nodes.size(); ++i) {
             const gc_node_ref_t value = draft.materializeStaticValue(
                 closure->get<slot_t>(i),
-                tupleType->typeAt(i),
+                i < closureTypes.size() && closureTypes[i] ? closureTypes[i] : tupleType->typeAt(i),
                 kGCNodeFlagConstant);
             draft.replaceAllValueUses(nodes[i], value);
             eraseFormalFromDraft(draft, FormalKind::Closure, nodes[i]);

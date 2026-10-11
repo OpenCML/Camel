@@ -1,0 +1,30 @@
+/**
+ * The tensor program on which the defect of arms_laid_out_whole.cml was found: `loop(0, 2, x)`
+ * unrolled inside the arm of a run-time `if`. Under std::opt::simplify FastVM and the JIT left
+ * the unrolled arm after its first multiplication and the JOIN read a slot never written
+ * ("reduce: RuntimeError" at the `sum`). The first arm is empty here, so NodeVM and Taskflow
+ * were right by accident.
+ *
+ * Expected: "r 0.4375" (the four elements of the fixture sum to 1.75; two halvings).
+ */
+module arms_laid_out_whole_tensor
+
+import { Tensor, load_npy, sum } from tensor
+
+func loop(i: int, n: int, acc: Tensor): Tensor {
+    return if i >= n then acc else {
+        let a2 = acc * 0.5
+        loop(i + 1, n, a2)
+    }
+}
+
+func main(): int sync {
+    let x = load_npy('test/cases/opt/generic/arms_laid_out_whole_v4.npy')
+    let n = int(x[0] + 2.6)
+    let r = if n > 2 then {
+        let a = loop(0, 2, x)
+        a
+    } else x
+    println('r {}'->format<sum(r, 0, true)[0]>)
+    return 0
+}
