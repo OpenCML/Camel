@@ -87,6 +87,18 @@ inline void storeFloatResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &b
     build.emitVXmm32StoreToFrame(disp, v);
 }
 
+// Whether the divisor (operand 1) of an integer division is a constant other than 0 and -1.
+inline bool
+isTrapFreeConstDivisor(const Bytecode &bc, const camel::runtime::GCGraph *graph, bool is32Bit) {
+    if (bc.fastop[1] >= 0 || graph == nullptr || !graph->staticArea()) {
+        return false;
+    }
+    const slot_t value = graph->staticArea()->data()[static_cast<size_t>(-bc.fastop[1])];
+    const int64_t divisor =
+        is32Bit ? static_cast<int64_t>(static_cast<int32_t>(value)) : static_cast<int64_t>(value);
+    return divisor != 0 && divisor != -1;
+}
+
 std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
     if (unit.graphLength == 0)
         return "graph bytecode span is empty";
@@ -109,6 +121,16 @@ std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
             return "pc=" + std::to_string(pc) + " contains indirect CALL";
         case OpCode::ACCS:
             return "pc=" + std::to_string(pc) + " contains ACCS";
+        case OpCode::IDIV:
+        case OpCode::LDIV:
+            // `idiv` raises a hardware exception on a zero divisor (and on the most negative
+            // dividend over -1), and compiled code has no way to leave with a located
+            // diagnostic. The interpreter checks, so a division is compiled only when its
+            // divisor is a constant that cannot trap.
+            if (!isTrapFreeConstDivisor(bc, unit.runtimeGraph, bc.opcode == OpCode::IDIV)) {
+                return "pc=" + std::to_string(pc) + " divides by a value not known to be nonzero";
+            }
+            break;
         case OpCode::FUNC:
         case OpCode::TAIL:
             if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph) {

@@ -4,6 +4,22 @@ tier = "feat"
 tags = ["feat", "linear", "runtime", "negative"]
 
 [[tests]]
+name = "divide_by_zero_hot.nvm"
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (nvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 28
+expect_output_contains = ["145", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "modulo_by_zero.nvm"
 desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (nvm)."
 kind = "negative"
@@ -64,6 +80,22 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 16
 expect_output_contains = ["Attempted division by zero."]
 expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero_hot.fvm"
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 28
+expect_output_contains = ["145", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -132,6 +164,22 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "divide_by_zero_hot.jit"
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 28
+expect_output_contains = ["145", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "modulo_by_zero.jit"
 desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (jit)."
 kind = "negative"
@@ -192,6 +240,22 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 16
 expect_output_contains = ["Attempted division by zero."]
 expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero_hot.inline_jit"
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (inline_jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 28
+expect_output_contains = ["145", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -260,6 +324,22 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "divide_by_zero_hot.prl"
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (prl)."
+kind = "negative"
+case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 28
+expect_output_contains = ["145", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "modulo_by_zero.prl"
 desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (prl)."
 kind = "negative"
@@ -320,6 +400,22 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 16
 expect_output_contains = ["Attempted division by zero."]
 expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero_hot.tf"
+desc = "Division by zero in a function made of arithmetic and self-recursion, already run once (what the JIT compiles after std::inline): the located DivisionByZero of the interpreters, not SIGFPE (tf)."
+kind = "negative"
+case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 28
+expect_output_contains = ["145", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
