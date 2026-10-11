@@ -16,8 +16,10 @@ prints, per finding, whether it still fails as recorded. All 33 failed on every 
 was written (2026-10-11, branch `lane/gen`, Linux container, release build). None is in the
 default test set; the test plan `feat/opt/progen` runs only seeds that pass.
 
-**Nothing here was fixed, and the compiler code was not read to confirm a cause** (except
-where a source file is named). The "class" column is a judgement from the symptom and the
+**Fixed since** (branch `lane/frontend-fixes`): F25 to F31 and F33, the failures without any
+pass except F24. Their rows name the commit; each has a test in the default set, and
+`progen.py findings` reports them as "does not fail". For the others, **nothing was fixed, and
+the compiler code was not read to confirm a cause** (except where a source file is named). The "class" column is a judgement from the symptom and the
 reduced program, using the five classes of the roadmap (effect order lost; a written variable
 taken for one value; branch arms; macro operands inlined early; unbounded growth) and
 "(other)" where none fits. Two findings of one class may have one cause, and one reduced
@@ -119,14 +121,14 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 | id | program | schedulers | expected | actual | class |
 |---|---|---|---|---|---|
 | F24 | `const_graph_capacity.cml` | all, and every pipeline | `a` | `std::bad_alloc`, no position, exit 1, before the first pass | unbounded growth (capacity) |
-| F25 | `nested_function_value_crash.cml` | nvm, fvm, jit crash; prl prints something else | `[1]` | segmentation fault | (other) crash |
-| F26 | `string_of_bool_crash.cml` | all | `true` | segmentation fault | (other) crash |
-| F27 | `string_ordering.cml` | all | four lines `true` | four lines `false` | (other) operator not implemented |
-| F28 | `string_plus_assign.cml` | all | `ab` | `a` | (other) operator not implemented |
-| F29 | `mod_assign.cml` | all | `2` | located run-time error "assignment operator not fully implemented" | (other) operator not implemented |
-| F30 | `tuple_comparison_parse.cml` | all | `(true, x1)` | syntax error "missing ')' at ','" | (other) parser |
-| F31 | `return_named_function.cml` | all | `true` | "Compile graph 'f4' still contains a live DREF node", no position, exit 1 | (other) internal error |
-| F33 | `let_named_function_captured.cml` | all | `[2]` | compile-time error "Function of type 'void' cannot be called" at the call in the lambda | (other) front end |
+| F25 (fixed in a42941f8) | `nested_function_value_crash.cml` | nvm, fvm, jit crash; prl prints something else | `[1]` | segmentation fault | (other) crash |
+| F26 (fixed in edc8f2ea) | `string_of_bool_crash.cml` | all | `true` | segmentation fault | (other) crash |
+| F27 (fixed in db5e452c) | `string_ordering.cml` | all | four lines `true` | four lines `false` | (other) operator not implemented |
+| F28 (fixed in 5f3c58f2) | `string_plus_assign.cml` | all | `ab` | `a` | (other) operator not implemented |
+| F29 (fixed in 1224039c) | `mod_assign.cml` | all | `2` | located run-time error "assignment operator not fully implemented" | (other) operator not implemented |
+| F30 (fixed in 1d881d59) | `tuple_comparison_parse.cml` | all | `(true, x1)` | syntax error "missing ')' at ','" | (other) parser |
+| F31 (fixed in a42941f8) | `return_named_function.cml` | all | `true` | "Compile graph 'f4' still contains a live DREF node", no position, exit 1 | (other) internal error |
+| F33 (fixed in a42941f8) | `let_named_function_captured.cml` | all | `[2]` | compile-time error "Function of type 'void' cannot be called" at the call in the lambda | (other) front end |
 
 Notes on single findings:
 
@@ -141,7 +143,7 @@ Notes on single findings:
   `docs/cli.md` lists a permanent space of 32 MB with a named diagnostic; this limit is not
   listed and has no diagnostic. The generator stays below it (at most 34 such graphs by its
   own count), which is why its programs are about 115 lines.
-- **F27, F28, F29.** `src/builtin/executors/builtin.cpp` maps `op/lt_s`, `op/le_s`, `op/gt_s`,
+- **F27, F28, F29 (fixed).** `src/builtin/executors/builtin.cpp` mapped `op/lt_s`, `op/le_s`, `op/gt_s`,
   `op/ge_s`, `op/assn_add_s` (and the untyped `op/lt`, `op/le`, `op/gt`, `op/ge`, `op/assn_add`,
   `op/assn_sub`, `op/assn_mul`, `op/assn_div`, `struct/contains_str`) to `__not_implemented__`
   (`src/builtin/operators/other.h`), whose body is an `ASSERT(false)` followed by returning the
