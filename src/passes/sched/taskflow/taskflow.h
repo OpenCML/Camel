@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -65,7 +65,8 @@ class TaskflowFramePool {
         size_t frameSize{0};
         const camel::core::type::TupleType *runtimeDataType{nullptr};
         ::Tuple *staticArea{nullptr};
-        size_t chunkFrames{0};
+        size_t chunkFrames{0};     // Frames of a full chunk.
+        size_t nextChunkFrames{0}; // Frames of the next chunk: doubles up to chunkFrames.
         std::mutex mutex;
         std::vector<Frame *> freeFrames;
         std::unordered_set<Frame *> activeFrames;
