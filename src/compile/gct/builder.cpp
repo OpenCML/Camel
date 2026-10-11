@@ -589,7 +589,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     findBindingOrigin(context_, ast, i),
                     camel::source::OriginKind::GctNode,
                     "gct.nref");
-                res = nRefNode;
+                if (refs.size() == 1) {
+                    res = nRefNode;
+                } else {
+                    // `let a, b = 1, 2` binds every name: only the last one used to be kept.
+                    *res << nRefNode;
+                }
             }
         } else {
             if (dataNodes->size() == 1) {
