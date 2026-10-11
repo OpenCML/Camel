@@ -94,7 +94,12 @@ bracketIdents : '[' identList? ','? ']' ;    // for array unpacking
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
-typeDecl   : implMark? TYPE identRef ('<' identDef (',' identDef)* ','? '>')? '=' (typeExpr | STRING) ;
+// With parameters a type function: `type Pair<T> = (T, T)`. `>=` is one token, so `Pair<T>=`
+// is accepted as well.
+typeDecl
+    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+      (typeExpr | STRING)
+    ;
 useDecl    : USE (identDef '=')? identRef ;
 retStmt    : (RETURN | RAISE | THROW) dataList ;
 

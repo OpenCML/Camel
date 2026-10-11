@@ -920,8 +920,10 @@ any Builder::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 }
 
 /*
-typeDecl   : implMark? TYPE identRef ('<' identDef (',' identDef)* ','? '>')?
-             '=' (typeExpr | STRING) ;
+typeDecl
+    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+      (typeExpr | STRING)
+    ;
 */
 any Builder::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     ENTER("TypeDecl");

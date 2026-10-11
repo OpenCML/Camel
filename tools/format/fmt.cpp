@@ -553,8 +553,10 @@ any Formatter::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 }
 
 /*
-typeDecl   : implMark? TYPE identRef ('<' identDef (',' identDef)* ','? '>')?
-             '=' (typeExpr | STRING) ;
+typeDecl
+    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+      (typeExpr | STRING)
+    ;
 */
 any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     const auto &implMark = context->implMark();
