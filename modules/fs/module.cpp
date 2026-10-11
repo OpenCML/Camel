@@ -1,6 +1,7 @@
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
 
@@ -24,6 +25,17 @@ FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
                   {},
                   {{Type::String(), false}, {Type::String(), false}},
                   Type::Void())}}));
+    // The same read as an operation that can fail (design principles 2.9): an error value
+    // instead of a fault when the file cannot be opened.
+    exportEntity(
+        "try_read_text",
+        OperatorGroup::create(
+            "try_read_text",
+            {{"fs:try_read_text",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{Type::String(), false}},
+                  TupleType::fallible(Type::String()))}}));
     exportEntity(
         "exists",
         OperatorGroup::create(

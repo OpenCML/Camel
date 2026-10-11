@@ -23,6 +23,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/tagged.h"
 
 #include <filesystem>
 
@@ -46,6 +47,27 @@ slot_t __fs_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::ostringstream oss;
     oss << f.rdbuf();
     return toSlot(String::from(oss.str(), mm::autoSpace()));
+}
+
+slot_t __fs_try_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    static const camel::core::type::TupleType *resultType =
+        camel::core::type::TupleType::fallible(camel::core::type::Type::String());
+    String *path = norm.get<String *>(0);
+    const std::string name(path->c_str());
+    std::error_code ec;
+    if (fs_impl::is_directory(name, ec)) {
+        return makeError("IOError", "'" + name + "' is a directory", "<fs::try_read_text>");
+    }
+    std::ifstream f(name, std::ios::binary);
+    if (!f.is_open()) {
+        return makeError("IOError", "cannot open '" + name + "'", "<fs::try_read_text>");
+    }
+    std::ostringstream oss;
+    oss << f.rdbuf();
+    if (f.bad()) {
+        return makeError("IOError", "cannot read '" + name + "'", "<fs::try_read_text>");
+    }
+    return makeOk(toSlot(String::from(oss.str(), mm::autoSpace())), resultType);
 }
 
 slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -154,6 +176,7 @@ slot_t __fs_mkdirs__(ArgsView &with, ArgsView &norm, Context &ctx) {
 std::unordered_map<std::string, operator_t> getFsOpsMap() {
     return {
         {"read_text", __fs_read_text__},
+        {"try_read_text", __fs_try_read_text__},
         {"write_text", __fs_write_text__},
         {"exists", __fs_exists__},
         {"is_file", __fs_is_file__},

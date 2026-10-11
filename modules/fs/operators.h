@@ -27,6 +27,9 @@ namespace ctx = camel::core::context;
 
 // 算子实现
 slot_t __fs_read_text__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+/// read_text as an operation that can fail: `(path: string) => string!` (design principles
+/// 2.9). A file that cannot be opened or read is an error value of kind `IOError`, not a fault.
+slot_t __fs_try_read_text__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_exists__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __fs_is_file__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
