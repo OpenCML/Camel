@@ -82,7 +82,7 @@
 
 ### 8.3.1 类型表达式
 
-- **typeExpr**：**unionType ('?' unionType?)?**（可空等）。
+- **typeExpr**：**unionType (('?' \| '!')+ \| '?' unionType)?**（`T?` 可能为空，`T!` 可能出错，见 3.2.4；`T ? U` 为预留写法）。
 - **unionType**：**interType ('|' interType)***。
 - **interType**：**diffType ('&' diffType)***。
 - **diffType**：**keyUnionDiffType ('\\' keyUnionDiffType)***。
@@ -108,7 +108,7 @@
 
 ### 8.3.2 模式（match）
 
-- **pattern**：**identRef \| literal \| '(' (dataList \| identList)? ','? ')' \| '{' (pairedValues \| identList)? ','? '}' \| '_'**。
+- **pattern**：**identRef identDef? \| literal \| '(' (dataList \| identList)? ','? ')' \| '{' (pairedValues \| identList)? ','? '}' \| '_'**。
 - **matchCase**：**CASE** pattern (**'|'** pattern)* **'=>'** blockExpr。
 
 ---

@@ -1,6 +1,6 @@
 # 7. 语句
 
-本章描述 Camel 的**简单语句**与**复合语句**：表达式语句、return（raise/throw 尚未实现）、let/var、use、using namespace、块、if、match、try（尚未实现）、函数定义、类型定义，并配有完整程序片段示例。
+本章描述 Camel 的**简单语句**与**复合语句**：表达式语句、return / throw（raise 尚未实现）、let/var、use、using namespace、块、if、match、try（不属于语言）、函数定义、类型定义，并配有完整程序片段示例。
 
 ---
 
@@ -32,8 +32,12 @@ seed(s)
 ### 7.1.2 return / raise / throw 语句
 
 - **retStmt**：**`(return | raise | throw) dataList?`**。
-- **`raise` / `throw` 未实现**：语法接受，但异常机制没有实现，使用它是编译期错误
-  `SemanticDiag::ConstructNotSupported`（它们不再被当作 `return` 编译）。
+- **`throw e`** 返回一个错误值，与 `return` 同构：它是所在函数（或所在分支臂）的值，不是跳转。
+  - 所在函数必须把返回类型声明为 `T!`，否则是编译期错误 `SemanticDiag::ThrowOutsideFallible`。
+  - `e` 必须是错误值：用内建的 `error(kind, message)` 构造（它记下这次调用的源码位置），或是
+    `case error e` 绑定的那个；否则是 `SemanticDiag::ThrowNotAnError`。
+  - 在这样的函数里，`return v` 把 `v` 作为成功的值返回。
+- **`raise` 未实现**（去留未定）：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`。
 - **return** 可带多个表达式，或省略表示无值返回；可返回 **null**。
 
 **示例**
@@ -52,6 +56,16 @@ return (signal.0 * 2, signal.1 * 2)
 return sigmoid(z)
 return dot(x, w) + b
 return total_squared_error / float(num_of_samples)
+```
+
+```cml
+func safe_div(a: int, b: int): int! {
+    if b == 0 then {
+        throw error('DivByZero', 'the divisor is zero')
+    } else {
+        return a / b
+    }
+}
 ```
 
 ### 7.1.3 数据声明（let / var）
@@ -186,12 +200,9 @@ match dir {
 }
 ```
 
-### 7.2.4 try 语句（未实现）
+### 7.2.4 try 语句（不属于语言）
 
-> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
-
-- **`try stmtBlock catchClause+ (finally stmtBlock)?`**；**catchClause**：**`catch identDef ':' typeExpr stmtBlock`**。
-- 见 [6.9.3 try](06_expressions.md#693-try)。
+`try`/`catch` 不进入 Camel；写了得到编译期错误 `SemanticDiag::TryCatchNotInLanguage`，它指向 `!!`、`?->` 与故障隔离。见 [6.9.3](06_expressions.md)。
 
 ### 7.2.5 函数定义
 

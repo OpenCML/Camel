@@ -216,8 +216,8 @@ append<p>
 ## 6.4 管道与组合
 
 - **`a->b`**：将 **a** 的求值结果作为参数传给 **b**（方法或函数）；左结合。
-- **`?->`**：可选管道。**未实现**：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在运算符处）。
-- **`..`**：组合。**`?..`** **未实现**，同一诊断。
+- **`x ?-> f`**：`x` 出错时把错误原样传下去，否则调用 `f`，见 [6.6](#66-空值与错误)。
+- **`..`**：组合。**`?..`** **未实现**：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在运算符处）。
 
 **示例**
 
@@ -256,12 +256,23 @@ v is int
 
 ---
 
-## 6.6 可空
+## 6.6 空值与错误
 
-- **`a ?? b`**：若 **a** 为 null 则取 **b**。
-- **`a !! b`**：若 **a** 出错则取 **b**。
+类型 `T?`（可能为空）与 `T!`（可能出错）见 [3.2.4](03_data_model.md)。这两种值只能用下面的运算符和 `match` 的固定模式（[6.9.2](#692-match)）拆开；它们在图上都是**一个分支**，条件是值上的一位标记，与 `if` 是同一种结构（设计原则 2.9）。
 
-> **未实现。** 可空值与错误值尚未实现（见设计原则 2.9）：使用 `??`、`!!`，或写可空类型 `T?`，是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在运算符或类型处）。此前它们只给出警告，右侧被丢弃，`T?` 被当作 `T`。
+- **`a ?? b`**：`a` 的类型是 `T?`，`b` 的类型是 `T`，结果是 `T`。`a` 为空取 `b`，否则取 `a` 里的值。
+- **`a !! b`**：`a` 的类型是 `T!`，`b` 的类型是 `T`，结果是 `T`。`a` 出错取 `b`，否则取 `a` 里的值。
+- **`x ?-> f`**：`x` 的类型是 `T!`。`x` 出错时把错误原样传下去，否则调用 `f`。结果是 `U!`：`f` 返回 `U` 或 `U!` 都可以。可以连写：`x ?-> f ?-> g`。
+- 右侧（`b`、对 `f` 的调用）是分支的一个臂，只在被选中时求值。
+- 左侧不是所要求的形式（例如对普通的 `int` 用 `??`，对 `T?` 用 `!!` 或 `?->`），或右侧类型不是 `T`：编译期错误 `SemanticDiag::TaggedOperandMismatch`（`??`、`!!` 定位在运算符处，`?->` 定位在表达式开头）。
+
+```cml
+let n = parse_int(text) !! 0                   // 解析失败取 0
+let v = lookup(key) ?? default_value           // 为空取默认值
+let r = parse_int(text) ?-> check ?-> double   // 任何一步出错，r 就是那个错误
+```
+
+错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障，带位置终止程序，`!!` 接不住它。
 
 ---
 
@@ -403,8 +414,31 @@ return if snake->contains<p> then "O" else "."
 - **`match identRef '{' matchCase+ '}'`**。
 - **matchCase**：**`case pattern ('|' pattern)* '=>' blockExpr`**。
 - **pattern**：**identRef**、字面量、**`( dataList | identList )`**、**`{ pairedValues | identList }`**、**`_`**（通配符）。
-- 已实现的模式只有字面量与 `_`。标识符、元组、结构体模式**未实现**：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该模式处）。
+- 对普通类型的值，已实现的模式只有字面量与 `_`。元组、结构体模式**未实现**，标识符模式只对 `T?`/`T!` 有定义（见下）：编译期错误 `SemanticDiag::ConstructNotSupported`。
 - `case a | b => body`：任一模式匹配即进入该分支。按书写顺序取第一个匹配的分支，`_` 之后的分支不可达。
+
+**对 `T?` 与 `T!` 的固定模式。** 被匹配的值是 `T?` 或 `T!` 时，`match` 是对它的标记位的一个分支，恰好两个分支（`case v` 写在前写在后都可以；`_` 仍然要写在最后）：
+
+- `T?`：`case null`，加上一个取值的分支：`case v`（把取出的值绑定为 `v`，类型 `T`）或 `case _`。
+- `T!`：`case error e`（把错误绑定为 `e`），加上一个取值的分支：`case v` 或 `case _`。
+- `e` 是固定的内建结构 `{ kind: string, message: string, location: string }`：种类名、消息、发生处的源码位置（`文件:行:列`）。
+- 缺分支、多分支，或混入字面量分支：编译期错误 `SemanticDiag::TaggedMatchCases`。
+
+```cml
+func describe(x: int?): string {
+    return match x {
+        case null => 'none'
+        case v => format<v>('some {}')
+    }
+}
+
+func show(r: int!): string {
+    return match r {
+        case error e => format<e.kind, e.message>('{}: {}')
+        case v => format<v>('ok {}')
+    }
+}
+```
 
 ```cml
 let new_head = match dir {
@@ -416,21 +450,14 @@ let new_head = match dir {
 }
 ```
 
-### 6.9.3 try（未实现）
+### 6.9.3 try（不属于语言）
 
-> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
+`try`/`catch`/`finally` 不进入 Camel：它在图上的形状取决于块里写了什么，没有稳定的映射（设计原则 2.9）。文法仍然认得这个写法，只为了给出一条指引：编译期错误 `SemanticDiag::TryCatchNotInLanguage`（定位在 `try` 处）。
 
-- **`try stmtBlock catchClause+ (finally stmtBlock)?`**。
-- **catchClause**：**`catch identDef ':' typeExpr stmtBlock`**。
+可能失败的操作返回 `T!`，用 `a !! b` 给出替代值，用 `x ?-> f` 把错误传下去，用 `match` 的 `case error e` 查看错误（见 [6.6](#66-空值与错误)）。
 
 ```cml
-try {
-    risky_op()
-} catch e: IOError {
-    println('Failed')
-} finally {
-    cleanup()
-}
+let text = try_read_text(path) !! ''
 ```
 
 ---

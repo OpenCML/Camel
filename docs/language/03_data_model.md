@@ -116,9 +116,42 @@ func sum_pair(p: Pair<int>): int { return p.0 + p.1 }
 
 **类型变量**不是一种值的类型，只出现在泛型函数的签名与函数体里，用 `typeas T` 绑定，见 7.2.5。
 
-### 3.2.4 可空与类型运算
+### 3.2.4 可能为空与可能出错
 
-- 类型后可跟 **`?`** 表示可空联合（语法见文法 **typeExpr**）。
+两种专用的内建形式（设计原则 2.9），各带一位标记：
+
+- **`T?`**：可能为空。值要么是 `null`，要么是一个 `T`。
+- **`T!`**：可能出错。值要么是一个 `T`，要么是一个错误。错误是固定的内建结构 `{ kind: string, message: string, location: string }`，所有可能出错的函数共用这一种。
+
+规则：
+
+- `T?`、`T!` 与 `T` 是不同的类型。`T?`/`T!` 的值可以保存、传递、返回、打印（`println` 打印 `null`、其中的值，或 `error <kind>: <message>`），但不能当作 `T` 使用：没有运算符或算子接受它，也不能对它取成员。只能用 `??`、`!!`、`?->`（[6.6](06_expressions.md)）和 `match` 的固定模式（[6.9.2](06_expressions.md#692-match)）拆开；否则是编译期错误（`SemanticDiag::TaggedValueNotOpened`、`NoMatchingFunction` 等）。
+- **`T` 不会自己变成 `T?`/`T!`**（与数值类型不做隐式转换一致）。进入这两种形式的写法：
+  - `v as T?`、`v as T!`；
+  - 带类型的声明 `let x: T? = v`；
+  - 返回类型声明为 `T?`/`T!` 的函数里的 `return v`（与 `throw` 相对：一个给出值，一个给出错误）。
+  - 调用的实参不转换：`f(5)` 传给 `x: int?` 是错误，写 `f(5 as int?)`。
+- **`null`** 是每个 `T?` 的字面量，在上述三处写 `null` 即可：`let x: int? = null`、`null as int?`、`return null`。传给形参同样要写 `f(null as int?)`。
+- 分支的各臂类型必须相同：`if c then 1 else null` 是错误，把两臂都写成 `T?`（在声明了 `T?` 的函数里用 `return`，或用 `as`）。
+- 两种标记可以组合：`T?!`（可能出错，成功时可能为空）、`T!?`。同一种标记不能重复（`T??`、`T!!`）：编译期错误 `SemanticDiag::TaggedTypeNesting`。数组元素等位置需要括号：`(int?)[]`。
+- 与泛型配合：`(typeas T)?` 从可空实参里的类型绑定 `T`。
+
+```cml
+func positive(x: int): int? {
+    if x > 0 then { return x } else { return null }
+}
+
+func or_else(x: (typeas T)?, d: T): T {
+    return x ?? d
+}
+```
+
+运行时没有类型信息：一个值是不是 `T?` 只由它的静态类型决定。实现见 `docs/technical/29_nullable_and_fallible_values.md`。
+
+`T ? U` 是早先预留的另一个记号，与 `T!` 的关系未定，使用它是编译期错误。
+
+### 3.2.5 类型运算
+
 - 类型运算：联合 **`|`**、交集 **`&`**、差 **`\`**、键联合等（见类型表达式规则）。
 
 ---
