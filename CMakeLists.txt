@@ -95,8 +95,7 @@ target_compile_options(libcamel PRIVATE
     -Wno-nan-infinity-disabled
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
-    -march=native
-    -mfma
+    ${CAMEL_TARGET_ARCH_FLAGS} # cmake/Options.cmake: CAMEL_TARGET_ARCH
     # -ffast-math # Do not enable this; build-mode optimization can make results inaccurate.
 )
 
