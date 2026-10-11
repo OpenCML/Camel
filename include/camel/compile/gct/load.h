@@ -276,9 +276,39 @@ class AccsLoad : public Load {
     }
 };
 
+/// The reserved name under which the arm of `x ?-> f` finds the value taken out of `x`. It
+/// is not an identifier, so no program can write it.
+inline constexpr const char *kPassedValueName = "$passed";
+
 class BrchLoad : public Load {
   public:
-    BrchLoad() : Load(LoadType::BRCH) {}
+    /// What selects the arm (design principles 2.9; all are the same structure on the graph).
+    ///  - Cond: `if` (a boolean) and `match` (a value compared with the cases, or the tag
+    ///    of a `T?` / `T!` with the fixed patterns). Children: condition, CASE...
+    ///  - NullThen: `a ?? b`. Children: a, CASE(True)[EXEC b].
+    ///  - ErrorThen: `a !! b`. Children: a, CASE(True)[EXEC b].
+    ///  - ErrorPass: `x ?-> f`. Children: x, CASE(Else)[EXEC call], where the call takes
+    ///    DREF kPassedValueName as its argument.
+    enum class Kind { Cond, NullThen, ErrorThen, ErrorPass };
+
+    BrchLoad(Kind kind = Kind::Cond) : Load(LoadType::BRCH), kind_(kind) {}
+    Kind kind() const { return kind_; }
+
+    const std::string toString() const override {
+        switch (kind_) {
+        case Kind::NullThen:
+            return "BRCH: ??";
+        case Kind::ErrorThen:
+            return "BRCH: !!";
+        case Kind::ErrorPass:
+            return "BRCH: ?->";
+        default:
+            return "BRCH";
+        }
+    }
+
+  private:
+    Kind kind_;
 };
 
 class CaseLoad : public Load {
@@ -287,14 +317,22 @@ class CaseLoad : public Load {
         Value,
         True,
         Else,
+        // The fixed patterns over a tagged scrutinee (design principles 2.9). One child, the
+        // body. Bind: `case v`, the value taken out of a `T?` / `T!` under the name
+        // binding(). Error: `case error e`, the error of a failed `T!` under that name.
+        Bind,
+        Error,
     };
 
   private:
     CaseType caseType_;
+    std::string binding_;
 
   public:
-    CaseLoad(CaseType type) : Load(LoadType::CASE), caseType_(type) {}
+    CaseLoad(CaseType type, std::string binding = {})
+        : Load(LoadType::CASE), caseType_(type), binding_(std::move(binding)) {}
     CaseType caseType() const { return caseType_; }
+    const std::string &binding() const { return binding_; }
 
     const std::string toString() const override {
         std::string result = "CASE: ";
@@ -307,6 +345,12 @@ class CaseLoad : public Load {
             break;
         case CaseType::Else:
             result += "(else)";
+            break;
+        case CaseType::Bind:
+            result += "(bind " + binding_ + ")";
+            break;
+        case CaseType::Error:
+            result += "(error " + binding_ + ")";
             break;
         }
         return result;

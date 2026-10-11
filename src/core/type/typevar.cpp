@@ -165,6 +165,49 @@ rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &c
 
 } // namespace
 
+TupleType *findRepeatedMark(Type *type) {
+    if (type == nullptr) {
+        return nullptr;
+    }
+    const auto among = [](std::span<Type *const> types) -> TupleType * {
+        for (Type *member : types) {
+            if (TupleType *found = findRepeatedMark(member)) {
+                return found;
+            }
+        }
+        return nullptr;
+    };
+    switch (type->code()) {
+    case TypeCode::Array:
+        return findRepeatedMark(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Tuple: {
+        auto *tuple = static_cast<TupleType *>(type);
+        if (tuple->isTagged()) {
+            TupleType *inner = asTagged(tuple->payloadType());
+            if (inner != nullptr && inner->tag() == tuple->tag()) {
+                return tuple;
+            }
+            return findRepeatedMark(tuple->payloadType());
+        }
+        return among(tuple->types());
+    }
+    case TypeCode::Struct:
+        return among(static_cast<StructType *>(type)->types());
+    case TypeCode::Function: {
+        auto *func = static_cast<FunctionType *>(type);
+        if (TupleType *found = among(func->withTypesSpan())) {
+            return found;
+        }
+        if (TupleType *found = among(func->normTypesSpan())) {
+            return found;
+        }
+        return func->hasExitType() ? findRepeatedMark(func->exitType()) : nullptr;
+    }
+    default:
+        return nullptr;
+    }
+}
+
 bool containsTypeVar(Type *type) {
     if (type == nullptr) {
         return false;
@@ -231,6 +274,12 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         }
         if (!changed) {
             return type;
+        }
+        if (tuple->isNullable()) {
+            return TupleType::nullable(types.front());
+        }
+        if (tuple->isFallible()) {
+            return TupleType::fallible(types.front());
         }
         return tuple->isCell() ? TupleType::cell(types.front()) : TupleType::create(types);
     }
@@ -302,7 +351,8 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     case TypeCode::Tuple: {
         auto *want = static_cast<TupleType *>(pattern);
         auto *have = static_cast<TupleType *>(actual);
-        if (want->size() != have->size() || want->isCell() != have->isCell()) {
+        if (want->size() != have->size() || want->isCell() != have->isCell() ||
+            want->tag() != have->tag()) {
             return false;
         }
         for (size_t i = 0; i < want->size(); ++i) {

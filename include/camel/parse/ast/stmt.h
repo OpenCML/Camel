@@ -133,6 +133,7 @@ class ExprStmtLoad : public StmtLoad {
 class ExitStmtLoad : public StmtLoad {
   public:
     ExitStmtLoad(ExitType type) : StmtLoad(StmtType::Exit), type_(type) {}
+    ExitType exitType() const { return type_; }
     const std::string toString() const override;
     const std::string geneCode() const override;
 

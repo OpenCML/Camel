@@ -34,6 +34,7 @@ using namespace camel::core::rtdata;
 #include "../operators/profiler.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
+#include "../operators/tagged.h"
 #include "camel/core/operator_traits.h"
 
 #include <string_view>
@@ -256,6 +257,17 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // macro
         {"macro/cmp", __cmp__},
+
+        // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
+        {"op/tag_is_null", __is_null__},
+        {"op/tag_null_value", __null_value__},
+        {"op/tag_is_error", __is_error__},
+        {"op/tag_error_value", __error_value__},
+        {"op/tag_error_info", __error_info__},
+        {"op/tag_throw", __throw__},
+        {"op/error_new", __error_new__},
+        {"op/parse_int", __parse_int__},
+        {"op/parse_float", __parse_float__},
     };
     return map;
 }

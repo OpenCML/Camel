@@ -1291,6 +1291,17 @@ compile_graph_ptr_t Builder::resolveGenericCall(
                 typeBindingsToString(bindings)));
         }
     }
+    // `T?` with `T = int?` would be `int??`: the same mark twice is rejected where a type is
+    // written, and so it is where substitution writes it (design principles 2.9;
+    // DESIGN-QUESTION(nullable-error) Q2).
+    if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
+        diags_->of(SemanticDiag::TaggedTypeNesting)
+            .atOrigin(call->load()->origin())
+            .commit(
+                repeated->toString(),
+                asTagged(repeated->payloadType())->payloadType()->toString());
+        throw BuildAbortException();
+    }
     return instantiateGeneric(tmpl, bindings, call);
 }
 
@@ -2056,7 +2067,8 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
     if (const auto &operand = gct->at(0);
         operand->type() == GCT::LoadType::DATA &&
-        containsTypeVar(gct->loadAs<GCT::CastLoad>()->targetType())) {
+        containsTypeVar(gct->loadAs<GCT::CastLoad>()->targetType()) &&
+        asTagged(gct->loadAs<GCT::CastLoad>()->targetType()) == nullptr) {
         // A literal converted to a type written with a type variable (`let zero: T = 0`,
         // `0 as T`). The GCT converts a literal to a concrete type itself; here the type is
         // only known now, so the same conversion is applied now.
@@ -2088,13 +2100,35 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return node;
         }
     }
-    const auto &res = visit(gct->at(0));
-    ASSERT(res.type() == typeid(node_handle_t), "Unexpected result type from child of CAST node.");
-    node_handle_t valueNode = any_cast<node_handle_t>(res);
-    ASSERT(valueNode != nullptr, "Cast node value is null.");
     const auto &castLoad = gct->loadAs<GCT::CastLoad>();
     Type *targetType     = boundType(castLoad->targetType());
-    Type *sourceType     = nodeTypeOf(valueNode);
+    node_handle_t valueNode{};
+    if (TupleType *tagged = asTagged(targetType);
+        tagged != nullptr && gct->at(0)->type() == GCT::LoadType::DATA) {
+        // A literal put into `T?` / `T!`: it is first the literal of the payload type, by the
+        // rule for any annotated literal (`let x: float? = 1`); `null` stays `null`.
+        data_ptr_t data = gct->at(0)->loadAs<GCT::DataLoad>()->data();
+        const bool literal = !isComposite(data->type()->code()) ||
+                             tt::as_shared<CompositeData>(data)->resolved();
+        Type *payload      = tagged->payloadType();
+        if (literal && data->type()->code() != TypeCode::Void && !payload->equals(data->type()) &&
+            (castLoad->annotation() ||
+             payload->castSafetyFrom(data->type()) == CastSafety::Safe)) {
+            if (data_ptr_t converted = data->convertTo(payload)) {
+                valueNode = currGraph_->addStaticDataNode(converted);
+                registerNodeOrigin(context_, valueNode, gct->at(0), "gir.data");
+            }
+        }
+    }
+    if (valueNode == nullptr) {
+        const auto &res = visit(gct->at(0));
+        ASSERT(
+            res.type() == typeid(node_handle_t),
+            "Unexpected result type from child of CAST node.");
+        valueNode = any_cast<node_handle_t>(res);
+    }
+    ASSERT(valueNode != nullptr, "Cast node value is null.");
+    Type *sourceType = nodeTypeOf(valueNode);
     // Safe conversions always; an Unsafe one only into a module type, which then checks the
     // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
     // that may lose information stay refused.
@@ -2706,6 +2740,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         normInputs.push_back({inputNode, gct->at(i)});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
     }
+    if (gct->size() == 3 && nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        // `error(kind, message)`: an error value records where it was made (design
+        // principles 2.9), so the position of this call is its third, constant argument.
+        const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        if (std::holds_alternative<oper_group_ptr_t>(drefTarget) &&
+            std::get<oper_group_ptr_t>(drefTarget)->name() == "error") {
+            node_handle_t location = currGraph_->addStaticDataNode(
+                tt::as_shared<Data>(std::make_shared<StringData>(
+                    sourceLocationOf(gct->at(0)->load()->origin()))));
+            registerNodeOrigin(context_, location, gct, "gir.data");
+            normInputs.push_back({location, gct});
+            normInputTypes.push_back(Type::String());
+        }
+    }
 
     if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
         // A call of a generic function: the argument types select (and, the first time,
@@ -3111,6 +3159,14 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     const auto tgtType   = nodeTypeOf(tgtNode);
     const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     Type *elemType       = nullptr;
+    if (asTagged(tgtType) != nullptr) {
+        // A `T?` / `T!` has the layout of a tuple and is not one: its parts are reached by
+        // `??`, `!!`, `?->` and `match` only (design principles 2.9).
+        diags_->of(SemanticDiag::TaggedValueNotOpened)
+            .atOrigin(gct->load()->origin())
+            .commit(tgtType->toString(), "a member cannot be read from it");
+        throw BuildAbortException();
+    }
 
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
@@ -3164,13 +3220,338 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     return accsNode;
 }
 
+std::string Builder::sourceLocationOf(uint64_t origin) const {
+    const auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr;
+    const auto *record        = sourceContext ? sourceContext->origin(origin) : nullptr;
+    const auto *span          = record ? sourceContext->span(record->primarySpan) : nullptr;
+    const auto *file          = span && span->valid() ? sourceContext->sourceFile(span->fileId) : nullptr;
+    if (file == nullptr || span->startOffset > file->content.size()) {
+        return {};
+    }
+    size_t line = 1, lineStart = 0;
+    for (size_t i = 0; i < span->startOffset; ++i) {
+        if (file->content[i] == '\n') {
+            ++line;
+            lineStart = i + 1;
+        }
+    }
+    // The file name only: an error value must not differ with where the program is stored.
+    const size_t slash = file->path.find_last_of("/\\");
+    return std::format(
+        "{}:{}:{}",
+        slash == std::string::npos ? file->path : file->path.substr(slash + 1),
+        line,
+        span->startOffset - lineStart + 1);
+}
+
+std::string Builder::bindTemporary(node_handle_t node) {
+    std::string name = "$tagged" + std::to_string(tagTemporaries_++);
+    insertNode(name, node);
+    return name;
+}
+
+node_handle_t Builder::applyTagOperator(
+    const char *op, const std::string &name, const GCT::node_ptr_t &origin) {
+    // An ordinary call, built from a synthesized GCT so that capturing the operand from an
+    // enclosing graph, overload resolution and origins are what they are for any call.
+    const auto make = [&](GCT::load_ptr_t load) {
+        load->setOrigin(origin->load()->origin());
+        return std::make_shared<GCT::Node>(std::move(load));
+    };
+    GCT::node_ptr_t call = make(std::make_shared<GCT::LinkLoad>(1));
+    *call << make(std::make_shared<GCT::DRefLoad>(Reference(op)))
+          << make(std::make_shared<GCT::DRefLoad>(Reference(name)));
+    return visitLinkNode(call);
+}
+
+node_handle_t
+Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &origin) {
+    node_handle_t castNode = currGraph_->addCastNode(target);
+    linkNodes(LinkType::Norm, value, castNode);
+    registerNodeOrigin(context_, castNode, origin, "gir.cast");
+    return castNode;
+}
+
+Type *Builder::declaredExitTypeHere() const {
+    compile_graph_ptr_t graph = currGraph_;
+    while (graph != nullptr && openArmGraphs_.contains(graph.get())) {
+        graph = graph->outerGraph();
+    }
+    FunctionType *funcType = graph != nullptr ? graph->funcType() : nullptr;
+    // An undeclared return type is set from the first value returned (see
+    // checkDeclaredReturn): before that, a type that is present was declared.
+    if (funcType == nullptr || !funcType->hasExitType() ||
+        graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+        return nullptr;
+    }
+    return funcType->exitType();
+}
+
+node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value) {
+    Type *declared   = declaredExitTypeHere();
+    Type *valueType  = valueTypeOf(nodeTypeOf(value));
+    const auto where = gct->load()->origin() != 0 ? gct->load()->origin()
+                                                  : gct->at(0)->load()->origin();
+    if (gct->loadAs<GCT::ExitLoad>()->exitType() == ExitType::Throw) {
+        // `throw e`: the exit `return` is, with the failed form of the declared `T!` as its
+        // value (design principles 2.9). OPER __throw__ makes the failed value, the CAST
+        // gives it the declared type; both are the same object.
+        TupleType *fallible = asFallible(declared);
+        if (fallible == nullptr) {
+            diags_->of(SemanticDiag::ThrowOutsideFallible)
+                .atOrigin(where)
+                .commit(
+                    declared == nullptr
+                        ? "the function around it declares no return type"
+                        : "the function around it returns '" + declared->toString() + "'");
+            throw BuildAbortException();
+        }
+        // DESIGN-QUESTION(nullable-error) Q3: `throw` takes an Error (made by `error(kind,
+        // message)` or bound by `case error e`), nothing else.
+        if (!valueType->equals(errorType())) {
+            diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
+            throw BuildAbortException();
+        }
+        node_handle_t thrown = applyTagOperator("__throw__", bindTemporary(value), gct->at(0));
+        return fallible->equals(nodeTypeOf(thrown)) ? thrown : castNodeTo(thrown, fallible, gct->at(0));
+    }
+    // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
+    // `throw` (DESIGN-QUESTION(nullable-error) Q1). A value that already has the declared
+    // type, and one that fits neither way (reported by checkDeclaredReturn), is left alone.
+    if (TupleType *tagged = asTagged(declared);
+        tagged != nullptr && !tagged->assignableFrom(valueType) &&
+        tagged->castSafetyFrom(valueType) == CastSafety::Safe) {
+        return castNodeTo(value, tagged, gct->at(0));
+    }
+    return value;
+}
+
+compile_graph_ptr_t Builder::buildArmGraph(
+    const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body) {
+    graph_ptr_t subGraph = enterScope(FunctionType::create());
+    registerGraphOrigin(context_, subGraph, exec, "gir.brch.case.graph");
+    bodyStates_[subGraph.get()] = BodyState::Open;
+    openArmGraphs_.insert(subGraph.get());
+    // A body given by the caller is a body of its own like any other (see visitBodyNode).
+    const bool outerSynced        = synced_;
+    const node_handle_t outerLast = lastSyncedNode_;
+    const auto restore            = [&] {
+        synced_         = outerSynced;
+        lastSyncedNode_ = outerLast;
+        openArmGraphs_.erase(subGraph.get());
+        bodyStates_[subGraph.get()] = BodyState::Built;
+    };
+    try {
+        if (body) {
+            synced_         = false;
+            lastSyncedNode_ = {};
+            setBodyResult(subGraph, body());
+        } else {
+            setBodyResult(subGraph, visitBodyNode(exec));
+        }
+    } catch (...) {
+        restore();
+        leaveScope();
+        throw;
+    }
+    restore();
+    armGraphs_.insert(subGraph.get());
+    builtBodies_.push_back(subGraph);
+    leaveScope();
+    return subGraph;
+}
+
+node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
+    using Kind         = GCT::BrchLoad::Kind;
+    const Kind kind    = gct->loadAs<GCT::BrchLoad>()->kind();
+    const bool onNull  = kind == Kind::NullThen;
+    const char *symbol = onNull ? "??" : kind == Kind::ErrorThen ? "!!" : "?->";
+
+    node_handle_t subject = valueNodeOf(visit(gct->at(0)));
+    Type *subjectType     = valueTypeOf(nodeTypeOf(subject));
+    TupleType *tagged     = asTagged(subjectType);
+    if (tagged == nullptr || tagged->isNullable() != onNull) {
+        // DESIGN-QUESTION(nullable-error) Q6: `?->` is defined for errors only.
+        diags_->of(SemanticDiag::TaggedOperandMismatch)
+            .atOrigin(gct->load()->origin())
+            .commit(
+                symbol,
+                "its left side has type '" + subjectType->toString() + "', which is not a '" +
+                    (onNull ? "T?" : "T!") + "'");
+        throw BuildAbortException();
+    }
+    Type *payload            = tagged->payloadType();
+    const std::string name   = bindTemporary(subject);
+    node_handle_t tagNode    = applyTagOperator(onNull ? "__is_null__" : "__is_error__", name, gct);
+    const char *valueOp      = onNull ? "__null_value__" : "__error_value__";
+    const GCT::node_ptr_t exec = gct->at(1)->at(0);
+    std::vector<compile_graph_ptr_t> arms(2);
+
+    if (kind != Kind::ErrorPass) {
+        // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
+        // evaluated, only when the tag selects it. Arm 1 takes the value out.
+        arms[0] = buildArmGraph(exec);
+        arms[1] = buildArmGraph(exec, [&] { return applyTagOperator(valueOp, name, gct); });
+        // DESIGN-QUESTION(nullable-error) Q7: the right-hand side has the payload type.
+        Type *fallback = arms[0]->funcType()->exitType();
+        if (fallback == nullptr || payload->unify(fallback) == nullptr) {
+            diags_->of(SemanticDiag::TaggedOperandMismatch)
+                .atOrigin(gct->load()->origin())
+                .commit(
+                    symbol,
+                    "its right side has type '" +
+                        (fallback ? fallback->toString() : std::string("void")) +
+                        "', but the left side holds a '" + payload->toString() + "'");
+            throw BuildAbortException();
+        }
+        return buildBranch(gct, tagNode, &arms);
+    }
+
+    // `x ?-> f`: arm 1 calls `f` with the value and yields a `U!` (put into that form when
+    // `f` returns a plain `U`); arm 0 hands the failed `x` on as that `U!`. Arm 1 is built
+    // first because it is what determines `U`.
+    Type *resultType = nullptr;
+    arms[1]          = buildArmGraph(exec, [&] {
+        insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, gct));
+        node_handle_t result = visitBodyNode(exec);
+        ASSERT(result != nullptr, "The call of '?->' produced no node.");
+        if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
+            result = nodeDraftOf(result)->node(normInputsOf(result).front());
+        }
+        Type *type = valueTypeOf(nodeTypeOf(result));
+        if (asFallible(type) != nullptr) {
+            resultType = type;
+            return result;
+        }
+        resultType = TupleType::fallible(type);
+        return castNodeTo(result, resultType, gct);
+    });
+    arms[0] = buildArmGraph(exec, [&] {
+        const auto dref = std::make_shared<GCT::Node>(
+            std::make_shared<GCT::DRefLoad>(Reference(name)));
+        dref->load()->setOrigin(gct->load()->origin());
+        node_handle_t failed = visitDRefNode(dref);
+        return resultType->equals(subjectType) ? failed : castNodeTo(failed, resultType, gct);
+    });
+    return buildBranch(gct, tagNode, &arms);
+}
+
+node_handle_t Builder::visitTaggedMatch(
+    const GCT::node_ptr_t &gct, node_handle_t scrutinee, TupleType *type) {
+    using CaseType = GCT::CaseLoad::CaseType;
+    const auto malformed = [&](const std::string &why) {
+        diags_->of(SemanticDiag::TaggedMatchCases)
+            .atOrigin(gct->load()->origin())
+            .commit(type->toString(), why);
+        throw BuildAbortException();
+    };
+    // DESIGN-QUESTION(nullable-error) Q4: exactly the tagged case and one other.
+    GCT::node_ptr_t taggedCase, restCase;
+    for (size_t i = 1; i < gct->size(); ++i) {
+        const auto &caseNode = gct->at(i);
+        const auto caseType  = caseNode->loadAs<GCT::CaseLoad>()->caseType();
+        const bool isNull =
+            caseType == CaseType::Value && caseNode->at(0)->type() == GCT::LoadType::DATA &&
+            caseNode->at(0)->loadAs<GCT::DataLoad>()->data()->type()->code() == TypeCode::Void;
+        if (isNull || caseType == CaseType::Error) {
+            if (isNull != type->isNullable()) {
+                malformed(
+                    isNull ? "'case null' needs a value that may be null"
+                           : "'case error' needs a value that may have failed");
+            }
+            if (taggedCase != nullptr) {
+                malformed(std::string("it has more than one '") +
+                          (isNull ? "case null" : "case error") + "'");
+            }
+            taggedCase = caseNode;
+        } else if (caseType == CaseType::Bind || caseType == CaseType::Else) {
+            if (restCase != nullptr) {
+                malformed("it has more than one case for the value");
+            }
+            restCase = caseNode;
+        } else {
+            malformed("a literal case cannot be compared with a value that is not opened yet");
+        }
+    }
+    if (taggedCase == nullptr) {
+        malformed(type->isNullable() ? "'case null' is missing" : "'case error e' is missing");
+    }
+    if (restCase == nullptr) {
+        malformed("the case for the value is missing ('case v' or 'case _')");
+    }
+
+    const std::string name = bindTemporary(scrutinee);
+    node_handle_t tagNode =
+        applyTagOperator(type->isNullable() ? "__is_null__" : "__is_error__", name, gct);
+    const GCT::node_ptr_t taggedExec = taggedCase->at(taggedCase->size() - 1);
+    const GCT::node_ptr_t restExec   = restCase->at(0);
+    std::vector<compile_graph_ptr_t> arms(2);
+    arms[0] = buildArmGraph(taggedExec, [&] {
+        if (type->isFallible()) {
+            insertNode(
+                taggedCase->loadAs<GCT::CaseLoad>()->binding(),
+                applyTagOperator("__error_info__", name, taggedCase));
+        }
+        return visitBodyNode(taggedExec);
+    });
+    arms[1] = buildArmGraph(restExec, [&] {
+        const auto &restLoad = restCase->loadAs<GCT::CaseLoad>();
+        if (restLoad->caseType() == CaseType::Bind) {
+            insertNode(
+                restLoad->binding(),
+                applyTagOperator(
+                    type->isNullable() ? "__null_value__" : "__error_value__",
+                    name,
+                    restCase));
+        }
+        return visitBodyNode(restExec);
+    });
+    return buildBranch(gct, tagNode, &arms);
+}
+
 node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
+    if (gct->loadAs<GCT::BrchLoad>()->kind() != GCT::BrchLoad::Kind::Cond) {
+        node_handle_t node = visitTaggedBrchNode(gct);
+        LEAVE("BRCH");
+        return node;
+    }
     const auto &res = visit(gct->at(0));
     ASSERT(
         res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of BRCH node.");
     node_handle_t condNode = any_cast<node_handle_t>(res);
+    node_handle_t node{};
+    if (TupleType *tagged = asTagged(valueTypeOf(nodeTypeOf(condNode)))) {
+        node = visitTaggedMatch(gct, condNode, tagged);
+    } else {
+        for (size_t i = 1; i < gct->size(); ++i) {
+            const auto &caseLoad = gct->at(i)->loadAs<GCT::CaseLoad>();
+            if (caseLoad->caseType() == GCT::CaseLoad::CaseType::Bind ||
+                caseLoad->caseType() == GCT::CaseLoad::CaseType::Error) {
+                // The two patterns that bind are defined over `T?` / `T!` only. What an
+                // identifier pattern means over any other type has not been decided.
+                const bool isError = caseLoad->caseType() == GCT::CaseLoad::CaseType::Error;
+                diags_->of(SemanticDiag::ConstructNotSupported)
+                    .atOrigin(gct->at(i)->load()->origin())
+                    .commit(
+                        (isError ? "error " : "") + caseLoad->binding(),
+                        std::string(isError ? "the pattern 'error e'" : "an identifier pattern") +
+                            " is implemented only for a value of type 'T?' or 'T!'; over '" +
+                            nodeTypeOf(condNode)->toString() +
+                            "' only literal patterns and '_' are");
+                throw BuildAbortException();
+            }
+        }
+        node = buildBranch(gct, condNode);
+    }
+    LEAVE("BRCH");
+    return node;
+}
+
+node_handle_t Builder::buildBranch(
+    const GCT::node_ptr_t &gct, node_handle_t condNode,
+    const std::vector<compile_graph_ptr_t> *arms) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, {}, nullptr);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
@@ -3195,50 +3576,44 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     std::vector<CapturedUse> captured;
     std::vector<DraftGraphBuilder *> armGraphs;
 
-    for (size_t i = 1; i < gct->size(); i++) {
-        const auto &caseNode         = gct->atAs<GCT::CaseLoad>(i);
-        const auto &caseLoad         = caseNode->loadAs<GCT::CaseLoad>();
-        GCT::node_ptr_t caseExecNode = nullptr;
+    const size_t armEnd = arms != nullptr ? arms->size() + 1 : gct->size();
+    for (size_t i = 1; i < armEnd; i++) {
+        graph_ptr_t subGraph;
+        if (arms != nullptr) {
+            // Arms the caller built (the tagged forms): a boolean condition and two arms.
+            subGraph = (*arms)[i - 1];
+        } else {
+            const auto &caseNode         = gct->atAs<GCT::CaseLoad>(i);
+            const auto &caseLoad         = caseNode->loadAs<GCT::CaseLoad>();
+            GCT::node_ptr_t caseExecNode = nullptr;
 
-        switch (caseLoad->caseType()) {
-        case GCT::CaseLoad::CaseType::True:
-            ASSERT(caseNode->size() == 1, "True case should have only one child.");
-            caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
-            break;
-        case GCT::CaseLoad::CaseType::Else:
-            ASSERT(i == gct->size() - 1, "Else case should be the last case.");
-            ASSERT(caseNode->size() == 1, "Else case should have only one child.");
-            caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
-            break;
-        case GCT::CaseLoad::CaseType::Value: {
-            ASSERT(caseNode->size() == 2, "Value case should have two children.");
-            any res = visit(caseNode->at(0));
-            ASSERT(
-                res.type() == typeid(node_handle_t),
-                "Unexpected result type from visiting the case node.");
-            node_handle_t valueNode = any_cast<node_handle_t>(res);
-            linkNodes(LinkType::With, valueNode, brchNode);
-            caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
-            break;
-        }
-        default:
-            ASSERT(false, "Unknown case type in BRCH node.");
-        }
+            switch (caseLoad->caseType()) {
+            case GCT::CaseLoad::CaseType::True:
+                ASSERT(caseNode->size() == 1, "True case should have only one child.");
+                caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                break;
+            case GCT::CaseLoad::CaseType::Else:
+                ASSERT(i == gct->size() - 1, "Else case should be the last case.");
+                ASSERT(caseNode->size() == 1, "Else case should have only one child.");
+                caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                break;
+            case GCT::CaseLoad::CaseType::Value: {
+                ASSERT(caseNode->size() == 2, "Value case should have two children.");
+                any res = visit(caseNode->at(0));
+                ASSERT(
+                    res.type() == typeid(node_handle_t),
+                    "Unexpected result type from visiting the case node.");
+                node_handle_t valueNode = any_cast<node_handle_t>(res);
+                linkNodes(LinkType::With, valueNode, brchNode);
+                caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
+                break;
+            }
+            default:
+                ASSERT(false, "Unknown case type in BRCH node.");
+            }
 
-        graph_ptr_t subGraph = enterScope(FunctionType::create());
-        registerGraphOrigin(context_, subGraph, caseExecNode, "gir.brch.case.graph");
-        bodyStates_[subGraph.get()] = BodyState::Open;
-        try {
-            setBodyResult(subGraph, visitBodyNode(caseExecNode));
-        } catch (...) {
-            bodyStates_[subGraph.get()] = BodyState::Built;
-            leaveScope();
-            throw;
+            subGraph = buildArmGraph(caseExecNode);
         }
-        bodyStates_[subGraph.get()] = BodyState::Built;
-        armGraphs_.insert(subGraph.get());
-        builtBodies_.push_back(subGraph);
-        leaveScope();
         armGraphs.push_back(subGraph.get());
         for (const CapturedUse &use : capturedUsesOf(subGraph)) {
             auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
@@ -3417,7 +3792,6 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         lastSyncedNode_ = joinNode;
     }
 
-    LEAVE("BRCH");
     return joinNode;
 }
 
@@ -3443,6 +3817,8 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
                 : std::string("the returned name"),
             gct);
     }
+    // A function that declares T? or T! returns its plain value boxed (see adaptExitValue).
+    resNode = adaptExitValue(gct, resNode);
     node_handle_t outputAnchor = resNode;
     node_vec_t pendingCtrlInputs;
     if (auto modifier = modifierOf(resNode); modifier.has_value()) {

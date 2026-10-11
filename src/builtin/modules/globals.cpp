@@ -20,6 +20,7 @@
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/derivative.h"
+#include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/resolver.h"
 
@@ -1568,6 +1569,10 @@ GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule(""
     registerBuiltinOperatorTraits();
     registerBuiltinDerivatives();
     for (const auto &group : getGlobalOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // The operators over T? and T! (design principles 2.9).
+    for (const auto &group : getTaggedOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }

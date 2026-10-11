@@ -557,8 +557,11 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(i);
                     Type *type              = visitType(typeASTNode);
                     // Try a static type conversion first.
-                    if (dataNode->type() == LoadType::DATA && containsTypeVar(type)) {
-                        // Decided when the generic function is instantiated.
+                    if (asTagged(type) != nullptr ||
+                        (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
+                        // Decided when the generic function is instantiated. A declared
+                        // `T?` / `T!` puts the value into that form (design principles 2.9;
+                        // DESIGN-QUESTION(nullable-error) Q1): a CAST, for any expression.
                         node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
                         *castNode << dataNode;
                         setOriginFromAst(
@@ -618,8 +621,11 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
                     Type *type              = visitType(typeASTNode);
                     // Try a static type conversion first.
-                    if (dataNode->type() == LoadType::DATA && containsTypeVar(type)) {
-                        // Decided when the generic function is instantiated.
+                    if (asTagged(type) != nullptr ||
+                        (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
+                        // Decided when the generic function is instantiated. A declared
+                        // `T?` / `T!` puts the value into that form (design principles 2.9;
+                        // DESIGN-QUESTION(nullable-error) Q1): a CAST, for any expression.
                         node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
                         *castNode << dataNode;
                         setOriginFromAst(
@@ -848,8 +854,11 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
 
-    // Create an ExitLoad node to represent the exit statement
-    node_ptr_t exitNode = createNodeAs<ExitLoad>();
+    // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
+    // it returns the failed form of the function's declared `T!` (the graph builder checks).
+    const bool isThrow = ast->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Throw;
+    node_ptr_t exitNode =
+        createNodeAs<ExitLoad>(isThrow ? ExitType::Throw : ExitType::Return);
 
     // Retrieve the data nodes associated with the exit statement
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
@@ -1280,22 +1289,39 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     // Handle different reserved operators
     switch (reservedExpr->op()) {
-    case AST::ReservedDataOp::NullThen: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("NullThen Operator");
-        res = visitData(lhsASTNode);
-    } break;
+    case AST::ReservedDataOp::NullThen:
     case AST::ReservedDataOp::ErrorThen: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("ErrorThen Operator");
-        res = visitData(lhsASTNode);
+        // `a ?? b` / `a !! b`: a branch on the tag of `a` whose first arm is `b` (design
+        // principles 2.9). The graph builder knows the types; it adds the arm that takes the
+        // value out of `a`.
+        const bool onNull = reservedExpr->op() == AST::ReservedDataOp::NullThen;
+        res               = createNodeAs<BrchLoad>(
+            onNull ? BrchLoad::Kind::NullThen : BrchLoad::Kind::ErrorThen);
+        // The node is located at the operator.
+        setOriginFromAst(
+            context_,
+            res,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.tagged.branch");
+        node_ptr_t lhsNode  = visitData(lhsASTNode);
+        node_ptr_t rhsNode  = visitData(ast->atAs<AST::DataLoad>(1));
+        node_ptr_t execNode = createNodeAs<ExecLoad>();
+        setOriginFromOrigin(
+            context_,
+            execNode,
+            nodeOrigin(rhsNode),
+            camel::source::OriginKind::GctNode,
+            "gct.tagged.fallback");
+        *execNode << rhsNode;
+        node_ptr_t caseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
+        *caseNode << execNode;
+        *res << lhsNode << caseNode;
     } break;
     case AST::ReservedDataOp::NotNullThen: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("NotNullThen Operator");
+        // The marked receiver of `x ?-> f` is taken apart where the call is lowered (Call,
+        // below); it does not occur anywhere else.
+        ASSERT(false, "The receiver of '?->' is lowered with its call.");
         res = visitData(lhsASTNode);
     } break;
 
@@ -1312,8 +1338,29 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         };
         std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(calleeNode)};
         int32_t argSlot                                      = 0;
+        // `x ?-> f`: the receiver is marked (NotNullThen). The call becomes the arm of a
+        // branch on the tag of `x`, taken when `x` has not failed, and receives the value
+        // taken out of `x` under a reserved name (design principles 2.9).
+        node_ptr_t passedNode       = nullptr;
+        AST::node_ptr_t passOperator = nullptr;
         for (auto &argNode : *argsNode) {
-            node_ptr_t gctArg = visitData(argNode);
+            node_ptr_t gctArg;
+            const auto &argData = argNode->loadAs<AST::DataLoad>();
+            if (argData->dataType() == AST::DataType::ReservedExpr &&
+                argNode->loadAs<AST::ReservedExprLoad>()->op() ==
+                    AST::ReservedDataOp::NotNullThen) {
+                passedNode   = visitData(argNode->atAs<AST::DataLoad>(0));
+                passOperator = argNode;
+                gctArg     = createNodeAs<DRefLoad>(Reference(kPassedValueName));
+                setOriginFromOrigin(
+                    context_,
+                    gctArg,
+                    nodeOrigin(passedNode),
+                    camel::source::OriginKind::GctNode,
+                    "gct.tagged.passed");
+            } else {
+                gctArg = visitData(argNode);
+            }
             *res << gctArg;
             mergedInputs.push_back(nodeOrigin(gctArg));
             parts.push_back(semanticPart(
@@ -1338,6 +1385,28 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // }
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
+        if (passedNode != nullptr) {
+            node_ptr_t execNode = createNodeAs<ExecLoad>();
+            setOriginFromAst(
+                context_,
+                execNode,
+                ast,
+                camel::source::OriginKind::GctNode,
+                "gct.tagged.call");
+            *execNode << res;
+            node_ptr_t caseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+            *caseNode << execNode;
+            node_ptr_t brchNode = createNodeAs<BrchLoad>(BrchLoad::Kind::ErrorPass);
+            // Located at the operator, as the marked receiver is.
+            setOriginFromAst(
+                context_,
+                brchNode,
+                passOperator,
+                camel::source::OriginKind::GctNode,
+                "gct.tagged.branch");
+            *brchNode << passedNode << caseNode;
+            res = brchNode;
+        }
     } break;
 
     case AST::ReservedDataOp::Bind: {
@@ -1416,7 +1485,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         const auto &dstType    = visitType(rhsASTNode);
         // A conversion to a type written with a type variable is decided when the generic
         // function is instantiated, for a literal as for any other value.
-        if (dataNode->type() == LoadType::DATA && !containsTypeVar(dstType)) {
+        // A conversion into `T?` / `T!` is a CAST node for a literal too: the value is put
+        // into the form when the program runs.
+        if (dataNode->type() == LoadType::DATA && !containsTypeVar(dstType) &&
+            asTagged(dstType) == nullptr) {
             const auto &dataLoad = dataNode->loadAs<DataLoad>();
             const auto &data     = dataLoad->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
@@ -1650,7 +1722,21 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
         const auto &caseLoadType = aCaseNode->front()->type();
         node_ptr_t gCaseNode     = nullptr;
 
-        if (caseLoadType != AST::LoadType::Null) {
+        if (caseLoadType == AST::LoadType::Data &&
+            aCaseNode->front()->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref) {
+            // `case v` / `case error e`: the fixed patterns over a `T?` / `T!` (design
+            // principles 2.9). The graph builder, which knows the scrutinee's type, binds
+            // the name in the arm or reports the pattern.
+            const auto &pattern = aCaseNode->front();
+            const bool isError  = pattern->size() > 0;
+            const std::string name =
+                (isError ? pattern->front() : pattern)->loadAs<AST::RefDataLoad>()->ref().toString();
+            gCaseNode = createNodeAs<CaseLoad>(
+                isError ? CaseLoad::CaseType::Error : CaseLoad::CaseType::Bind,
+                name);
+            node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
+            *gCaseNode << caseExprNode;
+        } else if (caseLoadType != AST::LoadType::Null) {
             gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Value);
             node_ptr_t caseDataNode = visitData(aCaseNode->atAs<AST::DataLoad>(0));
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
@@ -2041,7 +2127,17 @@ NullableType : Type type ;
 Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
     ENTER("NullableType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for NullableType");
-    Type *type = visitType(ast->atAs<AST::TypeLoad>(0));
+    Type *payload       = visitType(ast->atAs<AST::TypeLoad>(0));
+    const bool fallible = ast->loadAs<AST::NullableTypeLoad>()->fallible();
+    // The same mark twice (`T??`, `T!!`) adds nothing a program could tell apart; `T?!` and
+    // `T!?` are allowed (DESIGN-QUESTION(nullable-error) Q2).
+    if (TupleType *inner = asTagged(payload); inner && inner->isFallible() == fallible) {
+        diags_->of(SemanticDiag::TaggedTypeNesting)
+            .at(ast->load()->tokenRange())
+            .commit(payload->toString() + (fallible ? "!" : "?"), inner->payloadType()->toString());
+        throw BuildAbortException();
+    }
+    Type *type = fallible ? TupleType::fallible(payload) : TupleType::nullable(payload);
     LEAVE("NullableType");
     return type;
 }

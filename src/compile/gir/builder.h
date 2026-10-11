@@ -420,6 +420,43 @@ class Builder {
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
+    /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
+    /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
+    node_handle_t buildBranch(
+        const GCT::node_ptr_t &gct, node_handle_t condNode,
+        const std::vector<compile_graph_ptr_t> *arms = nullptr);
+    /// The subgraph of one branch arm. Its body is the block `exec`, or what `body` builds
+    /// (called inside the arm's scope) when given; `exec` then only locates the arm.
+    compile_graph_ptr_t buildArmGraph(
+        const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
+
+    // ---- The tagged forms `T?` and `T!` (design principles 2.9;
+    // docs/technical/29_nullable_and_fallible_values.md). Each construct below is a branch on
+    // the one-bit tag of a value; nothing here adds a node kind. ----
+    /// `a ?? b`, `a !! b`, `x ?-> f`.
+    node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
+    /// `match x { case null => ..  case v => .. }` and `case error e` over a tagged `x`.
+    node_handle_t visitTaggedMatch(
+        const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::TupleType *type);
+    /// Binds `node` to a fresh name no program can write, so that arms can capture it.
+    std::string bindTemporary(node_handle_t node);
+    /// The call `op(<name>)` of one of the built-in operators over tagged values.
+    node_handle_t
+    applyTagOperator(const char *op, const std::string &name, const GCT::node_ptr_t &origin);
+    /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
+    node_handle_t castNodeTo(
+        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The return type the function around the current position declares (looking out of
+    /// branch arms), or nullptr when it declares none.
+    camel::core::type::Type *declaredExitTypeHere() const;
+    /// What `return value` / `throw value` hands back: the value put into the declared
+    /// `T?` / `T!`, or the failed form of the declared `T!`.
+    node_handle_t adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value);
+    /// `file:line:column` of an origin, for the `location` of an error; empty when unknown.
+    std::string sourceLocationOf(uint64_t origin) const;
+    /// Branch arms whose body is being built.
+    std::unordered_set<DraftGraphBuilder *> openArmGraphs_;
+    size_t tagTemporaries_ = 0;
     node_handle_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExecNode(const GCT::node_ptr_t &gct);

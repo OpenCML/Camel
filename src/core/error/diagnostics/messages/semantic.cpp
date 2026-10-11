@@ -454,6 +454,76 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ThrowOutsideFallible,
+            {
+                "ThrowOutsideFallible",
+                "'throw' needs a function declared to return 'T!': {0}.",
+                "'throw e' returns an error value, as 'return' returns a value, so the "
+                "function it stands in must declare a fallible return type, for example "
+                "'func f(): int! {{ ... }}'. It does not unwind to a caller.",
+            },
+        },
+        {
+            SemanticDiag::ThrowNotAnError,
+            {
+                "ThrowNotAnError",
+                "'throw' takes an error value, not a value of type '{0}'.",
+                "Make one with 'error(kind, message)', for example "
+                "'throw error(\"ParseError\", \"not a number\")', or hand on the one a "
+                "'case error e' bound.",
+            },
+        },
+        {
+            SemanticDiag::TaggedTypeNesting,
+            {
+                "TaggedTypeNesting",
+                "The type '{0}' marks '{1}' twice.",
+                "'T?' may be null and 'T!' may have failed; a second mark of the same kind "
+                "adds nothing a program could tell apart. 'T?!' and 'T!?' are allowed.",
+            },
+        },
+        {
+            SemanticDiag::TaggedValueNotOpened,
+            {
+                "TaggedValueNotOpened",
+                "A value of type '{0}' cannot be used here: {1}.",
+                "A value that may be null ('T?') or may have failed ('T!') is opened only by "
+                "'?" "?', '!!', '?->' and by 'match' with 'case null' / 'case error e'.",
+            },
+        },
+        {
+            SemanticDiag::TryCatchNotInLanguage,
+            {
+                "TryCatchNotInLanguage",
+                "'try'/'catch' is not part of Camel.",
+                "An operation that can fail returns a value of type 'T!'. Give a fallback "
+                "with 'a !! b', hand an error on with 'x ?-> f', or inspect it with 'match r "
+                "{{ case error e => ... case v => ... }}'. Faults (division by zero, an index "
+                "out of range) are not errors and end the program; isolating them is the "
+                "job of the fault-isolation operator.",
+            },
+        },
+        {
+            SemanticDiag::TaggedOperandMismatch,
+            {
+                "TaggedOperandMismatch",
+                "'{0}' cannot be applied here: {1}.",
+                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T'. 'a !! b' needs 'a' of "
+                "type 'T!' and 'b' of type 'T'. 'x ?-> f' needs 'x' of type 'T!' and a "
+                "function 'f' that takes a 'T'.",
+            },
+        },
+        {
+            SemanticDiag::TaggedMatchCases,
+            {
+                "TaggedMatchCases",
+                "This 'match' on a value of type '{0}' is not well formed: {1}.",
+                "A 'match' on a 'T?' has exactly the cases 'case null' and one other "
+                "('case v' binds the value, 'case _' ignores it). A 'match' on a 'T!' has "
+                "exactly 'case error e' and one other.",
+            },
+        },
+        {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",

@@ -23,12 +23,14 @@
 #include "camel/utils/assert.h"
 
 #include <span>
+#include <string_view>
 #include <vector>
 
 namespace camel::core::type {
 
 // Forward declaration.
 class TupleType;
+class StructType;
 
 // Layout information: compute once to avoid duplication.
 struct TupleTypeLayout {
@@ -103,6 +105,26 @@ class TupleType : public CompositeType {
     static TupleType *cell(Type *valueType);
     bool isCell() const { return cell_; }
 
+    /// The two built-in tagged forms (design principles 2.9; the layout and the reasons for
+    /// it are in docs/technical/29_nullable_and_fallible_values.md). Like a cell, each has
+    /// the layout of a tuple and is a distinct type; equal payload types yield the same
+    /// object.
+    ///  - `T?` (nullable): the null slot when null, otherwise a one-slot tuple `(T)`.
+    ///  - `T!` (fallible): a two-slot tuple `(T, Error)` whose second slot is the null slot
+    ///    unless the operation failed.
+    enum class Tag : uint8_t { None, Nullable, Fallible };
+    static TupleType *nullable(Type *payloadType);
+    static TupleType *fallible(Type *payloadType);
+    Tag tag() const { return tag_; }
+    bool isTagged() const { return tag_ != Tag::None; }
+    bool isNullable() const { return tag_ == Tag::Nullable; }
+    bool isFallible() const { return tag_ == Tag::Fallible; }
+    /// `T` of a `T?` or `T!`.
+    Type *payloadType() const {
+        ASSERT(isTagged(), "payloadType() is defined for T? and T! only");
+        return typeAt(0);
+    }
+
     // Helper: build from raw data (internal use).
     static TupleType *fromFactoryData(
         const Type *const *types, const TypeCode *typeCodes, const size_t *refs, size_t size,
@@ -136,6 +158,10 @@ class TupleType : public CompositeType {
     virtual Type *clone(bool deep = false) const override;
     virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
+    /// Puts a value into a tagged form (`T -> T?`, `T -> T!`, `Error -> T!`, `U! -> T!` for a
+    /// failed value): the CAST node of `v as T?`, of `return v` under a declared `T!`, and
+    /// of `throw e`.
+    virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
     /// Widens every element type, so `var` bindings never hold refined aggregates (mutation
     /// through `var` parameters would otherwise break covariant assignability).
@@ -152,6 +178,7 @@ class TupleType : public CompositeType {
     TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &types);
 
     bool cell_ = false;      // A variable cell, see cell().
+    Tag tag_   = Tag::None;  // A tagged form, see nullable() and fallible().
     size_t size_;            // Element count.
     size_t refCount_;        // Number of reference indices.
     Type **typesPtr_;        // Pointer to the types array (computed at construction).
@@ -168,6 +195,31 @@ class TupleType : public CompositeType {
     const TypeCode *typeCodesPtr() const { return typeCodesPtr_; }
     const size_t *refsPtr() const { return refsPtr_; }
 };
+
+/// The fixed built-in error structure (design principles 2.9): `{ kind: string, message:
+/// string, location: string }`. One object; every fallible type carries it.
+StructType *errorType();
+/// Field indices of errorType(), in its own field order.
+size_t errorFieldIndex(std::string_view name);
+
+/// `type` as a tagged tuple type, or nullptr when it is not `T?` / `T!`.
+inline TupleType *asTagged(Type *type) {
+    if (type && type->code() == TypeCode::Tuple) {
+        auto *tuple = static_cast<TupleType *>(type);
+        if (tuple->isTagged()) {
+            return tuple;
+        }
+    }
+    return nullptr;
+}
+inline TupleType *asNullable(Type *type) {
+    TupleType *tuple = asTagged(type);
+    return tuple && tuple->isNullable() ? tuple : nullptr;
+}
+inline TupleType *asFallible(Type *type) {
+    TupleType *tuple = asTagged(type);
+    return tuple && tuple->isFallible() ? tuple : nullptr;
+}
 
 /// The type of the value an argument of type `type` carries: the content type of a variable
 /// cell, `type` itself otherwise. Overloads are resolved on value types.

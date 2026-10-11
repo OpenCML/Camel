@@ -126,8 +126,9 @@ parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
 angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 
+// `identRef identDef` is the fixed pattern `error e` (a failed `T!`, its error bound to `e`).
 pattern
-    : identRef
+    : identRef identDef?
     | literal
     | '(' (dataList | identList)? ','? ')'
     | '{' (pairedValues | identList)? ','? '}'
@@ -253,8 +254,10 @@ literal
     | NULL
     ;
 
+// `T?` may be null, `T!` may have failed (design principles 2.9); the marks combine (`T?!`).
+// `T ? U` is an earlier reserved form (undecided, not implemented).
 typeExpr
-    : unionType ('?' unionType?)?
+    : unionType (('?' | '!')+ | '?' unionType)?
     ;
 
 unionType

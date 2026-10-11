@@ -46,17 +46,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "semantic.throw_not_supported"
-desc = "`throw` is rejected at compile time with ConstructNotSupported at the statement; it is no longer compiled as `return`."
+name = "semantic.throw_outside_fallible"
+desc = "`throw` returns an error value, so the function around it must declare a `T!`: in a function returning `int` it is ThrowOutsideFallible at the statement. (It used to be reported as not supported, and before that compiled as `return`.)"
 kind = "negative"
-case = "../../../cases/compile/semantic/throw_not_supported.cml"
+case = "../../../cases/compile/semantic/throw_outside_fallible.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_name = "SemanticDiag::ThrowOutsideFallible"
+expect_diagnostic_code = "0x03000060"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 9
-expect_output_contains = ["'throw' is not supported: exceptions are not implemented."]
+expect_output_contains = ["'throw' needs a function declared to return 'T!': the function around it returns 'i64'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
@@ -78,36 +78,36 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "semantic.try_not_supported"
-desc = "`try` / `catch` / `finally` is rejected at compile time with ConstructNotSupported at `try`, instead of an internal error without a position."
+name = "semantic.try_not_in_language"
+desc = "`try` / `catch` / `finally` is not part of the language (design principles 2.9): TryCatchNotInLanguage at `try`, pointing to `!!`, `?->`, `match` and fault isolation."
 kind = "negative"
-case = "../../../cases/compile/semantic/try_not_supported.cml"
+case = "../../../cases/compile/semantic/try_not_in_language.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_name = "SemanticDiag::TryCatchNotInLanguage"
+expect_diagnostic_code = "0x03000064"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 5
-expect_output_contains = ["'try' is not supported: exceptions are not implemented."]
+expect_output_contains = ["'try'/'catch' is not part of Camel.", "'a !! b'", "'x ?-> f'", "case error e", "fault-isolation operator"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
-name = "semantic.try_not_supported_json"
-desc = "The not-supported diagnostic in JSON: one error, stage typecheck, the range of the whole try expression, the file; stdout is nothing but the array."
+name = "semantic.try_not_in_language_json"
+desc = "The diagnostic for `try` in JSON: one error, stage typecheck, the range of the whole try expression, the file; stdout is nothing but the array."
 kind = "behavior"
-case = "../../../cases/compile/semantic/try_not_supported.cml"
+case = "../../../cases/compile/semantic/try_not_in_language.cml"
 args = ["--output-format", "json", "${case}"]
 expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
 assert(diags.length === 1, 'one diagnostic, got ' + diags.length)
 const d = diags[0]
-assert(d.severity === 'Error' && d.data.name === 'SemanticDiag::ConstructNotSupported', d.severity + ' ' + d.data.name)
+assert(d.severity === 'Error' && d.data.name === 'SemanticDiag::TryCatchNotInLanguage', d.severity + ' ' + d.data.name)
 assert(d.data.stage === 'typecheck', 'stage ' + d.data.stage)
 assert(d.range.start.line === 8 && d.range.start.character === 4 && d.range.end.line === 14, 'range ' + JSON.stringify(d.range))
-assert(d.data.modulePath.endsWith('try_not_supported.cml'), 'file ' + d.data.modulePath)
+assert(d.data.modulePath.endsWith('try_not_in_language.cml'), 'file ' + d.data.modulePath)
 assert(input.stderr === '', 'stderr empty')
 """
 normalizers = ["strip_ansi", "normalize_newlines"]

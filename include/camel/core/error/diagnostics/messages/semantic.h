@@ -78,6 +78,15 @@ enum class SemanticDiag : uint32_t {
     GenericFunctionUnsupported   = 0x000057,
     // Functions as values.
     FunctionNameAsValue          = 0x000060,
+    // Nullable and fallible values (design principles 2.9;
+    // docs/technical/29_nullable_and_fallible_values.md).
+    ThrowOutsideFallible         = 0x000070,
+    ThrowNotAnError              = 0x000071,
+    TaggedTypeNesting            = 0x000072,
+    TaggedValueNotOpened         = 0x000073,
+    TryCatchNotInLanguage        = 0x000074,
+    TaggedOperandMismatch        = 0x000075,
+    TaggedMatchCases             = 0x000076,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

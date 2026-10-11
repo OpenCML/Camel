@@ -38,6 +38,7 @@
 
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/tuple.h"
 
 #include <string>
 #include <utility>
@@ -133,6 +134,11 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings);
 /// without duplicates. A `typeas` inside a union or among the arguments of a module type is
 /// not among them: there is no position of the argument type to take it from.
 void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names);
+
+/// A `T??` or `T!!` anywhere in `type`, or nullptr: the same mark twice, which a type
+/// expression rejects where it is written and which substitution can still produce
+/// (`(typeas T)?` with `T = int?`).
+TupleType *findRepeatedMark(Type *type);
 
 /// `T = int, U = string`, for diagnostics and instance names.
 std::string typeBindingsToString(const type_bindings_t &bindings);
