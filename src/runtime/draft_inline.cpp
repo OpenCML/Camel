@@ -383,8 +383,22 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             canonicalId           = withInputs.empty() ? kInvalidNodeRef : withInputs.back();
             continue;
         }
-        if (header->kind == GCNodeKind::Copy || header->kind == GCNodeKind::Cast ||
-            header->kind == GCNodeKind::Dref) {
+        if (header->kind == GCNodeKind::Cast) {
+            // A CAST computes a value: `7 as float` is 7.0, not the bits of the integer 7.
+            // Looking through it bound the unconverted constant to the parameter (f(i as
+            // float) computed with 0.0...035 instead of 7.0). Only a CAST between equal
+            // types forwards its input; a constant under any other CAST becomes a static
+            // value when std::opt::fold has evaluated the conversion.
+            const auto normInputs = draft.normInputsOf(canonicalId);
+            const DraftNodeHeader *source =
+                normInputs.empty() ? nullptr : draft.header(normInputs.front());
+            if (!source || !source->dataType || source->dataType != header->dataType) {
+                return resolved;
+            }
+            canonicalId = normInputs.front();
+            continue;
+        }
+        if (header->kind == GCNodeKind::Copy || header->kind == GCNodeKind::Dref) {
             const auto normInputs = draft.normInputsOf(canonicalId);
             canonicalId           = normInputs.empty() ? kInvalidNodeRef : normInputs.front();
             continue;
