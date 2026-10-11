@@ -1490,7 +1490,11 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
     // Names declared inside the initializer are not part of this declaration.
     const bool isVar   = std::exchange(declaresVariable_, false);
-    node_handle_t node = valueNodeOf(visit(gct->at(0)));
+    // A function named as the initializer is bound as its function value (`let g = f`), so
+    // that the name can be captured and returned like any other value. A name without a
+    // single function value (an operator, a set of overloads) stays bound to what it names
+    // and can be called where it was bound.
+    node_handle_t node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
     declaresVariable_  = isVar;
     // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
@@ -1891,6 +1895,10 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (optNode.has_value()) {
         node_handle_t node = optNode.value();
         if (!sameGraph(node, currGraph_)) {
+            // A name bound to an operator or to a set of overloads has no value that a
+            // capture could hold (it was captured as a port of type void, and the call of
+            // it then failed with "Function of type 'void' cannot be called").
+            rejectNameWithoutValue(node, name, gct);
             node = resolveCrossGraphRef(node, name);
             ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
         }
@@ -2092,6 +2100,42 @@ node_handle_t Builder::valueNodeOf(const std::any &res) {
     return any_cast<node_handle_t>(res);
 }
 
+node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        return node;
+    }
+    // A function named as a value: a decorated function yields what its decorators return, a
+    // plain one its function value.
+    const auto &target = nodeGraphOf(node)->drefTarget(node);
+    if (std::holds_alternative<graph_ptr_t>(target)) {
+        return lowerDecoratedGraphValue(std::get<graph_ptr_t>(target), origin);
+    }
+    if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+        auto graphs = asCompileGraphVec(target);
+        if (graphs && graphs->size() == 1) {
+            return createFuncDataNode(graphs->front(), true, false);
+        }
+    }
+    return node;
+}
+
+void Builder::rejectNameWithoutValue(
+    node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        return;
+    }
+    const auto &target = nodeGraphOf(node)->drefTarget(node);
+    std::string what   = "an operator with several signatures";
+    if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+        auto graphs = asCompileGraphVec(target);
+        what        = std::format("{} functions of that name", graphs ? graphs->size() : 0);
+    }
+    diags_->of(SemanticDiag::FunctionNameAsValue)
+        .atOrigin(origin->load()->origin())
+        .commit(name, what);
+    throw BuildAbortException();
+}
+
 node_handle_t Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
@@ -2158,6 +2202,14 @@ node_handle_t Builder::createFuncDataNode(
 
     // allowParameterization = false
     if (resolved) {
+        if (callableAsResult && graph->parameterized() && graph->funcType()->hasExitType() &&
+            graph->funcType()->closureRefsCount() > 0) {
+            // A direct call has turned the captures of `graph` into with-parameters, which
+            // each direct call passes. A function value has no place for them: called through
+            // the value, the function read parameters nobody had set. The value is therefore
+            // that of a function which captures the same names and passes them on.
+            return createFuncDataNode(forwardingGraphOf(graph), true, false);
+        }
         if (callableAsResult) {
             const auto slotIndex = currGraph_->addStaticSlot(
                 camel::core::rtdata::toSlot<StaticFunction *>(staticFunc),
@@ -2228,6 +2280,71 @@ node_handle_t Builder::createFuncDataNode(
     // used only after all updates finish.
     usedGraphs_.insert(graph.get());
     return resultNode;
+}
+
+compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target) {
+    FunctionType *targetType = target->funcType();
+    // Its own type object (a graph completes its function type in place): the declared
+    // parameters and result of the target, and no captures yet.
+    FunctionTypeFactory factory;
+    factory.setModifiers(targetType->modifiers());
+    factory.setExitType(targetType->exitType());
+    const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
+        return argIndex < targetType->argNamesCount() ? std::string(targetType->argNameAt(argIndex))
+                                                      : std::format("{}{}", prefix, i);
+    };
+    for (size_t i = 0; i < targetType->withTypesCount(); ++i) {
+        factory
+            .addWithArg(nameAt(i, "__w", i), targetType->withTypeAt(i), targetType->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < targetType->normTypesCount(); ++i) {
+        factory.addNormArg(
+            nameAt(targetType->withTypesCount() + i, "__n", i),
+            targetType->normTypeAt(i),
+            targetType->normIsVarAt(i));
+    }
+    FunctionType *type = factory.build();
+
+    compile_graph_ptr_t graph = enterScope(type);
+    try {
+        auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+        auto targetOrigin  = sourceContext
+                                 ? sourceContext->debugMap().graphOrigin(target->stableId())
+                                 : camel::source::kInvalidOriginId;
+        if (sourceContext && targetOrigin != camel::source::kInvalidOriginId) {
+            sourceContext->debugMap().registerGraphOrigin(graph->stableId(), targetOrigin);
+        }
+        bodyStates_[graph.get()] = BodyState::Open;
+        graph->addDependencyGraph(target);
+        // The call the target's direct callers make: the captured names first, bound where
+        // the call stands (here they become captures of this graph), then the arguments.
+        node_handle_t call = graph->addFuncNode(target, 0);
+        if (isMacroGraph(target)) {
+            setNodeMacro(call, true);
+        }
+        for (const auto &ref : targetType->closureRefs()) {
+            linkNodes(LinkType::With, resolveNodeByRef(std::string(ref)), call);
+        }
+        for (draft_node_ref_t port : graph->draft().withPorts()) {
+            linkNodes(LinkType::With, graph->draft().node(port), call);
+        }
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            linkNodes(LinkType::Norm, graph->draft().node(port), call);
+        }
+        bindGraphScopedFuncNodeDebug(sourceContext, targetOrigin, target, call);
+        // The summaries see the target as a function this graph calls: what the target
+        // writes of the captured variables, this graph writes.
+        (void)capturedUsesOf(target);
+        setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), targetType->exitType());
+        bodyStates_[graph.get()] = BodyState::Built;
+        builtBodies_.push_back(graph);
+    } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return graph;
 }
 
 node_handle_t
@@ -2322,23 +2439,7 @@ node_handle_t Builder::argumentNodeOf(const std::any &res, const GCT::node_ptr_t
         return createFuncDataNode(any_cast<graph_ptr_t>(res), true, false);
     }
     ASSERT(res.type() == typeid(node_handle_t), "Argument did not produce a value node.");
-    node_handle_t node = any_cast<node_handle_t>(res);
-    if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
-        return node;
-    }
-    // A function named as a value: a decorated function yields what its decorators return, a
-    // plain one its function value.
-    const auto &target = nodeGraphOf(node)->drefTarget(node);
-    if (std::holds_alternative<graph_ptr_t>(target)) {
-        return lowerDecoratedGraphValue(std::get<graph_ptr_t>(target), origin);
-    }
-    if (std::holds_alternative<graph_vec_ptr_t>(target)) {
-        auto graphs = asCompileGraphVec(target);
-        if (graphs && graphs->size() == 1) {
-            return createFuncDataNode(graphs->front(), true, false);
-        }
-    }
-    return node;
+    return functionValueOf(any_cast<node_handle_t>(res), origin);
 }
 
 StaticArg Builder::staticArgOf(node_handle_t node) const {
@@ -3260,7 +3361,18 @@ node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     ENTER("EXIT");
-    node_handle_t resNode      = valueNodeOf(visit(gct->at(0)));
+    // `return f`: the function value of a function named here. The name itself is not a
+    // value, and left in place it reached the end of compilation as a DREF node.
+    node_handle_t resNode = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+    if (nodeIsKind(resNode, runtime::GCNodeKind::Dref)) {
+        const auto &returned = gct->at(0);
+        rejectNameWithoutValue(
+            resNode,
+            returned->type() == GCT::LoadType::DREF
+                ? returned->loadAs<GCT::DRefLoad>()->ref().toString()
+                : std::string("the returned name"),
+            gct);
+    }
     node_handle_t outputAnchor = resNode;
     node_vec_t pendingCtrlInputs;
     if (auto modifier = modifierOf(resNode); modifier.has_value()) {

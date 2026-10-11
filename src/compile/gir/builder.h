@@ -316,6 +316,18 @@ class Builder {
     node_handle_t valueNodeOf(const std::any &res);
     // The value node of a call or with-argument: also lowers functions named as values.
     node_handle_t argumentNodeOf(const std::any &res, const GCT::node_ptr_t &origin);
+    // `node` when it is a value; when it is the name of exactly one function (a DREF node),
+    // that function's value. A name that stands for an operator or for several overloads has
+    // no single value and is returned as it is.
+    node_handle_t functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin);
+    // Reports FunctionNameAsValue at `origin` when `node` is still such a name (`name`) in
+    // a place that needs a value.
+    void rejectNameWithoutValue(
+        node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
+    // A function with the declared parameters of `target` that captures the names `target`
+    // captured and calls it with them: what a function value of `target` refers to once the
+    // captures of `target` have become with-parameters (createFuncDataNode).
+    compile_graph_ptr_t forwardingGraphOf(const compile_graph_ptr_t &target);
     // The function a decorated graph produces when its decorators run.
     node_handle_t lowerDecoratedGraphValue(
         const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);

@@ -76,6 +76,8 @@ enum class SemanticDiag : uint32_t {
     GenericInstantiationTooDeep  = 0x000055,
     TypeFunctionArguments        = 0x000056,
     GenericFunctionUnsupported   = 0x000057,
+    // Functions as values.
+    FunctionNameAsValue          = 0x000060,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

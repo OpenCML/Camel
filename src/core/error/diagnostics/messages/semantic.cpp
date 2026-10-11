@@ -413,6 +413,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "This use of a generic function is not supported.",
             },
         },
+        {
+            SemanticDiag::FunctionNameAsValue,
+            {
+                "FunctionNameAsValue",
+                "'{0}' is used as a value here, but it names {1}, not one function.",
+                "Only a name that stands for exactly one function has a function value. Wrap "
+                "the call in a function whose parameter types are written out, e.g. "
+                "'(x: int) => {0}(x)'.",
+            },
+        },
 
         {
             SemanticDiag::FeatureNotSupported,
