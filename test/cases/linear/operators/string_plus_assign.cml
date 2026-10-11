@@ -1,0 +1,24 @@
+/**
+ * `+=` on a string variable appends. It used to compile and leave the variable unchanged
+ * (progen finding F28). Also through a `var` parameter.
+ */
+module string_plus_assign
+
+sync func append(var t: string, x: string): string sync {
+    t += x
+    return t
+}
+
+func main(): int sync {
+    var s = 'a'
+    s += 'b'
+    println(s)
+    s += s
+    println(s)
+    var e = ''
+    e += ''
+    println(len(e))
+    println(append(s, 'z'))
+    println(s)
+    return 0
+}

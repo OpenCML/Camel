@@ -92,7 +92,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/assn_add_l", __builtin__assn_add_l__},
         {"op/assn_add_f", __builtin__assn_add_f__},
         {"op/assn_add_d", __builtin__assn_add_d__},
-        {"op/assn_add_s", __not_implemented__},
+        {"op/assn_add_s", __builtin__assn_add_s__},
         {"op/assn_add", __not_implemented__},
 
         {"op/assn_sub_i", __builtin__assn_sub_i__},

@@ -131,3 +131,95 @@ assert(out === want, `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "string_plus_assign.nvm"
+desc = "+= on a string variable appends, also through a var parameter; it used to leave the variable unchanged (progen F28) (nvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ab",
+  "abab",
+  "0",
+  "ababz",
+  "ababz",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_plus_assign.fvm"
+desc = "+= on a string variable appends, also through a var parameter; it used to leave the variable unchanged (progen F28) (fvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ab",
+  "abab",
+  "0",
+  "ababz",
+  "ababz",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_plus_assign.jit"
+desc = "+= on a string variable appends, also through a var parameter; it used to leave the variable unchanged (progen F28) (jit)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ab",
+  "abab",
+  "0",
+  "ababz",
+  "ababz",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_plus_assign.prl"
+desc = "+= on a string variable appends, also through a var parameter; it used to leave the variable unchanged (progen F28) (prl)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ab",
+  "abab",
+  "0",
+  "ababz",
+  "ababz",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

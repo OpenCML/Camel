@@ -30,6 +30,7 @@ slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, camel::core::cont
 slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_add_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_add_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_sub_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

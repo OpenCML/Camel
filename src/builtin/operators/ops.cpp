@@ -99,6 +99,13 @@ slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(lhs);
 }
 
+slot_t __builtin__assn_add_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *cell    = variableOf(norm);
+    String *result = String::concat(cell->get<String *>(0), norm.get<String *>(1), mm::autoSpace());
+    cell->set<slot_t>(0, toSlot(result), static_cast<TupleType *>(norm.type(0)));
+    return toSlot(result);
+}
+
 slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     Int32 lhs = cell->get<Int32>(0);
