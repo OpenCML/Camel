@@ -60,7 +60,8 @@
   "expected": [
    ""
   ],
-  "class": "effect order lost"
+  "class": "effect order lost",
+  "fixed": "inline: a body stays inside the branch arm its call was in"
  },
  {
   "id": "F06",
@@ -73,7 +74,8 @@
   "expected": [
    "false"
   ],
-  "class": "effect order lost"
+  "class": "effect order lost",
+  "fixed": "inline: a body stays inside the branch arm its call was in"
  },
  {
   "id": "F07",
