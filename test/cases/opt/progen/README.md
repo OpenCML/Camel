@@ -16,10 +16,12 @@ prints, per finding, whether it still fails as recorded. All 33 failed on every 
 was written (2026-10-11, branch `lane/gen`, Linux container, release build). None is in the
 default test set; the test plan `feat/opt/progen` runs only seeds that pass.
 
-**Fixed since** (branch `lane/frontend-fixes`): F25 to F31 and F33, the failures without any
-pass except F24. Their rows name the commit; each has a test in the default set, and
-`progen.py findings` reports them as "does not fail". For the others, **nothing was fixed, and
-the compiler code was not read to confirm a cause** (except where a source file is named). The "class" column is a judgement from the symptom and the
+**Fixed since**: F25 to F31 and F33, the failures without any pass except F24 (branch
+`lane/frontend-fixes`), and the findings of cause C1 (branch `lane/simplify-fixes`). Their rows
+name the commit; each has a test in the default set, and `progen.py findings` reports them as
+"does not fail". Findings traced to a cause but not fixed say so in their row; see "Root causes"
+below. For the others, **nothing was fixed, and the compiler code was not read to confirm a
+cause** (except where a source file is named). The "class" column is a judgement from the symptom and the
 reduced program, using the five classes of the roadmap (effect order lost; a written variable
 taken for one value; branch arms; macro operands inlined early; unbounded growth) and
 "(other)" where none fits. Two findings of one class may have one cause, and one reduced
@@ -91,14 +93,14 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 | F03 | `opt_untaken_arm_effect.cml` | `std::opt` | all | nothing | `L2 0 0 0 0` (a lambda in the arm of `if false` runs) | branch arm |
 | F04 | `inline_statement_effect_lost.cml` | `std::inline` | all | `pq` | nothing (a `println` statement of `main` is dropped) | effect order lost |
 | F05 | `opt_statement_effect_lost.cml` | `std::opt` | all | an empty line | nothing (the first `println` of `main` is dropped) | effect order lost |
-| F06 | `opt_lambda_effect_lost.cml` | `std::opt` | all | `false` | nothing (effect of a call with unused result in a sync lambda) | effect order lost |
-| F07 | `simplify_nested_function_effect_lost.cml` | `std::opt::simplify` | all | an empty line | nothing (`println` of a nested sync function) | effect order lost |
-| F08 | `inline_dce_arm_effect_lost.cml` | `std::inline std::opt::dce` | all | an empty line | nothing (`println` of the taken arm) | branch arm |
+| F06 | `opt_lambda_effect_lost.cml` | `std::opt` | all | `false` | nothing (effect of a call with unused result in a sync lambda) | effect order lost. **Fixed in `741b8705`** (cause C1) |
+| F07 | `simplify_nested_function_effect_lost.cml` | `std::opt::simplify` | all | an empty line | nothing (`println` of a nested sync function) | effect order lost. **Fixed in `741b8705`** (cause C1) |
+| F08 | `inline_dce_arm_effect_lost.cml` | `std::inline std::opt::dce` | all | an empty line | nothing (`println` of the taken arm) | branch arm. **Fixed in `741b8705`** (cause C1) |
 | F09 | `inline_fvm_arm_effect_lost.cml` | `std::inline` | fvm, jit | an empty line | nothing (`println` of the taken arm; nvm and prl print it) | branch arm |
 | F10 | `inline_unused_branch_effect_lost.cml` | `std::inline` | all | an empty line | nothing (`println` of the taken arm of an unused branch) | branch arm |
-| F11 | `simplify_arm_write_lost.cml` | `std::opt::simplify` | all | `a` | an empty line (a write made in the taken arm is lost) | written variable taken for one value |
-| F12 | `simplify_effect_order.cml` | `std::opt::simplify` | all | empty line, then `L1 0 0` | `L1 0 0`, then empty line | effect order lost |
-| F13 | `inline_dce_arm_value.cml` | `std::inline std::opt::dce` | all | `1` | `0` | branch arm |
+| F11 | `simplify_arm_write_lost.cml` | `std::opt::simplify` | all | `a` | an empty line (a write made in the taken arm is lost) | written variable taken for one value. **Fixed in `741b8705`** (cause C1; no variable is taken for one value) |
+| F12 | `simplify_effect_order.cml` | `std::opt::simplify` | all | empty line, then `L1 0 0` | `L1 0 0`, then empty line | effect order lost. Not fixed: cause C2, in the inliner |
+| F13 | `inline_dce_arm_value.cml` | `std::inline std::opt::dce` | all | `1` | `0` | branch arm. **Fixed in `741b8705`** (cause C1) |
 | F14 | `inline_branch_value_null.cml` | `std::inline` | nvm, fvm, jit | `L4 (0, [0]) 0` | `L4 null 0` | branch arm |
 | F15 | `inline_match_value_null.cml` | `std::inline` | all | `L6 { n: 5, tag:  }` | `L6 null` | branch arm |
 | F16 | `fold_inline_env_value.cml` | `std::opt::fold std::inline` | all | `L11 false 4` | `L11 false 0` (a value read from the environment) | (other) wrong value after inlining |
@@ -110,11 +112,12 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 | id | program | pipeline | schedulers | expected | actual | class |
 |---|---|---|---|---|---|---|
 | F18 | `inline_untaken_arm_fault.cml` | `std::inline` | all | nothing, exit 0 | `Array index out of bounds`, exit 1: the body of a call in the arm of `if false` runs | branch arm |
-| F19 | `simplify_recursion_never_ends.cml` | `std::opt::simplify` | nvm, prl | nothing, exit 0 | `MaxRecursionDepthExceeded` in graph `__g_10__` (fvm and jit finish) | unbounded growth |
+| F19 | `simplify_recursion_never_ends.cml` | `std::opt::simplify` | nvm, prl | nothing, exit 0 | `MaxRecursionDepthExceeded` in graph `__g_10__` (fvm and jit finish) | unbounded growth. Not fixed: cause C2, in the inliner (nothing grows; the recursion is two calls deep and one arm runs into the other) |
 | F20 | `inline_crash_function_argument.cml` | `std::inline` | all | nothing | segmentation fault | (other) crash after a rewrite |
 | F21 | `inline_crash_capturing_lambda.cml` | `std::inline` | all | nothing | segmentation fault | (other) crash after a rewrite |
 | F22 | `specialize_inline_crash.cml` | `std::specialize std::inline` | all | an empty line | segmentation fault | (other) crash after a rewrite |
-| F23 | `simplify_crash.cml` | `std::opt::simplify` | all | nothing | segmentation fault | (other) crash after a rewrite |
+| F23 | `simplify_crash.cml` | `std::opt::simplify` | all | nothing | segmentation fault | (other) crash after a rewrite. **Fixed in `741b8705`** (cause C1) |
+| F34 | `opt_permanent_space.cml` | `std::specialize std::opt` | all (the pass fails before any scheduler runs) | nothing, exit 0 | `PassInternalError`: "Permanent space exhausted (32 MB of types and layouts)", no position, exit 1 | unbounded growth (a query that allocates; cause C3) |
 
 ### Without any pass
 
@@ -162,6 +165,55 @@ Notes on single findings:
   each needs its particular shape (F01 passes when either the `var` declaration or the tuple
   result of the callee is removed).
 
+### Root causes
+
+Read from the graphs (`std::rgir` after each step of the smallest failing sequence) and the code.
+`std::opt::simplify` is rounds of `std::opt` (specialize, devirtualize, inline), fold and dce; it
+does not run cse.
+
+- **C1: an arm is looked for from its head only (F06, F07, F08, F11, F13, F23). Fixed in
+  `741b8705`** (regression tests: plan `feat/opt/progen_simplify`). The
+  schedulers run a taken arm as the range from its entry to its tail, and
+  `resolveRuntimeBranchArmEntry` (`src/execute/graph_runtime_support.cpp`) found the entry among
+  what follows the arm's recorded head. After inlining, an arm's nodes wait on the BRCH directly,
+  and the head can become a node nothing follows: dce removes the unused pure node after it (F11,
+  F23: `std::inline std::opt::dce`), or fold prunes the inner `if false` that held its only user
+  (F07: `std::inline std::opt::fold`). The arm was then taken to be empty: its effects did not run
+  and the JOIN read a slot never written (null; F23 crashes in `len(null)`). The rewritten graph
+  was right; all four schedulers misread it. The entry lookup now also takes what the tail depends
+  on inside the branch, which is how the execution order already lays an arm out.
+- **C2: an inlined body is not ordered after what its call was ordered after (F12, F19). Not
+  fixed: the code is the inliner's** (`collectExecutableEntryRoots` and the entry targets in
+  `src/runtime/draft_inline.cpp`). The entry roots of a callee are its executable nodes whose
+  inputs are all DATA or PORT. A node that reads a constant through a GATE is not one: fold's
+  pruning and specialization leave `GATE(constant)` in front of the first node of a body (a gate
+  that waited on a parameter which is now a constant), and inside one `std::opt` session such
+  gates are not dissolved yet. With no root, the call's control predecessors go to the gates of
+  the parameters, and a body that reads no parameter gets none of them.
+  - F12: the `println` of the inlined `w14` is not ordered after the `reduce` before the call
+    (second round: specialize, then inline, in one session).
+  - F19: the body inlined at the tail of an arm (a nested branch) does not wait on that arm, so
+    it lies outside the branch; the arm's tail is then laid out before the arm's entry, NodeVM and
+    Taskflow never reach the end of the arm and run into the other arm, which is the recursive one
+    (`std::opt std::opt::fold std::opt` is the smallest failing sequence).
+  Making a node that reaches no executable node through GATE / SYNC inputs an entry root makes
+  both pass on all four schedulers (tried, not committed). With that change 33 of the 34
+  programs of seeds 1-1000 that still fail after `741b8705` pass every cell tried (20 cells with
+  `std::inline`, `std::opt` or `std::opt::simplify`), so C2 is also behind most of the findings
+  filed under `std::inline`. The one left is seed 299 (`std::specialize std::inline`, a silent
+  mismatch; not reduced).
+- **C3: asking whether a value is written allocates in the space that is never freed (F34). Not
+  fixed** (the capacity of that space and its diagnostic are handled elsewhere). `isVarArgument`
+  (`src/runtime/draft_writes.cpp`) resolves the overload of an effectful operator through
+  `operFuncType` on every call, and the resolver builds a function type in the permanent space
+  each time. `isWrittenInPlace` asks it for every user of a value; the specialization probe of
+  the rewrite engine (`tryResolveStaticValue`) asks that for every argument of every call, again
+  after each inlined call. On seed 3293 the resolver ran 171,810 times before the limit (1,658
+  times in the run of `std::opt::simplify` alone, which passes); the graphs do not grow (79
+  graphs, 121 inlined calls, within the growth budget). So neither unbounded growth of the
+  program nor a program too large: the cost is per query. Fold and cse ask the same question for
+  every node.
+
 ### Seen, not reduced
 
 - **Results that change from run to run** after `std::inline`, `std::opt::simplify` or
@@ -177,8 +229,8 @@ Notes on single findings:
   of 10 runs after being copied elsewhere. They are not archived because they do not fail here.
 - **`Permanent space exhausted (32 MB of types and layouts)`** from `std::opt::simplify` in the
   frozen pipeline R22 on a 113-line program (batch F seed 3293), reported as
-  `RuntimeDiag::PassInternalError` without a position. `docs/cli.md` documents the limit; the
-  size of the program that reaches it is the observation.
+  `RuntimeDiag::PassInternalError` without a position. Since reduced to 17 lines and archived as
+  F34 (cause C3): it needs neither `std::opt::simplify` nor a large program.
 - **An effect lost under `std::inline`** in a program without `var`, captures or effectful
   functions (batch C seed 2508: a `println` of `main` before a `match` with a call in an arm
   that is not taken), and **`null` in place of a string** built in a function inlined into an

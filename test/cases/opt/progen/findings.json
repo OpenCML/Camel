@@ -399,5 +399,17 @@
    "[2]"
   ],
   "class": "(other) front end"
+ },
+ {
+  "id": "F34",
+  "file": "findings/opt_permanent_space.cml",
+  "pipeline": [
+   "std::specialize",
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "unbounded growth (a query that allocates in the permanent space)"
  }
 ]

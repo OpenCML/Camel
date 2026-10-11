@@ -1,0 +1,32 @@
+/**
+ * progen finding F34 (unbounded growth: a query that allocates, not a graph that grows).
+ *   `std::specialize std::opt` (and `std::specialize std::opt::simplify`) ends with
+ *   `Permanent space exhausted (32 MB of types and layouts)` on this program, whose `main` does
+ *   not even call the functions. The graphs stay small (11 graphs, 33 inlined calls); the space
+ *   goes to `operFuncType` (src/runtime/draft_writes.cpp), which resolves an operator's overload,
+ *   and so allocates a function type in the space that is never freed, every time
+ *   `isVarArgument` is asked about a user of a value (171,810 times before the limit on the
+ *   unreduced program, all from the specialization probe of the rewrite engine).
+ * Pipeline: std::specialize std::opt std::nvm
+ * Expected output: (nothing)
+ * Actual: REFUSED_UNLOCATED RuntimeDiag::PassInternalError: Pass 'std::opt' failed with an
+ *   internal error: Permanent space exhausted (32 MB of types and layouts), no position, exit 1.
+ * Reduced by test/tools/progen from seed 3293 (generator version 1, all features).
+ */
+module opt_permanent_space
+
+func r1(a2: int, a3: float): float {
+    return 1.0;
+}
+
+func r5(a6: int, a7: float, a8: float): float {
+    return if false then 1.0 else {
+        let n9 = r5(0, 0.25, a8);
+        let n10 = r5(a6, r1(9, 4.75), a8);
+        return [0]->reduce<(p11: float, p12: int): float => if false then n10 else n9, a8>;
+    };
+}
+
+func main(): int sync {
+    return 0;
+}
