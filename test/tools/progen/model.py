@@ -842,3 +842,17 @@ def heavy_graphs(prog: N) -> int:
 
 
 MAX_HEAVY = 34
+
+
+def static_faults(prog: N) -> list:
+    """Faults that are visible without running: a literal index outside a literal array, a
+    division by a literal zero. The design principles (2.7) make the first a compile-time
+    error, so a program that has one, even in code that never runs, is not a valid test of the
+    optimizer; the reducer must not shrink a program into one."""
+    out = []
+    for x in walk(prog):
+        if x.k == "idx" and x.c[0].k == "arr" and x.c[1].k == "lit" and not 0 <= x.c[1].a["v"] < len(x.c[0].c):
+            out.append("index")
+        if x.k == "bin" and x.a["op"] in ("/", "%") and x.c[1].k == "lit" and x.c[1].a["v"] == 0:
+            out.append("division")
+    return out

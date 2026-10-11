@@ -16,6 +16,7 @@ Outcomes of a cell:
   FRONTEND           a diagnostic of stage parse or typecheck (the generator wrote something
                      the compiler does not accept: a generator matter unless it only happens
                      with passes, which cannot be)
+  NOT_RUN            not run because MAX_CRASHES cells of the program had already crashed
 
 Reused from benchmarks/pipeline: how camel is invoked (`--output-format json`) and how its
 diagnostics array is split from the program's own output (run.split_diagnostics), what counts
@@ -74,6 +75,12 @@ REWRITES: Dict[str, List[str]] = {
     "macro+fold+cse+dce": ["std::macro", "std::opt::fold", "std::opt::cse", "std::opt::dce"],
 }
 QUICK = ["none", "inline", "fold", "cse", "dce", "simplify", "opt", "macro+opt"]
+# `cross`: every rewrite sequence on the node VM, and these on the other schedulers too.
+CROSS = ["none", "inline", "simplify", "opt", "macro+opt"]
+
+# A crashing process can take many seconds to go away (a system crash handler collects it), so
+# after this many crashed or hung cells the other cells of the program are not run (NOT_RUN).
+MAX_CRASHES = 4
 
 BAD = {"MISMATCH", "CRASH", "HANG", "RUN_ERROR", "ERROR_NO_DIAG", "REFUSED_UNLOCATED", "FRONTEND"}
 
@@ -92,6 +99,8 @@ def matrix(name: str = "full", backends: Optional[List[str]] = None) -> Dict[str
     names = QUICK if name == "quick" else list(REWRITES)
     for r in names:
         for b in backends:
+            if name == "cross" and b != "std::nvm" and r not in CROSS:
+                continue
             cells[f"{r}@{b.split('::')[-1]}"] = REWRITES[r] + [b]
     return cells
 
@@ -164,7 +173,14 @@ def run_program(source: str, env_values: dict, expected: List[str], cells: Dict[
     def go(d: Path):
         path = d / f"{name}.cml"
         path.write_text(source, encoding="utf-8", newline="\n")
-        return {cid: run_cell(path, passes, env_values, expected, timeout) for cid, passes in cells.items()}
+        out, crashes = {}, 0
+        for cid, passes in cells.items():
+            if crashes >= MAX_CRASHES:
+                out[cid] = {"outcome": "NOT_RUN", "detail": f"{MAX_CRASHES} cells of this program crashed"}
+                continue
+            out[cid] = run_cell(path, passes, env_values, expected, timeout)
+            crashes += out[cid]["outcome"] in ("CRASH", "HANG")
+        return out
     if workdir is not None:
         workdir.mkdir(parents=True, exist_ok=True)
         return go(workdir)

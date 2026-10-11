@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Lists the bad cells of a progen run, grouped, with the source line a diagnostic points at.
 
-    triage.py DIR [--outcome MISMATCH] [--limit 5] [--cell SUBSTR]
+    triage.py DIR [--outcome MISMATCH] [--limit 5] [--cell SUBSTR] [--patterns]
 
 DIR is the --out directory of `progen.py selfcheck` or `progen.py diff` (it reads
 DIR/failures/*.json and the sources beside them). Groups are keyed by outcome, diagnostic name
@@ -28,13 +28,39 @@ def key_of(info: dict) -> str:
     return f"{info['outcome']} {info.get('diag', '')} {detail[:150]}"
 
 
+def patterns(args) -> int:
+    """Programs grouped by which rewrite sequences fail and how (schedulers folded together)."""
+    groups = collections.defaultdict(list)
+    for path in sorted(Path(args.dir, "failures").glob("*.json"), key=lambda p: int(re.sub(r"\D", "", p.stem) or 0)):
+        case = json.loads(path.read_text(encoding="utf-8"))
+        per = collections.defaultdict(set)
+        unstable = False
+        for cid, info in case["bad"].items():
+            if args.outcome and info["outcome"] != args.outcome:
+                continue
+            rewrite, _, backend = cid.partition("@")
+            per[(rewrite, info["outcome"] + (":" + info["diag"].split("::")[-1] if info.get("diag") else ""))].add(backend or "-")
+            unstable = unstable or not info.get("stable", True)
+        if per:
+            key = "; ".join(f"{r} {o} [{','.join(sorted(b))}]" for (r, o), b in sorted(per.items()))
+            groups[key].append(str(case["seed"]) + ("~" if unstable else ""))
+    for key, seeds in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        print(f"== {len(seeds)} programs: seeds {' '.join(seeds[:16])}   (~ = not the same on every run)")
+        for part in key.split("; "):
+            print("     " + part)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("dir")
     ap.add_argument("--outcome")
     ap.add_argument("--cell")
     ap.add_argument("--limit", type=int, default=4)
+    ap.add_argument("--patterns", action="store_true", help="group programs by the set of failing rewrite sequences")
     args = ap.parse_args()
+    if args.patterns:
+        return patterns(args)
     groups = collections.defaultdict(list)
     for path in sorted(Path(args.dir, "failures").glob("*.json"), key=lambda p: int(re.sub(r"\D", "", p.stem) or 0)):
         case = json.loads(path.read_text(encoding="utf-8"))

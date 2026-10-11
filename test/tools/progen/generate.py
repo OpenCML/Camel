@@ -19,7 +19,7 @@ import random
 from typing import List, Optional
 
 from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, REC, STR, TUP, Reject, effect_violations,
-                   evaluate, heavy_graphs, walk)
+                   evaluate, heavy_graphs, static_faults, walk)
 
 FEATURES = {
     "float": "float arithmetic (exact values only), float(int), int(float), precision placeholders",
@@ -995,6 +995,8 @@ def generate(seed: int, features: frozenset = DEFAULT_FEATURES, module: Optional
             continue
         if effect_violations(prog):
             raise AssertionError(f"seed {seed}: generated an effect outside an effect position")
+        if static_faults(prog):
+            continue
         try:
             expected = evaluate(prog)
         except Reject:

@@ -3,10 +3,11 @@
 
     progen.py show      --seed N [--features LIST]            print the program and its reference
     progen.py selfcheck --seeds A-B [--features LIST] [--jobs J] [--out DIR]
-    progen.py diff      --seeds A-B [--matrix full|quick|frozen] [--backends LIST]
-                        [--features LIST] [--jobs J] --out DIR [--reduce K]
+    progen.py diff      --seeds A-B [--matrix full|cross|quick|frozen] [--backends LIST]
+                        [--features LIST] [--jobs J] --out DIR
     progen.py reduce    --seed N --cell ID [--matrix M] [--features LIST] --out DIR
     progen.py check                                           the fixed batch of the test plan
+    progen.py findings [--runs N]                             re-run the archived findings
 
 `selfcheck` runs every program once, without passes (the node VM), and reports how often the
 reference and the run agree: it tests the generator and its model of the semantics.
@@ -52,7 +53,9 @@ def one(seed: int, features, cells, out, keep_all=False):
     work = None if out is None else Path(out) / "work" / name
     res = run_program(source, prog.a["env"], expected, cells, work, name)
     bad = {cid: info for cid, info in res.items() if info["outcome"] in BAD}
-    for cid, info in bad.items():                       # is it the same on two more runs?
+    for n, (cid, info) in enumerate(bad.items()):       # is it the same on two more runs?
+        if info["outcome"] in ("CRASH", "HANG") and n >= 2:
+            continue                                    # crashes are slow to collect: two cells are enough
         again = [run_program(source, prog.a["env"], expected, {cid: cells[cid]}, work, name)[cid] for _ in range(2)]
         info["repeat"] = [signature(a) for a in again]
         info["stable"] = all(signature(a) == signature(info) and a.get("got") == info.get("got") for a in again)
@@ -69,15 +72,30 @@ def one(seed: int, features, cells, out, keep_all=False):
     return record
 
 
-def run_batch(seeds, features, cells, out, jobs):
+def run_batch(seeds, features, cells, out, jobs, resume=False):
     records = []
     started = time.time()
+    partial = None
+    if out is not None:                  # records as they finish, in case the batch is stopped
+        Path(out).mkdir(parents=True, exist_ok=True)
+        path = Path(out) / "results.partial.jsonl"
+        if resume and path.exists():
+            records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            done = {r["seed"] for r in records}
+            seeds = [s for s in seeds if s not in done]
+            print(f"  resuming: {len(records)} programs already recorded, {len(seeds)} to run", file=sys.stderr, flush=True)
+        partial = open(path, "a" if resume else "w", encoding="utf-8")
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = {pool.submit(one, s, features, cells, out): s for s in seeds}
         for n, fut in enumerate(concurrent.futures.as_completed(futures), 1):
             records.append(fut.result())
+            if partial:
+                partial.write(json.dumps(records[-1]) + chr(10))
+                partial.flush()
             if n % 100 == 0:
                 print(f"  {n}/{len(seeds)} programs, {time.time() - started:.0f} s", file=sys.stderr, flush=True)
+    if partial:
+        partial.close()
     records.sort(key=lambda r: r["seed"])
     return records
 
@@ -152,7 +170,7 @@ def cmd_diff(args):
         cells = {k: v for k, v in cells.items() if k in args.cells.split(",")}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    records = run_batch(seeds_of(args.seeds), features, cells, out, args.jobs)
+    records = run_batch(seeds_of(args.seeds), features, cells, out, args.jobs, args.resume)
     with open(out / "results.jsonl", "w", encoding="utf-8") as f:
         for r in records:
             f.write(json.dumps(r) + "\n")
@@ -217,24 +235,55 @@ def write_case(out: Path, name: str, prog, passes, seed, features, last, runs: i
     print(f"outcomes of {runs} runs of the written file: {dict(seen)}")
 
 
-# The fixed batch of the test plan (test/plans/feat/opt/progen.plan.toml): seeds and cells that
-# all pass today. Known failures are recorded in test/cases/opt/progen/ and are not run here.
-CHECK_SEEDS = "1-24"
-CHECK_CELLS = ["default", "none@fvm", "none@jit", "inline@nvm", "fold@nvm", "cse@nvm", "dce@nvm", "macro@nvm"]
-CHECK_EXCLUDED_FEATURES = ""
+# The fixed batch of the test plan (test/plans/feat/opt/progen.plan.toml): the first seeds whose
+# every cell of the `cross` matrix passes today, all features on. It is a regression guard, so a
+# seed with a known bad cell is left out, and listed here with the finding it shows
+# (test/cases/opt/progen/README.md); `progen.py findings` re-runs the findings themselves.
+CHECK_RANGE = range(1, 26)
+CHECK_EXCLUDED = {
+    5: "F18: std::opt::fold std::inline runs the body of a call written in an arm that is never taken",
+}
+CHECK_MATRIX = "cross"
 
 
 def cmd_check(args):
-    features = parse_features(CHECK_EXCLUDED_FEATURES)
-    cells = {k: v for k, v in matrix("full").items() if k in CHECK_CELLS}
-    records = run_batch(seeds_of(CHECK_SEEDS), features, cells, None, args.jobs)
+    features = parse_features(None)
+    cells = matrix(CHECK_MATRIX)
+    seeds = [s for s in CHECK_RANGE if s not in CHECK_EXCLUDED]
+    records = run_batch(seeds, features, cells, None, args.jobs)
     bad = [(r["seed"], cid, info["outcome"], info.get("detail", "")) for r in records for cid, info in r["bad"].items()]
     for seed, cid, outcome, detail in bad:
         print(f"seed {seed} [{cid}]: {outcome}: {detail}")
     n = sum(len(r["outcomes"]) for r in records)
-    print(f"progen check: {len(records)} programs, {n} program-pipeline cells, {len(bad)} wrong")
+    refused = sum(len(r["refused"]) for r in records)
+    print(f"progen check: {len(records)} programs x {len(cells)} pipelines = {n} cells "
+          f"({refused} located refusals), {len(CHECK_EXCLUDED)} seed(s) left out as known failures")
+    print(f"{len(bad)} wrong")
     print("PASS" if not bad and n > 0 else "FAIL")
     return 0 if not bad and n > 0 else 1
+
+
+FINDINGS = Path(__file__).resolve().parents[2] / "cases" / "opt" / "progen"
+
+
+def cmd_findings(args):
+    """Runs every archived finding (findings.json) and says whether it still fails as recorded."""
+    from runner import run_cell
+    root = Path(args.dir) if args.dir else FINDINGS
+    listed = json.loads((root / "findings.json").read_text(encoding="utf-8"))
+    still = 0
+    for f in listed:
+        seen = collections.Counter()
+        for _ in range(args.runs):
+            info = run_cell(root / f["file"], f["pipeline"], f.get("env", {}), f["expected"])
+            seen[signature(info)] += 1
+        fails = sum(n for sig, n in seen.items() if sig.split(":")[0] in BAD)
+        still += fails > 0
+        state = "fails" if fails == args.runs else "fails sometimes" if fails else "does not fail"
+        print(f"{f['id']:<4} {state:<16} {f['file']:<46} [{' '.join(f['pipeline']) or 'no pass'}] "
+              + ", ".join(f"{sig} x{n}" for sig, n in seen.most_common()))
+    print(f"progen findings: {len(listed)} recorded, {still} still fail")
+    return 0
 
 
 def main(argv=None):
@@ -252,12 +301,13 @@ def main(argv=None):
     p.set_defaults(fn=cmd_selfcheck)
     p = sub.add_parser("diff")
     p.add_argument("--seeds", required=True)
-    p.add_argument("--matrix", default="full", choices=["full", "quick", "frozen", "reference"])
+    p.add_argument("--matrix", default="full", choices=["full", "cross", "quick", "frozen", "reference"])
     p.add_argument("--backends", help="comma-separated, e.g. nvm,fvm (default: " + ",".join(BACKENDS) + ")")
     p.add_argument("--cells", help="comma-separated cell ids to keep")
     p.add_argument("--features")
     p.add_argument("--jobs", type=int, default=4)
     p.add_argument("--out", required=True)
+    p.add_argument("--resume", action="store_true", help="keep the programs already in OUT/results.partial.jsonl")
     p.set_defaults(fn=cmd_diff)
     p = sub.add_parser("reduce")
     p.add_argument("--seed", type=int, required=True)
@@ -275,6 +325,10 @@ def main(argv=None):
     p = sub.add_parser("check")
     p.add_argument("--jobs", type=int, default=4)
     p.set_defaults(fn=cmd_check)
+    p = sub.add_parser("findings")
+    p.add_argument("--dir")
+    p.add_argument("--runs", type=int, default=3)
+    p.set_defaults(fn=cmd_findings)
     p = sub.add_parser("features")
     p.set_defaults(fn=lambda a: print("\n".join(f"{k:<10} {v}" for k, v in FEATURES.items())) or 0)
     args = ap.parse_args(argv)

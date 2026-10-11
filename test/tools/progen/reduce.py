@@ -2,8 +2,8 @@
 
 A candidate is kept only when all of these hold:
 
-  * it is still inside the determined subset (model.effect_violations is empty) and the
-    reference evaluates it (so its expected output is recomputed, never carried over);
+  * it is still inside the determined subset (model.effect_violations is empty), has no
+    fault that is visible without running (model.static_faults), and the reference evaluates it (so its expected output is recomputed, never carried over);
   * the run without passes prints exactly that expected output (unless the failure being
     reduced is itself in the run without passes), which also filters candidates the compiler
     does not accept;
@@ -21,7 +21,7 @@ import tempfile
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from model import ARR, BOOL, FLOAT, INT, N, STR, Reject, effect_violations, emit, evaluate, walk
+from model import BOOL, FLOAT, INT, N, STR, Reject, effect_violations, emit, evaluate, static_faults, walk
 from runner import BACKENDS, run_program, signature
 
 STATEMENTS = {"let", "var", "expr", "ifs", "func", "case", "prog", "blk"}
@@ -80,7 +80,7 @@ class Reducer:
     def fails(self, prog: N, passes: Optional[List[str]] = None) -> bool:
         if self.tests >= self.max_tests:
             return False
-        if effect_violations(prog):
+        if effect_violations(prog) or static_faults(prog):
             return False
         try:
             expected = evaluate(prog)
