@@ -1,0 +1,133 @@
+id = "compile.not_supported"
+order = 312
+tier = "feat"
+tags = ["feat", "compile", "semantic", "negative"]
+
+[[tests]]
+name = "not_supported.list_comprehension"
+desc = "A list comprehension is rejected at the literal; it used to be compiled as the empty array, silently."
+kind = "negative"
+case = "../../../cases/compile/not_supported/list_comprehension.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 14
+expect_output_contains = ["'[... for ... in ...]' is not supported: list comprehensions are not implemented"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "not_supported.pattern_identifier"
+desc = "An identifier pattern in a `case` is rejected at the pattern, instead of an internal error without a position."
+kind = "negative"
+case = "../../../cases/compile/not_supported/pattern_identifier.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 14
+expect_output_contains = ["'other' is not supported: an identifier pattern is not implemented"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "not_supported.pattern_tuple"
+desc = "A tuple pattern in a `case` is rejected at the pattern, instead of an internal error without a position."
+kind = "negative"
+case = "../../../cases/compile/not_supported/pattern_tuple.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["'(1,2)' is not supported: a tuple pattern is not implemented"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "not_supported.pattern_struct"
+desc = "A struct pattern in a `case` is rejected at the pattern, instead of an internal error without a position."
+kind = "negative"
+case = "../../../cases/compile/not_supported/pattern_struct.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["'{x:1}' is not supported: a struct pattern is not implemented"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "not_supported.spread_array"
+desc = "`...xs` in an array literal is rejected at the marker; the marker used to be dropped and the program printed an address."
+kind = "negative"
+case = "../../../cases/compile/not_supported/spread_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 15
+expect_output_contains = ["'...' is not supported: spreading is not implemented."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "not_supported.spread_struct"
+desc = "`...s` in a struct literal is rejected at the marker; it used to crash the compiler (null dereference)."
+kind = "negative"
+case = "../../../cases/compile/not_supported/spread_struct.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 15
+expect_output_contains = ["'...' is not supported: spreading is not implemented."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "not_supported.formatted_string"
+desc = "A backquoted formatted string is rejected at the literal; it used to be compiled as a plain string."
+kind = "negative"
+case = "../../../cases/compile/not_supported/formatted_string.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["formatted strings are not implemented"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "not_supported.of_type"
+desc = "`name of T` is rejected at the type, instead of an exception text without a position."
+kind = "negative"
+case = "../../../cases/compile/not_supported/of_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 11
+expect_output_contains = ["'k of ...' is not supported: the 'of' type form is not implemented."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+

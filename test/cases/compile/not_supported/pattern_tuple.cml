@@ -1,0 +1,16 @@
+/**
+ * A tuple pattern is in the grammar but destructuring in a `case` is not implemented: a
+ * compile-time error at the pattern (line 10).
+ */
+module pattern_tuple
+
+func main(): int sync {
+    let t = (1, 2)
+    let r = match t {
+        case (1, 2) => 1
+        case _ => 0
+    }
+    println('never printed')
+    println(r)
+    return 0
+}

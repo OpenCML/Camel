@@ -1020,6 +1020,13 @@ indexValue   : '...'? dataExpr ;
 */
 any Builder::visitIndexValue(OpenCMLParser::IndexValueContext *context) {
     ENTER("IndexValue");
+    if (context->children.size() > 1) {
+        // `...xs` is in the grammar but spreading is not implemented. The marker used to be
+        // dropped, so that `[...xs, 4]` was built as the array of `xs` and 4.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart())
+            .commit("...", "spreading is not implemented");
+    }
     node_ptr_t res = any2node(visitDataExpr(context->dataExpr()));
     LEAVE("IndexValue");
     return res;
@@ -1045,7 +1052,15 @@ keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
 any Builder::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
     ENTER("KeyValuePair");
-    Reference ref(context->identDef()->getText());
+    if (!context->identDef()) {
+        // `...s` in a struct literal or an argument list: in the grammar, not implemented. It
+        // used to dereference the missing key and crash the compiler.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart())
+            .commit("...", "spreading is not implemented");
+    }
+    // The error above stops compilation; a placeholder key keeps the rest of the file checked.
+    Reference ref(context->identDef() ? context->identDef()->getText() : std::string("_"));
     node_ptr_t namedDataNode = createNodeAs<NamedDataLoad>(ref);
     setNodeTokenRangeByContext(namedDataNode, context);
     if (context->dataExpr()) {
@@ -1272,8 +1287,19 @@ any Builder::visitPattern(OpenCMLParser::PatternContext *context) {
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
     } else {
-        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
-            .commit("visitPattern: not implemented yet");
+        // Binding, tuple and struct patterns are in the grammar, but what they destructure and
+        // bind has not been decided. They used to end in an internal error without a position.
+        const char *kind = context->identRef()                       ? "an identifier pattern"
+                           : context->getStart()->getText() == "(" ? "a tuple pattern"
+                                                                     : "a struct pattern";
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart(), context->getStop())
+            .commit(
+                context->getText(),
+                std::string(kind) + " is not implemented, only literal patterns and '_' are");
+        // The error above stops compilation; a wildcard keeps the rest of the file checked.
+        res = createNodeAs<NullLoad>();
+        setNodeTokenRangeByContext(res, context);
     }
     LEAVE("Pattern");
     return res;
@@ -2227,6 +2253,18 @@ any Builder::visitArrayData(OpenCMLParser::ArrayDataContext *context) {
     if (context->indexValues()) {
         *dataNode << any2node(visitIndexValues(context->indexValues()));
     } else {
+        if (context->FOR()) {
+            // `[e for x in xs if c]` is in the grammar, but its meaning is not specified (how
+            // `x` is bound, the order and the effects of the element expressions). It used to
+            // be compiled as the empty array, silently.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(context->getStart(), context->getStop())
+                .commit(
+                    "[... for ... in ...]",
+                    "list comprehensions are not implemented; write it with 'map' and 'filter'");
+            // The error above stops compilation; the empty array keeps the rest of the file
+            // checked.
+        }
         *dataNode << createNodeAs<RepeatedLoad>("Data");
     }
     LEAVE("ArrayData");
@@ -2303,6 +2341,13 @@ any Builder::visitLiteral(OpenCMLParser::LiteralContext *context) {
     } else if (context->REAL()) {
         type = LiteralType::Real;
     } else if (context->STRING() || context->FSTRING()) {
+        if (context->FSTRING()) {
+            // A backquoted string is a formatted string, which is not implemented. It used to
+            // be compiled as a plain string, its `{...}` left as written.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(context->getStart())
+                .commit("`...`", "formatted strings are not implemented; use 'format'");
+        }
         data = data.substr(1, data.size() - 2); // Remove quotes
         type = LiteralType::String;
     } else if (context->MULTI_STR()) {
@@ -2456,7 +2501,14 @@ any Builder::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
     ENTER("TypeUnit");
     node_ptr_t res = nullptr;
     if (context->identDef()) {
-        throw std::runtime_error("visitTypeUnit: identDef is not implemented yet");
+        // `name of T` used to end in an exception without a position.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart(), context->getStop())
+            .commit(
+                context->identDef()->getText() + " of ...",
+                "the 'of' type form is not implemented");
+        // The error above stops compilation; the type itself keeps the rest checked.
+        res = any2node(visitArrayType(context->arrayType()));
     } else if (context->arrayType()) {
         res = any2node(visitArrayType(context->arrayType()));
     }
