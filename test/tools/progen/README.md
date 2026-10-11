@@ -57,10 +57,10 @@ Each switch is a feature (`progen.py features`); all are on by default and they 
 |---|---|
 | (always) | `int` arithmetic `+ - * / %` with negative operands (division truncates, the remainder takes the sign of the dividend), comparisons, `&&`, `\|\|`, `!`, `let`, `println`, `format` with `{}` |
 | `float` | `+ - * /` and unary minus on values that are exact (see "Limits of the reference"), comparisons, `float(int)`, `int(float)`, `{:.Nf}` placeholders, default float printing |
-| `string` | literals, `+`, `len`, `string(int)`, `format`, `==`, `!=`, `join` |
+| `string` | literals, `+`, `len`, `string(int)`, `string(bool)`, `format`, `==`, `!=`, `<`, `<=`, `>`, `>=` (byte order), `join` |
 | `array` | literals (of scalars, tuples, structs), index (with and without a length guard), `len`, `concat`, `slice`, `contains` |
 | `tuple`, `struct` | literals, `.N` and field access, as parameters, results, array elements and variables |
-| `var` | `var` of int, float, string, bool, `int[]`, tuple; `=`, `+=`, `-=`, `*=`, `/=` in sync blocks; reads before and after writes |
+| `var` | `var` of int, float, string, bool, `int[]`, tuple; `=`, `+=`, `-=`, `*=`, `/=`, `%=` (and `+=` on a string) in sync blocks; reads before and after writes |
 | `varparam` | `sync func` with one or two `var` parameters, writes through them, a variable passed on to another function |
 | `capture` | lambdas and nested functions that read captured values and variables (seeing later writes) or write them; a function returning a lambda that owns a variable (a counter) |
 | `if`, `match` | as expressions with expression or block arms; as statements with `sync` arms that print and write; `match` on an int, string or bool name with literal cases and `_` |
@@ -179,9 +179,11 @@ seed back; when the generator changes the programs of existing seeds, raise
   program has at most 34 graphs that own a constant object (see finding F24: more cannot be
   compiled today). Inlining budgets and graph capacity are therefore not stressed.
 - Constructs that did not work when probed and are left out so that the reference stays
-  reliable: ordering comparisons of strings (finding F27), `+=` on a string (F28), `%=` (F29),
-  `string(bool)` (F26), `string(float)` (question J3), and `==` on arrays, tuples and structs
-  (the type checker has no such overload). A statement-form `if` without `else` is always
+  reliable: `string(float)` (question J3), and `==` on arrays, tuples and structs (the type
+  checker has no such overload). Ordering comparisons of strings, `+=` on a string, `%=` and
+  `string(bool)` were left out for findings F27, F28, F29 and F26 and are generated since
+  those were fixed (`generate.VERSION` 2); an ordering comparison is no longer parenthesized
+  for F30. A statement-form `if` without `else` is always
   written with `return null` in its arm, and a block arm always ends in `return`: other forms
   were rejected by the type checker or misread by the parser.
 - Integers near the 64-bit range (programs are discarded when a value leaves +-2^62), bit

@@ -23,7 +23,7 @@ from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, REC, STR, TUP, Rejec
 
 FEATURES = {
     "float": "float arithmetic (exact values only), float(int), int(float), precision placeholders",
-    "string": "string literals, concatenation, len, string(int), format, ==, !=, join",
+    "string": "string literals, concatenation, len, string(int), string(bool), format, comparisons, +=, join",
     "array": "array literals, index, len, concat, slice, contains",
     "tuple": "tuple literals and .N access",
     "struct": "struct types, literals and field access",
@@ -46,7 +46,7 @@ DEFAULT_FEATURES = frozenset(FEATURES)
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
-VERSION = 1
+VERSION = 2
 
 
 def parse_features(text: Optional[str]) -> frozenset:
@@ -249,6 +249,7 @@ class Gen:
         elif t == STR:
             o.append((3.0, lambda: bin_("+", self.expr(STR, d - 1), self.expr(STR, d - 1), STR)))
             o.append((1.5, lambda: N("conv", [self.expr(INT, d - 1)], t=STR, fn="string")))
+            o.append((0.5, lambda: N("conv", [self.expr(BOOL, d - 1)], t=STR, fn="string")))
             o.append((2.0, lambda: self.fmt(d)))
             if self.on("array"):
                 o.append((0.6, lambda: N("join", [self.expr(ARR(STR), d - 1)], t=STR, sep=self.r.choice([",", "", "-"]))))
@@ -306,7 +307,7 @@ class Gen:
         if self.on("string"):
             ts.append(STR)
         t = self.r.choice(ts)
-        ops = ["==", "!="] if t == STR else ["==", "!=", "<", "<=", ">", ">="]
+        ops = ["==", "!=", "<", "<=", ">", ">="]
         return bin_(self.r.choice(ops), self.expr(t, d - 1), self.expr(t, d - 1), BOOL)
 
     def contains(self, d):
@@ -717,11 +718,13 @@ class Gen:
     def write(self, v: Sym, d):
         t = v.t
         if t == INT:
-            op = self.r.choice(["+=", "+=", "-=", "=", "*=", "/="])
+            op = self.r.choice(["+=", "+=", "-=", "=", "*=", "/=", "%="])
             if op == "*=":
                 rhs = lit(INT, self.r.choice([2, 3, -1]))
             elif op == "/=":
                 rhs = lit(INT, self.r.choice([2, 3, -2]))
+            elif op == "%=":
+                rhs = lit(INT, self.r.choice([2, 3, 7, 10, 97, -3]))
             elif op == "=":
                 rhs = bin_("%", self.expr(INT, d), lit(INT, 1000), INT) if self.chance(0.5) else self.expr(INT, d)
             else:
@@ -730,7 +733,10 @@ class Gen:
             op = self.r.choice(["+=", "-=", "=", "*="])
             rhs = lit(FLOAT, self.r.choice([2.0, 0.5, -1.0])) if op == "*=" else self.expr(FLOAT, d)
         elif t == STR:
-            op, rhs = "=", (bin_("+", ref(v), self.expr(STR, d), STR) if self.chance(0.7) else self.expr(STR, d))
+            if self.chance(0.4):
+                op, rhs = "+=", self.expr(STR, d)
+            else:
+                op, rhs = "=", (bin_("+", ref(v), self.expr(STR, d), STR) if self.chance(0.5) else self.expr(STR, d))
         elif t[0] == "arr":
             op = "="
             rhs = N("concat", [ref(v), N("arr", [self.expr(t[1], d)], t=t)], t=t) if self.chance(0.7) else self.expr(t, d)

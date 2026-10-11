@@ -162,10 +162,7 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         s = f"get_env({str_lit(n.a['name'])})"
         return f"int({s})" if n.t == INT else s
     if k == "bin":
-        text = f"{sub(n.c[0])} {n.a['op']} {sub(n.c[1])}"
-        # An ordering comparison is always parenthesized: `(a < b, 'x'->format<a>)` does not
-        # parse (the `<` ... `>` pair is taken for a generic argument list).
-        return "(" + text + ")" if n.a["op"] in ("<", ">", "<=", ">=") else wrap(text)
+        return wrap(f"{sub(n.c[0])} {n.a['op']} {sub(n.c[1])}")
     if k == "un":
         return wrap(n.a["op"] + sub(n.c[0]))
     if k == "conv":

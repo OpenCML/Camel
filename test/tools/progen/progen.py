@@ -240,9 +240,9 @@ def write_case(out: Path, name: str, prog, passes, seed, features, last, runs: i
 # seed with a known bad cell is left out, and listed here with the finding it shows
 # (test/cases/opt/progen/README.md); `progen.py findings` re-runs the findings themselves.
 CHECK_RANGE = range(1, 26)
-CHECK_EXCLUDED = {
-    5: "F18: std::opt::fold std::inline runs the body of a call written in an arm that is never taken",
-}
+# With generate.VERSION 2 every seed of the range passes (seeds 1-40 were run); the seed left
+# out under VERSION 1 (5, finding F18) is another program now.
+CHECK_EXCLUDED = {}
 CHECK_MATRIX = "cross"
 
 
