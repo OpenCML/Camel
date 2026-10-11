@@ -1762,10 +1762,16 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     StructDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+    std::unordered_set<string> fieldNames;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
         const string &name    = namedPair->ref().ident();
+        if (!fieldNames.insert(name).second) {
+            // As in a struct type. The later value used to be dropped, silently.
+            diags_->of(SemanticDiag::DuplicateDictKey).at(namedPair->tokenRange()).commit(name);
+            throw BuildAbortException();
+        }
         node_ptr_t dataNode   = visitData(child->atAs<AST::DataLoad>(0));
         auto [data, _]        = extractData(dataNode, execNode, dangling);
         factory.add(name, data);

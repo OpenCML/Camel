@@ -259,3 +259,19 @@ expect_output_not_contains = ["never printed", "Warn"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+[[tests]]
+name = "semantic.duplicate_struct_field"
+desc = "A field written twice in a struct literal is an error at the second one; the later value used to be dropped, silently."
+kind = "negative"
+case = "../../../cases/compile/semantic/duplicate_struct_field.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DuplicateDictKey"
+expect_diagnostic_code = "0x03000006"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 21
+expect_output_contains = ["Duplicate key in dict: 'x'."]
+expect_output_not_contains = ["never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
