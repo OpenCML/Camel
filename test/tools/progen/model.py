@@ -801,7 +801,7 @@ def heavy_graphs(prog: N) -> int:
     """How many graphs of the program own a constant object. A graph is a function, a lambda,
     or an arm of an `if` or `match`; it owns a constant object when a string literal or an
     array, tuple or struct literal is written directly in it. The compiler cannot build a
-    program with 62 such graphs (finding F1 in test/cases/opt/progen/README.md: an unlocated
+    program with 62 such graphs (finding F24 in test/cases/opt/progen/README.md: an unlocated
     std::bad_alloc under every pipeline), so the generator keeps below MAX_HEAVY."""
     count = 0
 

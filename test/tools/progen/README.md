@@ -176,11 +176,14 @@ seed back; when the generator changes the programs of existing seeds, raise
 - Faults and their diagnostics (division by zero, index out of range, recursion limits, macro
   evaluation failure by depth), `??`, `!!`, `?->`, `throw`.
 - Deep or large programs: recursion is at most 9 deep, arrays have at most 64 elements, and a
-  program has at most 34 graphs that own a constant object (see finding F1: more cannot be
+  program has at most 34 graphs that own a constant object (see finding F24: more cannot be
   compiled today). Inlining budgets and graph capacity are therefore not stressed.
-- Constructs that did not behave as documented when probed and are left out so that the
-  reference stays reliable (each is in the findings README): ordering comparisons of strings,
-  `+=` on a string, `%=`, `string(bool)`, `==` on arrays, tuples and structs.
+- Constructs that did not work when probed and are left out so that the reference stays
+  reliable: ordering comparisons of strings (finding F27), `+=` on a string (F28), `%=` (F29),
+  `string(bool)` (F26), `string(float)` (question J3), and `==` on arrays, tuples and structs
+  (the type checker has no such overload). A statement-form `if` without `else` is always
+  written with `return null` in its arm, and a block arm always ends in `return`: other forms
+  were rejected by the type checker or misread by the parser.
 - Integers near the 64-bit range (programs are discarded when a value leaves +-2^62), bit
   operators, `^`, `i32` / `f32`, `as` / `is`, list comprehensions, slices with a step.
 
