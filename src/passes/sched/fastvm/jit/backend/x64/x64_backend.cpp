@@ -87,6 +87,18 @@ inline void storeFloatResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &b
     build.emitVXmm32StoreToFrame(disp, v);
 }
 
+// Whether the divisor (operand 1) of an integer division is a constant other than 0 and -1.
+inline bool
+isTrapFreeConstDivisor(const Bytecode &bc, const camel::runtime::GCGraph *graph, bool is32Bit) {
+    if (bc.fastop[1] >= 0 || graph == nullptr || !graph->staticArea()) {
+        return false;
+    }
+    const slot_t value = graph->staticArea()->data()[static_cast<size_t>(-bc.fastop[1])];
+    const int64_t divisor =
+        is32Bit ? static_cast<int64_t>(static_cast<int32_t>(value)) : static_cast<int64_t>(value);
+    return divisor != 0 && divisor != -1;
+}
+
 std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
     if (unit.graphLength == 0)
         return "graph bytecode span is empty";
@@ -109,6 +121,16 @@ std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
             return "pc=" + std::to_string(pc) + " contains indirect CALL";
         case OpCode::ACCS:
             return "pc=" + std::to_string(pc) + " contains ACCS";
+        case OpCode::IDIV:
+        case OpCode::LDIV:
+            // `idiv` raises a hardware exception on a zero divisor (and on the most negative
+            // dividend over -1), and compiled code has no way to leave with a located
+            // diagnostic. The interpreter checks, so a division is compiled only when its
+            // divisor is a constant that cannot trap.
+            if (!isTrapFreeConstDivisor(bc, unit.runtimeGraph, bc.opcode == OpCode::IDIV)) {
+                return "pc=" + std::to_string(pc) + " divides by a value not known to be nonzero";
+            }
+            break;
         case OpCode::FUNC:
         case OpCode::TAIL:
             if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph) {
@@ -261,17 +283,42 @@ bool X64Backend::compileBytecode(
     // if a dynamic slot is never written by any bytecode in this function,
     // repeated loads of that slot can be replaced by VCopy from the first load.
     //
-    // This is deliberately stronger than a local peephole because the source
-    // slot is immutable for the whole function, so the cache may survive normal
-    // control-flow edges. Calls still clear the cache because caller-saved regs
-    // are clobbered even if the logical slot value itself is unchanged.
+    // The cache lives for one basic block: the register is only known to hold the
+    // slot where the load has run, and a load made in one arm of a branch has not
+    // run in the other arm, nor on every path to the join. It is cleared wherever
+    // straight-line code starts anew (blockStarts) and at calls, which clobber the
+    // caller-saved regs even if the logical slot value itself is unchanged.
     std::unordered_set<data_idx_t> writtenSlots;
     for (size_t p = entryPc; p < pcEnd; p += base[p].opsize)
         if (base[p].result > 0)
             writtenSlots.insert(base[p].result);
     std::unordered_map<int, x64::VRegId> slotCache;
+    // Every jump target, and the bytecode after each BRCH, JUMP, RETN and TAIL. An
+    // if-else BRCH is followed by its two-entry jump table (the targets its lowering uses).
+    std::unordered_set<size_t> blockStarts;
+    for (size_t p = entryPc; p < pcEnd; p += base[p].opsize) {
+        const size_t next = p + base[p].opsize;
+        switch (base[p].opcode) {
+        case OpCode::BRCH:
+            blockStarts.insert(next);
+            blockStarts.insert(next + 1);
+            break;
+        case OpCode::JUMP:
+            blockStarts.insert(getJumpTargetPc(&base[p]));
+            blockStarts.insert(next);
+            break;
+        case OpCode::RETN:
+        case OpCode::TAIL:
+            blockStarts.insert(next);
+            break;
+        default:
+            break;
+        }
+    }
 
-    auto loadSlot = [&](data_idx_t slotIdx, int disp, x64::VRegId v) {
+    // `cacheable` is false for a load whose code does not run on every path through the
+    // current block (see the fused JOIN).
+    auto loadSlot = [&](data_idx_t slotIdx, int disp, x64::VRegId v, bool cacheable = true) {
         // Positive indices address the dynamic frame, negative indices address
         // compile-time-known static slots.
         if (slotIdx > 0) {
@@ -281,7 +328,7 @@ bool X64Backend::compileBytecode(
                 return;
             }
             build.emitVLoadFromFrame(v, disp);
-            if (!writtenSlots.count(slotIdx))
+            if (cacheable && !writtenSlots.count(slotIdx))
                 slotCache[disp] = v;
         } else {
             emitLoadStaticConst(staticBase, slotIdx, v, build);
@@ -306,6 +353,8 @@ bool X64Backend::compileBytecode(
 
     for (size_t pc = entryPc; pc < pcEnd;) {
         const Bytecode &bc = base[pc];
+        if (blockStarts.count(pc))
+            slotCache.clear();
         build.setNextPc(static_cast<uint32_t>(pc));
         if (debug && debug->enableDebugTrace) {
             build.emitDebugTrace(static_cast<uint32_t>(pc));
@@ -772,9 +821,10 @@ bool X64Backend::compileBytecode(
 
             if (fusedBrchJoin.active && fusedBrchJoin.idxSlot == idxSlot) {
                 // Phase K: fused cmp-BRCH already handled then-path via JUMP.
-                // JOIN only executes from else-path, so take w1 directly.
+                // JOIN only executes from else-path, so take w1 directly. The then-path
+                // jumps past this code, so what follows the JOIN must not reuse the load.
                 x64::VRegId v1 = nextVReg++;
-                loadSlot(w1, d1, v1);
+                loadSlot(w1, d1, v1, false);
 
                 // Phase N: if JOIN is immediately followed by RETN reading
                 // JOIN's result, emit VRet directly — skip the intermediate store.
@@ -809,12 +859,20 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::FUNC: {
-#if defined(_WIN32) || defined(_WIN64)
             bool handledByNativeJitCall = false;
             if (unit.poolTopAddr && !unit.runtimeGraph->funcType()->modifiers().sync()) {
                 auto *targetRuntimeGraph = getFuncExtraRuntimeGraph(&bc);
                 bool sameGraph           = (targetRuntimeGraph == unit.runtimeGraph);
-                if (!(sameGraph && !canUseFramelessSelfFunc)) {
+#if defined(_WIN32) || defined(_WIN64)
+                const bool nativeCallEncodable = !(sameGraph && !canUseFramelessSelfFunc);
+#else
+                // Under SysV only the frameless self-call is encoded natively: it stays in
+                // the JIT's own convention (rdi = slots, rsi = ctx restored from r13). The
+                // frame-based path hands its slow-path helper the arguments in the Win64
+                // registers, so every other call keeps the trampoline below.
+                const bool nativeCallEncodable = sameGraph && canUseFramelessSelfFunc;
+#endif
+                if (nativeCallEncodable) {
                     // NativeJitCallParams is the bridge between MIR lowering and the
                     // encoder's call expander. Everything the encoder needs for fast
                     // path / slow path selection is packed here once.
@@ -878,7 +936,6 @@ bool X64Backend::compileBytecode(
             }
             if (handledByNativeJitCall)
                 break;
-#endif
             if (!unit.trampolineFunc)
                 return fail("pc=" + std::to_string(pc) + " no FUNC trampoline");
             uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
@@ -936,7 +993,7 @@ bool X64Backend::compileBytecode(
             break;
         }
         case OpCode::JUMP: {
-            size_t target = static_cast<size_t>(bc.fastop[0]);
+            size_t target = getJumpTargetPc(&bc);
             // If the target is JOIN and the current block is the BRCH "first branch" (only this
             // JUMP), write back w0 directly and jump to JOIN afterward, to avoid reading an
             // uninitialized w1 through JOIN.

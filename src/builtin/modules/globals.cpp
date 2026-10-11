@@ -1559,12 +1559,17 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (with[1]->code() != TypeCode::Function)
+                            // The predicate is the one with-argument (it was read at
+                            // index 1, past the end: every use of filter crashed).
+                            if (with[0]->code() != TypeCode::Function)
                                 return nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[1]);
-                            if (!FunctionType::create()->assignableFrom(funcType))
+                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
+                            if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            if (!funcType->exitType()->equals(Type::Bool()))
+                            if (!funcType->normTypeAt(0)->equals(arrType->elemType()))
+                                return nullopt;
+                            if (!funcType->hasExitType() ||
+                                !funcType->exitType()->equals(Type::Bool()))
                                 return nullopt;
                             return arrType;
                         }),

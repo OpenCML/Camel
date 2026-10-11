@@ -23,9 +23,14 @@
 
 #include "type.h"
 
+#include "camel/core/data/composite/array.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/mm.h"
 #include "camel/utils/assert.h"
+#include "camel/core/error/runtime.h"
+#include "camel/core/rtdata.h"
 #include "dtype.h"
+#include "tensor.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -120,6 +125,45 @@ std::string TensorType::toString() const {
     return result + ">";
 }
 
+std::string TensorType::spelling() const {
+    if (!dtype_ && !shape_) {
+        return "Tensor";
+    }
+    std::string arguments;
+    if (dtype_) {
+        switch (*dtype_) {
+        case TypeCode::Float32:
+            arguments = "f32";
+            break;
+        case TypeCode::Float64:
+            arguments = "f64";
+            break;
+        case TypeCode::Int32:
+            arguments = "i32";
+            break;
+        case TypeCode::Int64:
+            arguments = "i64";
+            break;
+        case TypeCode::Bool:
+            arguments = "bool";
+            break;
+        default:
+            arguments = std::string(dtypeName(*dtype_));
+            break;
+        }
+    }
+    if (shape_) {
+        arguments += arguments.empty() ? "const [" : ", const [";
+        for (size_t i = 0; i < shape_->size(); ++i) {
+            arguments +=
+                (i ? ", " : "") +
+                ((*shape_)[i] == kUnknownDim ? std::string("-1") : std::to_string((*shape_)[i]));
+        }
+        arguments += "]";
+    }
+    return "Tensor<" + arguments + ">";
+}
+
 std::string TensorType::mangle() const { return "T" + internKey(dtype_, shape_) + ";"; }
 
 Type *TensorType::clone(bool) const { return const_cast<TensorType *>(this); }
@@ -151,7 +195,64 @@ CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
     if (auto r = Type::checkCastSafetyWithAny(code(), sourceType)) {
         return *r;
     }
-    return assignableFrom(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
+    if (assignableFrom(sourceType)) {
+        return CastSafety::Safe;
+    }
+    // `t as Tensor<...>` is the checked way from a less precise tensor type to a more precise
+    // one. What the two static types already contradict is refused at compile time; what the
+    // source leaves open is checked when the conversion runs (castSlotFrom): Unsafe.
+    const TensorType *rhs = asTensorType(sourceType);
+    if (!rhs) {
+        return CastSafety::Forbidden;
+    }
+    if (dtype_ && rhs->dtype_ && rhs->dtype_ != dtype_) {
+        return CastSafety::Forbidden;
+    }
+    if (shape_ && rhs->shape_) {
+        if (shape_->size() != rhs->shape_->size()) {
+            return CastSafety::Forbidden;
+        }
+        for (size_t i = 0; i < shape_->size(); ++i) {
+            const int64_t want = (*shape_)[i], have = (*rhs->shape_)[i];
+            if (want != kUnknownDim && have != kUnknownDim && want != have) {
+                return CastSafety::Forbidden;
+            }
+        }
+    }
+    return CastSafety::Unsafe;
+}
+
+slot_t TensorType::castSlotFrom(slot_t value, Type *sourceType) const {
+    (void)sourceType;
+    auto *tensor = camel::core::rtdata::fromSlot<TensorObject *>(value);
+    const auto refuse = [&](const std::string &what) {
+        camel::core::error::throwRuntimeFault(
+            camel::core::error::RuntimeDiag::RuntimeError,
+            "conversion to '" + toString() + "' failed: " + what);
+    };
+    if (tensor == nullptr) {
+        refuse("the value is null");
+    }
+    if (dtype_ && normalizeTensorDType(tensor->dtype()) != *dtype_) {
+        refuse(
+            "the tensor has element type " + std::string(dtypeName(tensor->dtype())));
+    }
+    if (shape_) {
+        std::string actual = "[";
+        for (size_t i = 0; i < tensor->rank(); ++i) {
+            actual += (i ? ", " : "") + std::to_string(tensor->dim(i));
+        }
+        actual += "]";
+        if (tensor->rank() != shape_->size()) {
+            refuse("the tensor has shape " + actual);
+        }
+        for (size_t i = 0; i < shape_->size(); ++i) {
+            if ((*shape_)[i] != kUnknownDim && (*shape_)[i] != tensor->dim(i)) {
+                refuse("the tensor has shape " + actual);
+            }
+        }
+    }
+    return value;
 }
 
 bool TensorType::assignableFrom(Type *sourceType) const {
@@ -182,6 +283,49 @@ OtherType *TensorType::cloneWithParams(std::span<Type *const> params) const {
         return Default();
     }
     return get(params[0]->code(), std::nullopt);
+}
+
+OtherType *TensorType::cloneWithArguments(
+    std::span<const type::TypeArgument> arguments, std::string &error) const {
+    std::optional<TypeCode> dtype;
+    std::optional<StaticShape> shape;
+    for (const type::TypeArgument &argument : arguments) {
+        if (argument.type != nullptr) {
+            if (dtype || shape) {
+                error = "Tensor takes at most one element type, written before the shape: "
+                        "Tensor<dtype, const [d0, d1, ...]>";
+                return nullptr;
+            }
+            // As cloneWithParams: the type's code names the element type.
+            const TypeCode code = argument.type->code();
+            dtype = code;
+            continue;
+        }
+        if (shape) {
+            error = "Tensor takes at most one shape: Tensor<dtype, const [d0, d1, ...]>";
+            return nullptr;
+        }
+        const auto array = std::dynamic_pointer_cast<camel::core::data::ArrayData>(argument.data);
+        if (!array) {
+            error = "the constant argument of a Tensor type is its shape, an array of integers "
+                    "such as const [3, 4] (a negative extent means unknown)";
+            return nullptr;
+        }
+        StaticShape extents;
+        for (const auto &element : array->raw()) {
+            if (auto i = std::dynamic_pointer_cast<camel::core::data::IntData>(element)) {
+                extents.push_back(i->data() < 0 ? kUnknownDim : static_cast<int64_t>(i->data()));
+            } else if (auto l = std::dynamic_pointer_cast<camel::core::data::LongData>(element)) {
+                extents.push_back(l->data() < 0 ? kUnknownDim : l->data());
+            } else {
+                error = "every extent of a Tensor shape must be an integer constant (a negative "
+                        "extent means unknown)";
+                return nullptr;
+            }
+        }
+        shape = std::move(extents);
+    }
+    return get(dtype, std::move(shape));
 }
 
 const TensorType *asTensorType(const Type *type) {

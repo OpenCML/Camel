@@ -91,9 +91,19 @@ GenerationalAllocatorWithGC::CollectionKind envCollectionKind() {
     return GenerationalAllocatorWithGC::CollectionKind::Major;
 }
 
+// The allocator whose statistics are printed at exit (CAMEL_GC_STATS).
+GenerationalAllocatorWithGC *statsInstance = nullptr;
+
 size_t largeObjectBudgetFromEnv() {
     const size_t megabytes = envSize("CAMEL_GC_LARGE_BUDGET_MB");
     return (megabytes != 0 ? megabytes : 4) * 1024 * 1024;
+}
+
+// Growth of the large-object space between two collections, in percent of what the last sweep
+// left (CAMEL_GC_GROWTH_PERCENT).
+size_t largeObjectGrowthPercentFromEnv() {
+    const size_t percent = envSize("CAMEL_GC_GROWTH_PERCENT");
+    return percent != 0 ? percent : 100;
 }
 
 GenerationalAllocatorWithGC::DebugConfig debugConfigFromEnv() {
@@ -163,6 +173,7 @@ GenerationalAllocatorWithGC &autoSpace() {
             .largeObjThreshold     = 4 * KB, // Large-object threshold.
             // Large-object bytes between collections (CAMEL_GC_LARGE_BUDGET_MB overrides).
             .largeObjCollectionBudget = largeObjectBudgetFromEnv(),
+            .largeObjGrowthPercent    = largeObjectGrowthPercentFromEnv(),
             .minorGCTriggerRatio      = 0.9f, // Minor GC trigger ratio.
             .majorGCTriggerRatio      = 0.8f, // Major GC trigger ratio.
             // Production remains address-stable by default; Phase 3 tests can opt into the
@@ -170,6 +181,13 @@ GenerationalAllocatorWithGC &autoSpace() {
             .enableYoungGenCopying = youngCopying});
         instance->configureDebug(debugConfig);
         maybePrintDebugConfig(youngCopying, debugConfig);
+        // CAMEL_GC_STATS=1: one line of pacing statistics on stderr at exit; =2: also one line
+        // per major collection.
+        if (const size_t level = envSize("CAMEL_GC_STATS"); level != 0) {
+            instance->setStatsLevel(static_cast<int>(level));
+            statsInstance = instance;
+            std::atexit([] { statsInstance->reportStats(std::cerr); });
+        }
         return instance;
     }();
     return *allocator;

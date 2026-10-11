@@ -604,6 +604,22 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 
 } // namespace
 
+namespace {
+// The interpreter is initialised on the thread that loads the module, which then holds the
+// GIL. Operators run on whichever thread the scheduler gives them (a worker of the parallel
+// scheduler, several at once), so each takes the GIL for its duration, and the loading thread
+// gives it up once the module is loaded. A thread that never held the GIL has no Python thread
+// state at all: calling into the interpreter from it crashes.
+struct ReleaseGilAfterLoad {
+    bool armed = false;
+    ~ReleaseGilAfterLoad() {
+        if (armed) {
+            (void)PyEval_SaveThread();
+        }
+    }
+};
+} // namespace
+
 PythonModule::PythonModule(context_ptr_t ctx) : BuiltinModule("python", ctx) {
     exportType(Reference("PyObject"), getPyObjectType());
     for (const auto &group : getOperatorGroups())
@@ -616,6 +632,9 @@ bool PythonModule::load() {
     if (loaded_)
         return true;
     // 在模块加载时完成 Python 初始化，后续 python 协议算子无需再检查
+    ReleaseGilAfterLoad releaseGil;
+    // An interpreter that is already running (another module loaded it and gave the GIL up).
+    std::optional<py::gil_scoped_acquire> gil;
     try {
         if (auto venv = activeVenvPath();
             venv.has_value() && !isVenvVersionCompatible(venv.value())) {
@@ -633,8 +652,11 @@ bool PythonModule::load() {
             promote_libpython_to_global();
             set_python_home_from_venv();
             py::initialize_interpreter();
+            releaseGil.armed = true;
             ensure_site_packages_in_path();
             ensure_extra_python_paths_in_path();
+        } else {
+            gil.emplace();
         }
         // Python 解释器可能早于当前脚本上下文初始化，因此每次加载模块时都重新同步入口目录。
         ensure_context_paths_in_path(context_);

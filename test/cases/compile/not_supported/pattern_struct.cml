@@ -1,0 +1,16 @@
+/**
+ * A struct pattern is in the grammar but destructuring in a `case` is not implemented: a
+ * compile-time error at the pattern (line 10).
+ */
+module pattern_struct
+
+func main(): int sync {
+    let s = { x: 1 }
+    let r = match s {
+        case { x: 1 } => 1
+        case _ => 0
+    }
+    println('never printed')
+    println(r)
+    return 0
+}

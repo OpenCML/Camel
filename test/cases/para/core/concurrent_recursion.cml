@@ -1,0 +1,27 @@
+/**
+ * Tree recursion: every call above the leaves makes two recursive calls with no path between
+ * them, so a parallel scheduler runs the two subtrees concurrently, at every level. Each of the
+ * 8 leaves waits at a rendezvous for one peer (see concurrent_calls): it counts 1 when it met
+ * one, 0 when it timed out alone. With the two subtrees of some call running concurrently every
+ * leaf finds a peer (8 leaves, groups of two); node by node, none does. Nothing is timed.
+ */
+module concurrent_recursion
+
+import { rendezvous } from para
+
+func leaf(): int sync {
+    return rendezvous(2, 5000) - 1
+}
+
+func tree(depth: int): int {
+    return if depth == 0 then leaf() else {
+        let l = tree(depth - 1)
+        let r = tree(depth - 1)
+        return l + r
+    }
+}
+
+func main(): int sync {
+    println('leaves that met a peer: {} of 8'->format<tree(3)>)
+    return 0
+}

@@ -228,9 +228,14 @@ class FreeListAllocator : public IAllocator {
             }
         });
 
-        // Insert and coalesce one block at a time.
+        // Insert and coalesce one block at a time. The blocks come in address order, so each
+        // search resumes at the free block the previous one ended in: one pass over the free
+        // list for the whole batch. Restarting from the head for every block made a sweep
+        // quadratic in the number of dead objects scattered between live ones (56,000 dead
+        // arrays, each between two live ones: over 100 s for one sweep).
+        FreeBlock *resumeAt = nullptr;
         for (const auto &[addr, size] : blocks) {
-            insertAndCoalesce(addr, size);
+            resumeAt = insertAndCoalesce(addr, size, resumeAt);
         }
     }
 
@@ -456,14 +461,21 @@ class FreeListAllocator : public IAllocator {
             static_cast<std::byte *>(ptr) - sizeof(ObjectHeader));
     }
 
-    // Core helper: insert and coalesce a free block.
-    void insertAndCoalesce(std::byte *blockData, size_t total_size) {
+    // Core helper: insert and coalesce a free block. Returns the free block that now holds it.
+    // `from`, when given, is a free block that starts below `blockData` (what an earlier call
+    // returned for a lower address): the search for the insertion point starts there instead of
+    // at the head of the list.
+    FreeBlock *
+    insertAndCoalesce(std::byte *blockData, size_t total_size, FreeBlock *from = nullptr) {
         ASSERT(total_size >= sizeof(FreeBlock), "Block too small");
         ASSERT(blockData >= start_ && blockData + total_size <= end_, "Block out of bounds");
+        ASSERT(
+            !from || reinterpret_cast<std::byte *>(from) < blockData,
+            "The resume block must start below the block being freed");
 
-        FreeBlock **prevPtr = &freeList_;
-        FreeBlock *prev     = nullptr;
-        FreeBlock *curr     = freeList_;
+        FreeBlock **prevPtr = from ? &(from->next) : &freeList_;
+        FreeBlock *prev     = from;
+        FreeBlock *curr     = from ? from->next : freeList_;
 
         // Find the insertion point while preserving address order.
         while (curr && reinterpret_cast<std::byte *>(curr) < blockData) {
@@ -486,7 +498,7 @@ class FreeListAllocator : public IAllocator {
             if (UNLIKELY(prevEnd == blockData)) {
                 prev->size += total_size;
                 prev->next = curr;
-                return;
+                return prev;
             }
         }
 
@@ -495,6 +507,7 @@ class FreeListAllocator : public IAllocator {
         newBlock->size      = total_size;
         newBlock->next      = curr;
         *prevPtr            = newBlock;
+        return newBlock;
     }
 };
 

@@ -62,6 +62,28 @@ Camel 的运行时围绕 **Frame**（栈帧）、**Context**（全局/模块上�
   - **buildBranchJoinRegion** 处理 BRCH/JOIN；**connectDependencies** 按图边建立任务依赖。
   - 通过线程池执行，实现「显式依赖、隐式并行」。
 
+#### 4.3.1 Task granularity (粒度规则)
+
+The parallel scheduler does not make every node, or every call, a task. A scope of a graph (its
+top level, or one arm of a branch) runs as a task graph only when it contains at least two items
+with no path between them that are each worth a task: a higher-order operator (`map`, `filter`,
+`reduce`, `foreach`, ...), a call of a *heavy* graph, or a branch one of whose arms contains such
+an item. Every other scope runs inline on the calling thread, in the linear order.
+
+A graph is heavy when its body, or the body of a graph it calls directly or indirectly,
+contains a higher-order operator, an operator of a module (`tensor:matmul`, `algo:sort`: any
+operator that is not one of the built-in `:...` operators), or a call of a function value (whose
+callee is not known when the plan is built). A graph that only does built-in arithmetic and
+comparisons and calls such graphs, like the body of `fib`, is light: a task per call costs more
+than the call. A recursive graph is heavy exactly when its body is heavy apart from the
+recursive calls.
+
+The rule is static: it is decided once per graph when its plan is built, and nothing is measured
+at run time. The higher-order operators keep their own fan-out (one task per element) whatever
+the rule says about the scope they sit in. `CAMEL_TF_FANOUT_ALL=1` switches the rule off (every
+scope that is not totally ordered runs as a task graph) for comparison; `CAMEL_TF_GC_STATS=1`
+prints the number of task graphs a run started (`[taskflow] run: task_graphs=N`).
+
 ## 5. 算子与类型分发
 
 - **operator_t**（`core/operator.h`）：算子索引类型，与 GIR 的 **OperNode** 对应。

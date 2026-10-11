@@ -1,0 +1,24 @@
+/**
+ * Cost probe for the growth setting: a LIVE table of many small objects that does not fit the
+ * elder space (rows x 16 integers; --arg rows=N), kept alive while `reps` temporary tables of a
+ * tenth of its size are built and dropped. Every collection marks the whole live table, so its
+ * cost is proportional to the number of live objects, and the growth setting decides how often
+ * that is paid.
+ */
+module gc_live_table
+
+type Row = int[]
+
+func table(n: int, k: int): Row[] {
+    return range(0, n)->map<(i: int): int[] => range(0, 16)->map<(j: int): int => i + j + k>>
+}
+
+func churn(keep: Row[], n: int, left: int, total: int): int {
+    return if left == 0 then total + keep[0][0] else churn(keep, n, left - 1, total + table(n, left)[n - 1][15])
+}
+
+func main(rows: int, reps: int): int sync {
+    let keep = table(rows, 0)
+    println('gc_live_table total={}'->format<churn(keep, rows / 10, reps, 0)>)
+    return 0
+}

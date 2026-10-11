@@ -1020,6 +1020,13 @@ indexValue   : '...'? dataExpr ;
 */
 any Builder::visitIndexValue(OpenCMLParser::IndexValueContext *context) {
     ENTER("IndexValue");
+    if (context->children.size() > 1) {
+        // `...xs` is in the grammar but spreading is not implemented. The marker used to be
+        // dropped, so that `[...xs, 4]` was built as the array of `xs` and 4.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart())
+            .commit("...", "spreading is not implemented");
+    }
     node_ptr_t res = any2node(visitDataExpr(context->dataExpr()));
     LEAVE("IndexValue");
     return res;
@@ -1045,7 +1052,15 @@ keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
 any Builder::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
     ENTER("KeyValuePair");
-    Reference ref(context->identDef()->getText());
+    if (!context->identDef()) {
+        // `...s` in a struct literal or an argument list: in the grammar, not implemented. It
+        // used to dereference the missing key and crash the compiler.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart())
+            .commit("...", "spreading is not implemented");
+    }
+    // The error above stops compilation; a placeholder key keeps the rest of the file checked.
+    Reference ref(context->identDef() ? context->identDef()->getText() : std::string("_"));
     node_ptr_t namedDataNode = createNodeAs<NamedDataLoad>(ref);
     setNodeTokenRangeByContext(namedDataNode, context);
     if (context->dataExpr()) {
@@ -1272,8 +1287,19 @@ any Builder::visitPattern(OpenCMLParser::PatternContext *context) {
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
     } else {
-        throw DiagnosticBuilder::of(InternalDiag::UnknownInternalError)
-            .commit("visitPattern: not implemented yet");
+        // Binding, tuple and struct patterns are in the grammar, but what they destructure and
+        // bind has not been decided. They used to end in an internal error without a position.
+        const char *kind = context->identRef()                       ? "an identifier pattern"
+                           : context->getStart()->getText() == "(" ? "a tuple pattern"
+                                                                     : "a struct pattern";
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart(), context->getStop())
+            .commit(
+                context->getText(),
+                std::string(kind) + " is not implemented, only literal patterns and '_' are");
+        // The error above stops compilation; a wildcard keeps the rest of the file checked.
+        res = createNodeAs<NullLoad>();
+        setNodeTokenRangeByContext(res, context);
     }
     LEAVE("Pattern");
     return res;
@@ -1286,24 +1312,48 @@ matchCase
 */
 any Builder::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     ENTER("MatchCase");
-    node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
-    setNodeTokenRangeByContext(caseNode, context);
-    node_ptr_t pattern  = any2node(visitPattern(context->pattern(0)));
-    node_ptr_t exprNode = any2node(visitBlockExpr(context->blockExpr()));
-    *caseNode << pattern << exprNode;
-    registerAstSemanticBundle(
-        caseNode,
-        {
-            semanticPart(
-                camel::source::SemanticRole::Keyword,
-                deriveAstAnchorOrigin(caseNode, context->CASE()->getSymbol(), "ast.match.case"),
-                -1,
-                "case"),
-            semanticPart(camel::source::SemanticRole::CaseValue, nodeOrigin(pattern), 0, "pattern"),
-            semanticPart(camel::source::SemanticRole::CaseBody, nodeOrigin(exprNode), -1, "body"),
-        });
+    // `case a | b => body` enters the body when any of its patterns matches. A branch has one
+    // value per arm, so the case becomes one arm per pattern, each with its own copy of the
+    // body (only the first pattern used to be read). An alternative that is the wildcard
+    // matches everything: the whole case is then the wildcard arm.
+    std::vector<node_ptr_t> patterns;
+    for (auto *patternContext : context->pattern()) {
+        node_ptr_t pattern = any2node(visitPattern(patternContext));
+        if (pattern->type() == LoadType::Null) {
+            patterns.assign(1, pattern);
+            break;
+        }
+        patterns.push_back(pattern);
+    }
+    std::vector<node_ptr_t> caseNodes;
+    for (const node_ptr_t &pattern : patterns) {
+        node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
+        setNodeTokenRangeByContext(caseNode, context);
+        node_ptr_t exprNode = any2node(visitBlockExpr(context->blockExpr()));
+        *caseNode << pattern << exprNode;
+        registerAstSemanticBundle(
+            caseNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Keyword,
+                    deriveAstAnchorOrigin(caseNode, context->CASE()->getSymbol(), "ast.match.case"),
+                    -1,
+                    "case"),
+                semanticPart(
+                    camel::source::SemanticRole::CaseValue,
+                    nodeOrigin(pattern),
+                    0,
+                    "pattern"),
+                semanticPart(
+                    camel::source::SemanticRole::CaseBody,
+                    nodeOrigin(exprNode),
+                    -1,
+                    "body"),
+            });
+        caseNodes.push_back(caseNode);
+    }
     LEAVE("MatchCase");
-    return caseNode;
+    return caseNodes;
 }
 
 /*
@@ -1394,8 +1444,64 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
         setNodeTokenRangeByContext(ctrlNode, context);
         node_ptr_t casesNode = createNodeAs<RepeatedLoad>("MatchCase");
         setNodeTokenRangeByContext(casesNode, context);
+        OpenCMLParser::MatchCaseContext *wildcardCase = nullptr;
         for (auto &matchCase : context->matchCase()) {
-            *casesNode << any2node(visitMatchCase(matchCase));
+            // One node per pattern of the case (see visitMatchCase).
+            for (const node_ptr_t &caseNode :
+                 any_cast<std::vector<node_ptr_t>>(visitMatchCase(matchCase))) {
+                *casesNode << caseNode;
+            }
+            // The first case that matches is taken, so nothing after the wildcard can be.
+            // The branch takes its last arm when no value matches: a case left after the
+            // wildcard used to be entered in its place.
+            if (casesNode->size() > 0 &&
+                casesNode->at(casesNode->size() - 1)->front()->type() == LoadType::Null) {
+                wildcardCase = matchCase;
+                break;
+            }
+        }
+        if (wildcardCase != nullptr && casesNode->size() == 1) {
+            // Only the wildcard is left: the match is its body, whatever the value. A branch
+            // without a value to compare is read as an `if` on a boolean, so this is built as
+            // one whose condition is true (the scrutinee used to be read as that boolean, and
+            // an arm that does not exist entered when it was false).
+            ctrlNode = createNodeAs<IfExprLoad>();
+            setNodeTokenRangeByContext(ctrlNode, context);
+            node_ptr_t condNode = createNodeAs<LiteralLoad>(Literal(LiteralType::Boolean, "true"));
+            setNodeTokenRangeByContext(condNode, context->identRef());
+            node_ptr_t thenNode      = casesNode->at(0)->at(1);
+            node_ptr_t elseBlockNode = createNodeAs<OptionalLoad>("StmtBlock");
+            setNodeTokenRangeByContext(elseBlockNode, wildcardCase->blockExpr());
+            *elseBlockNode << any2node(visitBlockExpr(wildcardCase->blockExpr()));
+            *ctrlNode << condNode << thenNode << elseBlockNode;
+            registerAstSemanticBundle(
+                ctrlNode,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Keyword,
+                        deriveAstAnchorOrigin(
+                            ctrlNode,
+                            context->MATCH()->getSymbol(),
+                            "ast.match.keyword"),
+                        -1,
+                        "match"),
+                    semanticPart(
+                        camel::source::SemanticRole::BranchCondition,
+                        nodeOrigin(condNode),
+                        -1,
+                        "condition"),
+                    semanticPart(
+                        camel::source::SemanticRole::BranchTarget,
+                        nodeOrigin(thenNode),
+                        0,
+                        "then"),
+                    semanticPart(
+                        camel::source::SemanticRole::BranchTarget,
+                        nodeOrigin(elseBlockNode->front()),
+                        1,
+                        "else"),
+                });
+            break;
         }
         *ctrlNode << casesNode;
         std::vector<camel::source::SemanticPart> parts = {
@@ -1794,6 +1900,11 @@ any Builder::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
         } else {
             throw std::runtime_error("Invalid nullable operator: " + strOp);
         }
+        // Nullable and error values are not implemented. The operator used to be accepted
+        // with a warning and its right-hand side dropped.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(tokenFromTree(context->children[1]))
+            .commit(strOp, "the operator is not implemented");
 
         if (context->dataExpr()) {
             node_ptr_t dataExprNode = createNodeAs<ReservedExprLoad>(op);
@@ -1849,6 +1960,13 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
             } else {
                 throw std::runtime_error(
                     "Invalid unary operator: " + context->children[0]->getText());
+            }
+            if (context->IS()) {
+                // There is no run-time type test. `x is T` used to be accepted with a warning
+                // and compiled as `x`.
+                diags_->of(SemanticDiag::ConstructNotSupported)
+                    .at(context->IS()->getSymbol())
+                    .commit("is", "the operator is not implemented");
             }
             node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
             node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
@@ -1938,6 +2056,10 @@ any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
         setNodeTokenRangeByContext(linkNode, context);
         node_ptr_t rhsNode = any2node(visitCompExpr(context->compExpr(i)));
         if (strOp == "?->") {
+            // Used to be accepted with a warning and compiled as `->`.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(tokenFromTree(context->children[i * 2 - 1]))
+                .commit(strOp, "the operator is not implemented");
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
             setNodeTokenRangeByContext(notNullNode, context->compExpr(i));
             *notNullNode << lhsNode;
@@ -2001,6 +2123,10 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
         setNodeTokenRangeByContext(dataNode, context);
         node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
         if (strOp == "?..") {
+            // Used to be accepted with a warning and compiled as `..`.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(tokenFromTree(context->children[i * 2 - 1]))
+                .commit(strOp, "the operator is not implemented");
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
             setNodeTokenRangeByContext(notNullNode, context->annoExpr(i));
             *notNullNode << lhsNode;
@@ -2050,6 +2176,16 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                 registerAstSemanticBundle(
                     exprNode,
                     {
+                        // The operator is the bracket: a fault of the index (out of range) is
+                        // reported there, as a division by zero is reported at its `/`.
+                        semanticPart(
+                            camel::source::SemanticRole::Operator,
+                            deriveAstAnchorOrigin(
+                                exprNode,
+                                tt::as_ptr<OpenCMLParser::IndicesContext>(child)->getStart(),
+                                "ast.index.operator"),
+                            -1,
+                            "[]"),
                         semanticPart(
                             camel::source::SemanticRole::IndexExpr,
                             nodeOrigin(rhsNode),
@@ -2123,6 +2259,10 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
             }
             lhsNode = exprNode;
         } else {
+            // The postfix `!` (non-null assertion) used to be recorded and never read.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(tokenFromTree(child))
+                .commit("!", "the postfix non-null assertion is not implemented");
             unwrapNodeAs<DataLoad>(lhsNode)->setNonNull(true);
         }
     }
@@ -2227,6 +2367,18 @@ any Builder::visitArrayData(OpenCMLParser::ArrayDataContext *context) {
     if (context->indexValues()) {
         *dataNode << any2node(visitIndexValues(context->indexValues()));
     } else {
+        if (context->FOR()) {
+            // `[e for x in xs if c]` is in the grammar, but its meaning is not specified (how
+            // `x` is bound, the order and the effects of the element expressions). It used to
+            // be compiled as the empty array, silently.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(context->getStart(), context->getStop())
+                .commit(
+                    "[... for ... in ...]",
+                    "list comprehensions are not implemented; write it with 'map' and 'filter'");
+            // The error above stops compilation; the empty array keeps the rest of the file
+            // checked.
+        }
         *dataNode << createNodeAs<RepeatedLoad>("Data");
     }
     LEAVE("ArrayData");
@@ -2303,6 +2455,13 @@ any Builder::visitLiteral(OpenCMLParser::LiteralContext *context) {
     } else if (context->REAL()) {
         type = LiteralType::Real;
     } else if (context->STRING() || context->FSTRING()) {
+        if (context->FSTRING()) {
+            // A backquoted string is a formatted string, which is not implemented. It used to
+            // be compiled as a plain string, its `{...}` left as written.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(context->getStart())
+                .commit("`...`", "formatted strings are not implemented; use 'format'");
+        }
         data = data.substr(1, data.size() - 2); // Remove quotes
         type = LiteralType::String;
     } else if (context->MULTI_STR()) {
@@ -2335,6 +2494,10 @@ any Builder::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
             *typeExprNode << any2node(visitUnionType(context->unionType(1)));
             lhsNode = typeExprNode;
         } else {
+            // `T?` used to be compiled as `T`, silently.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(context->getStart(), context->getStop())
+                .commit(context->getText(), "nullable types are not implemented");
             node_ptr_t nullableTypeNode = createNodeAs<NullableTypeLoad>();
             setNodeTokenRangeByContext(nullableTypeNode, context);
             *nullableTypeNode << lhsNode;
@@ -2456,7 +2619,14 @@ any Builder::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
     ENTER("TypeUnit");
     node_ptr_t res = nullptr;
     if (context->identDef()) {
-        throw std::runtime_error("visitTypeUnit: identDef is not implemented yet");
+        // `name of T` used to end in an exception without a position.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(context->getStart(), context->getStop())
+            .commit(
+                context->identDef()->getText() + " of ...",
+                "the 'of' type form is not implemented");
+        // The error above stops compilation; the type itself keeps the rest checked.
+        res = any2node(visitArrayType(context->arrayType()));
     } else if (context->arrayType()) {
         res = any2node(visitArrayType(context->arrayType()));
     }

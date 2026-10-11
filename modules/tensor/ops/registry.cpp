@@ -155,13 +155,8 @@ class OpDefResolver final : public FuncTypeResolver {
 
   private:
     std::optional<Type *> infer(const type_vec_t &norm, static_args_t normStatics) const {
-        std::vector<std::optional<ConstArg>> constants(norm.size());
-        for (size_t i = 0; i < norm.size() && i < normStatics.size(); ++i) {
-            if (normStatics[i]) {
-                constants[i] = constArgOf(*normStatics[i], norm[i]);
-            }
-        }
-        return def_->infer(InferContext(norm, constants));
+        const StaticFacts facts(norm, normStatics);
+        return def_->infer(InferContext(norm, facts.constants, facts.partials));
     }
 
     std::shared_ptr<const OpDef> def_;
@@ -198,14 +193,11 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
                     std::span<Type *const> types,
                     static_args_t statics,
                     mm::IAllocator &allocator) -> std::optional<slot_t> {
-                    std::vector<std::optional<ConstArg>> constants(types.size());
-                    for (size_t i = 0; i < types.size() && i < statics.size(); ++i) {
-                        if (statics[i]) {
-                            constants[i] = constArgOf(*statics[i], types[i]);
-                        }
-                    }
+                    const StaticFacts facts(types, statics);
                     try {
-                        return fold(InferContext(types, constants), allocator);
+                        return fold(
+                            InferContext(types, facts.constants, facts.partials),
+                            allocator);
                     } catch (const std::exception &) {
                         return std::nullopt; // left to the program to report when it runs
                     }

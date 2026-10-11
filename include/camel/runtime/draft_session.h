@@ -37,6 +37,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -73,6 +74,26 @@ struct RuntimeSpecializationKey {
     std::vector<RuntimeSpecializationBindingKey> bindings;
 
     bool operator==(const RuntimeSpecializationKey &other) const = default;
+};
+
+/// Thrown when a draft cannot be encoded because the space runtime graphs live in is full. It
+/// is a std::runtime_error with the message this failure always had; the type lets the driver
+/// of an open-ended rewrite (an export that unrolls a recursion) say what grew, and where.
+class GraphSpaceExhausted : public std::runtime_error {
+  public:
+    GraphSpaceExhausted(size_t bytes, const std::string &graph)
+        : std::runtime_error(
+              "Runtime draft encoding failed to allocate " + std::to_string(bytes) +
+              " bytes for graph '" + graph + "'."),
+          bytes_(bytes), graph_(graph) {}
+
+    /// The size of the graph that could not be placed, and its name.
+    size_t bytes() const { return bytes_; }
+    const std::string &graph() const { return graph_; }
+
+  private:
+    size_t bytes_;
+    std::string graph_;
 };
 
 /// Suffix tag of a specialization that binds no value and only refines parameter types

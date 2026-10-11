@@ -1,0 +1,303 @@
+id = "mm.gc_pacing"
+order = 367
+tier = "feat"
+tags = ["feat", "mm", "gc", "pacing"]
+desc = """
+How often the allocator asks for a collection when a program allocates large objects, and how
+much the large-object space holds at most. One array of 40 MB stays alive while 200 temporary
+arrays of 0.8 MB each are allocated and dropped, one per call (190.7 MB in all). After a sweep
+the budget is the larger of the floor (CAMEL_GC_LARGE_BUDGET_MB, default 4 MB) and
+CAMEL_GC_GROWTH_PERCENT percent of the volume the sweep left, so the space holds at most
+live * (1 + percent / 100) plus the allocation that crossed the budget, and the number of
+collections is the volume allocated divided by the budget. Both are read from the allocator's
+statistics line (CAMEL_GC_STATS=1); nothing here depends on time, and the program runs one node
+at a time, so the numbers are the same on every run.
+"""
+
+[[tests]]
+name = "gc_pacing.growth_default_fvm"
+desc = "Default growth (100 percent): the budget equals the live volume, the space doubles between collections: 4 collections, high-water mark 77.8 MB for 38.9 MB alive. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_large_pacing total=25000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+const major = field('major')
+const byBudget = field('by_large_budget')
+const live = field('large_live_mb')
+const high = field('large_high_water_mb')
+const budget = field('budget_mb')
+assert(field('growth_percent') === 100, `growth setting in force: ${line[0]}`)
+assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
+assert(major >= 4 && major <= 4, `${major} collections, expected 4 to 4: ${line[0]}`)
+assert(Math.abs(budget - 38.9) <= 0.2, `budget ${budget} MB, expected 38.9: ${line[0]}`)
+// The space never holds more than what the last sweep left, plus the budget, plus the one
+// temporary array (0.8 MB) whose allocation crossed the budget.
+assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
+assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.growth_default_nvm"
+desc = "Default growth (100 percent): 4 collections, high-water mark 77.8 MB for 38.9 MB alive. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
+args = ["${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_large_pacing total=25000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+const major = field('major')
+const byBudget = field('by_large_budget')
+const live = field('large_live_mb')
+const high = field('large_high_water_mb')
+const budget = field('budget_mb')
+assert(field('growth_percent') === 100, `growth setting in force: ${line[0]}`)
+assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
+assert(major >= 4 && major <= 4, `${major} collections, expected 4 to 4: ${line[0]}`)
+assert(Math.abs(budget - 38.9) <= 0.2, `budget ${budget} MB, expected 38.9: ${line[0]}`)
+// The space never holds more than what the last sweep left, plus the budget, plus the one
+// temporary array (0.8 MB) whose allocation crossed the budget.
+assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
+assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.growth_50_fvm"
+desc = "Growth 50 percent: budget 19.5 MB, twice the collections of the default, high-water mark 58.4 MB. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=50"]
+expect_exit = 0
+expect_stdout_contains = ["gc_large_pacing total=25000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+const major = field('major')
+const byBudget = field('by_large_budget')
+const live = field('large_live_mb')
+const high = field('large_high_water_mb')
+const budget = field('budget_mb')
+assert(field('growth_percent') === 50, `growth setting in force: ${line[0]}`)
+assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
+assert(major >= 8 && major <= 9, `${major} collections, expected 8 to 9: ${line[0]}`)
+assert(Math.abs(budget - 19.5) <= 0.2, `budget ${budget} MB, expected 19.5: ${line[0]}`)
+// The space never holds more than what the last sweep left, plus the budget, plus the one
+// temporary array (0.8 MB) whose allocation crossed the budget.
+assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
+assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.growth_25_fvm"
+desc = "Growth 25 percent: budget 9.7 MB, 16 collections, high-water mark 48.8 MB. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25"]
+expect_exit = 0
+expect_stdout_contains = ["gc_large_pacing total=25000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+const major = field('major')
+const byBudget = field('by_large_budget')
+const live = field('large_live_mb')
+const high = field('large_high_water_mb')
+const budget = field('budget_mb')
+assert(field('growth_percent') === 25, `growth setting in force: ${line[0]}`)
+assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
+assert(major >= 16 && major <= 16, `${major} collections, expected 16 to 16: ${line[0]}`)
+assert(Math.abs(budget - 9.7) <= 0.2, `budget ${budget} MB, expected 9.7: ${line[0]}`)
+// The space never holds more than what the last sweep left, plus the budget, plus the one
+// temporary array (0.8 MB) whose allocation crossed the budget.
+assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
+assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.growth_25_nvm"
+desc = "Growth 25 percent: budget 9.7 MB, 16 collections, high-water mark 48.8 MB. Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
+args = ["${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25"]
+expect_exit = 0
+expect_stdout_contains = ["gc_large_pacing total=25000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+const major = field('major')
+const byBudget = field('by_large_budget')
+const live = field('large_live_mb')
+const high = field('large_high_water_mb')
+const budget = field('budget_mb')
+assert(field('growth_percent') === 25, `growth setting in force: ${line[0]}`)
+assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
+assert(major >= 16 && major <= 16, `${major} collections, expected 16 to 16: ${line[0]}`)
+assert(Math.abs(budget - 9.7) <= 0.2, `budget ${budget} MB, expected 9.7: ${line[0]}`)
+// The space never holds more than what the last sweep left, plus the budget, plus the one
+// temporary array (0.8 MB) whose allocation crossed the budget.
+assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
+assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.growth_25_prl"
+desc = "Growth 25 percent under the parallel scheduler (the program has no two unordered heavy items, so the allocation order is the sequential one): 16 collections, high-water mark 48.8 MB, every collection performed by the scheduler's gate. Pipeline: std::prl."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
+args = ["${case}", "std::prl"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25"]
+expect_exit = 0
+expect_stdout_contains = ["gc_large_pacing total=25000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+const major = field('major')
+const byBudget = field('by_large_budget')
+const live = field('large_live_mb')
+const high = field('large_high_water_mb')
+const budget = field('budget_mb')
+assert(field('growth_percent') === 25, `growth setting in force: ${line[0]}`)
+assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
+assert(major >= 16 && major <= 16, `${major} collections, expected 16 to 16: ${line[0]}`)
+assert(Math.abs(budget - 9.7) <= 0.2, `budget ${budget} MB, expected 9.7: ${line[0]}`)
+// The space never holds more than what the last sweep left, plus the budget, plus the one
+// temporary array (0.8 MB) whose allocation crossed the budget.
+assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
+assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.growth_10_floor_fvm"
+desc = "Growth 10 percent of 38.9 MB is below the floor, so the floor (4 MB) is the budget: 34 collections, high-water mark 43.5 MB. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=10"]
+expect_exit = 0
+expect_stdout_contains = ["gc_large_pacing total=25000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+const major = field('major')
+const byBudget = field('by_large_budget')
+const live = field('large_live_mb')
+const high = field('large_high_water_mb')
+const budget = field('budget_mb')
+assert(field('growth_percent') === 10, `growth setting in force: ${line[0]}`)
+assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
+assert(major >= 34 && major <= 34, `${major} collections, expected 34 to 34: ${line[0]}`)
+assert(Math.abs(budget - 4.0) <= 0.2, `budget ${budget} MB, expected 4.0: ${line[0]}`)
+// The space never holds more than what the last sweep left, plus the budget, plus the one
+// temporary array (0.8 MB) whose allocation crossed the budget.
+assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
+assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.floor_64_fvm"
+desc = "CAMEL_GC_LARGE_BUDGET_MB is the floor of the budget, not the budget: 64 MB is above 25 percent of the live volume, so it is in force: 2 collections. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_large_pacing.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_LARGE_BUDGET_MB=64"]
+expect_exit = 0
+expect_stdout_contains = ["gc_large_pacing total=25000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+const major = field('major')
+const byBudget = field('by_large_budget')
+const live = field('large_live_mb')
+const high = field('large_high_water_mb')
+const budget = field('budget_mb')
+assert(field('growth_percent') === 25, `growth setting in force: ${line[0]}`)
+assert(major === byBudget, `every collection is asked for by the large-object budget: ${line[0]}`)
+assert(major >= 2 && major <= 2, `${major} collections, expected 2 to 2: ${line[0]}`)
+assert(Math.abs(budget - 64.0) <= 0.2, `budget ${budget} MB, expected 64.0: ${line[0]}`)
+// The space never holds more than what the last sweep left, plus the budget, plus the one
+// temporary array (0.8 MB) whose allocation crossed the budget.
+assert(high <= live + budget + 0.9, `high-water mark ${high} MB above live ${live} + budget ${budget} + 0.9: ${line[0]}`)
+assert(high >= live + budget - 0.15, `high-water mark ${high} MB below live ${live} + budget ${budget}: the budget was not used: ${line[0]}`)
+}
+"""
+timeout_ms = 120000

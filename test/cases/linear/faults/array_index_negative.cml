@@ -1,0 +1,15 @@
+/**
+ * A negative array index is IndexOutOfRange with the index as written (-1), not the unsigned
+ * value it wraps to.
+ */
+module array_index_negative
+
+func at(xs: int[], i: int): int { return xs[i] }
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(at(xs, 2))
+    println(at(xs, 0 - 1))
+    println('not reached')
+    return 0
+}

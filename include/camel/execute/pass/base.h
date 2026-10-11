@@ -82,8 +82,15 @@ struct PassApplyResult {
  * with stage `pass:<name>` for the first unknown name, after listing the available passes on
  * stderr. applyPassesDetailed calls it for its own list; a driver that runs several lists
  * (the given passes, then the fallback) calls it for all of them first.
+ *
+ * With a context, a name that is not known yet and is written `<module>::<pass>` first loads
+ * the module `<module>` (as an `import` of it would): naming a module's pass on the command
+ * line is enough to have it, the program need not import a module it does not use. A module
+ * that cannot be found leaves the name unknown, which is reported as before.
  */
-void requireKnownPasses(const std::vector<std::string> &passes);
+void requireKnownPasses(
+    const std::vector<std::string> &passes,
+    const camel::core::context::context_ptr_t &ctx = nullptr);
 
 /**
  * The index of the first pass of the list that consumes the graph by its kind (a scheduling or

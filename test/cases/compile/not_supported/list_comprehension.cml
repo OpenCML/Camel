@@ -1,0 +1,13 @@
+/**
+ * A list comprehension is in the grammar but not implemented: a compile-time error at the
+ * literal (line 9), not the empty array it used to be compiled as.
+ */
+module list_comprehension
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let ys = [x * 2 for x in xs if x > 1]
+    println('never printed')
+    println(ys)
+    return 0
+}

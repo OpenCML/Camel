@@ -1,0 +1,20 @@
+/**
+ * map and filter are ordered in their RESULT: element i of the result comes from element i of
+ * the input, whatever order the element functions ran in. A parallel scheduler may run the
+ * element functions concurrently (the order of effects inside them is then not defined).
+ */
+module map_result_order
+
+func slow_square(i: int): int {
+    // more work for the first elements, so that later ones tend to finish first
+    let spin = range(0, (40 - i) * 200)->reduce<(acc: int, k: int): int => acc + k - k, 0>
+    return i * i + spin
+}
+
+func main(): int sync {
+    let squares = range(0, 40)->map<slow_square>
+    let kept = range(0, 40)->filter<(i: int): bool => i - (i / 3) * 3 == 0>
+    println(squares)
+    println(kept)
+    return 0
+}

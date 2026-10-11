@@ -22,12 +22,24 @@
 #include "camel/core/type/base.h"
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <string>
 #include <unordered_map>
 
+namespace camel::core::data {
+class Data;
+}
+
 namespace camel::core::type {
+
+/// One argument of a parameterised type as it is written between `<` and `>`: a type
+/// (`Tensor<f32>`) or a compile-time constant (`Tensor<const [3, 4]>`). Exactly one member is set.
+struct TypeArgument {
+    Type *type = nullptr;
+    std::shared_ptr<data::Data> data;
+};
 
 class OtherTypeRegistry {
   public:
@@ -85,6 +97,16 @@ class OtherType : public Type {
     }
 
     virtual OtherType *cloneWithParams(std::span<Type *const> params) const = 0;
+    /// The type `Name<args...>` denotes, arguments in source order. A type that gives its
+    /// constant arguments a meaning overrides this; the default accepts type arguments only
+    /// (and hands them to cloneWithParams). Returns nullptr with `error` set when the arguments
+    /// are not ones the type accepts; the compiler reports that at the type expression.
+    virtual OtherType *
+    cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const;
+
+    /// The type as a program writes it, for diagnostics that suggest source text (`x as T`).
+    /// toString() is the default; a type whose printed form is not its source form overrides.
+    virtual std::string spelling() const { return toString(); }
 
     virtual std::string toString() const override                      = 0;
     virtual std::string mangle() const override                        = 0;

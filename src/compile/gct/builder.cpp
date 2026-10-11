@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -210,9 +210,32 @@ pair<node_ptr_t, data_ptr_t> Builder::makeRefData(const node_ptr_t &expr) {
     return make_pair(refNode, data);
 }
 
+/// A tuple, array or struct literal that still names values (`(h, k)`): it is built when the
+/// program runs, from what the names stand for, so it is not a constant element of a literal
+/// that encloses it.
+bool isUnresolvedLiteral(const data_ptr_t &data) {
+    if (!data || !data->type()) {
+        return false;
+    }
+    switch (data->type()->code()) {
+    case TypeCode::Tuple:
+    case TypeCode::Array:
+    case TypeCode::Struct: {
+        const auto composite = std::dynamic_pointer_cast<CompositeData>(data);
+        return composite && !composite->resolved();
+    }
+    default:
+        return false;
+    }
+}
+
 pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode) {
     const data_ptr_t data = extractStaticDataFromNode(node);
-    if (data) {
+    // An enclosing literal only fills the names among its own elements (CompositeData::refs),
+    // so an inner literal with names of its own is an element computed like any other
+    // expression: `((h, k), 1)` is `let a = (h, k)` then `(a, 1)`. Embedded as a constant it
+    // kept its unresolved element types ("(ref, ref)") and its names were never filled.
+    if (data && !isUnresolvedLiteral(data)) {
         return make_pair(data, false);
     } else {
         auto [refNode, refData] = makeRefData(node);
@@ -566,7 +589,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     findBindingOrigin(context_, ast, i),
                     camel::source::OriginKind::GctNode,
                     "gct.nref");
-                res = nRefNode;
+                if (refs.size() == 1) {
+                    res = nRefNode;
+                } else {
+                    // `let a, b = 1, 2` binds every name: only the last one used to be kept.
+                    *res << nRefNode;
+                }
             }
         } else {
             if (dataNodes->size() == 1) {
@@ -1734,10 +1762,16 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     StructDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+    std::unordered_set<string> fieldNames;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
         const string &name    = namedPair->ref().ident();
+        if (!fieldNames.insert(name).second) {
+            // As in a struct type. The later value used to be dropped, silently.
+            diags_->of(SemanticDiag::DuplicateDictKey).at(namedPair->tokenRange()).commit(name);
+            throw BuildAbortException();
+        }
         node_ptr_t dataNode   = visitData(child->atAs<AST::DataLoad>(0));
         auto [data, _]        = extractData(dataNode, execNode, dangling);
         factory.add(name, data);
@@ -2015,12 +2049,16 @@ ArrayType(siz dim) : Type type ;
 Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
     ENTER("ArrayType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
-    // TODO: The dims information is not used here yet.
-    // const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
-    Type *type            = visitType(ast->atAs<AST::TypeLoad>(0));
-    const auto &arrayType = ArrayType::create(type);
+    // `T[][]` reaches here as one node of two dimensions: an array of arrays of T. One array
+    // type per dimension; a single one made `T[][]` mean `T[]`.
+    const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
+    Type *type                = visitType(ast->atAs<AST::TypeLoad>(0));
+    type                      = ArrayType::create(type);
+    for (size_t dim = 1; dim < arrayTypeLoad->dims(); ++dim) {
+        type = ArrayType::create(type);
+    }
     LEAVE("ArrayType");
-    return arrayType;
+    return type;
 }
 
 /*
@@ -2233,25 +2271,43 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         LEAVE("SpecType");
         return base;
     }
-    type_vec_t typeArgs;
+    // The arguments in source order: types, and constants written `const <data>`. What a
+    // constant means is the type's business (OtherType::cloneWithArguments); an argument the
+    // type does not accept is an error here, never dropped.
+    std::vector<TypeArgument> arguments;
     const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
     for (const auto &child : *argsNode) {
         if (child->type() == AST::LoadType::Type) {
-            typeArgs.push_back(visitType(child));
+            arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
+            continue;
         }
+        const data_ptr_t data = extractStaticDataFromNode(visitData(child));
+        if (!data) {
+            diags_->of(SemanticDiag::InvalidTypeArgument)
+                .at(child->load()->tokenRange())
+                .commit(base->toString(), "a 'const' argument must be a compile-time constant");
+            throw BuildAbortException();
+        }
+        arguments.push_back(TypeArgument{.type = nullptr, .data = data});
     }
-    if (typeArgs.empty()) {
+    if (arguments.empty()) {
         LEAVE("SpecType");
         return base;
     }
     if (!base->isOtherType()) {
-        diags_->of(SemanticDiag::FeatureNotSupported)
+        diags_->of(SemanticDiag::InvalidTypeArgument)
             .at(ast->load()->tokenRange())
-            .commit("Only OtherType is allowed to have generic params");
+            .commit(base->toString(), "this type takes no arguments");
         throw BuildAbortException();
     }
-    Type *res = static_cast<OtherType *>(base)->cloneWithParams(
-        std::span<Type *const>(typeArgs.data(), typeArgs.size()));
+    std::string error;
+    Type *res = static_cast<OtherType *>(base)->cloneWithArguments(arguments, error);
+    if (res == nullptr) {
+        diags_->of(SemanticDiag::InvalidTypeArgument)
+            .at(ast->load()->tokenRange())
+            .commit(base->toString(), error.empty() ? std::string("no reason given") : error);
+        throw BuildAbortException();
+    }
     LEAVE("SpecType");
     return res;
 }

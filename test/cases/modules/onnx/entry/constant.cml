@@ -1,0 +1,12 @@
+/**
+ * A `main` without parameters computes from constants: the model has no inputs.
+ */
+module constant
+
+import { Tensor, tanh, reshape } from tensor
+
+func main(): Tensor {
+    let w = reshape([0.5, -0.25, 0.1, 0.3], [2, 2])
+    let x = reshape([1.0, 2.0, 0.5, -1.0], [2, 2])
+    return tanh(x @ w)
+}

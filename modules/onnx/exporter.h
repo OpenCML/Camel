@@ -51,6 +51,10 @@
 
 class Function;
 
+namespace camel::runtime {
+class GCGraph;
+}
+
 namespace camel::tensor {
 class TensorObject;
 }
@@ -104,5 +108,19 @@ Model exportFunction(
 Model translateFunction(
     core::context::Context &ctx, ::Function *fn, std::span<const Example> captures,
     std::span<const Example> examples, const ExportOptions &options = {});
+
+/**
+ * The export of a program that makes no export request: translates the entry graph `root`
+ * itself, that is the computation of `main`. Each parameter the entry graph still has becomes
+ * model inputs declared from its type (`with` parameters first; a tensor needs its element
+ * type and shape, a negative extent is a dynamic axis; a number is a rank-0 input; a struct or
+ * tuple gives one input per leaf). Parameters that were given a value from outside
+ * (camel/execute/entry_args.h) are constants of the graph by now and become initializers named
+ * after the parameter. The result of `main` becomes the outputs as in exportFunction. The
+ * graph is simplified like translateFunction simplifies its function; the program itself is
+ * left as it is. Throws ExportError.
+ */
+Model translateEntryGraph(
+    core::context::Context &ctx, camel::runtime::GCGraph *root, const ExportOptions &options = {});
 
 } // namespace camel::onnx

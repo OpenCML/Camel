@@ -1,0 +1,31 @@
+/**
+ * Gradients do not flow through variables. A read of a `var` tensor in the differentiated
+ * function, before the function writes the variable, is a constant of the call: the gradient
+ * goes to `m` only, and the function's write still reaches the caller's variable.
+ * Expected output:
+ *   plain call: value 1 sum(acc) 3
+ *   value_and_grad: value 4 sum(acc) 4.5 grad 3
+ */
+module var_tensor_read
+import { Tensor, reshape, sum } from tensor
+import { value_and_grad } from autodiff
+
+type P = { p0: Tensor }
+
+with <m: P>
+sync func loss(x: Tensor, var acc: Tensor): float sync {
+    let a = acc * 1.0
+    acc = a * 0.5 + x
+    return sum(m.p0 * x) + sum(a)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0], [2])
+    let m = { p0: reshape([0.5, 0.25], [2]) }
+    var acc = reshape([0.0, 0.0], [2])
+    let a = wait loss<m>(x, acc)
+    println("plain call: value {} sum(acc) {}"->format<a, sum(acc)>)
+    let vg = wait value_and_grad(loss)<m>(x, acc)
+    println("value_and_grad: value {} sum(acc) {} grad {}"->format<vg.0, sum(acc), sum(vg.1.p0)>)
+    return 0
+}

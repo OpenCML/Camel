@@ -1,0 +1,12 @@
+/**
+ * `name of T` is in the grammar but not implemented: a compile-time error at the type (line 7,
+ * column 11), instead of an exception text without a position.
+ */
+module of_type
+
+func f(x: k of int): int { return 1 }
+
+func main(): int sync {
+    println('never printed')
+    return 0
+}

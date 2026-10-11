@@ -156,7 +156,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_evaluation.error"
-desc = "A macro call with constant arguments whose evaluation fails is a compile-time error of std::macro (provisional rule): RuntimeDiag::MacroEvaluationFailed at the call (19:17), with the reason. The program does not run. The effect the evaluation performed before failing has happened at pass time (once per round of the pass)."
+desc = "A macro call with constant arguments whose evaluation fails is a compile-time error of std::macro: RuntimeDiag::MacroEvaluationFailed at the call (19:17), with the reason. The program does not run. The effect the evaluation performed before failing has happened at pass time (once per round of the pass)."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_evaluation.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -276,7 +276,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_unreached.error"
-desc = "Consequence of the provisional rule: a failing macro call in a function nothing calls is rejected by std::macro, at the call (11:16), although the program never reaches it."
+desc = "Consequence of the macro-failure rule: a failing macro call in a function nothing calls is rejected by std::macro, at the call (11:16), although the program never reaches it."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_unreached.cml"
 args = ["${case}", "std::macro", "std::nvm"]

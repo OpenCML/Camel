@@ -1,0 +1,8 @@
+module bounds_index_const
+import { Tensor, reshape, slice, sum, shape, load_npy } from tensor
+func main(): int sync {
+    println('ran')
+    let b = reshape([1.0, 2.0, 3.0], [3])
+    println(b[8])
+    return 0
+}

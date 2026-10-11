@@ -2908,3 +2908,720 @@ assert(out === '0 7 7', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read.default"
+desc = "Gradients do not flow through variables: a read of a var tensor parameter in the differentiated function, before the function writes it, is a constant of the call; the gradient goes to the with-parameter only and the write reaches the caller's variable."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'plain call: value 1 sum(acc) 3 | value_and_grad: value 4 sum(acc) 4.5 grad 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read.macro_fvm"
+desc = "Gradients do not flow through variables: a read of a var tensor parameter in the differentiated function, before the function writes it, is a constant of the call; the gradient goes to the with-parameter only and the write reaches the caller's variable."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'plain call: value 1 sum(acc) 3 | value_and_grad: value 4 sum(acc) 4.5 grad 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read.macro_simplify_jit"
+desc = "Gradients do not flow through variables: a read of a var tensor parameter in the differentiated function, before the function writes it, is a constant of the call; the gradient goes to the with-parameter only and the write reaches the caller's variable."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'plain call: value 1 sum(acc) 3 | value_and_grad: value 4 sum(acc) 4.5 grad 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read.opt_macro_nvm"
+desc = "Gradients do not flow through variables: a read of a var tensor parameter in the differentiated function, before the function writes it, is a constant of the call; the gradient goes to the with-parameter only and the write reaches the caller's variable."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read.cml"
+args = ["${case}", "std::opt", "std::macro", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'plain call: value 1 sum(acc) 3 | value_and_grad: value 4 sum(acc) 4.5 grad 3', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read_after_write.run"
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after the function assigned it a value that depends on a differentiated parameter (run-time error at the gradient call)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read_after_write.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout + (input.stderr || '')
+assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
+assert(text.includes('is not ordered before that assignment'), 'the diagnostic names the case: ' + text)
+assert(!text.includes('grad '), 'no gradient is printed')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read_after_write.macro"
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after the function assigned it a value that depends on a differentiated parameter (compile-time error of std::macro)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read_after_write.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout + (input.stderr || '')
+assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
+assert(text.includes('is not ordered before that assignment'), 'the diagnostic names the case: ' + text)
+assert(!text.includes('grad '), 'no gradient is printed')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_local.run"
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: a variable of a differentiable type declared inside the differentiated function is read there (run-time error at the gradient call)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_local.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout + (input.stderr || '')
+assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
+assert(text.includes('declared inside the differentiated function'), 'the diagnostic names the case: ' + text)
+assert(!text.includes('grad '), 'no gradient is printed')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_local.macro"
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: a variable of a differentiable type declared inside the differentiated function is read there (compile-time error of std::macro)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_local.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout + (input.stderr || '')
+assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
+assert(text.includes('declared inside the differentiated function'), 'the diagnostic names the case: ' + text)
+assert(!text.includes('grad '), 'no gradient is printed')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read_after_call.run"
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after a call that receives it and may write it (run-time error at the gradient call)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read_after_call.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout + (input.stderr || '')
+assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
+assert(text.includes('receives the variable and may write it'), 'the diagnostic names the case: ' + text)
+assert(!text.includes('grad '), 'no gradient is printed')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read_after_call.macro"
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read after a call that receives it and may write it (compile-time error of std::macro)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read_after_call.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout + (input.stderr || '')
+assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
+assert(text.includes('receives the variable and may write it'), 'the diagnostic names the case: ' + text)
+assert(!text.includes('grad '), 'no gradient is printed')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read_in_callee.run"
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read in a function the differentiated function calls (run-time error at the gradient call)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read_in_callee.cml"
+args = ["${case}"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout + (input.stderr || '')
+assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
+assert(text.includes('in a function or branch arm that the differentiated function calls'), 'the diagnostic names the case: ' + text)
+assert(!text.includes('grad '), 'no gradient is printed')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_tensor_read_in_callee.macro"
+desc = "Refused with a clear diagnostic instead of a silently wrong gradient: the variable is read in a function the differentiated function calls (compile-time error of std::macro)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_tensor_read_in_callee.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout + (input.stderr || '')
+assert(text.includes('Gradients do not flow through variables'), 'the diagnostic states the rule: ' + text)
+assert(text.includes('in a function or branch arm that the differentiated function calls'), 'the diagnostic names the case: ' + text)
+assert(!text.includes('grad '), 'no gradient is printed')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "var_writes_through_recursion.default"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.simplify"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.macro_simplify_fvm"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.macro_simplify_jit"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.inline_x4"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::inline", "std::inline", "std::inline", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_writes_through_recursion.simplify_tf"
+desc = "Declared writes to a var made on the way down (and up) a recursion whose last call returns a constant are all made, on every pipeline. std::opt::simplify used to drop the write ordered before the innermost call once inlining had reduced that call to a body with no effect and no use of its argument (counters 2, 2, 4, 23 instead of 3, 3, 5, 33; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_writes_through_recursion.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'use: 10 counter 3 | climb 3: 0 counter 3 | climb 5: 0 counter 5 | around 3: 7 counter 33', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.default"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.simplify"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.opt_fold"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}", "std::opt", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.macro_simplify_fvm"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_read_before_callee_write.macro_simplify_jit"
+desc = "A read of a var stays before later writes made by a callee, also when the only thing ordering the call after the read was an argument the callee does not use. After inlining, the callee's write used to be free to run before the read under std::opt::simplify (a snapshot came out as the variable's final value; silent)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_pipelines"
+desc = "Generated programs that write variables (fixed seed): recursions writing a var on the way down and up at depths 0 to 7, and straight-line functions with snapshots of the variable interleaved with writes, a snapshot feeding an argument the callee ignores while the callee writes, and a branch whose arms write; and, in 8 more programs, nested branches on a run-time integer (depth 1 to 3) whose innermost arm calls a self-tail-recursive function with literal or run-time bounds, where the arm ending the recursion, the sibling arms and the calling arm print and / or write the variable. Each of 16 programs runs on 11 pipelines (every scheduler also after std::opt::simplify) and is compared with a reference computed by simulation (not only with the default run). Three silent defects are in this class: two of std::opt::simplify (a dropped write; a read moved behind later writes) and one of the execution order (an arm of a branch ran into its sibling arm after an inner branch was removed)."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/linear/byref/var_pipelines.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["176 program-pipeline cells, 0 wrong", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
+name = "var_rule_subpasses.default"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.nvm"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.fvm"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.jit"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.tf"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.fold"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.cse"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.dce"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.inline"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.specialize"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::specialize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.devirtualize"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::devirtualize"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.opt"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.opt_fold"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.opt_cse"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt", "std::opt::cse"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.opt_dce"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.opt_fold_cse_dce"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.simplify"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.simplify_twice"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt::simplify", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.macro_simplify_fvm"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_rule_subpasses.simplify_jit"
+desc = "The rule every rewriting pass must keep for variables: a read is not moved across a write to the same variable, and a write is not merged or dropped while a later read is reachable. One function per sub-pass built to tempt it (constant-foldable reads around writes, identical reads and identical writes, writes whose value is unused, a writer called with constants, a writer called through a function value, a write in one branch arm); the expected values were computed by hand."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_rule_subpasses.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 10305 5 | branch 10801 80802 8', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

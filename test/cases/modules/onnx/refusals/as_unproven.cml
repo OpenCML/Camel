@@ -1,0 +1,21 @@
+/**
+ * `as` on a value that depends on the model input asserts a shape. With axis 0 dynamic the
+ * model's input is [batch, 3], so the extent 2 the conversion asserts is not known when the
+ * model is exported, and an ONNX model checks nothing when it runs: the export is refused at
+ * the conversion (line 13) instead of leaving the check out.
+ */
+module as_unproven
+
+import { Tensor, reshape, tanh } from tensor
+import { export_model } from onnx
+
+func f(x: Tensor): Tensor {
+    let y = tanh(x) as Tensor<f32, const [2, 3]>
+    return y * 2.0
+}
+
+func main(): int sync {
+    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3])
+    export_model(f, ex, 'tmp/test/onnx/refusal_as_unproven.onnx', [0])
+    return 0
+}

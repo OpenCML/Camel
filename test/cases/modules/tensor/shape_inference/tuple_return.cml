@@ -1,0 +1,15 @@
+module shape_inference_tuple_return
+import { Tensor, tanh, sum, ones } from tensor
+// Elements of a returned tuple: each one that is less exact than declared is named.
+func g(x: Tensor<f32, const [3]>): (Tensor, Tensor) {
+    return (x, tanh(x))
+}
+func f(x: Tensor<f32, const [3]>): (Tensor<f32, const [3]>, float, Tensor<f32, const [3]>) {
+    let (a, b) = g(x)
+    return (a, sum(x), b)
+}
+func main(): int sync {
+    let r = f(ones([3]))
+    println(r.1)
+    return 0
+}

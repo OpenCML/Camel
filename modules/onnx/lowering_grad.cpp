@@ -264,24 +264,60 @@ std::string swapLast(Emitter &e, const std::string &x, size_t rank) {
 
 // matmul_grad_lhs(dy, lhs, rhs) = sum_to(dy @ rhs^T, lhs);
 // matmul_grad_rhs(dy, lhs, rhs) = sum_to(lhs^T @ dy, rhs).
+// A vector operand is what matmul takes it for: a 1-D lhs is a row (1, n), a 1-D rhs a column
+// (n, 1), and the axis added for it is missing from the product and so from dy. The operands
+// and dy get those axes back, the matrix formula applies, and the gradient of a vector operand
+// loses its added axis again.
 template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
-    Emitter &e          = ctx.emitter();
-    const auto dyShape  = staticShape(ctx.facts(0), ctx.uri());
-    const auto lhsShape = staticShape(ctx.facts(1), ctx.uri());
-    const auto rhsShape = staticShape(ctx.facts(2), ctx.uri());
-    if (lhsShape.size() < 2 || rhsShape.size() < 2) {
-        throw ExportError(std::format("{}: vector operands cannot be exported", ctx.uri()));
+    Emitter &e                    = ctx.emitter();
+    tensor::StaticShape dyShape   = staticShape(ctx.facts(0), ctx.uri());
+    tensor::StaticShape lhsShape  = staticShape(ctx.facts(1), ctx.uri());
+    tensor::StaticShape rhsShape  = staticShape(ctx.facts(2), ctx.uri());
+    if (lhsShape.empty() || rhsShape.empty()) {
+        throw ExportError(std::format("{}: scalar operands cannot be exported", ctx.uri()));
     }
+    const bool lhsVector = lhsShape.size() == 1;
+    const bool rhsVector = rhsShape.size() == 1;
     const auto dtype     = ctx.result().dtype;
-    const std::string dy = ctx.input(0, dtype);
+    const auto axisOf    = [&](size_t axis) {
+        const int64_t value[] = {static_cast<int64_t>(axis)};
+        return e.int64s(value);
+    };
+    std::string dy = ctx.input(0, dtype);
+    if (rhsVector) {
+        rhsShape = {rhsShape[0], 1};
+        dy       = e.node("Unsqueeze", {dy, axisOf(dyShape.size())});
+        dyShape.push_back(1);
+    }
+    if (lhsVector) {
+        lhsShape = {1, lhsShape[0]};
+        dy       = e.node("Unsqueeze", {dy, axisOf(dyShape.size() - 1)});
+        dyShape.insert(dyShape.end() - 1, 1);
+    }
     std::string product;
     tensor::StaticShape productShape = dyShape;
     if (Lhs) {
-        product = e.node("MatMul", {dy, swapLast(e, ctx.input(2, dtype), rhsShape.size())});
+        std::string rhs = ctx.input(2, dtype);
+        if (rhsVector) {
+            rhs = e.node("Unsqueeze", {rhs, axisOf(1)});
+        }
+        product             = e.node("MatMul", {dy, swapLast(e, rhs, rhsShape.size())});
         productShape.back() = lhsShape.back();
+        if (lhsVector) {
+            product = e.node("Squeeze", {product, axisOf(productShape.size() - 2)});
+            productShape.erase(productShape.end() - 2);
+        }
     } else {
-        product = e.node("MatMul", {swapLast(e, ctx.input(1, dtype), lhsShape.size()), dy});
+        std::string lhs = ctx.input(1, dtype);
+        if (lhsVector) {
+            lhs = e.node("Unsqueeze", {lhs, axisOf(0)});
+        }
+        product = e.node("MatMul", {swapLast(e, lhs, lhsShape.size()), dy});
         productShape[productShape.size() - 2] = rhsShape[rhsShape.size() - 2];
+        if (rhsVector) {
+            product = e.node("Squeeze", {product, axisOf(productShape.size() - 1)});
+            productShape.pop_back();
+        }
     }
     return ctx.result(sumTo(ctx, product, {dtype, productShape}, Lhs ? 1 : 2));
 }

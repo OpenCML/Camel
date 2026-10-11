@@ -1,0 +1,37 @@
+/**
+ * `case a | b => body` enters the body when the scrutinee equals any of its patterns (only the
+ * first used to be read). A wildcard among the alternatives makes the case the default.
+ */
+module match_multi_pattern
+
+func kind(c: string): string {
+    return match c {
+        case 'a' | 'e' | 'i' | 'o' | 'u' => 'vowel'
+        case 'y' => 'both'
+        case 'x' | 'z' => 'rare'
+        case _ => 'other'
+    }
+}
+
+func small(n: int): int {
+    return match n {
+        case 1 | 2 | 3 => n * 10
+        case 4 | _ => 0 - 1
+    }
+}
+
+func main(): int sync {
+    println(kind('a'))
+    println(kind('e'))
+    println(kind('u'))
+    println(kind('y'))
+    println(kind('x'))
+    println(kind('z'))
+    println(kind('k'))
+    println(small(1))
+    println(small(2))
+    println(small(3))
+    println(small(4))
+    println(small(9))
+    return 0
+}

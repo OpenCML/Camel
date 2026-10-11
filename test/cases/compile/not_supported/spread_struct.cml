@@ -1,0 +1,13 @@
+/**
+ * `...s` in a struct literal is in the grammar but spreading is not implemented: a
+ * compile-time error at the marker (line 9, column 15). It used to crash the compiler.
+ */
+module spread_struct
+
+func main(): int sync {
+    let s = { x: 1 }
+    let t = { ...s, y: 2 }
+    println('never printed')
+    println(t)
+    return 0
+}

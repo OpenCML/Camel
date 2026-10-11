@@ -103,6 +103,7 @@ static std::vector<double> __array_to_vector_with_type__(
 }
 
 slot_t __plot__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+    py::gil_scoped_acquire gil;
     Array *arr               = norm.get<Array *>(0);
     const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));
     TypeCode elemCode        = arrType->elemTypeCode();

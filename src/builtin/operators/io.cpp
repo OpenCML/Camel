@@ -32,10 +32,29 @@ using namespace camel::core::rtdata;
 #include "fmt/core.h"
 
 #include <iostream>
+#include <mutex>
 #include <sstream>
+
+namespace {
+
+// What one print or println produces reaches standard output in one piece: under a parallel
+// scheduler calls with no order between them print at the same time, and a line written in
+// several steps came out with another call's text (or only its line end) in the middle.
+void writeToStdout(const std::string &text, bool flush) {
+    static std::mutex mutex;
+    std::lock_guard lock(mutex);
+    std::cout << text;
+    if (flush) {
+        std::cout.flush();
+    }
+}
+
+} // namespace
 
 slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t result = NullSlot;
+    std::ostringstream out;
+    bool flush = false;
     if (with.size() > 0) {
         String *fmtStrObj  = with.get<String *>(0);
         std::string fmtStr = fmtStrObj->toString();
@@ -66,7 +85,8 @@ slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
         try {
             std::string resultStr = fmt::vformat(fmtStr, store);
-            std::cout << resultStr << std::endl;
+            out << resultStr << '\n';
+            flush = true;
         } catch (const fmt::format_error &e) {
             throwRuntimeFault(
                 RuntimeDiag::RuntimeError,
@@ -79,20 +99,23 @@ slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
     } else {
         for (size_t i = 0; i < norm.size(); i++) {
             if (i > 0) {
-                std::cout << " ";
+                out << " ";
             } else {
                 result = norm.slot(i);
             }
             slot_t data = norm.slot(i);
-            printSlot(std::cout, data, norm.type(i));
+            printSlot(out, data, norm.type(i));
         }
     }
 
+    writeToStdout(out.str(), flush);
     return result;
 }
 
 slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t result = NullSlot;
+    std::ostringstream out;
+    bool flush = false;
     if (with.size() > 0) {
         String *fmtStrObj  = with.get<String *>(0);
         std::string fmtStr = fmtStrObj->toString();
@@ -123,7 +146,8 @@ slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
         try {
             std::string resultStr = fmt::vformat(fmtStr, store);
-            std::cout << resultStr << std::endl;
+            out << resultStr << '\n';
+            flush = true;
         } catch (const fmt::format_error &e) {
             throwRuntimeFault(
                 RuntimeDiag::RuntimeError,
@@ -136,16 +160,17 @@ slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
     } else {
         for (size_t i = 0; i < norm.size(); i++) {
             if (i > 0) {
-                std::cout << " ";
+                out << " ";
             } else {
                 result = norm.slot(i);
             }
             slot_t data = norm.slot(i);
-            printSlot(std::cout, data, norm.type(i));
+            printSlot(out, data, norm.type(i));
         }
     }
 
-    std::cout << std::endl;
+    out << '\n';
+    writeToStdout(out.str(), true);
     return result;
 }
 

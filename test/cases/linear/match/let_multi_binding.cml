@@ -1,0 +1,15 @@
+/**
+ * `let a, b = 1, 2` binds every name to its value (only the last name used to be bound, the
+ * others were unresolved references).
+ */
+module let_multi_binding
+
+func main(): int sync {
+    let a, b = 1, 2
+    var c, d = 3, 4
+    c = c + 10
+    println(a)
+    println(b)
+    println(a + b + c + d)
+    return 0
+}

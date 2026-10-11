@@ -1,0 +1,37 @@
+/**
+ * The type expression `T[][]` is an array of arrays of T (and `T[][][]` one level more), in a
+ * parameter, a return type, a `var` and a lambda. It used to be taken as `T[]`, so
+ * that `u[1]` had the element type and `first(u[1])` found no overload.
+ */
+module nested_array_type
+
+func first(r: float[]): float {
+    return r[0]
+}
+
+func second_row_head(u: float[][]): float {
+    return first(u[1])
+}
+
+func grid(n: int): int[][] {
+    return range(0, n)->map<(i: int): int[] => range(0, n)->map<(j: int): int => i * 10 + j>>
+}
+
+func last(plane: int[][]): int {
+    return plane[1][1]
+}
+
+func corner(c: int[][][]): int {
+    return last(c[1])
+}
+
+func main(): int sync {
+    let g = grid(3)
+    var acc: int[][] = []
+    acc->append<g[2]>
+    let lens = g->map<(r: int[]): int => len(r)>
+    let head = second_row_head([[1.0, 2.0], [3.0, 4.0]])
+    let deep = corner([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+    println('nested_array_type head={} g21={} acc={} lens={} corner={}'->format<head, g[2][1], acc, lens, deep>)
+    return 0
+}

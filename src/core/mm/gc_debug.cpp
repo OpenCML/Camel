@@ -52,9 +52,12 @@ GenerationalAllocatorWithGC::DebugConfig GenerationalAllocatorWithGC::debugConfi
 
 GenerationalAllocatorWithGC::RuntimeStats GenerationalAllocatorWithGC::stats() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    RuntimeStats result      = stats_;
-    result.rememberedSetSize = rememberedSet_.size();
-    result.rootSourceCount   = rootSourceCountUnlocked();
+    RuntimeStats result       = stats_;
+    result.largeLiveBytes     = largeLiveBytes_;
+    result.largeBudgetBytes   = largeObjBudget_;
+    result.largeGrowthPercent = largeObjGrowthPercent_;
+    result.rememberedSetSize  = rememberedSet_.size();
+    result.rootSourceCount    = rootSourceCountUnlocked();
     return result;
 }
 

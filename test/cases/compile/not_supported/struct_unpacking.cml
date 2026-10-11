@@ -1,0 +1,16 @@
+/**
+ * A feature the compiler reports as not supported is an error (line 9, column 5). It used to
+ * be a warning: the function that used it was dropped and the rest of the program ran.
+ */
+module struct_unpacking
+
+func helper(): int {
+    let p = { x: 1, y: 2 }
+    let {x, y} = p
+    return x + y
+}
+
+func main(): int sync {
+    println('never printed')
+    return 0
+}

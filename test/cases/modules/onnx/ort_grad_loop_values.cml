@@ -1,0 +1,105 @@
+/**
+ * The gradient of tail recursions that carry and return several values (a tensor state with an
+ * integer iteration counter; the counter is not differentiated). Autodiff derives for each a
+ * forward function that is a linear recursion returning ((state, counter, ...), pullback); the
+ * pullback takes one cotangent per differentiable element of the result, as a tuple or struct.
+ * The export unrolls it into paired Loops. Run by ort_grad_loop_values.py: w.npy and x.npy are
+ * read from the working directory, the native values are saved there, and the step is exported
+ * when ONNX_OUT is set.
+ */
+module ort_grad_loop_values
+import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { value_and_grad } from autodiff
+import { export_model } from onnx
+import { get_env } from sys
+
+type P = { w: Tensor }
+
+// A: (state, counter) as a tuple; the loss reads the state only.
+with <m: P>
+func walk(h: Tensor, k: int): (Tensor, int) {
+    return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
+}
+
+with <m: P>
+func loss_a(x: Tensor): float {
+    let (h, k) = walk<m>(x, 0)
+    return sum(h * h)
+}
+
+// B: the counter enters the loss as a number (it has no derivative).
+with <m: P>
+func loss_b(x: Tensor): float {
+    let (h, k) = walk<m>(x, 0)
+    return sum(h * h) * (1.0 + 0.5 * float(k))
+}
+
+// C: the same as a struct.
+type Run = { state: Tensor, steps: int }
+
+with <m: P>
+func walk_c(h: Tensor, k: int): Run {
+    return if k >= 6 || sum(h * h) < 1.0 then { state: h, steps: k } else walk_c<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
+}
+
+with <m: P>
+func loss_c(x: Tensor): float {
+    let r = walk_c<m>(x, 0)
+    return sum(r.state)
+}
+
+// D: four carried values, three of them differentiable (two tensors and a float).
+with <m: P>
+func walk_d(h: Tensor, k: int, acc: Tensor, e: float): (Tensor, int, Tensor, float) {
+    return if k >= 6 || sum(h * h) < 1.0 then (h, k, acc, e) else walk_d<m>(
+        tanh(h @ m.w) * 0.3 + h * 0.6,
+        k + 1,
+        acc + h * h,
+        e * 0.5 + sum(h)
+    )
+}
+
+with <m: P>
+func loss_d(x: Tensor): float {
+    let r = walk_d<m>(x, 0, x * 0.0, 0.25)
+    return sum(r.0) + sum(r.2) * 0.1 + r.3 * 0.3
+}
+
+// The counter as an output of the model, next to the value and the gradient.
+func step(w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int) {
+    let m = { w: w }
+    let a = value_and_grad(loss_a)<m>(x)
+    let b = value_and_grad(loss_b)<m>(x)
+    let c = value_and_grad(loss_c)<m>(x)
+    let d = value_and_grad(loss_d)<m>(x)
+    let (h, k) = walk<m>(x, 0)
+    return (
+        reshape([a.0], [1]), a.1.w, reshape([b.0], [1]), b.1.w,
+        reshape([c.0], [1]), c.1.w, reshape([d.0], [1]), d.1.w, k
+    )
+}
+
+func main(): int sync {
+    let w = load_npy('w.npy')
+    let x = load_npy('x.npy')
+    let r = step(w, x)
+    save_npy(r.0, 'native_0.npy')
+    save_npy(r.1, 'native_1.npy')
+    save_npy(r.2, 'native_2.npy')
+    save_npy(r.3, 'native_3.npy')
+    save_npy(r.4, 'native_4.npy')
+    save_npy(r.5, 'native_5.npy')
+    save_npy(r.6, 'native_6.npy')
+    save_npy(r.7, 'native_7.npy')
+    save_npy(reshape([r.8], [1]), 'native_8.npy')
+    let exported = if get_env('ONNX_OUT') != '' then sync {
+        export_model(
+            (w: Tensor, x: Tensor): (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, int) => step(w, x),
+            (w, x),
+            get_env('ONNX_OUT')
+        )
+        1
+    } else 0
+    println(exported)
+    return 0
+}

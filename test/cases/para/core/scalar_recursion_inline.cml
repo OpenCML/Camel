@@ -1,0 +1,27 @@
+/**
+ * The granularity rule of the parallel scheduler, light side: `fib` and `ways` make two
+ * recursive calls with no path between them, but their bodies are built-in arithmetic only, so
+ * the graphs are light and no scope becomes a task graph (a task per call would cost more than
+ * the call). The test reads the number of task graphs run from the scheduler's statistics: 0.
+ * The heavy side is concurrent_alloc (a merge sort whose halves call module operators).
+ */
+module scalar_recursion_inline
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+// Mutual recursion between two light graphs stays light.
+func ways(n: int): int {
+    return if n <= 1 then 1 else steps(n - 1) + steps(n - 2)
+}
+
+func steps(n: int): int {
+    return if n <= 0 then 1 else ways(n) + 0
+}
+
+func main(): int sync {
+    println(fib(20))
+    println(ways(15))
+    return 0
+}

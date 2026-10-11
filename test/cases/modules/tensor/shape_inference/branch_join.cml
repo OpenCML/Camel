@@ -1,0 +1,13 @@
+module shape_inference_branch_join
+import { Tensor, concat, slice, sum, ones } from tensor
+// Arms of different extents join to an unknown extent.
+func f(x: Tensor<f32, const [3]>, c: bool): Tensor<f32, const [3]> {
+    return if c then x else slice(concat(x, x, 0), 0, 0, 3) * 2.0
+}
+func g(x: Tensor<f32, const [3]>, c: bool): Tensor<f32, const [3]> {
+    return if c then x else concat(x, x, 0)
+}
+func main(): int sync {
+    println(sum(f(ones([3]), false)))
+    return 0
+}

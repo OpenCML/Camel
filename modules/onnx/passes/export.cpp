@@ -35,12 +35,19 @@
 #include "camel/core/source/ids.h"
 #include "camel/core/source/manager.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/entry_args.h"
+#include "camel/execute/graph_runtime_support.h"
+#include "camel/passes/opt/config.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/reachable.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <format>
+#include <memory>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::onnx::passes {
@@ -242,6 +249,80 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node) {
     return request;
 }
 
+/// The branch of `g` in whose arm `node` sits (the innermost one), when the condition of that
+/// branch is not a constant of the graph: whether the arm runs is then decided at run time.
+std::optional<gc_node_ref_t> runtimeBranchOver(GCGraph *g, gc_node_ref_t node) {
+    std::optional<gc_node_ref_t> found;
+    size_t foundSize = 0;
+    for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+        const auto *n = *it;
+        if (!n || n->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        const auto cond = g->normInputsOf(it.ref());
+        if (!cond.empty() && constantOf(g, cond.front())) {
+            continue;
+        }
+        const size_t arms = g->ctrlOutputsOf(it.ref()).size();
+        for (size_t arm = 0; arm < arms; ++arm) {
+            const auto region = camel::execute::collectRuntimeBranchArmRegion(g, it.ref(), arm);
+            const auto &nodes = region.topoIndices;
+            if (std::find(nodes.begin(), nodes.end(), node) != nodes.end() &&
+                (!found || nodes.size() < foundSize)) {
+                found     = it.ref();
+                foundSize = nodes.size();
+            }
+        }
+    }
+    return found;
+}
+
+/// "file:line:column" of `origin`, or nothing when it has no source position.
+std::string locationOf(const core::context::Context &ctx, uint64_t origin) {
+    const auto source = ctx.sourceContext();
+    if (!source || origin == camel::source::kInvalidOriginId) {
+        return {};
+    }
+    const auto *file = source->fileForOrigin(origin);
+    if (!file) {
+        return {};
+    }
+    const auto range = source->resolveOrigin(origin);
+    return std::format("{}:{}:{}", file->path, range.start.line + 1, range.start.character + 1);
+}
+
+/// Reads the request `node` of the entry graph. A request the pass cannot read because it is
+/// made in the arm of a branch decided at run time is refused at that branch: what the arm
+/// computes is not a constant of the graph (it waits for the branch), and that, not the
+/// argument the reading stumbled on, is what the program has to change.
+Request readEntryRequest(const core::context::Context &ctx, GCGraph *g, gc_node_ref_t node) {
+    try {
+        return readRequest(g, node);
+    } catch (const Refusal &) {
+        const auto brch = runtimeBranchOver(g, node);
+        if (!brch) {
+            throw;
+        }
+        const auto cond            = g->normInputsOf(*brch);
+        const std::string location = locationOf(ctx, originNear(g, node));
+        uint64_t origin            = originNear(g, *brch);
+        if (origin == camel::source::kInvalidOriginId) {
+            origin = originNear(g, node);
+        }
+        throw Refusal{
+            origin,
+            std::format(
+                "the onnx.export_model call{} is made in an arm of this branch, and the "
+                "condition of the branch{} is not known at compile time; onnx::export does not "
+                "run the program, so it cannot tell whether the request is made, and what the "
+                "arm computes is not a constant of the graph; write the export_model call "
+                "outside the branch, or make the condition a constant",
+                location.empty() ? std::string() : " at " + location,
+                cond.empty() ? std::string()
+                             : std::format(" ({})", describeNode(g, cond.front())))};
+    }
+}
+
 /// The function a call node of `g` calls, when it is statically known.
 const GCGraph *calleeGraphOf(const GCGraph *g, gc_node_ref_t ref) {
     if (g->node(ref)->kind == GCNodeKind::Func) {
@@ -306,10 +387,164 @@ uint64_t entryOriginOf(core::context::Context &ctx, const GCGraph *root) {
     return graphOriginOf(ctx, root);
 }
 
-/// The export requests of the entry graph. A program whose entry graph still calls `main`
-/// (nothing was inlined) shows no request: that is a missing simplification, not an empty
-/// program.
-std::vector<Request> collectRequests(const GCGraph *root) {
+bool holdsRequest(const GCGraph *g) {
+    for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+        const auto *n = *it;
+        if (n && n->kind == GCNodeKind::Oper &&
+            g->nodeBodyAs<camel::runtime::GCOperBody>(it.ref())->uri() == kRequestUri) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether an export request is written somewhere in the program (in a function the entry
+/// graph reaches), though none is visible in the entry graph itself.
+bool requestIsReachable(GCGraph *root) {
+    for (GCGraph *g : camel::runtime::collectReachableGraphs(root)) {
+        if (g != nullptr && g != root && holdsRequest(g)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Whether `g` holds an export request or reaches, through calls of statically known
+/// functions, a graph that does.
+bool leadsToRequest(const GCGraph *g, std::unordered_set<const GCGraph *> &seen) {
+    if (g == nullptr || !seen.insert(g).second) {
+        return false;
+    }
+    if (holdsRequest(g)) {
+        return true;
+    }
+    for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+        const auto *n = *it;
+        if (n && (n->kind == GCNodeKind::Func || n->kind == GCNodeKind::Call) &&
+            leadsToRequest(calleeGraphOf(g, it.ref()), seen)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// The call of the entry graph behind which the export request sits, when the calls from
+/// there to the request are all calls of statically known functions.
+std::optional<gc_node_ref_t> callLeadingToRequest(const GCGraph *root) {
+    for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
+        const auto *n = *it;
+        if (!n || (n->kind != GCNodeKind::Func && n->kind != GCNodeKind::Call)) {
+            continue;
+        }
+        std::unordered_set<const GCGraph *> seen{root};
+        if (leadsToRequest(calleeGraphOf(root, it.ref()), seen)) {
+            return it.ref();
+        }
+    }
+    return std::nullopt;
+}
+
+/// What to tell about a call of the entry graph that hides the export request: why the
+/// inliner left it, when a pass that inlines ran (it records its decisions, see InlineReport),
+/// and that no such pass ran otherwise.
+std::string
+explainCallLeft(const core::context::Context &ctx, const GCGraph *root, gc_node_ref_t call) {
+    const auto report =
+        std::static_pointer_cast<const InlineReport>(ctx.passFact(kInlineReportFactKey));
+    if (!report) {
+        return "run std::opt::simplify before onnx::export (after std::macro when the program "
+               "uses macros such as grad)";
+    }
+    const GCGraph *callee    = calleeGraphOf(root, call);
+    const std::string shown  = calleeNameOf(root, call);
+    const std::string name   = shown.empty() ? "the called function" : "'" + shown + "'";
+    const InlineDeclined *no = callee ? report->find(root->name(), callee->name()) : nullptr;
+    const std::string budget = std::format(
+        "{} nodes, {}",
+        report->growthBudget,
+        report->budgetFromEnvironment ? std::format("set by {}", kGrowthBudgetEnvVar)
+                                      : std::string("the default"));
+    const std::string raise = std::format(
+        "raise the budget by setting the environment variable {} to a larger number of nodes",
+        kGrowthBudgetEnvVar);
+    if (no && no->why == InlineDecline::GrowthBudget) {
+        return std::format(
+            "the inliner ran before onnx::export and left this call because its growth budget "
+            "was exhausted: the budget is {} nodes ({}), {} were spent, and inlining {} copies {} "
+            "more; {}",
+            report->growthBudget,
+            report->budgetFromEnvironment ? std::format("set by {}", kGrowthBudgetEnvVar)
+                                          : std::string("the default"),
+            report->growthSpent,
+            name,
+            no->calleeNodes,
+            raise);
+    }
+    std::string why;
+    if (!no) {
+        why = "the inliner ran before onnx::export and left this call";
+    } else {
+        switch (no->why) {
+        case InlineDecline::OwnerSize:
+            why = std::format(
+                "the inliner ran before onnx::export and left this call because inlining {} "
+                "({} nodes) would make the entry graph ({} nodes) larger than the {} nodes a "
+                "graph may reach by inlining",
+                name,
+                no->calleeNodes,
+                no->callerNodes,
+                report->maxOwnerNodes);
+            break;
+        case InlineDecline::Recursive:
+            why = std::format(
+                "the inliner ran before onnx::export and left this call because {} is "
+                "recursive, and a recursive function is not copied into its callers; write "
+                "the export_model call outside the recursion",
+                name);
+            break;
+        case InlineDecline::ReachesRecursion:
+            why = std::format(
+                "the inliner ran before onnx::export and left this call because {} calls, "
+                "directly or through other functions, a recursive function (a loop), and "
+                "such a function is inlined only while it is small (at most {} nodes besides "
+                "constants and parameters; this one has {}); keep the function that makes "
+                "the export_model call small by moving the rest of its work into a function "
+                "it calls",
+                name,
+                report->smallNodes,
+                no->calleeNodes);
+            break;
+        case InlineDecline::Duplication:
+            why = std::format(
+                "the inliner ran before onnx::export and left this call because {} is "
+                "called from {} places and is too large ({} nodes) to be copied to each; "
+                "write the export_model call in a function that is called once",
+                name,
+                no->callSites,
+                no->calleeNodes);
+            break;
+        default:
+            why = "the inliner ran before onnx::export and left this call";
+            break;
+        }
+    }
+    if (report->growthSpent >= report->growthBudget) {
+        // Not the reason recorded for this call, but nothing is specialized or inlined once
+        // the budget is spent, so it may be what kept the call from becoming inlinable.
+        why += std::format(
+            "; the growth budget of the inliner was also exhausted ({}, {} spent): {}",
+            budget,
+            report->growthSpent,
+            raise);
+    }
+    return why;
+}
+
+/// The export requests of the entry graph. None, in a program that makes none anywhere, is
+/// the other way to export: the entry graph itself is translated (see apply). A program that
+/// does make a request, in a function its entry graph still calls (nothing was inlined), shows
+/// none here: that is a missing simplification.
+std::vector<Request> collectRequests(const core::context::Context &ctx, GCGraph *root) {
     std::vector<Request> requests;
     std::optional<gc_node_ref_t> firstCall;
     for (auto it = root->nodes().begin(); it != root->nodes().end(); ++it) {
@@ -319,7 +554,7 @@ std::vector<Request> collectRequests(const GCGraph *root) {
         }
         if (n->kind == GCNodeKind::Oper &&
             root->nodeBodyAs<camel::runtime::GCOperBody>(it.ref())->uri() == kRequestUri) {
-            requests.push_back(readRequest(root, it.ref()));
+            requests.push_back(readEntryRequest(ctx, root, it.ref()));
         } else if ((n->kind == GCNodeKind::Func || n->kind == GCNodeKind::Call) && !firstCall) {
             firstCall = it.ref();
         }
@@ -327,21 +562,19 @@ std::vector<Request> collectRequests(const GCGraph *root) {
     if (!requests.empty()) {
         return requests;
     }
-    if (firstCall) {
-        const std::string callee = calleeNameOf(root, *firstCall);
+    if (firstCall && requestIsReachable(root)) {
+        // The call behind which the request sits, when that is known; the first call else.
+        const gc_node_ref_t call = callLeadingToRequest(root).value_or(*firstCall);
+        const std::string callee = calleeNameOf(root, call);
         throw Refusal{
-            originNear(root, *firstCall),
+            originNear(root, call),
             std::format(
                 "the entry graph still contains a call{} that was not inlined, so no "
-                "onnx.export_model(fn, example, path) request is visible in it; run "
-                "std::opt::simplify before onnx::export (after std::macro when the program "
-                "uses macros such as grad)",
-                callee.empty() ? std::string() : std::format(" to '{}'", callee))};
+                "onnx.export_model(fn, example, path) request is visible in it; {}",
+                callee.empty() ? std::string() : std::format(" to '{}'", callee),
+                explainCallLeft(ctx, root, call))};
     }
-    throw Refusal{
-        camel::source::kInvalidOriginId,
-        "the entry graph contains no onnx.export_model(fn, example, path) call; onnx::export "
-        "translates the function such a call names"};
+    return requests;
 }
 
 /// A macro operator (grad, value_and_grad, ...) left in the function means std::macro did
@@ -372,10 +605,10 @@ Model translate(core::context::Context &ctx, const Request &request) {
     } catch (const ExportError &e) {
         std::string message = e.what();
         if (e.kind() == ExportError::Kind::CallRemains) {
-            message += "; onnx::export only translates and does not inline: calls must be "
-                       "removed by std::opt::simplify (after std::macro when the program uses "
-                       "macros such as grad) before it, and a call those passes leave cannot "
-                       "be exported";
+            message += "; onnx::export inlines what std::opt::simplify left once the shapes "
+                       "of the examples are known, so this call is one no simplification "
+                       "removes (run std::macro before the pass when the program uses macros "
+                       "such as grad)";
         }
         // An error about the request as a whole (its examples, dynamic axes, target, the
         // function's arity or result) names no node: it is reported at the export_model call.
@@ -385,12 +618,59 @@ Model translate(core::context::Context &ctx, const Request &request) {
     }
 }
 
+/// The export of a program that makes no request: the computation of `main` is the model.
+void exportEntry(core::context::Context &ctx, GCGraph *root, std::ostream &os) {
+    const char *out = std::getenv(kOutputEnvVar);
+    if (!out || !*out) {
+        throw Refusal{
+            camel::source::kInvalidOriginId,
+            std::format(
+                "the program contains no onnx.export_model(fn, example, path) call, so "
+                "onnx::export translates 'main' itself, and the model file is not named: set "
+                "the environment variable {} to it",
+                kOutputEnvVar)};
+    }
+    for (GCGraph *g : camel::runtime::collectReachableGraphs(root)) {
+        if (g != nullptr) {
+            refuseUnexpandedMacros(g);
+        }
+    }
+    Model model;
+    try {
+        model = translateEntryGraph(ctx, root);
+    } catch (const ExportError &e) {
+        std::string message = e.what();
+        if (e.kind() == ExportError::Kind::CallRemains) {
+            message += "; onnx::export inlines what std::opt::simplify left, so this call is "
+                       "one no simplification removes (run std::macro before the pass when "
+                       "the program uses macros such as grad)";
+        }
+        // The program makes no export request, so what is translated is `main` as a whole:
+        // say so, a driver program is refused here for what it does besides computing.
+        message += " (the program contains no onnx.export_model call, so onnx::export "
+                   "translates the computation of 'main' itself: its parameters are the "
+                   "model's inputs, its result the outputs; a program that does more than "
+                   "compute exports one of its functions with onnx.export_model instead)";
+        throw Refusal{e.origin(), std::move(message)};
+    }
+    try {
+        writeModelFile(model, out);
+    } catch (const std::runtime_error &e) {
+        throw Refusal{camel::source::kInvalidOriginId, e.what()};
+    }
+    os << std::format("onnx::export: wrote {}\n", out);
+}
+
 } // namespace
 
 GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
     try {
         // Every request is translated before any file is written: a refusal leaves no model.
-        const std::vector<Request> requests = collectRequests(graph);
+        const std::vector<Request> requests = collectRequests(*context_, graph);
+        if (requests.empty()) {
+            exportEntry(*context_, graph, os);
+            return nullptr;
+        }
         if (requests.size() > 1 && std::getenv(kOutputEnvVar) && *std::getenv(kOutputEnvVar)) {
             // Reported at the second call: the first one is what the file name stands for.
             throw Refusal{
@@ -417,6 +697,9 @@ GCGraph *OnnxExportPass::apply(GCGraph *graph, std::ostream &os) {
         // Every refusal is located: at the node it names, else at the export_model call it
         // concerns (set where it is raised), else at the entry function.
         uint64_t origin = refusal.origin;
+        if (origin == camel::source::kInvalidOriginId) {
+            origin = camel::execute::entryFunctionOrigin(*context_);
+        }
         if (origin == camel::source::kInvalidOriginId) {
             origin = entryOriginOf(*context_, graph);
         }

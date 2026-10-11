@@ -1,0 +1,54 @@
+/**
+ * A sync block keeps its written order when graphs run as task graphs. The three calls of
+ * `ordered` sleep for less and less time: run concurrently they would print 3, 2, 1; in the
+ * order the sync block gives them they print 1, 2, 3. The same holds inside a function that
+ * also has two independent calls (they do run concurrently: they meet at a rendezvous), and for
+ * a variable written by ordered calls.
+ */
+module sync_order_with_tasks
+
+import { sleep } from os
+import { rendezvous } from para
+
+func step(tag: int, delay_ms: int): int sync {
+    sleep(delay_ms)
+    println('step {}'->format<tag>)
+    return tag
+}
+
+func ordered(): int sync {
+    let a = step(1, 60)
+    let b = step(2, 30)
+    let c = step(3, 0)
+    return a + b + c
+}
+
+func meet(timeout_ms: int): int sync {
+    return rendezvous(2, timeout_ms)
+}
+
+func bump(var total: int, delay_ms: int, by: int): int sync {
+    sleep(delay_ms)
+    wait total = total * 2 + by
+    return total
+}
+
+// Not a sync block: nothing orders the two calls.
+func independent(timeout_ms: int): int {
+    let l = meet(timeout_ms)
+    let r = meet(timeout_ms)
+    return l + r
+}
+
+func main(): int sync {
+    println(ordered())
+    println('independent calls that met: {}'->format<independent(3000) - 2>)
+    println(ordered())
+    var total = 0
+    let x = bump(total, 40, 1)
+    let y = bump(total, 20, 2)
+    let z = bump(total, 0, 3)
+    println('{} {} {}'->format<x, y, z>)
+    println(total)
+    return 0
+}

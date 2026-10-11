@@ -73,6 +73,11 @@ Every `[[tests]]` entry may use these common fields:
 - `normalize_newlines`
 - `trim_trailing_space`
 - `normalize_paths`
+  Replaces the repository root with `<ROOT>` and writes the rest of that path with forward
+  slashes. On Windows the root is recognised with native separators and with escaped backslashes
+  (a path inside a quoted DOT or JSON string) as well. Use it on every snapshot whose output
+  carries an absolute path (for example the `srcfile` attribute of `std::rgir` / `std::argir`),
+  otherwise the golden only matches the checkout it was recorded in.
 - `normalize_addresses`
 - `normalize_duration_seconds`
 

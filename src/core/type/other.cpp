@@ -47,6 +47,20 @@ std::string OtherType::typeName() const {
     return OtherTypeRegistry::getTypeName(code_);
 }
 
+OtherType *
+OtherType::cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const {
+    std::vector<Type *> types;
+    types.reserve(arguments.size());
+    for (const TypeArgument &argument : arguments) {
+        if (argument.type == nullptr) {
+            error = "type '" + typeName() + "' does not take a constant ('const ...') argument";
+            return nullptr;
+        }
+        types.push_back(argument.type);
+    }
+    return cloneWithParams(std::span<Type *const>(types.data(), types.size()));
+}
+
 Type **OtherType::copyParams(std::span<Type *const> params) {
     if (params.empty())
         return nullptr;

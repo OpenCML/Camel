@@ -180,7 +180,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ReturnTypeMismatch",
                 "Return type '{0}' does not match the function's declared return type '{1}'.",
                 "Ensure that the value returned from the function matches the type specified in "
-                "the function signature: {2}.",
+                "the function signature: {2}. No implicit conversion is applied: convert "
+                "explicitly, for example float(x) for a number or 'x as T' for a module type.",
             },
         },
         {
@@ -294,6 +295,40 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::InvalidTypeArgument,
+            {
+                "InvalidTypeArgument",
+                "The arguments of the type '{0}<...>' are not accepted: {1}.",
+                "What a type takes between '<' and '>' is defined by the type itself (a type "
+                "argument, or a constant written 'const <data>'). An argument a type does not "
+                "accept is an error; it is never ignored.",
+            },
+        },
+        {
+            SemanticDiag::ArgumentNeedsConversion,
+            {
+                "ArgumentNeedsConversion",
+                "The call to '{0}' needs an explicit conversion: {1}.",
+                "A type that leaves open what a parameter fixes is never accepted implicitly, "
+                "and nothing is checked on its behalf. {2} A conversion written with 'as' is "
+                "checked when it runs; a value that does not fit stops the program at that "
+                "position.",
+            },
+        },
+        {
+            SemanticDiag::ReturnNeedsConversion,
+            {
+                "ReturnNeedsConversion",
+                "The returned value needs an explicit conversion to the function's declared "
+                "return type '{0}': {1}.",
+                "A type that leaves open what the declared return type fixes is never accepted "
+                "implicitly, and nothing is checked on its behalf (function signature: {3}). "
+                "Where the value is known to fit, write the conversion: {2}. A conversion "
+                "written with 'as' is checked when it runs; a value that does not fit stops the "
+                "program at that position.",
+            },
+        },
+        {
             SemanticDiag::ImmutablePassedToVarParam,
             {
                 "ImmutablePassedToVarParam",
@@ -303,7 +338,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
 
-        // Warnings
         {
             SemanticDiag::FeatureNotSupported,
             {
@@ -312,6 +346,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Check the documentation for supported features.",
             },
         },
+
+        // Warnings
         {
             SemanticDiag::VarParamInAsyncFunction,
             {

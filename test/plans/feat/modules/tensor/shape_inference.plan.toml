@@ -1,0 +1,281 @@
+id = "modules.tensor.shape_inference"
+order = 365
+tier = "feat"
+tags = ["feat", "modules", "tensor", "types", "diagnostics"]
+
+[[tests]]
+name = "si_shape_operator"
+desc = "The shape of a tensor whose type carries it is a constant where it is passed on: reshape(y, shape(x)), zeros(shape(x)) and ones([dim(x, 1)]) have the shapes [2, 3], [2, 3] and [3] in their types (each is accepted by a parameter declared with that shape) and the values are right."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/shape_operator.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["30"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_computed_extent"
+desc = "A shape written in place with a computed extent keeps its rank and constant extents: zeros([n, 3]) and reshape(x, [n, 3]) are accepted by a parameter declared [-1, 3]; with a [6] input, reshape(y, [n, 3]) is [2, 3] (the only value of n that fits). Values are right."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/computed_extent.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["27", "21"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_computed_extent_stays_open"
+desc = "The computed extent itself stays unknown: reshape(x, [n, 3]) of a [-1, 3] input is Tensor<float32, [?, 3]> and does not enter a [2, 3] parameter without `as`."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/computed_extent_stays_open.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 17
+expect_output_contains = ["argument 1 ('reshape(x, [n, 3])', for parameter 'a') has type 'Tensor<float32, [?, 3]>', which is less exact than 'Tensor<float32, [2, 3]>'", "'reshape(x, [n, 3]) as Tensor<f32, const [2, 3]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_computed_extent_run_time"
+desc = "The [2, 3] inferred for reshape(y, [n, 3]) of a [6] input claims nothing that can be wrong: with n = 3 the reshape itself fails when it runs, at the reshape."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["ran", "reshape changes tensor element count: [6] -> [3, 3]", "computed_extent_run_time.cml:8:18"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_row_loop"
+desc = "A loop written as a recursion carries a [3] accumulator over the rows of a [?, 3] input; the first accumulator is zeros([dim(x, 1)]) and the input may come from concat(reshape(x, [n, 3]), x, 0). Everything is inferred, no `as`; values are right."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/row_loop.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tensor([      5.,       7.,       9.], dtype=float32)", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_plain_result"
+desc = "A result declared plain Tensor has no extents for its caller. Passing it to a shaped parameter names the argument, both types and the conversion to write."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/plain_result.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 14
+expect_output_contains = ["The call to 'h: (a: Tensor<float32, [3]>) => f64' needs an explicit conversion", "argument 1 ('t', for parameter 'a') has type 'Tensor', which is less exact than 'Tensor<float32, [3]>'", "write the conversion: 't as Tensor<f32, const [3]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_plain_result_as"
+desc = "The same program with `t as Tensor<f32, const [3]>` compiles and runs."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/plain_result_as.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_loaded_struct"
+desc = "A struct with a field loaded from a file, passed to a with parameter whose field is shaped: the field is named and the conversion is suggested for it."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/loaded_struct.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 17
+expect_output_contains = ["element .w of with-argument 1 ('p', for parameter 'm') has type 'Tensor', which is less exact than 'Tensor<float32, [3]>'", "'p.w as Tensor<f32, const [3]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_loaded_struct_as"
+desc = "The same program with the field converted where the struct is built."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/loaded_struct_as.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_recursion_leaf"
+desc = "Where a recursion ends the vector has one element, which only the run knows: the return of a [?] value against a declared [1] asks for `as`."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/recursion_leaf.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReturnNeedsConversion"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 5
+expect_output_contains = ["the value has type 'Tensor<float32, [?]>', which is less exact than 'Tensor<float32, [1]>'", "as Tensor<f32, const [1]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_recursion_leaf_as"
+desc = "The same recursion with `x as Tensor<f32, const [1]>` at the leaf sums a 5-vector by halving."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/recursion_leaf_as.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_computed_slice"
+desc = "A slice with computed bounds has an extent only the run knows."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/computed_slice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 15
+expect_output_contains = ["argument 1 ('slice(x, 0, i, i + 1)', for parameter 'a') has type 'Tensor<float32, [?, 3]>', which is less exact than 'Tensor<float32, [1, 3]>'", "'slice(x, 0, i, i + 1) as Tensor<f32, const [1, 3]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_computed_slice_as"
+desc = "The same program with the slice converted."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/computed_slice_as.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_tuple_return"
+desc = "A returned tuple whose elements came from a function declared (Tensor, Tensor): each element that is less exact than declared is named, with its own conversion."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/tuple_return.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReturnNeedsConversion"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 5
+expect_output_contains = ["element .0 of the value ('(a, sum(x), b)') has type 'Tensor', which is less exact than 'Tensor<float32, [3]>'", "element .2 of the value", "'a as Tensor<f32, const [3]>', 'b as Tensor<f32, const [3]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_tuple_return_as"
+desc = "The same program with both elements converted."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/tuple_return_as.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_branch_join"
+desc = "Arms of extents 3 and 6 join to an unknown extent; a declared [3] result asks for `as` (an arm sliced back to 3 is accepted as it is)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/branch_join.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReturnNeedsConversion"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["the value ('if c then x else concat(x, x, 0)') has type 'Tensor<float32, [?]>', which is less exact than 'Tensor<float32, [3]>'", "'(if c then x else concat(x, x, 0)) as Tensor<f32, const [3]>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_branch_join_as"
+desc = "The function declared [-1] and its result converted by the caller."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/branch_join_as.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_var_argument"
+desc = "A variable has the widened type of its first value, and a var parameter takes the variable itself: the diagnostic says that no conversion applies and what to write instead."
+kind = "negative"
+case = "../../../../cases/modules/tensor/shape_inference/var_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 17
+expect_output_contains = ["argument 1 ('s', for parameter 's') has type 'Tensor', which is less exact than 'Tensor<float32, [3]>'", "No conversion applies to argument 1: a var parameter takes the variable itself"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_var_argument_plain"
+desc = "The var parameter declared with the variable's type, the value converted where it is read."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/var_argument_plain.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_as_fails"
+desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<float32, [4]>' failed: the tensor has shape [6]", "as_fails.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_as_fails_fvm"
+desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion (under std::fvm)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<float32, [4]>' failed: the tensor has shape [6]", "as_fails.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_as_fails_jit"
+desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion (under std::jit)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<float32, [4]>' failed: the tensor has shape [6]", "as_fails.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "si_as_fails_prl"
+desc = "A conversion that fails when it runs names the declared type, the shape the tensor has, and the position of the conversion (under std::prl)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 1
+expect_output_contains = ["ran", "conversion to 'Tensor<float32, [4]>' failed: the tensor has shape [6]", "as_fails.cml:9:15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

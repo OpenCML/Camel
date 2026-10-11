@@ -1,0 +1,20 @@
+/**
+ * Refused: the variable is assigned in branch arms, outside the function body that declares it.
+ */
+module var_arm
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func forward(x: Tensor): Tensor sync {
+    var acc = x * 2.0
+    if sum(x) > 0.0 then sync { acc = acc + 1.0 } else sync { acc = acc - 1.0 }
+    return acc
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
+    export_model((x: Tensor): Tensor => forward(x), x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

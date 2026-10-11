@@ -1,0 +1,29 @@
+/**
+ * A table of integers built by a map inside a map element, rebuilt `reps` times
+ * (--arg reps=N). Each row is an array of 128 integers: below the large-object threshold, so the
+ * rows fill the elder space (32 MB, about 120 tables) and a long run crosses several
+ * collections. Every table is checked at three cells per row (first, diagonal, last) and the
+ * checks are summed.
+ */
+module gc_nested_map
+
+type Row = int[]
+
+func table(n: int, k: int): Row[] {
+    return range(0, n)->map<(i: int): int[] => range(0, n)->map<(j: int): int => i + j + k>>
+}
+
+func probe(t: Row[], n: int): int {
+    return range(0, n)
+        ->map<(i: int): int => t[i][0] + t[i][i] + t[i][n - 1]>
+        ->reduce<(acc: int, x: int): int => acc + x, 0>
+}
+
+func repeat(n: int, left: int, total: int): int {
+    return if left == 0 then total else repeat(n, left - 1, total + probe(table(n, left), n))
+}
+
+func main(reps: int): int sync {
+    println('gc_nested_map total={}'->format<repeat(128, reps, 0)>)
+    return 0
+}
