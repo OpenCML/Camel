@@ -47,9 +47,12 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, camel::core::cont
 slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
-slot_t __builtin__assn_mod__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__assn_mat__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__assn_pow__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_mod_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_mod_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 

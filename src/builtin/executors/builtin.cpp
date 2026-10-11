@@ -93,33 +93,29 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/assn_add_f", __builtin__assn_add_f__},
         {"op/assn_add_d", __builtin__assn_add_d__},
         {"op/assn_add_s", __builtin__assn_add_s__},
-        {"op/assn_add", __not_implemented__},
 
         {"op/assn_sub_i", __builtin__assn_sub_i__},
         {"op/assn_sub_l", __builtin__assn_sub_l__},
         {"op/assn_sub_f", __builtin__assn_sub_f__},
         {"op/assn_sub_d", __builtin__assn_sub_d__},
-        {"op/assn_sub", __not_implemented__},
 
         {"op/assn_mul_i", __builtin__assn_mul_i__},
         {"op/assn_mul_l", __builtin__assn_mul_l__},
         {"op/assn_mul_f", __builtin__assn_mul_f__},
         {"op/assn_mul_d", __builtin__assn_mul_d__},
-        {"op/assn_mul", __not_implemented__},
 
         {"op/assn_div_i", __builtin__assn_div_i__},
         {"op/assn_div_l", __builtin__assn_div_l__},
         {"op/assn_div_f", __builtin__assn_div_f__},
         {"op/assn_div_d", __builtin__assn_div_d__},
-        {"op/assn_div", __not_implemented__},
 
-        {"op/assn_mod_i", __builtin__assn_mod__},
-        {"op/assn_mod_l", __builtin__assn_mod__},
-        {"op/assn_mod", __builtin__assn_mod__},
+        {"op/assn_mod_i", __builtin__assn_mod_i__},
+        {"op/assn_mod_l", __builtin__assn_mod_l__},
 
-        {"op/assn_mat", __builtin__assn_mat__},
-
-        {"op/assn_pow", __builtin__assn_pow__},
+        {"op/assn_pow_i", __builtin__assn_pow_i__},
+        {"op/assn_pow_l", __builtin__assn_pow_l__},
+        {"op/assn_pow_f", __builtin__assn_pow_f__},
+        {"op/assn_pow_d", __builtin__assn_pow_d__},
 
         {"op/assn_and", __builtin__assn_and__},
         {"op/assn_or", __builtin__assn_or__},

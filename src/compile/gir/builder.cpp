@@ -499,6 +499,26 @@ compile_graph_ptr_t createCompileGraph(
     }
     return graph;
 }
+
+/// How a program writes the operator behind an operator group (`__assn_add__` is `+=`);
+/// null for a group that is not an operator of the language.
+const char *operatorSymbolOf(std::string_view group) {
+    static const std::unordered_map<std::string_view, const char *> symbols = {
+        {"__assn__", "="},        {"__assn_add__", "+="},  {"__assn_sub__", "-="},
+        {"__assn_mul__", "*="},   {"__assn_div__", "/="},  {"__assn_mod__", "%="},
+        {"__assn_mat__", "@="},   {"__assn_pow__", "^="},  {"__assn_and__", "&="},
+        {"__assn_or__", "|="},    {"__or__", "||"},        {"__and__", "&&"},
+        {"__eq__", "=="},         {"__neq__", "!="},       {"__strict_eq__", "==="},
+        {"__strict_neq__", "!=="}, {"__lt__", "<"},        {"__le__", "<="},
+        {"__gt__", ">"},          {"__ge__", ">="},        {"__add__", "+"},
+        {"__sub__", "-"},         {"__mul__", "*"},        {"__div__", "/"},
+        {"__mod__", "%"},         {"__mat__", "@"},        {"__pow__", "^"},
+        {"__idx__", "[]"},        {"__not__", "!"},        {"__neg__", "-"},
+        {"__inv__", "~"},
+    };
+    const auto it = symbols.find(group);
+    return it == symbols.end() ? nullptr : it->second;
+}
 } // namespace
 
 inline void tryRemoveCtrlLink(node_handle_t from, node_handle_t to) {
@@ -2618,6 +2638,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         .atOrigin(gct->load()->origin())
                         .commit(ops->name(), argTypesStr, strutil::join(reasons, "; "));
                     throw BuildAbortException();
+                }
+                // An operator written in the program: say which, the group name is not what
+                // the program wrote.
+                if (const char *symbol = operatorSymbolOf(ops->name())) {
+                    argTypesStr += std::format(
+                        "; operator '{}' is not defined for these operand types",
+                        symbol);
                 }
                 std::string overloadsStr =
                     "\n    " +

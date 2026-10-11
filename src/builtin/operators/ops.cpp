@@ -234,24 +234,66 @@ slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(lhs);
 }
 
-slot_t __builtin__assn_mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
+// `%=` on the two integer types: the remainder `%` gives, stored back.
+template <typename T> static slot_t assignMod(ArgsView &norm) {
+    Tuple *cell = variableOf(norm);
+    T lhs       = cell->get<T>(0);
+    T rhs       = norm.get<T>(1);
+    if (rhs == 0) {
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
+    }
+    // Every remainder by -1 is 0; computing the one of the smallest integer overflows in C++.
+    lhs = rhs == static_cast<T>(-1) ? static_cast<T>(0) : static_cast<T>(lhs % rhs);
+    cell->set(0, lhs);
+    return toSlot(lhs);
 }
 
-slot_t __builtin__assn_pow__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
+slot_t __builtin__assn_mod_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignMod<Int32>(norm);
 }
 
+slot_t __builtin__assn_mod_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignMod<Int64>(norm);
+}
+
+// `^=` on the four numeric types: what `^` gives (__builtin__pow__), stored back.
+template <typename T> static slot_t assignPow(ArgsView &norm) {
+    Tuple *cell = variableOf(norm);
+    T lhs       = static_cast<T>(std::pow(cell->get<T>(0), norm.get<T>(1)));
+    cell->set(0, lhs);
+    return toSlot(lhs);
+}
+
+slot_t __builtin__assn_pow_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignPow<Int32>(norm);
+}
+
+slot_t __builtin__assn_pow_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignPow<Int64>(norm);
+}
+
+slot_t __builtin__assn_pow_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignPow<Float32>(norm);
+}
+
+slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignPow<Float64>(norm);
+}
+
+// `&=` and `|=` on bool: `a = a && b` and `a = a || b`. The right side is an operand like any
+// other, evaluated before the operator runs.
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
+    Tuple *cell = variableOf(norm);
+    Bool lhs    = cell->get<Bool>(0) && norm.get<Bool>(1);
+    cell->set(0, lhs);
+    return toSlot(lhs);
 }
 
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
-}
-
-slot_t __builtin__assn_mat__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "Invalid tensor assignment operation");
+    Tuple *cell = variableOf(norm);
+    Bool lhs    = cell->get<Bool>(0) || norm.get<Bool>(1);
+    cell->set(0, lhs);
+    return toSlot(lhs);
 }
 
 slot_t __builtin__or__(ArgsView &with, ArgsView &norm, Context &ctx) {

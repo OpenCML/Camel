@@ -245,6 +245,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             }),
 
         // ======= Assignment operators =======
+        // `=` takes any type. A compound assignment takes exactly the types listed for it: a
+        // combination without an implementation is rejected when the program is compiled.
         OperatorGroup::create(
             "__assn__",
             {
@@ -343,20 +345,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), true}, {Type::String(), false}},
                         Type::String()),
                 },
-                {
-                    ":op/assn_add",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__assn_sub__",
@@ -388,20 +376,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
-                },
-                {
-                    ":op/assn_sub",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
                 },
             }),
         OperatorGroup::create(
@@ -435,20 +409,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
-                {
-                    ":op/assn_mul",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__assn_div__",
@@ -481,20 +441,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
-                {
-                    ":op/assn_div",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__assn_mod__",
@@ -513,55 +459,39 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Int64(), true}, {Type::Int64(), false}},
                         Type::Int64()),
                 },
-                {
-                    ":op/assn_mod",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
-        OperatorGroup::create(
-            "__assn_mat__",
-            {
-                {
-                    ":op/assn_mat",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
-            }),
+        // No built-in type has `@`; a module that has it (tensor) provides `@=` or it is rejected.
+        OperatorGroup::create("__assn_mat__", {}),
         OperatorGroup::create(
             "__assn_pow__",
             {
                 {
-                    ":op/assn_pow",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
+                    ":op/assn_pow_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/assn_pow_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+                {
+                    ":op/assn_pow_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), true}, {Type::Float32(), false}},
+                        Type::Float32()),
+                },
+                {
+                    ":op/assn_pow_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), true}, {Type::Float64(), false}},
+                        Type::Float64()),
                 },
             }),
         OperatorGroup::create(
