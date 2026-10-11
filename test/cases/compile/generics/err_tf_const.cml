@@ -1,0 +1,11 @@
+module err_tf_const
+
+type Pair<T> = (T, T)
+
+func f(p: Pair<const 3>): int {
+    return 1
+}
+
+func main(): int sync {
+    return 0
+}

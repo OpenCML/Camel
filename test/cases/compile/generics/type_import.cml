@@ -1,0 +1,21 @@
+/**
+ * A type function exported by one module is applied in another.
+ */
+module type_import
+
+import type_lib
+
+func swap(p: type_lib::Pair<typeas T>): type_lib::Pair<T> {
+    return (p.1, p.0)
+}
+
+func size(t: type_lib::Table<typeas K, typeas V>): int {
+    return len(t.keys)
+}
+
+func main(): int sync {
+    println(swap((1, 2)))
+    println(swap(('x', 'y')))
+    println(size({ keys: ['a', 'b'], values: [1.0, 2.0] }))
+    return 0
+}

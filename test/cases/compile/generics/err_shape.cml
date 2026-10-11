@@ -1,0 +1,10 @@
+module err_shape
+
+func first(xs: (typeas T)[]): T {
+    return xs[0]
+}
+
+func main(): int sync {
+    println(first(3))
+    return 0
+}

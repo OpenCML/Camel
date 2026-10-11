@@ -1,0 +1,7 @@
+/**
+ * Helper module: exports type functions.
+ */
+module type_lib
+
+export type Pair<T> = (T, T)
+export type Table<K, V> = { keys: K[], values: V[] }

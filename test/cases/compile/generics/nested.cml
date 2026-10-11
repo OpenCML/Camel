@@ -1,0 +1,59 @@
+/**
+ * Type variables bound at nested positions: the element of an array of arrays, the elements
+ * of a tuple, the fields of a struct, the parameter and the result of a function type.
+ */
+module nested
+
+func flat_first(xss: (typeas T)[][]): T {
+    return xss[0][0]
+}
+
+func fst(p: (typeas A, typeas B)): A {
+    return p.0
+}
+
+func get_x(s: { x: typeas T, y: int }): T {
+    return s.x
+}
+
+func apply(f: (x: typeas T) => typeas U, x: T): U {
+    return f(x)
+}
+
+func twice(f: (x: typeas T) => T, x: T): T {
+    return f(f(x))
+}
+
+func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+    return xs->map<f>
+}
+
+func compose(f: (x: typeas A) => typeas B, g: (y: B) => typeas C, x: A): C {
+    return g(f(x))
+}
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func show(x: int): string {
+    return 'n={}'->format<x>
+}
+
+func main(): int sync {
+    println(flat_first([[1, 2], [3]]))
+    println(flat_first([['a'], ['b', 'c']]))
+    println(fst((1, 'one')))
+    println(fst(('two', 2.0)))
+    println(get_x({ x: 'sx', y: 1 }))
+    println(get_x({ x: 2.5, y: 1 }))
+    println(apply(inc, 41))
+    println(apply(show, 7))
+    println(apply((s: string) => s + '!', 'hey'))
+    println(twice(inc, 0))
+    println(my_map([1, 2, 3], inc))
+    println(my_map([1, 2, 3], show))
+    println(my_map(['a', 'b'], (s: string) => s + s))
+    println(compose(inc, show, 9))
+    return 0
+}

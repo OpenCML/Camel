@@ -1,0 +1,11 @@
+module err_as_value
+
+func id(x: typeas T): T {
+    return x
+}
+
+func main(): int sync {
+    let f = id
+    println([1, 2]->map<id>)
+    return 0
+}

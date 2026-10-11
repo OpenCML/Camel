@@ -1,0 +1,11 @@
+module err_tf_unused
+
+type Tag<T> = int
+
+func f(p: Tag<typeas T>): int {
+    return 1
+}
+
+func main(): int sync {
+    return 0
+}

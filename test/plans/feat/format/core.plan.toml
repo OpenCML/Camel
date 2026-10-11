@@ -105,3 +105,17 @@ expect_diagnostic_line = 1
 expect_diagnostic_column = 11
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
+
+[[tests]]
+name = "format.type_params_snapshot"
+desc = "A type declaration with parameters keeps them (`type Pair<T> = ...`, also written `Pair<T>=`), as do `typeas` and applied type functions in signatures."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/type_params.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/type_params.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

@@ -1,0 +1,10 @@
+module err_typeas_shadow
+
+func id(a: typeas int): int {
+    return a
+}
+
+func main(): int sync {
+    println(id(1))
+    return 0
+}
