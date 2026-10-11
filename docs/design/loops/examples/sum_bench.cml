@@ -1,0 +1,37 @@
+/**
+ * One loop, three ways it can be written today, timed separately.
+ *   camel sum_bench.cml std::fvm        (and std::nvm, std::jit, std::inline std::jit, std::tf)
+ */
+module sum_bench
+import { now } from time
+
+func loop(i: int, n: int, acc: int): int {
+    return if i > n then acc else loop(i + 1, n, acc + i)
+}
+
+func by_reduce(n: int): int {
+    return range(1, n + 1)->reduce<(acc: int, x: int): int => acc + x, 0>
+}
+
+func by_foreach(n: int): int sync {
+    var acc = 0
+    range(1, n + 1)->foreach<(x: int) => sync {
+        acc = acc + x
+    }>
+    return acc
+}
+
+func main(): int sync {
+    let n = 3000000
+    let t0 = now()
+    let a = loop(1, n, 0)
+    let t1 = now()
+    let b = by_reduce(n)
+    let t2 = now()
+    let c = by_foreach(n)
+    let t3 = now()
+    'tail    {} {:.3f}s'->format<a, t1 - t0>->println
+    'reduce  {} {:.3f}s'->format<b, t2 - t1>->println
+    'foreach {} {:.3f}s'->format<c, t3 - t2>->println
+    return 0
+}

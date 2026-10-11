@@ -1,0 +1,16 @@
+/**
+ * What a loop with `break` means today: a recursion with two exits.
+ *   for i in range(0, len(xs)) { if xs[i] == key { found = i; break } }
+ */
+module early_exit
+
+func find(xs: int[], key: int, i: int): int {
+    return if i >= len(xs) then -1 else if xs[i] == key then i else find(xs, key, i + 1)
+}
+
+func main(): int sync {
+    let xs = range(0, 100000)
+    println(find(xs, 77777, 0))
+    println(find(xs, -5, 0))
+    return 0
+}

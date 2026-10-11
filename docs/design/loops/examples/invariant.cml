@@ -1,0 +1,17 @@
+/**
+ * A loop with an invariant computation (k * k + 7 does not change between iterations) and a
+ * value derived from the counter (i * 4). `k` comes from the environment so that it is not a
+ * compile-time constant. Used to see what the optimisation passes do with them today:
+ *   K=3 camel invariant.cml std::opt::simplify std::rgir
+ */
+module invariant
+import { get_env } from sys
+
+func loop(i: int, n: int, k: int, acc: int): int {
+    return if i >= n then acc else loop(i + 1, n, k, acc + (k * k + 7) + i * 4)
+}
+
+func main(): int sync {
+    println(loop(0, 1000000, int(get_env('K')), 0))
+    return 0
+}

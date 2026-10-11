@@ -1,0 +1,29 @@
+/**
+ * What `for x in xs { acc = acc + x * x }` means today, written three ways:
+ * an index-carrying tail recursion, `reduce`, and `foreach` writing a captured `var`.
+ */
+module for_tail
+
+func loop(xs: int[], i: int, acc: int): int {
+    return if i >= len(xs) then acc else loop(xs, i + 1, acc + xs[i] * xs[i])
+}
+
+func by_reduce(xs: int[]): int {
+    return xs->reduce<(acc: int, x: int): int => acc + x * x, 0>
+}
+
+func by_foreach(xs: int[]): int sync {
+    var acc = 0
+    xs->foreach<(x: int) => sync {
+        acc = acc + x * x
+    }>
+    return acc
+}
+
+func main(): int sync {
+    let xs = range(0, 1000)
+    println(loop(xs, 0, 0))
+    println(by_reduce(xs))
+    println(by_foreach(xs))
+    return 0
+}
