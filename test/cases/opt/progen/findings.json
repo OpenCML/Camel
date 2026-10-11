@@ -102,7 +102,8 @@
   "expected": [
    ""
   ],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "rewrite: the head of a branch arm is an ordered source"
  },
  {
   "id": "F09",
@@ -171,7 +172,8 @@
   "expected": [
    "1"
   ],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "rewrite: the head of a branch arm is an ordered source"
  },
  {
   "id": "F14",
