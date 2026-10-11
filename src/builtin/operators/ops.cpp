@@ -317,6 +317,27 @@ slot_t __builtin__strict_ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(res);
 }
 
+// Strings are ordered by their bytes (design principles 2.9); a proper prefix comes first.
+static int compareStrings(ArgsView &norm) {
+    return norm.get<String *>(0)->compare(norm.get<String *>(1));
+}
+
+slot_t __builtin__lt_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(Bool(compareStrings(norm) < 0));
+}
+
+slot_t __builtin__le_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(Bool(compareStrings(norm) <= 0));
+}
+
+slot_t __builtin__gt_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(Bool(compareStrings(norm) > 0));
+}
+
+slot_t __builtin__ge_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(Bool(compareStrings(norm) >= 0));
+}
+
 slot_t __builtin__add_ii__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 left  = norm.get<Int32>(0);
     Int32 right = norm.get<Int32>(1);

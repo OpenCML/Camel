@@ -80,6 +80,11 @@ slot_t __builtin__ge__(ArgsView &with, ArgsView &norm, camel::core::context::Con
     return toSlot(Bool(lhs >= rhs));
 }
 
+slot_t __builtin__lt_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__le_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__gt_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__ge_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
 slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__strict_eq__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

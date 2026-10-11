@@ -1,0 +1,32 @@
+/**
+ * `<`, `<=`, `>`, `>=` on strings compare byte by byte (design principles 2.9); a proper prefix
+ * comes first. They used to compile and give false whatever the operands (progen finding F27).
+ * Each line: a < b, a <= b, a > b, a >= b.
+ */
+module string_ordering
+
+func cmp(a: string, b: string): string {
+    let lt = a < b
+    let le = a <= b
+    let gt = a > b
+    let ge = a >= b
+    return '{} {} {} {}'->format<lt, le, gt, ge>
+}
+
+func main(): int sync {
+    println(cmp('a', 'b'))
+    println(cmp('b', 'a'))
+    println(cmp('a', 'a'))
+    println(cmp('', 'a'))
+    println(cmp('', ''))
+    println(cmp('ab', 'abc'))
+    println(cmp('abd', 'abc'))
+    println(cmp('B', 'a'))
+    println(cmp('10', '9'))
+    println(cmp('z', 'é'))
+    println('a' < 'b')
+    println('b' > 'a')
+    println('a' <= 'a')
+    println('a' >= 'a')
+    return 0
+}

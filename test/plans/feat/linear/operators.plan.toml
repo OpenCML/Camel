@@ -1,0 +1,133 @@
+id = "linear.operators"
+order = 347
+tier = "feat"
+tags = ["feat", "linear", "ops", "runtime"]
+desc = "Built-in operators on the types that have them, the same result on every back end: string ordering, compound assignment, conversions."
+
+[[tests]]
+name = "string_ordering.nvm"
+desc = "Strings are ordered by their bytes with < <= > >=; the four used to compile and give false (progen F27) (nvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_ordering.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true false false",
+  "false false true true",
+  "false true false true",
+  "true true false false",
+  "false true false true",
+  "true true false false",
+  "false false true true",
+  "true true false false",
+  "true true false false",
+  "true true false false",
+  "true",
+  "true",
+  "true",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_ordering.fvm"
+desc = "Strings are ordered by their bytes with < <= > >=; the four used to compile and give false (progen F27) (fvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_ordering.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true false false",
+  "false false true true",
+  "false true false true",
+  "true true false false",
+  "false true false true",
+  "true true false false",
+  "false false true true",
+  "true true false false",
+  "true true false false",
+  "true true false false",
+  "true",
+  "true",
+  "true",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_ordering.jit"
+desc = "Strings are ordered by their bytes with < <= > >=; the four used to compile and give false (progen F27) (jit)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_ordering.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true false false",
+  "false false true true",
+  "false true false true",
+  "true true false false",
+  "false true false true",
+  "true true false false",
+  "false false true true",
+  "true true false false",
+  "true true false false",
+  "true true false false",
+  "true",
+  "true",
+  "true",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_ordering.prl"
+desc = "Strings are ordered by their bytes with < <= > >=; the four used to compile and give false (progen F27) (prl)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_ordering.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true false false",
+  "false false true true",
+  "false true false true",
+  "true true false false",
+  "false true false true",
+  "true true false false",
+  "false false true true",
+  "true true false false",
+  "true true false false",
+  "true true false false",
+  "true",
+  "true",
+  "true",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
