@@ -338,7 +338,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
 
-        // Warnings
         {
             SemanticDiag::FeatureNotSupported,
             {
@@ -347,6 +346,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Check the documentation for supported features.",
             },
         },
+
+        // Warnings
         {
             SemanticDiag::VarParamInAsyncFunction,
             {

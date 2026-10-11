@@ -243,3 +243,19 @@ expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+[[tests]]
+name = "not_supported.struct_unpacking"
+desc = "FeatureNotSupported is an error: it used to be a warning, the function using the feature was dropped and the rest of the program ran."
+kind = "negative"
+case = "../../../cases/compile/not_supported/struct_unpacking.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
+expect_diagnostic_code = "0x03000040"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 5
+expect_output_contains = ["The feature 'Struct Unpacking' is not supported yet."]
+expect_output_not_contains = ["never printed", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
