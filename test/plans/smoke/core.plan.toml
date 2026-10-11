@@ -113,7 +113,7 @@ expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/rgir.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]

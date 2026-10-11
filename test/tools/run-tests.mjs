@@ -98,9 +98,30 @@ function loadVars() {
     return { ...builtins, ...parseTomlFile(VARS_PATH) }
 }
 
-function normalizePathText(text) {
-    const root = REPO_ROOT.replace(/\\/g, '/')
-    return text.replaceAll(root, '<ROOT>').replaceAll(root.toLowerCase(), '<ROOT>')
+/**
+ * Replace the repository root with `<ROOT>` and write the rest of that path with forward slashes,
+ * so a snapshot does not depend on where the checkout lives or on the platform's separator. The
+ * root is recognised with forward slashes, with native separators, and with escaped backslashes
+ * (a Windows path inside a quoted DOT or JSON string), in its own case and in lower case.
+ */
+function normalizePathText(text, repoRoot = REPO_ROOT) {
+    const forward = repoRoot.replace(/\\/g, '/')
+    let output = text
+    if (repoRoot.includes('\\')) {
+        // Windows: `C:\\repo\\a\\b` (escaped) first, then `C:\repo\a\b` (native). Only the
+        // separator form the root itself was written in is rewritten in the rest of the path,
+        // so an escape that follows the path (`\"`, `\n`) is left alone.
+        const quote = (root) => root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const rest = '[^\\s"\'`<>|*?,;]*'
+        for (const [root, separator] of [
+            [repoRoot.replace(/\\/g, '\\\\'), /\\\\/g],
+            [repoRoot, /\\/g],
+        ]) {
+            const pattern = new RegExp(`${quote(root)}(${rest})`, 'gi')
+            output = output.replace(pattern, (_, tail) => `<ROOT>${tail.replace(separator, '/')}`)
+        }
+    }
+    return output.replaceAll(forward, '<ROOT>').replaceAll(forward.toLowerCase(), '<ROOT>')
 }
 
 function applyNormalizers(text, names) {
