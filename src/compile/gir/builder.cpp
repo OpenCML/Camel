@@ -720,6 +720,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     armGraphs_.clear();
     builtBodies_.clear();
     typeDecls_.clear();
+    redeclaredFuncTypes_.clear();
     syntheticRefIndex_ = 0;
     typeBindings_.clear();
     genericDrefs_.clear();
@@ -843,19 +844,82 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
 }
 
 compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
+    std::string scopeName = name;
     if (name.empty()) {
         currGraph_ = createCompileGraph(funcType, currGraph_);
     } else {
-        auto graphs = graphScope_->get(name);
-        if (graphs.has_value() && !graphs.value()->empty()) {
-            currGraph_ = graphs.value()->front();
-        } else {
-            currGraph_ = createCompileGraph(funcType, currGraph_, name);
-            insertGraph(name, currGraph_);
+        // The functions of one name declared in one block are overloads, one graph each. A
+        // graph is found again (the forward declaration of a module-level function, then its
+        // definition) by the function type object the declaration carries, never by the name
+        // alone: by name the second overload was built into the graph of the first.
+        compile_graph_ptr_t found;
+        size_t index = 0;
+        if (auto graphs = graphScope_->get(name, false); graphs.has_value()) {
+            for (; index < graphs.value()->size(); ++index) {
+                if (graphs.value()->at(index)->funcType() == funcType) {
+                    found = graphs.value()->at(index);
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            found = createCompileGraph(funcType, currGraph_, name);
+            insertGraph(name, found);
+        }
+        currGraph_ = found;
+        // Each overload has its own scope: they may name their parameters alike.
+        if (index > 0) {
+            scopeName = std::format("{}#{}", name, index);
         }
     }
-    enterGraphScope(currGraph_, name);
+    enterGraphScope(currGraph_, scopeName);
     return currGraph_;
+}
+
+void Builder::rejectRedeclaredFunction(
+    const std::string &name, FunctionType *funcType, const GCT::node_ptr_t &gct) {
+    if (name.empty()) {
+        return;
+    }
+    if (redeclaredFuncTypes_.contains(funcType)) {
+        // Reported at the forward declaration of this function.
+        throw BuildAbortException();
+    }
+    auto graphs = graphScope_->get(name, false);
+    if (!graphs.has_value()) {
+        return;
+    }
+    for (const auto &graph : *graphs.value()) {
+        if (graph->funcType() == funcType) {
+            return; // this very function, declared ahead
+        }
+    }
+    // Overloads are told apart by their parameter types alone: a call has nothing else to
+    // choose by.
+    const auto sameParameters = [](FunctionType *a, FunctionType *b) {
+        if (a->withTypesCount() != b->withTypesCount() ||
+            a->normTypesCount() != b->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < a->withTypesCount(); ++i) {
+            if (!a->withTypeAt(i)->equals(b->withTypeAt(i))) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < a->normTypesCount(); ++i) {
+            if (!a->normTypeAt(i)->equals(b->normTypeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    for (const auto &graph : *graphs.value()) {
+        if (sameParameters(graph->funcType(), funcType)) {
+            redeclaredFuncTypes_.insert(funcType);
+            diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(name);
+            throw BuildAbortException();
+        }
+    }
 }
 
 void Builder::enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name) {
@@ -887,9 +951,9 @@ bool Builder::insertNode(const std::string &name, node_handle_t node) {
 }
 
 bool Builder::insertGraph(const std::string &name, const compile_graph_ptr_t &graph) {
-    if (graphScope_->has(name, false)) {
-        auto graphs = graphScope_->get(name).value();
-        graphs->push_back(graph);
+    if (auto graphs = graphScope_->get(name, false); graphs.has_value()) {
+        graphs.value()->push_back(graph);
+        return true;
     }
     graphScope_->insert(name, std::make_shared<graph_set_t>(1, graph));
     return true;
@@ -1028,6 +1092,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
     FunctionType *funcType    = tt::as_ptr<FunctionType>(type);
+    rejectRedeclaredFunction(declLoad->ref().toString(), funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, declLoad->ref().toString());
     leaveScope();
 
@@ -1053,6 +1118,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         // with the type variables replaced.
         funcType = instantiateFunctionType(funcType, typeBindings_);
     }
+    rejectRedeclaredFunction(name, funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, name);
     buildFuncBody(gct, graph, funcType, name);
     leaveScope();
@@ -2658,19 +2724,23 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
             auto graphs = asCompileGraphVec(drefTarget);
+            // The first overload, in declaration order, whose parameters take the arguments.
+            // Only the chosen one has to be complete: an overload the call does not mean may
+            // still be waiting for its return type.
             for (const auto &g : *graphs) {
                 const auto &funcType = g->funcType();
+                StaticFuncTypeResolver resolver(funcType);
+                if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+                    continue;
+                }
                 if (!funcType->hasExitType()) {
                     diags_->of(SemanticDiag::CallingIncompleteFunction)
                         .atOrigin(gct->load()->origin())
                         .commit(g->name(), funcType->toString());
                     throw BuildAbortException();
                 }
-                StaticFuncTypeResolver resolver(funcType);
-                if (resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
-                    targetGraph = g;
-                    break;
-                }
+                targetGraph = g;
+                break;
             }
             if (!targetGraph) {
                 std::vector<std::pair<std::string, FunctionType *>> candidates;

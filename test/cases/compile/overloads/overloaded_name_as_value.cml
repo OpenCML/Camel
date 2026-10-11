@@ -1,0 +1,23 @@
+/**
+ * A name with several overloads has no single function value: returning it is rejected at the
+ * `return`.
+ */
+module overloaded_name_as_value
+
+func f(x: int): string {
+    return 'int'
+}
+
+func f(x: string): string {
+    return 'string'
+}
+
+func pick(): (x: int) => string {
+    return f
+}
+
+func main(): int sync {
+    println(pick()(1))
+    println('never printed')
+    return 0
+}

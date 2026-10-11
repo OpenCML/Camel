@@ -1,0 +1,19 @@
+/**
+ * A call that none of the overloads takes is rejected at the call, with the overloads listed.
+ */
+module no_match
+
+func f(x: int): string {
+    return 'int'
+}
+
+func f(x: string): string {
+    return 'string'
+}
+
+func main(): int sync {
+    println(f(1))
+    println(f(true))
+    println('never printed')
+    return 0
+}

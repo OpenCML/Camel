@@ -1,0 +1,57 @@
+/**
+ * Functions of one name with different parameter types are overloads: one graph each, and a
+ * call takes the first, in declaration order, whose parameters take the arguments. The body of
+ * the second used to be built into the graph of the first, and its calls then found no match.
+ */
+module overloads
+
+func f(x: int): string {
+    return 'int'
+}
+
+func f(x: string): string {
+    return 'string ' + x
+}
+
+func f(x: int, y: int): string {
+    return 'two ints'
+}
+
+func f(x: float): string {
+    return 'float'
+}
+
+func twice(x: int): int {
+    return x * 2
+}
+
+func twice(x: string): string {
+    return x + x
+}
+
+func depth(n: int): int {
+    return if n <= 0 then 0 else depth(n - 1) + 1
+}
+
+func depth(s: string): int {
+    return depth(len(s))
+}
+
+func main(): int sync {
+    println(f(1))
+    println(f('a'))
+    println(f(1, 2))
+    println(f(1.5))
+    println(twice(21), twice('ab'))
+    println(depth(3), depth('abcde'))
+    println([1, 2]->map<(x: int): int => twice(x)>)
+
+    func local(x: int): string {
+        return 'local int'
+    }
+    func local(x: bool): string {
+        return 'local bool'
+    }
+    println(local(1), local(true))
+    return 0
+}

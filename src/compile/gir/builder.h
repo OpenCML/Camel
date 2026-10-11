@@ -306,7 +306,17 @@ class Builder {
     bool insertGraph(const std::string &name, const compile_graph_ptr_t &graph);
     bool insertDecoratedGraph(const std::string &name, const compile_graph_ptr_t &graph);
 
+    // Enters the scope of the function `name` whose declared type is the object `funcType`,
+    // creating its graph the first time. Functions of one name in one block are overloads;
+    // the declared type object identifies which one is meant.
     compile_graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
+    // A second function of this name with the same parameter types in the same block:
+    // reports Redeclaration at `gct` and abandons the declaration.
+    void rejectRedeclaredFunction(
+        const std::string &name, FunctionType *funcType, const GCT::node_ptr_t &gct);
+    // The declared types of the functions rejected so (the forward declaration reports, the
+    // definition that follows is skipped quietly).
+    std::unordered_set<FunctionType *> redeclaredFuncTypes_;
     void leaveScope();
 
     node_handle_t createFuncDataNode(
