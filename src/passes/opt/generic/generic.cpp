@@ -33,6 +33,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/warnings.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/runtime/draft_inline.h"
@@ -716,6 +717,17 @@ size_t foldDraft(
             slot_t result          = NullSlot;
             try {
                 result = (*op)(*with, *norm, ctx);
+            } catch (const camel::core::error::RuntimeFault &fault) {
+                // A constant expression that can only fault (`1 / 0`) is not folded: it is
+                // left as written, to fault with its position if the run reaches it, so the
+                // program behaves the same with and without the pass. The user is told once,
+                // where the expression is written (design principles 2.9).
+                raisePassWarning(
+                    ctx,
+                    camel::core::error::RuntimeDiag::ConstantExpressionFaults,
+                    draft.nodeOrigin(id),
+                    fault.what());
+                continue;
             } catch (...) {
                 continue; // leave the failure to be reported when the program runs
             }

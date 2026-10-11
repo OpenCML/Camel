@@ -47,6 +47,7 @@ enum class RuntimeDiag : uint32_t {
     GraphTooLarge             = 0x000013,
     // Warnings (severity bits = Warn).
     PassesNeverRun = 0x10000F,
+    ConstantExpressionFaults = 0x100015,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

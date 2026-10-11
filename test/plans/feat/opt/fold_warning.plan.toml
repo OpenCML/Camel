@@ -1,0 +1,155 @@
+id = "opt.fold_warning"
+order = 324
+tier = "feat"
+tags = ["feat", "opt", "fold", "diagnostics"]
+
+[[tests]]
+name = "constant_fault_untaken.default"
+desc = "Design principles 2.9: a constant expression that can only fault (`1 / 0`) in an arm that is not taken. Without passes nothing faults and nothing is warned: 7, exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', 'no warning without passes: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_fault_untaken.fold"
+desc = "std::opt::fold does not fold `1 / 0`: the program prints 7 and exits 0 as without passes, and one warning ConstantExpressionFaults on stderr points at the division (line 16, column 29)."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+const lines = input.normalized.stderr.trim().split('\n')
+assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
+assert(lines[0].includes('fold_constant_fault.cml:16:29: [Warn]: This constant expression faults whenever it is evaluated (DivisionByZero); it is not folded.'), lines[0])
+assert(lines[0].endsWith('(name=RuntimeDiag::ConstantExpressionFaults, code=0x04100015)'), lines[0])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_fault_untaken.fold_simplify_fvm"
+desc = "The warning is given once per expression in a pipeline: std::opt::fold and then std::opt::simplify (which runs fold again in every round) print one line, and the program runs as without passes on FastVM."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault.cml"
+args = ["${case}", "std::opt::fold", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+const lines = input.normalized.stderr.trim().split('\n')
+assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
+assert(lines[0].includes(':16:29: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_fault_untaken.simplify_jit"
+desc = "std::opt::simplify alone: one warning, 7, exit 0 on the JIT."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+const lines = input.normalized.stderr.trim().split('\n')
+assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
+assert(lines[0].includes(':16:29: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_fault_untaken.opt_no_fold"
+desc = "A pipeline without fold (std::opt) says nothing: the warning belongs to the pass that would have folded the expression."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', 'no warning: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_fault_reached.default"
+desc = "The same expression where the run reaches it, without passes: 'before' is printed, then the division by zero is reported at line 11, column 15, exit 1."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
+args = ["${case}"]
+expect_exit = 1
+verify_script = """
+const out = input.normalized.stdout.trim().split('\n')
+assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
+assert(out[1].includes('fold_constant_fault_reached.cml:11:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
+assert(input.normalized.stderr === '', 'no warning without passes: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_fault_reached.fold"
+desc = "With std::opt::fold the program behaves the same (2.9): 'before', then the division by zero at the same position, exit 1. The warning on stderr names that position before the run."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 1
+verify_script = """
+const out = input.normalized.stdout.trim().split('\n')
+assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
+assert(out[1].includes('fold_constant_fault_reached.cml:11:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
+const lines = input.normalized.stderr.trim().split('\n')
+assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
+assert(lines[0].includes('fold_constant_fault_reached.cml:11:15: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_fault_reached.simplify_fvm"
+desc = "The same under std::opt::simplify on FastVM: unchanged behaviour, one warning."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 1
+verify_script = """
+const out = input.normalized.stdout.trim().split('\n')
+assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
+assert(out[1].includes('fold_constant_fault_reached.cml:11:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
+const lines = input.normalized.stderr.trim().split('\n')
+assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
+assert(lines[0].includes(':11:15: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constant_fault_reached.json"
+desc = "With --output-format json the warning is one JSON array on stderr (severity Warn, stage pass:std::opt::fold, the position of the division), and stdout is the program's output followed by the error array, which holds the error only."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault_reached.cml"
+args = ["--output-format", "json", "${case}", "std::opt::fold", "std::opt::simplify"]
+expect_exit = 1
+verify_script = """
+const warnings = JSON.parse(input.stderr)
+assert(warnings.length === 1, 'one warning: ' + input.stderr)
+const w = warnings[0]
+assert(w.severity === 'Warn' && w.data.name === 'RuntimeDiag::ConstantExpressionFaults' && w.code === '0x04100015', JSON.stringify(w))
+assert(w.data.stage === 'pass:std::opt::fold', 'stage ' + w.data.stage)
+assert(w.range.start.line === 10 && w.range.start.character === 14, JSON.stringify(w.range))
+assert(input.normalized.stdout.startsWith('before\n'), input.normalized.stdout)
+const errors = JSON.parse(input.normalized.stdout.slice('before\n'.length))
+assert(errors.length === 1 && errors[0].severity === 'Error' && errors[0].data.name === 'RuntimeDiag::DivisionByZero', JSON.stringify(errors))
+assert(errors[0].range.start.line === 10 && errors[0].range.start.character === 14, JSON.stringify(errors[0].range))
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000

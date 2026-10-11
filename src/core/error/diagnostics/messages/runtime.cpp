@@ -178,6 +178,19 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::ConstantExpressionFaults,
+            {
+                "ConstantExpressionFaults",
+                "This constant expression faults whenever it is evaluated ({0}); it is not "
+                "folded.",
+                "All its operands are known and computing it fails, so there is no value to "
+                "put in its place. It is left as written: the program behaves the same with "
+                "and without the pass, and the fault is reported with its position if the run "
+                "reaches the expression. If it is never reached (an arm that is not taken), "
+                "nothing happens.",
+            },
+        },
+        {
             RuntimeDiag::GraphTooLarge,
             {
                 "GraphTooLarge",

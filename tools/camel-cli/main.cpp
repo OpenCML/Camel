@@ -29,6 +29,7 @@
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/snapshot.h"
+#include "camel/execute/pass/warnings.h"
 #include "camel/init.h"
 #include "camel/parse/antlr/OpenCMLLexer.h"
 #include "camel/parse/antlr/OpenCMLParser.h"
@@ -344,6 +345,27 @@ int main(int argc, char *argv[]) {
                         writePassDump(passDump, "input", graph);
                         setPassSnapshotHandler(&passDumpHandler, &passDump);
                     }
+                    // A pass's warnings about the program go where the compiler's go: to
+                    // stderr, in the format of the diagnostics, when the pass has run.
+                    static bool passWarningsAsJson = false;
+                    passWarningsAsJson             = useJsonFormat;
+                    setPassWarningHandler(
+                        [](const char *, const std::vector<Diagnostic> &warnings, void *) {
+                            if (passWarningsAsJson) {
+                                std::cerr << "[\n";
+                            }
+                            for (size_t i = 0; i < warnings.size(); ++i) {
+                                const bool last = i + 1 == warnings.size();
+                                std::cerr << (passWarningsAsJson ? warnings[i].toJson()
+                                                                 : warnings[i].toText())
+                                          << (passWarningsAsJson && !last ? ",\n" : "\n");
+                            }
+                            if (passWarningsAsJson) {
+                                std::cerr << "]\n";
+                            }
+                            std::cerr << std::flush;
+                        },
+                        nullptr);
                     auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
                     graph       = result.graph;
                     if (result.failed()) {

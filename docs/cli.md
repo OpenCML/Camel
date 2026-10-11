@@ -157,6 +157,7 @@ A warning (a `[Warn]` diagnostic) does not stop a program. The compiler's warnin
 | `SemanticDiag::VarParamInAsyncFunction` | `0x03100001` | the parameter | A `var` parameter in a function without the `sync` modifier |
 | `SemanticDiag::CapturedWriteInAsyncFunction` | `0x03100003` | the function | The function writes a captured variable and has no `sync` modifier |
 | `RuntimeDiag::PassesNeverRun` | `0x0410000F` | no source position (a command-line matter) | Passes are written after a pass that consumes the graph; they will not run. Printed with the program's warnings (the last element of the stderr array in JSON mode) |
+| `RuntimeDiag::ConstantExpressionFaults` | `0x04100015` | the expression | `std::opt::fold` (also inside `std::opt::simplify`) met an expression whose operands are all constants and whose evaluation faults (`1 / 0`). It is not folded: the program behaves the same with and without the pass, and the fault is reported with its position if the run reaches the expression. Printed on stderr when the pass has run, once per expression, before the next pass |
 
 What counts as an effect for `EffectNotExecuted`: an operator that is neither pure nor state-only in the operator-traits registry (the same set the effect trace records), a call of a function declared `sync func` or with a `var` parameter, a call of a function whose own result depends on an effect, and a branch with such an arm. A call through a function value is only recognised by its type (`sync` modifier, `var` parameter).
 

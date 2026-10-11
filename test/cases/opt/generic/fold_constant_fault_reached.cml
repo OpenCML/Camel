@@ -1,0 +1,14 @@
+/**
+ * A constant expression that can only fault is not folded (design principles 2.9), also when the
+ * run reaches it: the division by zero is reported with its position when the program runs,
+ * after "before" was printed, exactly as without passes. std::opt::fold and std::opt::simplify
+ * add one warning at the same position before the run.
+ */
+module fold_constant_fault_reached
+
+func main(): int sync {
+    println('before')
+    let a = 1 / 0
+    println(a)
+    return 0
+}
