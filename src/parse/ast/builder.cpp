@@ -1312,24 +1312,48 @@ matchCase
 */
 any Builder::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     ENTER("MatchCase");
-    node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
-    setNodeTokenRangeByContext(caseNode, context);
-    node_ptr_t pattern  = any2node(visitPattern(context->pattern(0)));
-    node_ptr_t exprNode = any2node(visitBlockExpr(context->blockExpr()));
-    *caseNode << pattern << exprNode;
-    registerAstSemanticBundle(
-        caseNode,
-        {
-            semanticPart(
-                camel::source::SemanticRole::Keyword,
-                deriveAstAnchorOrigin(caseNode, context->CASE()->getSymbol(), "ast.match.case"),
-                -1,
-                "case"),
-            semanticPart(camel::source::SemanticRole::CaseValue, nodeOrigin(pattern), 0, "pattern"),
-            semanticPart(camel::source::SemanticRole::CaseBody, nodeOrigin(exprNode), -1, "body"),
-        });
+    // `case a | b => body` enters the body when any of its patterns matches. A branch has one
+    // value per arm, so the case becomes one arm per pattern, each with its own copy of the
+    // body (only the first pattern used to be read). An alternative that is the wildcard
+    // matches everything: the whole case is then the wildcard arm.
+    std::vector<node_ptr_t> patterns;
+    for (auto *patternContext : context->pattern()) {
+        node_ptr_t pattern = any2node(visitPattern(patternContext));
+        if (pattern->type() == LoadType::Null) {
+            patterns.assign(1, pattern);
+            break;
+        }
+        patterns.push_back(pattern);
+    }
+    std::vector<node_ptr_t> caseNodes;
+    for (const node_ptr_t &pattern : patterns) {
+        node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
+        setNodeTokenRangeByContext(caseNode, context);
+        node_ptr_t exprNode = any2node(visitBlockExpr(context->blockExpr()));
+        *caseNode << pattern << exprNode;
+        registerAstSemanticBundle(
+            caseNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Keyword,
+                    deriveAstAnchorOrigin(caseNode, context->CASE()->getSymbol(), "ast.match.case"),
+                    -1,
+                    "case"),
+                semanticPart(
+                    camel::source::SemanticRole::CaseValue,
+                    nodeOrigin(pattern),
+                    0,
+                    "pattern"),
+                semanticPart(
+                    camel::source::SemanticRole::CaseBody,
+                    nodeOrigin(exprNode),
+                    -1,
+                    "body"),
+            });
+        caseNodes.push_back(caseNode);
+    }
     LEAVE("MatchCase");
-    return caseNode;
+    return caseNodes;
 }
 
 /*
@@ -1420,8 +1444,64 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
         setNodeTokenRangeByContext(ctrlNode, context);
         node_ptr_t casesNode = createNodeAs<RepeatedLoad>("MatchCase");
         setNodeTokenRangeByContext(casesNode, context);
+        OpenCMLParser::MatchCaseContext *wildcardCase = nullptr;
         for (auto &matchCase : context->matchCase()) {
-            *casesNode << any2node(visitMatchCase(matchCase));
+            // One node per pattern of the case (see visitMatchCase).
+            for (const node_ptr_t &caseNode :
+                 any_cast<std::vector<node_ptr_t>>(visitMatchCase(matchCase))) {
+                *casesNode << caseNode;
+            }
+            // The first case that matches is taken, so nothing after the wildcard can be.
+            // The branch takes its last arm when no value matches: a case left after the
+            // wildcard used to be entered in its place.
+            if (casesNode->size() > 0 &&
+                casesNode->at(casesNode->size() - 1)->front()->type() == LoadType::Null) {
+                wildcardCase = matchCase;
+                break;
+            }
+        }
+        if (wildcardCase != nullptr && casesNode->size() == 1) {
+            // Only the wildcard is left: the match is its body, whatever the value. A branch
+            // without a value to compare is read as an `if` on a boolean, so this is built as
+            // one whose condition is true (the scrutinee used to be read as that boolean, and
+            // an arm that does not exist entered when it was false).
+            ctrlNode = createNodeAs<IfExprLoad>();
+            setNodeTokenRangeByContext(ctrlNode, context);
+            node_ptr_t condNode = createNodeAs<LiteralLoad>(Literal(LiteralType::Boolean, "true"));
+            setNodeTokenRangeByContext(condNode, context->identRef());
+            node_ptr_t thenNode      = casesNode->at(0)->at(1);
+            node_ptr_t elseBlockNode = createNodeAs<OptionalLoad>("StmtBlock");
+            setNodeTokenRangeByContext(elseBlockNode, wildcardCase->blockExpr());
+            *elseBlockNode << any2node(visitBlockExpr(wildcardCase->blockExpr()));
+            *ctrlNode << condNode << thenNode << elseBlockNode;
+            registerAstSemanticBundle(
+                ctrlNode,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Keyword,
+                        deriveAstAnchorOrigin(
+                            ctrlNode,
+                            context->MATCH()->getSymbol(),
+                            "ast.match.keyword"),
+                        -1,
+                        "match"),
+                    semanticPart(
+                        camel::source::SemanticRole::BranchCondition,
+                        nodeOrigin(condNode),
+                        -1,
+                        "condition"),
+                    semanticPart(
+                        camel::source::SemanticRole::BranchTarget,
+                        nodeOrigin(thenNode),
+                        0,
+                        "then"),
+                    semanticPart(
+                        camel::source::SemanticRole::BranchTarget,
+                        nodeOrigin(elseBlockNode->front()),
+                        1,
+                        "else"),
+                });
+            break;
         }
         *ctrlNode << casesNode;
         std::vector<camel::source::SemanticPart> parts = {

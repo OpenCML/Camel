@@ -1,0 +1,27 @@
+/**
+ * The first case that matches is taken: nothing after the wildcard is reachable. The case
+ * after it used to be entered for every value that matched no pattern.
+ */
+module match_wildcard_first
+
+func f(s: string): int {
+    return match s {
+        case _ => 0
+        case 'a' => 1
+    }
+}
+
+// Only the wildcard: the body, whatever the value (0 used to select an arm that does not exist).
+func g(n: int): int {
+    return match n {
+        case _ => 7
+    }
+}
+
+func main(): int sync {
+    println(f('a'))
+    println(f('b'))
+    println(g(0))
+    println(g(5))
+    return 0
+}
