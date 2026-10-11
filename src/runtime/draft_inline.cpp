@@ -113,12 +113,18 @@ appendUniqueRefs(std::span<const gc_node_ref_t> lhs, std::span<const gc_node_ref
     return merged;
 }
 
+/// Kinds an entry root of an inlined body may have: every node that is not a value carrier.
+/// SYNC and GATE count. A callee that was itself inlined into (earlier in the same session, or
+/// by an earlier pass) starts with the entry SYNC of that splice, and its first operators wait
+/// on that SYNC: they have a non-constant input, so they are not roots themselves. Leaving the
+/// SYNC out made such a body have no root at all. The control predecessors of the call (the
+/// BRCH whose arm the call is, the statement before it) were then attached to the callee's
+/// recorded entry node only, and everything behind the SYNC ran whether the arm was taken or
+/// not, and before the statements it was written after.
 bool isExecutableEntryKind(GCNodeKind kind) {
     switch (kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
-    case GCNodeKind::Sync:
-    case GCNodeKind::Gate:
     case GCNodeKind::Dref:
         return false;
     default:

@@ -8,6 +8,7 @@
     progen.py reduce    --seed N --cell ID [--matrix M] [--features LIST] --out DIR
     progen.py check                                           the fixed batch of the test plan
     progen.py findings [--runs N]                             re-run the archived findings
+    progen.py fixed                                           the fixed findings, on every scheduler
 
 `selfcheck` runs every program once, without passes (the node VM), and reports how often the
 reference and the run agree: it tests the generator and its model of the semantics.
@@ -286,6 +287,33 @@ def cmd_findings(args):
     return 0
 
 
+def cmd_fixed(args):
+    """Regression guard of the test plan: every finding recorded as fixed (findings.json, key
+    `fixed`) must print its expected output under its own rewrite sequence on every scheduler."""
+    from runner import run_cell
+    root = Path(args.dir) if args.dir else FINDINGS
+    listed = [f for f in json.loads((root / "findings.json").read_text(encoding="utf-8")) if f.get("fixed")]
+    jobs = []
+    for f in listed:
+        own = [p for p in f["pipeline"] if p not in BACKENDS]
+        for backend in BACKENDS:
+            jobs.append((f, own + [backend]))
+    def go(job):
+        f, passes = job
+        return f, passes, run_cell(root / f["file"], passes, f.get("env", {}), f["expected"])
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        results = list(pool.map(go, jobs))
+    wrong = 0
+    for f, passes, info in results:
+        if info["outcome"] != "OK":
+            wrong += 1
+            print(f"{f['id']} {f['file']} [{' '.join(passes)}]: {signature(info)}: {info.get('detail', '')}")
+    print(f"progen fixed: {len(listed)} findings, {len(results)} runs")
+    print(f"{wrong} wrong")
+    print("PASS" if not wrong and results else "FAIL")
+    return 0 if not wrong and results else 1
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -329,6 +357,10 @@ def main(argv=None):
     p.add_argument("--dir")
     p.add_argument("--runs", type=int, default=3)
     p.set_defaults(fn=cmd_findings)
+    p = sub.add_parser("fixed")
+    p.add_argument("--dir")
+    p.add_argument("--jobs", type=int, default=4)
+    p.set_defaults(fn=cmd_fixed)
     p = sub.add_parser("features")
     p.set_defaults(fn=lambda a: print("\n".join(f"{k:<10} {v}" for k, v in FEATURES.items())) or 0)
     args = ap.parse_args(argv)

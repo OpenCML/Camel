@@ -15,3 +15,16 @@ expect_stdout_contains = ["0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
+
+[[tests]]
+name = "progen_fixed"
+desc = "The archived progen findings that are recorded as fixed (test/cases/opt/progen/findings.json, key `fixed`): reduced programs on which std::inline, std::opt or a pass after them ran code of a branch arm that is not taken, dropped or reordered an effect of a sync block, produced a wrong value, or crashed. Each runs under the rewrite sequence it was found with, on the node VM, the bytecode VM, the JIT and the parallel scheduler, and every run must print exactly the output the generator's reference evaluator computed."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/progen/progen.py"
+args = ["${case}", "fixed"]
+expect_exit = 0
+expect_stdout_contains = ["0 wrong", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000

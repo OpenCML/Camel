@@ -8,7 +8,8 @@
   ],
   "env": {},
   "expected": [],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F02",
@@ -19,7 +20,8 @@
   ],
   "env": {},
   "expected": [],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F03",
@@ -30,7 +32,8 @@
   ],
   "env": {},
   "expected": [],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F04",
@@ -43,7 +46,8 @@
   "expected": [
    "pq"
   ],
-  "class": "effect order lost"
+  "class": "effect order lost",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F05",
@@ -109,7 +113,8 @@
   "expected": [
    ""
   ],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F10",
@@ -122,7 +127,8 @@
   "expected": [
    ""
   ],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F11",
@@ -176,7 +182,8 @@
   "expected": [
    "L4 (0, [0]) 0"
   ],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F15",
@@ -189,7 +196,8 @@
   "expected": [
    "L6 { n: 5, tag:  }"
   ],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F16",
@@ -205,7 +213,8 @@
   "expected": [
    "L11 false 4"
   ],
-  "class": "(other) wrong value after inlining"
+  "class": "(other) wrong value after inlining",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F17",
@@ -231,7 +240,8 @@
   ],
   "env": {},
   "expected": [],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F19",
@@ -255,7 +265,8 @@
   ],
   "env": {},
   "expected": [],
-  "class": "(other) crash after a rewrite"
+  "class": "(other) crash after a rewrite",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F21",
@@ -266,7 +277,8 @@
   ],
   "env": {},
   "expected": [],
-  "class": "(other) crash after a rewrite"
+  "class": "(other) crash after a rewrite",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F22",
@@ -280,7 +292,8 @@
   "expected": [
    ""
   ],
-  "class": "(other) crash after a rewrite"
+  "class": "(other) crash after a rewrite",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F23",
@@ -388,7 +401,8 @@
   "expected": [
    "L4 0 3 a"
   ],
-  "class": "branch arm"
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F33",
