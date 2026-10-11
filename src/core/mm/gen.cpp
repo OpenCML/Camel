@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -358,9 +358,23 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
 }
 
 void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t align) {
-    void *ptr = largeObjSpace_.alloc(payloadSize, align);
+    // The large-object space takes its blocks from the host and has no limit of its own: a
+    // failure here is the host running out of memory. It is told as such, with the volume the
+    // space holds, instead of as a bare std::bad_alloc.
+    void *ptr = nullptr;
+    try {
+        ptr = largeObjSpace_.alloc(payloadSize, align);
+    } catch (const std::bad_alloc &) {
+        ptr = nullptr;
+    }
     if (UNLIKELY(!ptr)) {
-        throw std::bad_alloc();
+        throw MemoryExhausted(
+            "auto",
+            "run-time values",
+            payloadSize,
+            largeLiveBytes_ + largeBytesSinceSweep_,
+            0,
+            {});
     }
     auto *header = headerOf(ptr);
     header->setRegion(AllocRegion::LargeObj);

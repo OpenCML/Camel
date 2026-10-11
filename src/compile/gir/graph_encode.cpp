@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -615,7 +615,14 @@ class EncodeSession {
                 staticGraphPtrs,
                 prepared.payloadShape,
                 prepared.staticSlots);
-            prepared.memory = camel::core::mm::graphSpace().alloc(prepared.bytes, alignof(GCGraph));
+            try {
+                prepared.memory =
+                    camel::core::mm::graphSpace().alloc(prepared.bytes, alignof(GCGraph));
+            } catch (const camel::core::mm::MemoryExhausted &e) {
+                throw e.during(
+                    std::format("encoding graph '{}'", prepared.source->name()),
+                    prepared.draft->firstNodeOrigin());
+            }
             prepared.runtime = reinterpret_cast<GCGraph *>(prepared.memory);
             CAMEL_LOG_INFO_S(
                 "GIREncode",

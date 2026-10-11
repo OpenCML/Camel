@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -799,6 +799,19 @@ PassApplyResult applyPassesDetailed(
                     e.quantity(),
                     e.limit());
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (graph too large)", p);
+                return {nullptr, PassApplyStatus::Failed};
+            } catch (const camel::core::mm::MemoryExhausted &e) {
+                // A memory space is at its limit, or the host has no memory left. Like a graph
+                // that is too large this is a limit the program (or what the pass made of it)
+                // ran into: it is reported with the space, the usage, the limit and the
+                // setting that raises it, at the graph that was being built when one is known.
+                setPipelineStage("pass:" + p);
+                auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);
+                if (e.origin() != camel::source::kInvalidOriginId) {
+                    diag.atOrigin(e.origin());
+                }
+                diag.commit(std::format(" in pass '{}'", p), std::string(e.what()));
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
                 return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
                 // A pass that gives up with a plain exception (graph validation at commit, the

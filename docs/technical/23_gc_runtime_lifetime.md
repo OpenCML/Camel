@@ -11,6 +11,63 @@ Camel's runtime values live in four allocator domains with different ownership r
 The graph carrier itself is not an `autoSpace` object and is reclaimed by `GCGraphManager`, not by
 mark-sweep.
 
+## Growable Program Spaces
+
+`graphSpace`, `permSpace` and `metaSpace` hold what the program is made of, so their size
+follows the size of the program. Each is a list of segments
+(`include/camel/core/mm/alloc/growable.h`): `GrowableFreeListAllocator` for the graph and meta
+spaces (one `FreeListAllocator` per segment), `GrowableBumpAllocator` for the permanent space
+(one `BumpPointerAllocator` per segment). The first segment is as large as the whole space used
+to be (64, 32 and 16 MB); when no segment has room, a further one is reserved, as large as
+everything reserved so far (at most 256 MB, never smaller than the request), until the total
+reaches the limit of the space (`CAMEL_GRAPH_SPACE_LIMIT_MB`, `CAMEL_PERM_SPACE_LIMIT_MB`,
+`CAMEL_META_SPACE_LIMIT_MB`; 256 MB each by default).
+
+Invariants:
+
+- **Addresses are stable.** An object never moves and a segment is never released. `GCGraph *`,
+  `Type *` and arena blocks are held as raw pointers all over the compiler and the schedulers;
+  growth changes nothing for them.
+- **The segment table is append-only and read without a lock.** It has a fixed capacity (1024
+  entries); an entry is written before the count that publishes it. `contains`, `free` and
+  `iterateAllocated` read the count and walk the entries at any time from any thread. The
+  collector calls `graphSpace().contains` / `permSpace().contains` (address-stability checks,
+  heap verification) and `graphSpace().iterateAllocated` (unmarking graph carriers before a
+  mark) while other threads may allocate: a segment added meanwhile holds only objects
+  allocated after the walk began, which are unmarked, as an object allocated at the end of the
+  single block was before.
+- **Growth is serialized, allocation is not.** A thread that finds no room takes the growth
+  mutex, looks again at the segments added while it waited, and only then reserves one.
+  Allocation inside a segment keeps the segment's own synchronization (a mutex for the free
+  lists, compare-and-swap for the bump pointer).
+- **The cross-space contract is unchanged.** Objects of these spaces are not collected: the
+  collector reaches auto-space objects through the graph roots (`GCGraphManager::gcRoots()`),
+  wherever the graph lies, and never frees or moves anything in these spaces. Graphs are
+  released one by one by `GCGraphManager`, into the segment they came from.
+- **Allocation never returns null.** At the limit, or when the host has no memory for a
+  segment, the space throws `mm::MemoryExhausted` (a `std::bad_alloc`) with the space, the
+  request, the usage, the limit and the variable that raises it. The first caller that knows
+  what was being built adds it (`during`): the graph builder names the function being compiled,
+  the encoders name the graph. The pass driver, the graph builder and the command line report
+  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own (objects that do
+  not fit the elder space go to the large-object space, which takes memory from the host); a
+  refusal by the host is reported the same way.
+
+This does not stand in the way of a moving collector for small objects: nothing here hands out
+pointers to collectable objects, and the spaces hold only what is never moved.
+
+What a function costs (measured, release build, `CAMEL_GC_STATS=1`): about 0.8 KB of the graph
+space for a function of one expression, 1.9 KB with an `if` (three graphs), 1.5 KB with a
+lambda; 0.6 to 1.8 KB of the permanent space (5 to 17 type objects: composite types are created
+anew at every use, not shared); about 1.2 KB of the meta space when its graph owns a constant
+object or a function value (the first block of its arena, see
+`include/camel/compile/gir/arena.h`). That first block was 256 KB, which is what limited a
+program to 62 such graphs.
+
+`CAMEL_SPACE_SEGMENT_KB=<kilobytes>` sets the first segment of all three spaces. It is a test
+control: with 64 KB a program of a few hundred functions makes every space grow several times,
+so growth can be run under heap verification and collection stress (`test/plans/feat/mm/capacity.plan.toml`).
+
 ## Tracing Contract
 
 `rtdata::Object::updateRefs` receives both a relocation callback and the static `Type` describing the
@@ -206,6 +263,9 @@ do not need source changes:
   tests. It is off by default.
 - `CAMEL_GC_PRINT_CONFIG=1` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.
+- `CAMEL_GC_STATS=1` also prints the occupancy of the graph, permanent and meta spaces at exit
+  (`[camel] spaces: ...`): for each, kilobytes in use and at the high-water mark, megabytes
+  reserved, segments, allocations and the limit.
 - `CAMEL_GC_STATS=1` prints one line of pacing statistics to stderr at exit (`[camel] gc: ...`):
   collections performed, requests by cause (large-object budget, elder space exhausted, other),
   megabytes allocated per space, the large-object volume the last sweep left, the high-water mark

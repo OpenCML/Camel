@@ -45,7 +45,6 @@ class GraphArena {
         size_t wasteBytes      = 0;
         size_t blockCount      = 0;
         size_t draftFreedBytes = 0;
-        size_t allocFailCount  = 0;
     };
 
     explicit GraphArena(size_t initialBlockBytes)
@@ -171,12 +170,9 @@ class GraphArena {
     Block &allocateBlock(Region region, size_t minBytes) {
         auto &nextBytes           = nextBlockBytesOf(region);
         const size_t requestBytes = std::max({kMinBlockBytes_, minBytes, nextBytes});
+        // Throws mm::MemoryExhausted when the meta space is at its limit.
         void *basePayload =
             camel::core::mm::metaSpace().alloc(requestBytes + kGuardBytes_ * 2, alignof(slot_t));
-        if (basePayload == nullptr) {
-            metrics_.allocFailCount++;
-            throw std::bad_alloc();
-        }
         auto *header             = camel::core::mm::headerOf(static_cast<std::byte *>(basePayload));
         const size_t rawCapacity = header->objSize();
         ASSERT(

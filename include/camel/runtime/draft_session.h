@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 02, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,7 @@
 #pragma once
 
 #include "camel/core/context/context.h"
+#include "camel/core/mm/alloc/growable.h"
 #include "camel/runtime/draft.h"
 
 #include <cstdint>
@@ -76,15 +77,16 @@ struct RuntimeSpecializationKey {
     bool operator==(const RuntimeSpecializationKey &other) const = default;
 };
 
-/// Thrown when a draft cannot be encoded because the space runtime graphs live in is full. It
-/// is a std::runtime_error with the message this failure always had; the type lets the driver
-/// of an open-ended rewrite (an export that unrolls a recursion) say what grew, and where.
-class GraphSpaceExhausted : public std::runtime_error {
+/// Thrown when a draft cannot be encoded because the space runtime graphs live in is at its
+/// limit. It is the allocator's mm::MemoryExhausted, told with the graph that was being
+/// encoded; the type lets the driver of an open-ended rewrite (an export that unrolls a
+/// recursion) say what grew, and where.
+class GraphSpaceExhausted : public camel::core::mm::MemoryExhausted {
   public:
-    GraphSpaceExhausted(size_t bytes, const std::string &graph)
-        : std::runtime_error(
-              "Runtime draft encoding failed to allocate " + std::to_string(bytes) +
-              " bytes for graph '" + graph + "'."),
+    GraphSpaceExhausted(
+        const camel::core::mm::MemoryExhausted &cause, size_t bytes, const std::string &graph,
+        uint64_t origin = 0)
+        : camel::core::mm::MemoryExhausted(cause.during("encoding graph '" + graph + "'", origin)),
           bytes_(bytes), graph_(graph) {}
 
     /// The size of the graph that could not be placed, and its name.

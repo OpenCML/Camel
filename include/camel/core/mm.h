@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,15 +21,36 @@
 
 #include "mm/alloc/bump_ptr.h"
 #include "mm/alloc/free_list.h"
+#include "mm/alloc/growable.h"
 #include "mm/foreign_handle.h"
 #include "mm/gen.h"
 #include "mm/root_handle.h"
 
+#include <iosfwd>
+
 namespace camel::core::mm {
 
+// Limits of the growable spaces: the default total and the environment variable that
+// overrides it, in megabytes. A function takes about 1 to 2 KB of the graph space, 0.6 to 2 KB
+// of the permanent space and, when its graph owns a constant, about 1.2 KB of the meta space,
+// so the defaults hold programs of more than a hundred thousand functions. They are kept this
+// low because a limit is also what stops a pass that never stops growing the program (an
+// unrolling that does not end): the time to reach it grows faster than the limit.
+constexpr size_t kDefaultGraphSpaceLimitBytes = 256 * MB;
+constexpr size_t kDefaultPermSpaceLimitBytes  = 256 * MB;
+constexpr size_t kDefaultMetaSpaceLimitBytes  = 256 * MB;
+constexpr const char *kGraphSpaceLimitEnv     = "CAMEL_GRAPH_SPACE_LIMIT_MB";
+constexpr const char *kPermSpaceLimitEnv      = "CAMEL_PERM_SPACE_LIMIT_MB";
+constexpr const char *kMetaSpaceLimitEnv      = "CAMEL_META_SPACE_LIMIT_MB";
+
 GenerationalAllocatorWithGC &autoSpace();
-FreeListAllocator &metaSpace();
-FreeListAllocator &graphSpace();
-BumpPointerAllocator &permSpace();
+GrowableFreeListAllocator &metaSpace();
+GrowableFreeListAllocator &graphSpace();
+GrowableBumpAllocator &permSpace();
+
+/// One line with the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`):
+/// bytes in use now and at the high-water mark, bytes reserved, segments, allocations, limit.
+/// Printed at exit after the collector's line when CAMEL_GC_STATS is set.
+void reportSpaceUsage(std::ostream &os);
 
 } // namespace camel::core::mm

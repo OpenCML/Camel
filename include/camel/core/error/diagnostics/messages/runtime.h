@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,6 +45,7 @@ enum class RuntimeDiag : uint32_t {
     EntryArgumentInvalid      = 0x000011,
     EntryResultNotWritten     = 0x000012,
     GraphTooLarge             = 0x000013,
+    MemoryExhausted           = 0x000014,
     // Warnings (severity bits = Warn).
     PassesNeverRun = 0x10000F,
     ConstantExpressionFaults = 0x100015,

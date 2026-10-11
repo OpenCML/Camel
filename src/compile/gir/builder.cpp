@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -838,6 +838,17 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
         rootGraph_ = nullptr;
     } catch (const BuildAbortException &) {
         rootGraph_ = nullptr;
+    } catch (const camel::core::mm::MemoryExhausted &e) {
+        // A memory space is at its limit: reported like any other limit the program runs into,
+        // at the function that was being compiled (buildFuncBody says which).
+        camel::core::error::setPipelineStage("compile");
+        auto diag = diags_->of(RuntimeDiag::MemoryExhausted);
+        if (e.origin() != camel::source::kInvalidOriginId) {
+            diag.atOrigin(e.origin());
+        }
+        diag.commit(std::string(), std::string(e.what()));
+        camel::core::error::setPipelineStage("");
+        rootGraph_ = nullptr;
     }
 
     return rootGraph_;
@@ -1165,6 +1176,13 @@ void Builder::buildFuncBody(
         bodyStates_[graph.get()] = BodyState::Built;
         builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
         builtBodies_.push_back(graph);
+    } catch (const camel::core::mm::MemoryExhausted &e) {
+        // Say which function was being compiled; the allocator does not know.
+        bodyStates_[graph.get()] = BodyState::Built;
+        leaveScope();
+        throw e.during(
+            std::format("compiling function '{}'", name.empty() ? graph->name() : name),
+            gct->load()->origin());
     } catch (...) {
         // The caller entered the scope of `graph`; an error leaves it on the way out.
         bodyStates_[graph.get()] = BodyState::Built;

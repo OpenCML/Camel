@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: May. 03, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -426,6 +426,24 @@ int main(int argc, char *argv[]) {
         d.fetchRange(conv);
         os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
         return selectedCommand == Command::Check ? 0 : 1;
+    } catch (const mm::MemoryExhausted &e) {
+        // A memory space reached its limit outside any pass (while the program was compiled
+        // into graphs). The pass driver and the graph builder report theirs; this is the rest.
+        // It is a limit the program ran into, told as a diagnostic with the space, the usage,
+        // the limit and the setting that raises it.
+        setPipelineStage("compile");
+        try {
+            auto diag = ctx->runtimeDiagSink()->of(RuntimeDiag::MemoryExhausted);
+            if (e.origin() != camel::source::kInvalidOriginId) {
+                diag.atOrigin(e.origin());
+            }
+            diag.commit(std::string(), std::string(e.what()));
+        } catch (const DiagnosticsLimitExceededBaseException &) {
+            // The sink stops at its first error; the diagnostic is recorded and dumped below.
+        }
+        setPipelineStage("");
+        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
+        return 1;
     } catch (exception &e) {
         // An exception that is not a diagnostic and was not raised inside a pass (the pass
         // driver reports those itself). JSON output stays a diagnostics array.

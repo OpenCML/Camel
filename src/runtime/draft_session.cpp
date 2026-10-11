@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -510,30 +510,46 @@ size_t draftGraphBytes(
         staticSlots);
 }
 
+/// The source position a failure to encode the graph `identity` is reported at, which only
+/// the session knows: the definition of the function the graph was compiled from; a graph a
+/// rewrite created (a specialization, a copy) has none and is reported at its first node that
+/// has one.
+uint64_t draftGraphOrigin(
+    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
+    const GraphDraft &draft) {
+    uint64_t origin = 0;
+    if (const auto source = context ? context->sourceContext() : nullptr) {
+        origin = source->debugMap().graphOrigin(identity.stableId);
+    }
+    return origin != 0 ? origin : draft.firstNodeOrigin();
+}
+
 /// draftGraphBytes for the graph `identity`: a draft too large for one runtime graph is
-/// reported with the graph's name and a source position, which only the session knows. The
-/// position is the definition of the function the graph was compiled from; a graph a rewrite
-/// created (a specialization, a copy) has none and is reported at its first node that has one.
+/// reported with the graph's name and a source position.
 size_t namedDraftGraphBytes(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
     const GraphDraft &draft, const GCGraph *fallback) {
     try {
         return draftGraphBytes(context, draft, fallback);
     } catch (const GraphCapacityError &e) {
-        uint64_t origin = 0;
-        if (const auto source = context ? context->sourceContext() : nullptr) {
-            origin = source->debugMap().graphOrigin(identity.stableId);
-        }
-        throw e.inGraph(identity.name, origin != 0 ? origin : draft.firstNodeOrigin());
+        throw e.inGraph(identity.name, draftGraphOrigin(context, identity, draft));
     }
 }
 
-GCGraph *allocateGraph(size_t bytes, const std::string &name) {
-    void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
-    if (!mem) {
-        throw GraphSpaceExhausted(bytes, name);
+/// Room for the runtime graph of the draft `identity`. A graph space at its limit is reported
+/// with the graph's name and source position, like a draft that is too large.
+GCGraph *allocateGraph(
+    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
+    const GraphDraft &draft, size_t bytes) {
+    try {
+        return reinterpret_cast<GCGraph *>(mm::graphSpace().alloc(bytes, alignof(GCGraph)));
+    } catch (const mm::MemoryExhausted &e) {
+        throw GraphSpaceExhausted(
+            e,
+            bytes,
+            identity.name,
+            draftGraphOrigin(context, identity, draft));
     }
-    return reinterpret_cast<GCGraph *>(mem);
 }
 
 } // namespace
@@ -706,7 +722,7 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     for (GCGraph *graph : closure) {
         const DraftEntry &entry = *drafts_.at(graph);
         const size_t bytes = namedDraftGraphBytes(context_, entry.identity, *entry.draft, graph);
-        rewritten.emplace(graph, allocateGraph(bytes, entry.identity.name));
+        rewritten.emplace(graph, allocateGraph(context_, entry.identity, *entry.draft, bytes));
         allocatedBytes.emplace(graph, bytes);
     }
     for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
@@ -778,7 +794,7 @@ void GraphDraftGroup::encode() {
     for (GCGraph *key : order_) {
         const Member &m = member(key);
         bytes.emplace(key, namedDraftGraphBytes(context_, m.identity, *m.draft, nullptr));
-        rewritten.emplace(key, allocateGraph(bytes.at(key), m.identity.name));
+        rewritten.emplace(key, allocateGraph(context_, m.identity, *m.draft, bytes.at(key)));
     }
     // Graphs outside the group keep their identity.
     for (GCGraph *key : order_) {
