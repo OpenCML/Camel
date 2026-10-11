@@ -196,12 +196,34 @@ does not run cse.
     it lies outside the branch; the arm's tail is then laid out before the arm's entry, NodeVM and
     Taskflow never reach the end of the arm and run into the other arm, which is the recursive one
     (`std::opt std::opt::fold std::opt` is the smallest failing sequence).
-  Making a node that reaches no executable node through GATE / SYNC inputs an entry root makes
-  both pass on all four schedulers (tried, not committed). With that change 33 of the 34
-  programs of seeds 1-1000 that still fail after `741b8705` pass every cell tried (20 cells with
-  `std::inline`, `std::opt` or `std::opt::simplify`), so C2 is also behind most of the findings
-  filed under `std::inline`. The one left is seed 299 (`std::specialize std::inline`, a silent
-  mismatch; not reduced).
+  Tried, not committed: in both overloads of `collectExecutableEntryRoots`, an input that is
+  not DATA or PORT disqualifies a node only if an executable node is reached from it through
+  GATE / SYNC nodes alone:
+
+  ```cpp
+  if (inputNode->kind != GCNodeKind::Data && inputNode->kind != GCNodeKind::Port) {
+      std::vector<gc_node_ref_t> work{in};          // was: hasNonDataPortInput = true; break;
+      std::unordered_set<gc_node_ref_t> seen;
+      while (!work.empty() && !hasNonDataPortInput) {
+          const gc_node_ref_t c = work.back();
+          work.pop_back();
+          const auto *node = seen.insert(c).second ? sourceGraph->node(c) : nullptr;
+          if (!node) continue;
+          if (isExecutableEntryKind(node->kind)) hasNonDataPortInput = true;
+          else for (auto inputs : {sourceGraph->normInputsOf(c), sourceGraph->withInputsOf(c),
+                                   sourceGraph->ctrlInputsOf(c)})
+              work.insert(work.end(), inputs.begin(), inputs.end());
+      }
+      if (hasNonDataPortInput) break;
+  }
+  ```
+
+  With it F12 and F19 pass on all four schedulers, and over seeds 1-1000 (20 cells per program:
+  no pass, fold, dce, and 17 with `std::inline`, `std::opt` or `std::opt::simplify`) 19,988 of
+  20,000 cells agree, 6 are located refusals, and one program is left with a bad cell: seed 299,
+  a silent mismatch under `std::specialize std::inline` (not reduced). After `741b8705` alone
+  34 programs have a bad cell (44 before it), so C2 is also behind most of what was filed under
+  `std::inline`. The default test set was not run with the change.
 - **C3: asking whether a value is written allocates in the space that is never freed (F34). Not
   fixed** (the capacity of that space and its diagnostic are handled elsewhere). `isVarArgument`
   (`src/runtime/draft_writes.cpp`) resolves the overload of an effectful operator through
