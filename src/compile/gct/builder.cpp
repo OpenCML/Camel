@@ -758,8 +758,39 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     Type *type;
     ASSERT(typeNode, "TypeDecl must have a type");
-    type                 = visitType(typeNode);
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
+    if (typeLoad->params().empty()) {
+        type = visitType(typeNode);
+    } else {
+        // A type function (`type Pair<T> = (T, T)`): the right-hand side is an ordinary type
+        // expression in which the parameters are type variables. A use `Pair<int>` replaces
+        // them (visitSpecType); nothing of the declaration reaches a graph.
+        const string typeName = typeLoad->ref().toString();
+        struct TypeScopeGuard {
+            Builder &self;
+            scope_ptr_t<Reference, Type *> outer;
+            ~TypeScopeGuard() { self.typeScope_ = outer; }
+        } typeScopeGuard{*this, typeScope_};
+        pushScope();
+        for (const string &param : typeLoad->params()) {
+            const Reference paramRef(param);
+            if (typeScope_->has(paramRef, false)) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .at(ast->load()->tokenRange())
+                    .commit(param);
+                throw BuildAbortException();
+            }
+            if (typeScope_->get(paramRef).has_value() ||
+                module_->getImportedType(paramRef).has_value()) {
+                diags_->of(SemanticDiag::TypeFunctionArguments)
+                    .at(ast->load()->tokenRange())
+                    .commit(typeName, "its parameter '" + param + "' already denotes a type here");
+                throw BuildAbortException();
+            }
+            typeScope_->insert(paramRef, TypeVarType::create(param, false));
+        }
+        type = TypeFunctionType::create(typeName, typeLoad->params(), visitType(typeNode));
+    }
     typeScope_->insert(typeLoad->ref(), type);
     node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref(), false);
     *declNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
@@ -1946,6 +1977,8 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     // Extract the type load from the AST node
     const auto &type = ast->loadAs<AST::TypeLoad>();
     Type *res;
+    // Whether this type is the base of `Name<...>`, the one place a type function may stand.
+    const bool asTypeFunctionBase = std::exchange(typeFunctionBase_, false);
 
     // Handle different type categories based on the TypeType enumeration
     switch (type->typeType()) {
@@ -1984,6 +2017,18 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         break;
     default:
         throw std::runtime_error("Unknown type type");
+    }
+
+    if (res != nullptr && res->code() == TypeCode::TypeFunc && !asTypeFunctionBase) {
+        const auto *typeFunc = static_cast<TypeFunctionType *>(res);
+        diags_->of(SemanticDiag::TypeFunctionArguments)
+            .at(ast->load()->tokenRange())
+            .commit(
+                typeFunc->toString(),
+                std::format(
+                    "it takes {} type argument(s) and is used without any",
+                    typeFunc->params().size()));
+        throw BuildAbortException();
     }
 
     LEAVE("Type");
@@ -2362,7 +2407,8 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     ENTER("SpecType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for SpecType");
     ASSERT(ast->size() >= 1, "SpecType must have base type");
-    Type *base = visitType(ast->atAs<AST::TypeLoad>(0));
+    typeFunctionBase_ = ast->size() >= 2;
+    Type *base        = visitType(ast->atAs<AST::TypeLoad>(0));
     if (ast->size() < 2) {
         LEAVE("SpecType");
         return base;
@@ -2386,9 +2432,52 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         }
         arguments.push_back(TypeArgument{.type = nullptr, .data = data});
     }
+    if (base->code() == TypeCode::TypeFunc) {
+        // A type declared with parameters: the arguments replace them in its body.
+        const auto *typeFunc = static_cast<TypeFunctionType *>(base);
+        type_vec_t types;
+        for (const TypeArgument &argument : arguments) {
+            if (argument.type == nullptr) {
+                diags_->of(SemanticDiag::TypeFunctionArguments)
+                    .at(ast->load()->tokenRange())
+                    .commit(
+                        typeFunc->toString(),
+                        "its parameters are types, and a constant ('const ...') was given");
+                throw BuildAbortException();
+            }
+            types.push_back(argument.type);
+        }
+        if (types.size() != typeFunc->params().size()) {
+            diags_->of(SemanticDiag::TypeFunctionArguments)
+                .at(ast->load()->tokenRange())
+                .commit(
+                    typeFunc->toString(),
+                    std::format(
+                        "it takes {} type argument(s) and {} were given",
+                        typeFunc->params().size(),
+                        types.size()));
+            throw BuildAbortException();
+        }
+        LEAVE("SpecType");
+        return typeFunc->apply(types);
+    }
     if (arguments.empty()) {
         LEAVE("SpecType");
         return base;
+    }
+    if (base->isOtherType()) {
+        // What the arguments of a module type mean is defined by the type, which sees
+        // concrete types only.
+        for (const TypeArgument &argument : arguments) {
+            if (argument.type != nullptr && containsTypeVar(argument.type)) {
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(ast->load()->tokenRange())
+                    .commit(
+                        base->toString(),
+                        "a type variable cannot be an argument of a module type");
+                throw BuildAbortException();
+            }
+        }
     }
     if (!base->isOtherType()) {
         diags_->of(SemanticDiag::InvalidTypeArgument)
