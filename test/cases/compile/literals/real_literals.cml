@@ -1,0 +1,42 @@
+/**
+ * A real literal is the double nearest to the number written (ties to even), the value
+ * `float('...')` gives for the same text, in every build. The literal used to be summed digit
+ * by digit, so its last bit depended on the literal and on the build: 0.7747 read as
+ * 0.77470000000000017 in a build with fused multiply-add, and 0.6906 as 0.6906000000000001
+ * in every build.
+ * Each line is the literal with 17 significant digits, which identifies the double.
+ */
+module real_literals
+
+func main(): int sync {
+    println('{:.17g}'->format<0.7747>)
+    println('{:.17g}'->format<0.6906>)
+    println('{:.17g}'->format<0.1>)
+    println('{:.17g}'->format<0.2>)
+    println('{:.17g}'->format<0.3>)
+    println('{:.17g}'->format<1.5>)
+    println('{:.17g}'->format<3.141592653589793>)
+    println('{:.17g}'->format<2.718281828459045>)
+    println('{:.17g}'->format<1.0e-2>)
+    println('{:.17g}'->format<1.0e22>)
+    println('{:.17g}'->format<1.0e23>)
+    println('{:.17g}'->format<8.41e21>)
+    println('{:.17g}'->format<123456789.123456789>)
+    println('{:.17g}'->format<0.000001>)
+    println('{:.17g}'->format<9007199254740993.0>)
+    println('{:.17g}'->format<1.7976931348623157e308>)
+    println('{:.17g}'->format<2.2250738585072014e-308>)
+    println('{:.17g}'->format<4.9e-324>)
+    println('{:.17g}'->format<0.1e1>)
+    println('{:.17g}'->format<100.0E-2>)
+    println('{:.17g}'->format<-0.7747>)
+    println('{:.17g}'->format<5.0e-324>)
+    println('{:.17g}'->format<0.30000000000000004>)
+    println('{:.17g}'->format<7.0e-10>)
+    println('{:.17g}'->format<2.5e+3>)
+    println('{:.17g}'->format<0.5>)
+    println(0.7747 == float('0.7747'), 0.6906 == float('0.6906'), 1.0e23 == float('1.0e23'))
+    println(0.1 + 0.2 == 0.3, 0.1 + 0.2 == 0.30000000000000004)
+    println(1e5, 1e5 + 1)
+    return 0
+}
