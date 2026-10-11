@@ -292,19 +292,13 @@ class GraphArena {
             }
         }
         if (!blocks.empty()) {
-            auto &meta             = camel::core::mm::metaSpace();
-            const bool metaHealthy = meta.validate();
-            if (!metaHealthy) {
-                CAMEL_LOG_WARN_S(
-                    "GIR",
-                    "Skip GraphArena {:p} block recycle because metaSpace is already "
-                    "corrupted.",
-                    static_cast<void *>(this));
-                heads.clear();
-                blocks.clear();
-                return;
-            }
+            auto &meta = camel::core::mm::metaSpace();
+            // The structural check walks the whole meta space, so it belongs to debug builds:
+            // run for every arena in a release build it made the release of the arenas
+            // quadratic in their number (a program of 8000 functions with a string constant
+            // took 4.9 s with the check and 3.0 s without).
             EXEC_WHEN_DEBUG({
+                ASSERT(meta.validate(), "metaSpace is corrupted before GraphArena recycle.");
                 for (const auto &blk : blocks) {
                     auto *hdr = camel::core::mm::headerOf(blk.basePayload);
                     ASSERT(hdr != nullptr, "GraphArena block payload has null header.");
