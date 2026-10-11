@@ -1,0 +1,29 @@
+/**
+ * progen finding F32 (branch arm). After `std::opt::fold std::inline` a pure function returns 0
+ *   instead of 3: the value of the taken `_` arm of a `match` (`0 + (if false then a12 else 3)`)
+ *   is lost and the program prints 0, the value the other two arms have.
+ * Pipeline: std::opt::fold std::inline std::nvm
+ * Expected output: L4 0 3 a
+ * Actual: L4 0 0 a
+ * Reduced by test/tools/progen from seed 2632 (generator version 1, features without capture,
+ *   effects, var, varparam, wait).
+ */
+module fold_inline_match_arm_value
+
+func f10(a11: int, a12: int): int {
+    return match a12 {
+        case 10 => 0
+        case 5 => {
+            return 0;
+        }
+        case _ => {
+            return 0 + (if false then a12 else 3);
+        }
+    };
+}
+
+func main(): int sync {
+    let n26 = f10(0, 7);
+    println('L4 {} {} {}'->format<0, n26, 'a'>);
+    return 0;
+}

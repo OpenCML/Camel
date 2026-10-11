@@ -1,0 +1,28 @@
+/**
+ * progen finding F12 (effect order lost). `std::opt::simplify` swaps two effects of a sync body:
+ *   the `println` of a later call comes before the `println` of an earlier `reduce`.
+ * Pipeline: std::opt::simplify std::nvm
+ * Expected output: (empty line) | L1 0 0
+ * Actual: L1 0 0 | (empty line)
+ * Reduced by test/tools/progen from seed 462 (generator version 1, all features).
+ */
+module simplify_effect_order
+
+sync func w14(a15: int, var c16: int, a17: int): int sync {
+    return if (0 <= 0) then sync {
+        println('L1 {} {}'->format<0, a15>);
+        return 0;
+    } else sync {
+        return w14(0, 0, 0);
+    };
+}
+
+func main(): int sync {
+    let n48 = [0]->reduce<(p46: int, p47: int): int => sync {
+        println('');
+        return 0;
+    }, 0>;
+    var v49 = 0;
+    let n54 = w14(0 % 8, v49, 1 / 1);
+    return 0;
+}

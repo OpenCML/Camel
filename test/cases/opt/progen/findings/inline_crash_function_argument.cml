@@ -1,0 +1,37 @@
+/**
+ * progen finding F20 ((other) crash after a rewrite). Segmentation fault after `std::inline`
+ *   (every scheduler): a function with a function parameter, called from another function in the
+ *   taken arm.
+ * Pipeline: std::inline std::nvm
+ * Expected output: (nothing)
+ * Actual: CRASH
+ * Reduced by test/tools/progen from seed 1665 (generator version 1, all features).
+ */
+module inline_crash_function_argument
+
+func f1(a2: (a0: int) => int, a3: string, a4: (int, int, bool)): int {
+    let n6 = true;
+    return concat(['']->map<(p12: string): string => ''>, if false then [''] else ['', a3])->reduce<(p10: int, p11: string): int => -1, 0>;
+}
+
+macro func r13(a14: int, a15: float, a16: float): float {
+    return 2.5;
+}
+
+func r23(a24: int, a25: int): int {
+    return if (0 <= 0) then f1((p26: int): int => 0, string(0), (0, 0, false)) else 0 - 1;
+}
+
+func main(): int sync {
+    let n44 = 0;
+    let n45 = '';
+    let n46 = 0;
+    let n61 = if false then sync {
+        let n54 = { n: 0, tag: '', w: 1.0 };
+        return 0;
+    } else sync {
+        return r23(7, -1);
+    };
+    let n66 = [false]->reduce<(p63: int, p64: bool): int => -1, 0>;
+    return 0;
+}

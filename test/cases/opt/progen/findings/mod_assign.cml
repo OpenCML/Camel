@@ -1,0 +1,15 @@
+/**
+ * progen finding F29 ((other) operator not implemented). `v %= 5` compiles and fails when it runs:
+ * `RuntimeDiag::RuntimeError`, "assignment operator not fully implemented", located at the
+ * operator, exit 1. The other compound assignments on an int (`+=`, `-=`, `*=`, `/=`) work. Not a
+ * silent result; recorded because the language reference lists the operator.
+ * Expected output: 2
+ */
+module mod_assign
+
+func main(): int sync {
+    var v = 17
+    v %= 5
+    println(v)
+    return 0
+}

@@ -1,0 +1,262 @@
+/**
+ * progen finding F24 (unbounded growth). A program with 62 functions that each contain a string
+ * literal cannot be compiled: `std::bad_alloc`, no source position, exit 1, under every pipeline
+ * (the failure is before the first pass). With 61 functions it prints `a`. The same limit is
+ * reached by 62 lambdas, or by 62 branch arms, that contain a string, array, tuple or struct
+ * literal.
+ * Expected output: a
+ */
+module const_graph_capacity
+
+func f0(): string {
+    return 'a'
+}
+
+func f1(): string {
+    return 'a'
+}
+
+func f2(): string {
+    return 'a'
+}
+
+func f3(): string {
+    return 'a'
+}
+
+func f4(): string {
+    return 'a'
+}
+
+func f5(): string {
+    return 'a'
+}
+
+func f6(): string {
+    return 'a'
+}
+
+func f7(): string {
+    return 'a'
+}
+
+func f8(): string {
+    return 'a'
+}
+
+func f9(): string {
+    return 'a'
+}
+
+func f10(): string {
+    return 'a'
+}
+
+func f11(): string {
+    return 'a'
+}
+
+func f12(): string {
+    return 'a'
+}
+
+func f13(): string {
+    return 'a'
+}
+
+func f14(): string {
+    return 'a'
+}
+
+func f15(): string {
+    return 'a'
+}
+
+func f16(): string {
+    return 'a'
+}
+
+func f17(): string {
+    return 'a'
+}
+
+func f18(): string {
+    return 'a'
+}
+
+func f19(): string {
+    return 'a'
+}
+
+func f20(): string {
+    return 'a'
+}
+
+func f21(): string {
+    return 'a'
+}
+
+func f22(): string {
+    return 'a'
+}
+
+func f23(): string {
+    return 'a'
+}
+
+func f24(): string {
+    return 'a'
+}
+
+func f25(): string {
+    return 'a'
+}
+
+func f26(): string {
+    return 'a'
+}
+
+func f27(): string {
+    return 'a'
+}
+
+func f28(): string {
+    return 'a'
+}
+
+func f29(): string {
+    return 'a'
+}
+
+func f30(): string {
+    return 'a'
+}
+
+func f31(): string {
+    return 'a'
+}
+
+func f32(): string {
+    return 'a'
+}
+
+func f33(): string {
+    return 'a'
+}
+
+func f34(): string {
+    return 'a'
+}
+
+func f35(): string {
+    return 'a'
+}
+
+func f36(): string {
+    return 'a'
+}
+
+func f37(): string {
+    return 'a'
+}
+
+func f38(): string {
+    return 'a'
+}
+
+func f39(): string {
+    return 'a'
+}
+
+func f40(): string {
+    return 'a'
+}
+
+func f41(): string {
+    return 'a'
+}
+
+func f42(): string {
+    return 'a'
+}
+
+func f43(): string {
+    return 'a'
+}
+
+func f44(): string {
+    return 'a'
+}
+
+func f45(): string {
+    return 'a'
+}
+
+func f46(): string {
+    return 'a'
+}
+
+func f47(): string {
+    return 'a'
+}
+
+func f48(): string {
+    return 'a'
+}
+
+func f49(): string {
+    return 'a'
+}
+
+func f50(): string {
+    return 'a'
+}
+
+func f51(): string {
+    return 'a'
+}
+
+func f52(): string {
+    return 'a'
+}
+
+func f53(): string {
+    return 'a'
+}
+
+func f54(): string {
+    return 'a'
+}
+
+func f55(): string {
+    return 'a'
+}
+
+func f56(): string {
+    return 'a'
+}
+
+func f57(): string {
+    return 'a'
+}
+
+func f58(): string {
+    return 'a'
+}
+
+func f59(): string {
+    return 'a'
+}
+
+func f60(): string {
+    return 'a'
+}
+
+func f61(): string {
+    return 'a'
+}
+
+func main(): int sync {
+    println(f0())
+    return 0
+}

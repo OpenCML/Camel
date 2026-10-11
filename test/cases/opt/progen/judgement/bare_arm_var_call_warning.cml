@@ -1,0 +1,24 @@
+/**
+ * progen question J2. The `if` is a statement of main's sync body; its arm is a bare call that
+ * writes `c` through a var parameter, and neither `r` nor `c` is used afterwards. The compiler
+ * warns (SemanticDiag::IgnoredSideEffect): "The call of 'wr' is neither waited nor in a sync
+ * block ... Without either, the write runs only if the variable is read afterwards." The
+ * program prints `wr` and `after` under every pipeline tried (no pass, std::fvm, std::opt,
+ * std::inline, std::opt::simplify, std::prl): the call does run.
+ * See README.md, "For the owner to decide", J2.
+ */
+module bare_arm_var_call_warning
+
+sync func wr(var c: int, x: int): int sync {
+    c += x
+    println('wr')
+    return c
+}
+
+func main(): int sync {
+    let a = 3
+    var c = 0
+    let r = if a > 2 then wr(c, 5) else 0
+    println('after')
+    return 0
+}

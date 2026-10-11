@@ -1,0 +1,22 @@
+/**
+ * progen finding F31 ((other) internal error without passes). A function that returns a declared
+ * function as a value cannot be compiled: "Compile graph 'f4' still contains a live DREF node at
+ * draft ref 0", InternalDiag::UnknownInternalError, no source position, exit 1, under every
+ * pipeline. Returning a lambda that calls `f1` works, and passing `f1` as an argument works.
+ * Expected output: true
+ */
+module return_named_function
+
+func f1(a: int): bool {
+    return a > 0
+}
+
+func f4(): (a0: int) => bool {
+    return f1
+}
+
+func main(): int sync {
+    let g = f4()
+    println(g(1))
+    return 0
+}
