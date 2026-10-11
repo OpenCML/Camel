@@ -1,0 +1,407 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Oct. 11, 2026
+ * Updated: Oct. 11, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * Type variables and type functions: see camel/core/type/typevar.h.
+ */
+
+#include "camel/core/type/typevar.h"
+
+#include "camel/core/mm.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/composite/union.h"
+#include "camel/core/type/other.h"
+#include "camel/utils/assert.h"
+
+#include <algorithm>
+
+namespace camel::core::type {
+
+// ---- TypeVarType ----
+
+TypeVarType::TypeVarType(const std::string &name, bool binder)
+    : Type(TypeCode::TypeVar), name_(name), binder_(binder) {}
+
+TypeVarType *TypeVarType::create(const std::string &name, bool binder) {
+    void *mem = mm::permSpace().alloc(sizeof(TypeVarType), alignof(TypeVarType));
+    ASSERT(mem != nullptr, "Failed to allocate TypeVarType from permSpace");
+    return new (mem) TypeVarType(name, binder);
+}
+
+std::string TypeVarType::toString() const { return binder_ ? "typeas " + name_ : name_; }
+
+std::string TypeVarType::mangle() const { return "V" + std::to_string(name_.size()) + name_; }
+
+Type *TypeVarType::clone(bool) const { return create(name_, binder_); }
+
+bool TypeVarType::equals(Type *type) const {
+    if (this == type) {
+        return true;
+    }
+    if (!type || type->code() != TypeCode::TypeVar) {
+        return false;
+    }
+    return static_cast<const TypeVarType *>(type)->name_ == name_;
+}
+
+// A variable stands for a type that is not known yet: nothing converts to it. Code that casts
+// to a type written with a variable runs when the variable has been replaced.
+CastSafety TypeVarType::castSafetyFrom(Type *sourceType) const {
+    return equals(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
+}
+
+Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name) {
+    for (const auto &[bound, type] : bindings) {
+        if (bound == name) {
+            return type;
+        }
+    }
+    return nullptr;
+}
+
+// ---- TypeFunctionType ----
+
+TypeFunctionType::TypeFunctionType(
+    const std::string &name, std::vector<std::string> params, Type *body)
+    : Type(TypeCode::TypeFunc), name_(name), params_(std::move(params)), body_(body) {}
+
+TypeFunctionType *
+TypeFunctionType::create(const std::string &name, std::vector<std::string> params, Type *body) {
+    void *mem = mm::permSpace().alloc(sizeof(TypeFunctionType), alignof(TypeFunctionType));
+    ASSERT(mem != nullptr, "Failed to allocate TypeFunctionType from permSpace");
+    return new (mem) TypeFunctionType(name, std::move(params), body);
+}
+
+Type *TypeFunctionType::apply(const type_vec_t &arguments) const {
+    ASSERT(arguments.size() == params_.size(), "Type function applied to a wrong argument count.");
+    type_bindings_t bindings;
+    bindings.reserve(params_.size());
+    for (size_t i = 0; i < params_.size(); ++i) {
+        bindings.emplace_back(params_[i], arguments[i]);
+    }
+    return substituteTypeVars(body_, bindings);
+}
+
+std::string TypeFunctionType::toString() const {
+    std::string result = name_ + "<";
+    for (size_t i = 0; i < params_.size(); ++i) {
+        result += (i > 0 ? ", " : "") + params_[i];
+    }
+    return result + ">";
+}
+
+std::string TypeFunctionType::mangle() const {
+    return "Y" + std::to_string(name_.size()) + name_ + std::to_string(params_.size());
+}
+
+Type *TypeFunctionType::clone(bool) const { return create(name_, params_, body_); }
+
+bool TypeFunctionType::equals(Type *type) const { return this == type; }
+
+// A type function is not the type of any value.
+CastSafety TypeFunctionType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
+
+// ---- The algebra ----
+
+namespace {
+
+const TypeVarType *asVar(Type *type) {
+    return type && type->code() == TypeCode::TypeVar ? static_cast<const TypeVarType *>(type)
+                                                     : nullptr;
+}
+
+std::string paramNameOf(const FunctionType *func, size_t argIndex, const char *prefix, size_t i) {
+    return argIndex < func->argNamesCount() ? std::string(func->argNameAt(argIndex))
+                                            : prefix + std::to_string(i);
+}
+
+FunctionType *
+rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &changed) {
+    FunctionTypeFactory factory;
+    factory.setImplMark(func->implMark());
+    factory.setModifiers(func->modifiers());
+    factory.setHasCompileInfo(func->hasMetaInfo());
+    const auto replaced = [&](Type *type) {
+        Type *result = substituteTypeVars(type, bindings);
+        changed |= result != type;
+        return result;
+    };
+    for (size_t i = 0; i < func->withTypesCount(); ++i) {
+        factory.addWithArg(
+            paramNameOf(func, i, "__w", i),
+            replaced(func->withTypeAt(i)),
+            func->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < func->normTypesCount(); ++i) {
+        factory.addNormArg(
+            paramNameOf(func, func->withTypesCount() + i, "__n", i),
+            replaced(func->normTypeAt(i)),
+            func->normIsVarAt(i));
+    }
+    for (const auto ref : func->closureRefs()) {
+        factory.addClosureRef(std::string(ref));
+    }
+    factory.setExitType(func->hasExitType() ? replaced(func->exitType()) : nullptr);
+    return factory.build();
+}
+
+} // namespace
+
+bool containsTypeVar(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    switch (type->code()) {
+    case TypeCode::TypeVar:
+        return true;
+    case TypeCode::TypeFunc:
+        return false;
+    case TypeCode::Array:
+        return containsTypeVar(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Tuple: {
+        const auto types = static_cast<TupleType *>(type)->types();
+        return std::any_of(types.begin(), types.end(), containsTypeVar);
+    }
+    case TypeCode::Struct: {
+        const auto types = static_cast<StructType *>(type)->types();
+        return std::any_of(types.begin(), types.end(), containsTypeVar);
+    }
+    case TypeCode::Function: {
+        const auto *func = static_cast<FunctionType *>(type);
+        const auto with  = func->withTypesSpan();
+        const auto norm  = func->normTypesSpan();
+        return std::any_of(with.begin(), with.end(), containsTypeVar) ||
+               std::any_of(norm.begin(), norm.end(), containsTypeVar) ||
+               (func->hasExitType() && containsTypeVar(func->exitType()));
+    }
+    case TypeCode::Union: {
+        const auto &types = static_cast<UnionType *>(type)->types();
+        return std::any_of(types.begin(), types.end(), containsTypeVar);
+    }
+    default:
+        break;
+    }
+    if (type->isOtherType()) {
+        const auto params = static_cast<OtherType *>(type)->paramsSpan();
+        return std::any_of(params.begin(), params.end(), containsTypeVar);
+    }
+    return false;
+}
+
+Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
+    if (type == nullptr || bindings.empty()) {
+        return type;
+    }
+    switch (type->code()) {
+    case TypeCode::TypeVar: {
+        Type *bound = findTypeBinding(bindings, asVar(type)->name());
+        return bound != nullptr ? bound : type;
+    }
+    case TypeCode::Array: {
+        auto *array = static_cast<ArrayType *>(type);
+        Type *elem  = substituteTypeVars(array->elemType(), bindings);
+        return elem == array->elemType() ? type : ArrayType::create(elem);
+    }
+    case TypeCode::Tuple: {
+        auto *tuple  = static_cast<TupleType *>(type);
+        bool changed = false;
+        std::vector<Type *> types;
+        types.reserve(tuple->size());
+        for (Type *elem : tuple->types()) {
+            types.push_back(substituteTypeVars(elem, bindings));
+            changed |= types.back() != elem;
+        }
+        if (!changed) {
+            return type;
+        }
+        return tuple->isCell() ? TupleType::cell(types.front()) : TupleType::create(types);
+    }
+    case TypeCode::Struct: {
+        auto *record = static_cast<StructType *>(type);
+        bool changed = false;
+        StructTypeFactory factory;
+        for (size_t i = 0; i < record->size(); ++i) {
+            Type *field = substituteTypeVars(record->typeAt(i), bindings);
+            changed |= field != record->typeAt(i);
+            factory.add(std::string(record->fieldName(i)), field);
+        }
+        return changed ? factory.build() : type;
+    }
+    case TypeCode::Function: {
+        bool changed = false;
+        FunctionType *func =
+            rebuildFunctionType(static_cast<FunctionType *>(type), bindings, changed);
+        return changed ? func : type;
+    }
+    case TypeCode::Union: {
+        bool changed = false;
+        std::vector<Type *> types;
+        for (Type *member : static_cast<UnionType *>(type)->types()) {
+            types.push_back(substituteTypeVars(member, bindings));
+            changed |= types.back() != member;
+        }
+        return changed ? UnionType::create(types) : type;
+    }
+    default:
+        // Primitive types, and module types: what the arguments of a module type mean is the
+        // type's own business, so variables are not accepted among them in the first place.
+        return type;
+    }
+}
+
+FunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t &bindings) {
+    bool changed = false;
+    return rebuildFunctionType(type, bindings, changed);
+}
+
+bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
+    if (pattern == nullptr || actual == nullptr) {
+        return true;
+    }
+    if (const TypeVarType *var = asVar(pattern)) {
+        if (var->binder() && findTypeBinding(bindings, var->name()) == nullptr) {
+            bindings.emplace_back(var->name(), actual);
+        }
+        return true;
+    }
+    // Nothing to bind below: whether the argument fits is the ordinary check's question.
+    std::vector<std::string> bindable;
+    collectBindableTypeVars(pattern, bindable);
+    if (std::all_of(bindable.begin(), bindable.end(), [&](const std::string &name) {
+            return findTypeBinding(bindings, name) != nullptr;
+        })) {
+        return true;
+    }
+    if (pattern->code() != actual->code()) {
+        return false;
+    }
+    switch (pattern->code()) {
+    case TypeCode::Array:
+        return bindTypeVars(
+            static_cast<ArrayType *>(pattern)->elemType(),
+            static_cast<ArrayType *>(actual)->elemType(),
+            bindings);
+    case TypeCode::Tuple: {
+        auto *want = static_cast<TupleType *>(pattern);
+        auto *have = static_cast<TupleType *>(actual);
+        if (want->size() != have->size() || want->isCell() != have->isCell()) {
+            return false;
+        }
+        for (size_t i = 0; i < want->size(); ++i) {
+            if (!bindTypeVars(want->typeAt(i), have->typeAt(i), bindings)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    case TypeCode::Struct: {
+        auto *want = static_cast<StructType *>(pattern);
+        auto *have = static_cast<StructType *>(actual);
+        for (size_t i = 0; i < want->size(); ++i) {
+            const auto field = have->findField(want->fieldName(i));
+            if (!field.has_value()) {
+                return false;
+            }
+            if (!bindTypeVars(want->typeAt(i), have->typeAt(*field), bindings)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    case TypeCode::Function: {
+        auto *want = static_cast<FunctionType *>(pattern);
+        auto *have = static_cast<FunctionType *>(actual);
+        if (want->withTypesCount() != have->withTypesCount() ||
+            want->normTypesCount() != have->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < want->withTypesCount(); ++i) {
+            if (!bindTypeVars(want->withTypeAt(i), have->withTypeAt(i), bindings)) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < want->normTypesCount(); ++i) {
+            if (!bindTypeVars(want->normTypeAt(i), have->normTypeAt(i), bindings)) {
+                return false;
+            }
+        }
+        if (want->hasExitType() && have->hasExitType()) {
+            return bindTypeVars(want->exitType(), have->exitType(), bindings);
+        }
+        return true;
+    }
+    default:
+        return true;
+    }
+}
+
+void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names) {
+    if (pattern == nullptr) {
+        return;
+    }
+    switch (pattern->code()) {
+    case TypeCode::TypeVar: {
+        const TypeVarType *var = asVar(pattern);
+        if (var->binder() && std::find(names.begin(), names.end(), var->name()) == names.end()) {
+            names.push_back(var->name());
+        }
+        return;
+    }
+    case TypeCode::Array:
+        collectBindableTypeVars(static_cast<ArrayType *>(pattern)->elemType(), names);
+        return;
+    case TypeCode::Tuple:
+        for (Type *elem : static_cast<TupleType *>(pattern)->types()) {
+            collectBindableTypeVars(elem, names);
+        }
+        return;
+    case TypeCode::Struct:
+        for (Type *field : static_cast<StructType *>(pattern)->types()) {
+            collectBindableTypeVars(field, names);
+        }
+        return;
+    case TypeCode::Function: {
+        auto *func = static_cast<FunctionType *>(pattern);
+        for (Type *param : func->withTypesSpan()) {
+            collectBindableTypeVars(param, names);
+        }
+        for (Type *param : func->normTypesSpan()) {
+            collectBindableTypeVars(param, names);
+        }
+        if (func->hasExitType()) {
+            collectBindableTypeVars(func->exitType(), names);
+        }
+        return;
+    }
+    default:
+        return;
+    }
+}
+
+std::string typeBindingsToString(const type_bindings_t &bindings) {
+    std::string result;
+    for (const auto &[name, type] : bindings) {
+        result += (result.empty() ? "" : ", ") + name + " = " + (type ? type->toString() : "?");
+    }
+    return result;
+}
+
+} // namespace camel::core::type
