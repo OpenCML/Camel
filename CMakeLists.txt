@@ -46,6 +46,11 @@ add_definitions(-DNOMINMAX)
 # Shared library: Camel core (libcamel)
 add_library(libcamel SHARED ${LIBCAMEL_SRC})
 
+# The target name already carries "lib": without this, the Unix prefix produces liblibcamel.so,
+# which the scripts (scripts/common.js: libName) do not find, so out/latest/libs stays empty and
+# the tools only run through the build-tree runpath.
+set_target_properties(libcamel PROPERTIES PREFIX "")
+
 # Windows: export all symbols for camel-cli and tools linkage.
 if(WIN32)
     set_target_properties(libcamel PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
