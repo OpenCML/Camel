@@ -1069,14 +1069,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/neg_d",
                     StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
                 },
-                {
-                    ":op/neg",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(self: typeas T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> { return norm[0]; }),
-                },
             }),
         OperatorGroup::create(
             "__inv__",
@@ -1088,14 +1080,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/inv_l",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/inv",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(self: typeas T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> { return norm[0]; }),
                 },
             }),
         // ======= IO (built-in input/print/println) ======
@@ -1399,13 +1383,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         OperatorGroup::create(
             "contains",
             {
-                {
-                    ":struct/contains_str",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::String(), false}, {Type::String(), false}},
-                        Type::Bool()),
-                },
                 {
                     ":struct/contains_arr",
                     DynamicFuncTypeResolver::create(

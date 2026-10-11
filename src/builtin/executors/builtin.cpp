@@ -41,6 +41,10 @@ using namespace camel::core::rtdata;
 
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
+        // The placeholder for an operator that is declared before it is written. Nothing below
+        // maps to it: a combination of operator and type without an implementation has no
+        // resolver either (globals.cpp), so the compiler rejects it. Should one be mapped to it
+        // again, running it is a located fault, never a silent null.
         {"not-impl", __not_implemented__},
 
         // Type conversions
@@ -147,28 +151,24 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/lt_f", __builtin__lt__<Float32>},
         {"op/lt_d", __builtin__lt__<Float64>},
         {"op/lt_s", __builtin__lt_s__},
-        {"op/lt", __not_implemented__},
 
         {"op/le_i", __builtin__le__<Int32>},
         {"op/le_l", __builtin__le__<Int64>},
         {"op/le_f", __builtin__le__<Float32>},
         {"op/le_d", __builtin__le__<Float64>},
         {"op/le_s", __builtin__le_s__},
-        {"op/le", __not_implemented__},
 
         {"op/gt_i", __builtin__gt__<Int32>},
         {"op/gt_l", __builtin__gt__<Int64>},
         {"op/gt_f", __builtin__gt__<Float32>},
         {"op/gt_d", __builtin__gt__<Float64>},
         {"op/gt_s", __builtin__gt_s__},
-        {"op/gt", __not_implemented__},
 
         {"op/ge_i", __builtin__ge__<Int32>},
         {"op/ge_l", __builtin__ge__<Int64>},
         {"op/ge_f", __builtin__ge__<Float32>},
         {"op/ge_d", __builtin__ge__<Float64>},
         {"op/ge_s", __builtin__ge_s__},
-        {"op/ge", __not_implemented__},
 
         {"op/add_i", __builtin__add_ii__},
         {"op/add_l", __builtin__add_ll__},
@@ -203,8 +203,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/pow_d", __builtin__pow__},
         {"op/pow", __builtin__pow__},
 
-        {"op/mat", __builtin__mat__},
-
         {"op/idx_arr", __builtin__idx__},
         {"op/idx_str", __builtin__idx__},
 
@@ -214,11 +212,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/neg_l", __builtin__neg__},
         {"op/neg_f", __builtin__neg__},
         {"op/neg_d", __builtin__neg__},
-        {"op/neg", __builtin__neg__},
 
         {"op/inv_i", __builtin__inv__},
         {"op/inv_l", __builtin__inv__},
-        {"op/inv", __builtin__inv__},
 
         // IO (built-in input/print/println)
         {"io/input", __op_input__},
@@ -250,7 +246,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         {"struct/extend_arr", __extend_arr__},
 
-        {"struct/contains_str", __not_implemented__},
         {"struct/contains_arr", __contains_arr__},
 
         // profiler
@@ -280,7 +275,6 @@ void registerBuiltinOperatorTraits() {
         "struct/range",
         "struct/slice_arr",
         "struct/concat_arr",
-        "struct/contains_str",
         "struct/contains_arr",
     };
     auto &registry = camel::core::OperatorTraitsRegistry::instance();

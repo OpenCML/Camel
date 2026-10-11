@@ -114,8 +114,6 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, camel::core::context::Co
 
 slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
-slot_t __builtin__mat__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-
 slot_t __builtin__pow__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
