@@ -98,14 +98,23 @@ func my_filter(points: Point[]): Point[] sync { ... }
 
 ### 3.2.3 泛型/参数化类型
 
-- **`Ident<T1, T2, ...>`**，如 **`Point[]`**、**`(int, int)`**、**`Tensor`**。
+类型位置上的 **`Name<A1, A2, ...>`** 有两种来源：
+
+- **模块类型**（由 C++ 模块引入，如 `Tensor`）：尖括号里的实参是类型或写作 `const <data>` 的编译期常量，
+  含义由该类型自己定义，例如 `Tensor<f32, const [3, 4]>`。
+- **类型函数**：带参数的类型声明。使用处用实参替换参数，得到的就是右侧那个类型，图上不留任何痕迹。
 
 ```cml
-type Point = { x: int, y: int }
-type Signal = (int, int)
-with <weights: Tensor>
-func predict(X: Tensor): Tensor { ... }
+type Pair<T> = (T, T)
+type Entry<K, V> = { key: K, value: V }
+
+let p: Pair<int> = (1, 2)             // 就是 (int, int)
+func sum_pair(p: Pair<int>): int { return p.0 + p.1 }
 ```
+
+类型函数的实参只能是类型，个数必须与参数一致；不带实参使用（`p: Pair`）是错误。详见 7.2.6。
+
+**类型变量**不是一种值的类型，只出现在泛型函数的签名与函数体里，用 `typeas T` 绑定，见 7.2.5。
 
 ### 3.2.4 可空与类型运算
 

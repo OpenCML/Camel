@@ -259,6 +259,59 @@ sync func train(var weights: Tensor): void {
 }
 ```
 
+**泛型函数**
+
+在形参类型里第一次出现类型变量的位置写 **`typeas T`**，把那个位置上的类型绑定为 `T`；之后（其余形参、
+返回类型、函数体）直接写 `T`。
+
+```cml
+func first(xs: (typeas T)[]): T {
+    return xs[0]
+}
+
+func pick(c: bool, a: typeas T, b: T): T {
+    return if c then a else b
+}
+
+func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+    return xs->map<f>
+}
+
+first([1, 2, 3])        // T = int
+first(['a', 'b'])       // T = string
+pick(true, 1, 2.5)      // 错误：b 的形参是 T，这里 T = int，实参是 float
+```
+
+- 泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图（同一组类型只
+  实例化一次，用 `std::rgir` 可以看到名为 `first<i64>`、`first<string>` 的子图）；图上只有具体类型，
+  运行时不需要类型信息。
+- **绑定只发生在 `typeas` 的位置**：变量取实参类型在该位置上的类型。其余位置是普通的形参，按代入后的
+  类型检查，规则与普通函数相同，不做隐式转换。
+- `typeas` 可以出现在数组元素、元组元素、结构体字段、函数类型的形参与返回值这些位置上，也可以作为类型
+  函数的实参（`Pair<typeas T>`）。不能出现在联合类型里，也不能作为模块类型的实参。
+- `typeas` 只能写在**函数声明的形参**（包括 `with` 形参）里。写在返回类型、lambda、`let` 里是错误；同一个
+  变量写两次 `typeas`、或变量名与已有类型同名也是错误。变量必须先绑定后使用（按书写顺序，`with` 形参
+  在前）。
+- **函数体在实例化时检查。** 函数体里的类型错误在实例化时报告，诊断给出错误在函数体里的位置，并指出
+  是哪个实例、由哪一处调用实例化的。从未被调用的泛型函数不会被实例化，它的函数体也就不会被检查。
+- 递归的泛型函数可以正常工作：用同一组类型递归调用，调用的就是正在构造的那个实例（与普通递归函数
+  一样需要写出返回类型）。每次递归都换成更大的类型（如 `f([x])`）的函数无法终止实例化，嵌套到 8 层时
+  报错。
+- 函数体里可以用 `T` 写 lambda 的形参类型、`let z: T = 0` 与 `e as T`；字面量到 `T` 的转换在实例化时
+  按具体类型进行。
+- **目前的限制**：泛型函数只能被直接调用，不能当作值（赋给名字、作为实参传给 `map` 或别的函数）、不能
+  加装饰器、不能导出；需要时用一个写明形参类型的 lambda 包一层：`xs->map<(x: int) => id(x)>`。同一个
+  名字不能既是泛型函数又是普通函数。调用时不能显式给出类型实参。
+
+```cml
+with <f: (acc: typeas U, x: typeas T) => U, init: U>
+func my_fold(xs: T[]): U {
+    return xs->reduce<f, init>
+}
+
+['a', 'bb']->my_fold<(acc: int, s: string) => acc + len(s), 0>    // 3
+```
+
 **无返回类型（void）**
 
 ```cml
@@ -278,7 +331,7 @@ func render(snake: Point[]): void sync {
 
 ### 7.2.6 类型定义
 
-- **typeDecl**：**`implMark? type identRef '=' (typeExpr | STRING)`**。
+- **typeDecl**：**`implMark? type identRef ('<' identDef (',' identDef)* ','? '>')? '=' (typeExpr | STRING)`**。
 
 **结构体类型别名**
 
@@ -294,6 +347,34 @@ type Point = {
 ```cml
 type Signal = (int, int)
 ```
+
+**带参数的类型声明（类型函数）**
+
+名字后面用尖括号写出参数，右侧是一个普通的类型表达式，其中可以使用这些参数。在类型位置上用尖括号
+"调用"它，得到右侧把参数替换成实参之后的类型。它在建图时求值，图上不留节点。
+
+```cml
+type Pair<T> = (T, T)
+type Entry<K, V> = { key: K, value: V }
+type Mapper<A, B> = (x: A) => B
+type PairList<T> = Pair<T>[]              // 右侧可以使用已声明的类型函数
+
+func sum_pair(p: Pair<int>): int { return p.0 + p.1 }
+
+// 与 typeas 组合：实参位置上绑定类型变量
+func swap(p: Pair<typeas T>): Pair<T> {
+    return (p.1, p.0)
+}
+func key_of(e: Entry<typeas K, typeas V>): K {
+    return e.key
+}
+```
+
+- 实参只能是类型（不接受 `const ...`），个数必须与参数一致；不带实参使用是错误。这些都在类型表达式
+  处报告。
+- 右侧只能引用已经声明的类型，所以类型函数不能引用自身。
+- 可以 `export`，在别的模块里以 `模块名::Pair<int>` 使用。
+- 模块类型（如 `Tensor<...>`）的尖括号不受影响，仍由该类型自己解释。
 
 ---
 

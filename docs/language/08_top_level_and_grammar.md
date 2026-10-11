@@ -24,7 +24,7 @@
 | 展开命名空间 | **usingNamespaceDecl** | `USING NAMESPACE identRef` |
 | 数据 | **dataDecl** | `(LET \| VAR) carrier (':' typeList)? '=' dataList` |
 | 函数 | **funcDecl** | `(WITH angledParams)? EXPORT? implMark? modifiers? FUNC identRef parentParams (':' typeExpr)? stmtBlock` |
-| 类型 | **typeDecl** | `implMark? TYPE identRef '=' (typeExpr \| STRING)` |
+| 类型 | **typeDecl** | `implMark? TYPE identRef ('<' identDef (',' identDef)* ','? '>')? '=' (typeExpr \| STRING)` |
 | use | **useDecl** | `USE (identDef '=')? identRef` |
 
 > 语法中已有、但**尚未实现**的部分：`implMark`（`inner` / `outer`）和 `modifiers` 中的 `atomic` / `shared`
@@ -95,6 +95,16 @@
 - **structType**：**'{' (keyTypePair (',' keyTypePair)*)? ','? '}'**。
 - **tupleType**：**'(' typeList? ','? ')'**。
 - **funcType**：**modifiers? angledParams? parentParams '=>' typeExpr**。
+
+其中已经有语义的部分：
+
+- **`TYPEAS identDef`**（`typeas T`）：在函数声明的形参里就地绑定类型变量，见 7.2.5 的"泛型函数"。
+- **specType** 的尖括号：基类型是模块类型时（如 `Tensor<f32, const [3]>`），实参的含义由该类型自己定义；
+  基类型是带参数的类型声明（类型函数）时，实参替换其参数，见 7.2.6。
+- 联合 **`|`**。
+
+**未实现**（写了会被编译器拒绝）：`&`、`\`、`+`、`-`、`^`、`typeof`、`ident of T`，以及
+`T ? U`。它们的含义尚未确定。`T?` 目前被当作 `T`。
 
 ### 8.3.2 模式（match）
 

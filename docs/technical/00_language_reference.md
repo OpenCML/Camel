@@ -286,7 +286,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 
 ### 8.6 类型定义
 
-- **typeDecl**：`implMark? type identRef '=' (typeExpr | STRING)`。
+- **typeDecl**：`implMark? type identRef ('<' identDef (',' identDef)* ','? '>')? '=' (typeExpr | STRING)`。带参数的类型声明是类型函数（见 `docs/language/07_statements.md` 7.2.6）。
   - 例：`type Point = { x: int, y: int }`、`type Signal = (int, int)`。
 
 ---
