@@ -1,0 +1,436 @@
+id = "opt.progen_simplify"
+order = 323
+tier = "feat"
+tags = ["feat", "opt", "progen", "simplify", "regression"]
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.default"
+desc = "progen finding F07 under [no pass]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.simplify_nvm"
+desc = "progen finding F07 under [std::opt::simplify std::nvm]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.simplify_fvm"
+desc = "progen finding F07 under [std::opt::simplify std::fvm]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.simplify_jit"
+desc = "progen finding F07 under [std::opt::simplify std::jit]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.simplify_prl"
+desc = "progen finding F07 under [std::opt::simplify std::prl]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}", "std::opt::simplify", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.inline_fold_nvm"
+desc = "progen finding F07 under [std::inline std::opt::fold std::nvm]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}", "std::inline", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.inline_fold_fvm"
+desc = "progen finding F07 under [std::inline std::opt::fold std::fvm]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}", "std::inline", "std::opt::fold", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.opt_fold_dce_nvm"
+desc = "progen finding F07 under [std::opt std::opt::fold std::opt::dce std::nvm]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}", "std::opt", "std::opt::fold", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_nested_function_effect_lost.macro_simplify_fvm"
+desc = "progen finding F07 under [std::macro std::opt::simplify std::fvm]. A branch arm whose head is a pure value nothing follows any more (its only user was pruned with an inner `if false`) is still run: the println of the nested sync function called in the taken arm is printed."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_nested_function_effect_lost.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.default"
+desc = "progen finding F11 under [no pass]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.simplify_nvm"
+desc = "progen finding F11 under [std::opt::simplify std::nvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.simplify_fvm"
+desc = "progen finding F11 under [std::opt::simplify std::fvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.simplify_jit"
+desc = "progen finding F11 under [std::opt::simplify std::jit]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.simplify_prl"
+desc = "progen finding F11 under [std::opt::simplify std::prl]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}", "std::opt::simplify", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.inline_dce_nvm"
+desc = "progen finding F11 under [std::inline std::opt::dce std::nvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}", "std::inline", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.inline_dce_fvm"
+desc = "progen finding F11 under [std::inline std::opt::dce std::fvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}", "std::inline", "std::opt::dce", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.opt_fold_dce_nvm"
+desc = "progen finding F11 under [std::opt std::opt::fold std::opt::dce std::nvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}", "std::opt", "std::opt::fold", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_arm_write_lost.macro_simplify_fvm"
+desc = "progen finding F11 under [std::macro std::opt::simplify std::fvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused `format` after it) is still run: the write to the variable made in the taken arm is seen by the read after the branch."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_arm_write_lost.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === 'a|', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.default"
+desc = "progen finding F23 under [no pass]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.simplify_nvm"
+desc = "progen finding F23 under [std::opt::simplify std::nvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.simplify_fvm"
+desc = "progen finding F23 under [std::opt::simplify std::fvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.simplify_jit"
+desc = "progen finding F23 under [std::opt::simplify std::jit]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.simplify_prl"
+desc = "progen finding F23 under [std::opt::simplify std::prl]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}", "std::opt::simplify", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.inline_dce_nvm"
+desc = "progen finding F23 under [std::inline std::opt::dce std::nvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}", "std::inline", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.inline_dce_fvm"
+desc = "progen finding F23 under [std::inline std::opt::dce std::fvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}", "std::inline", "std::opt::dce", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.opt_fold_dce_nvm"
+desc = "progen finding F23 under [std::opt std::opt::fold std::opt::dce std::nvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}", "std::opt", "std::opt::fold", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "simplify_crash.macro_simplify_fvm"
+desc = "progen finding F23 under [std::macro std::opt::simplify std::fvm]. A branch arm whose head is a pure value nothing follows any more (dce removed the unused variable's initializer chain) is still run: the JOIN reads the taken arm's string, not a slot never written (which crashed in `len`)."
+kind = "behavior"
+case = "../../../cases/opt/progen/findings/simplify_crash.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.split(String.fromCharCode(10)).join('|')
+assert(out === '', `unexpected output: ${JSON.stringify(out)}`)
+}
+"""
+timeout_ms = 8000
