@@ -1,0 +1,372 @@
+id = "linear.faults"
+order = 345
+tier = "feat"
+tags = ["feat", "linear", "runtime", "negative"]
+
+[[tests]]
+name = "modulo_by_zero.nvm"
+desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (nvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/modulo_by_zero.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 28
+expect_output_contains = ["87", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_out_of_range.nvm"
+desc = "An array index past the end is IndexOutOfRange at the bracket, with the index and the length; it used to be the catch-all RuntimeError at the start of the function (nvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_out_of_range.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index 5 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_negative.nvm"
+desc = "A negative array index is IndexOutOfRange with the index as written (nvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_negative.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index -1 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero.fvm"
+desc = "Division by zero is DivisionByZero at the division expression, the same position on every back end (fvm)."
+kind = "negative"
+case = "../../../cases/linear/runtime/divide_by_zero.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_output_contains = ["Attempted division by zero."]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "modulo_by_zero.fvm"
+desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/modulo_by_zero.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 28
+expect_output_contains = ["87", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_out_of_range.fvm"
+desc = "An array index past the end is IndexOutOfRange at the bracket, with the index and the length; it used to be the catch-all RuntimeError at the start of the function (fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_out_of_range.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index 5 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_negative.fvm"
+desc = "A negative array index is IndexOutOfRange with the index as written (fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_negative.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index -1 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero.jit"
+desc = "Division by zero is DivisionByZero at the division expression, the same position on every back end (jit)."
+kind = "negative"
+case = "../../../cases/linear/runtime/divide_by_zero.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_output_contains = ["Attempted division by zero."]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "modulo_by_zero.jit"
+desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/modulo_by_zero.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 28
+expect_output_contains = ["87", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_out_of_range.jit"
+desc = "An array index past the end is IndexOutOfRange at the bracket, with the index and the length; it used to be the catch-all RuntimeError at the start of the function (jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_out_of_range.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index 5 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_negative.jit"
+desc = "A negative array index is IndexOutOfRange with the index as written (jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_negative.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index -1 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero.inline_jit"
+desc = "Division by zero is DivisionByZero at the division expression, the same position on every back end (inline_jit)."
+kind = "negative"
+case = "../../../cases/linear/runtime/divide_by_zero.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_output_contains = ["Attempted division by zero."]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "modulo_by_zero.inline_jit"
+desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (inline_jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/modulo_by_zero.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 28
+expect_output_contains = ["87", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_out_of_range.inline_jit"
+desc = "An array index past the end is IndexOutOfRange at the bracket, with the index and the length; it used to be the catch-all RuntimeError at the start of the function (inline_jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_out_of_range.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index 5 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_negative.inline_jit"
+desc = "A negative array index is IndexOutOfRange with the index as written (inline_jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_negative.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index -1 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero.prl"
+desc = "Division by zero is DivisionByZero at the division expression, the same position on every back end (prl)."
+kind = "negative"
+case = "../../../cases/linear/runtime/divide_by_zero.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_output_contains = ["Attempted division by zero."]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "modulo_by_zero.prl"
+desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (prl)."
+kind = "negative"
+case = "../../../cases/linear/faults/modulo_by_zero.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 28
+expect_output_contains = ["87", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_out_of_range.prl"
+desc = "An array index past the end is IndexOutOfRange at the bracket, with the index and the length; it used to be the catch-all RuntimeError at the start of the function (prl)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_out_of_range.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index 5 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_negative.prl"
+desc = "A negative array index is IndexOutOfRange with the index as written (prl)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_negative.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index -1 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero.tf"
+desc = "Division by zero is DivisionByZero at the division expression, the same position on every back end (tf)."
+kind = "negative"
+case = "../../../cases/linear/runtime/divide_by_zero.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_output_contains = ["Attempted division by zero."]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "modulo_by_zero.tf"
+desc = "Modulo by zero is DivisionByZero at the operator (it used to be the catch-all RuntimeError), the same position on every back end (tf)."
+kind = "negative"
+case = "../../../cases/linear/faults/modulo_by_zero.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 28
+expect_output_contains = ["87", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_out_of_range.tf"
+desc = "An array index past the end is IndexOutOfRange at the bracket, with the index and the length; it used to be the catch-all RuntimeError at the start of the function (tf)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_out_of_range.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index 5 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_index_negative.tf"
+desc = "A negative array index is IndexOutOfRange with the index as written (tf)."
+kind = "negative"
+case = "../../../cases/linear/faults/array_index_negative.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_code = "0x04000002"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 44
+expect_output_contains = ["Index -1 is out of range for an array of length 3."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

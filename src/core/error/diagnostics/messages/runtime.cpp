@@ -43,7 +43,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             RuntimeDiag::IndexOutOfRange,
             {
                 "IndexOutOfRange",
-                "Index out of range: {0}.",
+                "Index {0} is out of range for {1} of length {2}.",
                 "Ensure the index is within the valid range of the collection.",
             },
         },

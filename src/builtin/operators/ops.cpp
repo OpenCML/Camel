@@ -461,7 +461,7 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int32 lhs = norm.get<Int32>(0);
         Int32 rhs = norm.get<Int32>(1);
         if (rhs == 0) {
-            throwRuntimeFault(RuntimeDiag::RuntimeError, "<mod> division by zero");
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
         return toSlot(lhs % rhs);
     }
@@ -470,7 +470,7 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int64 lhs = norm.get<Int64>(0);
         Int64 rhs = norm.get<Int64>(1);
         if (rhs == 0) {
-            throwRuntimeFault(RuntimeDiag::RuntimeError, "<mod> division by zero");
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
         return toSlot(lhs % rhs);
     }
@@ -531,23 +531,29 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         switch (containerType) {
         case TypeCode::Tuple: {
             Tuple *tpl = norm.get<Tuple *>(0);
-            size_t idx = static_cast<size_t>(norm.get<Int64>(1));
-            if (idx >= tpl->size()) {
-                throwRuntimeFault(RuntimeDiag::RuntimeError, "Tuple index out of bounds.");
+            Int64 raw  = norm.get<Int64>(1);
+            size_t idx = static_cast<size_t>(raw);
+            if (raw < 0 || idx >= tpl->size()) {
+                throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "a tuple", tpl->size());
             }
             return tpl->get<slot_t>(idx);
         }
         case TypeCode::Array: {
             Array *arr = norm.get<Array *>(0);
-            size_t idx = static_cast<size_t>(norm.get<Int64>(1));
-            if (idx >= arr->size()) {
-                throwRuntimeFault(RuntimeDiag::RuntimeError, "Array index out of bounds.");
+            Int64 raw  = norm.get<Int64>(1);
+            size_t idx = static_cast<size_t>(raw);
+            if (raw < 0 || idx >= arr->size()) {
+                throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "an array", arr->size());
             }
             return arr->get<slot_t>(idx);
         }
         case TypeCode::Struct: {
             Struct *st = norm.get<Struct *>(0);
-            size_t idx = static_cast<size_t>(norm.get<Int64>(1));
+            Int64 raw  = norm.get<Int64>(1);
+            size_t idx = static_cast<size_t>(raw);
+            if (raw < 0 || idx >= st->size()) {
+                throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "a struct", st->size());
+            }
             return st->get<slot_t>(idx);
         }
         default: {

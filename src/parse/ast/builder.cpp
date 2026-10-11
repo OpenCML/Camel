@@ -2176,6 +2176,16 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                 registerAstSemanticBundle(
                     exprNode,
                     {
+                        // The operator is the bracket: a fault of the index (out of range) is
+                        // reported there, as a division by zero is reported at its `/`.
+                        semanticPart(
+                            camel::source::SemanticRole::Operator,
+                            deriveAstAnchorOrigin(
+                                exprNode,
+                                tt::as_ptr<OpenCMLParser::IndicesContext>(child)->getStart(),
+                                "ast.index.operator"),
+                            -1,
+                            "[]"),
                         semanticPart(
                             camel::source::SemanticRole::IndexExpr,
                             nodeOrigin(rhsNode),

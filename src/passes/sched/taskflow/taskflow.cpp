@@ -1668,10 +1668,13 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     try {
         return (*opFunc)(withView, normView, *context_);
     } catch (const RuntimeFault &fault) {
-        throw reportRuntimeFault(
-            *context_,
-            fault,
-            makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow"));
+        // Reported at the operator, as on the other back ends (it used to be the start of
+        // the enclosing graph).
+        auto site = makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow");
+        if (const uint64_t origin = graph->nodeOrigin(nodeRef)) {
+            site.cachedOrigin = origin;
+        }
+        throw reportRuntimeFault(*context_, fault, site);
     }
 }
 
