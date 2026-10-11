@@ -75,7 +75,10 @@ Each switch is a feature (`progen.py features`); all are on by default and they 
 
 A program ends up at about 115 source lines: one to four pure functions, one to three
 functions with effects, and a `main` of 6 to 14 statements that prints most of what it
-computed.
+computed. `--size N` (on `show`, `selfcheck`, `diff`, `reduce`) multiplies the number of
+functions and of statements of `main` by N: size 4 gives programs of about 450 lines, size 8
+of about 900. A seed names a different program at each size; every recorded seed and finding
+refers to size 1.
 
 ## Why the reference is valid
 
@@ -181,9 +184,12 @@ the rewrite sequence it was found with and under `std::inline`, `std::opt`,
 - Module-level variables, `with` parameters, imports of user modules, namespaces, decorators.
 - Faults and their diagnostics (division by zero, index out of range, recursion limits, macro
   evaluation failure by depth), `??`, `!!`, `?->`, `throw`.
-- Deep or large programs: recursion is at most 9 deep, arrays have at most 64 elements, and a
-  program has at most 34 graphs that own a constant object (see finding F24: more cannot be
-  compiled today). Inlining budgets and graph capacity are therefore not stressed.
+- Deep programs: recursion is at most 9 deep and arrays have at most 64 elements. At the
+  default size a program also has at most 34 graphs that own a constant object: that was the
+  most the compiler could build (finding F24, fixed since), and the filter is kept at size 1
+  only so that recorded seeds keep naming the same programs. Larger programs (`--size`) are
+  not filtered, but the default batch does not use them, so inlining budgets and graph
+  capacity are stressed only by batches run with `--size`.
 - Constructs that did not work when probed and are left out so that the reference stays
   reliable: `string(float)` (question J3), and `==` on arrays, tuples and structs (the type
   checker has no such overload). Ordering comparisons of strings, `+=` on a string, `%=` and

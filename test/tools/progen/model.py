@@ -797,9 +797,11 @@ HEAVY_KINDS = {"fmt", "join", "arr", "tup", "rec"}
 def heavy_graphs(prog: N) -> int:
     """How many graphs of the program own a constant object. A graph is a function, a lambda,
     or an arm of an `if` or `match`; it owns a constant object when a string literal or an
-    array, tuple or struct literal is written directly in it. The compiler cannot build a
-    program with 62 such graphs (finding F24 in test/cases/opt/progen/README.md: an unlocated
-    std::bad_alloc under every pipeline), so the generator keeps below MAX_HEAVY."""
+    array, tuple or struct literal is written directly in it. The compiler could not build a
+    program with 62 such graphs (finding F24 in test/cases/opt/progen/README.md, fixed since:
+    an unlocated std::bad_alloc under every pipeline), so the generator kept below MAX_HEAVY.
+    Programs of size 1 are still held to it, only so that the recorded seeds keep naming the
+    same programs (see generate.generate); larger sizes are not."""
     count = 0
 
     def graph(root) -> None:

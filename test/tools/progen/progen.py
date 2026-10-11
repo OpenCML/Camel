@@ -47,8 +47,8 @@ def seeds_of(text: str):
     return out
 
 
-def one(seed: int, features, cells, out, keep_all=False):
-    prog, expected, attempts = generate(seed, features)
+def one(seed: int, features, cells, out, keep_all=False, size=1):
+    prog, expected, attempts = generate(seed, features, size=size)
     source = emit(prog)
     name = f"progen_{seed}"
     work = None if out is None else Path(out) / "work" / name
@@ -68,12 +68,13 @@ def one(seed: int, features, cells, out, keep_all=False):
         d = Path(out) / "failures"
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{name}.cml").write_text(source, encoding="utf-8", newline="\n")
-        (d / f"{name}.json").write_text(json.dumps({"seed": seed, "features": sorted(features), "env": prog.a["env"],
+        (d / f"{name}.json").write_text(json.dumps({"seed": seed, "features": sorted(features), "size": size,
+                                                    "env": prog.a["env"],
                                                     "expected": expected, "bad": bad}, indent=1), encoding="utf-8")
     return record
 
 
-def run_batch(seeds, features, cells, out, jobs, resume=False):
+def run_batch(seeds, features, cells, out, jobs, resume=False, size=1):
     records = []
     started = time.time()
     partial = None
@@ -87,7 +88,7 @@ def run_batch(seeds, features, cells, out, jobs, resume=False):
             print(f"  resuming: {len(records)} programs already recorded, {len(seeds)} to run", file=sys.stderr, flush=True)
         partial = open(path, "a" if resume else "w", encoding="utf-8")
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = {pool.submit(one, s, features, cells, out): s for s in seeds}
+        futures = {pool.submit(one, s, features, cells, out, False, size): s for s in seeds}
         for n, fut in enumerate(concurrent.futures.as_completed(futures), 1):
             records.append(fut.result())
             if partial:
@@ -141,7 +142,7 @@ def summarize(records, cells, features, title):
 
 
 def cmd_show(args):
-    prog, expected, attempts = generate(args.seed, parse_features(args.features))
+    prog, expected, attempts = generate(args.seed, parse_features(args.features), size=args.size)
     print(emit(prog))
     print("// environment:", prog.a["env"])
     print(f"// reference output ({attempts} attempt(s)):")
@@ -153,8 +154,9 @@ def cmd_show(args):
 def cmd_selfcheck(args):
     features = parse_features(args.features)
     cells = matrix("reference")
-    records = run_batch(seeds_of(args.seeds), features, cells, args.out, args.jobs)
-    text = summarize(records, cells, features, "progen selfcheck: reference against the run without passes (node VM)")
+    records = run_batch(seeds_of(args.seeds), features, cells, args.out, args.jobs, size=args.size)
+    text = summarize(records, cells, features, "progen selfcheck: reference against the run without passes (node VM)"
+                     + (f", size {args.size}" if args.size != 1 else ""))
     agree = sum(1 for r in records if r["outcomes"]["default"] == "OK")
     text += f"\nagreement: {agree} of {len(records)} programs ({100.0 * agree / max(1, len(records)):.2f}%)\n"
     print(text)
@@ -171,11 +173,12 @@ def cmd_diff(args):
         cells = {k: v for k, v in cells.items() if k in args.cells.split(",")}
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    records = run_batch(seeds_of(args.seeds), features, cells, out, args.jobs, args.resume)
+    records = run_batch(seeds_of(args.seeds), features, cells, out, args.jobs, args.resume, size=args.size)
     with open(out / "results.jsonl", "w", encoding="utf-8") as f:
         for r in records:
             f.write(json.dumps(r) + "\n")
-    text = summarize(records, cells, features, f"progen diff: matrix {args.matrix}, seeds {args.seeds}")
+    text = summarize(records, cells, features, f"progen diff: matrix {args.matrix}, seeds {args.seeds}"
+                     + (f", size {args.size}" if args.size != 1 else ""))
     (out / "summary.txt").write_text(text, encoding="utf-8")
     print(text)
     return 0 if not any(r["bad"] for r in records) else 1
@@ -183,12 +186,14 @@ def cmd_diff(args):
 
 def cmd_reduce(args):
     features = parse_features(args.features)
+    size = args.size
     workdir = None
     if args.from_dir:
         case = json.loads((Path(args.from_dir) / "failures" / f"progen_{args.seed}.json").read_text(encoding="utf-8"))
         features = frozenset(case["features"])
+        size = case.get("size", size)
         workdir = Path(args.from_dir) / "work" / f"progen_{args.seed}"
-    prog, expected, _ = generate(args.seed, features)
+    prog, expected, _ = generate(args.seed, features, size=size)
     cells = matrix(args.matrix)
     passes = args.passes.split() if args.passes is not None else cells[args.cell]
     target = None
@@ -321,16 +326,22 @@ def cmd_fixed(args):
     return 0 if not wrong and results else 1
 
 
+SIZE_HELP = ("multiplies the number of functions and of statements of main (default 1: the programs of about "
+             "115 lines the recorded seeds refer to; a seed names another program at another size)")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("show")
     p.add_argument("--seed", type=int, required=True)
     p.add_argument("--features")
+    p.add_argument("--size", type=int, default=1, help=SIZE_HELP)
     p.set_defaults(fn=cmd_show)
     p = sub.add_parser("selfcheck")
     p.add_argument("--seeds", required=True)
     p.add_argument("--features")
+    p.add_argument("--size", type=int, default=1, help=SIZE_HELP)
     p.add_argument("--jobs", type=int, default=4)
     p.add_argument("--out")
     p.set_defaults(fn=cmd_selfcheck)
@@ -340,6 +351,7 @@ def main(argv=None):
     p.add_argument("--backends", help="comma-separated, e.g. nvm,fvm (default: " + ",".join(BACKENDS) + ")")
     p.add_argument("--cells", help="comma-separated cell ids to keep")
     p.add_argument("--features")
+    p.add_argument("--size", type=int, default=1, help=SIZE_HELP)
     p.add_argument("--jobs", type=int, default=4)
     p.add_argument("--out", required=True)
     p.add_argument("--resume", action="store_true", help="keep the programs already in OUT/results.partial.jsonl")
@@ -350,6 +362,7 @@ def main(argv=None):
     p.add_argument("--passes", help="the pass list as one string, instead of --cell")
     p.add_argument("--matrix", default="full")
     p.add_argument("--features")
+    p.add_argument("--size", type=int, default=1, help=SIZE_HELP)
     p.add_argument("--out", required=True)
     p.add_argument("--name")
     p.add_argument("--max-tests", type=int, default=4000)

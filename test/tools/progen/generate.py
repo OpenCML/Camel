@@ -101,9 +101,10 @@ SCALARS = (INT, FLOAT, BOOL, STR)
 
 
 class Gen:
-    def __init__(self, rng: random.Random, features: frozenset):
+    def __init__(self, rng: random.Random, features: frozenset, size: int = 1):
         self.r = rng
         self.f = features
+        self.size = size            # multiplies the number of functions and of statements of `main`
         self.scope: List[Sym] = []
         self.counter = 0
         self.types = {}
@@ -932,13 +933,13 @@ class Gen:
     # -- the program ------------------------------------------------------------------------
     def program(self, module: str) -> N:
         if self.on("func"):
-            for _ in range(self.r.choice([1, 2, 3, 3, 4])):
+            for _ in range(self.r.choice([1, 2, 3, 3, 4]) * self.size):
                 if self.on("rec") and self.chance(0.3):
                     self.recursive_function()
                 else:
                     self.pure_function()
             if self.on("effects") or self.on("varparam"):
-                for _ in range(self.r.choice([1, 2, 2, 3])):
+                for _ in range(self.r.choice([1, 2, 2, 3]) * self.size):
                     r = self.r.random()
                     if self.on("rec") and self.on("varparam") and self.on("var") and r < 0.25:
                         self.effect_recursion()
@@ -958,7 +959,7 @@ class Gen:
                 s = Sym(self.fresh("n"), INT if is_int else STR, "let", value=value if is_int else None)
                 stmts.append(N("let", [N("env", t=s.t, name=key)], name=s.name))
                 self.scope.append(s)
-        stmts += self.stmts(self.r.randint(6, 14), 2)
+        stmts += self.stmts(self.r.randint(6, 14) * self.size, 2)
         for s in self.values():
             if s.t[0] != "fn" and not s.shown and self.chance(0.75):
                 self.label += 1
@@ -986,18 +987,26 @@ MAX_ATTEMPTS = 200
 
 
 def generate(seed: int, features: frozenset = DEFAULT_FEATURES, module: Optional[str] = None,
-             max_heavy: int = MAX_HEAVY):
+             size: int = 1):
     """Returns (program, expected lines, attempts). Attempts beyond the first are programs the
-    reference rejected (see model.Reject); they are replaced, deterministically."""
+    reference rejected (see model.Reject); they are replaced, deterministically.
+
+    `size` multiplies the number of functions and of statements of `main`: 1 gives the programs
+    of about 115 lines all recorded seeds refer to, n gives programs about n times as long. At
+    size 1 a program with more than MAX_HEAVY graphs that own a constant is still replaced:
+    that was the compiler's limit when the seeds were recorded (finding F24, fixed since), and
+    dropping the filter would change which program a seed names. Larger sizes have no such
+    filter and their own random streams."""
     key = ",".join(sorted(features))
     for attempt in range(MAX_ATTEMPTS):
-        rng = random.Random(f"progen|{VERSION}|{seed}|{key}|{attempt}")
-        gen = Gen(rng, features)
+        stream = f"progen|{VERSION}|{seed}|{key}|{attempt}" + (f"|size{size}" if size != 1 else "")
+        rng = random.Random(stream)
+        gen = Gen(rng, features, size)
         try:
             prog = gen.program(module or f"progen_{seed}")
         except IndexError:
             continue                                   # a production found nothing to choose from
-        if heavy_graphs(prog) > max_heavy:
+        if size == 1 and heavy_graphs(prog) > MAX_HEAVY:
             continue
         if effect_violations(prog):
             raise AssertionError(f"seed {seed}: generated an effect outside an effect position")

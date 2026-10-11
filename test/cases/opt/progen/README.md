@@ -20,8 +20,8 @@ schedulers under the rewrite sequence it was found with, `std::inline`, `std::op
 `std::inline std::opt::dce`, `std::opt::simplify` and `std::specialize`). The other findings are
 in no test.
 
-**Fixed since**: F25 to F31 and F33, the failures without any pass except F24 (branch
-`lane/frontend-fixes`), and the findings of cause C1 (branch `lane/simplify-fixes`). Their rows
+**Fixed since**: F24 (branch `lane/capacity`), F25 to F31 and F33, the other failures without
+any pass (branch `lane/frontend-fixes`), and the findings of cause C1 (branch `lane/simplify-fixes`). Their rows
 name the commit; each has a test in the default set, and `progen.py findings` reports them as
 "does not fail". Findings traced to a cause but not fixed say so in their row; see "Root causes"
 below. For the others, **nothing was fixed, and the compiler code was not read to confirm a
@@ -181,7 +181,7 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 
 | id | program | schedulers | expected | actual | class | status |
 |---|---|---|---|---|---|---|
-| F24 | `const_graph_capacity.cml` | all, and every pipeline | `a` | `std::bad_alloc`, no position, exit 1, before the first pass | unbounded growth (capacity) | |
+| F24 | `const_graph_capacity.cml` | all, and every pipeline | `a` | `std::bad_alloc`, no position, exit 1, before the first pass | unbounded growth (capacity) | fixed (branch `lane/capacity`; regression test `capacity.f24_const_graphs`) |
 | F25 | `nested_function_value_crash.cml` | nvm, fvm, jit crash; prl prints something else | `[1]` | segmentation fault | (other) crash | fixed (a42941f8) |
 | F26 | `string_of_bool_crash.cml` | all | `true` | segmentation fault | (other) crash | fixed (edc8f2ea) |
 | F27 | `string_ordering.cml` | all | four lines `true` | four lines `false` | (other) operator not implemented | fixed (db5e452c) |
@@ -193,17 +193,20 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 
 Notes on single findings:
 
-- **F24.** The limit is 62 graphs that own a constant object, where a graph is a function, a
-  lambda or one arm of an `if` / `match`, and it owns one when a string literal or an array,
-  tuple or struct literal (even with run-time elements) is written in it. 62 functions each
-  returning `'a'` fail; 31 `if` expressions with two string arms fail; 3000 strings in one
-  graph, or 600 `if` expressions with integer or float arms, compile. The only user of the
-  16 MB meta space is the graph arena (`include/camel/compile/gir/arena.h`,
-  `src/core/mm/mm.cpp`), which is where the `std::bad_alloc` comes from; that the arena takes
-  about 256 KB per such graph is an inference from 16 MB / 62, not something read in the code.
-  `docs/cli.md` lists a permanent space of 32 MB with a named diagnostic; this limit is not
-  listed and has no diagnostic. The generator stays below it (at most 34 such graphs by its
-  own count), which is why its programs are about 115 lines.
+- **F24 (fixed).** The limit was 62 graphs that own a constant object, where a graph is a
+  function, a lambda or one arm of an `if` / `match`, and it owns one when a string literal or
+  an array, tuple or struct literal (even with run-time elements) is written in it, or when it
+  holds a function value (the arms of an `if`, a callee). 62 functions each returning `'a'`
+  failed; 31 `if` expressions with two string arms failed; 3000 strings in one graph compiled.
+  Cause, read in the code: the arena of a compile-time graph
+  (`include/camel/compile/gir/arena.h`) took its first block when the graph got its first
+  constant object or function value, and `DraftGraphBuilder` asked for a first block of
+  256 KB; the blocks come from the meta space, which was a fixed 16 MB (`src/core/mm/mm.cpp`):
+  16 MB / 256 KB = 62 after the guard bytes. The first block is 1 KB now, the meta, graph and
+  permanent spaces grow by segments up to a configurable total, and reaching a total is the
+  located diagnostic `RuntimeDiag::MemoryExhausted` (see "Resource limits" in `docs/cli.md`).
+  The generator's limit of 34 such graphs is lifted for programs larger than the default
+  (`--size`, see the generator's README).
 - **F27, F28, F29 (fixed).** `src/builtin/executors/builtin.cpp` mapped `op/lt_s`, `op/le_s`, `op/gt_s`,
   `op/ge_s`, `op/assn_add_s` (and the untyped `op/lt`, `op/le`, `op/gt`, `op/ge`, `op/assn_add`,
   `op/assn_sub`, `op/assn_mul`, `op/assn_div`, `struct/contains_str`) to `__not_implemented__`
