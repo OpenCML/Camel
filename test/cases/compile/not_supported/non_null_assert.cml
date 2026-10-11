@@ -1,0 +1,13 @@
+/**
+ * The postfix `!` is in the grammar but not implemented: a compile-time error at the operator
+ * (line 9, column 14). It used to be recorded and never read.
+ */
+module non_null_assert
+
+func main(): int sync {
+    let a = 1
+    let b = a! + 1
+    println('never printed')
+    println(b)
+    return 0
+}

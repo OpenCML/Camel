@@ -1820,6 +1820,11 @@ any Builder::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
         } else {
             throw std::runtime_error("Invalid nullable operator: " + strOp);
         }
+        // Nullable and error values are not implemented. The operator used to be accepted
+        // with a warning and its right-hand side dropped.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(tokenFromTree(context->children[1]))
+            .commit(strOp, "the operator is not implemented");
 
         if (context->dataExpr()) {
             node_ptr_t dataExprNode = createNodeAs<ReservedExprLoad>(op);
@@ -1875,6 +1880,13 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
             } else {
                 throw std::runtime_error(
                     "Invalid unary operator: " + context->children[0]->getText());
+            }
+            if (context->IS()) {
+                // There is no run-time type test. `x is T` used to be accepted with a warning
+                // and compiled as `x`.
+                diags_->of(SemanticDiag::ConstructNotSupported)
+                    .at(context->IS()->getSymbol())
+                    .commit("is", "the operator is not implemented");
             }
             node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
             node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
@@ -1964,6 +1976,10 @@ any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
         setNodeTokenRangeByContext(linkNode, context);
         node_ptr_t rhsNode = any2node(visitCompExpr(context->compExpr(i)));
         if (strOp == "?->") {
+            // Used to be accepted with a warning and compiled as `->`.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(tokenFromTree(context->children[i * 2 - 1]))
+                .commit(strOp, "the operator is not implemented");
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
             setNodeTokenRangeByContext(notNullNode, context->compExpr(i));
             *notNullNode << lhsNode;
@@ -2027,6 +2043,10 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
         setNodeTokenRangeByContext(dataNode, context);
         node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
         if (strOp == "?..") {
+            // Used to be accepted with a warning and compiled as `..`.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(tokenFromTree(context->children[i * 2 - 1]))
+                .commit(strOp, "the operator is not implemented");
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
             setNodeTokenRangeByContext(notNullNode, context->annoExpr(i));
             *notNullNode << lhsNode;
@@ -2149,6 +2169,10 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
             }
             lhsNode = exprNode;
         } else {
+            // The postfix `!` (non-null assertion) used to be recorded and never read.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(tokenFromTree(child))
+                .commit("!", "the postfix non-null assertion is not implemented");
             unwrapNodeAs<DataLoad>(lhsNode)->setNonNull(true);
         }
     }
@@ -2380,6 +2404,10 @@ any Builder::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
             *typeExprNode << any2node(visitUnionType(context->unionType(1)));
             lhsNode = typeExprNode;
         } else {
+            // `T?` used to be compiled as `T`, silently.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(context->getStart(), context->getStop())
+                .commit(context->getText(), "nullable types are not implemented");
             node_ptr_t nullableTypeNode = createNodeAs<NullableTypeLoad>();
             setNodeTokenRangeByContext(nullableTypeNode, context);
             *nullableTypeNode << lhsNode;

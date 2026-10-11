@@ -41,12 +41,12 @@ timeout_ms = 4000
 
 [[tests]]
 name = "accepted"
-desc = "Unchanged: returning the declared type, into any, into a nullable of the type, with no declared type, and a value from a function declared void."
+desc = "Unchanged: returning the declared type, into any, with no declared type, and a value from a function declared void."
 kind = "behavior"
 case = "../../../cases/compile/return_type/accepted.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["<any>", "2", "3"]
+expect_stdout_contains = ["<any>", "3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

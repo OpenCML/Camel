@@ -1,0 +1,15 @@
+/**
+ * `?..` is in the grammar but not implemented: a compile-time error at the operator (line 11,
+ * column 16). It used to be a warning, and `inc?..dbl` was compiled as `inc..dbl`.
+ */
+module optional_comp
+
+func inc(x: int): int { return x + 1 }
+func dbl(x: int): int { return x * 2 }
+
+func main(): int sync {
+    let g = inc?..dbl
+    println('never printed')
+    println(g(3))
+    return 0
+}
