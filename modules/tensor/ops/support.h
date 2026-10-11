@@ -100,6 +100,17 @@ reduceShape(const std::optional<StaticShape> &input, std::optional<int64_t> axis
 /// numbers, bools, strings, and int arrays; nullopt for anything else.
 std::optional<ConstArg> constArgOf(slot_t slot, type::Type *type);
 
+/// The elements known of an int array written in place (`[n, 3]`), from what the compiler
+/// knows about the argument; nullopt when it is not such an array.
+std::optional<PartialInts> partialIntsOf(const type::StaticArg &arg, type::Type *type);
+
+/// The constant arguments and the partly known int arrays of a call, for an InferContext.
+struct StaticFacts {
+    std::vector<std::optional<ConstArg>> constants;
+    std::vector<std::optional<PartialInts>> partials;
+    StaticFacts(std::span<type::Type *const> types, type::static_args_t statics);
+};
+
 /// True when at least one of the first `count` arguments is a tensor.
 bool anyTensor(const InferContext &ctx, size_t count);
 /// True when at least one of the first `count` arguments is a tensor or an array.

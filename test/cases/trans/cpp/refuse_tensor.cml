@@ -1,0 +1,17 @@
+/**
+ * std::cpp translates scalar and string values only. `scale` returns a Tensor: the pass
+ * refuses at the definition of `scale` (line 9) and names the type, instead of stopping with
+ * an internal error that names a node number.
+ */
+module refuse_tensor
+
+import { Tensor, ones } from tensor
+
+func scale(x: Tensor, k: float): Tensor {
+    return x * k
+}
+
+func main(): int sync {
+    println(scale(ones([2, 3]), 2.0))
+    return 0
+}

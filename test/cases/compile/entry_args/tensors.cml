@@ -1,0 +1,12 @@
+/**
+ * Tensor parameters of `main` are read from .npy files and checked against the declared
+ * element type and shape.
+ */
+module tensors
+
+import { Tensor, tanh } from tensor
+
+func main(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 4]>): int sync {
+    println(tanh(x @ w))
+    return 0
+}

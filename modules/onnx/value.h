@@ -53,7 +53,9 @@ namespace rtdata = camel::core::rtdata;
 
 struct Value {
     enum class Kind { Constant, Symbolic };
-    enum class Form { Tensor, Scalar, IntArray, Aggregate };
+    enum class Form { Tensor, Scalar, IntArray, Aggregate, Closure };
+    /// What a Closure value is (see the linear-recursion translation in exporter.cpp).
+    enum class ClosureKind { Plain, Hole, Loop, Select };
 
     Kind kind = Kind::Constant;
     Form form = Form::Tensor; // symbolic values only
@@ -68,6 +70,12 @@ struct Value {
     type::Type *camelType = nullptr; // Scalar: the Camel scalar type; Aggregate: tuple/struct type
     std::vector<int64_t> elements;   // IntArray: known entries (kUnknownDim when dynamic)
     std::vector<Value> fields;       // Aggregate: the elements, in the type's order
+    // Closure: a function value that exists only at export time. Plain: `slot` is the function
+    // and `fields` its captured values. Hole: the result of the recursive call being abstracted.
+    // Loop: the function a linear recursion returns (`closureRef` names it). Select: one of the
+    // two closures in `fields`, chosen by the bool value `name`.
+    ClosureKind closureKind = ClosureKind::Plain;
+    size_t closureRef       = 0;
 
     static Value constant(slot_t slot, type::Type *ty) {
         Value v;
@@ -115,6 +123,16 @@ struct Value {
 
     bool isConstant() const { return kind == Kind::Constant; }
     bool isAggregate() const { return kind == Kind::Symbolic && form == Form::Aggregate; }
+    bool isClosure() const { return kind == Kind::Symbolic && form == Form::Closure; }
+
+    static Value closure(ClosureKind closureKind, type::Type *functionType) {
+        Value v;
+        v.kind        = Kind::Symbolic;
+        v.form        = Form::Closure;
+        v.closureKind = closureKind;
+        v.camelType   = functionType;
+        return v;
+    }
     bool isSymbolic() const { return kind == Kind::Symbolic; }
 };
 

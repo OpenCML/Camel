@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,6 +27,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <iosfwd>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -220,6 +221,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // objects bypass the generational spaces, so without this budget they
         // would only be reclaimed when small-object pressure forces a major GC.
         size_t largeObjCollectionBudget;
+        // Growth allowed between two collections, in percent of the large-object volume the
+        // last sweep left: the budget is the larger of largeObjCollectionBudget and
+        // live * percent / 100. 100 lets the space double before it is collected again.
+        size_t largeObjGrowthPercent;
         float minorGCTriggerRatio;
         float majorGCTriggerRatio;
         bool enableYoungGenCopying;
@@ -239,7 +244,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         uint64_t safepoints                   = 0;
         uint64_t deferredCollections          = 0;
         uint64_t requestedCollections         = 0;
-        uint64_t allocationFailureCollections = 0;
+        uint64_t elderOverflowAllocations     = 0;
         uint64_t writeBarriers                = 0;
         uint64_t minorCollections             = 0;
         uint64_t majorCollections             = 0;
@@ -250,6 +255,23 @@ class GenerationalAllocatorWithGC : public IAllocator {
         uint64_t lastTracedRootReferenceCount = 0;
         size_t rememberedSetSize              = 0;
         size_t rootSourceCount                = 0;
+        // Pacing (reported with CAMEL_GC_STATS). Requests are counted once per collection they
+        // lead to, by the cause that asked first; deferredCollections counts every repeat.
+        uint64_t largeBudgetRequests    = 0;
+        uint64_t elderExhaustedRequests = 0;
+        uint64_t otherRequests          = 0; // Stress settings, explicit calls, a full birth space
+        // Payload bytes handed out, per space. Small objects that found no room in the elder
+        // space are counted in largeBytesAllocated (and in elderOverflowBytes).
+        uint64_t youngBytesAllocated = 0;
+        uint64_t elderBytesAllocated = 0;
+        uint64_t largeBytesAllocated = 0;
+        uint64_t elderOverflowBytes  = 0;
+        // Large-object space: what the last sweep left, the budget in force, and the most the
+        // space held (what the last sweep left plus what was allocated since).
+        size_t largeLiveBytes     = 0;
+        size_t largeBudgetBytes   = 0;
+        size_t largeHighWaterMark = 0;
+        size_t largeGrowthPercent = 0;
     };
 
     struct HeapVerificationIssue {
@@ -281,6 +303,14 @@ class GenerationalAllocatorWithGC : public IAllocator {
     DebugConfig debugConfig() const;
 
     RuntimeStats stats() const;
+
+    // 0: silent; 1: reportStats is meant to be called at exit; 2: also one line on stderr per
+    // major collection (CAMEL_GC_STATS).
+    void setStatsLevel(int level);
+
+    // One line: collections, requests by cause, bytes allocated per space, the large-object
+    // space after the last sweep, its high-water mark and the budget in force.
+    void reportStats(std::ostream &os) const;
 
     std::vector<std::string> rootSourceDescriptions() const;
 
@@ -322,15 +352,21 @@ class GenerationalAllocatorWithGC : public IAllocator {
   private:
     void *allocUnlocked(size_t payloadSize, size_t align = alignof(slot_t));
 
+    void *allocLargeUnlocked(size_t payloadSize, size_t align);
+
+    // Small-object allocation in the elder space, or in the large-object space when the elder
+    // space is full. It never collects: collection happens at safepoints only (see the
+    // definition).
+    void *allocElderUnlocked(size_t payloadSize, size_t align);
+
     static CollectionKind combineCollectionKinds(CollectionKind lhs, CollectionKind rhs);
 
     void requestStressCollectionUnlocked(std::string_view reason);
 
+    // `reason` must be a string literal: it is kept until the collection runs.
     void requestCollectionAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
 
     void collectAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
-
-    void collectNonMovingUnlocked(std::string_view reason);
 
     void minorGCUnlocked();
 
@@ -385,8 +421,16 @@ class GenerationalAllocatorWithGC : public IAllocator {
     size_t promotionAgeThreshold_;    // Promote after this many minor GC survivals
     size_t largeObjThreshold_;        // Objects larger than this go to large-object space
     size_t largeObjMinBudget_;        // Floor of the large-object allocation budget
+    size_t largeObjGrowthPercent_;    // Budget above the floor: this share of the live volume
     size_t largeObjBudget_;           // Large-object bytes allowed before requesting a major GC
     size_t largeBytesSinceSweep_ = 0; // Large-object bytes allocated since the last sweep
+    size_t largeLiveBytes_       = 0; // Large-object bytes the last sweep left
+    // Elder-space overflow (allocElderUnlocked). Payloads of elderFullFromSize_ bytes or more
+    // found no block since the last sweep and go straight to the large-object space.
+    static constexpr size_t kElderNotFull = static_cast<size_t>(-1);
+    size_t elderFullFromSize_             = kElderNotFull;
+    size_t elderBytesSinceSweep_          = 0; // Bytes the elder space took since the last sweep
+    size_t elderRefillThreshold_;              // ...of which this many justify a collection
     float minorGCTriggerRatio_;       // Reserved: minor GC trigger ratio (e.g. when birth is full)
     float majorGCTriggerRatio_;       // Major GC trigger ratio (old-gen utilization)
     bool enableYoungGenCopying_;      // The runtime currently assumes stable raw object pointers.
@@ -415,6 +459,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     DebugConfig debugConfig_{};
     RuntimeStats stats_{};
     CollectionKind pendingSafepointCollection_ = CollectionKind::None;
+    // Why the pending collection was first asked for. Always a string literal.
+    std::string_view pendingCause_{};
+    int statsLevel_ = 0;
     mutable std::mutex mutex_;
 
     struct TraceEntry {

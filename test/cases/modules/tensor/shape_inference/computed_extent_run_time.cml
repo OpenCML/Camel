@@ -1,0 +1,14 @@
+module shape_inference_computed_extent_run_time
+import { Tensor, reshape, sum } from tensor
+// [n, 3] typed [2, 3] from a [6] input: another n is reshape's error when it runs.
+func exact(a: Tensor<f32, const [2, 3]>): float {
+    return sum(a)
+}
+func g(y: Tensor<f32, const [6]>, n: int): float {
+    return exact(reshape(y, [n, 3]))
+}
+func main(): int sync {
+    println('ran')
+    println(g(reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6]), 3))
+    return 0
+}

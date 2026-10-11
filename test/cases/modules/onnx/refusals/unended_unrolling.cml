@@ -1,0 +1,38 @@
+/**
+ * An export whose simplification does not end. `mk` is declared to return `{ w: Tensor }`, so
+ * the weights are a constant of the exported function whose type says neither element type
+ * nor shape. Where the recursion is called the constant itself is visible and the next state
+ * gets a precise type; inside the recursion only the declared type is. Every level the
+ * simplification unrolls is therefore more precisely typed than the loop it would become, and
+ * one more level is unrolled each time, until the memory for graphs is full.
+ *
+ * That is refused at the recursive call (line 24) with what grew, instead of the unlocated
+ * "Runtime draft encoding failed to allocate ... bytes". (Converting the weights where they
+ * are used, `m.w as Tensor<f32, const [2, 2]>`, makes the program export.)
+ */
+module unended_unrolling
+
+import { Tensor, reshape, sum, tanh } from tensor
+import { export_model } from onnx
+
+type P = { w: Tensor }
+
+func weights(): Tensor { return reshape([0.5, -0.25, 0.1, 0.3], [2, 2]) }
+
+with <m: P>
+func walk(h: Tensor, k: int): Tensor {
+    return if k >= 6 || sum(h * h) < 1.0 then h else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
+}
+
+func mk(): P { return { w: weights() } }
+
+func model(x: Tensor): Tensor {
+    let m = mk()
+    return walk<m>(x, 0)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    export_model(model, x, 'tmp/test/onnx/refusal_unended_unrolling.onnx')
+    return 0
+}

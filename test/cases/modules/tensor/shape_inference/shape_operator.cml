@@ -1,0 +1,21 @@
+module shape_inference_shape_operator
+import { Tensor, reshape, shape, zeros, ones, dim, sum } from tensor
+// The shape of a tensor whose type carries it is a constant for the operator it is passed to.
+func six(a: Tensor<f32, const [2, 3]>): float {
+    return sum(a)
+}
+func three(a: Tensor<f32, const [3]>): float {
+    return sum(a)
+}
+func f(x: Tensor<f32, const [2, 3]>, y: Tensor<f32, const [6]>): float {
+    let a = reshape(y, shape(x))
+    let b = zeros(shape(x)) + x
+    let c = ones([dim(x, 1)])
+    return six(a) + six(b) + three(c)
+}
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let y = reshape([1.0, 1.0, 1.0, 1.0, 1.0, 1.0], [6])
+    println(f(x, y))
+    return 0
+}

@@ -30,6 +30,7 @@
 
 #include "camel/core/context/frame.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/source/ids.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
@@ -74,7 +75,7 @@ class MacroEvaluator {
     void beginRound() { failures_.clear(); }
     /// Reports the failures of the current round as RuntimeDiag::MacroEvaluationFailed errors
     /// at the call, with the reason, in the runtime diagnostics: a failed evaluation rejects
-    /// the program (provisional rule, design principles 3 and 6). An argument that is not a
+    /// the program (design principles 2.7 and 3). An argument that is not a
     /// constant is not a failure and is never reported here.
     void reportFailures();
 
@@ -85,7 +86,11 @@ class MacroEvaluator {
         std::string reason;
     };
     std::vector<Failure> failures_;
-    void noteFailure(const MacroCandidate &candidate, std::string reason);
+    /// `origin`, when valid, is the place the failure is about (a fault that names one): the
+    /// error is reported there, and its text says where the macro call is.
+    void noteFailure(
+        const MacroCandidate &candidate, std::string reason,
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId);
     /// The normal reason a macro call is not evaluated: an argument that is not a constant.
     /// Logged at warn level (visible with -v), naming the argument.
     void noteNotStatic(

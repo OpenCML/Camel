@@ -36,6 +36,16 @@ Names match the configure log (booleans are CMake `ON` / `OFF`).
 - **Implementation**: Plain `option()` — **not** `add_bool_option`, so there is no global `CAMEL_ENABLE_PYTHON=0|1` preprocessor macro; it only controls `add_subdirectory(modules/python)` and, when dev is available, `modules/pyplot`.
 - **Environment override**: If **`CAMEL_SKIP_PYTHON`** is set to `1`, `ON`, `YES`, or `TRUE` (see `Options.cmake` for the exact pattern), **`CAMEL_ENABLE_PYTHON` is forced to `OFF`** at configure time (cache write; overrides prior cache). Useful for CI or builds that do not need Python modules.
 
+### `CAMEL_TARGET_ARCH`
+
+- **Meaning**: The instruction set `libcamel` is compiled for. A string, not a boolean, so it is not listed in `cmake/options.json` / `npm run config`.
+  - `native` (default): `-march=native` (plus `-mfma` on x86-64, the historical local-build flags). Fastest on the build machine; the binary may die with an illegal instruction on a CPU that lacks a feature the build machine has.
+  - `baseline`: no `-march` flag; the compiler's default for the target (x86-64: SSE2 only).
+  - any other value is passed through as `-march=<value>`, for example `x86-64-v2`, `x86-64-v3`, `haswell`.
+- **How to set it**: `-DCAMEL_TARGET_ARCH=<value>` when invoking CMake directly, or the **`CAMEL_TARGET_ARCH` environment variable** with `npm run build` / `debug` / `profile` / `pypi:rollup`. The environment variable wins over the cache for that configure run and is not written back, so unsetting it returns to the cached value (default `native`).
+- **Scope**: only `libcamel`. Modules (`*.cmo`) and tools are compiled without `-march`; the tensor module compiles its AVX2/AVX-512 kernels as separate units and selects them at run time after a CPUID check. The FastVM JIT emits SSE2 scalar code only.
+- **Release packages** must not use `native`; `.github/workflows/build-pypi.yml` pins the value.
+
 ### No Python development layout
 
 - If `modules/python` cannot build `python.cmo`, it skips; when `CAMEL_PYTHON_DEV_AVAILABLE` is false, the root `CMakeLists.txt` does not add `modules/pyplot`, avoiding a failing `find_package(Python3 REQUIRED)`.

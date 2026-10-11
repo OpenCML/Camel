@@ -937,3 +937,392 @@ assert(!out.includes('main start'), `the program ran: ${out}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.default"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.opt_fold"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt", "std::opt::fold"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.simplify"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.macro_simplify_fvm"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.simplify_jit"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pruned_branch_keeps_condition_effect.simplify_tf"
+desc = "A branch whose condition is statically known is replaced by its taken arm; the effect the condition waited on (a call that prints, whose result is the condition) still runs. It was dropped silently under std::opt::simplify: the two printed lines of the calls were missing."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'side 2 | side 2 | bd 1 1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.default"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify_nvm"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify_fvm"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify_jit"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.simplify_tf"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole.macro_simplify_fvm"
+desc = "The arms of a branch are laid out one after the other, each as one piece, also when the JOIN waits on nodes inside an arm (left by the removal of an inner branch whose test is known). Under std::opt::simplify the second arm used to run into the first one: 'base' printed twice on NodeVM and Taskflow, 'r 0' on FastVM and the JIT, all with exit 0."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'base | r 126', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.default"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.simplify_nvm"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.simplify_fvm"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.simplify_jit"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "arms_laid_out_whole_tensor.simplify_tf"
+desc = "The tensor program on which the arm layout defect was found: under std::opt::simplify FastVM and the JIT left the unrolled arm after its first multiplication and ended with 'reduce: RuntimeError'."
+kind = "behavior"
+case = "../../../cases/opt/generic/arms_laid_out_whole_tensor.cml"
+args = ["${case}", "std::opt::simplify", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'r 0.4375', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "graph_too_large.diagnostic"
+desc = "A pass that builds a graph too large for the runtime representation (here the test-only pass test::overgrow_graph, which adds COPY nodes to `main` until its node blocks exceed 65535) is stopped with RuntimeDiag::GraphTooLarge at the definition of the function, naming the pass, the graph, the quantity, the size it needs and the limit, and nothing executes. It used to be the unlocated PassInternalError '... exceeds the target integral width'."
+kind = "negative"
+case = "../../../cases/opt/generic/broken_graph.cml"
+args = ["${case}", "test::overgrow_graph", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GraphTooLarge"
+expect_diagnostic_code = "0x04000013"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 1
+expect_output_contains = ["Pass 'test::overgrow_graph' cannot build graph 'main': it needs ", " node blocks (the 8-byte units nodes are stored in", "and one graph holds at most 65535."]
+expect_output_not_contains = ["main start", "internal error", "integral width", ":?:?:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "graph_too_large.diagnostic_json"
+desc = "The same in --output-format json: one diagnostic, GraphTooLarge, stage pass:test::overgrow_graph, the range of `main`, a size above the limit."
+kind = "behavior"
+case = "../../../cases/opt/generic/broken_graph.cml"
+args = ["--output-format", "json", "${case}", "test::overgrow_graph", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const diags = JSON.parse(input.normalized.stdout)
+assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
+const d = diags[0]
+assert(d.data.name === 'RuntimeDiag::GraphTooLarge' && d.code === '0x04000013', `unexpected diagnostic ${d.data.name} ${d.code}`)
+assert(d.data.stage === 'pass:test::overgrow_graph', `stage ${d.data.stage}`)
+const m = /cannot build graph 'main': it needs (\d+) node blocks .* holds at most (\d+)[.]/.exec(d.message)
+assert(m && Number(m[2]) === 65535 && Number(m[1]) > 65535, `graph, size and limit are missing: ${d.message}`)
+assert(d.range.start.line === 9 && d.range.start.character === 0, `unexpected range ${JSON.stringify(d.range)}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_cast.rewrites"
+desc = "A conversion (`e as T`, a CAST node) of a constant is a constant: after std::opt::simplify no CAST is left, for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor) and for a number converted to another primitive type. Folding used to leave every CAST, so nothing under `as` was a constant."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_cast.cml"
+args = ["${case}", "std::opt::simplify", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (label) => (out.match(new RegExp(`label="${label}"`, 'g')) || []).length
+assert(count('CAST') === 0, `a conversion of a constant was not folded: ${count('CAST')} CAST nodes left`)
+assert(out.includes('label="31.5"'), 'the expression over the converted constants must fold to its value, 31.5')
+assert(count(':io/println') >= 1, 'effects must be kept')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_cast.results"
+desc = "The folded conversions leave the result unchanged: with and without std::opt::simplify the program prints the same number."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_cast.cml"
+args = ["${case}", "std::opt::simplify", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["31.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_cast.failing_is_kept"
+desc = "A conversion of a constant that fails is not folded: the CAST stays in the simplified graph, and compiling is not an error."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_cast_fails.cml"
+args = ["${case}", "std::opt::simplify", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (label) => (out.match(new RegExp(`label="${label}"`, 'g')) || []).length
+assert(count('CAST') >= 1, 'the failing conversion must stay in the graph')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_cast.failing_fails_at_run_time"
+desc = "The failing conversion left by folding fails when the simplified program runs, after what ran before it, with the conversion's own error at the conversion."
+kind = "negative"
+case = "../../../cases/opt/generic/fold_cast_fails.cml"
+args = ["${case}", "std::opt::simplify", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 13
+expect_output_contains = ["before", "conversion to 'Tensor<float32, [3, 2]>' failed: the tensor has shape [2, 3]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

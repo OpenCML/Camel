@@ -23,3 +23,40 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
+
+[[tests]]
+name = "refuse_tensor"
+desc = "std::cpp translates scalar and string values only. A function that returns a Tensor is refused with a located TranslationRefused at the definition of the function, naming the function and the type; it used to be the unlocated PassInternalError \"runtime graph 'scale' is not supported by the direct C++ path: node#N: non-bridgeable return type\"."
+kind = "negative"
+case = "../../../cases/trans/cpp/refuse_tensor.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_code = "0x0400000B"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 1
+expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'scale' returns a value of type 'Tensor'; std::cpp translates values of the types int32, int64, float32, float64, bool, string and void only"]
+expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_tensor_json"
+desc = "The same refusal in --output-format json: one diagnostic, TranslationRefused, stage pass:std::cpp, the range of the definition of `scale` (lines 10 to 12), nothing of a translation unit on stdout."
+kind = "behavior"
+case = "../../../cases/trans/cpp/refuse_tensor.cml"
+args = ["--output-format", "json", "${case}", "std::cpp"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const diags = JSON.parse(input.normalized.stdout)
+assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
+const d = diags[0]
+assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:std::cpp', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
+assert(d.code === '0x0400000B', `code ${d.code}`)
+assert(d.message.includes("function 'scale' returns a value of type 'Tensor'"), `unexpected message: ${d.message}`)
+assert(d.range.start.line === 9 && d.range.start.character === 0 && d.range.end.line === 11, `unexpected range ${JSON.stringify(d.range)}`)
+}
+"""
+timeout_ms = 8000

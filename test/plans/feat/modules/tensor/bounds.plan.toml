@@ -1,0 +1,85 @@
+id = "modules.tensor.bounds"
+order = 364
+tier = "feat"
+tags = ["feat", "modules", "tensor", "diagnostics"]
+
+[[tests]]
+name = "slice_const"
+desc = "A slice whose constant bounds lie outside a statically known extent is a compile-time error (it used to return an empty tensor)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/bounds/slice_const.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["slice bounds 8..9 are outside axis 0 of extent 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "index_const"
+desc = "A constant index outside a statically known extent is a compile-time error (it used to stop the running program after earlier effects)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/bounds/index_const.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["index 8 is outside axis 0 of extent 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "index_declared_shape"
+desc = "The extent may come from a declared parameter shape (`Tensor<const [3]>`)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/bounds/index_declared_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["index 5 is outside axis 0 of extent 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "slice_untaken_branch"
+desc = "The check does not depend on the branch being taken: an out-of-range slice in an arm the run never enters is still a compile-time error."
+kind = "negative"
+case = "../../../../cases/modules/tensor/bounds/slice_untaken_branch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["slice bounds 8..9 are outside axis 0 of extent 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "in_range"
+desc = "Slices and indexes inside the extent, including a negative start, are unaffected."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/bounds/in_range.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["5", "3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unknown_runtime"
+desc = "With an unknown extent (a tensor loaded at run time) nothing changes: slice clamps (shape [0]) and an index outside the extent is a run-time error of the idx operator."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/bounds/unknown_runtime.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["ran", "[0]", "idx: tensor index out of bounds"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "tuple_index"
+desc = "A tuple element past the end of the tuple is a compile-time error (the compiler used to crash)."
+kind = "negative"
+case = "../../../../cases/compile/bounds/tuple_index.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidAccessIndex"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

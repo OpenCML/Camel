@@ -45,8 +45,9 @@ import classify as c  # noqa: E402
 FLAGGED = ["D2", "D4", "D5", "D7"]
 REPORTING = "D9"
 BASE9 = "frozen+D1-D9"                       # the default rule set before D10 and R1
-LATER = {"D10": (BASE9 + "+D10", BASE9 + "+R1"),      # revision: (alone, the newest without it)
-         "R1": (BASE9 + "+R1", BASE9 + "+D10")}
+LATER = {"D10": (BASE9 + "+D10", BASE9 + "+D11+R1"),     # revision: (alone, the newest without it)
+         "D11": (BASE9 + "+D11", BASE9 + "+D10+R1"),     # the order of pure reads (2026-10-07)
+         "R1": (BASE9 + "+R1", BASE9 + "+D10+D11")}
 
 
 def reading(row: dict, refusal: bool) -> str:
@@ -108,7 +109,7 @@ def main() -> int:
     for rs in sorted(wanted):
         state[rs] = states(parts[rs])
         keys |= set(state[rs])
-    for rs in ["frozen", "frozen+D1", *chain[1:], BASE9, BASE9 + "+D10", BASE9 + "+R1", c.NEWEST]:
+    for rs in ["frozen", "frozen+D1", *chain[1:], BASE9, BASE9 + "+D10", BASE9 + "+D11", BASE9 + "+R1", c.NEWEST]:
         c.write_summary(parts[rs], c.resolve_rules(rs), out / rs, 20.0, 10.0, removed)
     missing = ("(program not judged)", "(program not judged)", "")
     # Program-level changes (no cell moves): the state of the reference per program and rule set.
@@ -136,7 +137,7 @@ def main() -> int:
     for d, (alone, without) in LATER.items():
         comparisons.append((d, "alone", BASE9, alone))
         comparisons.append((d, "last", without, c.NEWEST))
-    comparisons.append(("D10+R1", "all", BASE9, c.NEWEST))
+    comparisons.append(("D10+D11+R1", "all", BASE9, c.NEWEST))
     for dev, how, a, b in comparisons:
         moved = diff(a, b)
         for (kind, o1, o2, r1, r2, part), n in sorted(moved.items(), key=lambda kv: -kv[1]):

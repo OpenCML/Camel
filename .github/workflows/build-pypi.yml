@@ -42,6 +42,14 @@ permissions:
   # upload-artifact in build-wheel needs write; publish jobs set their own permissions block.
   actions: write
 
+env:
+  # Instruction-set baseline of the published libcamel (cmake/Options.cmake, docs/build-options.en.md).
+  # Never `native` here: the wheel must run on CPUs other than the runner's.
+  # PENDING OWNER DECISION: x86-64-v2 (SSE4.2/POPCNT, no AVX/FMA) is the conservative placeholder;
+  # the alternatives are `baseline` (SSE2 only) and `x86-64-v3` (AVX2+FMA, closest to local builds).
+  # The value is an x86-64 level: an arm64 matrix cell, once enabled, must override it (`baseline`).
+  CAMEL_TARGET_ARCH: x86-64-v2
+
 jobs:
   build-wheel:
     strategy:
@@ -96,11 +104,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Ubuntu 24.04's unversioned `clang` package is Clang 18; docs/setup.en.md requires >= 19.
       - name: Install toolchain (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential clang cmake ninja-build
+          sudo apt-get install -y build-essential clang-19 cmake ninja-build
+          mkdir -p "$RUNNER_TEMP/clang-bin"
+          ln -sf /usr/bin/clang-19 "$RUNNER_TEMP/clang-bin/clang"
+          ln -sf /usr/bin/clang++-19 "$RUNNER_TEMP/clang-bin/clang++"
+          echo "$RUNNER_TEMP/clang-bin" >> "$GITHUB_PATH"
 
       - name: Select Clang (Linux)
         if: runner.os == 'Linux'
@@ -115,6 +128,11 @@ jobs:
           clang++ --version
           ninja --version
           cmake --version
+          major=$(clang -dumpversion | cut -d. -f1)
+          if [ "$major" -lt 19 ]; then
+            echo "::error::Clang >= 19 is required (docs/setup.en.md); found $(clang -dumpversion)"
+            exit 1
+          fi
 
       - name: Install LLVM, Ninja, CMake (Windows)
         if: runner.os == 'Windows'

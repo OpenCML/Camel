@@ -1,0 +1,21 @@
+/**
+ * A float array literal with elements that depend on the model input is the 1-D tensor it
+ * stands for. Camel prints tensor([12., 1.5, 6.], dtype=float32) for the example input; the
+ * exported model gives the same on ONNX Runtime.
+ */
+module export_float_array
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func pack(x: Tensor): Tensor {
+    return reshape([sum(x * 2.0), 1.5, sum(x)], [3])
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
+    println(pack(x))
+    export_model((x: Tensor): Tensor => pack(x), x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

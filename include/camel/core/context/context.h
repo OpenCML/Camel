@@ -57,6 +57,9 @@ struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
     std::string entryFile;                // entry module path
     std::vector<std::string> searchPaths; // search paths for modules
+    // Upper bound on worker threads of parallel schedulers (`-t` on the command line); 0 means
+    // not given: the scheduler uses the number of hardware threads.
+    size_t maxThreads = 0;
 
     std::string toString() const;
 };
@@ -77,9 +80,12 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, void *>
         loadedDllHandles_; // .cmo path -> handle; keep DLLs loaded.
     std::optional<int> processExitCode_;
+    std::function<void(camel::runtime::GCGraph *, slot_t)> entryResultHandler_;
     /** Most recent reason a ".cmo found but failed to load" case occurred, used by ModuleNotFound
      * diagnostics. */
     mutable std::string lastCmoLoadError_;
+    /// See setPassFact.
+    std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>
@@ -109,6 +115,7 @@ class Context : public std::enable_shared_from_this<Context> {
         const error::DiagsConfig &diagConf = error::DiagsConfig());
 
     const std::string &entryDir() const { return entryConfig_.entryDir; }
+    size_t maxThreads() const { return entryConfig_.maxThreads; }
     error::DiagsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
     error::diagnostics_ptr_t rtmDiags() const { return runtimeDiagSink_; }
@@ -150,9 +157,33 @@ class Context : public std::enable_shared_from_this<Context> {
     void registerExecutorFactory(std::string name, std::function<std::shared_ptr<Executor>()> fact);
 
     void clearProcessExitCode() { processExitCode_.reset(); }
+    /** Every scheduling pass reports the value the entry graph returned here. */
     void captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result);
+    /**
+     * Who else wants the value the entry graph returned (camel/execute/entry_args.h writes it
+     * to a file on request). Called from captureProcessExitCode, while the value is live.
+     */
+    using EntryResultHandler = std::function<void(camel::runtime::GCGraph *, slot_t)>;
+    void setEntryResultHandler(EntryResultHandler handler) {
+        entryResultHandler_ = std::move(handler);
+    }
     std::optional<int> processExitCode() const { return processExitCode_; }
     int processExitCodeOr(int fallback = 0) const { return processExitCode_.value_or(fallback); }
+
+    /**
+     * A fact a pass leaves for the passes that run after it on this context: something it
+     * decided that the graph it hands on does not show (why a call is still a call). The key
+     * names the fact and fixes the type of the value; the header that declares the key declares
+     * the type and the typed accessors (camel/passes/opt/config.h: the growth budget).
+     * A later pass reads a fact to explain what it finds, never to decide what a program means.
+     */
+    void setPassFact(const std::string &key, std::shared_ptr<const void> value) {
+        passFacts_[key] = std::move(value);
+    }
+    std::shared_ptr<const void> passFact(const std::string &key) const {
+        const auto it = passFacts_.find(key);
+        return it == passFacts_.end() ? nullptr : it->second;
+    }
 
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

@@ -1,0 +1,281 @@
+# Build from scratch and run the default test set (smoke + feat) on every push and pull request.
+#
+# Jobs
+#   build-test   Linux x64 and Windows x64 are required; macOS is experimental (never validated, does
+#                not fail the run).
+#   sanitizers   Manual only (Run workflow -> sanitizers): ASan + UBSan Debug build on Linux, smoke plan.
+#
+# Toolchain follows docs/setup.en.md (Clang >= 19, CMake, Ninja, Conan >= 2.10, Node 20, Java 21).
+# libcamel is built for the same portable baseline as the release wheels (CAMEL_TARGET_ARCH), so what is
+# tested here is what build-pypi.yml ships; hosted runners do not share one CPU model.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - fsh-dev
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      sanitizers:
+        description: "Also run the ASan/UBSan Debug build (Linux, smoke plan)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CC: clang
+  CXX: clang++
+  HUSKY: "0"
+  # Reference-side packages of the ONNX export tests (skip_unless in test/plans/feat/modules/onnx.plan.toml);
+  # without them those tests are skipped, not failed.
+  TEST_PIP_PACKAGES: numpy onnx onnxruntime psutil
+
+jobs:
+  build-test:
+    name: Build and test (${{ matrix.cfg.slug }})
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg:
+          - runner: ubuntu-24.04
+            slug: linux-x64
+            arch: x86-64-v2
+            experimental: false
+          - runner: windows-latest
+            slug: win-x64
+            arch: x86-64-v2
+            experimental: false
+          - runner: macos-latest
+            slug: macos-arm64
+            arch: baseline # the x86-64 levels do not apply to arm64
+            experimental: true
+    runs-on: ${{ matrix.cfg.runner }}
+    continue-on-error: ${{ matrix.cfg.experimental }}
+    timeout-minutes: 120
+    env:
+      # Same value as build-pypi.yml on x86-64 (pending the owner's decision there).
+      CAMEL_TARGET_ARCH: ${{ matrix.cfg.arch }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Enable long paths (Windows)
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java (ANTLR)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Ubuntu 24.04's unversioned `clang` package is Clang 18; the project needs >= 19.
+      - name: Install toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 ninja-build cmake
+          mkdir -p "$RUNNER_TEMP/clang-bin"
+          ln -sf /usr/bin/clang-19 "$RUNNER_TEMP/clang-bin/clang"
+          ln -sf /usr/bin/clang++-19 "$RUNNER_TEMP/clang-bin/clang++"
+          echo "$RUNNER_TEMP/clang-bin" >> "$GITHUB_PATH"
+
+      - name: Install toolchain (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco upgrade llvm ninja -y --no-progress
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # Apple Clang is rejected by CMakeLists.txt (compiler id must be Clang), so use Homebrew LLVM.
+      - name: Install toolchain (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+        run: |
+          brew install llvm ninja
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify toolchain
+        run: |
+          clang --version
+          clang++ --version
+          cmake --version
+          ninja --version
+          node --version
+          java -version
+          python --version
+          major=$(clang -dumpversion | cut -d. -f1)
+          if [ "$major" -lt 19 ]; then
+            echo "::error::Clang >= 19 is required (docs/setup.en.md); found $(clang -dumpversion)"
+            exit 1
+          fi
+          echo "CLANG_MAJOR=$major" >> "$GITHUB_ENV"
+
+      - name: Install Conan and test-side Python packages
+        run: |
+          python -m pip install --upgrade pip "conan>=2.10,<3" $TEST_PIP_PACKAGES
+          # CPU-only wheels: the default Linux wheel on PyPI pulls in the CUDA runtime.
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2/p
+          key: conan-${{ matrix.cfg.slug }}-clang${{ env.CLANG_MAJOR }}-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-${{ matrix.cfg.slug }}-clang${{ env.CLANG_MAJOR }}-
+
+      # The detected profile is adjusted to the one in docs/setup.en.md: C++23 and Ninja Multi-Config.
+      - name: Conan profile
+        run: |
+          conan profile detect --force
+          profile="$(conan profile path default)"
+          sed -i.bak -E 's/^compiler\.cppstd=.*/compiler.cppstd=23/' "$profile"
+          printf '\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n' >> "$profile"
+          cat "$profile"
+
+      - name: Install npm dependencies (skip husky / prepare)
+        run: npm ci --ignore-scripts
+
+      - name: Generate ANTLR C++ sources
+        run: npm run psrgen
+
+      - name: Conan install (Release, Debug, RelWithDebInfo)
+        run: node scripts/install.js
+
+      - name: Build (Release)
+        run: npm run build
+
+      - name: Test (smoke + feat)
+        run: node scripts/test.js
+
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.cfg.slug }}
+          path: |
+            test/results/log/*/fail/
+            test/results/log/*/summary.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Manual: Run workflow -> sanitizers. Debug build of everything with ASan + UBSan, then the smoke plan.
+  # The flags reach CMake through CFLAGS/CXXFLAGS/LDFLAGS on the first configure of a fresh build tree.
+  sanitizers:
+    name: ASan + UBSan (linux-x64, Debug, smoke)
+    if: github.event_name == 'workflow_dispatch' && inputs.sanitizers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CAMEL_TARGET_ARCH: x86-64-v2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java (ANTLR)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # clang-19 does not depend on the sanitizer runtimes (libclang-rt-19-dev); llvm-19 provides
+      # llvm-symbolizer-19 for readable reports.
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 libclang-rt-19-dev llvm-19 ninja-build cmake
+          mkdir -p "$RUNNER_TEMP/clang-bin"
+          ln -sf /usr/bin/clang-19 "$RUNNER_TEMP/clang-bin/clang"
+          ln -sf /usr/bin/clang++-19 "$RUNNER_TEMP/clang-bin/clang++"
+          echo "$RUNNER_TEMP/clang-bin" >> "$GITHUB_PATH"
+
+      - name: Install Conan
+        run: python -m pip install --upgrade pip "conan>=2.10,<3"
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2/p
+          key: conan-linux-x64-clang19-${{ hashFiles('conanfile.txt') }}
+          restore-keys: |
+            conan-linux-x64-clang19-
+
+      - name: Conan profile
+        run: |
+          conan profile detect --force
+          profile="$(conan profile path default)"
+          sed -i.bak -E 's/^compiler\.cppstd=.*/compiler.cppstd=23/' "$profile"
+          printf '\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n' >> "$profile"
+          cat "$profile"
+
+      - name: Install npm dependencies (skip husky / prepare)
+        run: npm ci --ignore-scripts
+
+      - name: Generate ANTLR C++ sources
+        run: npm run psrgen
+
+      - name: Conan install (Release, Debug, RelWithDebInfo)
+        run: node scripts/install.js
+
+      - name: Build (Debug, ASan + UBSan)
+        env:
+          CFLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
+          CXXFLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
+          LDFLAGS: -fsanitize=address,undefined
+        run: npm run debug
+
+      - name: Test (smoke)
+        env:
+          ASAN_OPTIONS: detect_leaks=0:symbolize=1
+          ASAN_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer-19
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: node scripts/test.js smoke
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-sanitizers
+          path: test/results/log/
+          if-no-files-found: ignore
+          retention-days: 14

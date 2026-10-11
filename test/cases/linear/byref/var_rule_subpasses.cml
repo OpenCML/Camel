@@ -1,0 +1,91 @@
+/**
+ * One rule for every rewriting pass: a read of a variable is not moved across a write to it,
+ * and a write is not merged or dropped while a later read is reachable. One function per
+ * rewriting sub-pass, each built to tempt that sub-pass.
+ */
+module var_rule_subpasses
+
+sync func bump(var c: int, by: int): int sync {
+    c += by
+    return by
+}
+
+// fold: everything is a constant except that the variable changes between the reads.
+sync func fold_case(): int sync {
+    var c = 3
+    let a = c + 0
+    c += 2
+    let b = c + 0
+    c = c * 2
+    let d = c + 0
+    return a * 10000 + b * 100 + d
+}
+
+// cse: identical reads on both sides of a write, and two identical writes.
+sync func cse_case(var c: int): int sync {
+    let a = c + 1
+    c += 1
+    let b = c + 1
+    c += 1
+    let d = c + 1
+    return a * 10000 + b * 100 + d
+}
+
+// dce: writes whose own value nobody uses; the last one is seen only by the caller.
+sync func dce_case(var c: int): int sync {
+    c += 1
+    let a = c + 0
+    c += 10
+    c += 100
+    return a
+}
+
+// inline / specialize: the same writer called with constants, reads between the calls.
+sync func call_case(var c: int): int sync {
+    let a = c + 0
+    let r1 = wait bump(c, 1)
+    let b = c + 0
+    let r2 = wait bump(c, 1)
+    let d = c + 0
+    let r3 = wait bump(c, 5)
+    return a * 10000 + b * 100 + d + r1 * 0 + r2 * 0 + r3 * 0
+}
+
+// devirtualize: the writer is called through a function value.
+sync func value_case(var c: int): int sync {
+    let f = bump
+    let a = c + 0
+    let r1 = wait f(c, 2)
+    let b = c + 0
+    let r2 = wait f(c, 2)
+    return a * 10000 + b * 100 + c + r1 * 0 + r2 * 0
+}
+
+// branch: a write in one arm only, reads before and after.
+sync func branch_case(var c: int, flag: bool): int sync {
+    let a = c + 0
+    let r = if flag then sync { c += 7; 1 } else sync { 2 }
+    let b = c + 0
+    return a * 10000 + b * 100 + r
+}
+
+func main(): int sync {
+    println('fold {}'->format<wait fold_case()>)
+    var c1 = 1
+    let x1 = wait cse_case(c1)
+    println('cse {} {}'->format<x1, c1>)
+    var c2 = 1
+    let x2 = wait dce_case(c2)
+    println('dce {} {}'->format<x2, c2>)
+    var c3 = 1
+    let x3 = wait call_case(c3)
+    println('call {} {}'->format<x3, c3>)
+    var c4 = 1
+    let x4 = wait value_case(c4)
+    println('value {} {}'->format<x4, c4>)
+    var c5 = 1
+    let x5 = wait branch_case(c5, true)
+    let x6 = wait branch_case(c5, false)
+    println('branch {} {} {}'->format<x5, x6, c5>)
+    return 0
+}

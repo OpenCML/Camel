@@ -24,6 +24,7 @@
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
+#include "executor.h"
 
 #include <optional>
 
@@ -88,6 +89,15 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         }),
                 },
             }),
+        // Not a scheduling directive: an ordinary (effectful) operator that lets a program
+        // observe that several calls are in flight at once. See operators.h.
+        OperatorGroup::create(
+            "rendezvous",
+            {{"para:rendezvous",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{Type::Int64(), false}, {Type::Int64(), false}},
+                  Type::Int64())}}),
     };
     return groups;
 }
@@ -103,6 +113,8 @@ module_ptr_t ParaModule::create(context_ptr_t ctx) { return std::make_shared<Par
 bool ParaModule::load() {
     if (loaded_)
         return true;
+    context_ptr_t ctx = context_;
+    context_->registerExecutorFactory("para", [ctx]() { return createParaExecutor(ctx); });
     loaded_ = true;
     return true;
 }

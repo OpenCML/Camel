@@ -80,4 +80,30 @@ option(
 )
 message(STATUS "CAMEL_TENSOR_BLAS=${CAMEL_TENSOR_BLAS}")
 
+# ========== Target instruction set of libcamel ==========
+# CAMEL_TARGET_ARCH selects the -march value libcamel is compiled with:
+#   native    (default) tune for the build machine; the binary may not run on another CPU.
+#   baseline  no -march flag: the compiler's default for the target (x86-64: SSE2 only).
+#   <value>   passed through as -march=<value>, e.g. x86-64-v2, x86-64-v3, haswell, armv8-a.
+# The CAMEL_TARGET_ARCH environment variable, when set and non-empty, takes precedence over the
+# cache for that configure run only (it is not written back), so release builds can pin a
+# portable baseline without touching the scripts.
+set(CAMEL_TARGET_ARCH "native" CACHE STRING
+    "-march value for libcamel: native (build machine), baseline (compiler default), or a -march value such as x86-64-v2")
+set(_camel_target_arch "${CAMEL_TARGET_ARCH}")
+if(DEFINED ENV{CAMEL_TARGET_ARCH} AND NOT "$ENV{CAMEL_TARGET_ARCH}" STREQUAL "")
+    set(_camel_target_arch "$ENV{CAMEL_TARGET_ARCH}")
+endif()
+set(CAMEL_TARGET_ARCH_FLAGS "")
+if(_camel_target_arch STREQUAL "native")
+    list(APPEND CAMEL_TARGET_ARCH_FLAGS -march=native)
+    # Historical local-build behaviour: FMA is requested on x86-64 even if -march=native lacks it.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
+        list(APPEND CAMEL_TARGET_ARCH_FLAGS -mfma)
+    endif()
+elseif(NOT _camel_target_arch STREQUAL "baseline")
+    list(APPEND CAMEL_TARGET_ARCH_FLAGS "-march=${_camel_target_arch}")
+endif()
+message(STATUS "CAMEL_TARGET_ARCH=${_camel_target_arch} (flags: ${CAMEL_TARGET_ARCH_FLAGS})")
+
 message(STATUS "========================================")

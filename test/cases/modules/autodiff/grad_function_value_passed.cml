@@ -1,0 +1,20 @@
+module grad_function_value_passed
+import { grad } from autodiff
+
+// Refused: a function value that depends on the differentiated parameter (both closures capture
+// x) is passed to a function, and which function it is is not evident where it is passed (a
+// branch chooses it). The callee has no differentiable parameter, so before this refusal the
+// call counted as a constant and the gradient came out as 1 instead of 7, without any error.
+func call0(f: () => float): float {
+    return f()
+}
+
+func loss(x: float): float {
+    let g = if x > 0.0 then (): float => x * x else (): float => x
+    return call0(g) + x
+}
+
+func main(): int sync {
+    println(grad(loss)(3.0))
+    return 0
+}

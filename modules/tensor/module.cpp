@@ -29,10 +29,12 @@
 #include "camel/core/module/module.h"
 #include "camel/core/operator_traits.h"
 #include "camel/runtime/node_roles.h"
+#include "camel/execute/entry_args.h"
 #include "camel/execute/executor.h"
 #include "ops/registry.h"
 #include "passes/fuse.h"
 #include "dtype.h"
+#include "npy.h"
 #include "tensor.h"
 #include "type.h"
 
@@ -89,6 +91,56 @@ bool TensorModule::load() {
         return true;
     }();
     (void)refinerAdded;
+    // A Tensor parameter of `main` given on the command line is a .npy file (the extension
+    // may be left out, as in the layout nn.save_params writes). The tensor is checked against
+    // the declared element type and shape, like `as`.
+    static const bool loaderAdded = [] {
+        camel::execute::registerEntryArgumentLoader(
+            camel::tensor::TensorType::typeCode(),
+            [](const std::string &text, camel::core::type::Type *declared,
+               camel::core::type::Type *&valueType) -> slot_t {
+                namespace tensor = camel::tensor;
+                std::filesystem::path path(text);
+                if (!std::filesystem::exists(path) && path.extension() != ".npy") {
+                    path += ".npy";
+                }
+                if (!std::filesystem::exists(path)) {
+                    throw std::runtime_error(
+                        "a Tensor parameter takes a .npy file, and '" + text +
+                        "' does not exist");
+                }
+                tensor::TensorObject *t = tensor::loadNpy(path, camel::core::mm::autoSpace());
+                const slot_t value =
+                    camel::core::rtdata::toSlot(static_cast<camel::core::rtdata::Object *>(t));
+                if (const auto *want = tensor::asTensorType(declared)) {
+                    (void)want->castSlotFrom(value, declared);
+                }
+                const auto dims = t->shapeSpan();
+                valueType       = tensor::TensorType::get(
+                    t->dtype(),
+                    tensor::StaticShape(dims.begin(), dims.end()));
+                return value;
+            });
+        return true;
+    }();
+    (void)loaderAdded;
+    // The counterpart: a Tensor that `main` returns is written as a .npy file.
+    static const bool saverAdded = [] {
+        camel::execute::registerEntryResultSaver(
+            camel::tensor::TensorType::typeCode(),
+            [](slot_t value, camel::core::type::Type *, const std::string &text) -> std::string {
+                std::filesystem::path path(text);
+                if (path.extension() != ".npy") {
+                    path += ".npy";
+                }
+                camel::tensor::saveNpy(
+                    camel::core::rtdata::fromSlot<camel::tensor::TensorObject *>(value),
+                    path);
+                return path.string();
+            });
+        return true;
+    }();
+    (void)saverAdded;
     // Where a value crosses between tensors and host numbers: reading an element or a reduction
     // back to the host, or a computed host number entering tensor math.
     camel::runtime::NodeRoleRegistry::instance().add(

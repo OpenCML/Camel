@@ -28,6 +28,7 @@
  */
 
 #include "camel/runtime/draft.h"
+#include "camel/runtime/capacity.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/context/frame.h"
@@ -917,6 +918,15 @@ uint64_t GraphDraft::nodeOrigin(gc_node_ref_t id) const {
     return h ? h->origin : 0;
 }
 
+uint64_t GraphDraft::firstNodeOrigin() const {
+    for (gc_node_ref_t id = 0; id < nodesById_.size(); ++id) {
+        if (const DraftNodeHeader *h = header(id); h && h->origin != 0) {
+            return h->origin;
+        }
+    }
+    return 0;
+}
+
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set the origin of a missing draft node.");
@@ -924,9 +934,14 @@ void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
 }
 
 gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
-    ASSERT(
-        nodesById_.size() < std::numeric_limits<gc_node_ref_t>::max(),
-        "GraphDraft node count exceeds 16-bit id capacity.");
+    // Checked in every build: past this the id below would wrap around and name another
+    // node. (The last id is kInvalidNodeRef.) The node slots count erased nodes too.
+    if (nodesById_.size() >= std::numeric_limits<gc_node_ref_t>::max()) {
+        throw GraphCapacityError(
+            "nodes (counting the ones a rewrite added and removed again)",
+            nodesById_.size() + 1,
+            std::numeric_limits<gc_node_ref_t>::max());
+    }
     gc_node_ref_t id = static_cast<gc_node_ref_t>(nodesById_.size());
     nodesById_.push_back(rebuildNode(id, init));
     sourceRefsById_.push_back(kInvalidNodeRef);
@@ -1336,7 +1351,13 @@ GCGraph *GraphDraft::encode(
     if (!staticSlotTypes_.empty()) {
         staticDataType = camel::core::type::TupleType::create(staticSlotTypes_);
     }
-    const auto payloadShape = describeDraftNativePayload(*this);
+    const auto payloadShape = [&] {
+        try {
+            return describeDraftNativePayload(*this);
+        } catch (const GraphCapacityError &e) {
+            throw e.inGraph(name, firstNodeOrigin());
+        }
+    }();
 
     return GCGraphBuildAccess::create(
         debugRecord,

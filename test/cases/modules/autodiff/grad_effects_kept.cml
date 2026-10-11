@@ -1,0 +1,32 @@
+/**
+ * A function with effects is differentiated: grad runs it, so everything it prints must be
+ * printed, once and in order, also what comes after the last value the gradient needs (the
+ * print after the call of helper: the gradient of sum does not read the sum, and nothing else
+ * depended on that print).
+ */
+module grad_effects_kept
+import { Tensor, reshape, sum, tanh } from tensor
+import { grad, value_and_grad } from autodiff
+
+func helper(s: float, p: Tensor): Tensor sync {
+    println('helper')
+    let a = tanh(p * s)
+    println('helper: done')
+    return a + p
+}
+
+func loss(p: Tensor): float sync {
+    println('loss')
+    let s = sum(p)
+    let r = helper(s, p)
+    println('loss: helper returned')
+    return sum(r)
+}
+
+func main(): int sync {
+    let x = reshape([0.5, 0.25, -0.35], [3])
+    println(loss(x))
+    println(grad(loss)(x))
+    println(value_and_grad(loss)(x))
+    return 0
+}

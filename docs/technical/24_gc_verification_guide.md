@@ -83,7 +83,9 @@ Use these controls for deterministic GC validation:
 | `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
 | `CAMEL_GC_ENABLE_YOUNG_COPYING=1` | Enable the experimental young-generation copying path. |
 | `CAMEL_GC_PRINT_CONFIG=1` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
-| `CAMEL_GC_LARGE_BUDGET_MB=N` | Minimum large-object allocation (MB) between collections; default 4. Not a diagnostic switch: it tunes production pacing. |
+| `CAMEL_GC_LARGE_BUDGET_MB=N` | Floor (MB) of the large-object allocation between collections; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
+| `CAMEL_GC_GROWTH_PERCENT=N` | Large-object allocation between collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
+| `CAMEL_GC_STATS=1|2` | Print the allocator's pacing statistics to stderr at exit (1), and one line per major collection (2). |
 
 GC stress is a diagnostic mode: it asks the allocator to request collections at deterministic
 allocation or safepoint intervals so missed roots, missing barriers, and relocation bugs fail

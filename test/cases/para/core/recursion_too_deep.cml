@@ -1,0 +1,18 @@
+/**
+ * The parallel scheduler has no fixed recursion limit (NodeVM stops at 256 frames): a non-tail
+ * recursion goes as deep as the native stack of the thread allows. Past that it stops with
+ * MaxRecursionDepthExceeded instead of a segmentation fault. With the usual 8 MB stack
+ * depth(2000) fits and depth(400000) does not (the limit is near 15000 here).
+ */
+module recursion_too_deep
+
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
+
+func main(): int sync {
+    println(depth(2000))
+    println(depth(400000))
+    println('not reached')
+    return 0
+}

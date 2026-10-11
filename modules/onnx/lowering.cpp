@@ -304,6 +304,48 @@ Value lowerReshape(const LowerContext &ctx) {
     return out;
 }
 
+/// dim(t, axis): the extent of one axis, a Camel int. A constant when that extent is static
+/// (the gradient rules of reductions and concat ask for it on values that depend on the model
+/// input, whose shapes are nevertheless known); otherwise read from the Shape of the tensor.
+Value lowerDim(const LowerContext &ctx) {
+    const auto facts = ctx.facts(0);
+    if (!facts.shape) {
+        throw ExportError("'tensor:dim' of a tensor of unknown rank is not supported");
+    }
+    const int64_t rank = static_cast<int64_t>(facts.shape->size());
+    int64_t axis       = ctx.constInt(1);
+    axis               = axis < 0 ? axis + rank : axis;
+    if (axis < 0 || axis >= rank) {
+        throw ExportError(
+            std::format("'tensor:dim': axis {} is out of range for rank {}", ctx.constInt(1), rank));
+    }
+    const int64_t extent = (*facts.shape)[static_cast<size_t>(axis)];
+    if (extent != tensor::kUnknownDim) {
+        return Value::constant(rtdata::toSlot<rtdata::Int64>(extent), type::Type::Int64());
+    }
+    Emitter &e = ctx.emitter();
+    const std::string index =
+        e.operand(Value::constant(rtdata::toSlot<rtdata::Int64>(axis), type::Type::Int64()), TypeCode::Int64);
+    return Value::symbolicScalar(
+        e.node("Gather", {e.node("Shape", {ctx.input(0)}), index}, {intAttr("axis", 0)}),
+        type::Type::Int64());
+}
+
+/// numel(t): the number of elements, a Camel int. A constant when the shape is static, otherwise
+/// the ONNX Size of the tensor.
+Value lowerNumel(const LowerContext &ctx) {
+    const auto facts = ctx.facts(0);
+    if (facts.shape &&
+        std::ranges::none_of(*facts.shape, [](int64_t d) { return d == tensor::kUnknownDim; })) {
+        int64_t count = 1;
+        for (int64_t d : *facts.shape) {
+            count *= d;
+        }
+        return Value::constant(rtdata::toSlot<rtdata::Int64>(count), type::Type::Int64());
+    }
+    return Value::symbolicScalar(ctx.emitter().node("Size", {ctx.input(0)}), type::Type::Int64());
+}
+
 Value lowerFlatten(const LowerContext &ctx) {
     return ctx.emit("Flatten", {ctx.input(0)}, {intAttr("axis", ctx.constInt(1, 1))});
 }
@@ -321,15 +363,49 @@ Value lowerConcat(const LowerContext &ctx) {
         {intAttr("axis", ctx.constInt(2))});
 }
 
+/// slice(t, axis, start, end[, step]). The axis and the step are constants of the model; a start
+/// or an end that depends on the model input (the counter of a loop over the time axis) is an
+/// input of the ONNX Slice, which clamps out-of-range bounds as Camel does. The extent of the
+/// sliced axis is then unknown to the exporter.
 Value lowerSlice(const LowerContext &ctx) {
-    Emitter &e             = ctx.emitter();
-    const int64_t axis[]   = {ctx.constInt(1)};
-    const int64_t starts[] = {ctx.constInt(2)};
-    const int64_t ends[]   = {ctx.constInt(3)};
-    const int64_t steps[]  = {ctx.constInt(4, 1)};
-    return ctx.emit(
-        "Slice",
-        {ctx.input(0), e.int64s(starts), e.int64s(ends), e.int64s(axis), e.int64s(steps)});
+    Emitter &e            = ctx.emitter();
+    const int64_t axis[]  = {ctx.constInt(1)};
+    const int64_t steps[] = {ctx.constInt(4, 1)};
+    bool dynamic          = false;
+    const auto bound      = [&](size_t index) {
+        if (ctx.arg(index).isConstant()) {
+            const int64_t value[] = {ctx.constInt(index)};
+            return e.int64s(value);
+        }
+        if (ctx.arg(index).form != Value::Form::Scalar) {
+            throw ExportError(
+                std::format("'tensor:slice': argument {} must be an integer", index));
+        }
+        dynamic              = true;
+        const int64_t zero[] = {0};
+        return e.node("Unsqueeze", {ctx.input(index, TypeCode::Int64), e.int64s(zero)});
+    };
+    const std::string starts = bound(2);
+    const std::string ends   = bound(3);
+    if (!dynamic) {
+        return ctx.emit("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)});
+    }
+    const auto facts = ctx.facts(0);
+    if (!facts.shape) {
+        throw ExportError("'tensor:slice' of a tensor of unknown rank is not supported");
+    }
+    tensor::StaticShape shape = *facts.shape;
+    const int64_t rank        = static_cast<int64_t>(shape.size());
+    const int64_t at          = axis[0] < 0 ? axis[0] + rank : axis[0];
+    if (at < 0 || at >= rank) {
+        throw ExportError(
+            std::format("'tensor:slice': axis {} is out of range for rank {}", axis[0], rank));
+    }
+    shape[static_cast<size_t>(at)] = tensor::kUnknownDim;
+    return Value::symbolic(
+        e.node("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)}),
+        facts.dtype,
+        shape);
 }
 
 /// Reduction over one axis. Opset 18 moved `axes` from an attribute to an input for every
@@ -736,6 +812,8 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:concat", lowerConcat);
     add("tensor:slice", lowerSlice, 10);
     add("tensor:shape", lowerShape);
+    add("tensor:dim", lowerDim);
+    add("tensor:numel", lowerNumel);
     add("tensor:zeros", constantOfShapeOp(0.0), 9);
     add("tensor:ones", constantOfShapeOp(1.0), 9);
     add("tensor:full", constantOfShapeOp(std::nullopt), 9);

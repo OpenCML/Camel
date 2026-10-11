@@ -103,7 +103,31 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     auto target          = ctx.constInts(1);
     if (!target) {
-        return tensorOf(in.dtype, std::nullopt);
+        // A target written in place with computed extents, `[n, 3]`: the rank and the constant
+        // extents are the result's. A computed extent (and -1) is not known, unless it is the
+        // only one and the input's element count leaves one value for it: any other value the
+        // program computes makes reshape fail when it runs.
+        const auto partial = ctx.partialInts(1);
+        if (!partial) {
+            return tensorOf(in.dtype, std::nullopt);
+        }
+        StaticShape shape;
+        std::vector<int64_t> probe;
+        size_t open = 0;
+        for (const auto &extent : *partial) {
+            const bool known = extent && *extent >= 0;
+            shape.push_back(known ? *extent : kUnknownDim);
+            probe.push_back(known ? *extent : -1);
+            open += known ? 0 : 1;
+        }
+        if (open == 1 && fullyKnown(in.shape)) {
+            try {
+                return tensorOf(in.dtype, k::resolveReshape(*in.shape, probe));
+            } catch (const std::exception &) {
+                // No value fits: left to reshape to report when it runs.
+            }
+        }
+        return tensorOf(in.dtype, shape);
     }
     if (fullyKnown(in.shape)) {
         return tensorOf(in.dtype, k::resolveReshape(*in.shape, *target));
@@ -279,6 +303,22 @@ std::optional<Type *> sliceInfer(const InferContext &ctx) {
     if (ext == kUnknownDim || !start || !end || !step || *step <= 0) {
         (*in.shape)[a] = kUnknownDim;
         return tensorOf(in);
+    }
+    // Extent and bounds are known at compile time: an interval that leaves the axis is an
+    // error here (design principles 2.7). With an unknown extent or bounds the kernel clamps,
+    // as NumPy slicing and ONNX Slice do.
+    const auto inside = [ext](int64_t v) {
+        const int64_t n = v < 0 ? v + ext : v;
+        return n >= 0 && n <= ext;
+    };
+    if (!inside(*start) || !inside(*end)) {
+        throw ShapeError(
+            std::format(
+                "slice bounds {}..{} are outside axis {} of extent {}",
+                *start,
+                *end,
+                a,
+                ext));
     }
     auto clamp      = [ext](int64_t v) { return std::clamp<int64_t>(v < 0 ? v + ext : v, 0, ext); };
     const int64_t s = clamp(*start), e = clamp(*end);

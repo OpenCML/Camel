@@ -24,6 +24,7 @@
 #include <format>
 #include <limits>
 #include <span>
+#include <stdexcept>
 
 #include "camel/core/operator.h"
 #include "camel/core/type/base.h"
@@ -44,7 +45,7 @@ enum class OpCode : uint8_t {
     CAST, // Use fastop[0] as the slot index to cast; extra stores the target type.
     COPY, // Use fastop[0] as the source index to copy.
     ACCS, // fastop[0] is the target index; fastop[1] is the accessed subscript.
-    JUMP, // Use fastop[0] as the jump target address.
+    JUMP, // The jump target pc: see getJumpTargetPc (fastop[0], and fastop[1] once linked).
 
     // Variable-arity instructions
     BRCH,
@@ -162,9 +163,14 @@ inline bool isSafeSizeTForIndexT(size_t value) {
 
 template <typename T> inline data_idx_t as_index(T value) {
     if constexpr (std::is_same_v<T, size_t>) {
-        ASSERT(
-            isSafeSizeTForIndexT(value),
-            "Value exceeds int16_t range when converting to data_idx_t.");
+        // Checked in every build: a truncated slot index or jump target runs on other data.
+        if (!isSafeSizeTForIndexT(value)) {
+            throw std::runtime_error(
+                std::format(
+                    "FastVM: index {} does not fit the 16-bit operand of a bytecode (one graph "
+                    "with more than 32767 slots or bytecode words)",
+                    value));
+        }
     } else {
         static_assert(false, "Unsupported type for data_idx_t conversion.");
     }
@@ -387,7 +393,9 @@ union BytecodeExtra {                           // 8 bytes
 
 // FUNC/TAIL:
 // - extra()  : runtime callee graph pointer
-// - extra2() : [targetPc:16 | directCallCount:48]
+// - extra2() : [targetPc:32 | directCallCount:32]. The pc was 16 bits wide: a program linked
+//                to more than 65535 bytecode words got truncated call targets (a crash in
+//                release builds, where the range ASSERT is compiled out).
 // - extra3() : JIT entry pointer (JIT builds only; 0 means interpreter entry)
 inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *bc) {
     return bc->directCallExtra()->runtimeGraph;
@@ -396,9 +404,26 @@ inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph
     bc->directCallExtra()->runtimeGraph = graph;
 }
 
-constexpr uint64_t kFuncExtraCountMask     = (1ull << 48) - 1;
-constexpr uint64_t kFuncExtraTargetPcShift = 48;
-constexpr uint64_t kFuncExtraTargetPcMask  = 0xFFFFull;
+// JUMP: the target pc. Inside one graph, before linking, it is graph-relative and fits fastop[0]
+// (fastop[1] is 0). The linker makes it absolute, and a linked program can exceed 16 bits: the
+// absolute target is spread over both operands, low 16 bits in fastop[0], high 16 bits in
+// fastop[1]. Every reader of a linked JUMP goes through getJumpTargetPc.
+inline size_t getJumpTargetPc(const BytecodeHeader *bc) {
+    return static_cast<size_t>(static_cast<uint16_t>(bc->fastop[0])) |
+           (static_cast<size_t>(static_cast<uint16_t>(bc->fastop[1])) << 16);
+}
+inline void setJumpTargetPc(BytecodeHeader *bc, size_t targetPc) {
+    if (targetPc > 0xFFFFFFFFull) {
+        throw std::runtime_error(
+            std::format("FastVM: jump target pc {} exceeds the 32-bit range", targetPc));
+    }
+    bc->fastop[0] = static_cast<data_idx_t>(static_cast<uint16_t>(targetPc & 0xFFFF));
+    bc->fastop[1] = static_cast<data_idx_t>(static_cast<uint16_t>(targetPc >> 16));
+}
+
+constexpr uint64_t kFuncExtraCountMask     = (1ull << 32) - 1;
+constexpr uint64_t kFuncExtraTargetPcShift = 32;
+constexpr uint64_t kFuncExtraTargetPcMask  = 0xFFFFFFFFull;
 
 inline uint32_t getFuncExtraCount(const BytecodeHeader *bc) {
     const uint64_t count = *bc->directCallExtra2() & kFuncExtraCountMask;
@@ -411,7 +436,14 @@ inline size_t getFuncExtraTargetPc(const BytecodeHeader *bc) {
         (*bc->directCallExtra2() >> kFuncExtraTargetPcShift) & kFuncExtraTargetPcMask);
 }
 inline void setFuncExtraTargetPc(BytecodeHeader *bc, size_t targetPc) {
-    ASSERT(targetPc <= kFuncExtraTargetPcMask, "JIT target pc exceeds packed FuncExtra range.");
+    if (targetPc > kFuncExtraTargetPcMask) {
+        // Checked in every build: a truncated target would run other code.
+        throw std::runtime_error(
+            std::format(
+                "FastVM: call target pc {} exceeds the {} bytecode words a program may have",
+                targetPc,
+                kFuncExtraTargetPcMask));
+    }
     const uint64_t count    = *bc->directCallExtra2() & kFuncExtraCountMask;
     *bc->directCallExtra2() = (static_cast<uint64_t>(targetPc) << kFuncExtraTargetPcShift) | count;
 }

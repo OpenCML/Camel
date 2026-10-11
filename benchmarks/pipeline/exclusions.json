@@ -3,7 +3,9 @@
  "purpose": "Deviation D4 of the X1a classifier rules: programs of the agree set that print wall-clock times or unseeded random values (or otherwise have no stable zero-pass observation). classify.py does not judge them (reference class EXCLUDED); corpus.py marks them. The determinism check on the zero-pass repeats stays as a second line of defence and reports programs it catches that are not listed here.",
  "criteria": {
   "a": "The zero-pass repeats of the program differed in the first run (records of Camel 623f5145, 13 programs) or in the after-run (records of Camel 0586a0a6, 16 entries of 13 files), under the frozen determinism check (CLASSIFIER-RULES.md section 5).",
-  "b": "Source review. Candidates were every program whose archived zero-pass trace contains an operator matching ^time:|rand|random, or whose source imports time, random, os or perf, or calls now(, random(, rand*(, seed(, sleep(. A candidate is excluded when a clock value or a random value drawn before any seed operator reaches the printed output, a written file, an effect payload or the exit code. The review was done by the harness maintainer (an AI agent) by reading each source file; it was not checked by a second reader."
+  "b": "Source review. Candidates were every program whose archived zero-pass trace contains an operator matching ^time:|rand|random, or whose source imports time, random, os or perf, or calls now(, random(, rand*(, seed(, sleep(. A candidate is excluded when a clock value or a random value drawn before any seed operator reaches the printed output, a written file, an effect payload or the exit code. The review was done by the harness maintainer (an AI agent) by reading each source file; it was not checked by a second reader.",
+  "c": "Source review: the program observes by design whether calls with no order between them run at the same time, or in which order they do. Its output (or its effect trace) on a pipeline ending in the parallel scheduler differs from the default run without either being wrong, so pipeline invariance against the default run does not apply to it. Its own test (test/plans/feat/para/core.plan.toml) asserts the expected values under std::prl.",
+  "d": "Owner ruling (2026-10-07): the program prints a value whose static type is `any`. Camel has no run-time type test, so such a value prints as `<any>`; a pass that inlines the call makes the static type of the printed value known and it then prints as that type. Both outputs are by design (printing `<any>` is the safest behaviour for a value of unknown type), so the output of a pipeline that inlines differs from the default run without either being wrong, and pipeline invariance against the default run does not apply to the program."
  },
  "how_to_extend": "Add an entry with path (relative to the repository root, all environment variants of the file are excluded), reason, criteria and evidence. A program that runs clock/random operators and stays judged goes into reviewed_not_excluded with the reason; classify.py reports programs with such operators that are in neither list.",
  "excluded": [
@@ -55,9 +57,30 @@
   {"path": "test/cases/trans/cpp/main_io.cml", "criteria": ["b"],
    "reason": "prints a wall-clock difference: 'elapsed = 0.0000' (four decimals of now() - start)",
    "evidence": "source review; the zero-pass repeats agreed in both runs by chance; a harness trial saw a false VALUE_MISMATCH from it (CLASSIFIER-RULES.md Q5)"},
+  {"path": "test/cases/para/core/concurrent_calls.cml", "criteria": ["c"],
+   "reason": "prints how many of two independent calls met a peer at para:rendezvous: 2 under a parallel scheduler, 0 on a linear one (each call times out alone)",
+   "evidence": "source review; harness run on the std::tf pipelines: VALUE_MISMATCH 'calls that met a peer: 0' against '2' on all five"},
+  {"path": "test/cases/para/core/concurrent_recursion.cml", "criteria": ["c"],
+   "reason": "prints how many of the 8 leaves of a tree recursion met a peer at para:rendezvous: 8 under a parallel scheduler, 0 on a linear one",
+   "evidence": "source review; harness run on the std::tf pipelines: VALUE_MISMATCH on all five"},
+  {"path": "test/cases/para/core/merge_sort_small.cml", "criteria": ["c"],
+   "reason": "prints how many of the 8 leaf sorts met a peer at para:rendezvous (8 parallel, 0 linear); the sorted array it also prints is the same everywhere",
+   "evidence": "source review; harness run on the std::tf pipelines: VALUE_MISMATCH in line 2 only, on all five"},
+  {"path": "test/cases/para/core/sync_order_with_tasks.cml", "criteria": ["c"],
+   "reason": "prints how many of two independent calls met a peer at para:rendezvous (2 parallel, 0 linear); every other line is the same everywhere",
+   "evidence": "source review; harness run on the std::tf pipelines: VALUE_MISMATCH in line 5 only, on all five"},
+  {"path": "test/cases/para/core/println_whole_lines.cml", "criteria": ["c"],
+   "reason": "3000 map elements each print one line; under a parallel scheduler the order of the lines is not defined (the test checks that each line is whole and printed once)",
+   "evidence": "source review; same class as map_ordered_effects.cml, whose line order differs on every std::tf pipeline"},
+  {"path": "test/cases/para/core/concurrent_alloc.cml", "criteria": ["c"],
+   "reason": "printed output is the same everywhere, but the two halves of its merge sort run concurrently, so the order of their operators in the effect trace differs from the default run",
+   "evidence": "source review; harness run on the std::tf pipelines: EFFECT_MISMATCH with equal counts (468 effects) and equal output on all five"},
   {"path": "test/cases/para/core/unordered_foreach_timing.cml", "criteria": ["b"],
    "reason": "prints a wall-clock duration and returns exit code 1 when the duration is 0.5 s or more",
-   "evidence": "source review; its zero-pass run exits 1 on this machine (INVALID_REF in both runs), and the printed duration differed between repeats in the after-run"}
+   "evidence": "source review; its zero-pass run exits 1 on this machine (INVALID_REF in both runs), and the printed duration differed between repeats in the after-run"},
+  {"path": "test/cases/compile/return_type/accepted.cml", "criteria": ["d"],
+   "reason": "println(a(2)) prints the result of a function declared to return `any`: `<any>` on the default run, `2` on a pipeline whose passes inline the call",
+   "evidence": "owner ruling: normal, by design; no compiler change. Source review of the program; the difference was reported from pipeline runs and was not re-measured for this entry"}
  ],
  "reviewed_not_excluded": [
   {"path": "benchmarks/gru/model.cml", "reason": "prints wall-clock timings only as the values of keys ending in _ms on CAMEL_BENCH lines; these are masked (output mask camel_bench_ms, rules section 3)"},

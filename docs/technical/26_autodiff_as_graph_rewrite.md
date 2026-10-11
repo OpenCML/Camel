@@ -194,6 +194,104 @@ inlining remove the closures.
   site.
 - Otherwise the call is rejected with a diagnostic naming the call site.
 
+Implementation status (2026-10-06). The library handles the callee itself when
+`grad` runs; no pass has to run first. One rule decides what is accepted:
+
+> A call of a function value is differentiated when the function is **named, or
+> built by a lambda, in the function being differentiated or in a function it
+> calls**, and gets from there to the call only by being **bound, captured,
+> passed as an argument, or returned**.
+
+So besides a `let`-bound lambda called where it was built: a closure called
+inside a second closure that captured it, a closure returned by a factory, a
+closure or a named function passed to a function that calls it, a function
+that takes a closure and returns one capturing it, a lambda returning a lambda,
+and a closure built before a branch and called in its arms. Captured values
+are inputs of the call like any other, so gradients flow into captures that
+depend on the differentiated parameter.
+
+How (`modules/autodiff/pullback.cpp`):
+
+- *Following* (`ForwardRewrite::followFunctionValues`). Before a graph is
+  differentiated, the calls in it that carry a function value are inlined into
+  it: a call that is passed an evident function value (as an argument or a
+  captured value) and a call that returns one. "Evident" means that the graph
+  itself says which function the value is: a constant function, or a
+  `FILL FunctionClosure` over one. Afterwards the call of the value is a call
+  of a closure built in the graph. Inlining is `std::inline`'s own
+  (`camel::passes::opt::inlineCallInOrder`), so the order and the effects of the
+  inlined code are kept by the same code as in the pass; a callee value behind
+  the gates an inlined call puts on its arguments is seen through.
+- *The call* (`rewriteIndirectCall`). A constant function without captures
+  becomes a direct call; a closure is differentiated through the function's
+  own graph with the captured values as trailing arguments
+  (`Engine::planForClosure`, one derivative per function, shared by its call
+  sites).
+- *Branch arms* (`rewriteBranch`). An arm is a graph of its own and is not
+  inlined. A closure built before the branch is handed to the arm as the values
+  it captured, and the arm builds it again in its own graph.
+- *Bounds.* Macros and functions with a derivative rule of their own are never
+  followed into. A recursive function that passes a function value on to itself
+  is followed into once: the arm that holds its recursive call knows which
+  function it came from and leaves that call a call. One transformation follows
+  at most 256 calls.
+
+What is refused, and how. A function value that does not fit the rule is
+refused at its call: one chosen by a branch at run time (also when the
+condition is a constant expression: nothing folds it before `grad` runs), read
+from a tuple, struct, array or variable, a parameter of the differentiated
+function itself, or reached through the recursive call of a function that
+passes it on. The diagnostic is located at the refused call, in the default run
+and under `std::macro` (a runtime fault names its origin; under `std::macro`
+the text adds where the macro call is); when several calls are refused, the
+first in source order is reported; the message gives the one reason that holds
+for that call. A direct call that is passed such a function value is refused
+as well when the value depends on the differentiated parameter: the callee
+may have no differentiable parameter at all, and the call would otherwise
+count as a constant and drop that part of the gradient silently. For this a
+function value that captured an active value is itself active in the activity
+analysis (`Backward::run`), as a carrier that never holds a gradient. (The
+wrapping of function-typed parameters described above is not implemented.)
+
+`grad` of a function with effects runs the function: the gradient waits for
+everything the function's own result waited for, so effects after the last
+value the gradient reads still happen.
+
+Arrays are not differentiable values today (`:op/idx_arr` and `map` have no
+derivative rule), so a lambda passed to `map` is refused for that reason.
+Tests: `grad_closure.*`, `grad_function_values*.*` (accepted structures,
+against finite differences), `grad_function_value_*.*` (each refusal with its
+position), `grad_effects_kept.*`.
+
+### 4.4a Variables
+
+A variable (`var`) is a cell: the graph passes the cell and reads its content with
+the operator `:var/get` (design principles 2.5). **Gradients do not flow through
+variables.** This is a rule of the library, not of the language:
+
+- A `var` parameter is not a differentiable input; `grad` and `value_and_grad`
+  take no gradient with respect to it. The gradient function keeps it a `var`
+  parameter, so the function's writes reach the caller's variable.
+- A read of a variable of a differentiable type is a **constant of the call**,
+  and it is accepted only where that is certain: in the differentiated function
+  itself (not in a function or branch arm it calls), for a variable that comes
+  in from outside (a `var` parameter or a captured variable), and only if every
+  operation of that function that assigns the variable a value depending on a
+  differentiated parameter, or that receives the variable and may write it (a
+  call, a branch, a closure), is ordered after the read, that is, depends on it.
+  `let a = acc * 1.0; acc = a * 0.5 + x` is accepted: the read feeds the
+  assignment.
+- Everything else is refused with a diagnostic that says so (a read after such
+  an assignment or call, a read in a callee or an arm, a variable of a
+  differentiable type declared inside the differentiated function). Taking those
+  reads as constants would return a wrong gradient without any sign of it.
+- Variables of types without a tangent (an integer counter, a flag) are not
+  affected.
+
+Not implemented: following a value through an assignment and a later read of the
+same variable (`acc = m.w * x; ... sum(acc)`). Use `let` for values a gradient
+has to pass through. Tests: `test/cases/modules/autodiff/var_tensor_*.cml`.
+
 ### 4.5 Macro interplay
 
 `grad(f)` evaluates when `f` is static, after the macros inside `f` have run
@@ -276,7 +374,7 @@ What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
 - It refuses, with the diagnostic `RuntimeDiag::TranslationRefused` at the node
   and the name of the missing pass, a graph that still has a call (not inlined,
   or the entry graph still calling `main`) or an unexpanded macro operator. It
-  never expands macros, devirtualizes, specializes calls, inlines or unrolls.
+  never expands macros.
 - For the programs both entries accept, the models are equivalent: same
   checker result and bit-identical ONNX Runtime outputs
   (`test/cases/modules/onnx/pass_export.py`).
@@ -285,27 +383,29 @@ What differs from the design above:
 
 - **Shape specialization is not a general pass.** There is no pass that takes
   example input types, so the pass does that step itself: it binds the example
-  types to the function's ports, re-infers node types, and runs the
-  `std::opt::fold` / `std::opt::dce` fixpoint on its copy of the function
-  (shape arithmetic such as `shape(x)[0] * shape(x)[1]` or `numel` in a
-  gradient can only fold then). This is the one simplification step left
-  inside the pass.
+  types to the function's ports, re-infers node types, and runs the export
+  simplification on its copy of the function (shape arithmetic such as
+  `shape(x)[0] * shape(x)[1]` or `numel` in a gradient can only fold then, and
+  a recursion bounded by a shape can only unroll then).
 - **Shapes are not read from node types.** The lowering walks the graph as a
   value DAG and re-derives dtype and shape per value with operator inference
   (this is what carries dynamic axes); in that walk it also evaluates pure
   operators whose arguments are all constants and takes the arm of a branch on
   a constant condition, where folding left them (inside branch arms).
-- **`onnx.export_model` does not run the pass pipeline.** It simplifies the
-  bound function itself with settings `std::opt::simplify` does not have:
-  inlining regardless of size, up to 4096 rounds (deeper static recursion),
-  and the branched-call split that turns the pullback of a data-dependent
-  branch into per-arm calls (`enableBranchedCallSplit`, valid only for a
-  consumer that builds no execution order). Programs that need these export
-  through `export_model` and are refused by the pipeline: of the exporting
-  programs in `test/cases/modules/onnx`, the pipeline accepts nine and refuses
-  the four `export_train_step_branch*` (indirect call left) and the two
-  `export_gated_gru_*` (call left); `export_import_order` is refused because
-  its captured weights come from `random` and only exist at run time.
+- **Both export entries run the same export simplification** on the bound
+  function (`exportRewriteConfig`, `modules/onnx/exporter.cpp`), with settings
+  `std::opt::simplify` does not have: inlining regardless of size, up to 4096
+  rounds (deeper static recursion), and the branched-call split that turns the
+  pullback of a data-dependent branch into per-arm calls
+  (`enableBranchedCallSplit`, valid only for a consumer that builds no
+  execution order, which is why it cannot be a pass before a scheduler).
+  `onnx.export_model` also expands macros; the pass leaves that to `std::macro`.
+  For nineteen programs of `test/cases/modules/onnx` the two entries write
+  models with bit-identical ONNX Runtime outputs (`pass_export.py equiv`),
+  among them the four `export_train_step_branch*` and `export_gated_gru_forward`,
+  which the pass used to refuse. `export_gated_gru_step` is refused by both;
+  `export_import_order` is refused by the pass because its captured weights
+  come from `random` and only exist at run time.
 - **Control dependencies are checked, not translated.** The lowering walk
   follows data dependencies only. Before it, both entries refuse a function in
   which an impure operator is reachable from the exit through data or control
@@ -315,6 +415,152 @@ What differs from the design above:
   reads) is reported at the operator and no model is written. The check is
   structural: an effect in the arm of a branch on a constant condition that
   folding did not remove is refused too.
+- **Variables.** ONNX has no cells. A variable that is declared, assigned and
+  read directly in one function (`var acc = x * 2.0; acc = acc + 1.0; return
+  acc`) is only a name for a sequence of values: each read is translated as the
+  value of the assignment that reaches it, which is decided from the graph (the
+  assignments that must run before the read form a chain; the last one is
+  read; the declaration's initial value when there is none). A compound
+  assignment (`+=`, `*=`, ...) writes the content it finds combined with its
+  operand. No state appears in the model. Refused with a diagnostic: a variable read or assigned outside
+  the function that declares it (a `var` parameter, a captured variable, a
+  variable used in a branch arm) — its content would be state the model cannot
+  hold; a variable passed to a call or a closure; an assignment that the graph
+  does not order with a read. Tests: `export_var_local`,
+  `pass_export_refusal_var_*`.
+- **Tail recursion of dynamic depth is an ONNX Loop.** Simplification unrolls
+  a recursion whose depth is known at export time. A call that is left is a
+  recursion whose depth depends on the model input. When every recursive call
+  is in tail position, the function is a loop over its arguments, and the
+  exporter emits one `Loop` (`Evaluator::translateLoop`,
+  `modules/onnx/exporter.cpp`):
+  - the carried values are the arguments a recursive call changes (found by a
+    first, discarded evaluation of the body); the others stay what they are
+    outside the loop, so constants keep folding inside the body;
+  - the body is the function's own graph evaluated once. A branch that
+    separates "return" from "call again" becomes an `If` whose outputs are the
+    continue flag and the next state: each side is computed only when it is
+    taken. (Until 2026-10-06 both sides were computed and selected with
+    `Where`, on the assumption that exported operators are total; a step taken
+    past the end of the data is not — a slice outside its axis is empty and the
+    reshape after it fails — and exported loops failed at run time for some
+    lengths and inputs. Found by the pass-quality cycle; test `ort_time_axis`.)
+    Branches without a recursive call remain `If`s as before;
+  - the body always runs once (as a call does) and continues while the path
+    taken was a recursive call; the result is the body evaluated once more
+    after the `Loop`, at the final state, so no carried value needs an initial
+    result;
+  - a recursion that goes through helpers or branch arms is followed (the arm
+    case is what the tests exercise; a loop inside a loop body would become a
+    nested `Loop` and is not tested);
+  - **several values.** The recursion may carry several values and return
+    them: the result is a tensor, a scalar (float, int, bool), or a tuple or
+    struct of these, nested to any depth. Each leaf of the result is a carried
+    value, a value computed from the carried values where the recursion
+    returns, or a constant; different returning paths may yield different
+    values, of the same structure and leaf types. The result is merged leaf
+    by leaf: a leaf that differs between two returning paths is an output of
+    the `If` that separates them; next to a path that calls again, zeros of
+    the leaf's type and rank stand in (they are never read); a constant needs
+    no output. An integer counter stays an int64 scalar and is an int64
+    output of the model, a bool a bool output. This is the usual shape of a
+    data-dependent loop: `func loop(h: Tensor, k: int): (Tensor, int)`,
+    stopped by a threshold on the state or a maximum count.
+  Refused, each with a diagnostic at the recursive call or the export request:
+  a carried value whose dtype or shape changes between calls; a tuple, struct
+  or array argument that changes (the carried values themselves are the
+  arguments: tensors and scalars, not a tuple passed whole); a leaf of the
+  result that is neither a tensor nor a scalar: a function, or an int array
+  built from values that depend on the model input (the diagnostic names the
+  element of the result and what it is); returning paths whose results differ
+  in structure or in a leaf's type; a `match` whose arms call the function
+  again; a recursion that never returns. Tests: `export_loop`,
+  `pass_export_loop`, `export_dynamic_recursion`, `ort_loop_values` (tuple,
+  two returning paths, struct, three carried values, nested tuple with a
+  carried float and a bool: NumPy and the native run for 0, 1, several and
+  the maximum number of steps), `export_loop_values_array` (refusal); both
+  entries write equivalent models (`pass_export.py equiv`).
+- **Linear recursion** (the recursive call is not the last action). A function
+  `f(a) = E(a, if c(a) then E'(a, f(step(a))) else B(a))` with ONE recursive
+  call on one side of ONE two-way branch is the pair of loops it denotes:
+  with `a_0` the first arguments, `a_{i+1} = step(a_i)` and `n` the first `i`
+  where the branch takes the other side, `V_n` is the body at `a_n` and
+  `V_i` the body at `a_i` given `V_{i+1}`. The exporter emits a forward `Loop`
+  (the last arguments and `n`), the value of the last call, and a `Loop` of
+  `n` iterations that applies the body in reverse order; the arguments of call
+  `i` are recomputed from `a_0` by a counted inner `Loop`. There is no tape:
+  the step runs `n + n(n-1)/2` times plus a constant (measured), which is the
+  stated cost; a tape (scan outputs of the forward loop) is the follow-up.
+  The identity is applied by symbolic evaluation of the function's own graph
+  and does not depend on where the function comes from; hand-written
+  recursions (a right fold) are tested as such.
+  - Functions as results. The forward function autodiff derives for a tail
+    recursion is such a linear recursion returning `(value, pullback)`, the
+    pullback being a closure that captures values of its call and the pullback
+    returned by the recursive call. A closure cannot be carried by a `Loop`:
+    it is kept as an export-time value (function + captured values) and the
+    recursion is unrolled where the returned function is CALLED:
+    `g_i(x) = P(a_i, x, g_{i+1}(x))`, `g_n` the closure of the last call, i.e.
+    one bottom call and a `Loop` applying `P` in reverse order. A branch whose
+    arms yield such functions is evaluated on both sides and selected when the
+    function is called.
+  - Accepted, exactly: one recursive call in the function's own graph; one
+    if / else on a scalar condition that depends on the model input with the
+    call on exactly one side (branches inside that side which use the call's
+    result on both of their sides are part of the post-processing); the
+    arguments the call changes are tensors or scalars of fixed dtype and
+    shape; the result's leaves that are not functions are tensors or scalars
+    of fixed dtype and shape, and when the result also holds a function those
+    leaves are passed through unchanged; a function in the result calls the
+    function returned by the recursive call exactly once, with its own
+    arguments unchanged, and returns tensors or scalars (or tuples of them);
+    it is called with tensors, scalars, constants, or tuples and structs of
+    these (the arguments are not carried by a `Loop`: every call of the chain
+    receives them unchanged).
+    Closures may capture any export-time value: constants, tensors and
+    scalars that depend on the model input, tuples and structs of these, and
+    other closures.
+  - The gradient of a loop that returns several values. For a tail recursion
+    that returns `(state, counter)` (or a struct, or more values) the derived
+    forward function returns `((state, counter), pullback)` and the pullback
+    takes one cotangent per differentiable element of the result, as a tuple
+    or struct; the counter has no tangent and is not differentiated. This is
+    inside the class above, so `value_and_grad` of a loss computed from the
+    returned values exports as paired `Loop`s, with the counter usable as a
+    number in the loss and as an output of the model. What is accepted for
+    the gradient is NARROWER than for the forward loop: ONE if / else must
+    decide the recursion (write a maximum count into the condition,
+    `if k >= limit || done(h) then (h, k) else loop(step(h), k + 1)`; a
+    second, nested branch that also ends the loop exports forward and is
+    refused in the gradient as "several branches decide"). The cost is that
+    of the route: no tape, the step is recomputed, quadratic in the number of
+    iterations.
+  - Refused, each located: two or more recursive calls; several branches that
+    decide the recursion; a `match` that decides it; a condition that uses the
+    call's result; a result or state whose dtype or shape changes; a function
+    returned together with a value the recursion changes on the way back; a
+    returned function that calls the one below it more than once or with
+    changed arguments, or that is called with a function or with an array
+    whose elements depend on the model input. The conditions on the returned
+    function are reported at the recursive call (they used to be reported at
+    the `value_and_grad` expression, where the pullback is called).
+  Tests: `ort_linear_recursion` (NumPy, depths 0, 1 and more), `ort_grad_loop`
+  (gradient of a data-dependent loop, with a branch in the body, against
+  Camel's native gradient and NumPy), `ort_grad_loop_values` (gradient of
+  loops returning a tuple, a struct and four values, the counter in the loss
+  and as an output: NumPy reverse sweep and the native run for 0, 1, several
+  and the maximum number of steps), `ort_loop_values_dynamic` (the same loop
+  and its gradient with a dynamic batch axis), `export_nontail_recursion`
+  (refusal).
+- **Constant tuples, structs and arrays in a branch arm.** Simplification
+  folds a tuple, struct or array literal of constants only where replacing it
+  is execution-safe; one inside a branch arm reaches the export unfolded (the
+  zero gradient `{ w: zeros }` on the path where a loop takes no step; `[k, k
+  + 1]` in the first, specialised call of a recursion, where `k` is 0). The
+  exporter keeps such a tuple or struct as the export-time aggregate of its
+  elements and such an array as the 1-D tensor it stands for, as it does when
+  some element depends on the model input. (It used to refuse them with "a
+  tuple, struct or array of constants was not folded".)
 
 ## 8. Phases
 

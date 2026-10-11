@@ -1,0 +1,58 @@
+/**
+ * Gradients through calls of closures built in the differentiated function (a let-bound lambda
+ * and the values it captures). The callee of such a call is evident in the graph (a FILL of a
+ * known function with its captures), so the library differentiates the function's graph with
+ * the captured values as arguments; gradients flow into captures that depend on the parameter.
+ * The printed gradients were checked against central finite differences (float64).
+ */
+module grad_closure
+import { Tensor, reshape, sum, tanh } from tensor
+import { grad } from autodiff
+
+// 1. the reproducer: a let-bound lambda capturing a value computed from the parameter
+func loss1(p: Tensor): float {
+    let s = sum(p)
+    let g = (t: Tensor): Tensor => tanh(t * s)
+    return sum(g(p))
+}
+
+// 2. nested lambdas: the inner one captures a value of the outer one and of the function
+func loss2(p: Tensor): float {
+    let s = sum(p * p)
+    let wrap = (t: Tensor): Tensor => {
+        let u = t * s
+        let deep = (v: Tensor): Tensor => tanh(v * u) + v * s
+        deep(t + u)
+    }
+    return sum(wrap(p))
+}
+
+// 3. a lambda capturing a TENSOR that depends on the differentiated input
+func loss3(p: Tensor): float {
+    let q = tanh(p) * 2.0
+    let g = (t: Tensor): Tensor => t * q + q
+    return sum(g(p * p))
+}
+
+// 4. a lambda called twice (one derivative, two call sites)
+func loss4(p: Tensor): float {
+    let s = sum(p)
+    let g = (t: Tensor): Tensor => tanh(t * s)
+    return sum(g(p) * g(p * 0.5))
+}
+
+// 5. a lambda that captures nothing
+func loss5(p: Tensor): float {
+    let g = (t: Tensor): Tensor => tanh(t) * t
+    return sum(g(p))
+}
+
+func main(): int sync {
+    let x = reshape([0.5, 0.25, -0.35], [3])
+    println(grad(loss1)(x))
+    println(grad(loss2)(x))
+    println(grad(loss3)(x))
+    println(grad(loss4)(x))
+    println(grad(loss5)(x))
+    return 0
+}

@@ -1,0 +1,12 @@
+module shape_propagated_mismatch
+import { Tensor, zeros, ones, reshape, sum, tanh, load_npy } from tensor
+func g(h: Tensor<const [2, 4]>): Tensor {
+    return h
+}
+func f(x: Tensor<const [2, 3]>, w: Tensor<const [3, 5]>): Tensor {
+    return g(x @ w)
+}
+func main(): int sync {
+    println(f(ones([2, 3]), ones([3, 5])))
+    return 0
+}

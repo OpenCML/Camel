@@ -140,6 +140,60 @@ An unknown rank is represented by an absent shape.
 - Runtime shape errors use `RuntimeDiag::TensorDimensionMismatch` instead of
   generic `RuntimeError` strings.
 
+#### Shapes written in a program
+
+A program writes a tensor type as `Tensor<f32, const [2, 3]>`: the element type
+(`f32`, `f64`, `i32`, `i64`, `bool`), then the shape. Either part may be left
+out (`Tensor<f32>`, `Tensor<const [3]>`), and an extent written `-1` is unknown
+(`Tensor<f32, const [-1, 3]>`; diagnostics print it as `Tensor<float32, [?, 3]>`).
+A declared shape is checked at compile time wherever the value's type is at
+least as exact: at a call, at a `return` against the declared return type, in
+the operators of the body.
+
+What inference derives without help, besides the propagation listed above:
+
+- a shape literal: `zeros([2, 3])`, `reshape(x, [3, 2])`, `reshape(x, [-1])` of
+  a tensor whose extents are all known;
+- the shape operators of a tensor whose type carries the shape: `shape(x)`,
+  `dim(x, k)` and `numel(x)` are constants where they are passed on, so
+  `reshape(y, shape(x))`, `zeros(shape(x))` and `ones([dim(x, 1)])` have static
+  shapes;
+- a shape written in place with a computed extent: `zeros([n, 3])` and
+  `reshape(x, [n, 3])` are `[?, 3]`. When every extent of the input is known and
+  one extent of the target is computed, that extent is the only value that
+  fits (`reshape(y, [n, 3])` of a `[6]` tensor is `[2, 3]`; any other `n` is
+  reshape's error when it runs);
+- tuples, structs, branches whose arms agree, and recursive functions whose
+  declared types carry the shapes.
+
+#### When you need `as`
+
+`e as Tensor<...>` is a checked conversion: the compiler refuses it when the two
+types already contradict each other, and otherwise the element type and the
+shape are checked when the conversion runs. A failure stops the program at the
+conversion and names both sides (`conversion to 'Tensor<float32, [4]>' failed:
+the tensor has shape [6]`). Nothing else converts or checks implicitly: a type
+that leaves open what a declared type fixes is refused with
+`ArgumentNeedsConversion` or `ReturnNeedsConversion`, which name the argument
+(or the element of a tuple or struct), both types, and the conversion to write.
+
+The cases where the shape is knowledge of the run, so that `as` is the answer:
+
+| Case | Example |
+|---|---|
+| A tensor read from outside the program | `load_npy(path) as Tensor<f32, const [3, 3]>` |
+| A result that a function declares as plain `Tensor` (the declaration is what callers see, whatever the body computes); declaring the shape is the alternative | `let t = g(x)` ... `h(t as Tensor<f32, const [3]>)` |
+| A slice or index with computed bounds | `slice(x, 0, i, i + 1) as Tensor<f32, const [1, 3]>` |
+| A reduction with a computed axis, a reshape whose target is computed as a whole or has two computed extents, a computed extent itself | `reshape(x, [n, 3]) as Tensor<f32, const [2, 3]>` when `x` is `[?, 3]` |
+| A shape in which more than one extent is indexed out of a shape or computed by arithmetic, even from constants (such expressions are folded by `std::opt`, after types are checked) | `reshape(x, [shape(x)[1], shape(x)[0]]) as Tensor<f32, const [3, 2]>` |
+| The end of a recursion over a shrinking tensor | `if n <= 1 then x as Tensor<f32, const [1]> else ...` |
+| Branch arms of different extents (they join to `?`) | `(if c then a else b) as Tensor<f32, const [3]>` |
+| The value read from a `var` variable (a variable has the widened type `Tensor` of its first value, so that later assignments may change the shape) | `(s as Tensor<f32, const [3]>) + x` |
+
+A `var` parameter takes the variable itself, so no conversion applies to its
+argument: declare the `var` parameter with the variable's type (`var s:
+Tensor`) and convert the value where it is read.
+
 ### 3.4 Operator traits and generic graph passes (core)
 
 `camel::core::OperatorTraitsRegistry` (`include/camel/core/operator_traits.h`)
@@ -186,7 +240,10 @@ reads one or reads what `:var/get` returned (`len(a)` before and after
 
 `registerModulePass(path, factory)` (`include/camel/execute/pass/base.h`) lets a
 loaded module add a scoped pass; `findPassFactory` resolves it after the static
-`std` scope, and the "pass not found" listing includes module passes. The tensor
+`std` scope, and the "pass not found" listing includes module passes. A pass
+name `<module>::<pass>` that is not known when the names are checked
+(`requireKnownPasses`) loads `<module>` first, so a program need not import a
+module to use its pass (see `27_entry_parameters_and_pure_export.md`). The tensor
 module contributes `tensor::fuse`:
 
 - It rewrites `x @ w + b` and `relu(x @ w + b)` into `matmul_add` /
@@ -229,8 +286,20 @@ Every node evaluates to either a constant or a symbolic tensor:
   Operand dtypes are converted to the inferred result dtype, which reproduces
   Camel's promotion rules (ONNX requires equal input types).
 - `FUNC` and `CALL` nodes are inlined. Recursion driven by constants (for
-  example the GRU time-step loop) unrolls; a call-depth bound turns recursion
-  that depends on the model input into a diagnostic.
+  example the GRU time-step loop) unrolls. A recursion whose depth depends on
+  the model input is exported as ONNX `Loop`s when it is a loop: a tail
+  recursion (one `Loop` over the arguments that change) or a linear recursion
+  (paired `Loop`s, which is also how the gradient of a loop is exported);
+  everything else is refused with a located diagnostic. Accepted class, in
+  one statement: a tail recursion whose changing arguments are tensors and
+  scalars of fixed dtype and shape and whose result is a tensor, a scalar
+  (float, int, bool) or a tuple or struct of these, nested, each leaf a
+  carried value, a value computed from them where the recursion returns, or
+  a constant (an integer counter is an int64 output); and, for the gradient,
+  `value_and_grad` of a loss computed from that result when ONE if / else
+  decides the recursion. The full statement, the refusals and the tests are
+  in `26_autodiff_as_graph_rewrite.md` section 7 ("Tail recursion of dynamic
+  depth is an ONNX Loop", "Linear recursion").
 - Symbolic values have a form: a tensor, a Camel scalar (rank-0 ONNX
   tensor), or an `int[]` (1-D int64 tensor, e.g. `shape(x)` with a dynamic
   batch). The lowering table also covers builtin scalar arithmetic,

@@ -1,0 +1,115 @@
+/**
+ * Tail recursions whose depth depends on the model input and which carry and RETURN several
+ * values: a tensor state with an integer iteration counter, as a tuple, as a struct, with a
+ * third carried tensor, with a carried float scalar and a bool computed where the recursion
+ * returns, as a nested tuple, and with two returning paths that yield different values. Each
+ * exports as one ONNX Loop over the carried values; the counter is an int64 output of the model.
+ * Run by ort_loop_values.py: x.npy is read from the working directory, the native results of
+ * every model are saved there, and the model named by MODEL is exported when ONNX_OUT is set.
+ */
+module ort_loop_values
+import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+// pair: the state and the number of steps, stopped by a norm threshold or a maximum count.
+func shrink(h: Tensor, k: int): (Tensor, int) {
+    return if k >= 6 || sum(h * h) < 1.0 then (h, k) else shrink(tanh(h) * 0.3 + h * 0.6, k + 1)
+}
+
+func pair(x: Tensor): (Tensor, int) {
+    let (h, k) = shrink(x, 0)
+    return (h * 2.0, k)
+}
+
+// tree: two returning paths with different values in every element.
+func shrink2(h: Tensor, k: int): (Tensor, int) {
+    return if k >= 6 then (h * 3.0, k + 100) else if sum(h * h) < 1.0 then (h, k) else shrink2(tanh(h) * 0.3 + h * 0.6, k + 1)
+}
+
+func tree(x: Tensor): (Tensor, int) {
+    return shrink2(x, 0)
+}
+
+// rec: the same as a struct.
+type Run = { state: Tensor, steps: int }
+
+func shrink3(h: Tensor, k: int): Run {
+    return if k >= 6 || sum(h * h) < 1.0 then { state: h, steps: k } else shrink3(tanh(h) * 0.3 + h * 0.6, k + 1)
+}
+
+func rec(x: Tensor): Run {
+    return shrink3(x, 0)
+}
+
+// three: a third carried tensor (the sum of the states passed through).
+func shrink4(h: Tensor, k: int, acc: Tensor): (Tensor, int, Tensor) {
+    return if k >= 6 || sum(h * h) < 1.0 then (h, k, acc) else shrink4(tanh(h) * 0.3 + h * 0.6, k + 1, acc + h)
+}
+
+func three(x: Tensor): (Tensor, int, Tensor) {
+    return shrink4(x, 0, x * 0.0)
+}
+
+// nested: a carried float scalar, and a bool computed where the recursion returns.
+// (The result is built by a helper: a nested tuple literal of parameters, `((h, k), (e, ...))`,
+// is typed `((ref, ref), ...)` by the front end today and rejected against the declared type.)
+func done(h: Tensor, k: int, e: float): ((Tensor, int), (float, bool)) {
+    let state = (h, k)
+    let info = (e, k >= 6)
+    return (state, info)
+}
+
+func shrink5(h: Tensor, k: int, e: float): ((Tensor, int), (float, bool)) {
+    return if k >= 6 || sum(h * h) < 1.0 then done(h, k, e) else shrink5(tanh(h) * 0.3 + h * 0.6, k + 1, e * 0.5 + sum(h * h))
+}
+
+func nested(x: Tensor): ((Tensor, int), (float, bool)) {
+    return shrink5(x, 0, 0.25)
+}
+
+func flag(b: bool): int {
+    return if b then 1 else 0
+}
+
+func main(): int sync {
+    let x = load_npy('x.npy')
+    let a = pair(x)
+    save_npy(a.0, 'pair_0.npy')
+    save_npy(reshape([a.1], [1]), 'pair_1.npy')
+    let b = tree(x)
+    save_npy(b.0, 'tree_0.npy')
+    save_npy(reshape([b.1], [1]), 'tree_1.npy')
+    let c = rec(x)
+    save_npy(c.state, 'rec_0.npy')
+    save_npy(reshape([c.steps], [1]), 'rec_1.npy')
+    let d = three(x)
+    save_npy(d.0, 'three_0.npy')
+    save_npy(reshape([d.1], [1]), 'three_1.npy')
+    save_npy(d.2, 'three_2.npy')
+    let (p, q) = nested(x)
+    save_npy(p.0, 'nested_0.npy')
+    save_npy(reshape([p.1], [1]), 'nested_1.npy')
+    save_npy(reshape([q.0], [1]), 'nested_2.npy')
+    save_npy(reshape([flag(q.1)], [1]), 'nested_3.npy')
+    let out = get_env('ONNX_OUT')
+    let which = get_env('MODEL')
+    let exported = if out == '' then 0 else if which == 'pair' then sync {
+        export_model((x: Tensor): (Tensor, int) => pair(x), (x), out)
+        1
+    } else if which == 'tree' then sync {
+        export_model((x: Tensor): (Tensor, int) => tree(x), (x), out)
+        1
+    } else if which == 'rec' then sync {
+        export_model((x: Tensor): Run => rec(x), (x), out)
+        1
+    } else if which == 'three' then sync {
+        export_model((x: Tensor): (Tensor, int, Tensor) => three(x), (x), out)
+        1
+    } else sync {
+        export_model((x: Tensor): ((Tensor, int), (float, bool)) => nested(x), (x), out)
+        1
+    }
+    println(exported)
+    return 0
+}

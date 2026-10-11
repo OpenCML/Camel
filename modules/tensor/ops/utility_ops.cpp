@@ -22,6 +22,7 @@
  * name). Printing and the controls are effectful and marked impure.
  */
 
+#include <format>
 #include "../interop.h"
 #include "../kernels/gemm.h"
 #include "../kernels/parallel.h"
@@ -69,7 +70,36 @@ slot_t idx2dKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-std::optional<Type *> floatScalar(const InferContext &) { return Type::Float64(); }
+/// `t[i]`, `t[i, j]`: a float. When the tensor's shape and an index are known at compile time,
+/// a wrong rank or an index outside the extent is an error here (design principles 2.7);
+/// otherwise the kernel checks at run time.
+std::optional<Type *> indexInfer(const InferContext &ctx) {
+    const TensorFacts in = ctx.facts(0);
+    const size_t indices = ctx.size() - 1;
+    if (in.shape) {
+        if (in.shape->size() != indices) {
+            throw std::invalid_argument(
+                std::format(
+                    "{}-index access requires a rank-{} tensor, this one has rank {}",
+                    indices == 1 ? "single" : "two",
+                    indices,
+                    in.shape->size()));
+        }
+        for (size_t k = 0; k < indices; ++k) {
+            const auto index     = ctx.constInt(k + 1);
+            const int64_t extent = (*in.shape)[k];
+            if (index && extent != kUnknownDim && (*index < 0 || *index >= extent)) {
+                throw std::invalid_argument(
+                    std::format(
+                        "index {} is outside axis {} of extent {}",
+                        *index,
+                        k,
+                        extent));
+            }
+        }
+    }
+    return Type::Float64();
+}
 std::optional<Type *> voidResult(const InferContext &) { return Type::Void(); }
 
 slot_t showKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -118,7 +148,7 @@ std::vector<OpDef> utilityOps() {
         .exports   = {"__idx__"},
         .params    = {{"t", ParamKind::Tensor}, {"i", ParamKind::Int}},
         .resultDoc = "float",
-        .infer     = floatScalar,
+        .infer     = indexInfer,
         .kernel    = &idxKernel,
         .traits    = {}});
     defs.push_back(OpDef{
@@ -126,7 +156,7 @@ std::vector<OpDef> utilityOps() {
         .exports   = {"__idx__"},
         .params    = {{"t", ParamKind::Tensor}, {"i", ParamKind::Int}, {"j", ParamKind::Int}},
         .resultDoc = "float",
-        .infer     = floatScalar,
+        .infer     = indexInfer,
         .kernel    = &idx2dKernel,
         .traits    = {}});
     defs.push_back(OpDef{

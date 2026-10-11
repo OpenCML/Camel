@@ -60,10 +60,18 @@ old-to-young references.
 
 ## Phase 2 Safepoint Contract
 
-Moving-capable collection is serviced only by explicit `autoSpace().safepoint(...)` calls. Allocation
-and allocation-failure paths may queue a minor or major request for the next safepoint, but they do
-not run young-generation copying directly. If an allocation cannot be satisfied, the allocator may
-run an emergency non-moving mark-sweep over elder and large-object spaces before retrying.
+Collection, moving or not, is serviced only by explicit `autoSpace().safepoint(...)` calls.
+Allocation paths may queue a minor or major request for the next safepoint, but they never collect:
+an allocation site is not a safepoint, and its caller may hold objects that no root reaches yet
+(`Array::create` allocates the array and then its backing store). The earlier design ran a
+non-moving mark-sweep inside the failed allocation, which freed such half-built objects.
+
+When the elder space has no block for a small object, the object is placed in the large-object
+space instead, which grows on demand, and a major collection is requested for the next safepoint.
+The request is made only if the elder space has taken at least a quarter of its capacity since the
+last sweep: when it is full of live objects a sweep frees almost nothing, and the overflow is then
+paced by the large-object budget (below) alone. Until that sweep, sizes that found no block skip
+the elder space.
 
 Runtime safepoints are installed at pass boundaries, NodeVM node/function-call boundaries, FastVM
 bytecode boundaries, macro execution boundaries, and Taskflow's linear scheduler boundaries. At
@@ -73,8 +81,15 @@ frames, macro value roots, or explicit `mm::RootHandle` instances for C++ locals
 The current non-moving domains are intentional:
 
 - JIT machine code has no stack maps yet, so JIT execution remains outside the moving-GC contract.
-- Taskflow worker subflows do not yet provide a global stop-the-world worker barrier; they are safe
-  with the production non-moving auto-space mode and must not be treated as fully moving-safe.
+- Taskflow workers stop for a collection through a handshake (`TaskflowGcGate`), not by moving-safe
+  stack maps. Work that can hold a value no root reaches yet (an operator and the store of its
+  result, the fill of a callee frame, the store of a call result) runs inside a region; a worker
+  polls a safepoint only outside every region, and a deferred collection runs only while no other
+  thread is inside one. The higher-order operators keep what their tasks produce where the
+  collector finds it (the result array of a `map`, the node slot of a `reduce`, a rooted scratch
+  array). A collection can therefore run in the middle of a long flow. A collector that finds
+  another worker inside a long operator waits up to 500 ms, then gives up and retries at a later
+  poll. Workers still hold addresses across regions only for objects the collector does not move.
 - Native module bridges that hold auto-space objects across a safepoint must use `mm::RootHandle` or
   store the value in a traced frame/static slot before crossing the boundary.
 
@@ -119,10 +134,24 @@ deterministic runtime error and a later GC finalizer only releases the control-b
 Large-object pacing: objects above the generational threshold (4 KB) bypass the birth and elder
 spaces, so they never exhaust a space and never trigger a collection on their own. The allocator
 therefore counts large-object bytes since the last sweep and requests a major collection at the
-next safepoint once they exceed a budget (the larger of `CAMEL_GC_LARGE_BUDGET_MB`, default 4 MB,
-and the live large-object volume after the previous sweep). Freed large blocks are kept in a
-size-class cache (up to 256 MB) and reused, so steady-state tensor workloads recycle hot memory
-instead of faulting fresh pages in.
+next safepoint once they exceed a budget. After every sweep the budget is the larger of a floor
+(`CAMEL_GC_LARGE_BUDGET_MB`, default 4 MB) and `CAMEL_GC_GROWTH_PERCENT` percent (default 100) of
+the large-object volume the sweep left alive. This is the usual heap-growth rule: with a live
+volume `L` and a growth of `g` percent, a program is collected once per `L * g / 100` bytes it
+allocates and the space holds at most `L * (1 + g / 100)`, plus whatever is allocated between the
+request and the next safepoint (a whole operator: one array can be larger than the budget). The
+floor only matters while `L * g / 100` is below it; a program that keeps hundreds of megabytes
+alive is paced by the growth setting alone, whatever the floor. With the default, the space
+doubles between two collections: a merge sort of 2e7 integers (2 GB of arrays allocated, about
+750 MB alive at the deepest point) is collected 4 times and peaks a third above what it needs.
+A lower setting trades collections for memory in proportion (25: four times the collections, a
+quarter of the garbage). The collector's own work is proportional to the number of objects, not
+to their bytes, so for a few large arrays the collections themselves cost almost nothing; under
+`std::tf` each one also waits for the other workers to leave their operators (see the safepoint
+contract above), and that wait is what a lower setting pays for. Freed large blocks are kept in
+a size-class cache (up to 256 MB) and reused, so steady-state tensor workloads recycle hot memory
+instead of faulting fresh pages in; cached blocks stay resident, so the resident peak sits up to
+256 MB above what the space holds.
 
 GC finalization now runs before mark-sweep frees unreachable elder or large objects. In the
 young-copying path, dead nursery/from-space wrappers are finalized before the semispace reset, while
@@ -177,6 +206,13 @@ do not need source changes:
   tests. It is off by default.
 - `CAMEL_GC_PRINT_CONFIG=1` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.
+- `CAMEL_GC_STATS=1` prints one line of pacing statistics to stderr at exit (`[camel] gc: ...`):
+  collections performed, requests by cause (large-object budget, elder space exhausted, other),
+  megabytes allocated per space, the large-object volume the last sweep left, the high-water mark
+  of the large-object space, and the budget and growth setting in force. `CAMEL_GC_STATS=2` also
+  prints one line per major collection (`[camel] gc collection: ...`) with the budget that was in
+  force, the bytes allocated since the previous sweep, the volume before and after the sweep, and
+  the next budget. The numbers depend only on the allocation order, not on time.
 
 The verifier checks allocator structure, object header validity, region tags, and every typed
 GC-traced reference reachable from the named root sources. External roots are registered with stable
@@ -196,8 +232,8 @@ Runtime passes expose the same infrastructure:
 - `std::gc::summary` prints a compact human-readable GC summary and leaves the graph available for
   later passes.
 - `std::gc::snapshot` / `std::gcsnap` prints JSON with region object counts/bytes, collection
-  counters, deferred/emergency collection counters, moved/promoted/freed counters, root-source data,
-  remembered-set size, and foreign-resource diagnostics.
+  counters, deferred-collection and elder-overflow counters, moved/promoted/freed counters,
+  root-source data, remembered-set size, and foreign-resource diagnostics.
 - `std::gc::remembered_set` runs a targeted old-to-young remembered-set self-test and leaves the
   graph available for later passes.
 - `std::gc::foreign_resource` runs a targeted FFI resource and handle lifetime self-test and leaves

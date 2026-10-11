@@ -1,0 +1,10 @@
+module shape_body_mismatch
+import { Tensor, zeros, ones, reshape, sum, tanh, load_npy } from tensor
+func f(b: Tensor<const [3]>): float {
+    return sum(b + zeros([4]))
+}
+func main(): int sync {
+    println('ran')
+    println(f(ones([3])))
+    return 0
+}

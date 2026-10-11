@@ -1,0 +1,16 @@
+/**
+ * A struct parameter (a model's weights) is given as a directory holding one file per leaf,
+ * named by its path in the struct (`fc.w.npy`), the layout nn.save_params writes.
+ */
+module struct_param
+
+import { Tensor, tanh } from tensor
+
+type Linear = { w: Tensor<f32, const [3, 4]>, b: Tensor<f32, const [4]> }
+type Model = { fc: Linear }
+
+with <p: Model>
+func main(x: Tensor<f32, const [2, 3]>, scale: float): (Tensor, Tensor) {
+    let h = tanh(x @ p.fc.w + p.fc.b)
+    return (h, h * scale)
+}

@@ -1,0 +1,36 @@
+/**
+ * Recursions over the time axis whose step reads the data at the counter (a slice with bounds
+ * that depend on the counter, then a reshape). `scan` is a tail recursion that may stop early
+ * on the data; `back` is a linear recursion (a right fold over time). A step evaluated past the
+ * last time step would fail (the slice is empty and the reshape rejects it), so the exported
+ * loops must take a step only when the recursion goes on. Run by ort_time_axis.py with STEPS.
+ */
+module ort_time_axis
+import { Tensor, ones, reshape, slice, sum, shape, tanh, zeros } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func at(x: Tensor, t: int): Tensor {
+    return reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
+}
+
+func scan(t: int, steps: int, x: Tensor, h: Tensor): Tensor {
+    return if t >= steps then h else if sum(h) > 2.5 then h else scan(t + 1, steps, x, tanh(h + at(x, t)))
+}
+
+func back(t: int, steps: int, x: Tensor): Tensor {
+    return if t >= steps then zeros([shape(x)[0], shape(x)[2]]) else tanh(back(t + 1, steps, x) * 0.5 + at(x, t))
+}
+
+func main(): int sync {
+    let steps = int(get_env('STEPS'))
+    let x = ones([2, steps, 3]) * 0.1
+    export_model(
+        (x: Tensor): (Tensor, Tensor) =>
+            (scan(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]])), back(0, shape(x)[1], x)),
+        x,
+        get_env('ONNX_OUT')
+    )
+    println('exported')
+    return 0
+}

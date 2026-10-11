@@ -591,11 +591,13 @@ void encodeMirBuffer(
                 for (uint8_t ai = 0; ai < nArgs; ++ai)
                     enc.movToFrame(p->argDstDisps[ai], actualArgRegs[ai]);
 
-                patches.push_back({enc.here(), 0, 5, 0, 0});
 #if !defined(_WIN32) && !defined(_WIN64)
                 enc.emitBytes({0x4C, 0x89, 0xEE});
                 enc.asmLine("mov rsi, r13  ; jitCtx (frameless recursive entry)");
 #endif
+                // Recorded after the mov above: the patch rewrites the rel32 of the call at this
+                // offset.
+                patches.push_back({enc.here(), 0, 5, 0, 0});
                 enc.callRel32(0);
                 patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
                 patches.back().jumpEndPos   = enc.here();
@@ -657,11 +659,13 @@ void encodeMirBuffer(
             enc.movRdiR11();
 
             if (p->isSameGraph) {
-                patches.push_back({enc.here(), 0, 5, 0, 0});
 #if !defined(_WIN32) && !defined(_WIN64)
                 enc.emitBytes({0x4C, 0x89, 0xEE});
                 enc.asmLine("mov rsi, r13  ; jitCtx (same-graph frame-based entry)");
 #endif
+                // Recorded after the mov above: the patch rewrites the rel32 of the call at this
+                // offset.
+                patches.push_back({enc.here(), 0, 5, 0, 0});
                 enc.callRel32(0);
                 patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
                 patches.back().jumpEndPos   = enc.here();

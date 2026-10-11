@@ -26,15 +26,38 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace camel::core::type {
 
 using ResolverFunc = std::function<std::optional<Type *>(
     const type_vec_t &, const type_vec_t &, const ModifierSet &)>;
 
-/// Compile-time values of a call's norm arguments, aligned with their types: the slot of each
-/// argument that is a constant (a literal or other static data), nullopt otherwise.
-using static_args_t = std::span<const std::optional<slot_t>>;
+/**
+ * What is known at compile time about the value of one argument of a call.
+ *
+ * `value` is the slot of an argument that is a constant: a literal or other static data, or the
+ * result of an operator whose argument types fix it (OperatorTypeFolderRegistry). `elements` is
+ * set for an array written in place, such as `[n, 3]`: its length is the array's length, and
+ * each element is the slot of that element when it is a constant, nullopt otherwise. Both
+ * only refine a result type; they never decide whether the arguments fit.
+ */
+struct StaticArg {
+    std::optional<slot_t> value;
+    std::optional<std::vector<std::optional<slot_t>>> elements;
+
+    StaticArg() = default;
+    StaticArg(std::nullopt_t) {}
+    StaticArg(std::optional<slot_t> v) : value(v) {}
+    StaticArg(slot_t v) : value(v) {}
+
+    /// As the optional this struct replaced: true when the whole argument is a constant.
+    explicit operator bool() const { return value.has_value(); }
+    slot_t operator*() const { return *value; }
+};
+
+/// Compile-time knowledge of a call's norm arguments, aligned with their types.
+using static_args_t = std::span<const StaticArg>;
 
 class FuncTypeResolver {
   public:

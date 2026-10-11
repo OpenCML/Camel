@@ -1,0 +1,51 @@
+/**
+ * A constant under `as` is still a constant, and `as` on a value that depends on the model
+ * input is a checked assertion. Three models, each exported by both routes (the operator in a
+ * default run, the pass onnx::export after std::macro std::opt::simplify), from an example that
+ * is itself a tensor of literals converted with `as`:
+ *
+ *   affine   weights built from literals and converted to a shaped type (one of them to a type
+ *            that leaves the extent open): they are constants of the model;
+ *   checked  conversions of values computed from the input, which the shape of the example
+ *            proves: they are exported as nothing;
+ *   step     value_and_grad of a loss that converts a constant and a computed value: a
+ *            conversion of a tensor is the identity for the derivative.
+ *
+ * The models are written next to the working directory (literal paths: the pass reads them).
+ */
+module ort_const_under_as
+
+import { Tensor, reshape, sum, tanh } from tensor
+import { value_and_grad } from autodiff
+import { export_model } from onnx
+
+func affine(x: Tensor<f32, const [2, 3]>): Tensor {
+    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, const [2, 3]>
+    let k = reshape([0.5, -0.5, 0.25, -0.25, 1.5, -1.5], [6]) as Tensor<f32, const [-1]>
+    return x * w + reshape(k, [2, 3])
+}
+
+func checked(x: Tensor): Tensor {
+    let y = tanh(x) as Tensor<f32, const [2, 3]>
+    let z = (y * 2.0) as Tensor<f32, const [-1, 3]>
+    return z + 1.0
+}
+
+func loss(x: Tensor): float {
+    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, const [2, 3]>
+    let y = (x * x) as Tensor<f32, const [2, 3]>
+    return sum(y * w)
+}
+
+func step(x: Tensor): (float, Tensor) {
+    return value_and_grad(loss)(x)
+}
+
+func main(): int sync {
+    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3]) as Tensor<f32, const [2, 3]>
+    export_model(affine, ex, 'affine.onnx')
+    export_model(checked, ex, 'checked.onnx')
+    export_model(step, ex, 'step.onnx')
+    println('exported')
+    return 0
+}
