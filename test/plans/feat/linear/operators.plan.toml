@@ -467,3 +467,191 @@ expect_output_contains = ["2", "Attempted division by zero."]
 expect_output_not_contains = ["not reached", "Floating point exception"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "conversions.nvm"
+desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (nvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/conversions.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 4 2 -2 2 42 -7",
+  "3 4 2 2 42",
+  "3 4 2 2 42",
+  "3 4 1.5 0.5 2.5 1000",
+  "3 4 1.5 0.5 2.5",
+  "3 4 1.5 0.5 0.25",
+  "42 7 s -1",
+  "true false",
+  "true! 5",
+  "[1, 2, 3]",
+  "(1, a, true)",
+  "{ x: 1, y: b }",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "conversions.fvm"
+desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (fvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/conversions.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 4 2 -2 2 42 -7",
+  "3 4 2 2 42",
+  "3 4 2 2 42",
+  "3 4 1.5 0.5 2.5 1000",
+  "3 4 1.5 0.5 2.5",
+  "3 4 1.5 0.5 0.25",
+  "42 7 s -1",
+  "true false",
+  "true! 5",
+  "[1, 2, 3]",
+  "(1, a, true)",
+  "{ x: 1, y: b }",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "conversions.jit"
+desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (jit)"
+kind = "behavior"
+case = "../../../cases/linear/operators/conversions.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 4 2 -2 2 42 -7",
+  "3 4 2 2 42",
+  "3 4 2 2 42",
+  "3 4 1.5 0.5 2.5 1000",
+  "3 4 1.5 0.5 2.5",
+  "3 4 1.5 0.5 0.25",
+  "42 7 s -1",
+  "true false",
+  "true! 5",
+  "[1, 2, 3]",
+  "(1, a, true)",
+  "{ x: 1, y: b }",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "conversions.prl"
+desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (prl)"
+kind = "behavior"
+case = "../../../cases/linear/operators/conversions.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 4 2 -2 2 42 -7",
+  "3 4 2 2 42",
+  "3 4 2 2 42",
+  "3 4 1.5 0.5 2.5 1000",
+  "3 4 1.5 0.5 2.5",
+  "3 4 1.5 0.5 0.25",
+  "42 7 s -1",
+  "true false",
+  "true! 5",
+  "[1, 2, 3]",
+  "(1, a, true)",
+  "{ x: 1, y: b }",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "int_of_text.nvm"
+desc = "int of a string that is not a number is a located fault when it runs (nvm)"
+kind = "negative"
+case = "../../../cases/linear/operators/int_of_text.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_code = "0x04000000"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["12", "invalid integer string"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_of_text.fvm"
+desc = "int of a string that is not a number is a located fault when it runs (fvm)"
+kind = "negative"
+case = "../../../cases/linear/operators/int_of_text.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_code = "0x04000000"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["12", "invalid integer string"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_of_text.jit"
+desc = "int of a string that is not a number is a located fault when it runs (jit)"
+kind = "negative"
+case = "../../../cases/linear/operators/int_of_text.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_code = "0x04000000"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["12", "invalid integer string"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_of_text.prl"
+desc = "int of a string that is not a number is a located fault when it runs (prl)"
+kind = "negative"
+case = "../../../cases/linear/operators/int_of_text.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_code = "0x04000000"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["12", "invalid integer string"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

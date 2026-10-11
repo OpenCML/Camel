@@ -123,3 +123,27 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "contains_string.c
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "int_of_bool"
+desc = "int of a bool is rejected when compiled"
+kind = "negative"
+case = "../../../cases/compile/operators/int_of_bool.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "int_of_bool.cml:8:16:", "(bool)"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "float_of_array"
+desc = "float of an array is rejected when compiled"
+kind = "negative"
+case = "../../../cases/compile/operators/float_of_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "float_of_array.cml:8:18:", "(i64[])"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

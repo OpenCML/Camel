@@ -162,10 +162,12 @@ slot_t __dtos__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __stos__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
 
+// `string(x)` for a value of any type the overloads above do not take (bool, array, tuple,
+// struct, function, ...): the text `println` writes for it. The slot used to be read as a
+// string whatever its type, so `string(true)` dereferenced the bool.
 slot_t __atos__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    String *s = norm.get<String *>(0);
     std::ostringstream oss;
-    oss << s->toString();
+    printSlot(oss, norm.slot(0), norm.type(0));
     String *res = String::from(oss.str(), mm::autoSpace());
     return toSlot(res);
 }
