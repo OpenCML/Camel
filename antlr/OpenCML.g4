@@ -94,7 +94,7 @@ bracketIdents : '[' identList? ','? ']' ;    // for array unpacking
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
-typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
+typeDecl   : implMark? TYPE identRef ('<' identDef (',' identDef)* ','? '>')? '=' (typeExpr | STRING) ;
 useDecl    : USE (identDef '=')? identRef ;
 retStmt    : (RETURN | RAISE | THROW) dataList ;
 

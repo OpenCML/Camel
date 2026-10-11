@@ -920,7 +920,8 @@ any Builder::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 }
 
 /*
-typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
+typeDecl   : implMark? TYPE identRef ('<' identDef (',' identDef)* ','? '>')?
+             '=' (typeExpr | STRING) ;
 */
 any Builder::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     ENTER("TypeDecl");
@@ -942,6 +943,15 @@ any Builder::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
 
     node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, implMark, uri);
     setNodeTokenRangeByContext(typeDeclNode, context);
+    if (!context->identDef().empty()) {
+        // `type Pair<T> = (T, T)`: a type function, its parameters are type names in the
+        // right-hand side.
+        std::vector<std::string> params;
+        for (auto *param : context->identDef()) {
+            params.push_back(param->getText());
+        }
+        unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setParams(std::move(params));
+    }
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
     if (context->typeExpr()) {
