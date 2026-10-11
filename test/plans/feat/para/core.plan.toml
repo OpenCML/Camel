@@ -393,7 +393,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "recursion_too_deep.prl"
-desc = "A non-tail recursion deeper than the native stack allows stops under PRL with MaxRecursionDepthExceeded (the scheduler has no fixed limit; it refuses a call when fifteen sixteenths of the thread's stack are used) instead of a segmentation fault; depth(2000) printed before it, nothing after."
+desc = "A non-tail recursion deeper than the native stack allows stops under PRL with MaxRecursionDepthExceeded (the scheduler has no fixed limit; it reserves stack space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(2000) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/para/core/recursion_too_deep.cml"
 args = ["-t", "4", "${case}", "${run_prl}"]

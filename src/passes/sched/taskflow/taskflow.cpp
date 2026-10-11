@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,6 +46,8 @@
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <pthread.h>
+#elif defined(_WIN32)
+#include <windows.h>
 #endif
 
 using namespace camel::core::context;
@@ -171,6 +173,12 @@ void nativeStackBounds(uintptr_t &low, uintptr_t &high) {
         high = low + size;
     }
     pthread_attr_destroy(&attr);
+#elif defined(_WIN32)
+    ULONG_PTR stackLow  = 0;
+    ULONG_PTR stackHigh = 0;
+    GetCurrentThreadStackLimits(&stackLow, &stackHigh);
+    low  = static_cast<uintptr_t>(stackLow);
+    high = static_cast<uintptr_t>(stackHigh);
 #endif
 }
 
@@ -180,11 +188,12 @@ void nativeStackBounds(uintptr_t &low, uintptr_t &high) {
 // waiting worker picks up meanwhile), and deep non-tail recursion must not end in a stack
 // overflow that the node-by-node evaluator would not have had.
 bool nativeStackUsedBeyond(const TaskflowGcGate::ThreadState &ts, unsigned num, unsigned den) {
-#if defined(__linux__) && defined(__GLIBC__)
+#if (defined(__linux__) && defined(__GLIBC__)) || defined(_WIN32)
     if (ts.stackLow == 0) {
         return false;
     }
-    const uintptr_t here = reinterpret_cast<uintptr_t>(__builtin_frame_address(0));
+    volatile char marker = 0;
+    const uintptr_t here = reinterpret_cast<uintptr_t>(&marker);
     if (here <= ts.stackLow || here > ts.stackHigh) {
         return false;
     }
@@ -201,14 +210,20 @@ bool nativeStackIsTight(const TaskflowGcGate::ThreadState &ts) {
     return nativeStackUsedBeyond(ts, 1, 4);
 }
 
-// True when the calling thread has used fifteen sixteenths of its native stack: one more call
-// of a graph is refused with a diagnostic instead of running into the guard page. The
+// Refuse a call before the native stack is exhausted, keeping room for the diagnostic and
+// fault unwinding (a sixteenth on Unix; Windows SEH needs a larger reserve). The
 // scheduler has no fixed limit of its own (NodeVM stops at 256 frames); what a thread can nest
 // depends on its stack and on what else the worker picked up while waiting. The depth the
 // diagnostic reports is the number of calls open on that thread (a recursion that started on
 // another worker is deeper than that).
 bool nativeStackIsExhausted(const TaskflowGcGate::ThreadState &ts) {
+#if defined(_WIN32)
+    // Windows SEH keeps extra handler frames during recursive C++ rethrows. Reserve the
+    // rest of the native stack for reporting and unwinding a fault through those calls.
+    return nativeStackUsedBeyond(ts, 1, 16);
+#else
     return nativeStackUsedBeyond(ts, 15, 16);
+#endif
 }
 
 int64_t steadyNowNs() {

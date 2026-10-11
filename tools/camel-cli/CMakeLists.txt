@@ -16,6 +16,10 @@ target_compile_options(camel PRIVATE
     $<$<CONFIG:RelWithDebInfo>:-fno-PIE> $<$<CONFIG:Debug>:-O0> $<$<CONFIG:Debug>:-g3>
 )
 target_link_options(camel PRIVATE $<$<AND:$<CONFIG:RelWithDebInfo>,$<NOT:$<PLATFORM_ID:Windows>>>:-no-pie>)
+if(WIN32)
+    # Leave room for parsing large graphs and for recursive Windows SEH fault unwinding.
+    target_link_options(camel PRIVATE "LINKER:/STACK:33554432")
+endif()
 
 target_libcamel_tool_options(camel)
 target_include_directories(camel PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
