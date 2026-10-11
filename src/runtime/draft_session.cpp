@@ -390,14 +390,27 @@ std::vector<GCGraph *> collectDraftDependencyGraphs(const GraphDraft &draft) {
     return dependencies;
 }
 
+/// The type of the draft's static area. A commit asks twice for every graph of the closure
+/// (for the size, then to encode), and most of those graphs are not changed by the rewrite:
+/// when the members are the ones the graph the draft came from already has, that graph's type
+/// is the answer, and nothing is added to the permanent space, which never releases.
 TupleType *draftStaticDataType(const GraphDraft &draft, const GCGraph *fallback) {
-    if (!draft.staticSlotTypes().empty()) {
-        std::vector<camel::core::type::Type *> staticTypes(
-            draft.staticSlotTypes().begin(),
-            draft.staticSlotTypes().end());
-        return TupleType::create(std::move(staticTypes));
+    auto *known          = fallback ? const_cast<TupleType *>(fallback->staticDataType()) : nullptr;
+    const auto slotTypes = draft.staticSlotTypes();
+    if (slotTypes.empty()) {
+        return known;
     }
-    return fallback ? const_cast<TupleType *>(fallback->staticDataType()) : nullptr;
+    if (known && known->size() == slotTypes.size()) {
+        bool same = true;
+        for (size_t i = 0; same && i < slotTypes.size(); ++i) {
+            same = known->typeAt(i) == slotTypes[i];
+        }
+        if (same) {
+            return known;
+        }
+    }
+    std::vector<camel::core::type::Type *> staticTypes(slotTypes.begin(), slotTypes.end());
+    return TupleType::create(std::move(staticTypes));
 }
 
 std::vector<GCGraph *> collectDraftStaticGraphRefs(

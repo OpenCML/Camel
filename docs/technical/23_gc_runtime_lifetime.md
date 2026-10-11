@@ -64,6 +64,25 @@ object or a function value (the first block of its arena, see
 `include/camel/compile/gir/arena.h`). That first block was 256 KB, which is what limited a
 program to 62 such graphs.
 
+The permanent space never releases, so **a question must not allocate in it**. Resolving an
+operator overload builds a new function type every time; the rewrites ask "is this argument
+passed to a var parameter" for every user of every value and again after every inlined call,
+and re-infer the result type of every operator node at every commit. One program of 120 lines
+left 1.4 million function types (more than 256 MB) behind under `std::specialize std::opt`.
+Two rules follow, and code on a query or probe path has to keep them:
+
+- Overload questions that do not depend on constant argument values go through
+  `runtime::operatorOverloadType` (`include/camel/runtime/draft_writes.h`), which keeps the
+  answer per operator and argument types (types are permanent, so their addresses identify them
+  for good). A resolution with constant arguments is still made anew each time.
+- A commit that re-encodes a graph whose static area did not change keeps the graph's static
+  tuple type (`draftStaticDataType` in `src/runtime/draft_session.cpp`) instead of creating an
+  equal one for the size computation and another for the encoding.
+
+Composite types are otherwise not canonical: two equal array, tuple or function types are two
+objects, and type equality is structural (`equals`). That costs the 5 to 17 type objects per
+function counted above, which is proportional to the program and was left as it is.
+
 `CAMEL_SPACE_SEGMENT_KB=<kilobytes>` sets the first segment of all three spaces. It is a test
 control: with 64 KB a program of a few hundred functions makes every space grow several times,
 so growth can be run under heap verification and collection stress (`test/plans/feat/mm/capacity.plan.toml`).

@@ -218,3 +218,22 @@ for (const space of ["graph", "perm", "meta"]) {
 }
 """
 timeout_ms = 300000
+
+[[tests]]
+name = "capacity.perm_query_types"
+desc = "Queries must not fill the permanent space. A program of 120 lines under std::specialize std::opt: the rewrites ask for every user of every value whether it is passed to a var parameter, and every question used to leave a new function type in the permanent space (1.4 million of them, past 256 MB; 'Permanent space exhausted' at the old 32 MB). The answers are memoized per operator and argument types, and an unchanged graph keeps the type of its static area across a commit. The program prints what the run without passes prints, inside a permanent space limited to 32 MB, and the statistics line shows less than 4 MB in use (measured: 673 KB; 77 KB without passes)."
+kind = "behavior"
+case = "../../../cases/feat/mm/capacity/perm_query_types.cml"
+args = ["${case}", "std::specialize", "std::opt"]
+envs = ["PROGEN_I0=4", "PROGEN_I1=5", "CAMEL_PERM_SPACE_LIMIT_MB=32", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["L3 (0, -21) (0, -21)", "L5 (6, -21) 4", "L6 [-2, -2, -2, -2, -2, -2] 4", "L7 5", "L8 (a, -21)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /perm_used_kb=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) < 4096, `the permanent space holds ${m[1]} KB, expected less than 4096`)
+}
+"""
+timeout_ms = 60000
