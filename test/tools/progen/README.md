@@ -31,6 +31,7 @@ python test/tools/progen/triage.py DIR                           # bad cells gro
 python test/tools/progen/progen.py reduce --from DIR --seed 32 --cell 'devirt+inline+dce@nvm' --out OUT --name NAME
 python test/tools/progen/progen.py check                         # the batch of the test plan
 python test/tools/progen/progen.py findings                      # re-run the archived findings
+python test/tools/progen/progen.py fixed                         # the findings recorded as fixed
 ```
 
 - `--features a,b,c` generates with only those constructs; `--features -macro,-env` removes
@@ -159,7 +160,12 @@ a compile-time error.
 cell of the `cross` matrix passes today (about 15 s). A seed with a known bad cell is left out
 and listed in `CHECK_EXCLUDED` with the finding it shows. When a finding is fixed, move its
 seed back; when the generator changes the programs of existing seeds, raise
-`generate.VERSION` and choose the batch again from a fresh `diff` run.
+`generate.VERSION` and choose the batch again from a fresh `diff` run. No seed is left out at
+present.
+
+The same plan runs `progen.py fixed`: every finding with a `fixed` key in `findings.json`, under
+the rewrite sequence it was found with and under `std::inline`, `std::opt`,
+`std::inline std::opt::dce`, `std::opt::simplify` and `std::specialize`, on the four schedulers. When a finding is fixed, give it that key.
 
 ## What is not covered
 

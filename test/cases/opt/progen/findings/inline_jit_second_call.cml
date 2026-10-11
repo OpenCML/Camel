@@ -1,0 +1,22 @@
+/**
+ * finding F36 ((other) wrong value after inlining), found by hand, not by progen. After
+ *   `std::inline` a self-tail-recursive function of four parameters is compiled by the JIT; its
+ *   first call is right, every later call adds each `i * j` twice (the node VM, the bytecode VM
+ *   and the parallel scheduler print the expected lines, and so does `std::jit` without
+ *   `std::inline`).
+ * Pipeline: std::inline std::jit
+ * Expected output: 1, 1, 11 (three lines)
+ * Actual: 1, 2, 17
+ */
+module inline_jit_second_call
+
+func walk(i: int, j: int, m: int, acc: int): int {
+    return if j >= m then acc else walk(i, j + 1, m, acc + i * j)
+}
+
+func main(): int sync {
+    println(walk(1, 0, 2, 0))
+    println(walk(1, 0, 2, 0))
+    println(walk(2, 0, 3, 5))
+    return 0
+}

@@ -158,7 +158,8 @@
    "",
    "L1 0 0"
   ],
-  "class": "effect order lost"
+  "class": "effect order lost",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F13",
@@ -258,7 +259,8 @@
    "PROGEN_I0": "2"
   },
   "expected": [],
-  "class": "unbounded growth"
+  "class": "unbounded growth",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
  },
  {
   "id": "F20",
@@ -429,5 +431,36 @@
   "env": {},
   "expected": [],
   "class": "unbounded growth (a query that allocates in the permanent space)"
+ },
+ {
+  "id": "F35",
+  "file": "findings/opt_cast_argument_value.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "7.5",
+   "17.25",
+   "10.75"
+  ],
+  "class": "(other) wrong value after a rewrite",
+  "fixed": "specialize: a constant under a converting CAST is not a static value"
+ },
+ {
+  "id": "F36",
+  "file": "findings/inline_jit_second_call.cml",
+  "pipeline": [
+   "std::inline",
+   "std::jit"
+  ],
+  "env": {},
+  "expected": [
+   "1",
+   "1",
+   "11"
+  ],
+  "class": "(other) wrong value after inlining"
  }
 ]

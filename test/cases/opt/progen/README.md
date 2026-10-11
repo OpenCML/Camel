@@ -13,8 +13,12 @@ python test/tools/progen/progen.py findings          # re-runs every finding, 3 
 ```
 
 prints, per finding, whether it still fails as recorded. All 33 failed on every run when this
-was written (2026-10-11, branch `lane/gen`, Linux container, release build). None is in the
-default test set; the test plan `feat/opt/progen` runs only seeds that pass.
+was written (2026-10-11, branch `lane/gen`, Linux container, release build). The test plan
+`feat/opt/progen` runs a batch of seeds that pass and, since the fixes below, the findings
+recorded as fixed (`progen.py fixed`: key `fixed` of `findings.json`, each on the four
+schedulers under the rewrite sequence it was found with, `std::inline`, `std::opt`,
+`std::inline std::opt::dce`, `std::opt::simplify` and `std::specialize`). The other findings are
+in no test.
 
 **Fixed since**: F25 to F31 and F33, the failures without any pass except F24 (branch
 `lane/frontend-fixes`), and the findings of cause C1 (branch `lane/simplify-fixes`). Their rows
@@ -26,6 +30,58 @@ reduced program, using the five classes of the roadmap (effect order lost; a wri
 taken for one value; branch arms; macro operands inlined early; unbounded growth) and
 "(other)" where none fits. Two findings of one class may have one cause, and one reduced
 program may hide a second defect.
+
+## Fixed (branch `lane/inline-fixes`)
+
+Twenty findings of progen had three causes (A to C; D is a fourth defect found by hand). A to C are about what a branch arm is to the schedulers:
+when an arm is taken they run the nodes that run after the arm's head and not after the JOIN,
+as one range of the linear order, and everything else of the graph unconditionally before the
+BRCH. The findings were read against the graphs (`std::rgir`, `std::tns`) before and after the
+pass; the status column of the tables names the cause.
+
+- **A** (`e82fa21e`, `src/runtime/draft_inline.cpp`). The splice hands the control predecessors
+  of a call (the BRCH whose arm the call is, the statement before it) to the entry roots of the
+  body. SYNC and GATE nodes were not roots. A callee that had itself been inlined into starts
+  with the entry SYNC of that splice, so it had no root: the predecessors went to the callee's
+  recorded entry node (often its last GATE) and the body ran outside the arm, before the BRCH.
+  Code of an arm that is not taken ran (F01, F02, F03, F18), a BRCH was laid out before the
+  branch its JOIN was in, so that skipping its arm skipped statements of the enclosing sync
+  block or the taken arm (F04, F09, F10, F12, F19) or left a value unset (F14, F15, F16, F32), or the
+  layout could not be executed at all (F20, F21, F22).
+- **B** (`ac9a55a1`, `src/runtime/draft_inline.cpp`). A call can be inside an arm through an
+  argument only (it has no control predecessor). Nodes of its body that read no parameter then
+  had nothing that kept them in the arm. F05: a branch on a constant of a pure callee left the
+  arm while its JOIN stayed. F06: the body waited on the BRCH but not on the arm's head (the
+  head was the operator computing an argument the callee ignores), and was not run.
+- **C** (`ff52c85b`, `src/passes/opt/generic/rewrite.cpp`). `replaceNode` gives the users of a
+  removed node the ordered nodes its value came from. It walked through an arm's head that is
+  a pure node to the BRCH, so the users waited on the BRCH and no longer on the head (F08, F13:
+  `std::opt::dce` after `std::inline` removed the unused conversion after the head).
+
+- **D** (`ca28e0b8`, `src/runtime/draft_inline.cpp`). `tryResolveStaticValue`, which finds the
+  constant an argument is so that specialization can bind it, looked through CAST nodes: the
+  constant under `i as float` was bound without being converted (F35, found by hand).
+
+Not fixed: **F17** and **F36** (below) are in the JIT back end.
+
+F12 and F19 (found with `std::opt::simplify`, which runs the same inliner) have cause A: the
+simplify line reached it independently, with `GATE(constant)` in front of the body where A
+above names the entry SYNC. F07, F11 and F23 print their expected output on the four schedulers
+since these commits as well; the simplify line traced them (and F06, F08, F13) to the
+schedulers reading an arm from its head only, and fixes that in `resolveRuntimeBranchArmEntry`.
+B and C keep the code of an arm behind its head on the rewriting side; the two do not conflict.
+F07, F11 and F23 are left to that line and are not recorded as fixed here.
+
+Seeds 1-1000 of the `cross` matrix (41 cells per program, all features), before and after:
+
+| | OK | located refusal | silent mismatch | crash | hang | run-stage error | not run | programs with a bad cell |
+|---|---|---|---|---|---|---|---|---|
+| before | 40126 | 24 | 545 | 39 | 7 | 4 | 255 | 52 |
+| after A, B and C | 40975 | 24 | 1 | 0 | 0 | 0 | 0 | 1 |
+
+No cell is bad after that was not bad before. The cell left is seed 944 under
+`std::inline std::jit` (`L8 -nan` where `L8 -2` is expected; the other schedulers print `-2`);
+it was not reduced.
 
 ## How they were found
 
@@ -86,52 +142,54 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 
 ### Silent wrong results after a standard pass (exit 0, no diagnostic)
 
-| id | program | pipeline | schedulers | expected | actual | class |
-|---|---|---|---|---|---|---|
-| F01 | `inline_untaken_arm_effect.cml` | `std::inline` | all | nothing | `a` (a call in the arm of `if false` runs) | branch arm |
-| F02 | `inline_wrong_arm_runs.cml` | `std::inline` | nvm, prl | nothing | an empty line (the `else` arm runs although the test is true) | branch arm |
-| F03 | `opt_untaken_arm_effect.cml` | `std::opt` | all | nothing | `L2 0 0 0 0` (a lambda in the arm of `if false` runs) | branch arm |
-| F04 | `inline_statement_effect_lost.cml` | `std::inline` | all | `pq` | nothing (a `println` statement of `main` is dropped) | effect order lost |
-| F05 | `opt_statement_effect_lost.cml` | `std::opt` | all | an empty line | nothing (the first `println` of `main` is dropped) | effect order lost |
-| F06 | `opt_lambda_effect_lost.cml` | `std::opt` | all | `false` | nothing (effect of a call with unused result in a sync lambda) | effect order lost. **Fixed in `741b8705`** (cause C1) |
-| F07 | `simplify_nested_function_effect_lost.cml` | `std::opt::simplify` | all | an empty line | nothing (`println` of a nested sync function) | effect order lost. **Fixed in `741b8705`** (cause C1) |
-| F08 | `inline_dce_arm_effect_lost.cml` | `std::inline std::opt::dce` | all | an empty line | nothing (`println` of the taken arm) | branch arm. **Fixed in `741b8705`** (cause C1) |
-| F09 | `inline_fvm_arm_effect_lost.cml` | `std::inline` | fvm, jit | an empty line | nothing (`println` of the taken arm; nvm and prl print it) | branch arm |
-| F10 | `inline_unused_branch_effect_lost.cml` | `std::inline` | all | an empty line | nothing (`println` of the taken arm of an unused branch) | branch arm |
-| F11 | `simplify_arm_write_lost.cml` | `std::opt::simplify` | all | `a` | an empty line (a write made in the taken arm is lost) | written variable taken for one value. **Fixed in `741b8705`** (cause C1; no variable is taken for one value) |
-| F12 | `simplify_effect_order.cml` | `std::opt::simplify` | all | empty line, then `L1 0 0` | `L1 0 0`, then empty line | effect order lost. Not fixed: cause C2, in the inliner |
-| F13 | `inline_dce_arm_value.cml` | `std::inline std::opt::dce` | all | `1` | `0` | branch arm. **Fixed in `741b8705`** (cause C1) |
-| F14 | `inline_branch_value_null.cml` | `std::inline` | nvm, fvm, jit | `L4 (0, [0]) 0` | `L4 null 0` | branch arm |
-| F15 | `inline_match_value_null.cml` | `std::inline` | all | `L6 { n: 5, tag:  }` | `L6 null` | branch arm |
-| F16 | `fold_inline_env_value.cml` | `std::opt::fold std::inline` | all | `L11 false 4` | `L11 false 0` (a value read from the environment) | (other) wrong value after inlining |
-| F17 | `inline_jit_argument_value.cml` | `std::inline` | jit | `L8 0 0 24` | `L8 0 0 0` (nvm, fvm and prl print 24) | (other) wrong value after inlining |
-| F32 | `fold_inline_match_arm_value.cml` | `std::opt::fold std::inline` | all | `L4 0 3 a` | `L4 0 0 a` (a pure function; no effect, no variable) | branch arm |
+| id | program | pipeline | schedulers | expected | actual | class | status |
+|---|---|---|---|---|---|---|---|
+| F01 | `inline_untaken_arm_effect.cml` | `std::inline` | all | nothing | `a` (a call in the arm of `if false` runs) | branch arm | fixed (A, e82fa21e) |
+| F02 | `inline_wrong_arm_runs.cml` | `std::inline` | nvm, prl | nothing | an empty line (the `else` arm runs although the test is true) | branch arm | fixed (A, e82fa21e) |
+| F03 | `opt_untaken_arm_effect.cml` | `std::opt` | all | nothing | `L2 0 0 0 0` (a lambda in the arm of `if false` runs) | branch arm | fixed (A, e82fa21e) |
+| F04 | `inline_statement_effect_lost.cml` | `std::inline` | all | `pq` | nothing (a `println` statement of `main` is dropped) | effect order lost | fixed (A, e82fa21e) |
+| F05 | `opt_statement_effect_lost.cml` | `std::opt` | all | an empty line | nothing (the first `println` of `main` is dropped) | effect order lost | fixed (B, ac9a55a1) |
+| F06 | `opt_lambda_effect_lost.cml` | `std::opt` | all | `false` | nothing (effect of a call with unused result in a sync lambda) | effect order lost | fixed (B, ac9a55a1); the schedulers also misread the arm (cause C1, 741b8705) |
+| F07 | `simplify_nested_function_effect_lost.cml` | `std::opt::simplify` | all | an empty line | nothing (`println` of a nested sync function) | effect order lost | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
+| F08 | `inline_dce_arm_effect_lost.cml` | `std::inline std::opt::dce` | all | an empty line | nothing (`println` of the taken arm) | branch arm | fixed (C, ff52c85b); the schedulers also misread the arm (cause C1, 741b8705) |
+| F09 | `inline_fvm_arm_effect_lost.cml` | `std::inline` | fvm, jit | an empty line | nothing (`println` of the taken arm; nvm and prl print it) | branch arm | fixed (A, e82fa21e) |
+| F10 | `inline_unused_branch_effect_lost.cml` | `std::inline` | all | an empty line | nothing (`println` of the taken arm of an unused branch) | branch arm | fixed (A, e82fa21e) |
+| F11 | `simplify_arm_write_lost.cml` | `std::opt::simplify` | all | `a` | an empty line (a write made in the taken arm is lost) | written variable taken for one value | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
+| F12 | `simplify_effect_order.cml` | `std::opt::simplify` | all | empty line, then `L1 0 0` | `L1 0 0`, then empty line | effect order lost | fixed (A, e82fa21e; found by the simplify line as well) |
+| F13 | `inline_dce_arm_value.cml` | `std::inline std::opt::dce` | all | `1` | `0` | branch arm | fixed (C, ff52c85b); the schedulers also misread the arm (cause C1, 741b8705) |
+| F14 | `inline_branch_value_null.cml` | `std::inline` | nvm, fvm, jit | `L4 (0, [0]) 0` | `L4 null 0` | branch arm | fixed (A, e82fa21e) |
+| F15 | `inline_match_value_null.cml` | `std::inline` | all | `L6 { n: 5, tag:  }` | `L6 null` | branch arm | fixed (A, e82fa21e) |
+| F16 | `fold_inline_env_value.cml` | `std::opt::fold std::inline` | all | `L11 false 4` | `L11 false 0` (a value read from the environment) | (other) wrong value after inlining | fixed (A, e82fa21e) |
+| F17 | `inline_jit_argument_value.cml` | `std::inline` | jit | `L8 0 0 24` | `L8 0 0 0` (nvm, fvm and prl print 24) | (other) wrong value after inlining | open: in the JIT back end, see F36 |
+| F32 | `fold_inline_match_arm_value.cml` | `std::opt::fold std::inline` | all | `L4 0 3 a` | `L4 0 0 a` (a pure function; no effect, no variable) | branch arm | fixed (A, e82fa21e) |
+| F36 | `inline_jit_second_call.cml` | `std::inline` | jit | `1`, `1`, `11` | `1`, `2`, `17` (found by hand: a self-tail-recursive function, right on its first call, wrong on later ones) | (other) wrong value after inlining | open: in the JIT back end |
+| F35 | `opt_cast_argument_value.cml` | `std::opt`, `std::opt::simplify`, `std::specialize` | all | `7.5`, `17.25`, `10.75` | `0.5`, `-1.75`, `7.75` (found by hand: an argument written `i as float`) | (other) wrong value after a rewrite | fixed (D, ca28e0b8) |
 
 ### Faults and crashes after a standard pass
 
-| id | program | pipeline | schedulers | expected | actual | class |
-|---|---|---|---|---|---|---|
-| F18 | `inline_untaken_arm_fault.cml` | `std::inline` | all | nothing, exit 0 | `Array index out of bounds`, exit 1: the body of a call in the arm of `if false` runs | branch arm |
-| F19 | `simplify_recursion_never_ends.cml` | `std::opt::simplify` | nvm, prl | nothing, exit 0 | `MaxRecursionDepthExceeded` in graph `__g_10__` (fvm and jit finish) | unbounded growth. Not fixed: cause C2, in the inliner (nothing grows; the recursion is two calls deep and one arm runs into the other) |
-| F20 | `inline_crash_function_argument.cml` | `std::inline` | all | nothing | segmentation fault | (other) crash after a rewrite |
-| F21 | `inline_crash_capturing_lambda.cml` | `std::inline` | all | nothing | segmentation fault | (other) crash after a rewrite |
-| F22 | `specialize_inline_crash.cml` | `std::specialize std::inline` | all | an empty line | segmentation fault | (other) crash after a rewrite |
-| F23 | `simplify_crash.cml` | `std::opt::simplify` | all | nothing | segmentation fault | (other) crash after a rewrite. **Fixed in `741b8705`** (cause C1) |
-| F34 | `opt_permanent_space.cml` | `std::specialize std::opt` | all (the pass fails before any scheduler runs) | nothing, exit 0 | `PassInternalError`: "Permanent space exhausted (32 MB of types and layouts)", no position, exit 1 | unbounded growth (a query that allocates; cause C3) |
+| id | program | pipeline | schedulers | expected | actual | class | status |
+|---|---|---|---|---|---|---|---|
+| F18 | `inline_untaken_arm_fault.cml` | `std::inline` | all | nothing, exit 0 | `Array index out of bounds`, exit 1: the body of a call in the arm of `if false` runs | branch arm | fixed (A, e82fa21e) |
+| F19 | `simplify_recursion_never_ends.cml` | `std::opt::simplify` | nvm, prl | nothing, exit 0 | `MaxRecursionDepthExceeded` in graph `__g_10__` (fvm and jit finish) | unbounded growth | fixed (A, e82fa21e; found by the simplify line as well) |
+| F20 | `inline_crash_function_argument.cml` | `std::inline` | all | nothing | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
+| F21 | `inline_crash_capturing_lambda.cml` | `std::inline` | all | nothing | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
+| F22 | `specialize_inline_crash.cml` | `std::specialize std::inline` | all | an empty line | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
+| F23 | `simplify_crash.cml` | `std::opt::simplify` | all | nothing | segmentation fault | (other) crash after a rewrite | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
+| F34 | `opt_permanent_space.cml` | `std::specialize std::opt` | all (the pass fails before any scheduler runs) | nothing, exit 0 | `PassInternalError`: "Permanent space exhausted (32 MB of types and layouts)", no position, exit 1 | unbounded growth (a query that allocates; cause C3) | open: cause C3 |
 
 ### Without any pass
 
-| id | program | schedulers | expected | actual | class |
-|---|---|---|---|---|---|
-| F24 | `const_graph_capacity.cml` | all, and every pipeline | `a` | `std::bad_alloc`, no position, exit 1, before the first pass | unbounded growth (capacity) |
-| F25 (fixed in a42941f8) | `nested_function_value_crash.cml` | nvm, fvm, jit crash; prl prints something else | `[1]` | segmentation fault | (other) crash |
-| F26 (fixed in edc8f2ea) | `string_of_bool_crash.cml` | all | `true` | segmentation fault | (other) crash |
-| F27 (fixed in db5e452c) | `string_ordering.cml` | all | four lines `true` | four lines `false` | (other) operator not implemented |
-| F28 (fixed in 5f3c58f2) | `string_plus_assign.cml` | all | `ab` | `a` | (other) operator not implemented |
-| F29 (fixed in 1224039c) | `mod_assign.cml` | all | `2` | located run-time error "assignment operator not fully implemented" | (other) operator not implemented |
-| F30 (fixed in 1d881d59) | `tuple_comparison_parse.cml` | all | `(true, x1)` | syntax error "missing ')' at ','" | (other) parser |
-| F31 (fixed in a42941f8) | `return_named_function.cml` | all | `true` | "Compile graph 'f4' still contains a live DREF node", no position, exit 1 | (other) internal error |
-| F33 (fixed in a42941f8) | `let_named_function_captured.cml` | all | `[2]` | compile-time error "Function of type 'void' cannot be called" at the call in the lambda | (other) front end |
+| id | program | schedulers | expected | actual | class | status |
+|---|---|---|---|---|---|---|
+| F24 | `const_graph_capacity.cml` | all, and every pipeline | `a` | `std::bad_alloc`, no position, exit 1, before the first pass | unbounded growth (capacity) | |
+| F25 | `nested_function_value_crash.cml` | nvm, fvm, jit crash; prl prints something else | `[1]` | segmentation fault | (other) crash | fixed (a42941f8) |
+| F26 | `string_of_bool_crash.cml` | all | `true` | segmentation fault | (other) crash | fixed (edc8f2ea) |
+| F27 | `string_ordering.cml` | all | four lines `true` | four lines `false` | (other) operator not implemented | fixed (db5e452c) |
+| F28 | `string_plus_assign.cml` | all | `ab` | `a` | (other) operator not implemented | fixed (5f3c58f2) |
+| F29 | `mod_assign.cml` | all | `2` | located run-time error "assignment operator not fully implemented" | (other) operator not implemented | fixed (1224039c) |
+| F30 | `tuple_comparison_parse.cml` | all | `(true, x1)` | syntax error "missing ')' at ','" | (other) parser | fixed (1d881d59) |
+| F31 | `return_named_function.cml` | all | `true` | "Compile graph 'f4' still contains a live DREF node", no position, exit 1 | (other) internal error | fixed (a42941f8) |
+| F33 | `let_named_function_captured.cml` | all | `[2]` | compile-time error "Function of type 'void' cannot be called" at the call in the lambda | (other) front end | fixed (a42941f8) |
 
 Notes on single findings:
 
@@ -160,6 +218,18 @@ Notes on single findings:
   the program behaves the same with and without optimization"): without passes the function is
   never called, so nothing faults. The index is not a literal one; the reducer rejects
   candidates with a literal index outside a literal array (2.7 makes those compile-time errors).
+- **F17, F36.** The graph and the bytecode `std::inline` leaves are right: `std::inline std::fvm`
+  runs the same bytecode and prints the expected lines, and so do the node VM and the parallel
+  scheduler. Inlining the arms into the function makes it call only itself, which is the
+  condition for the JIT to compile it (`std::jit` alone reports "targets non-self graph" for it
+  and interprets). The MIR of one activation (`std::mir`) is right as well; the self tail call
+  is not native on Linux but goes through `trampolineTail`
+  (`src/passes/sched/fastvm/jit/runtime/trampoline.cpp`, the JIT-to-JIT path: release the
+  caller's frame, acquire one, `invokeOwnedJitFrame`), reached from `case OpCode::TAIL` of
+  `src/passes/sched/fastvm/jit/backend/x64/x64_backend.cpp`. In F36 the first call of
+  the function is right and every later one is wrong (each `i * j` is added twice), which fits a
+  function that is interpreted first and compiled later; that, and what goes wrong on the
+  compiled path, was not established.
 - **F01, F03, F18** are one symptom (code of an arm that is not taken runs) and **F04-F10**
   another (an effect that must run is dropped). Hand-simplifying them usually loses the failure:
   each needs its particular shape (F01 passes when either the `var` declaration or the tuple

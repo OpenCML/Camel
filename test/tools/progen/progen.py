@@ -287,17 +287,24 @@ def cmd_findings(args):
     return 0
 
 
+# Rewrite sequences every fixed finding is run under besides its own (on all four schedulers).
+FIXED_ALSO = [["std::inline"], ["std::opt"], ["std::inline", "std::opt::dce"], ["std::opt::simplify"],
+              ["std::specialize"]]
+
+
 def cmd_fixed(args):
     """Regression guard of the test plan: every finding recorded as fixed (findings.json, key
-    `fixed`) must print its expected output under its own rewrite sequence on every scheduler."""
+    `fixed`) must print its expected output under its own rewrite sequence and under FIXED_ALSO,
+    on every scheduler."""
     from runner import run_cell
     root = Path(args.dir) if args.dir else FINDINGS
     listed = [f for f in json.loads((root / "findings.json").read_text(encoding="utf-8")) if f.get("fixed")]
     jobs = []
     for f in listed:
         own = [p for p in f["pipeline"] if p not in BACKENDS]
-        for backend in BACKENDS:
-            jobs.append((f, own + [backend]))
+        for rewrites in [own] + [r for r in FIXED_ALSO if r != own]:
+            for backend in f.get("fixed_backends", BACKENDS):
+                jobs.append((f, rewrites + [backend]))
     def go(job):
         f, passes = job
         return f, passes, run_cell(root / f["file"], passes, f.get("env", {}), f["expected"])
