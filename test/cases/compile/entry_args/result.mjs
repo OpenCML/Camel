@@ -24,6 +24,7 @@ const REPO_ROOT = path.resolve(HERE, '..', '..', '..', '..')
 const CAMEL = path.join(REPO_ROOT, 'out', 'latest', 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
 const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest') }
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-entry-result-'))
+const normalizeNewlines = (text) => text.replace(/\r\n/g, '\n')
 
 /// The float32 payload of a little-endian .npy file (version 1 header).
 function npyFloats(file) {
@@ -89,8 +90,9 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
     let name = '(none)'
     let line = -1
     try {
-        const start = proc.stdout.lastIndexOf('[\n{')
-        const d = JSON.parse(proc.stdout.slice(start))[0]
+        const text = normalizeNewlines(proc.stdout)
+        const start = text.lastIndexOf('[\n{')
+        const d = JSON.parse(text.slice(start))[0]
         name = d.data.name
         line = d.range.start.line
     } catch (e) {
@@ -127,7 +129,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
         { env, encoding: 'utf8' },
     )
     check(
-        proc.status === 4 && proc.stdout === 'hi 3 0.5 false\n',
+        proc.status === 4 && normalizeNewlines(proc.stdout) === 'hi 3 0.5 false\n',
         'int result on stdout: not printed, exit code 4',
         `int result on stdout: exit ${proc.status}: ${JSON.stringify(proc.stdout)}`,
     )
@@ -139,7 +141,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
     fs.writeFileSync(program, "module void_main2\n\nfunc main(n: int): void sync {\n    println(n)\n}\n")
     const proc = spawnSync(CAMEL, [program, '--arg', 'n=3'], { env, encoding: 'utf8' })
     check(
-        proc.status === 0 && proc.stdout === '3\n',
+        proc.status === 0 && normalizeNewlines(proc.stdout) === '3\n',
         'void result on stdout: nothing printed',
         `void result on stdout: exit ${proc.status}: ${JSON.stringify(proc.stdout)} ${proc.stderr}`,
     )
