@@ -76,7 +76,8 @@ Nothing that is built changes. Without a recorder a report site is a test of a n
 ## 3. What it answers
 
 - **Hover**: the declaration as written (the header of a function, `let x: T`, a type alias),
-  types in source spelling (`int`, `float`: the compiler's `i64`, `f64` are mapped back), the
+  types in source spelling (`int`, `float`: every type prints itself that way, by the one
+  mapping in `camel::core::type::typeCodeToString` / `sourceTypeSpelling`), the
   comment lines directly above a declaration, the instances of a generic function, and at a
   call the instance or overload that call resolved to; the type of a field, a literal, an
   operator call; the signatures of library functions.

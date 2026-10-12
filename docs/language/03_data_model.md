@@ -39,6 +39,7 @@ type Pair<T> = (T, T)
 
 - **不做隐式转换。** `1 + 2.0`、`1 < 2.0`、`i32` 与 `int` 混算都是编译期错误（`SemanticDiag::NoMatchingFunction`）。需要时显式转换。
 - 转换函数：`int(x)`、`i64(x)`、`i32(x)`、`float(x)`、`f64(x)`、`f32(x)`、`string(x)`。
+- `i64`、`f64` 只是 `int`、`float` 的另一种写法。诊断、图（`std::rgir`、`inspect`）与编辑器里显示的类型一律用 `int`、`float`：泛型实例叫 `first<int>`，不是 `first<i64>`。
 
   | 写法 | 结果 |
   |---|---|

@@ -583,7 +583,7 @@ a
 
 - 没有单独的类型参数表。在签名里类型变量**第一次出现的位置**写 `typeas T`，把那个位置上的类型绑定为 `T`，之后直接用 `T`。
 - `type Pair<T> = (T, T)` 是带参数的类型声明：`Pair<int>` 就是 `(int, int)`。
-- 在图上，泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图：上面的程序里有 `first<i64>` 与 `first<string>` 两张子图（`camel docs/tutorial/examples/08_generics.cml std::rgir` 可以看到）。图上只有具体类型，运行时不需要类型信息。
+- 在图上，泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图：上面的程序里有 `first<int>` 与 `first<string>` 两张子图（`camel docs/tutorial/examples/08_generics.cml std::rgir` 可以看到）。图上只有具体类型，运行时不需要类型信息。
 - 目前泛型函数只能直接调用，不能当值传递。
 
 ## 9. 错误处理

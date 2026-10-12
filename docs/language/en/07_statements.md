@@ -174,7 +174,7 @@ func main(): int sync {
 [1!, 2!, 3!]
 ```
 
-- A generic function is a **subgraph template**. Each call with a set of concrete types instantiates a subgraph in which all types are concrete (the same set of types is instantiated only once; in `std::rgir` one can see subgraphs named `first<i64>` and `first<string>`). The graph contains only concrete types, and no type information is needed at run time.
+- A generic function is a **subgraph template**. Each call with a set of concrete types instantiates a subgraph in which all types are concrete (the same set of types is instantiated only once; in `std::rgir` one can see subgraphs named `first<int>` and `first<string>`). The graph contains only concrete types, and no type information is needed at run time.
 - **Binding happens only at the positions of `typeas`**: the type variable takes the type the argument has at that position. The other positions are ordinary parameters, checked against the type after substitution, with no implicit conversion: `pick(true, 1, 2.5)` is an error (`T` is already bound to `int`).
 - `typeas` can appear in these positions: array elements, tuple elements, struct fields, the parameters and return value of a function type, the inner type of `T?`/`T!`, the arguments of `Map`/`Set` and of type functions. It cannot appear in a union type, nor as an argument of a module type.
 - `typeas` can only be written in the parameters (including the `with` parameters) of a function declaration. A type variable must be bound before it is used (in the order written, `with` parameters first); binding the same variable twice, or giving it the name of an existing type, is an error.

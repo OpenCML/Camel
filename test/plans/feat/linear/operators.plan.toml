@@ -470,7 +470,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "conversions.nvm"
-desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (nvm)"
+desc = "int, i32, int, float, f32, float and string on every argument type they take; string(true) used to crash (progen F26) (nvm)"
 kind = "behavior"
 case = "../../../cases/linear/operators/conversions.cml"
 args = ["${case}", "${run_nvm}"]
@@ -501,7 +501,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "conversions.fvm"
-desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (fvm)"
+desc = "int, i32, int, float, f32, float and string on every argument type they take; string(true) used to crash (progen F26) (fvm)"
 kind = "behavior"
 case = "../../../cases/linear/operators/conversions.cml"
 args = ["${case}", "${run_fvm}"]
@@ -532,7 +532,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "conversions.jit"
-desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (jit)"
+desc = "int, i32, int, float, f32, float and string on every argument type they take; string(true) used to crash (progen F26) (jit)"
 kind = "behavior"
 case = "../../../cases/linear/operators/conversions.cml"
 args = ["${case}", "${run_jit}"]
@@ -563,7 +563,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "conversions.prl"
-desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (prl)"
+desc = "int, i32, int, float, f32, float and string on every argument type they take; string(true) used to crash (progen F26) (prl)"
 kind = "behavior"
 case = "../../../cases/linear/operators/conversions.cml"
 args = ["${case}", "${run_prl}"]

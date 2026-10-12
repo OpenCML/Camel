@@ -175,44 +175,10 @@ std::string normalPath(const std::string &path) {
     return p.lexically_normal().generic_string();
 }
 
-// A type as the compiler prints it, in the spelling of source text: the compiler names the
-// types by their width, programs by `int` and `float`.
+// Types print themselves in the spelling of source text; a signature written by hand as text
+// (an operator's) goes through the same mapping (camel::core::type::sourceTypeSpelling).
 std::string sourceSpelling(const std::string &text) {
-    static const std::pair<std::string_view, std::string_view> names[] = {
-        {"i64", "int"},
-        {"f64", "float"},
-    };
-    std::string out;
-    out.reserve(text.size());
-    size_t i = 0;
-    const auto isWord = [](char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-               c == '_';
-    };
-    while (i < text.size()) {
-        if (isWord(text[i]) && (i == 0 || !isWord(text[i - 1]))) {
-            size_t end = i;
-            while (end < text.size() && isWord(text[end])) {
-                ++end;
-            }
-            std::string_view word(text.data() + i, end - i);
-            bool replaced = false;
-            for (const auto &[from, to] : names) {
-                if (word == from) {
-                    out += to;
-                    replaced = true;
-                    break;
-                }
-            }
-            if (!replaced) {
-                out += word;
-            }
-            i = end;
-            continue;
-        }
-        out += text[i++];
-    }
-    return out;
+    return camel::core::type::sourceTypeSpelling(text);
 }
 
 } // namespace

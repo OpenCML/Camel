@@ -11,12 +11,15 @@ structure knows about either construct.
 | Construct | On the graph |
 |---|---|
 | generic function `func first(xs: (typeas T)[]): T` | nothing by itself: a subgraph template |
-| a call `first([1, 2])` | a call of the subgraph `first<i64>`, built once for `T = i64` |
+| a call `first([1, 2])` | a call of the subgraph `first<int>`, built once for `T = int` |
 | type function `type Pair<T> = (T, T)` | nothing: applied where a type is written |
 
 A graph only ever holds concrete types. `camel x.cml std::rgir` shows one subgraph per set of
 types a generic function is called with, named `name<types>`; `camel inspect --gir x.cml`
-also prints each subgraph's signature.
+also prints each subgraph's signature. Types are named as source text names them (design
+principles 2.10): `first<int>`, not `first<i64>`. That is the display name only: the mangled
+name of a type (`Type::mangle`) and the structural comparison that finds an instance again
+do not use it.
 
 ## 2. Representation (`include/camel/core/type/typevar.h`)
 

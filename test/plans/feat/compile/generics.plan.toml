@@ -621,7 +621,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "instances_are_concrete"
-desc = "The graph holds one subgraph per set of types (`first<i64>` once for two calls) and every instance has a concrete signature; no template and no type variable reaches the graph."
+desc = "The graph holds one subgraph per set of types (`first<int>` once for two calls) and every instance has a concrete signature; no template and no type variable reaches the graph."
 kind = "behavior"
 case = "../../../cases/compile/generics/basic.cml"
 args = ["inspect", "--gir", "${case}"]
@@ -632,14 +632,14 @@ verify_script = """
 const out = input.normalized.stdout
 const graphs = [...out.matchAll(/label="([^"]+)";\s*tooltip="([^"]+)";/g)].map((m) => `${m[1]} :: ${m[2]}`)
 const want = [
-  'first<i64> :: (xs: i64[]) => i64',
+  'first<int> :: (xs: int[]) => int',
   'first<string> :: (xs: string[]) => string',
-  'first<f64> :: (xs: f64[]) => f64',
-  'pick<i64> :: (c: bool, a: i64, b: i64) => i64',
+  'first<float> :: (xs: float[]) => float',
+  'pick<int> :: (c: bool, a: int, b: int) => int',
   'pick<string> :: (c: bool, a: string, b: string) => string',
-  'pair_of<i64, string> :: (a: i64, b: string) => (i64, string)',
-  'swap<i64, string> :: (p: (i64, string)) => (string, i64)',
-  'swap<f64, bool> :: (p: (f64, bool)) => (bool, f64)',
+  'pair_of<int, string> :: (a: int, b: string) => (int, string)',
+  'swap<int, string> :: (p: (int, string)) => (string, int)',
+  'swap<float, bool> :: (p: (float, bool)) => (bool, float)',
 ]
 for (const graph of want) {
   assert(graphs.filter((g) => g === graph).length === 1, `expected exactly one graph '${graph}' in: ${graphs.join(' | ')}`)
@@ -660,7 +660,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 17
-expect_output_contains = ["argument 3 has type 'f64', but its parameter 'b: T' is 'i64' here (T = i64)"]
+expect_output_contains = ["argument 3 has type 'float', but its parameter 'b: T' is 'int' here (T = int)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -674,7 +674,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 18
-expect_output_contains = ["argument 1 has type 'i64'", "needs a type of that form to bind its type variables"]
+expect_output_contains = ["argument 1 has type 'int'", "needs a type of that form to bind its type variables"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -713,7 +713,7 @@ kind = "negative"
 case = "../../../cases/compile/generics/err_body.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_body.cml:4:16:", "in the instance 'double<i64[]>' of the generic function 'double' with T = i64[]", "instantiated by the call at 10:19"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_body.cml:4:16:", "in the instance 'double<int[]>' of the generic function 'double' with T = int[]", "instantiated by the call at 10:19"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -727,7 +727,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralStaticCastFailed"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 5
-expect_output_contains = ["to type 'f64'", "in the instance 'zero_of<f64>'", "instantiated by the call at 10:20"]
+expect_output_contains = ["to type 'float'", "in the instance 'zero_of<float>'", "instantiated by the call at 10:20"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -755,7 +755,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CallingIncompleteFunction"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 49
-expect_output_contains = ["in the instance 'count<i64>'"]
+expect_output_contains = ["in the instance 'count<int>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -926,7 +926,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "generic_exported_instances"
-desc = "Each importing module holds its own instance: the graph shows rev<i64> twice, once under the module that re-exports a use of it."
+desc = "Each importing module holds its own instance: the graph shows rev<int> twice, once under the module that re-exports a use of it."
 kind = "behavior"
 case = "../../../cases/compile/generics/export_use.cml"
 args = ["${case}", "std::rgir"]
@@ -936,7 +936,7 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const count = (s) => out.split(`label="${s}";`).length - 1
-assert(count('rev<i64>') === 2, `rev<i64> clusters: ${count('rev<i64>')}`)
+assert(count('rev<int>') === 2, `rev<int> clusters: ${count('rev<int>')}`)
 assert(count('rev<string>') === 1, `rev<string> clusters: ${count('rev<string>')}`)
 assert(count('rev<bool>') === 1, `rev<bool> clusters: ${count('rev<bool>')}`)
 }

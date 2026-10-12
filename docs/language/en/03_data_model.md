@@ -39,6 +39,7 @@ type Pair<T> = (T, T)
 
 - **No implicit conversions.** `1 + 2.0`, `1 < 2.0` and mixing `i32` with `int` are all compile-time errors (`SemanticDiag::NoMatchingFunction`). Convert explicitly where needed.
 - Conversion functions: `int(x)`, `i64(x)`, `i32(x)`, `float(x)`, `f64(x)`, `f32(x)`, `string(x)`.
+- `i64` and `f64` are only other spellings of `int` and `float`. Diagnostics, graphs (`std::rgir`, `inspect`) and editors always show `int` and `float`: an instance of a generic function is `first<int>`, not `first<i64>`.
 
   | Form | Result |
   |---|---|

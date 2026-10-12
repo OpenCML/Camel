@@ -583,7 +583,7 @@ a
 
 - There is no separate type parameter list. At **the place where a type variable first appears** in the signature, write `typeas T`; this binds the type at that place as `T`, and after that you use `T` directly.
 - `type Pair<T> = (T, T)` is a type declaration with a parameter: `Pair<int>` is `(int, int)`.
-- In the graph, a generic function is a **subgraph template**. Each time it is called with a set of concrete types, a subgraph whose types are all concrete is instantiated: the program above has the two subgraphs `first<i64>` and `first<string>` (you can see them with `camel docs/tutorial/examples/08_generics.cml std::rgir`). The graph contains only concrete types, and no type information is needed at run time.
+- In the graph, a generic function is a **subgraph template**. Each time it is called with a set of concrete types, a subgraph whose types are all concrete is instantiated: the program above has the two subgraphs `first<int>` and `first<string>` (you can see them with `camel docs/tutorial/examples/08_generics.cml std::rgir`). The graph contains only concrete types, and no type information is needed at run time.
 - For now a generic function can only be called directly; it cannot be passed as a value.
 
 ## 9. Error handling

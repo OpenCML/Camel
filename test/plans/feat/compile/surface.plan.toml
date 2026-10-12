@@ -45,7 +45,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 26
-expect_output_contains = ["an operator with 4 signatures [(i32) => i32; (i64) => i64; (f32) => f32; (f64) => f64]"]
+expect_output_contains = ["an operator with 4 signatures [(i32) => i32; (int) => int; (f32) => f32; (float) => float]"]
 
 [[tests]]
 name = "surface.name_as_value_user_overloads"
@@ -56,7 +56,7 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
 expect_diagnostic_line = 6
-expect_output_contains = ["2 functions of that name [(x: i64) => i64; (x: f64) => f64]"]
+expect_output_contains = ["2 functions of that name [(x: int) => int; (x: float) => float]"]
 
 [[tests]]
 name = "surface.if_without_else"

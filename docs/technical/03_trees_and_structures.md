@@ -126,7 +126,7 @@ Module: main
 ### 4.2 顶层结构
 
 - 根为 **EXEC**，其子节点包括：
-  - **DECL**：对应函数/类型等声明，如 **DECL: func main**，下挂 **TYPE: () => i64**。
+  - **DECL**：对应函数/类型等声明，如 **DECL: func main**，下挂 **TYPE: () => int**。
   - **FUNC**：对应一个函数的图构造，如 **FUNC: main**，下挂 **TYPE** 与 **SYNC**（或 **EXEC**）块。
 
 ### 4.3 节点类型（LoadType）含义
@@ -134,7 +134,7 @@ Module: main
 | 节点 | 含义 |
 |------|------|
 | **DECL** | 声明（函数名、类型签名） |
-| **TYPE** | 类型（如 `() => i64`、`(n: i64) => i64`） |
+| **TYPE** | 类型（如 `() => int`、`(n: int) => int`） |
 | **FUNC** | 函数体入口 |
 | **SYNC** | 同步块（顺序执行） |
 | **EXEC** | 可执行块 |
@@ -154,15 +154,15 @@ Module: main
 ```
 EXEC
 |-DECL: func main
-|  \-TYPE: () => i64
+|  \-TYPE: () => int
 \-FUNC: main
-   |-TYPE: () => i64
+   |-TYPE: () => int
    \-SYNC
       |-LINK: argcnt=1
       |  |-DREF: println
       |  \-DATA: 0x..., string, "Hello, Camel!"
       \-EXIT: return
-         \-DATA: 0x..., i64, 0L
+         \-DATA: 0x..., int, 0L
 ```
 
 ### 4.5 示例（fib.cml 的 GCT 片段）
