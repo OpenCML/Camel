@@ -50,7 +50,7 @@ func main(): int sync {
     let grown = fill(150, 190, 1, 1000, m)
     let cut = drain(40, 120, 1, 1000, drain(0, 60, 7, 211, grown))
     println(format<len(m), total(m), len(grown), total(grown), len(cut), total(cut)>('m={}/{} grown={}/{} cut={}/{}'))
-    println(format<m['key-7'] ?? [0], grown['key-189'] ?? [0], cut['key-189'] ?? [0], has(cut, 'key-7'), has(m, 'key-189')>('{} {} {} {} {}'))
+    println(format<m['key-7'] ?? [0], grown['key-189'] ?? [0], cut['key-189'] ?? [0], cut->has<'key-7'>, m->has<'key-189'>>('{} {} {} {} {}'))
     let s = names(0, 260, [] as Set<string>)
     let k = keys(grown) as Set<string>
     println(format<len(s), len(k), len(intersect(s, k)), len(union(s, k)), len(difference(k, s)), is_subset(intersect(s, k), k)>('s={} k={} both={} either={} only={} subset={}'))

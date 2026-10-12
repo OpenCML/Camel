@@ -61,12 +61,12 @@ func main(): int sync {
     println(len(t), digest(t), t[7] ?? '?', t[(399 * 7) % 1009] ?? '?', t[1008] ?? '?')
     let grown = t->put<1008, 'last'>->remove<0>->put<-5, 'first'>
     println(len(grown), digest(grown), grown[1008] ?? '?', grown[0] ?? '?', len(t), digest(t), t[0] ?? '?')
-    println(t == labels(400), grown == t, merge(t, grown) == put(grown, 0, 'v0'))
+    println(t == labels(400), grown == t, merge(t, grown) == grown->put<0, 'v0'>)
     let w = words(600)
     let more = w->add<'zzz'>->remove<'w0'>
-    println(len(w), contains(w, 'w13'), contains(w, 'zzz'), len(more), contains(more, 'w0'), len(intersect(w, more)), len(difference(w, more)), difference(w, more))
+    println(len(w), w->contains<'w13'>, w->contains<'zzz'>, len(more), more->contains<'w0'>, len(intersect(w, more)), len(difference(w, more)), difference(w, more))
     let ops = operations(300)
     println(len(ops), apply(ops, 0, 21), apply(ops, 1, 21), apply(ops, 299, 21), apply(ops, 300, 21))
-    println(len(put(ops, 300, (x: int): int => x * x)), apply(put(ops, 300, (x: int): int => x * x), 300, 21))
+    println(len(ops->put<300, ((x: int): int => x * x)>), apply(ops->put<300, ((x: int): int => x * x)>, 300, 21))
     return 0
 }

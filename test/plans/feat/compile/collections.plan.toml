@@ -1095,6 +1095,8 @@ expect_stdout_contains = ["128 of 128 runs agree with the reference", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
+
+[[tests]]
 name = "callform_err_put"
 desc = "put(m, 'c', 3) is refused; the hint names the two arguments and gives both kept spellings."
 kind = "negative"

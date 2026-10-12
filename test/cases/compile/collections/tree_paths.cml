@@ -69,14 +69,14 @@ func main(): int sync {
     let r2 = drain(r1, 0, 1009, 1, 1009)
     println(len(r1), digest(r1), len(r2), r2, r2 == e)
     // Every intermediate value is still what it was.
-    println(len(m1), digest(m1), len(m3), digest(m3), m3[899] ?? -1, d1[899] ?? -1, d1[100] ?? -1, has(d3, 899))
+    println(len(m1), digest(m1), len(m3), digest(m3), m3[899] ?? -1, d1[899] ?? -1, d1[100] ?? -1, d3->has<899>)
 
     // Growth again from a value that has shrunk, and a tree met by a small map.
     let g1 = fill(d2, 2000, 2300, 3, 5003)
     let g2 = merge(g1, [(1, -1), (5002, -2)] as Map<int, int>)
     let g3 = merge([(1, -1), (5002, -2)] as Map<int, int>, g1)
     println(len(g1), digest(g1), len(g2), digest(g2), len(g3), digest(g3), g2[1] ?? 0, g3[1] ?? 0)
-    println(drain(g2, 5002, 5003, 1, 9999) == put(g1, 1, -1), len(keys(g1)), len(values(g1)), len(items(g1)))
+    println(drain(g2, 5002, 5003, 1, 9999) == g1->put<1, -1>, len(keys(g1)), len(values(g1)), len(items(g1)))
 
     let es = [] as Set<string>
     let s1 = fill_set(es, 0, 900, 11, 1201)

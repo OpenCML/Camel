@@ -34,6 +34,19 @@ case = "../../../cases/consistency/values/content_equality.cml"
 golden = "golden/content_equality.txt"
 
 [[tests]]
+name = "value.content_equality_trees"
+desc = "Arrays, tuples and structs that hold maps and sets of some hundred entries, built in opposite orders and by removal: a part that is a collection is compared by the collection's own equality, so the shape of the tree does not matter."
+case = "../../../cases/consistency/values/content_equality_trees.cml"
+golden = "golden/content_equality_trees.txt"
+
+[[tests]]
+name = "value.content_equality_trees.small_nodes"
+desc = "The same with leaves of two entries and a fan-out of four (CAMEL_COLL_LEAF_CAPACITY=2 CAMEL_COLL_FANOUT=4, every tree validated), where the three ways of building give trees of different shapes."
+case = "../../../cases/consistency/values/content_equality_trees.cml"
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4"]
+golden = "golden/content_equality_trees.txt"
+
+[[tests]]
 name = "value.counter_closure"
 desc = "Closures returned by a function share the var of their own call."
 case = "../../../cases/consistency/values/counter_closure.cml"

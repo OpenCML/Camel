@@ -1,0 +1,5 @@
+200 200 200 150 150
+true false false false
+true false true
+true false false true
+true false false false true

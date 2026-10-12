@@ -212,7 +212,7 @@ func fill_si(m: Map<string, int>, i: int, n: int, a: int, b: int): Map<string, i
     if i >= n then {{
         return m
     }} else {{
-        return fill_si(put(m, 'k' + string((i * a) % b), i), i + 1, n, a, b)
+        return fill_si(m->put<'k' + string((i * a) % b), i>, i + 1, n, a, b)
     }}
 }}
 
@@ -228,7 +228,7 @@ func drain_set(s: Set<int>, i: int, n: int, a: int, b: int): Set<int> {{
     if i >= n then {{
         return s
     }} else {{
-        return drain_set(remove(s, (i * a) % b), i + 1, n, a, b)
+        return drain_set(s->remove<(i * a) % b>, i + 1, n, a, b)
     }}
 }}
 
@@ -391,7 +391,7 @@ class Program:
         name, m = self.pick(typ)
         k = self.key_for(typ.key, m)
         e, v = self.value_expr(typ.value)
-        form = self.rng.choice(["{m}->put<{k}, {v}>", "put({m}, {k}, {v})", "put<{k}, {v}>({m})"])
+        form = self.rng.choice(["{m}->put<{k}, {v}>", "({m})->put<{k}, {v}>", "put<{k}, {v}>({m})"])
         out = dict(m)
         out[k] = v
         self.declare(typ, form.format(m=name, k=typ.key.lit(k), v=e), out)
@@ -400,7 +400,7 @@ class Program:
         typ = self.rng.choice(MAP_TYPES)
         name, m = self.pick(typ)
         k = self.key_for(typ.key, m)
-        form = self.rng.choice(["{m}->remove<{k}>", "remove({m}, {k})"])
+        form = self.rng.choice(["{m}->remove<{k}>", "remove<{k}>({m})"])
         out = dict(m)
         out.pop(k, None)
         self.declare(typ, form.format(m=name, k=typ.key.lit(k)), out)
@@ -418,7 +418,7 @@ class Program:
                 (f"{name}->get_or<{kl}, {d}>", typ.value, got),
                 (f"get<{kl}>({name}) ?? {d}", typ.value, got),
                 (f"get_or_else({name}, {kl}, {d})", typ.value, got),
-                (f"has({name}, {kl})", BOOL, k in m),
+                (f"{name}->has<{kl}>", BOOL, k in m),
                 (f"len({name})", INT, len(m)),
                 (f"size_of({name})", INT, len(m)),
             ]
@@ -456,7 +456,7 @@ class Program:
         if k in ma:
             again = f"rebuilt({a})"
         else:
-            again = f"remove(put({a}, {typ.key.lit(k)}, {e}), {typ.key.lit(k)})"
+            again = f"{a}->put<{typ.key.lit(k)}, {e}>->remove<{typ.key.lit(k)}>"
         parts = [
             (f"{a} == {b}", BOOL, ma == mb),
             (f"{a} == {again}", BOOL, True),
@@ -572,10 +572,10 @@ class Program:
         name, s = self.pick(typ)
         k = self.key_for(typ.key, s)
         if self.rng.random() < 0.6:
-            form = self.rng.choice(["{s}->add<{k}>", "add({s}, {k})"])
+            form = self.rng.choice(["{s}->add<{k}>", "add<{k}>({s})"])
             self.declare(typ, form.format(s=name, k=typ.key.lit(k)), s | {k})
         else:
-            form = self.rng.choice(["{s}->remove<{k}>", "remove({s}, {k})"])
+            form = self.rng.choice(["{s}->remove<{k}>", "remove<{k}>({s})"])
             self.declare(typ, form.format(s=name, k=typ.key.lit(k)), s - {k})
 
     def op_set_algebra(self):
@@ -603,7 +603,7 @@ class Program:
         else:
             self.show(
                 [
-                    (f"contains({a}, {kl})", BOOL, k in sa),
+                    (f"{a}->contains<{kl}>", BOOL, k in sa),
                     (f"{a}->has<{kl}>", BOOL, k in sa),
                     (f"is_subset({a}, {b})", BOOL, sa <= sb),
                     (f"is_subset(intersect({a}, {b}), {a})", BOOL, True),
