@@ -170,7 +170,10 @@ bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
     if (!allocator.containsAllocated(object)) {
         // The space was emptied since this address was handed out: the object moved or died.
         issues.push_back(makeIssue(
-            "Reference points into an evacuated part of a young space (stale pointer)",
+            std::format(
+                "Reference points into an evacuated part of a young space (stale pointer; the "
+                "word before it reads {:#x})",
+                headerOf(object)->raw_),
             std::string(path),
             {},
             {},
@@ -455,6 +458,7 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
             return nullptr;
         }
 
+        const size_t issuesBefore = issues.size();
         if (!knownObjectPointer(ref, issues, path)) {
             issues.push_back(makeIssue(
                 "GC-traced slot points outside managed object regions",
@@ -464,6 +468,13 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
                 {},
                 0,
                 reinterpret_cast<uintptr_t>(ref)));
+            return ref;
+        }
+        if (issues.size() != issuesBefore) {
+            // The reference is broken (a stale address, a bad header): say where it was found
+            // and do not walk into what it points at.
+            issues.back().owner    = info.describe();
+            issues.back().slotType = refType ? refType->toString() : std::string{"<unknown>"};
             return ref;
         }
 
