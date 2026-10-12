@@ -742,6 +742,21 @@ void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_
     // Ports are parameter placeholders. After cloning into the owner draft,
     // all observable value uses must flow from the real caller operand instead.
     draft.replaceAllValueUses(portNodeId, actualInputId);
+    // So must the control uses. A node of the body may wait on a parameter without reading it:
+    // the front end makes a BRCH wait on every value its arms capture, and a rewrite that
+    // removes a node hands its control inputs to its users. Erasing the port dropped those
+    // edges, and with them the only thing that ordered such a node after the argument.
+    const std::vector<gc_node_ref_t> waiting(
+        draft.ctrlUsersOf(portNodeId).begin(),
+        draft.ctrlUsersOf(portNodeId).end());
+    for (gc_node_ref_t user : waiting) {
+        draft.unlinkInput(DraftEdgeKind::Ctrl, user, portNodeId);
+        const auto existing = draft.ctrlInputsOf(user);
+        if (user != actualInputId &&
+            std::find(existing.begin(), existing.end(), actualInputId) == existing.end()) {
+            draft.appendInput(DraftEdgeKind::Ctrl, user, actualInputId);
+        }
+    }
 }
 
 gc_node_ref_t remapFormalNodeToActual(
