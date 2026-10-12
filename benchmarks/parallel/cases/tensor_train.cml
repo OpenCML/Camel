@@ -1,0 +1,39 @@
+// A training loop on tensors: a three-layer perceptron (784-256-128-10, batch 64), the
+// gradient from autodiff, one SGD step per iteration, 60 iterations as a tail recursion.
+// The time is in the tensor kernels; the scheduler runs a few dozen nodes per step.
+// Needs std::macro before the scheduler (autodiff).
+module tensor_train
+
+import { Tensor, ones, relu, mean } from tensor
+import { value_and_grad } from autodiff
+import { sgd } from nn
+
+type Mlp = {
+    fc1_w: Tensor, fc1_b: Tensor,
+    fc2_w: Tensor, fc2_b: Tensor,
+    fc3_w: Tensor, fc3_b: Tensor
+}
+
+with <m: Mlp>
+func loss(x: Tensor): float {
+    let h1 = relu(x @ m.fc1_w + m.fc1_b)
+    let h2 = relu(h1 @ m.fc2_w + m.fc2_b)
+    let y = h2 @ m.fc3_w + m.fc3_b
+    return mean(y * y)
+}
+
+func train(m: Mlp, x: Tensor, steps: int, last: float): float {
+    let vg = value_and_grad(loss)<m>(x)
+    return if steps == 0 then last
+        else train(sgd(m, vg.1, 0.000001), x, steps - 1, vg.0)
+}
+
+func main(): int sync {
+    let m = {
+        fc1_w: ones([784, 256]) * 0.001, fc1_b: ones([256]) * 0.01,
+        fc2_w: ones([256, 128]) * 0.002, fc2_b: ones([128]) * 0.01,
+        fc3_w: ones([128, 10]) * 0.003, fc3_b: ones([10]) * 0.01
+    }
+    println(format<train(m, ones([64, 784]), 60, 0.0)>('final loss: {:.6f}'))
+    return 0
+}
