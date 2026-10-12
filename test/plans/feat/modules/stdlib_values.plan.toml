@@ -154,3 +154,69 @@ case = "../../../cases/modules/stdlib/stats_quantiles.cml"
 golden = "golden/stdlib/stats_quantiles.txt"
 backends = false
 args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.array_basic"
+desc = "The array module (written in Camel): reverse, take, drop, enumerate, flatten, unique, index_of, sum, min, max, with empty arrays and the integer limits."
+case = "../../../cases/modules/stdlib/array_basic.cml"
+golden = "golden/stdlib/array_basic.txt"
+
+[[tests]]
+name = "stdlib.array_basic.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/array_basic.cml"
+golden = "golden/stdlib/array_basic.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.array_basic.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/array_basic.cml"
+golden = "golden/stdlib/array_basic.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.array_hof"
+desc = "The array module: find, any, all, count, flat_map, sort_by (stable, by number, string and bool keys), zip_with, with empty arrays."
+case = "../../../cases/modules/stdlib/array_hof.cml"
+golden = "golden/stdlib/array_hof.txt"
+
+[[tests]]
+name = "stdlib.array_hof.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/array_hof.cml"
+golden = "golden/stdlib/array_hof.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.array_hof.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/array_hof.cml"
+golden = "golden/stdlib/array_hof.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.array_large"
+desc = "The array module on 2000 elements with a function that does real work: the functions passed in are applied without an order among their calls, and the results agree on the four back ends."
+case = "../../../cases/modules/stdlib/array_large.cml"
+golden = "golden/stdlib/array_large.txt"
+
+[[tests]]
+name = "stdlib.array_large.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/array_large.cml"
+golden = "golden/stdlib/array_large.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.array_large.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/array_large.cml"
+golden = "golden/stdlib/array_large.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]

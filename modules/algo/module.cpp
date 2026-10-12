@@ -25,6 +25,7 @@
 #include "camel/utils/type.h"
 #include "executor.h"
 #include "operators.h"
+#include "sequence.h"
 
 #include <optional>
 
@@ -199,6 +200,8 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 
 AlgoModule::AlgoModule(context_ptr_t ctx) : BuiltinModule("algo", ctx) {
     for (const auto &group : getOperatorGroups())
+        exportEntity(group->name(), group);
+    for (const auto &group : getAlgoSequenceGroups())
         exportEntity(group->name(), group);
 }
 

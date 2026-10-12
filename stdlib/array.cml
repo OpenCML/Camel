@@ -1,0 +1,162 @@
+/**
+ * Array functions and higher-order functions, written in Camel on top of the built-in
+ * operators (map, filter, reduce, range, zip, slice, len) and three primitives of the algo
+ * module (flatten, unique, argsort). Every function returns a new value; none changes its
+ * argument.
+ *
+ * Conventions
+ *
+ * - The array a function works on is its ordinary argument; a function or a value that
+ *   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
+ *   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
+ * - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`); nothing here
+ *   returns an error value, and a wrong index is a fault of the operator that meets it.
+ * - Order of evaluation (design principles 2.7). A function passed to one of these is applied
+ *   with `map`: its calls on different elements have NO order among them and the parallel
+ *   scheduler may run them at the same time; the result is put together by position and is
+ *   the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
+ *   `sort_by` and `zip_with`. None of them stops early: the function is applied to every
+ *   element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
+ *
+ * These are generic functions: each call builds the instance for its element type in the
+ * module that calls it (DESIGN-QUESTION(generic-export)).
+ */
+module array
+
+import algo
+
+// ---------------------------------------------------------------------------------------------
+// Rearranging
+// ---------------------------------------------------------------------------------------------
+
+/// The elements in reverse order.
+export func reverse(xs: (typeas T)[]): T[] {
+    let n = len(xs)
+    return range(0, n)->map<(i: int) => xs[n - 1 - i]>
+}
+
+/// The first n elements; all of them when there are fewer, none when n is not positive.
+with <n: int>
+export func take(xs: (typeas T)[]): T[] {
+    return if n <= 0 then slice<0, 0>(xs) else slice<0, n>(xs)
+}
+
+/// The elements after the first n; none when there are fewer, all when n is not positive.
+with <n: int>
+export func drop(xs: (typeas T)[]): T[] {
+    return if n <= 0 then xs else slice<n, len(xs)>(xs)
+}
+
+/// Each element with its index: [(0, xs[0]), (1, xs[1]), ...].
+export func enumerate(xs: (typeas T)[]): (int, T)[] {
+    return zip(range(0, len(xs)), xs)
+}
+
+/// The elements of the inner arrays, in order. (Primitive: algo::flatten.)
+export func flatten(xss: (typeas T)[][]): T[] {
+    return algo::flatten(xss)
+}
+
+/// The first occurrence of every value, in order; values are compared with `==`.
+/// (Primitive: algo::unique.)
+export func unique(xs: (typeas T)[]): T[] {
+    return algo::unique(xs)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Searching
+// ---------------------------------------------------------------------------------------------
+
+func first_true(flags: bool[]): int {
+    return range(0, len(flags))->reduce<(found: int, i: int) => if found < 0 && flags[i] then i else found, -1>
+}
+
+/// The index of the first element equal to x, or null.
+with <x: typeas T>
+export func index_of(xs: T[]): int? {
+    let i = first_true(xs->map<(y: T) => y == x>)
+    return if i < 0 then null as int? else i as int?
+}
+
+/// The first element for which pred is true, or null.
+with <pred: (x: typeas T) => bool>
+export func find(xs: T[]): T? {
+    let i = first_true(xs->map<pred>)
+    return if i < 0 then null as T? else xs[i] as T?
+}
+
+/// True when pred is true for at least one element; false for an empty array.
+with <pred: (x: typeas T) => bool>
+export func any(xs: T[]): bool {
+    return xs->map<pred>->reduce<(acc: bool, b: bool) => acc || b, false>
+}
+
+/// True when pred is true for every element; true for an empty array.
+with <pred: (x: typeas T) => bool>
+export func all(xs: T[]): bool {
+    return xs->map<pred>->reduce<(acc: bool, b: bool) => acc && b, true>
+}
+
+/// The number of elements for which pred is true.
+with <pred: (x: typeas T) => bool>
+export func count(xs: T[]): int {
+    return xs->map<pred>->reduce<(acc: int, b: bool) => if b then acc + 1 else acc, 0>
+}
+
+// ---------------------------------------------------------------------------------------------
+// Aggregating
+// ---------------------------------------------------------------------------------------------
+
+/// The sum of the elements, 0 for an empty array. One function per numeric type: the zero of a
+/// type variable cannot be written. Integers wrap around on overflow, as `+` does.
+export func sum(xs: int[]): int {
+    return xs->reduce<(acc: int, x: int) => acc + x, 0>
+}
+
+export func sum(xs: float[]): float {
+    return xs->reduce<(acc: float, x: float) => acc + x, 0.0>
+}
+
+export func sum(xs: i32[]): i32 {
+    return xs->reduce<(acc: i32, x: i32) => acc + x, i32(0)>
+}
+
+export func sum(xs: f32[]): f32 {
+    return xs->reduce<(acc: f32, x: f32) => acc + x, f32(0.0)>
+}
+
+/// The smallest element by `<`, or null for an empty array. Among equal elements the first.
+/// A NaN compares false with everything: it is the result only when it is the first element.
+export func min(xs: (typeas T)[]): T? {
+    return if len(xs) == 0 then null as T? else xs->reduce<(acc: T, x: T) => if x < acc then x else acc, xs[0]> as T?
+}
+
+/// The largest element by `>`, or null for an empty array. Among equal elements the first.
+export func max(xs: (typeas T)[]): T? {
+    return if len(xs) == 0 then null as T? else xs->reduce<(acc: T, x: T) => if x > acc then x else acc, xs[0]> as T?
+}
+
+// ---------------------------------------------------------------------------------------------
+// Transforming
+// ---------------------------------------------------------------------------------------------
+
+/// f applied to every element, the resulting arrays joined in order.
+with <f: (x: typeas T) => (typeas U)[]>
+export func flat_map(xs: T[]): U[] {
+    return algo::flatten(xs->map<f>)
+}
+
+/// The elements in ascending order of key(x); elements with equal keys keep their order (the
+/// sort is stable). A key is a number, a string (ordered by byte) or a bool; NaN keys come
+/// last. For a descending order of numbers use the negated key. (Primitive: algo::argsort.)
+with <key: (x: typeas T) => typeas K>
+export func sort_by(xs: T[]): T[] {
+    return algo::argsort(xs->map<key>)->map<(i: int) => xs[i]>
+}
+
+/// f(xs[i], ys[i]) for every i. The two arrays must have the same length (a fault otherwise,
+/// as for zip).
+with <f: (a: typeas T, b: typeas U) => typeas V>
+export func zip_with(xs: T[], ys: U[]): V[] {
+    return zip(xs, ys)->map<(p: (T, U)) => f(p.0, p.1)>
+}

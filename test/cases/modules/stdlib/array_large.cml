@@ -1,0 +1,39 @@
+/**
+ * The array module on arrays large enough for the parallel scheduler to split the work of
+ * the functions passed in. Their calls have no order among them; the results are put
+ * together by position and are the same on every back end.
+ */
+module array_large
+
+import { reverse, take, drop, enumerate, flatten, unique, index_of, sum, min, max, find, any, all, count, flat_map, sort_by, zip_with } from array
+
+func collatz(n: int, steps: int): int {
+    return if n == 1 then steps else if n % 2 == 0 then collatz(n / 2, steps + 1) else collatz(3 * n + 1, steps + 1)
+}
+
+func steps(n: int): int {
+    return collatz(n, 0)
+}
+
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    let xs = range(1, 2001)
+    let lengths = xs->map<steps>
+    println(len(lengths), sum(lengths), max(lengths) ?? -1, min(lengths) ?? -1)
+    println(xs->count<(n: int) => steps(n) > 100>, xs->any<(n: int) => steps(n) > 200>, xs->all<(n: int) => steps(n) < 300>)
+    println(xs->find<(n: int) => steps(n) > 150> ?? -1, lengths->index_of<111> ?? -1)
+
+    let longest = xs->sort_by<(n: int) => -steps(n)>->take<5>
+    println(longest, longest->map<steps>)
+    let by_length = xs->sort_by<steps>
+    println(by_length->take<8>, by_length->drop<1995>)
+
+    let pairs = xs->take<500>->flat_map<(n: int) => [n, steps(n)]>
+    println(len(pairs), sum(pairs), pairs->take<6>)
+    println(len(unique(lengths)), unique(lengths)->take<10>)
+    println(sum(zip_with<add>(xs, reverse(xs))), len(flatten([xs, lengths, xs])), enumerate(lengths)->drop<1998>)
+    return 0
+}

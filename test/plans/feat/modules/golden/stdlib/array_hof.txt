@@ -1,0 +1,19 @@
+4 5 -1 -1
+fig ?
+true false false
+true false true
+3 0 0 2
+16 [0, 0, 1, 0, 1, 2]
+10 []
+[]
+[1, 1, 2, 3, 4, 5, 6, 9] [9, 6, 5, 4, 3, 2, 1, 1] []
+[fig, Fig, pear, Apple, apple]
+[Apple, apple, fig, Fig, pear]
+[Apple, Fig, apple, fig, pear]
+[-1, 0, 2.5] [false, true, true]
+[Bob, Di, Ann, Cy]
+[Ann, Cy, Bob, Di]
+[11, 22, 33]
+[a1, b2]
+[]
+[36, 16, 4]

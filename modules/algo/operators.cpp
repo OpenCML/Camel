@@ -18,6 +18,7 @@
  */
 
 #include "operators.h"
+#include "sequence.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
@@ -232,7 +233,8 @@ slot_t __algo_merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx
 }
 
 std::unordered_map<std::string, operator_t> getAlgoOpsMap() {
-    return {
+    std::unordered_map<std::string, operator_t> ops = getAlgoSequenceOpsMap();
+    ops.merge(std::unordered_map<std::string, operator_t>{
         {"sort", __algo_quick_sort_inplace__},
         {"sorted", __algo_quick_sort__},
         {"insert_sort", __algo_insert_sort_inplace__},
@@ -242,5 +244,6 @@ std::unordered_map<std::string, operator_t> getAlgoOpsMap() {
         {"merge_sort", __algo_merge_sort_inplace__},
         {"merge_sorted", __algo_merge_sort__},
         {"merge_sorted_arrays", __algo_merge_sorted_arrays__},
-    };
+    });
+    return ops;
 }
