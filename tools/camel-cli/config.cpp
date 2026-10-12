@@ -23,11 +23,13 @@
 #include <atomic>
 #include <cctype>
 #include <charconv>
+#include <cstdlib>
 #include <string_view>
 #include <vector>
 
 #include "build_config.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/execute/limits.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
 #include "clipp/clipp.h"
@@ -130,6 +132,33 @@ bool parseTimeitSpecValue(
     }
 
     outIterations = parsedIterations;
+    return true;
+}
+
+/// Reads a depth limit given by `option` (its raw text in `optionText`; empty when the option
+/// is absent) or else by the environment variable `envName`. `out` gets the option's value;
+/// the environment's is read where it is used (camel::execute::recursionLimit) and is only
+/// checked here. False, with a message on stderr, when the text in effect is no limit.
+bool readDepthLimit(
+    const std::string &optionText, const char *option, const char *envName, size_t &out) {
+    const auto refuse = [](const char *what, std::string_view text) {
+        std::cerr << "Invalid " << what << " value: '" << text << "'. Expected an integer from 1 to "
+                  << camel::execute::kMaxDepthLimit << "." << std::endl;
+        return false;
+    };
+    if (!optionText.empty()) {
+        const auto value = camel::execute::parseDepthLimit(optionText);
+        if (!value) {
+            return refuse(option, optionText);
+        }
+        out = *value;
+        return true;
+    }
+    if (const char *raw = std::getenv(envName)) {
+        if (!camel::execute::parseDepthLimit(raw)) {
+            return refuse(envName, raw);
+        }
+    }
     return true;
 }
 
@@ -246,6 +275,11 @@ bool profile      = false;
 bool noCache      = false;
 bool semanticOnly = false;
 int maxThreads    = -1; // -1 means use the maximum number of threads
+
+string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
+string maxMacroDepthOpt     = ""; // raw --max-macro-depth
+size_t maxRecursionDepth    = 0;  // 0: not given on the command line
+size_t maxMacroDepth        = 0;
 } // namespace Run
 
 namespace Check {
@@ -516,6 +550,12 @@ bool parseArgs(int argc, char *argv[]) {
         (option("-P", "--profile").set(profile) % "profile the perf",
          (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
          (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
+         (option("--max-recursion-depth") & value("calls", maxRecursionDepthOpt)) %
+             "limit on calls open at once that are not tail calls (default: 256 on std::nvm and "
+             "std::fvm, the native stack on std::tf; also CAMEL_MAX_RECURSION_DEPTH)",
+         (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
+             "limit on nested calls while std::macro evaluates a call (default: 64; also "
+             "CAMEL_MAX_MACRO_DEPTH)",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
@@ -698,6 +738,21 @@ bool parseArgs(int argc, char *argv[]) {
             scriptDir,
             Run::resolvedPassList,
             &Run::fallbackPasses);
+
+        // The two depth limits: the option, else the environment variable. A value that is not
+        // an integer in range is refused here, before anything is compiled or run.
+        if (!readDepthLimit(
+                Run::maxRecursionDepthOpt,
+                camel::execute::kMaxRecursionDepthOption,
+                camel::execute::kMaxRecursionDepthEnvVar,
+                Run::maxRecursionDepth) ||
+            !readDepthLimit(
+                Run::maxMacroDepthOpt,
+                camel::execute::kMaxMacroDepthOption,
+                camel::execute::kMaxMacroDepthEnvVar,
+                Run::maxMacroDepth)) {
+            std::exit(1);
+        }
 
         if (Run::timeitEnabled && Run::profile) {
             std::cerr << "Error: --timeit cannot be combined with --profile." << std::endl;

@@ -72,6 +72,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
     Frame *currFrame                = rootFrame;
     Frame *rootActiveFrame          = rootFrame;
     const size_t stackDepthBase     = stackDepth_;
+    const size_t nestedCallsBase    = nestedCalls_;
 
     try {
         while (true) {
@@ -235,10 +236,14 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     "FastVM indirect CALL requires a materialized runtime graph target.");
                 const uint32_t callCount = noteIndirectCall(runtimeTarget);
 
+                // The call nests on the native stack: it is counted, and checked before the frame
+                // is taken.
+                requireNestedCallRoom(currFrame);
                 Frame *funcFrame = framePool_.acquire(runtimeTarget);
                 populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
 
                 _timer.pause();
+                ++nestedCalls_;
                 const auto &result = jitEnabled() ? invokeCallOrJit(
                                                         graphEntryPc(runtimeTarget),
                                                         runtimeTarget,
@@ -246,6 +251,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                                                         currentJitCtx_,
                                                         callCount)
                                                   : call(graphEntryPc(runtimeTarget), funcFrame);
+                --nestedCalls_;
                 _timer.resume();
 
                 currFrame->set(bc.result, result);
@@ -476,6 +482,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
         }
+        nestedCalls_ = nestedCallsBase;
         while (stackDepth_ > stackDepthBase) {
             releaseFrame(frameStack_[stackDepth_ - 1]);
             --stackDepth_;
@@ -502,6 +509,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
         }
+        nestedCalls_ = nestedCallsBase;
         while (stackDepth_ > stackDepthBase) {
             releaseFrame(frameStack_[stackDepth_ - 1]);
             --stackDepth_;

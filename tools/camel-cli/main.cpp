@@ -206,6 +206,8 @@ int main(int argc, char *argv[]) {
             .entryFile   = targetFile,
             .searchPaths = std::move(searchPaths),
             .maxThreads  = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
+            .maxRecursionDepth = Run::maxRecursionDepth,
+            .maxMacroDepth     = Run::maxMacroDepth,
         },
         compileDiagsConfig);
     ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig);

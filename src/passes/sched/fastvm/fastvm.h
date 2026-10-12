@@ -22,6 +22,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/execute/limits.h"
 #include "camel/execute/pass/runtime_sched.h"
 #include "camel/runtime/graph.h"
 #include "compile.h"
@@ -81,7 +82,8 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     };
 
   private:
-    inline static const size_t maxRecursionDepth_ = 256; // default max recursion depth
+    // Calls that may be open at once without being tail calls (camel/execute/limits.h).
+    size_t maxRecursionDepth_;
 
     void populateDirectCallFrame(
         ctx::Frame *callerFrame, ctx::Frame *calleeFrame, data_arr_t srcArgs, data_arr_t dstSlots);
@@ -101,7 +103,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
   private:
     // Frame pool used by the interpreter and JIT trampolines.
-    ctx::FramePool framePool_{1 * camel::core::mm::MB};
+    ctx::FramePool framePool_;
 
     bytecode_vec_t bytecodes_;
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap_;
@@ -129,11 +131,25 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     void setJitFailureReportedOf(camel::runtime::GCGraph *graph, bool reported);
 #endif
 
-    // Direct-call recursion depth is statically bounded, so the interpreter
-    // stack should stay fixed-size and allocation-free in the hot path.
-    std::array<size_t, maxRecursionDepth_> pcStack_{};
-    std::array<ctx::Frame *, maxRecursionDepth_> frameStack_{};
+    // The interpreter's own call stack: a direct call (FUNC) pushes its return pc and frame
+    // here and does not nest on the native stack. The two arrays start with room for the
+    // default limit and grow (outside the hot path) up to the limit in effect.
+    std::vector<size_t> pcStack_ = std::vector<size_t>(
+        camel::execute::kDefaultMaxRecursionDepth + camel::execute::kEntryCalls);
+    std::vector<ctx::Frame *> frameStack_ = std::vector<ctx::Frame *>(
+        camel::execute::kDefaultMaxRecursionDepth + camel::execute::kEntryCalls);
     size_t stackDepth_ = 0;
+    // Calls that do nest on the native stack: a call through a function value (CALL) and each
+    // element call of a higher-order operator run in a nested call(). They are open calls like
+    // the ones on pcStack_, and the limit is on the sum.
+    size_t nestedCalls_ = 0;
+
+    // Raises MaxRecursionDepthExceeded, before the call, when one more nested call would
+    // exceed the limit or would not fit the native stack. `caller` is the frame the call is
+    // made from.
+    void requireNestedCallRoom(const ctx::Frame *caller) const;
+    /// One element call of a higher-order operator: a nested, counted call.
+    slot_t callElement(const HigherOrderCallSite &site, ctx::Frame *frame);
 
     void precompile(camel::runtime::GCGraph *runtimeRoot);
     /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).
@@ -160,7 +176,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
   public:
     FastVMSchedPass(const ctx::context_ptr_t &ctx, const FastVMConfig &config = {})
-        : RuntimeGraphSchedulePass(ctx)
+        : RuntimeGraphSchedulePass(ctx),
+          maxRecursionDepth_(camel::execute::recursionLimit(*ctx).frames),
+          framePool_(camel::execute::framePoolBytes(maxRecursionDepth_))
 #if ENABLE_FASTVM_JIT
           ,
           jitConfig_([&config]() {

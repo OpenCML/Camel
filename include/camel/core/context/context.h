@@ -60,6 +60,11 @@ struct EntryConfig {
     // Upper bound on worker threads of parallel schedulers (`-t` on the command line); 0 means
     // not given: the scheduler uses the number of hardware threads.
     size_t maxThreads = 0;
+    // Limit on non-tail recursion (`--max-recursion-depth`) and on nested calls of the macro
+    // evaluator (`--max-macro-depth`); 0 means not given: see camel/execute/limits.h for the
+    // environment variables and the defaults.
+    size_t maxRecursionDepth = 0;
+    size_t maxMacroDepth     = 0;
 
     std::string toString() const;
 };
@@ -116,6 +121,8 @@ class Context : public std::enable_shared_from_this<Context> {
 
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     size_t maxThreads() const { return entryConfig_.maxThreads; }
+    size_t maxRecursionDepth() const { return entryConfig_.maxRecursionDepth; }
+    size_t maxMacroDepth() const { return entryConfig_.maxMacroDepth; }
     error::DiagsConfig diagConfig() const { return diagConfig_; }
     module_ptr_t mainModule() const { return mainModule_; }
     error::diagnostics_ptr_t rtmDiags() const { return runtimeDiagSink_; }
@@ -157,6 +164,8 @@ class Context : public std::enable_shared_from_this<Context> {
     void registerExecutorFactory(std::string name, std::function<std::shared_ptr<Executor>()> fact);
 
     void clearProcessExitCode() { processExitCode_.reset(); }
+    /** The program ended itself with `exit(code)` (camel/core/process_exit.h). */
+    void setProcessExitCode(int code) { processExitCode_ = code; }
     /** Every scheduling pass reports the value the entry graph returned here. */
     void captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result);
     /**
@@ -164,8 +173,6 @@ class Context : public std::enable_shared_from_this<Context> {
      * to a file on request). Called from captureProcessExitCode, while the value is live.
      */
     using EntryResultHandler = std::function<void(camel::runtime::GCGraph *, slot_t)>;
-    /** The program ended itself with `exit(code)` (camel/core/process_exit.h). */
-    void setProcessExitCode(int code) { processExitCode_ = code; }
     void setEntryResultHandler(EntryResultHandler handler) {
         entryResultHandler_ = std::move(handler);
     }

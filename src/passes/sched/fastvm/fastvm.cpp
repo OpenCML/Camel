@@ -23,6 +23,7 @@
 #include "camel/utils/log.h"
 #include "opperf.h"
 
+#include <algorithm>
 #include <limits>
 
 #if ENABLE_FASTVM_JIT
@@ -359,11 +360,15 @@ void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
 }
 
 void FastVMSchedPass::push(size_t pc, Frame *frame) {
-    if (stackDepth_ >= maxRecursionDepth_) {
-        throwRuntimeFault(
-            RuntimeDiag::MaxRecursionDepthExceeded,
-            frame->graphName(),
-            maxRecursionDepth_);
+    if (stackDepth_ + nestedCalls_ >= maxRecursionDepth_ + camel::execute::kEntryCalls) {
+        camel::execute::throwRecursionLimitReached(frame->graphName(), maxRecursionDepth_);
+    }
+    if (stackDepth_ == pcStack_.size()) [[unlikely]] {
+        const size_t grown = std::min(
+            pcStack_.size() * 2,
+            maxRecursionDepth_ + camel::execute::kEntryCalls);
+        pcStack_.resize(grown);
+        frameStack_.resize(grown);
     }
     pcStack_[stackDepth_]    = pc;
     frameStack_[stackDepth_] = frame;
@@ -378,6 +383,28 @@ std::pair<size_t, Frame *> FastVMSchedPass::pop() {
     return {pc, frame};
 }
 
+void FastVMSchedPass::requireNestedCallRoom(const Frame *caller) const {
+    // The entry graph's call of main is open too and is not counted (kEntryCalls).
+    const size_t openCalls = stackDepth_ + nestedCalls_;
+    if (openCalls >= maxRecursionDepth_ + camel::execute::kEntryCalls) {
+        camel::execute::throwRecursionLimitReached(caller->graphName(), maxRecursionDepth_);
+    }
+    if (camel::execute::nativeStackNearlyExhausted()) [[unlikely]] {
+        camel::execute::throwNativeStackExhausted(caller->graphName(), openCalls);
+    }
+}
+
+slot_t FastVMSchedPass::callElement(const HigherOrderCallSite &site, Frame *frame) {
+    ++nestedCalls_;
+#if ENABLE_FASTVM_JIT
+    slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
+#else
+    slot_t result = call(site.entryPc, frame);
+#endif
+    --nestedCalls_;
+    return result;
+}
+
 camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     (void)os;
     ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
@@ -385,7 +412,8 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     camel::runtime::GCGraph *runtimeRoot = graph;
     precompile(runtimeRoot);
 
-    stackDepth_ = 0;
+    stackDepth_  = 0;
+    nestedCalls_ = 0;
 
 #if ENABLE_FASTVM_JIT
     if (jitConfig_.policy != JitPolicy::Disabled && !jitBackend_) {
@@ -436,7 +464,8 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
         slot_t result = call(pc, frame);
         context_->captureProcessExitCode(runtimeRoot, result);
     } catch (...) {
-        stackDepth_ = 0;
+        stackDepth_  = 0;
+        nestedCalls_ = 0;
         throw;
     }
     opperf::stop();
@@ -480,14 +509,11 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
         Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
+        requireNestedCallRoom(&currFrame);
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
-#if ENABLE_FASTVM_JIT
-        slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
-#else
-        slot_t result = call(site.entryPc, frame);
-#endif
+        slot_t result = callElement(site, frame);
         currFrame.get<Array *>(self)->set<slot_t>(i, result, resultType);
     }
 }
@@ -502,14 +528,11 @@ void FastVMSchedPass::evalMarkedOperator_apply_arr(
         Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
+        requireNestedCallRoom(&currFrame);
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
-#if ENABLE_FASTVM_JIT
-        slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
-#else
-        slot_t result = call(site.entryPc, frame);
-#endif
+        slot_t result = callElement(site, frame);
         currFrame.get<Array *>(nargs[0])->set<slot_t>(i, result, arrType);
     }
 
@@ -531,14 +554,11 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
         Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
+        requireNestedCallRoom(&currFrame);
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
-#if ENABLE_FASTVM_JIT
-        slot_t result = invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
-#else
-        slot_t result = call(site.entryPc, frame);
-#endif
+        slot_t result = callElement(site, frame);
 
         if (fromSlot<bool>(result)) {
             currFrame.get<Array *>(self)->append(
@@ -568,16 +588,11 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
         Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = higherOrderCallSite(func);
         const slot_t args[]            = {currFrame.get<slot_t>(self), arr->data()[i]};
+        requireNestedCallRoom(&currFrame);
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
-#if ENABLE_FASTVM_JIT
-        currFrame.set(
-            self,
-            invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_));
-#else
-        currFrame.set(self, call(site.entryPc, frame));
-#endif
+        currFrame.set(self, callElement(site, frame));
     }
 }
 
@@ -590,14 +605,11 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
         Function *func                 = currFrame.get<Function *>(wargs[0]);
         const HigherOrderCallSite site = higherOrderCallSite(func);
         slot_t element                 = arr->data()[i];
+        requireNestedCallRoom(&currFrame);
         Frame *frame                   = framePool_.acquire(site.runtimeGraph);
         populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
 
-#if ENABLE_FASTVM_JIT
-        invokeCallOrJit(site.entryPc, site.runtimeGraph, frame, currentJitCtx_);
-#else
-        call(site.entryPc, frame);
-#endif
+        callElement(site, frame);
     }
 
     // foreach has no aggregate return value.
