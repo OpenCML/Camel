@@ -1,0 +1,66 @@
+// Function definitions, calls, with-parameters, decorators and function literals.
+module functions
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func no_params() sync {
+    println('side effect')
+}
+
+func defaults(x: int, var y: float = 1.0, name: string = 'n'): void {
+    return null
+}
+
+with <k: int>
+func add_n(f: (x: int) => int): (x: int) => int {
+    return (x: int): int => {
+        return f(x) + k
+    }
+}
+
+with <predicate: (p: Point) => bool, var count: int>
+func my_filter(points: Point[]): Point[] sync {
+    var result: Point[] = []
+    points->foreach<(p: Point) => sync {
+        if predicate(p) then sync {
+            result->append<p>
+            return null
+        }
+    }>
+    return result
+}
+
+@add_n<1>
+@tools::trace
+@mul_n<2>
+export sync func core(x: int): int {
+    return x + 3
+}
+
+func tools::helper(x: int): int {
+    return x
+}
+
+func calls(arr: int[], p: Point): int sync {
+    let direct = fib(10)
+    let with_args = add_n<3>(fib)
+    let bound = arr->slice<0, len(arr) - 1>
+    let named = make(x: 1, y: p.x)
+    let qualified = math::sqrt(2.0)
+    let deep = a::b::c(1)
+    let method = p.norm()
+    let chained = make_adder(1)(2)
+    let indexed = table[0](3)
+    let member = pairs[0].0
+    let converted = float(direct) + int(2.5)
+    let lambda = (x: int): int => x + 1
+    let block_lambda = (var acc: int, x: int) => sync {
+        acc += x
+    }
+    let compare = direct < 5 && direct > 2
+    let tight = add_n<direct>(fib)(1) >= 2
+    wait no_params()
+    return lambda(direct)
+}

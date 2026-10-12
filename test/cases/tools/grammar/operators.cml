@@ -1,0 +1,71 @@
+// Operators and punctuation: every literal token of antlr/OpenCML.g4.
+module operators
+
+func compare(a: int, b: int): bool {
+    let strict = a === b
+    let strict_not = a !== b
+    let eq = a == b
+    let ne = a != b
+    let lt = a < b
+    let gt = a > b
+    let le = a <= b
+    let ge = a >= b
+    return strict && eq || !ne
+}
+
+func arithmetic(a: float, b: float, X: Tensor, w: Tensor): float {
+    let sum = a + b - a * b / a % b
+    let pow = a ^ 2.0
+    let mat = X @ w
+    let inv = ~7
+    let neg = -a
+    return sum
+}
+
+sync func assign(var x: int, var t: Tensor, u: Tensor) {
+    x = 1
+    x += 2
+    x -= 3
+    x *= 4
+    x /= 5
+    x %= 6
+    x ^= 7
+    t @= u
+    x &= 8
+    x |= 9
+}
+
+func tagged(m: Map<string, int>, r: int!, o: int?): int {
+    let a = m['a'] ?? 0
+    let b = r !! 0
+    let c = r ?-> double
+    let d = o ?? 1
+    let e: int! = r
+    let not_e = !(a == b) && !flag
+    let f: (int?)[] = []
+    let g: int?! = r
+    return a + b
+}
+
+func pipes(xs: int[], idx: int): void sync {
+    'value {}'->format<idx>->println
+    xs->map<double>->println
+    let h = double..double
+    let k = double?..double
+    let part = xs[1:3]
+    let stepped = xs[0:10:2]
+    let all = [...xs, 1]
+    let merged = { ...base, x: 1 }
+    spread(...xs)
+}
+
+type Union = int | string
+type Both = A & B
+type Diff = A \ B
+type Keys = A + B - C ^ D
+type Fn = (x: int, y: int) => int
+type Nullable = int?
+type Fallible = string!
+type Nested = Map<string, Set<int>>
+
+let end = 1; let after = 2;

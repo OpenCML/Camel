@@ -1,0 +1,319 @@
+>// Type declarations and type expressions.
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>module types
+#^^^^^^ keyword.control.import.module.camel
+#       ^^^^^ entity.name.namespace.module.camel
+>
+>type Point = {
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^ meta.type.definition.camel entity.name.type.camel
+#           ^ keyword.operator.assignment.camel
+#             ^ meta.block.camel punctuation.section.block.begin.camel
+>    x: int,
+#    ^ meta.block.camel variable.other.property.camel
+#     ^ meta.block.camel punctuation.separator.colon.camel
+#       ^^^ meta.block.camel support.type.primitive.camel
+#          ^ meta.block.camel punctuation.separator.comma.camel
+>    y: int
+#    ^ meta.block.camel variable.other.property.camel
+#     ^ meta.block.camel punctuation.separator.colon.camel
+#       ^^^ meta.block.camel support.type.primitive.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>type Signal = (int, int)
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^^ meta.type.definition.camel entity.name.type.camel
+#            ^ keyword.operator.assignment.camel
+#              ^ meta.parens.camel punctuation.section.parens.begin.camel
+#               ^^^ meta.parens.camel support.type.primitive.camel
+#                  ^ meta.parens.camel punctuation.separator.comma.camel
+#                    ^^^ meta.parens.camel support.type.primitive.camel
+#                       ^ meta.parens.camel punctuation.section.parens.end.camel
+>type Pair<T> = (T, T)
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^ meta.type.definition.camel entity.name.type.camel
+#         ^ meta.type.definition.camel punctuation.definition.type-parameters.begin.camel
+#          ^ meta.type.definition.camel entity.name.type.parameter.camel
+#           ^ meta.type.definition.camel punctuation.definition.type-parameters.end.camel
+#             ^ keyword.operator.assignment.camel
+#               ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                 ^ meta.parens.camel punctuation.separator.comma.camel
+#                    ^ meta.parens.camel punctuation.section.parens.end.camel
+>type Entry<K, V> = { key: K, value: V }
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^ meta.type.definition.camel entity.name.type.camel
+#          ^ meta.type.definition.camel punctuation.definition.type-parameters.begin.camel
+#           ^ meta.type.definition.camel entity.name.type.parameter.camel
+#            ^ meta.type.definition.camel punctuation.separator.comma.camel
+#              ^ meta.type.definition.camel entity.name.type.parameter.camel
+#               ^ meta.type.definition.camel punctuation.definition.type-parameters.end.camel
+#                 ^ keyword.operator.assignment.camel
+#                   ^ meta.block.camel punctuation.section.block.begin.camel
+#                     ^^^ meta.block.camel variable.other.property.camel
+#                        ^ meta.block.camel punctuation.separator.colon.camel
+#                           ^ meta.block.camel punctuation.separator.comma.camel
+#                             ^^^^^ meta.block.camel variable.other.property.camel
+#                                  ^ meta.block.camel punctuation.separator.colon.camel
+#                                      ^ meta.block.camel punctuation.section.block.end.camel
+>type Tight<T>= T[]
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^ meta.type.definition.camel entity.name.type.camel
+#          ^ meta.type.definition.camel punctuation.definition.type-parameters.begin.camel
+#           ^ meta.type.definition.camel entity.name.type.parameter.camel
+#            ^ meta.type.definition.camel punctuation.definition.type-parameters.end.camel
+#             ^ keyword.operator.assignment.camel
+#                ^ meta.brackets.camel punctuation.section.brackets.begin.camel
+#                 ^ meta.brackets.camel punctuation.section.brackets.end.camel
+>type Predicate = (p: Point) => bool
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^^^^^ meta.type.definition.camel entity.name.type.camel
+#               ^ keyword.operator.assignment.camel
+#                 ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                  ^ meta.parens.camel variable.parameter.camel
+#                   ^ meta.parens.camel punctuation.separator.colon.camel
+#                          ^ meta.parens.camel punctuation.section.parens.end.camel
+#                            ^^ keyword.operator.arrow.camel
+#                               ^^^^ support.type.primitive.camel
+>type Effect = sync (x: int) => void
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^^ meta.type.definition.camel entity.name.type.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^^ storage.modifier.sync.camel
+#                   ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                    ^ meta.parens.camel variable.parameter.camel
+#                     ^ meta.parens.camel punctuation.separator.colon.camel
+#                       ^^^ meta.parens.camel support.type.primitive.camel
+#                          ^ meta.parens.camel punctuation.section.parens.end.camel
+#                            ^^ keyword.operator.arrow.camel
+#                               ^^^^ support.type.primitive.camel
+>type Grid = float[][]
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^ meta.type.definition.camel entity.name.type.camel
+#          ^ keyword.operator.assignment.camel
+#            ^^^^^ support.type.primitive.camel
+#                 ^ meta.brackets.camel punctuation.section.brackets.begin.camel
+#                  ^ meta.brackets.camel punctuation.section.brackets.end.camel
+#                   ^ meta.brackets.camel punctuation.section.brackets.begin.camel
+#                    ^ meta.brackets.camel punctuation.section.brackets.end.camel
+>type Shape = Tensor<f32, const [3, 4]>
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^ meta.type.definition.camel entity.name.type.camel
+#           ^ keyword.operator.assignment.camel
+#                   ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                    ^^^ meta.angle-arguments.camel support.type.primitive.camel
+#                       ^ meta.angle-arguments.camel punctuation.separator.comma.camel
+#                         ^^^^^ meta.angle-arguments.camel storage.modifier.camel
+#                               ^ meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                                ^ meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                                 ^ meta.angle-arguments.camel meta.brackets.camel punctuation.separator.comma.camel
+#                                   ^ meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                                    ^ meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                                     ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>type Lookup = Map<string, Set<i64>>
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^^ meta.type.definition.camel entity.name.type.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^ support.type.collection.camel
+#                 ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                  ^^^^^^ meta.angle-arguments.camel support.type.primitive.camel
+#                        ^ meta.angle-arguments.camel punctuation.separator.comma.camel
+#                          ^^^ meta.angle-arguments.camel support.type.collection.camel
+#                             ^ meta.angle-arguments.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                              ^^^ meta.angle-arguments.camel meta.angle-arguments.camel support.type.primitive.camel
+#                                 ^ meta.angle-arguments.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                                  ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>type Maybe = (int?)[]
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^ meta.type.definition.camel entity.name.type.camel
+#           ^ keyword.operator.assignment.camel
+#             ^ meta.parens.camel punctuation.section.parens.begin.camel
+#              ^^^ meta.parens.camel support.type.primitive.camel
+#                 ^ meta.parens.camel keyword.operator.type.camel
+#                  ^ meta.parens.camel punctuation.section.parens.end.camel
+#                   ^ meta.brackets.camel punctuation.section.brackets.begin.camel
+#                    ^ meta.brackets.camel punctuation.section.brackets.end.camel
+>type Words = string[]
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^ meta.type.definition.camel entity.name.type.camel
+#           ^ keyword.operator.assignment.camel
+#             ^^^^^^ support.type.primitive.camel
+#                   ^ meta.brackets.camel punctuation.section.brackets.begin.camel
+#                    ^ meta.brackets.camel punctuation.section.brackets.end.camel
+>type All = i32 | i64 | f32 | f64 | bool | any | void
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^ meta.type.definition.camel entity.name.type.camel
+#         ^ keyword.operator.assignment.camel
+#           ^^^ support.type.primitive.camel
+#               ^ keyword.operator.type.camel
+#                 ^^^ support.type.primitive.camel
+#                     ^ keyword.operator.type.camel
+#                       ^^^ support.type.primitive.camel
+#                           ^ keyword.operator.type.camel
+#                             ^^^ support.type.primitive.camel
+#                                 ^ keyword.operator.type.camel
+#                                   ^^^^ support.type.primitive.camel
+#                                        ^ keyword.operator.type.camel
+#                                          ^^^ support.type.primitive.camel
+#                                              ^ keyword.operator.type.camel
+#                                                ^^^^ support.type.primitive.camel
+>
+>func or_else(x: (typeas T)?, d: T): T {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#            ^ meta.parens.camel punctuation.section.parens.begin.camel
+#             ^ meta.parens.camel variable.parameter.camel
+#              ^ meta.parens.camel punctuation.separator.colon.camel
+#                ^ meta.parens.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                 ^^^^^^ meta.parens.camel meta.parens.camel keyword.operator.expression.typeas.camel
+#                        ^ meta.parens.camel meta.parens.camel entity.name.type.parameter.camel
+#                         ^ meta.parens.camel meta.parens.camel punctuation.section.parens.end.camel
+#                          ^ meta.parens.camel keyword.operator.type.camel
+#                           ^ meta.parens.camel punctuation.separator.comma.camel
+#                             ^ meta.parens.camel variable.parameter.camel
+#                              ^ meta.parens.camel punctuation.separator.colon.camel
+#                                 ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                  ^ punctuation.separator.colon.camel
+#                                      ^ meta.block.camel punctuation.section.block.begin.camel
+>    return x ?? d
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#             ^^ meta.block.camel keyword.operator.fallback.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func sum_pair(p: Pair<int>): int {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#             ^ meta.parens.camel punctuation.section.parens.begin.camel
+#              ^ meta.parens.camel variable.parameter.camel
+#               ^ meta.parens.camel punctuation.separator.colon.camel
+#                     ^ meta.parens.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                      ^^^ meta.parens.camel meta.angle-arguments.camel support.type.primitive.camel
+#                         ^ meta.parens.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                          ^ meta.parens.camel punctuation.section.parens.end.camel
+#                           ^ punctuation.separator.colon.camel
+#                             ^^^ support.type.primitive.camel
+#                                 ^ meta.block.camel punctuation.section.block.begin.camel
+>    return p.0 + p.1
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#            ^ meta.block.camel punctuation.accessor.camel
+#             ^ meta.block.camel constant.numeric.integer.index.camel
+#               ^ meta.block.camel keyword.operator.arithmetic.camel
+#                  ^ meta.block.camel punctuation.accessor.camel
+#                   ^ meta.block.camel constant.numeric.integer.index.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func build(): Entry<string, Point> {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^ meta.function.definition.camel entity.name.function.camel
+#          ^ meta.parens.camel punctuation.section.parens.begin.camel
+#           ^ meta.parens.camel punctuation.section.parens.end.camel
+#            ^ punctuation.separator.colon.camel
+#                   ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                    ^^^^^^ meta.angle-arguments.camel support.type.primitive.camel
+#                          ^ meta.angle-arguments.camel punctuation.separator.comma.camel
+#                                 ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                                   ^ meta.block.camel punctuation.section.block.begin.camel
+>    let (a, b) = (1, 2)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel punctuation.definition.binding-pattern.camel
+#         ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel meta.declaration.let.camel punctuation.separator.comma.camel
+#            ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#             ^ meta.block.camel meta.declaration.let.camel punctuation.definition.binding-pattern.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                  ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                   ^ meta.block.camel meta.parens.camel punctuation.separator.comma.camel
+#                     ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                      ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let { x, y } = { x: a, y: b }
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel punctuation.definition.binding-pattern.camel
+#          ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel meta.declaration.let.camel punctuation.separator.comma.camel
+#             ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#               ^ meta.block.camel meta.declaration.let.camel punctuation.definition.binding-pattern.camel
+#                 ^ meta.block.camel keyword.operator.assignment.camel
+#                   ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                     ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                      ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                         ^ meta.block.camel meta.block.camel punctuation.separator.comma.camel
+#                           ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                            ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                                ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    let [head, tail] = [a, b]
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel punctuation.definition.binding-pattern.camel
+#         ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#             ^ meta.block.camel meta.declaration.let.camel punctuation.separator.comma.camel
+#               ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                   ^ meta.block.camel meta.declaration.let.camel punctuation.definition.binding-pattern.camel
+#                     ^ meta.block.camel keyword.operator.assignment.camel
+#                       ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                         ^ meta.block.camel meta.brackets.camel punctuation.separator.comma.camel
+#                            ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+>    var m, n: int, int = 1, 2
+#    ^^^ meta.block.camel meta.declaration.var.camel storage.type.var.camel
+#        ^ meta.block.camel meta.declaration.var.camel variable.other.readwrite.camel
+#         ^ meta.block.camel meta.declaration.var.camel punctuation.separator.comma.camel
+#           ^ meta.block.camel meta.declaration.var.camel variable.other.readwrite.camel
+#            ^ meta.block.camel punctuation.separator.colon.camel
+#              ^^^ meta.block.camel support.type.primitive.camel
+#                 ^ meta.block.camel punctuation.separator.comma.camel
+#                   ^^^ meta.block.camel support.type.primitive.camel
+#                       ^ meta.block.camel keyword.operator.assignment.camel
+#                         ^ meta.block.camel constant.numeric.integer.decimal.camel
+#                          ^ meta.block.camel punctuation.separator.comma.camel
+#                            ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let entry: Entry<string, Point> = { key: 'k', value: { x: x, y: y } }
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#             ^ meta.block.camel punctuation.separator.colon.camel
+#                    ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                     ^^^^^^ meta.block.camel meta.angle-arguments.camel support.type.primitive.camel
+#                           ^ meta.block.camel meta.angle-arguments.camel punctuation.separator.comma.camel
+#                                  ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                                    ^ meta.block.camel keyword.operator.assignment.camel
+#                                      ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                                        ^^^ meta.block.camel meta.block.camel variable.other.property.camel
+#                                           ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                                             ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                                              ^ meta.block.camel meta.block.camel string.quoted.single.camel
+#                                               ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
+#                                                ^ meta.block.camel meta.block.camel punctuation.separator.comma.camel
+#                                                  ^^^^^ meta.block.camel meta.block.camel variable.other.property.camel
+#                                                       ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                                                         ^ meta.block.camel meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                                                           ^ meta.block.camel meta.block.camel meta.block.camel variable.other.property.camel
+#                                                            ^ meta.block.camel meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                                                               ^ meta.block.camel meta.block.camel meta.block.camel punctuation.separator.comma.camel
+#                                                                 ^ meta.block.camel meta.block.camel meta.block.camel variable.other.property.camel
+#                                                                  ^ meta.block.camel meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                                                                      ^ meta.block.camel meta.block.camel meta.block.camel punctuation.section.block.end.camel
+#                                                                        ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    let empty: Map<string, int> = [] as Map<string, int>
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#             ^ meta.block.camel punctuation.separator.colon.camel
+#               ^^^ meta.block.camel support.type.collection.camel
+#                  ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                   ^^^^^^ meta.block.camel meta.angle-arguments.camel support.type.primitive.camel
+#                         ^ meta.block.camel meta.angle-arguments.camel punctuation.separator.comma.camel
+#                           ^^^ meta.block.camel meta.angle-arguments.camel support.type.primitive.camel
+#                              ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                                ^ meta.block.camel keyword.operator.assignment.camel
+#                                  ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                                   ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                                     ^^ meta.block.camel keyword.operator.expression.camel
+#                                        ^^^ meta.block.camel support.type.collection.camel
+#                                           ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                                            ^^^^^^ meta.block.camel meta.angle-arguments.camel support.type.primitive.camel
+#                                                  ^ meta.block.camel meta.angle-arguments.camel punctuation.separator.comma.camel
+#                                                    ^^^ meta.block.camel meta.angle-arguments.camel support.type.primitive.camel
+#                                                       ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>    return entry
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel

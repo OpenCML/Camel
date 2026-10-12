@@ -1,0 +1,602 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Camel",
+  "scopeName": "source.camel",
+  "fileTypes": ["cml"],
+  "information_for_contributors": [
+    "Derived from antlr/OpenCMLLex.g4 (tokens) and antlr/OpenCML.g4 (literal tokens, contexts).",
+    "scripts/check-grammar.mjs checks the keyword, operator and built-in type tables against",
+    "those files: the 'keywords', 'builtin-types', 'operators' and 'punctuation' rules below must",
+    "stay lists of plain 'match' patterns, keywords as \\b(?:a|b|c)\\b alternations."
+  ],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#command" },
+    { "include": "#strings" },
+    { "include": "#decorator" },
+    { "include": "#declarations" },
+    { "include": "#keywords" },
+    { "include": "#wildcard" },
+    { "include": "#builtin-types" },
+    { "include": "#numbers" },
+    { "include": "#pipe-target" },
+    { "include": "#calls" },
+    { "include": "#namespace-path" },
+    { "include": "#member-access" },
+    { "include": "#angle-arguments" },
+    { "include": "#operators" },
+    { "include": "#brackets" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.camel",
+          "begin": "/\\*\\*(?!/)",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.camel" } },
+          "end": "\\*/",
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.camel" } }
+        },
+        {
+          "name": "comment.block.camel",
+          "begin": "/\\*",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.camel" } },
+          "end": "\\*/",
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.camel" } }
+        },
+        {
+          "name": "comment.line.double-slash.camel",
+          "match": "(//).*$",
+          "captures": { "1": { "name": "punctuation.definition.comment.camel" } }
+        }
+      ]
+    },
+    "command": {
+      "comment": "COMMAND: '#' to the end of the line, on its own lexer channel.",
+      "name": "meta.preprocessor.command.camel",
+      "match": "(#).*$",
+      "captures": { "1": { "name": "punctuation.definition.directive.camel" } }
+    },
+    "strings": {
+      "patterns": [
+        {
+          "comment": "MULTI_STR, single quotes. The lexer ends it at the first ''' whatever precedes.",
+          "name": "string.quoted.triple.single.camel",
+          "begin": "'''",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.camel" } },
+          "end": "'''",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.camel" } },
+          "patterns": [
+            { "include": "#string-escape-in-triple" },
+            { "include": "#string-placeholder" }
+          ]
+        },
+        {
+          "comment": "MULTI_STR, double quotes.",
+          "name": "string.quoted.triple.double.camel",
+          "begin": "\"\"\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.camel" } },
+          "end": "\"\"\"",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.camel" } },
+          "patterns": [
+            { "include": "#string-escape-in-triple" },
+            { "include": "#string-placeholder" }
+          ]
+        },
+        {
+          "comment": "STRING, double quotes. May span lines: the lexer's '.' matches a newline.",
+          "name": "string.quoted.double.camel",
+          "begin": "\"",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.camel" } },
+          "end": "\"",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.camel" } },
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#string-placeholder" }
+          ]
+        },
+        {
+          "comment": "STRING, single quotes.",
+          "name": "string.quoted.single.camel",
+          "begin": "'",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.camel" } },
+          "end": "'",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.camel" } },
+          "patterns": [
+            { "include": "#string-escape" },
+            { "include": "#string-placeholder" }
+          ]
+        },
+        {
+          "comment": "FSTRING. A token of the lexer; the compiler rejects it (formatted strings are not implemented), so no interpolation syntax is highlighted.",
+          "name": "string.interpolated.backtick.camel",
+          "begin": "`",
+          "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.camel" } },
+          "end": "`",
+          "endCaptures": { "0": { "name": "punctuation.definition.string.end.camel" } },
+          "patterns": [
+            { "include": "#string-escape" }
+          ]
+        }
+      ]
+    },
+    "string-escape": {
+      "comment": "What decodeEscapes (include/camel/utils/escape.h) decodes. Any other backslash pair is kept as written, but still hides a quote from the lexer.",
+      "patterns": [
+        {
+          "name": "constant.character.escape.camel",
+          "match": "\\\\(?:[ntrabfv\\\\\"']|0[0-7]{0,2}|x[0-9a-fA-F]{1,2})"
+        },
+        {
+          "match": "\\\\[\\\\\"'`]"
+        }
+      ]
+    },
+    "string-escape-in-triple": {
+      "comment": "The same escapes, except that a backslash does not hide the closing quotes of a multi-line string.",
+      "patterns": [
+        {
+          "name": "constant.character.escape.camel",
+          "match": "\\\\(?!'''|\"\"\")(?:[ntrabfv\\\\\"']|0[0-7]{0,2}|x[0-9a-fA-F]{1,2})"
+        }
+      ]
+    },
+    "string-placeholder": {
+      "comment": "A placeholder of the library function 'format': {} or {:spec}.",
+      "name": "constant.other.placeholder.camel",
+      "match": "\\{(?::[^{}'\"\\n]*)?\\}"
+    },
+    "decorator": {
+      "comment": "funcAnno: '@' identRef angledValues? ahead of a function declaration. '@' is also a binary operator, so a decorator is recognised at the start of a line only.",
+      "name": "meta.decorator.camel",
+      "match": "^\\s*(@)((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)",
+      "captures": {
+        "1": { "name": "punctuation.definition.decorator.camel" },
+        "2": { "patterns": [{ "include": "#namespace-path" }] },
+        "3": { "name": "entity.name.function.decorator.camel" }
+      }
+    },
+    "declarations": {
+      "patterns": [
+        { "include": "#module-declaration" },
+        { "include": "#import-declaration" },
+        { "include": "#namespace-declaration" },
+        { "include": "#with-parameters" },
+        { "include": "#function-declaration" },
+        { "include": "#type-declaration" },
+        { "include": "#typeas-binding" },
+        { "include": "#catch-binding" },
+        { "include": "#let-declaration" },
+        { "include": "#var-declaration" }
+      ]
+    },
+    "module-declaration": {
+      "comment": "moduleDecl: MODULE identDef",
+      "match": "\\b(module)\\s+([A-Za-z_][A-Za-z_0-9]*)",
+      "captures": {
+        "1": { "name": "keyword.control.import.module.camel" },
+        "2": { "name": "entity.name.namespace.module.camel" }
+      }
+    },
+    "import-declaration": {
+      "comment": "importDecl: IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName); moduleName: ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*",
+      "patterns": [
+        {
+          "match": "\\b(from)\\s+(\\.{1,3})?([A-Za-z_][A-Za-z_0-9]*(?:\\.[A-Za-z_][A-Za-z_0-9]*)*)",
+          "captures": {
+            "1": { "name": "keyword.control.import.from.camel" },
+            "2": { "name": "punctuation.separator.module.relative.camel" },
+            "3": { "name": "entity.name.namespace.module.camel" }
+          }
+        },
+        {
+          "match": "\\b(import)\\s+(\\.{1,3})?([A-Za-z_][A-Za-z_0-9]*(?:\\.[A-Za-z_][A-Za-z_0-9]*)*)(?![A-Za-z_0-9.]|\\s+from\\b)",
+          "captures": {
+            "1": { "name": "keyword.control.import.camel" },
+            "2": { "name": "punctuation.separator.module.relative.camel" },
+            "3": { "name": "entity.name.namespace.module.camel" }
+          }
+        }
+      ]
+    },
+    "namespace-declaration": {
+      "comment": "namespaceDecl: NAMESPACE identRef '{' ...; usingNamespaceDecl: USING NAMESPACE identRef",
+      "match": "\\b(namespace)\\s+((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)",
+      "captures": {
+        "1": { "name": "storage.type.namespace.camel" },
+        "2": { "patterns": [{ "include": "#namespace-path" }] },
+        "3": { "name": "entity.name.namespace.camel" }
+      }
+    },
+    "with-parameters": {
+      "comment": "funcDecl: (WITH angledParams)? ... FUNC",
+      "name": "meta.with-parameters.camel",
+      "begin": "\\b(with)\\s*(<)",
+      "beginCaptures": {
+        "1": { "name": "keyword.other.with.camel" },
+        "2": { "name": "punctuation.definition.with-parameters.begin.camel" }
+      },
+      "end": "(>)(?!=)|(?=[)\\]};])",
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.with-parameters.end.camel" }
+      },
+      "patterns": [
+        { "include": "#parameter-name" },
+        { "include": "$self" }
+      ]
+    },
+    "function-declaration": {
+      "comment": "funcDecl: ... FUNC identRef parentParams (':' typeExpr)? stmtBlock",
+      "name": "meta.function.definition.camel",
+      "match": "\\b(func)\\s+((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)",
+      "captures": {
+        "1": { "name": "storage.type.function.camel" },
+        "2": { "patterns": [{ "include": "#namespace-path" }] },
+        "3": { "name": "entity.name.function.camel" }
+      }
+    },
+    "type-declaration": {
+      "comment": "typeDecl: implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING)",
+      "patterns": [
+        {
+          "name": "meta.type.definition.camel",
+          "begin": "\\b(type)\\s+((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)\\s*(<)",
+          "beginCaptures": {
+            "1": { "name": "storage.type.type.camel" },
+            "2": { "patterns": [{ "include": "#namespace-path" }] },
+            "3": { "name": "entity.name.type.camel" },
+            "4": { "name": "punctuation.definition.type-parameters.begin.camel" }
+          },
+          "end": "(>)|(?=[=)\\]};])",
+          "endCaptures": {
+            "1": { "name": "punctuation.definition.type-parameters.end.camel" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            {
+              "name": "entity.name.type.parameter.camel",
+              "match": "\\b[A-Za-z_][A-Za-z_0-9]*\\b"
+            },
+            {
+              "name": "punctuation.separator.comma.camel",
+              "match": ","
+            }
+          ]
+        },
+        {
+          "name": "meta.type.definition.camel",
+          "match": "\\b(type)\\s+((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)",
+          "captures": {
+            "1": { "name": "storage.type.type.camel" },
+            "2": { "patterns": [{ "include": "#namespace-path" }] },
+            "3": { "name": "entity.name.type.camel" }
+          }
+        }
+      ]
+    },
+    "typeas-binding": {
+      "comment": "primaryType: TYPEAS identDef binds a type variable.",
+      "match": "\\b(typeas)\\s+([A-Za-z_][A-Za-z_0-9]*)",
+      "captures": {
+        "1": { "name": "keyword.operator.expression.typeas.camel" },
+        "2": { "name": "entity.name.type.parameter.camel" }
+      }
+    },
+    "catch-binding": {
+      "comment": "catchClause: CATCH identDef ':' typeExpr stmtBlock",
+      "match": "\\b(catch)\\s+([A-Za-z_][A-Za-z_0-9]*)",
+      "captures": {
+        "1": { "name": "keyword.control.exception.camel" },
+        "2": { "name": "variable.parameter.camel" }
+      }
+    },
+    "let-declaration": {
+      "comment": "dataDecl: LET carrier (':' typeList)? '=' dataList. The names of the carrier are immutable bindings.",
+      "name": "meta.declaration.let.camel",
+      "begin": "\\b(let)\\b",
+      "beginCaptures": { "1": { "name": "storage.type.let.camel" } },
+      "end": "(?=[=:;])|$",
+      "patterns": [
+        { "include": "#comments" },
+        {
+          "name": "variable.other.constant.camel",
+          "match": "\\b[A-Za-z_][A-Za-z_0-9]*\\b"
+        },
+        { "include": "#carrier-punctuation" }
+      ]
+    },
+    "var-declaration": {
+      "comment": "dataDecl: VAR carrier (':' typeList)? '=' dataList. The names of the carrier are mutable variables.",
+      "name": "meta.declaration.var.camel",
+      "begin": "\\b(var)\\b",
+      "beginCaptures": { "1": { "name": "storage.type.var.camel" } },
+      "end": "(?=[=:;])|$",
+      "patterns": [
+        { "include": "#comments" },
+        {
+          "name": "variable.other.readwrite.camel",
+          "match": "\\b[A-Za-z_][A-Za-z_0-9]*\\b"
+        },
+        { "include": "#carrier-punctuation" }
+      ]
+    },
+    "carrier-punctuation": {
+      "comment": "carrier: identList | parentIdents | bracedIdents | bracketIdents",
+      "patterns": [
+        { "name": "punctuation.separator.comma.camel", "match": "," },
+        { "name": "punctuation.definition.binding-pattern.camel", "match": "[(){}\\[\\]]" }
+      ]
+    },
+    "parameter-name": {
+      "comment": "keyParamPair: VAR? identDef ':' typeExpr ('=' dataExpr)?, and the name of a named argument (keyValuePair: identDef ':' dataExpr).",
+      "patterns": [
+        {
+          "match": "\\b(var)\\s+([A-Za-z_][A-Za-z_0-9]*)\\s*(?=:(?!:))",
+          "captures": {
+            "1": { "name": "storage.modifier.var.camel" },
+            "2": { "name": "variable.parameter.camel" }
+          }
+        },
+        {
+          "match": "\\b([A-Za-z_][A-Za-z_0-9]*)\\s*(?=:(?!:))",
+          "captures": {
+            "1": { "name": "variable.parameter.camel" }
+          }
+        }
+      ]
+    },
+    "property-key": {
+      "comment": "keyTypePair / keyValuePair inside braces: identDef ':' ...",
+      "match": "\\b([A-Za-z_][A-Za-z_0-9]*)\\s*(?=:(?!:))",
+      "captures": {
+        "1": { "name": "variable.other.property.camel" }
+      }
+    },
+    "keywords": {
+      "comment": "Every keyword token of antlr/OpenCMLLex.g4, each exactly once (checked by scripts/check-grammar.mjs).",
+      "patterns": [
+        {
+          "name": "keyword.control.conditional.camel",
+          "match": "\\b(?:if|then|else|match|case)\\b"
+        },
+        {
+          "name": "keyword.control.loop.camel",
+          "match": "\\b(?:for|in)\\b"
+        },
+        {
+          "name": "keyword.control.exception.camel",
+          "match": "\\b(?:try|catch|finally)\\b"
+        },
+        {
+          "name": "keyword.control.flow.camel",
+          "match": "\\b(?:return|throw|raise|wait)\\b"
+        },
+        {
+          "name": "keyword.control.import.camel",
+          "match": "\\b(?:module|import|export|from|use|using)\\b"
+        },
+        {
+          "name": "storage.type.function.camel",
+          "match": "\\b(?:func)\\b"
+        },
+        {
+          "name": "storage.type.type.camel",
+          "match": "\\b(?:type|enum)\\b"
+        },
+        {
+          "name": "storage.type.namespace.camel",
+          "match": "\\b(?:namespace)\\b"
+        },
+        {
+          "name": "storage.type.let.camel",
+          "match": "\\b(?:let)\\b"
+        },
+        {
+          "name": "storage.type.var.camel",
+          "match": "\\b(?:var)\\b"
+        },
+        {
+          "name": "keyword.other.with.camel",
+          "match": "\\b(?:with)\\b"
+        },
+        {
+          "name": "storage.modifier.sync.camel",
+          "match": "\\b(?:sync)\\b"
+        },
+        {
+          "name": "storage.modifier.camel",
+          "match": "\\b(?:macro|inner|outer|atomic|shared|const)\\b"
+        },
+        {
+          "name": "keyword.operator.expression.camel",
+          "match": "\\b(?:as|is|of|typeof|typeas|keyof)\\b"
+        },
+        {
+          "name": "constant.language.boolean.camel",
+          "match": "\\b(?:true|false)\\b"
+        },
+        {
+          "name": "constant.language.null.camel",
+          "match": "\\b(?:null)\\b"
+        }
+      ]
+    },
+    "wildcard": {
+      "comment": "pattern: '_' is a token of its own, not an identifier.",
+      "name": "variable.language.wildcard.camel",
+      "match": "\\b_\\b"
+    },
+    "builtin-types": {
+      "comment": "The names src/compile/gct/builder.cpp puts in the root type scope (checked by scripts/check-grammar.mjs).",
+      "patterns": [
+        {
+          "name": "support.type.primitive.camel",
+          "match": "\\b(?:int|i32|i64|float|f32|f64|bool|string|any|void)\\b"
+        },
+        {
+          "name": "support.type.collection.camel",
+          "match": "\\b(?:Map|Set)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "comment": "REAL: [0-9]+ '.' [0-9]+ EXPONENT?; INTEGER: (DEC | OCT | HEX | BIN) EXPONENT?. No digit separators and no suffixes. A sign directly before the digits belongs to the token.",
+      "patterns": [
+        {
+          "name": "constant.numeric.float.camel",
+          "match": "[+-]?\\b[0-9]+\\.[0-9]+(?:[eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.hexadecimal.camel",
+          "match": "[+-]?\\b0x(?:[0-9a-fA-F]+?[eE][+-][0-9]+|[0-9a-fA-F]+)\\b"
+        },
+        {
+          "name": "constant.numeric.integer.binary.camel",
+          "match": "[+-]?\\b0b[01]+(?:[eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.octal.camel",
+          "match": "[+-]?\\b0[0-7]+(?:[eE][+-]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.decimal.camel",
+          "match": "[+-]?\\b(?:0|[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "pipe-target": {
+      "comment": "linkExpr: compExpr (('->' | '?->') compExpr)*. A name on the right is the function the left side is passed to.",
+      "match": "(\\?->|->)\\s*((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)\\b",
+      "captures": {
+        "1": { "name": "keyword.operator.pipe.camel" },
+        "2": { "patterns": [{ "include": "#namespace-path" }] },
+        "3": { "name": "entity.name.function.call.camel" }
+      }
+    },
+    "calls": {
+      "comment": "annoExpr: a '(' or '<' directly after an expression (isAdjacent) is a call or a with-argument list.",
+      "patterns": [
+        {
+          "match": "\\b([A-Za-z_][A-Za-z_0-9]*)(?=\\()",
+          "captures": { "1": { "name": "entity.name.function.call.camel" } }
+        },
+        {
+          "match": "\\b([A-Za-z_][A-Za-z_0-9]*)(?=<[^<>;{}\\n]*>\\()",
+          "captures": { "1": { "name": "entity.name.function.call.camel" } }
+        }
+      ]
+    },
+    "namespace-path": {
+      "comment": "identRef: (IDENTIFIER '::')* IDENTIFIER",
+      "match": "\\b([A-Za-z_][A-Za-z_0-9]*)(::)",
+      "captures": {
+        "1": { "name": "entity.name.namespace.camel" },
+        "2": { "name": "punctuation.separator.namespace.camel" }
+      }
+    },
+    "member-access": {
+      "comment": "accessExpr / memberAccess: '.' (IDENTIFIER | INTEGER). In 't.0.1' the lexer takes '0.1' for a REAL, so the index rule leaves that form to the number rules.",
+      "patterns": [
+        {
+          "match": "(?<=[A-Za-z_0-9)\\]}>'\"`])(\\.)([A-Za-z_][A-Za-z_0-9]*)(?=\\()",
+          "captures": {
+            "1": { "name": "punctuation.accessor.camel" },
+            "2": { "name": "entity.name.function.call.camel" }
+          }
+        },
+        {
+          "match": "(?<=[A-Za-z_0-9)\\]}>'\"`])(\\.)([A-Za-z_][A-Za-z_0-9]*)",
+          "captures": {
+            "1": { "name": "punctuation.accessor.camel" },
+            "2": { "name": "variable.other.property.camel" }
+          }
+        },
+        {
+          "match": "(?<=[A-Za-z_0-9)\\]}>'\"`])(\\.)([0-9]+)\\b(?!\\.[0-9])",
+          "captures": {
+            "1": { "name": "punctuation.accessor.camel" },
+            "2": { "name": "constant.numeric.integer.index.camel" }
+          }
+        }
+      ]
+    },
+    "angle-arguments": {
+      "comment": "angledValues / specType arguments: '<' directly after a name. The parser tells it from a comparison by adjacency (isAdjacent), and so does this rule. '>=' is one token and never closes the list.",
+      "name": "meta.angle-arguments.camel",
+      "begin": "(?<=[A-Za-z_0-9])<(?!=)",
+      "beginCaptures": { "0": { "name": "punctuation.definition.angle-arguments.begin.camel" } },
+      "end": "(>)(?!=)|(?=[)\\]};])",
+      "endCaptures": { "1": { "name": "punctuation.definition.angle-arguments.end.camel" } },
+      "patterns": [
+        { "include": "#parameter-name" },
+        { "include": "$self" }
+      ]
+    },
+    "operators": {
+      "comment": "The literal tokens of antlr/OpenCML.g4, longest first (checked by scripts/check-grammar.mjs).",
+      "patterns": [
+        { "name": "keyword.operator.spread.camel", "match": "\\.\\.\\." },
+        { "name": "keyword.operator.compose.camel", "match": "\\?\\.\\.|\\.\\." },
+        { "name": "keyword.operator.pipe.camel", "match": "\\?->|->" },
+        { "name": "keyword.operator.arrow.camel", "match": "=>" },
+        { "name": "keyword.operator.comparison.camel", "match": "===|!==|==|!=|<=|>=" },
+        { "name": "keyword.operator.assignment.compound.camel", "match": "\\+=|-=|\\*=|/=|%=|\\^=|@=|&=|\\|=" },
+        { "name": "keyword.operator.logical.camel", "match": "&&|\\|\\|" },
+        { "name": "keyword.operator.fallback.camel", "match": "\\?\\?|!!" },
+        { "name": "keyword.operator.comparison.camel", "match": "<|>" },
+        { "name": "keyword.operator.assignment.camel", "match": "=" },
+        { "name": "keyword.operator.arithmetic.camel", "match": "\\+|-|\\*|/|%|\\^|@" },
+        { "name": "keyword.operator.bitwise.camel", "match": "~" },
+        { "comment": "T! (may have failed) and the postfix x!: directly after a type or an expression.", "name": "keyword.operator.type.camel", "match": "(?<=[A-Za-z_0-9)\\]>?!])!" },
+        { "name": "keyword.operator.logical.camel", "match": "!" },
+        { "name": "keyword.operator.type.camel", "match": "\\?|\\||&|\\\\" }
+      ]
+    },
+    "brackets": {
+      "patterns": [
+        {
+          "name": "meta.parens.camel",
+          "begin": "\\(",
+          "beginCaptures": { "0": { "name": "punctuation.section.parens.begin.camel" } },
+          "end": "\\)",
+          "endCaptures": { "0": { "name": "punctuation.section.parens.end.camel" } },
+          "patterns": [
+            { "include": "#parameter-name" },
+            { "include": "$self" }
+          ]
+        },
+        {
+          "name": "meta.brackets.camel",
+          "begin": "\\[",
+          "beginCaptures": { "0": { "name": "punctuation.section.brackets.begin.camel" } },
+          "end": "\\]",
+          "endCaptures": { "0": { "name": "punctuation.section.brackets.end.camel" } },
+          "patterns": [
+            { "include": "$self" }
+          ]
+        },
+        {
+          "name": "meta.block.camel",
+          "begin": "\\{",
+          "beginCaptures": { "0": { "name": "punctuation.section.block.begin.camel" } },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.section.block.end.camel" } },
+          "patterns": [
+            { "include": "#property-key" },
+            { "include": "$self" }
+          ]
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.separator.namespace.camel", "match": "::" },
+        { "name": "punctuation.separator.colon.camel", "match": ":" },
+        { "name": "punctuation.separator.comma.camel", "match": "," },
+        { "name": "punctuation.terminator.statement.camel", "match": ";" },
+        { "name": "punctuation.accessor.camel", "match": "\\." }
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+# Everything the packaged extension does not need at run time.
+.vscode/**
+.gitignore
+src/**
+scripts/**
+tsconfig.json
+out/**/*.map
+**/*.ts
+*.vsix
+package-lock.json
