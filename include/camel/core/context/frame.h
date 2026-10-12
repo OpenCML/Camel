@@ -35,6 +35,11 @@ class FramePool;
 class TaskflowFramePool;
 class FrameView;
 
+/// The fault of a call whose frame does not fit what is left of a frame pool of `poolBytes`: a
+/// located MaxRecursionDepthExceeded (the pool is sized for the recursion limit; a recursion of
+/// functions with very large frames can fill it before the count is reached).
+[[noreturn]] void throwFramePoolExhausted(const camel::runtime::GCGraph *graph, size_t poolBytes);
+
 class Frame : public rtdata::Object {
   public:
     static consteval size_t runtimeGraphOffset() { return 0; }
@@ -445,18 +450,9 @@ class FramePool {
             graph->hasFrameLayout(),
             std::format("Runtime graph '{}' has no finalized frame layout.", graph->name()));
         size_t frameSize = graph->frameSize();
-        if (top_ + frameSize > end_) {
-            CAMEL_LOG_FATAL_S(
-                "FramePool",
-                "[{}] Out of memory for runtime graph <{}>: top = {}, need = {}, end = {}, "
-                "runtimeDataSize = {}",
-                mm::formatAddress(this, true),
-                graph ? graph->name() : "(null)",
-                mm::formatAddress(top_, true),
-                frameSize,
-                mm::formatAddress(end_, true),
-                graph && graph->runtimeDataType() ? graph->runtimeDataType()->size() : 0);
-            throw std::bad_alloc{};
+        // Room for the frame and for the sentinel that _resetTop() writes after it.
+        if (top_ + frameSize + sizeof(Frame) > end_) {
+            throwFramePoolExhausted(graph, static_cast<size_t>(end_ - base_));
         }
         Frame *frame = new (top_) Frame(
             graph,

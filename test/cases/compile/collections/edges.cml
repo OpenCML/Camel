@@ -1,0 +1,50 @@
+module main
+
+// The edges: empty and one-entry collections, tuple keys, values that may be null, values
+// that are arrays and maps, duplicate keys in an array computed at run time (the later
+// entry wins), key order for every key type.
+
+func repeated(n: int): (string, int)[] {
+    return range(0, n)->map<(i: int): (string, int) => ('k' + string(i % 3), i)>
+}
+
+func shuffled(n: int): int[] {
+    return range(0, n)->map<(i: int): int => (i * 7) % n>
+}
+
+func main(): int sync {
+    let e = [] as Map<string, int>
+    println(e, len(e), keys(e), values(e), items(e), e['a'] ?? -1, has(e, 'a'))
+    println(e == e, remove(e, 'a'), merge(e, e), put(e, 'a', 1))
+    let es = [] as Set<string>
+    println(es, len(es), items(es), contains(es, 'a'), union(es, es), add(es, 'q'))
+    let one = [(7, 'seven')] as Map<int, string>
+    println(one, remove(one, 7), one[7] ?? '?', len(remove(one, 7)))
+
+    let n = [('a', 1 as int?), ('b', null as int?)] as Map<string, int?>
+    println(n)
+    println(n['a'] ?? -1, n['b'] ?? -2, n['c'] ?? -3, has(n, 'b'), has(n, 'c'))
+
+    println(repeated(7) as Map<string, int>)
+    println(shuffled(20) as Set<int>)
+    println(shuffled(10)->map<(i: int): (int, int) => (i, i * i)> as Map<int, int>)
+
+    let nested = [(1, [(2, 'two')] as Map<int, string>)] as Map<int, Map<int, string>>
+    println(nested)
+    let sub = nested[1] ?? ([] as Map<int, string>)
+    println(sub[2] ?? '?', sub[3] ?? '?')
+    let arrays = [('xs', [1, 2, 3]), ('ys', [4])] as Map<string, int[]>
+    println(arrays, len(arrays['xs'] ?? [0]))
+    let floats = [(1, 1.5), (2, 2.5)] as Map<int, float>
+    println(floats == floats, floats == ([(2, 2.5), (1, 1.5)] as Map<int, float>), floats == ([(1, 1.5), (2, 2.0)] as Map<int, float>))
+
+    let grid = [((1, 'b'), true), ((0, 'z'), false), ((1, 'a'), true)] as Map<(int, string), bool>
+    println(grid, grid[(1, 'a')] ?? false, grid[(2, 'a')] ?? false)
+    println([(2, 1), (1, 9), (1, 2)] as Set<(int, int)>)
+    println(['b', 'B', 'a', 'ab', ''] as Set<string>)
+    println([-1, 10, 9, -10, 0] as Set<int>)
+    let a: i32 = 3
+    let b: i32 = 1
+    println([a, b] as Set<i32>)
+    return 0
+}

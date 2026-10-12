@@ -1,0 +1,31 @@
+/**
+ * The tagged forms and `typeas`: `(typeas T)?` binds `T` from the payload of the argument,
+ * and each set of types is one subgraph of concrete types.
+ */
+module generic
+
+func or_else(x: (typeas T)?, d: T): T {
+    return x ?? d
+}
+
+func some(x: typeas T): T? {
+    return x
+}
+
+func recover(r: (typeas T)!, d: T): T {
+    return r !! d
+}
+
+func ok(x: typeas T): T! {
+    return x
+}
+
+func main(): int sync {
+    println(or_else(some(3), 0))
+    println(or_else(null as int?, 4))
+    println(or_else(some('a'), 'z'))
+    println(or_else(null as string?, 'z'))
+    println(recover(ok(1.5), 0.0))
+    println(recover(parse_int('x'), 8))
+    return 0
+}

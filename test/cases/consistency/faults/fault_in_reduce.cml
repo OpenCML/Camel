@@ -1,0 +1,15 @@
+/**
+ * The function of a reduce faults at its fourth step. reduce runs in element order on every
+ * back end.
+ */
+module fault_in_reduce
+
+func step(acc: int, x: int): int { return acc + 60 / (x - 3) }
+
+func main(): int sync {
+    println('before')
+    let total = range(0, 8)->reduce<step, 0>
+    println(total)
+    println('not reached')
+    return 0
+}

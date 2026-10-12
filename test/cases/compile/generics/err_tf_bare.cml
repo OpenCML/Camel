@@ -1,0 +1,11 @@
+module err_tf_bare
+
+type Pair<T> = (T, T)
+
+func f(p: Pair): int {
+    return 1
+}
+
+func main(): int sync {
+    return 0
+}

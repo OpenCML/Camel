@@ -1,0 +1,14 @@
+module sem_independent
+
+func f(): int { return aaa }
+
+func g(): int { return 'text' }
+
+func add(a: int, b: int): int { return a + b }
+
+func main(): int sync {
+    println(f() + g())
+    println(add(1))
+    println(add(1, 'x'))
+    return 0
+}

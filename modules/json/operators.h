@@ -28,5 +28,10 @@ namespace ctx = camel::core::context;
 // 算子实现
 slot_t __json_encode__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __json_decode__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+/// Decoding to the type of a shape argument; the result is a `T!`
+/// (DESIGN-QUESTION(json-typed-decode)).
+slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+/// Whether decode_as can produce a value of `type`.
+bool jsonTypeHasForm(camel::core::type::Type *type);
 
 std::unordered_map<std::string, operator_t> getJsonOpsMap();

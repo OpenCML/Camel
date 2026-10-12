@@ -34,6 +34,8 @@ using namespace camel::core::rtdata;
 #include "../operators/profiler.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
+#include "../operators/collection.h"
+#include "../operators/tagged.h"
 #include "camel/core/operator_traits.h"
 
 #include <string_view>
@@ -41,6 +43,10 @@ using namespace camel::core::rtdata;
 
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
+        // The placeholder for an operator that is declared before it is written. Nothing below
+        // maps to it: a combination of operator and type without an implementation has no
+        // resolver either (globals.cpp), so the compiler rejects it. Should one be mapped to it
+        // again, running it is a located fault, never a silent null.
         {"not-impl", __not_implemented__},
 
         // Type conversions
@@ -92,34 +98,30 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/assn_add_l", __builtin__assn_add_l__},
         {"op/assn_add_f", __builtin__assn_add_f__},
         {"op/assn_add_d", __builtin__assn_add_d__},
-        {"op/assn_add_s", __not_implemented__},
-        {"op/assn_add", __not_implemented__},
+        {"op/assn_add_s", __builtin__assn_add_s__},
 
         {"op/assn_sub_i", __builtin__assn_sub_i__},
         {"op/assn_sub_l", __builtin__assn_sub_l__},
         {"op/assn_sub_f", __builtin__assn_sub_f__},
         {"op/assn_sub_d", __builtin__assn_sub_d__},
-        {"op/assn_sub", __not_implemented__},
 
         {"op/assn_mul_i", __builtin__assn_mul_i__},
         {"op/assn_mul_l", __builtin__assn_mul_l__},
         {"op/assn_mul_f", __builtin__assn_mul_f__},
         {"op/assn_mul_d", __builtin__assn_mul_d__},
-        {"op/assn_mul", __not_implemented__},
 
         {"op/assn_div_i", __builtin__assn_div_i__},
         {"op/assn_div_l", __builtin__assn_div_l__},
         {"op/assn_div_f", __builtin__assn_div_f__},
         {"op/assn_div_d", __builtin__assn_div_d__},
-        {"op/assn_div", __not_implemented__},
 
-        {"op/assn_mod_i", __builtin__assn_mod__},
-        {"op/assn_mod_l", __builtin__assn_mod__},
-        {"op/assn_mod", __builtin__assn_mod__},
+        {"op/assn_mod_i", __builtin__assn_mod_i__},
+        {"op/assn_mod_l", __builtin__assn_mod_l__},
 
-        {"op/assn_mat", __builtin__assn_mat__},
-
-        {"op/assn_pow", __builtin__assn_pow__},
+        {"op/assn_pow_i", __builtin__assn_pow_i__},
+        {"op/assn_pow_l", __builtin__assn_pow_l__},
+        {"op/assn_pow_f", __builtin__assn_pow_f__},
+        {"op/assn_pow_d", __builtin__assn_pow_d__},
 
         {"op/assn_and", __builtin__assn_and__},
         {"op/assn_or", __builtin__assn_or__},
@@ -150,29 +152,25 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/lt_l", __builtin__lt__<Int64>},
         {"op/lt_f", __builtin__lt__<Float32>},
         {"op/lt_d", __builtin__lt__<Float64>},
-        {"op/lt_s", __not_implemented__},
-        {"op/lt", __not_implemented__},
+        {"op/lt_s", __builtin__lt_s__},
 
         {"op/le_i", __builtin__le__<Int32>},
         {"op/le_l", __builtin__le__<Int64>},
         {"op/le_f", __builtin__le__<Float32>},
         {"op/le_d", __builtin__le__<Float64>},
-        {"op/le_s", __not_implemented__},
-        {"op/le", __not_implemented__},
+        {"op/le_s", __builtin__le_s__},
 
         {"op/gt_i", __builtin__gt__<Int32>},
         {"op/gt_l", __builtin__gt__<Int64>},
         {"op/gt_f", __builtin__gt__<Float32>},
         {"op/gt_d", __builtin__gt__<Float64>},
-        {"op/gt_s", __not_implemented__},
-        {"op/gt", __not_implemented__},
+        {"op/gt_s", __builtin__gt_s__},
 
         {"op/ge_i", __builtin__ge__<Int32>},
         {"op/ge_l", __builtin__ge__<Int64>},
         {"op/ge_f", __builtin__ge__<Float32>},
         {"op/ge_d", __builtin__ge__<Float64>},
-        {"op/ge_s", __not_implemented__},
-        {"op/ge", __not_implemented__},
+        {"op/ge_s", __builtin__ge_s__},
 
         {"op/add_i", __builtin__add_ii__},
         {"op/add_l", __builtin__add_ll__},
@@ -207,8 +205,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/pow_d", __builtin__pow__},
         {"op/pow", __builtin__pow__},
 
-        {"op/mat", __builtin__mat__},
-
         {"op/idx_arr", __builtin__idx__},
         {"op/idx_str", __builtin__idx__},
 
@@ -218,11 +214,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/neg_l", __builtin__neg__},
         {"op/neg_f", __builtin__neg__},
         {"op/neg_d", __builtin__neg__},
-        {"op/neg", __builtin__neg__},
 
         {"op/inv_i", __builtin__inv__},
         {"op/inv_l", __builtin__inv__},
-        {"op/inv", __builtin__inv__},
 
         // IO (built-in input/print/println)
         {"io/input", __op_input__},
@@ -254,7 +248,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         {"struct/extend_arr", __extend_arr__},
 
-        {"struct/contains_str", __not_implemented__},
         {"struct/contains_arr", __contains_arr__},
 
         // profiler
@@ -265,6 +258,40 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         // macro
         {"macro/cmp", __cmp__},
+
+        // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
+        {"op/tag_is_null", __is_null__},
+        {"op/tag_null_value", __null_value__},
+        {"op/tag_is_error", __is_error__},
+        {"op/tag_error_value", __error_value__},
+        {"op/tag_error_info", __error_info__},
+        {"op/tag_throw", __throw__},
+        {"op/match_fail", __match_fail__},
+        {"op/error_new", __error_new__},
+        {"op/parse_int", __parse_int__},
+        {"op/parse_float", __parse_float__},
+
+        // Map and Set (operators/collection.h). All are under coll/: pure.
+        {"coll/map_idx", __coll_map_idx__},
+        {"coll/map_get", __coll_map_get__},
+        {"coll/map_get_or", __coll_map_get_or__},
+        {"coll/has", __coll_has__},
+        {"coll/set_contains", __coll_has__},
+        {"coll/len", __coll_len__},
+        {"coll/map_put", __coll_map_put__},
+        {"coll/set_add", __coll_set_add__},
+        {"coll/remove", __coll_remove__},
+        {"coll/merge", __coll_merge__},
+        {"coll/set_union", __coll_merge__},
+        {"coll/set_intersect", __coll_set_intersect__},
+        {"coll/set_difference", __coll_set_difference__},
+        {"coll/set_is_subset", __coll_set_is_subset__},
+        {"coll/keys", __coll_keys__},
+        {"coll/map_values", __coll_map_values__},
+        {"coll/map_items", __coll_map_items__},
+        {"coll/set_items", __coll_keys__},
+        {"coll/eq", __coll_eq__},
+        {"coll/neq", __coll_neq__},
     };
     return map;
 }
@@ -284,18 +311,29 @@ void registerBuiltinOperatorTraits() {
         "struct/range",
         "struct/slice_arr",
         "struct/concat_arr",
-        "struct/contains_str",
         "struct/contains_arr",
     };
     auto &registry = camel::core::OperatorTraitsRegistry::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
-        const bool pure =
-            (key.starts_with("op/") && !key.starts_with("op/assn")) || kPureHelpers.contains(key);
-        if (pure) {
-            registry.set(":" + name, {.pure = true, .elementwise = false});
-        }
+        // Every operator over Map and Set (coll/) returns a new value and changes nothing.
+        const bool pure = (key.starts_with("op/") && !key.starts_with("op/assn")) ||
+                          key.starts_with("coll/") || kPureHelpers.contains(key);
+        // Declared either way: an operator without a declaration is treated the same as one
+        // declared to have effects, but only a declaration says that somebody looked.
+        registry.set(":" + name, {.pure = pure, .elementwise = false});
     }
+    // The higher-order operators and function composition run a function the program passes
+    // in: what they do is what that function does, and the passes that look at them look at
+    // that function. exit and sleep are the os module's and are built in as well.
+    registry.declare(
+        "",
+        {{"mark/map_arr", false},
+         {"mark/apply_arr", false},
+         {"mark/filter_arr", false},
+         {"mark/reduce_arr", false},
+         {"mark/foreach_arr", false}});
+    registry.declare("os", {{"exit", false}, {"sleep", false}});
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});

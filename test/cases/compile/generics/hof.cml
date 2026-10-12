@@ -1,0 +1,53 @@
+/**
+ * Generic functions in higher-order use: called from a lambda, from the function handed to
+ * an operator, with a function argument, by a closure that captured a value, and with `with`
+ * parameters whose types bind or use type variables.
+ */
+module hof
+
+func id(x: typeas T): T {
+    return x
+}
+
+func twice(f: (x: typeas T) => T, x: T): T {
+    return f(f(x))
+}
+
+with <f: (x: typeas T) => typeas U>
+func my_map(xs: T[]): U[] {
+    return xs->map<f>
+}
+
+with <keep: (x: typeas T) => bool>
+func my_filter(xs: T[]): T[] {
+    return xs->filter<keep>
+}
+
+with <f: (acc: typeas U, x: typeas T) => U, init: U>
+func my_fold(xs: T[]): U {
+    return xs->reduce<f, init>
+}
+
+func adder(n: typeas T): (x: T) => T {
+    return (x: T) => x + n
+}
+
+func main(): int sync {
+    // a lambda whose parameter types are written out instantiates the generic function
+    println([1, 2, 3]->map<(x: int) => id(x) * 2>)
+    println(['a', 'b']->map<(s: string) => id(s) + '!'>)
+    println(twice((x: int) => x + 3, 1))
+    println(twice((s: string) => s + s, 'ab'))
+    println([1, 2, 3]->my_map<(x: int) => x * x>)
+    println(my_map<(x: int) => 'n{}'->format<x>>([4, 5]))
+    println([1, 2, 3, 4]->my_filter<(x: int) => x % 2 == 0>)
+    println(['a', 'bb']->my_fold<(acc: int, s: string) => acc + len(s), 0>)
+    // a generic function returning a closure over a value of the variable's type
+    let add5 = adder(5)
+    let greet = adder('!')
+    println(add5(1))
+    println(greet('hi'))
+    // method-call syntax
+    println(7->id)
+    return 0
+}

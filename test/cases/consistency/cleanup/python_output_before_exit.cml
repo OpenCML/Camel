@@ -1,0 +1,14 @@
+/**
+ * Output printed by Python before exit(6).
+ */
+module python_output_before_exit
+
+import { py_call, py_wrap } from python
+
+func main(): int sync {
+    println('camel 1')
+    py_call('print', py_wrap('python 1'))
+    exit(6)
+    println('not reached')
+    return 0
+}

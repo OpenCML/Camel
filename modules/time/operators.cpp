@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <format>
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
@@ -70,7 +71,10 @@ slot_t __time_strftime__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (gmtime_r(&local_tt, &tm) == nullptr)
 #endif
         {
-            throwRuntimeFault(RuntimeDiag::RuntimeError, "<strftime> failed");
+            throwRuntimeFault(
+                RuntimeDiag::TimeFormatFailed,
+                "time.strftime",
+                std::format("the timestamp {} is outside the range of calendar time", timestamp));
         }
     } else {
 #if defined(_WIN32)
@@ -79,13 +83,22 @@ slot_t __time_strftime__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (gmtime_r(&tt, &tm) == nullptr)
 #endif
         {
-            throwRuntimeFault(RuntimeDiag::RuntimeError, "<strftime> failed");
+            throwRuntimeFault(
+                RuntimeDiag::TimeFormatFailed,
+                "time.strftime",
+                std::format("the timestamp {} is outside the range of calendar time", timestamp));
         }
     }
     const std::string &fmt = fmt_obj->toString();
     char buffer[128]       = {0};
     if (std::strftime(buffer, sizeof(buffer), fmt.c_str(), &tm) == 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<strftime> formatting failed");
+        throwRuntimeFault(
+            RuntimeDiag::TimeFormatFailed,
+            "time.strftime",
+            std::format(
+                "the format '{}' gives no text, or more than {} characters",
+                fmt,
+                sizeof(buffer) - 1));
     }
     return toSlot(String::from(buffer, mm::autoSpace()));
 }
@@ -95,11 +108,22 @@ slot_t __time_strptime__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *fmt_obj = norm.get<String *>(1);
     std::tm tm{};
     if (!myStrptime(str_obj->toString(), fmt_obj->toString(), tm)) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<strptime> failed to parse");
+        throwRuntimeFault(
+            RuntimeDiag::TimeFormatFailed,
+            "time.strptime",
+            std::format(
+                "the text '{}' does not match the format '{}'",
+                str_obj->toString(),
+                fmt_obj->toString()));
     }
     std::time_t local_tt = std::mktime(&tm);
     if (local_tt == static_cast<std::time_t>(-1)) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<strptime> mktime failed");
+        throwRuntimeFault(
+            RuntimeDiag::TimeFormatFailed,
+            "time.strptime",
+            std::format(
+                "the time read from '{}' cannot be represented as a timestamp",
+                str_obj->toString()));
     }
     double utc_seconds = static_cast<double>(local_tt) - 8 * 3600.0;
     return toSlot(utc_seconds);

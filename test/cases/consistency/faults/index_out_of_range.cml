@@ -1,0 +1,14 @@
+/**
+ * Reading past the end of an array inside a function: IndexOutOfRange at the bracket.
+ */
+module index_out_of_range
+
+func at(xs: int[], i: int): int { return xs[i] }
+
+func main(): int sync {
+    let xs = [10, 20, 30]
+    println(at(xs, 2))
+    println(at(xs, 3))
+    println('not reached')
+    return 0
+}

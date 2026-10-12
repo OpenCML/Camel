@@ -1,0 +1,36 @@
+/**
+ * Generic functions: a type variable is bound with `typeas T` where its type first appears
+ * among the parameters and is written `T` afterwards. Every call with a new set of types
+ * builds one subgraph in which the variables are replaced by those types.
+ */
+module basic
+
+func first(xs: (typeas T)[]): T {
+    return xs[0]
+}
+
+func pick(c: bool, a: typeas T, b: T): T {
+    return if c then a else b
+}
+
+func pair_of(a: typeas T, b: typeas U): (T, U) {
+    return (a, b)
+}
+
+func swap(p: (typeas A, typeas B)): (B, A) {
+    return (p.1, p.0)
+}
+
+func main(): int sync {
+    println(first([1, 2, 3]))
+    println(first(['a', 'b']))
+    println(first([1.5, 2.5]))
+    println(first([4, 5]))
+    println(pick(true, 1, 2))
+    println(pick(false, 'x', 'y'))
+    let p = pair_of(7, 'seven')
+    println(p)
+    println(swap(p))
+    println(swap((1.5, true)))
+    return 0
+}

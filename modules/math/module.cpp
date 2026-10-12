@@ -24,6 +24,7 @@
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
+#include "numeric.h"
 #include "operators.h"
 
 #include <optional>
@@ -127,6 +128,8 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 
 MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
     for (const auto &group : getOperatorGroups())
+        exportEntity(group->name(), group);
+    for (const auto &group : getMathNumericGroups())
         exportEntity(group->name(), group);
 }
 

@@ -25,9 +25,14 @@
 #include "diagnostics/builder.h"
 #include "diagnostics/messages/index.h"
 #include "diagnostics/range.h"
+#include "diagnostics/render.h"
 
 #include <format>
+#include <iosfwd>
+#include <optional>
+#include <string_view>
 #include <tuple>
+#include <vector>
 
 namespace camel::core::error {
 
@@ -37,6 +42,12 @@ struct Diagnostic {
     uint32_t specific{};
     Severity severity{};
     bool persisted = false;
+    /// A warning switched off on the command line (-Wno-<name>): it is not stored and must not
+    /// be shown. Set by Diagnostics::add on the copy it hands back.
+    bool suppressed = false;
+    /// A warning made an error on the command line (-Werror, -Werror=<name>). The code keeps
+    /// its warning severity bits, so the diagnostic is still the same catalog entry.
+    bool promoted = false;
 
     std::string moduleName;
     std::string modulePath;
@@ -50,19 +61,62 @@ struct Diagnostic {
 
     // range can be a traditional CharRange/TokenRange or a lazily resolved SpanId/OriginId.
     SourceRange range{};
+    /// Secondary locations, in the order they were attached.
+    std::vector<DiagLabel> related;
+    /// More secondary locations existed than were kept (see Diagnostics::addRelatedToErrorsFrom).
+    bool relatedElided = false;
+    /// Additional remarks, shown as `note:` lines after the excerpt.
+    std::vector<std::string> notes;
     camel::source::source_context_ptr_t
         sourceContext; // Resolves SpanId/OriginId into final line/column positions.
 
     Diagnostic &fetchRange(const RangeConverter &conv);
+    /// Text in the process-wide format (see diagnostics/render.h). The overload taking the
+    /// destination stream decides colours for that stream.
     std::string toText() const;
+    std::string toText(const std::ostream &os) const;
     std::string toJson() const;
     uint32_t diagCode() const;
 
-  private:
     static std::string hex8(uint32_t v);
+
+  private:
     static std::string escapeJson(const std::string &s);
     static char hexNib(int v);
 };
+
+/// The file a diagnostic is about: its module path, or the file of its span / origin.
+std::string diagnosticPath(const Diagnostic &d);
+/// The module name shown for a diagnostic (the stem of `path` when it has none of its own).
+std::string diagnosticModuleName(const Diagnostic &d, const std::string &path);
+/// The line/column range of `range`, when it has one that can be resolved now.
+std::optional<CharRange>
+resolveSourceRange(const SourceRange &range, const camel::source::source_context_ptr_t &ctx);
+
+// ---- Warning policy (command line: -Wno-<name>, -Werror, -Werror=<name>) ----
+/// Process-wide. Names are diagnostic names without the type prefix, compared without regard to
+/// case, '-' and '_' ("ignored-side-effect" names IgnoredSideEffect).
+struct WarningPolicy {
+    bool disableAll  = false;
+    bool allAsErrors = false;
+    std::vector<std::string> disabled;
+    std::vector<std::string> asErrors;
+    std::vector<std::string> notAsErrors;
+    /// Warnings shown before the rest are only counted (-N / --max-warning).
+    size_t maxShown = static_cast<size_t>(-1);
+};
+/// Counts one more warning about to be shown; false once the limit of the policy is passed.
+/// The first refusal is the place to say that further warnings are not shown.
+bool admitShownWarning();
+/// Number of warnings admitShownWarning() refused so far.
+size_t warningsNotShown();
+void setWarningPolicy(WarningPolicy policy);
+/// The key warning names are compared by: lower case, without the type prefix, '-' and '_'.
+std::string normalizeDiagnosticName(std::string_view name);
+/// Applies the policy to a diagnostic that was not added to a Diagnostics container (which
+/// applies it itself): marks a disabled warning `suppressed`, promotes one made an error.
+/// Returns false when the diagnostic is suppressed.
+bool applyWarningPolicy(Diagnostic &d);
 
 /// Names the pipeline stage that diagnostics raised from now on belong to ("" = none: the
 /// stage then follows the diagnostic type). The pass driver sets it around each pass.
@@ -174,6 +228,17 @@ class Diagnostics {
 
     // Statistics.
     size_t count() const;
+    /// Attaches `label` as a secondary location to every error recorded at index `from` or
+    /// later. For context that is only known where the failing work was requested, e.g. the
+    /// call that asked for the instantiation of a generic function in whose body an error was
+    /// found. An error that already has `limit` secondary locations is marked as having more
+    /// (relatedElided) instead of getting another one (0: no limit).
+    void addRelatedToErrorsFrom(size_t from, const DiagLabel &label, size_t limit = 0);
+    /// Gives every diagnostic recorded at index `from` or later the file its origin lies in,
+    /// when that is not this module's file: the body of a generic function imported from
+    /// another module is compiled by the importing module, and its errors are in the other
+    /// file.
+    void locateByOriginFrom(size_t from);
     size_t count(Severity severity) const;
     size_t count(DiagType type) const;
     std::unordered_map<Severity, size_t> countBySeverity() const;
@@ -187,6 +252,8 @@ class Diagnostics {
     camel::source::source_context_ptr_t sourceContext_;
     mutable std::mutex mtx_;
     std::deque<Diagnostic> storage_;
+    /// What add() returns for a warning the policy switched off; never part of storage_.
+    Diagnostic discarded_;
     DiagsConfig config_;
 
     // Helper methods for limit checking (use storage_.back() after push_back; never the moved-from
@@ -225,6 +292,8 @@ template <typename... Args> Diagnostic DiagnosticBuilder::commit(Args &&...args)
     d.specific = specific_;
     d.name     = name_;
     d.stage    = stageForDiagnostic(type_);
+    d.related  = std::move(related_);
+    d.notes    = std::move(notes_);
     try {
         auto arg_storage = std::make_tuple(std::forward<Args>(args)...);
         auto make_args   = [&] {

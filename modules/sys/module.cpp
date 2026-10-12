@@ -21,6 +21,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 
 using namespace camel::core::context;
@@ -47,6 +48,14 @@ bool SysModule::load() {
     if (loaded_)
         return true;
     context_->registerExecutorFactory("sys", [ctx = context_]() { return createSysExecutor(ctx); });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "sys",
+        {
+            // The environment of the process.
+            {"get_env", false},
+            {"get_cwd", false},
+        });
     loaded_ = true;
     return true;
 }

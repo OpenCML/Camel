@@ -1,0 +1,14 @@
+/**
+ * What `while i <= n { acc = acc + i; i = i + 1 }` means today: a self-recursive subgraph
+ * whose parameters are the loop-carried state.
+ */
+module sum_tail
+
+func loop(i: int, n: int, acc: int): int {
+    return if i > n then acc else loop(i + 1, n, acc + i)
+}
+
+func main(): int sync {
+    println(loop(1, 100000, 0))
+    return 0
+}

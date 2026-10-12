@@ -1,0 +1,29 @@
+/**
+ * progen finding F06 (effect order lost). `std::opt` drops the effect of a call whose result is
+ *   unused inside a lambda with a sync body, called from a taken arm: `println(false)` is not
+ *   printed.
+ * Pipeline: std::opt std::nvm
+ * Expected output: false
+ * Actual: (nothing)
+ * Reduced by test/tools/progen from seed 1197 (generator version 1, all features).
+ */
+module opt_lambda_effect_lost
+
+func e10(): (float, bool, int) sync {
+    println(false);
+    return (1.0, false, 0);
+}
+
+func main(): int sync {
+    let h35 = (p33: int): int => sync {
+        let n34 = e10();
+        return 7;
+    };
+    if (0 < 31) then sync {
+        let n36 = h35(0 - 0);
+        return null;
+    } else sync {
+        return null;
+    };
+    return 0;
+}

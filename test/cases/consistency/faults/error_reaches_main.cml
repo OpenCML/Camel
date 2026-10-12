@@ -1,0 +1,17 @@
+/**
+ * An error value nobody handled is what main returns.
+ */
+module error_reaches_main
+
+func safe_div(a: int, b: int): int! {
+    if b == 0 then {
+        throw error('DivByZero', 'the divisor is zero')
+    } else {
+        return a / b
+    }
+}
+
+func main(): int! sync {
+    println('before')
+    return safe_div(1, 0)
+}

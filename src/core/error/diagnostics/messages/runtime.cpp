@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,7 +60,9 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "MaxRecursionDepthExceeded",
                 "Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.",
-                "Check for infinite recursion or excessively deep recursive calls.",
+                "Check for infinite recursion. A call in tail position takes no frame, so write "
+                "a deep recursion as a tail call; or raise the limit with --max-recursion-depth "
+                "<n> or CAMEL_MAX_RECURSION_DEPTH=<n>.",
             },
         },
         {
@@ -178,6 +180,19 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::ConstantExpressionFaults,
+            {
+                "ConstantExpressionFaults",
+                "This constant expression faults whenever it is evaluated ({0}); it is not "
+                "folded.",
+                "All its operands are known and computing it fails, so there is no value to "
+                "put in its place. It is left as written: the program behaves the same with "
+                "and without the pass, and the fault is reported with its position if the run "
+                "reaches the expression. If it is never reached (an arm that is not taken), "
+                "nothing happens.",
+            },
+        },
+        {
             RuntimeDiag::GraphTooLarge,
             {
                 "GraphTooLarge",
@@ -192,6 +207,21 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::MemoryExhausted,
+            {
+                "MemoryExhausted",
+                "Out of memory{0}: {1}.",
+                "The graph, permanent and meta spaces hold the compiled program (its runtime "
+                "graphs, its types, the constants of the graphs being compiled) and grow with "
+                "it; each has a total limit that only guards against a compiler that does not "
+                "stop allocating. If the program is this large, raise the limit with the "
+                "environment variable the message names. If a pass is named, the growth may be "
+                "its doing (an inlining or unrolling that does not end): run the pipeline "
+                "without it. The auto space holds run-time values and is bounded only by the "
+                "memory of the host.",
+            },
+        },
+        {
             RuntimeDiag::PassInternalError,
             {
                 "PassInternalError",
@@ -203,6 +233,123 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
 
+        {
+            RuntimeDiag::InvalidNumberText,
+            {
+                "InvalidNumberText",
+                "Cannot convert the string '{0}' to {1}.",
+                "The string must hold {2} and nothing else that the conversion cannot skip. "
+                "Check the value before converting it; a conversion that fails is a fault and "
+                "ends the program.",
+            },
+        },
+        {
+            RuntimeDiag::FormatFailed,
+            {
+                "FormatFailed",
+                "Cannot format with the format string '{0}': {1}.",
+                "A replacement field is a pair of braces, optionally holding a format "
+                "specification after a colon. There must be one argument per field, and a "
+                "literal brace is written twice.",
+            },
+        },
+        {
+            RuntimeDiag::OperandTypeUnsupported,
+            {
+                "OperandTypeUnsupported",
+                "'{0}' does not support a value of type '{1}'; it takes {2}.",
+                "Convert the value to a supported type before the call.",
+            },
+        },
+        {
+            RuntimeDiag::FieldNotFound,
+            {
+                "FieldNotFound",
+                "The struct has no field '{0}'.",
+                "A struct is indexed by the name of one of its fields.",
+            },
+        },
+        {
+            RuntimeDiag::InvalidArgument,
+            {
+                "InvalidArgument",
+                "Invalid argument of '{0}': {1}.",
+                "",
+            },
+        },
+        {
+            RuntimeDiag::FileOpenFailed,
+            {
+                "FileOpenFailed",
+                "'{0}' cannot open the file '{1}': {2}.",
+                "Check that the path exists and that the program may access it; a relative path "
+                "is taken from the directory the program is run in. Where a missing file is "
+                "expected, fs.try_read_text returns an error value instead of ending the "
+                "program.",
+            },
+        },
+        {
+            RuntimeDiag::FileSystemError,
+            {
+                "FileSystemError",
+                "'{0}' failed for '{1}': {2}.",
+                "Check the path and the permissions of the directories on it.",
+            },
+        },
+        {
+            RuntimeDiag::JsonDecodeFailed,
+            {
+                "JsonDecodeFailed",
+                "json.decode: the text is not valid JSON ({0}). The text begins: '{1}'.",
+                "The line and column in the message are positions in the decoded text, not in "
+                "the program.",
+            },
+        },
+        {
+            RuntimeDiag::JsonEncodeUnsupported,
+            {
+                "JsonEncodeUnsupported",
+                "json.encode cannot encode a value of type '{0}'.",
+                "JSON has null, booleans, numbers, strings, arrays and objects: encode values "
+                "made of bool, int, float, string, arrays, tuples and structs.",
+            },
+        },
+        {
+            RuntimeDiag::RegexInvalid,
+            {
+                "RegexInvalid",
+                "'{0}': '{1}' is not a valid regular expression: {2}.",
+                "Patterns use the ECMAScript syntax. A character with a special meaning is "
+                "matched literally when it is written with a backslash.",
+            },
+        },
+        {
+            RuntimeDiag::TimeFormatFailed,
+            {
+                "TimeFormatFailed",
+                "'{0}' failed: {1}.",
+                "Check the format string against the strftime conversion specifiers (%Y, %m, "
+                "%d, %H, %M, %S, ...).",
+            },
+        },
+        {
+            RuntimeDiag::MatchNotExhaustive,
+            {
+                "MatchNotExhaustive",
+                "No case of this 'match' matches the value {0}.",
+                "A 'match' takes the first case whose pattern equals the value, and this one "
+                "has no 'case _' for the values it does not list. Add 'case _ => ...'.",
+            },
+        },
+        {
+            RuntimeDiag::OperatorNotImplemented,
+            {
+                "OperatorNotImplemented",
+                "The operator '{0}' is declared but not implemented.",
+                "The name exists so that programs using it are recognised; calling it is not "
+                "possible yet.",
+            },
+        },
     };
 
     return infoMap;

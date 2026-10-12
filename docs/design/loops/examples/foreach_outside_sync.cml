@@ -1,0 +1,20 @@
+/**
+ * A `foreach` written only for its effect, outside and inside a sync block.
+ */
+module foreach_outside_sync
+
+func quiet(xs: int[]): int {
+    xs->foreach<(x: int) => sync { println(x) }>
+    return 0
+}
+
+func loud(xs: int[]): int sync {
+    xs->foreach<(x: int) => sync { println(x) }>
+    return 0
+}
+
+func main(): int sync {
+    let a = quiet([1, 2])
+    let b = loud([3, 4])
+    return a + b
+}

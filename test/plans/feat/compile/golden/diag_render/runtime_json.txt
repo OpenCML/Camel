@@ -1,0 +1,6 @@
+error[RuntimeDiag::JsonDecodeFailed]: json.decode: the text is not valid JSON (parse error at line 1, column 2: syntax error while parsing object key - invalid literal; last read: '{b'; expected string literal). The text begins: '{bad json'.
+  --> <ROOT>/test/cases/compile/diag_render/runtime_json.cml:6:13
+   |
+ 6 |     println(decode('{bad json'))
+   |             ^^^^^^
+help: The line and column in the message are positions in the decoded text, not in the program.

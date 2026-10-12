@@ -1,0 +1,94 @@
+/**
+ * Generic functions together with the rest of the language: use before declaration, calls
+ * between generic functions, captured module-level values, `with` parameters, lambdas typed
+ * with a variable, conversions to a variable's type, a generic function declared inside a
+ * function, `var` parameters.
+ */
+module features
+
+let base = 100
+
+// declared after its first use below
+func main(): int sync {
+    println(add_base(1))
+    println(wrap(3))
+    println(wrap('s'))
+    println(scaled<2>(21))
+    println(21->scaled<3>)
+    println(keep<'w'>(1.5))
+    println(lam(5))
+    println(lam('q'))
+    println(conv(3))
+    println(local_generic(4))
+    var v = 1
+    bump(v, 5)
+    println(v)
+    var s = 'a'
+    bump(s, 'b')
+    println(s)
+    println(capture_param(10))
+    println(ann(4))
+    return 0
+}
+
+func id(x: typeas T): T {
+    return x
+}
+
+// a generic function calling generic functions
+func wrap(x: typeas T): (T, T[]) {
+    return (id(x), [id(x)])
+}
+
+// captures a module-level value
+func add_base(x: typeas T): T {
+    return x + base
+}
+
+// with parameters are ordinary context parameters; their types may use and bind variables
+with <k: typeas T>
+func scaled(x: T): T {
+    return x * k
+}
+
+with <w: typeas W>
+func keep(x: typeas T): (W, T) {
+    return (w, x)
+}
+
+// a lambda in the body typed with the variable
+func lam(x: typeas T): T[] {
+    let dup = (y: T) => [y, y]
+    return dup(x)
+}
+
+// conversions to a type written with the variable
+func conv(x: typeas T): T {
+    let zero: T = 0
+    return (x + zero) as T
+}
+
+// a generic function declared inside a function
+func local_generic(n: int): (int, string) {
+    func twice(x: typeas T): (T, T) {
+        return (x, x)
+    }
+    let a = twice(n)
+    let b = twice('z')
+    return (a.0 + a.1, b.0 + b.1)
+}
+
+sync func bump(var x: typeas T, d: T): void sync {
+    x = x + d
+}
+
+// a lambda capturing a parameter whose type is the variable
+func capture_param(x: typeas T): T {
+    let f = () => x
+    return f()
+}
+
+func ann(x: typeas T): T {
+    let y: T = 2
+    return x * y
+}

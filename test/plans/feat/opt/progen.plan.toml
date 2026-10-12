@@ -1,0 +1,30 @@
+id = "opt.progen"
+order = 322
+tier = "feat"
+tags = ["feat", "opt", "progen", "differential"]
+
+[[tests]]
+name = "progen_check"
+desc = "Random programs with a reference output computed outside the compiler (test/tools/progen): a fixed batch of seeds over integer, float, bool and string arithmetic, arrays, tuples, structs, let and var (written through var parameters and captures), if and match, functions, bounded recursion, closures, higher-order functions, map / filter / reduce / foreach / zip / range, sync blocks with println, and wait. Each program runs without passes and under every cell of the cross matrix (25 rewrite sequences on the node VM; no rewrite, std::inline, std::opt::simplify, std::opt and std::macro std::opt also on the bytecode VM, the JIT and the parallel scheduler) and every run must print exactly the reference output or decline with a located diagnostic of a pass. The batch holds only seeds whose every cell passes today; the seeds left out and the defects they show are recorded in test/cases/opt/progen/README.md and in CHECK_EXCLUDED of progen.py."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/progen/progen.py"
+args = ["${case}", "check"]
+expect_exit = 0
+expect_stdout_contains = ["0 wrong", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+
+[[tests]]
+name = "progen_fixed"
+desc = "The archived progen findings that are recorded as fixed (test/cases/opt/progen/findings.json, key `fixed`): reduced programs on which std::inline, std::opt or a pass after them ran code of a branch arm that is not taken, dropped or reordered an effect of a sync block, produced a wrong value, or crashed. Each runs under the rewrite sequence it was found with and under std::inline, std::opt, std::inline std::opt::dce, std::opt::simplify and std::specialize, on the node VM, the bytecode VM, the JIT and the parallel scheduler, and every run must print exactly the output the generator's reference evaluator computed."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/progen/progen.py"
+args = ["${case}", "fixed"]
+expect_exit = 0
+expect_stdout_contains = ["0 wrong", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000

@@ -1,0 +1,16 @@
+id = "consistency.runner"
+order = 350
+tier = "feat"
+tags = ["feat", "consistency", "tools"]
+desc = "The plan runner's back-end matrix (backends, backends_agree, known_fail, [defaults])"
+
+[[tests]]
+name = "runner.backend_matrix"
+desc = "Runs the runner on a fixture plan whose tests pass, fail and are known to fail on purpose, and checks the status of each."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/selftest/run.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["runner self-test ok"]
+timeout_ms = 60000

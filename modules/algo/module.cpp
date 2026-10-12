@@ -23,8 +23,10 @@
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "operators.h"
+#include "sequence.h"
 
 #include <optional>
 
@@ -200,6 +202,8 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 AlgoModule::AlgoModule(context_ptr_t ctx) : BuiltinModule("algo", ctx) {
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);
+    for (const auto &group : getAlgoSequenceGroups())
+        exportEntity(group->name(), group);
 }
 
 module_ptr_t AlgoModule::create(context_ptr_t ctx) { return std::make_shared<AlgoModule>(ctx); }
@@ -210,6 +214,25 @@ bool AlgoModule::load() {
     context_->registerExecutorFactory("algo", [ctx = context_]() {
         return createAlgoExecutor(ctx);
     });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "algo",
+        {
+            // Return a new array.
+            {"sorted", true},
+            {"insert_sorted", true},
+            {"quick_sorted", true},
+            {"merge_sorted", true},
+            {"merge_sorted_arrays", true},
+            {"flatten", true},
+            {"unique", true},
+            {"argsort", true},
+            // Sort the array they are given, in place.
+            {"sort", false},
+            {"insert_sort", false},
+            {"quick_sort", false},
+            {"merge_sort", false},
+        });
     loaded_ = true;
     return true;
 }

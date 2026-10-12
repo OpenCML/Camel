@@ -133,29 +133,17 @@ return result
 return [res1, res2]
 ```
 
-### 4.3.2 raise / throw
+### 4.3.2 throw 与错误值
 
-> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
+- **`throw e`** 返回一个错误值，与 `return` 同构（语法 **retStmt**：**RETURN | RAISE | THROW** + **dataList**）。它不展开调用栈，
+  没有"传播"与"捕获"：调用方拿到的是一个 `T!` 的值，用 `!!`、`?->` 或 `match` 处理（见 [6.6](06_expressions.md)、
+  [7.1.2](07_statements.md)）。
+- **`raise`** 的去留未定，使用它是编译期错误 `SemanticDiag::ConstructNotSupported`。
+- **错误与故障是两回事**：除零、越界、递归过深是故障，带位置终止程序，不是错误值。
 
-- **`raise expr`** / **`throw expr`**：语法为 **retStmt**：**RETURN | RAISE | THROW** + **dataList**；设计上用于
-  引发异常。
+### 4.3.3 try-catch-finally（不属于语言）
 
-### 4.3.3 try-catch-finally
-
-> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
-
-- **`try stmtBlock catchClause+ (finally stmtBlock)?`**。
-- **catchClause**：**`catch identDef ':' typeExpr stmtBlock`**，设计上用于捕获指定类型的异常并执行对应块。
-
-```cml
-try {
-    // ...
-} catch e: SomeError {
-    // 处理
-} finally {
-    // 清理
-}
-```
+`try`/`catch` 在图上没有稳定的映射，不进入 Camel；写了得到编译期错误 `SemanticDiag::TryCatchNotInLanguage`。
 
 ---
 

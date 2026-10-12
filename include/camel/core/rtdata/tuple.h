@@ -27,6 +27,12 @@
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
 
+namespace camel::core::rtdata {
+/// Defined in rtdata/tagged.cpp.
+void printTaggedSlots(
+    std::ostream &os, const slot_t *slots, const camel::core::type::TupleType *type);
+} // namespace camel::core::rtdata
+
 class Tuple : public rtdata::Object {
   public:
     Tuple(const Tuple &)            = delete;
@@ -95,6 +101,9 @@ class Tuple : public rtdata::Object {
                         reinterpret_cast<const rtdata::Object *const *>(dataB)[i];
                     if (refA == refB)
                         continue;
+                    // A reference slot may be null (the error slot of a `T!`).
+                    if (!refA || !refB)
+                        return false;
                     if (!refA->equals(refB, tupleType->typeAt(i), true))
                         return false;
                 } else {
@@ -150,6 +159,11 @@ class Tuple : public rtdata::Object {
     virtual void print(std::ostream &os, const type::Type *type) const override {
         ASSERT(type && type->code() == type::TypeCode::Tuple, "Type must be TupleType");
         const type::TupleType *tupleType = static_cast<const type::TupleType *>(type);
+        if (tupleType->isTagged()) {
+            // `T?` / `T!`: the value or the error, not the box (rtdata/tagged.h).
+            rtdata::printTaggedSlots(os, data_, tupleType);
+            return;
+        }
 
         os << "(";
 

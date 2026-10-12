@@ -1,0 +1,6 @@
+module warning_dropped_effect
+
+func main(): int {
+    println('never printed')
+    return 0
+}

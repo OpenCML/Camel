@@ -65,6 +65,45 @@ Every `[[tests]]` entry may use these common fields:
 - `skip_unless_timeout_ms`
   Optional timeout for the precondition command. Default is `120000`.
 
+## Plan Defaults
+
+A plan may start its tests with a `[defaults]` table. Every field in it is a field of every
+`[[tests]]` entry of the plan that does not set the field itself:
+
+```toml
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+```
+
+## One Test On Several Back Ends
+
+A test entry with `backends` is one test per back end, so that a case meant to behave the same
+everywhere is written once:
+
+- `backends`
+  String array, for example `["nvm", "fvm", "jit", "prl"]`. The entry becomes the tests
+  `<name>.nvm`, `<name>.fvm`, ... in that order. In `args`, `${backend}` is the pass list
+  `run_<backend>` of `test/vars.toml` (`run_inline_jit` gives the back end `inline_jit`). Every
+  assertion of the entry is checked for each of them. `backends = false` in an entry switches
+  off a `backends` of the plan defaults.
+- `backends_agree`
+  Fields on which every back end after the first must equal the first: the differential fields
+  below (`exit_code`, `stdout_normalized`, `stderr_normalized`, `output_normalized`) and
+  `diagnostics` (name, code, line and column of every diagnostic, in the order printed).
+- `known_fail`
+  Back ends of `backends` on which the test is known to fail. Such a test is reported as
+  `[XFAIL]`, counted apart in the summary (`known failures: N`) and does not fail the run. When
+  it passes it fails the run, with the request to remove the mark: a mark cannot go stale
+  unnoticed.
+- `known_fail_note`
+  Printed with an `[XFAIL]`: why, and what will fix it.
+
+`test/tools/selftest/run.mjs` checks these fields on a fixture plan; it runs with the default
+test set (`test/plans/feat/consistency/runner.plan.toml`).
+
 ## Supported Normalizers
 
 `normalizers` currently supports:
@@ -79,6 +118,10 @@ Every `[[tests]]` entry may use these common fields:
   carries an absolute path (for example the `srcfile` attribute of `std::rgir` / `std::argir`),
   otherwise the golden only matches the checkout it was recorded in.
 - `normalize_addresses`
+- `normalize_platform_error_messages`
+  Maps equivalent Windows and Unix standard-library messages for missing files and unmatched
+  regex parentheses to one spelling. Use it only on those diagnostic snapshots; the operation,
+  path, pattern and source locations remain part of the comparison.
 - `normalize_duration_seconds`
 
 Normalizers affect:
@@ -101,6 +144,7 @@ Behavior-style tests may combine:
 
 - `expect_exit`
 - `expect_stdout_contains`
+- `expect_stdout_starts_with`
 - `expect_stderr_contains`
 - `expect_output_contains`
 - `expect_output_not_contains`
@@ -115,6 +159,11 @@ Behavior-style tests may combine:
 ### `expect_stdout_contains` / `expect_stderr_contains`
 
 Use these for simple substring checks after normalizers are applied.
+
+### `expect_stdout_starts_with`
+
+A string that the normalized standard output must begin with: what a program printed before a
+fault is there, complete and in order, ahead of the diagnostic.
 
 ### `expect_output_contains` / `expect_output_not_contains`
 

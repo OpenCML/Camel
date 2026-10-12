@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Dec. 10, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -186,56 +186,99 @@ GenerationalAllocatorWithGC &autoSpace() {
         if (const size_t level = envSize("CAMEL_GC_STATS"); level != 0) {
             instance->setStatsLevel(static_cast<int>(level));
             statsInstance = instance;
-            std::atexit([] { statsInstance->reportStats(std::cerr); });
+            std::atexit([] {
+                statsInstance->reportStats(std::cerr);
+                reportSpaceUsage(std::cerr);
+            });
         }
         return instance;
     }();
     return *allocator;
 }
 
-// Metadata space: manually managed allocation and release.
-FreeListAllocator &metaSpace() {
-    // The process-level meta space uses an intentionally-leaked singleton to avoid static
-    // destruction order problems: some global objects may still call metaSpace().free() during
-    // shutdown.
-    static auto *allocator = new FreeListAllocator(16 * MB, "meta"); // 16 MB
-    return *allocator;
-}
+// The three spaces below hold what the program is made of, so they grow with it: segment by
+// segment, up to a limit that only guards against a compiler that never stops allocating (see
+// alloc/growable.h). The first segment of each is as large as the whole space used to be, so a
+// program that fitted before sees one segment and the same addresses-never-move contract.
 
-// Permanent generation: allocate only, never free.
-
-FreeListAllocator &graphSpace() {
-    static auto *allocator = new FreeListAllocator(64 * MB, "graph"); // 64 MB
-    return *allocator;
-}
 namespace {
 
-constexpr size_t kPermSpaceBytes = 32 * MB;
+/// The limit of a space in bytes: `<env>=<megabytes>` when set to a positive number.
+size_t spaceLimitFromEnv(const char *env, size_t defaultBytes) {
+    const size_t megabytes = envSize(env);
+    return megabytes != 0 ? megabytes * MB : defaultBytes;
+}
 
-/// The permanent space never frees, so it can only fill up. Its users (type and layout
-/// constructors) place an object in the returned memory right away and guard the pointer with an
-/// ASSERT, which release builds compile out: exhaustion has to be reported here, as an error the
-/// caller's driver turns into a diagnostic, instead of a write through null.
-class PermSpaceAllocator final : public BumpPointerAllocator {
-  public:
-    using BumpPointerAllocator::BumpPointerAllocator;
-
-    void *alloc(size_t size, size_t align = alignof(slot_t)) override {
-        void *mem = BumpPointerAllocator::alloc(size, align);
-        if (!mem) {
-            throw std::runtime_error(
-                "Permanent space exhausted (" + std::to_string(kPermSpaceBytes / MB) +
-                " MB of types and layouts): the program, or what a pass made of it, is too large.");
-        }
-        return mem;
+GrowableSpaceConfig spaceConfig(
+    const char *name, const char *holds, size_t segmentBytes, size_t defaultLimitBytes,
+    const char *limitEnv) {
+    GrowableSpaceConfig config;
+    config.name       = name;
+    config.holds      = holds;
+    config.limitBytes = spaceLimitFromEnv(limitEnv, defaultLimitBytes);
+    // CAMEL_SPACE_SEGMENT_KB=<kilobytes> sets the first segment of every growable space. It
+    // is a test control: with small segments a small program makes the spaces grow, so growth
+    // can be exercised under heap verification and collection stress.
+    if (const size_t kilobytes = envSize("CAMEL_SPACE_SEGMENT_KB"); kilobytes != 0) {
+        segmentBytes = kilobytes * KB;
     }
-};
+    config.segmentBytes = std::min(segmentBytes, config.limitBytes);
+    config.limitEnv     = limitEnv;
+    return config;
+}
+
+void printSpaceUsage(std::ostream &os, const char *name, const SpaceUsage &usage) {
+    os << ' ' << name << "_used_kb=" << usage.usedBytes / KB << ' ' << name
+       << "_peak_kb=" << usage.peakUsedBytes / KB << ' ' << name
+       << "_reserved_mb=" << usage.reservedBytes / MB << ' ' << name
+       << "_segments=" << usage.segments << ' ' << name << "_allocs=" << usage.allocations << ' '
+       << name << "_limit_mb=" << usage.limitBytes / MB;
+}
 
 } // namespace
 
-BumpPointerAllocator &permSpace() {
-    static auto *allocator = new PermSpaceAllocator(kPermSpaceBytes, "perm");
+// Metadata space: manually managed allocation and release (compile-time graph arenas).
+GrowableFreeListAllocator &metaSpace() {
+    // The process-level meta space uses an intentionally-leaked singleton to avoid static
+    // destruction order problems: some global objects may still call metaSpace().free() during
+    // shutdown.
+    static auto *allocator = new GrowableFreeListAllocator(spaceConfig(
+        "meta",
+        "constants and function objects of the graphs being compiled",
+        16 * MB,
+        kDefaultMetaSpaceLimitBytes,
+        kMetaSpaceLimitEnv));
     return *allocator;
+}
+
+// Graph space: runtime graphs, released one by one by GCGraphManager.
+GrowableFreeListAllocator &graphSpace() {
+    static auto *allocator = new GrowableFreeListAllocator(spaceConfig(
+        "graph",
+        "runtime graphs",
+        64 * MB,
+        kDefaultGraphSpaceLimitBytes,
+        kGraphSpaceLimitEnv));
+    return *allocator;
+}
+
+// Permanent space: allocate only, never free (types and layouts).
+GrowableBumpAllocator &permSpace() {
+    static auto *allocator = new GrowableBumpAllocator(spaceConfig(
+        "permanent",
+        "types and layouts",
+        32 * MB,
+        kDefaultPermSpaceLimitBytes,
+        kPermSpaceLimitEnv));
+    return *allocator;
+}
+
+void reportSpaceUsage(std::ostream &os) {
+    os << "[camel] spaces:";
+    printSpaceUsage(os, "graph", graphSpace().usage());
+    printSpaceUsage(os, "perm", permSpace().usage());
+    printSpaceUsage(os, "meta", metaSpace().usage());
+    os << '\n';
 }
 
 } // namespace camel::core::mm

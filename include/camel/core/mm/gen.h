@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Nov. 07, 2025
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 
 #include "alloc/bump_ptr.h"
 #include "alloc/free_list.h"
+#include "alloc/growable.h"
 #include "alloc/large_obj.h"
 #include "camel/core/rtdata/base.h"
 
@@ -196,8 +197,8 @@ namespace detail {
 extern std::atomic_bool autoSpaceSafepointSlowPath;
 } // namespace detail
 
-FreeListAllocator &graphSpace();
-BumpPointerAllocator &permSpace();
+GrowableFreeListAllocator &graphSpace();
+GrowableBumpAllocator &permSpace();
 
 class GenerationalAllocatorWithGC : public IAllocator {
   public:

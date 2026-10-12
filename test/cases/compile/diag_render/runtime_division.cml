@@ -1,0 +1,8 @@
+module runtime_division
+
+func div(a: int, b: int): int { return a / b }
+
+func main(): int sync {
+    println(div(1, 0))
+    return 0
+}

@@ -1,0 +1,36 @@
+/**
+ * The array module (written in Camel): rearranging, searching and aggregating.
+ */
+module array_basic
+
+import { reverse, take, drop, enumerate, flatten, unique, index_of, sum, min, max } from array
+
+func main(): int sync {
+    let xs = [3, 1, 4, 1, 5, 9, 2, 6]
+    let none = tail([0])
+    let words = ['pear', 'apple', 'fig']
+
+    println(reverse(xs), reverse(words), reverse(none), reverse([7]))
+    println(xs->take<3>, xs->take<0>, xs->take<-2>, xs->take<100>, none->take<2>)
+    println(xs->drop<3>, xs->drop<0>, xs->drop<-2>, xs->drop<100>, none->drop<2>)
+    println(xs->drop<2>->take<3>, len(xs))
+    println(enumerate(words), enumerate(none))
+
+    println(flatten([[1, 2], [3], tail([0]), [4, 5]]), flatten([words, words]), flatten([none]))
+    println(len(flatten(tail([[1]]))))
+    println(unique(xs), unique(['b', 'a', 'b', 'é', 'é']), unique(none), unique([1.5, 1.5, 0.0, -0.0]))
+    println(unique([[1, 2], [1, 2], [2, 1]]), unique([(1, 2), (1, 2), (2, 1)]))
+    println(unique([true, false, true]))
+
+    println(xs->index_of<1> ?? -1, xs->index_of<6> ?? -1, xs->index_of<7> ?? -1, none->index_of<1> ?? -1)
+    println(words->index_of<'fig'> ?? -1, words->index_of<'Fig'> ?? -1, [1.5, 2.5]->index_of<2.5> ?? -1)
+
+    println(sum(xs), sum(none), sum([1.5, 2.25]), sum(tail([0.5])), sum([i32(2), i32(3)]), sum([f32(0.5), f32(0.25)]))
+    println(sum([9223372036854775807, 1]))
+    println(min(xs) ?? -1, max(xs) ?? -1, min(none) ?? -1, max(none) ?? -1, min([7]) ?? -1)
+    println(min(words) ?? '?', max(words) ?? '?', min([2.5, -1.5]) ?? 0.0, max([2.5, -1.5]) ?? 0.0)
+    println(min([-9223372036854775807 - 1, 9223372036854775807]) ?? 0, max([-9223372036854775807 - 1, 9223372036854775807]) ?? 0)
+    // the argument is not changed
+    println(xs, words)
+    return 0
+}

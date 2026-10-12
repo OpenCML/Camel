@@ -1,0 +1,11 @@
+module err_tf_count
+
+type Pair<T> = (T, T)
+
+func f(p: Pair<int, string>): int {
+    return 1
+}
+
+func main(): int sync {
+    return 0
+}

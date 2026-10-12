@@ -1,0 +1,7 @@
+error[SyntaxDiag::MissingToken]: Expected ':' before 'int'.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_missing_token.cml:3:10
+   |
+ 3 | func f(a int): int { return a }
+   |          ^^^
+
+camel: 1 error

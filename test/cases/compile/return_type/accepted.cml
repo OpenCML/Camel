@@ -1,8 +1,8 @@
 module return_accepted
 // What stays accepted: the declared type itself, `any`, an undeclared return type, and a
 // function declared void whose body ends in a value. (A nullable of the type, `int?`, used to
-// be listed here: it was compiled as `int`. Nullable types are not implemented and are now a
-// compile-time error, see not_supported/nullable_type.cml.)
+// be listed here: it was compiled as `int`. `int?` is now a type of its own, and `return x`
+// under it puts `x` into that form, see compile/tagged/nullable.cml.)
 func a(x: int): any {
     return x
 }

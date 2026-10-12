@@ -1,0 +1,14 @@
+/**
+ * A faulting expression whose result nothing uses, outside a sync block, never runs: no fault.
+ */
+module fault_in_unused
+
+func careless(z: int): int {
+    let unused = 10 / z
+    return z + 1
+}
+
+func main(): int sync {
+    println(careless(0))
+    return 0
+}

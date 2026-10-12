@@ -82,6 +82,11 @@ enum class TypeCode : uint32_t {
     Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00C),
     Any      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00D),
     Union    = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00E),
+    // Compile-time only (camel/core/type/typevar.h): a type variable of a generic function
+    // or of a parameterised type declaration, and a parameterised type declaration itself.
+    // Neither is the type of a node of a graph.
+    TypeVar  = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00F),
+    TypeFunc = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x010),
     Other    = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 

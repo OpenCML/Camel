@@ -1,0 +1,332 @@
+id = "consistency.faults"
+order = 351
+tier = "feat"
+tags = ["feat", "consistency", "runtime", "negative"]
+desc = "Run-time faults on the four back ends: the same output, exit code and located diagnostic"
+
+# Every case runs on std::nvm, std::fvm, std::jit and std::prl. Unless an entry says otherwise the
+# four must agree on the exit code, on standard output (the program's output and, after it, the
+# diagnostic as printed) and on the name, code, line and column of the diagnostic. A fault stops
+# the program with one located diagnostic (design principles 2.9); what was printed before it is
+# on standard output, complete and in order (expect_stdout_starts_with).
+
+[defaults]
+kind = "negative"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_output_not_contains = ["not reached", "Floating point exception", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+# --- division and modulo by zero, at every kind of place -----------------------------------
+
+[[tests]]
+name = "fault.div_zero_top"
+desc = "Integer division by zero written in main."
+case = "../../../cases/consistency/faults/div_zero_top.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 15
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "fault.mod_zero_in_function"
+desc = "Modulo by zero in a called function."
+case = "../../../cases/consistency/faults/mod_zero_in_function.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 42
+expect_stdout_starts_with = "2\n"
+
+[[tests]]
+name = "fault.div_zero_in_arm"
+desc = "Division by zero in the arm of a branch that is taken."
+case = "../../../cases/consistency/faults/div_zero_in_arm.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 41
+expect_stdout_starts_with = "1\n"
+
+[[tests]]
+name = "fault.float_div_zero"
+desc = "Floating-point division by zero is the same fault as the integer one."
+case = "../../../cases/consistency/values/float_div_zero.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 48
+expect_stdout_starts_with = "before\n0.25\n"
+
+[[tests]]
+name = "fault.top_level"
+desc = "A fault while a module-level value is computed: nothing of main has run."
+case = "../../../cases/consistency/faults/top_level_fault.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 14
+verify_script = """
+assert(!input.normalized.stdout.startsWith('before'), 'main ran before the fault')
+"""
+
+[[tests]]
+name = "fault.in_closure"
+desc = "A fault in a closure called through a function value."
+case = "../../../cases/consistency/faults/fault_in_closure.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 31
+expect_stdout_starts_with = "5\n"
+
+[[tests]]
+name = "fault.in_tail_round"
+desc = "A fault in round 501 of a tail-recursive loop."
+case = "../../../cases/consistency/faults/fault_in_tail_round.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 61
+expect_stdout_starts_with = "1437\n"
+
+[[tests]]
+name = "fault.in_wait"
+desc = "A fault in a waited call that has already written its var parameter."
+case = "../../../cases/consistency/faults/fault_in_wait.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_stdout_starts_with = "5\n"
+
+[[tests]]
+name = "fault.after_output"
+desc = "A fault in a sync function after four lines of output from two sync blocks: all four are there, in order, before the diagnostic."
+case = "../../../cases/consistency/faults/fault_after_output.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 15
+expect_stdout_starts_with = "main 1\nmain 2\nwork 1\nwork 2\n"
+
+# --- faults in the element function of a higher-order operator ------------------------------
+# One element faults. The other elements of a map or filter may or may not have run on a
+# scheduler that runs them concurrently; they have no output here, so nothing shows it.
+
+[[tests]]
+name = "fault.in_map"
+desc = "One element function of a map faults."
+case = "../../../cases/consistency/faults/fault_in_map.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 35
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "fault.in_filter"
+desc = "One element function of a filter faults."
+case = "../../../cases/consistency/faults/fault_in_filter.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 37
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "fault.in_reduce"
+desc = "The function of a reduce faults at its fourth step."
+case = "../../../cases/consistency/faults/fault_in_reduce.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 52
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "fault.in_foreach"
+desc = "The function of a foreach faults at element 2: foreach runs in element order, so the lines of elements 0 and 1 are there and no other."
+case = "../../../cases/consistency/faults/fault_in_foreach.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_stdout_starts_with = "before\n-30\n-60\n"
+
+[[tests]]
+name = "fault.in_foreach_closure"
+desc = "A foreach closure that writes a captured var faults at its fourth element."
+case = "../../../cases/consistency/faults/fault_in_foreach_closure.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 28
+expect_stdout_starts_with = "4\n10\n22\n"
+
+[[tests]]
+name = "fault.in_nested_map"
+desc = "A fault in one element of a map nested in a map."
+case = "../../../cases/consistency/faults/fault_in_nested_map.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 50
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "fault.after_map_output"
+desc = "Twenty lines written by a foreach and one by main before a fault in a later map: all of them, in order."
+case = "../../../cases/consistency/faults/fault_after_map_output.cml"
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 35
+expect_stdout_starts_with = "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nbefore the map\n"
+
+[[tests]]
+name = "fault.in_map_many"
+desc = "Every element function of a map faults, at one of two lines. Which fault is reported when several happen under a concurrent scheduler is not laid down (a question for the language author): the run stops with exactly one located DivisionByZero, exit code 1, on every back end; the position is not compared."
+case = "../../../cases/consistency/faults/faults_in_map_many.cml"
+backends_agree = ["exit_code"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_stdout_starts_with = "before\n"
+verify_script = """
+assert(input.diagnostics.length === 1, `one diagnostic expected, got ${input.diagnostics.length}`)
+assert([10, 11].includes(input.diagnostics[0].line), `line ${input.diagnostics[0].line}`)
+"""
+
+# --- indexing -----------------------------------------------------------------------------
+
+[[tests]]
+name = "fault.index_out_of_range"
+desc = "Reading past the end of an array."
+case = "../../../cases/consistency/faults/index_out_of_range.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 44
+expect_stdout_starts_with = "30\n"
+expect_output_contains = ["Index 3 is out of range for an array of length 3."]
+
+[[tests]]
+name = "fault.negative_index"
+desc = "A negative index computed at run time."
+case = "../../../cases/consistency/faults/negative_index.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 44
+expect_stdout_starts_with = "10\n"
+expect_output_contains = ["Index -1 is out of range for an array of length 3."]
+
+[[tests]]
+name = "fault.array_index_constant"
+desc = "A constant index past the end of an array literal. Today this is the run-time fault on every back end (design principles 2.7 want a compile-time error where the length is known; an array literal has the type int[], whose length is not part of it)."
+case = "../../../cases/consistency/faults/array_index_static.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 15
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "fault.slice_out_of_range"
+desc = "A slice whose end is past the end of the array, bounds only known at run time. What it should do is not laid down (a question for the language author); the four back ends must agree."
+kind = "behavior"
+case = "../../../cases/consistency/faults/slice_out_of_range.cml"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = false
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+expect_stdout_starts_with = "[10, 20]\n"
+
+[[tests]]
+name = "fault.tuple_index_static"
+desc = "A tuple index past the end is a compile-time error: nothing runs."
+case = "../../../cases/consistency/faults/tuple_index_static.cml"
+expect_diagnostic_name = "SemanticDiag::InvalidAccessIndex"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+
+[[tests]]
+name = "fault.struct_field_static"
+desc = "A field the struct does not have is a compile-time error: nothing runs."
+case = "../../../cases/consistency/faults/struct_field_static.cml"
+expect_diagnostic_name = "SemanticDiag::InvalidAccessIndex"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+
+# --- conversions --------------------------------------------------------------------------
+
+[[tests]]
+name = "fault.parse_int"
+desc = "int('abc') stops the program at the conversion (int() of a string is a fault; parse_int returns an error value). The name of the diagnostic is left to the agreement check."
+case = "../../../cases/consistency/faults/parse_int_fault.cml"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 36
+expect_stdout_starts_with = "42\n"
+
+[[tests]]
+name = "fault.as_shape"
+desc = "`as` into a tensor type whose shape the value does not have: a fault at the conversion."
+case = "../../../cases/consistency/faults/as_shape_fault.cml"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 13
+expect_stdout_starts_with = "before\n"
+expect_output_contains = ["the tensor has shape [3, 2]"]
+
+# --- faults that do not happen ---------------------------------------------------------------
+
+[[tests]]
+name = "fault.in_unused"
+desc = "A faulting expression whose result nothing uses, outside a sync block, never runs (design principles 2.1): no fault."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/fault_in_unused.txt"
+case = "../../../cases/consistency/faults/fault_in_unused.cml"
+expect_exit = 0
+
+[[tests]]
+name = "fault.in_untaken_arm"
+desc = "A faulting expression in the arm that is not taken never runs."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/fault_in_untaken_arm.txt"
+case = "../../../cases/consistency/faults/fault_in_untaken_arm.cml"
+expect_exit = 0
+
+# --- how a program ends --------------------------------------------------------------------
+
+[[tests]]
+name = "end.main_returns_code"
+desc = "The value main returns is the exit code."
+kind = "behavior"
+case = "../../../cases/consistency/faults/main_returns_code.cml"
+expect_exit = 7
+expect_stdout_starts_with = "done\n"
+
+[[tests]]
+name = "end.exit_code"
+desc = "exit(3) in a function, without importing os: the output before it is there, nothing after it runs, the exit code is 3, and there is no diagnostic."
+kind = "behavior"
+case = "../../../cases/consistency/faults/exit_code.cml"
+expect_exit = 3
+expect_stdout_starts_with = "before\nstopping\n"
+verify_script = """
+assert(input.normalized.stdout === 'before\nstopping\n', JSON.stringify(input.normalized.stdout))
+assert(input.diagnostics.length === 0, 'no diagnostic expected')
+"""
+
+[[tests]]
+name = "end.exit_imported"
+desc = "The same with exit imported from os."
+kind = "behavior"
+case = "../../../cases/consistency/faults/exit_imported.cml"
+expect_exit = 3
+verify_script = """
+assert(input.normalized.stdout === 'before\nstopping\n', JSON.stringify(input.normalized.stdout))
+assert(input.diagnostics.length === 0, 'no diagnostic expected')
+"""
+
+[[tests]]
+name = "end.sleep_global"
+desc = "The global sleep, implemented in the os module like exit, works without importing it."
+kind = "behavior"
+case = "../../../cases/consistency/faults/sleep_global.cml"
+expect_exit = 0
+expect_stdout_starts_with = "before\nafter\n"
+
+[[tests]]
+name = "end.error_reaches_main"
+desc = "An error value nobody handled is what main returns. What the process does then (exit code, where the error is printed) is not laid down (a question for the language author); the four back ends must agree."
+kind = "behavior"
+case = "../../../cases/consistency/faults/error_reaches_main.cml"
+expect_exit = false
+expect_stdout_starts_with = "before\n"

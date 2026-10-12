@@ -18,6 +18,7 @@
  */
 
 #include "operators.h"
+#include "numeric.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -46,7 +47,11 @@ slot_t __math_abs__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::fabs(norm.get<Float64>(0)));
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<abs> not supported");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.abs",
+            typeCodeToString(norm.code(0)),
+            "a number");
     }
 }
 
@@ -57,7 +62,11 @@ slot_t __math_exp__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::exp(norm.get<Float64>(0)));
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<exp> only Float/Double");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.exp",
+            typeCodeToString(norm.code(0)),
+            "a float or a double");
     }
 }
 
@@ -68,7 +77,11 @@ slot_t __math_round__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::round(norm.get<Float64>(0)));
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<round> only Float/Double");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.round",
+            typeCodeToString(norm.code(0)),
+            "a float or a double");
     }
 }
 
@@ -79,7 +92,11 @@ slot_t __math_ceil__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::ceil(norm.get<Float64>(0)));
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<ceil> only Float/Double");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.ceil",
+            typeCodeToString(norm.code(0)),
+            "a float or a double");
     }
 }
 
@@ -90,7 +107,11 @@ slot_t __math_floor__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::floor(norm.get<Float64>(0)));
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<floor> only Float/Double");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.floor",
+            typeCodeToString(norm.code(0)),
+            "a float or a double");
     }
 }
 
@@ -104,7 +125,11 @@ slot_t __math_bin__(ArgsView &with, ArgsView &norm, Context &ctx) {
         number = static_cast<int64_t>(norm.get<Int64>(0));
         break;
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<bin> requires integer");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.bin",
+            typeCodeToString(norm.code(0)),
+            "an integer");
     }
     std::string bits = std::bitset<64>(number).to_string();
     auto first_one   = bits.find('1');
@@ -114,7 +139,11 @@ slot_t __math_bin__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __math_oct__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.code(0) != TypeCode::Int32 && norm.code(0) != TypeCode::Int64) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<oct> requires integer");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.oct",
+            typeCodeToString(norm.code(0)),
+            "an integer");
     }
     std::ostringstream oss;
     oss << "0o" << std::oct;
@@ -127,7 +156,11 @@ slot_t __math_oct__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __math_hex__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (norm.code(0) != TypeCode::Int32 && norm.code(0) != TypeCode::Int64) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<hex> requires integer");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.hex",
+            typeCodeToString(norm.code(0)),
+            "an integer");
     }
     std::ostringstream oss;
     oss << "0x" << std::hex << std::uppercase;
@@ -149,12 +182,17 @@ slot_t __math_sqrt__(ArgsView &with, ArgsView &norm, Context &ctx) {
     case TypeCode::Float64:
         return toSlot(std::sqrt(norm.get<Float64>(0)));
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<sqrt> only Float/Double");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "math.sqrt",
+            typeCodeToString(norm.code(0)),
+            "a float or a double");
     }
 }
 
 std::unordered_map<std::string, operator_t> getMathOpsMap() {
-    return {
+    std::unordered_map<std::string, operator_t> ops = getMathNumericOpsMap();
+    ops.merge(std::unordered_map<std::string, operator_t>{
         {"abs_i", __math_abs__},     {"abs_l", __math_abs__},     {"abs_f", __math_abs__},
         {"abs_d", __math_abs__},     {"exp_f", __math_exp__},     {"exp_d", __math_exp__},
         {"round_f", __math_round__}, {"round_d", __math_round__}, {"ceil_f", __math_ceil__},
@@ -162,5 +200,6 @@ std::unordered_map<std::string, operator_t> getMathOpsMap() {
         {"bin_i", __math_bin__},     {"bin_l", __math_bin__},     {"oct_i", __math_oct__},
         {"oct_l", __math_oct__},     {"hex_i", __math_hex__},     {"hex_l", __math_hex__},
         {"sqrt", __math_sqrt__},
-    };
+    });
+    return ops;
 }

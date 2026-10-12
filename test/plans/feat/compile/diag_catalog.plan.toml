@@ -1,0 +1,40 @@
+id = "compile.diag_catalog"
+order = 317
+tier = "feat"
+tags = ["feat", "compile", "diagnostics"]
+
+[[tests]]
+name = "catalog.check"
+desc = "Every diagnostic code has a name (the enumerator) and a message, and no value is used twice within a type. Two branches that each took the next free number collide here when they are merged."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--check"]
+expect_exit = 0
+expect_stdout_contains = ["every one with a name and a message, no value used twice"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "catalog.doc_is_generated"
+desc = "docs/diagnostics.md is what scripts/diagnostics-catalog.mjs --write produces from the tables and the tests: it is generated, not edited."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--verify-doc"]
+expect_exit = 0
+expect_stdout_contains = ["docs/diagnostics.md is up to date"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "catalog.coverage_report"
+desc = "Lists the diagnostic codes that no plan, golden file or scripted case mentions. A report: it never fails."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/diagnostics-catalog.mjs"
+args = ["${case}", "--coverage"]
+expect_exit = 0
+expect_stdout_contains = ["diagnostic codes mentioned by no test:"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000

@@ -1,0 +1,16 @@
+/**
+ * The same program without the fault, as the reference for where Python's output appears.
+ */
+module python_output_normal
+
+import { py_call, py_wrap, py_eval, py_unwrap, PyObject } from python
+
+func main(): int sync {
+    println('camel 1')
+    py_call('print', py_wrap('python 1'))
+    let held = py_eval('[1, 2, 3]')
+    println('camel 2')
+    py_call('print', py_wrap('python 2'))
+    println('camel 3')
+    return 0
+}

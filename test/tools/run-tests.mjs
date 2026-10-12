@@ -138,6 +138,11 @@ function applyNormalizers(text, names) {
                 .join('\n')
         } else if (name === 'normalize_paths') {
             output = normalizePathText(output)
+        } else if (name === 'normalize_platform_error_messages') {
+            // Equivalent standard-library error spellings on Windows and Unix.
+            output = output
+                .replace(/(error\[RuntimeDiag::FileOpenFailed\]: [^\n]*: )no such file or directory\./g, '$1No such file or directory.')
+                .replace(/(error\[RuntimeDiag::RegexInvalid\]: [^\n]+ is not a valid regular expression: )regex_error\(error_paren\): The expression contained mismatched \( and \)\.\./g, "$1Mismatched '(' and ')' in regular expression.")
         } else if (name === 'normalize_addresses') {
             output = output.replace(/0x[0-9a-fA-F]+/g, '<ADDR>')
         } else if (name === 'normalize_duration_seconds') {
@@ -233,7 +238,9 @@ function printStatusLine(status, name, metric = '') {
         ? `${COLORS.green}[PASS]${COLORS.reset}`
         : status === 'skip'
             ? `${COLORS.yellow}[SKIP]${COLORS.reset}`
-            : `${COLORS.red}[FAIL]${COLORS.reset}`
+            : status === 'xfail'
+                ? `${COLORS.yellow}[XFAIL]${COLORS.reset}`
+                : `${COLORS.red}[FAIL]${COLORS.reset}`
     const left = `${label} ${name}`
     if (!metric) {
         console.log(left)
@@ -256,10 +263,11 @@ function printDetailLines(lines) {
 }
 
 function printRunSummary(summary) {
-    const total = summary.pass + summary.fail + summary.skip
+    const total = summary.pass + summary.fail + summary.skip + summary.xfail
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
+    const known = summary.xfail > 0 ? `, known failures: ${summary.xfail}` : ''
     console.log('')
-    console.log(`${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}${skipped}`)
+    console.log(`${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}${skipped}${known}`)
 }
 
 /**
@@ -502,6 +510,13 @@ function compareField(field, actual, baseline) {
     if (field === 'stdout_normalized') return actual.normalized.stdout === baseline.normalized.stdout
     if (field === 'stderr_normalized') return actual.normalized.stderr === baseline.normalized.stderr
     if (field === 'output_normalized') return actual.normalized.output === baseline.normalized.output
+    if (field === 'diagnostics') {
+        // Name, code and source position of every diagnostic, in the order printed.
+        const key = (result) => JSON.stringify(
+            result.diagnostics.map((d) => [d.name, d.code, d.line, d.column])
+        )
+        return key(actual) === key(baseline)
+    }
     throw new Error(`unsupported differential field: ${field}`)
 }
 
@@ -514,6 +529,10 @@ function validateTest(test, result, context) {
         if (!result.normalized.stdout.includes(needle)) {
             failures.push(`stdout does not contain '${needle}'`)
         }
+    }
+    if (typeof test.expect_stdout_starts_with === 'string'
+        && !result.normalized.stdout.startsWith(test.expect_stdout_starts_with)) {
+        failures.push(`stdout does not start with ${JSON.stringify(test.expect_stdout_starts_with)}`)
     }
     for (const needle of test.expect_stderr_contains || []) {
         if (!result.normalized.stderr.includes(needle)) {
@@ -583,6 +602,20 @@ function validateTest(test, result, context) {
             }
         }
     }
+    if (test.__backendReference) {
+        // A test with `backends`: every back end after the first must agree with the first on
+        // the listed fields.
+        const base = context.completed.get(test.__backendReference)
+        if (!base) {
+            failures.push(`reference back end did not run: ${test.__backendReference}`)
+        } else {
+            for (const field of test.backends_agree || []) {
+                if (!compareField(field, result, base)) {
+                    failures.push(`differs from ${test.__backendReference}: ${field}`)
+                }
+            }
+        }
+    }
     if (test.kind === 'benchmark') {
         if (!result.benchmark) {
             failures.push('missing benchmark payload')
@@ -614,8 +647,18 @@ function runOneTest(test, sharedVars, logContext) {
         ...sharedVars,
         case: casePath,
     }
+    if (test.__backend) {
+        const passes = sharedVars[`run_${test.__backend}`]
+        if (passes === undefined) {
+            throw new Error(`unknown back end '${test.__backend}' for ${test.name}: no run_${test.__backend} in test/vars.toml`)
+        }
+        scope.backend = passes
+    }
     const args = expandArgs(test.args || [], scope)
     const env = { ...process.env }
+    // Assertions on diagnostics (name, code, line, column) read the one-line text format.
+    // A test of the format with source excerpts passes --error-format text, which wins.
+    env.CAMEL_ERROR_FORMAT = 'short'
     for (const entry of test.envs || []) {
         const text = String(entry)
         const eq = text.indexOf('=')
@@ -728,12 +771,38 @@ function writeLogFiles(plan, test, result, status, logDir) {
     )
 }
 
+/**
+ * A test with `backends = ["nvm", "fvm", ...]` is one test per back end, named
+ * `<name>.<backend>`, in that order. `${backend}` in its `args` is the pass list `run_<backend>`
+ * of test/vars.toml. Every assertion of the entry holds for each of them; in addition, each back
+ * end after the first must equal the first on the fields listed in `backends_agree`. A back end
+ * listed in `known_fail` is expected to fail (see main).
+ */
+function expandBackends(test) {
+    if (!Array.isArray(test.backends)) return [test]
+    const knownFail = new Set(test.known_fail || [])
+    for (const backend of knownFail) {
+        if (!test.backends.includes(backend)) {
+            throw new Error(`known_fail names '${backend}', which is not in backends of ${test.name}`)
+        }
+    }
+    return test.backends.map((backend, index) => ({
+        ...test,
+        name: `${test.name}.${backend}`,
+        __backend: backend,
+        __backendReference: index === 0 ? null : `${test.name}.${test.backends[0]}`,
+        __knownFail: knownFail.has(backend),
+    }))
+}
+
 function loadPlans(targets, tier) {
     const planPaths = targets.length > 0 ? targets.flatMap((target) => walkPlans(target)) : walkPlans(PLANS_ROOT)
     const plans = planPaths
         .map((planPath) => {
             const doc = parseTomlFile(planPath)
-            const tests = (doc.tests || []).map((test) => ({ ...test, __planPath: planPath }))
+            const tests = (doc.tests || [])
+                .map((test) => ({ ...(doc.defaults || {}), ...test, __planPath: planPath }))
+                .flatMap(expandBackends)
             return { ...doc, __planPath: planPath, tests }
         })
         .filter((plan) => !tier || plan.tier === tier)
@@ -757,7 +826,7 @@ function main() {
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} camel executable: ${CAMEL_EXE}`)
     console.log(`${COLORS.cyan}[INFO]${COLORS.reset} discovered plans: ${plans.length}`)
 
-    const summary = { pass: 0, fail: 0, skip: 0 }
+    const summary = { pass: 0, fail: 0, skip: 0, xfail: 0 }
     const completed = new Map()
 
     for (const plan of plans) {
@@ -772,12 +841,25 @@ function main() {
             }
             const result = runOneTest(test, sharedVars, { options, completed })
             completed.set(test.name, result)
+            if (test.__knownFail) {
+                // A known failure that fails is reported and counted apart, and does not fail
+                // the run. One that passes fails the run: the mark is out of date.
+                if (result.status === 'fail') {
+                    result.status = 'xfail'
+                } else {
+                    result.status = 'fail'
+                    result.failures.push(
+                        `marked known_fail on '${test.__backend}' but passes: remove the mark`
+                    )
+                }
+            }
             summary[result.status]++
             const metric = formatMetric(result)
             printStatusLine(result.status, test.name, metric)
             if (result.failures.length > 0) {
-                if (test.failure_note) {
-                    printDetailLines([`note: ${test.failure_note}`])
+                const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
+                if (note) {
+                    printDetailLines([`note: ${note}`])
                 }
                 printDetailLines(result.failures)
             }

@@ -31,6 +31,7 @@
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
@@ -264,6 +265,15 @@ void validateStaticValueGraphRefs(
         }
     } break;
     default:
+        // A Map or a Set is a container of typed slots too.
+        if (const auto *coll = camel::core::type::asCollectionType(type)) {
+            camel::core::rtdata::table::forEachSlot(
+                fromSlot<camel::core::rtdata::Table *>(slot),
+                coll,
+                [&](slot_t inner, Type *innerType) {
+                    validateStaticValueGraphRefs(owner, inner, innerType, reachable, visited);
+                });
+        }
         break;
     }
 }

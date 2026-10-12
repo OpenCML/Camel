@@ -1,0 +1,14 @@
+/**
+ * A `match` on a `T!` needs `case error e` and one case for the value: TaggedMatchCases.
+ */
+module err_match_missing
+
+func main(): int sync {
+    println('never printed')
+    let r = parse_int('1')
+    let s = match r {
+        case v => v
+    }
+    println(s)
+    return 0
+}

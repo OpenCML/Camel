@@ -920,7 +920,10 @@ any Builder::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 }
 
 /*
-typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
+typeDecl
+    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+      (typeExpr | STRING)
+    ;
 */
 any Builder::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     ENTER("TypeDecl");
@@ -942,6 +945,15 @@ any Builder::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
 
     node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, implMark, uri);
     setNodeTokenRangeByContext(typeDeclNode, context);
+    if (!context->identDef().empty()) {
+        // `type Pair<T> = (T, T)`: a type function, its parameters are type names in the
+        // right-hand side.
+        std::vector<std::string> params;
+        for (auto *param : context->identDef()) {
+            params.push_back(param->getText());
+        }
+        unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setParams(std::move(params));
+    }
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
     if (context->typeExpr()) {
@@ -975,17 +987,18 @@ retStmt    : (RETURN | RAISE | THROW) dataList ;
 */
 any Builder::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
     ENTER("RetStmt");
-    // `raise` and `throw` are in the grammar, but exceptions are not implemented: nothing
-    // propagates or catches one. They used to be compiled as `return`, silently.
-    if (context->RAISE() || context->THROW()) {
-        const char *keyword = context->RAISE() ? "raise" : "throw";
+    // `throw e` returns an error value: an exit like `return`, whose value is the failed form
+    // of the function's declared `T!` (design principles 2.9; the graph builder checks the
+    // declaration). `raise` is undecided (design principles section 6) and stays an error; it
+    // used to be compiled as `return`, silently.
+    if (context->RAISE()) {
         diags_->of(SemanticDiag::ConstructNotSupported)
             .at(context->getStart(), context->getStop())
-            .commit(keyword, "exceptions are not implemented");
+            .commit("raise", "exceptions are not implemented");
     }
     // The error above stops compilation; the statement is kept as a return so that the rest
     // of the file is still checked.
-    ExitType exitType = ExitType::Return;
+    ExitType exitType = context->THROW() ? ExitType::Throw : ExitType::Return;
     node_ptr_t exitNode = createNodeAs<ExitStmtLoad>(exitType);
     setNodeTokenRangeByContext(exitNode, context);
     if (context->dataList()) {
@@ -1286,9 +1299,30 @@ any Builder::visitPattern(OpenCMLParser::PatternContext *context) {
     } else if (context->getText() == "_") {
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
+    } else if (context->identRef()) {
+        // The two fixed patterns over a tagged value (design principles 2.9): `v` binds the
+        // value taken out of a `T?` / `T!`, `error e` binds the error of a failed `T!`. Both
+        // are a reference node; `error e` carries the bound name as its child. Whether the
+        // scrutinee has such a type is known to the graph builder only, which reports an
+        // identifier pattern over any other type as not implemented.
+        if (context->identDef() && context->identRef()->getText() != "error") {
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(context->getStart(), context->getStop())
+                .commit(
+                    context->identRef()->getText() + " " + context->identDef()->getText(),
+                    "the only pattern of two words is 'error e'");
+        }
+        res = createNodeAs<RefDataLoad>(Reference(context->identRef()->getText()));
+        setNodeTokenRangeByContext(res, context);
+        if (context->identDef()) {
+            node_ptr_t bound =
+                createNodeAs<RefDataLoad>(Reference(context->identDef()->getText()));
+            setNodeTokenRangeByContext(bound, context->identDef());
+            *res << bound;
+        }
     } else {
-        // Binding, tuple and struct patterns are in the grammar, but what they destructure and
-        // bind has not been decided. They used to end in an internal error without a position.
+        // Tuple and struct patterns are in the grammar, but what they destructure and bind
+        // has not been decided. They used to end in an internal error without a position.
         const char *kind = context->identRef()                       ? "an identifier pattern"
                            : context->getStart()->getText() == "(" ? "a tuple pattern"
                                                                      : "a struct pattern";
@@ -1529,9 +1563,11 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
 
     default:
         // TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
-        diags_->of(SemanticDiag::ConstructNotSupported)
+        // Not part of the language (design principles 2.9): its shape on the graph would
+        // depend on what the block contains. The diagnostic names what replaces it.
+        diags_->of(SemanticDiag::TryCatchNotInLanguage)
             .at(context->getStart(), context->getStop())
-            .commit("try", "exceptions are not implemented");
+            .commit();
         // The error above stops compilation; a placeholder keeps the rest of the file checked.
         ctrlNode = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(ctrlNode, context);
@@ -1900,15 +1936,16 @@ any Builder::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
         } else {
             throw std::runtime_error("Invalid nullable operator: " + strOp);
         }
-        // Nullable and error values are not implemented. The operator used to be accepted
-        // with a warning and its right-hand side dropped.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(tokenFromTree(context->children[1]))
-            .commit(strOp, "the operator is not implemented");
-
+        // `a ?? b` / `a !! b`: a branch on the tag of `a` (design principles 2.9).
         if (context->dataExpr()) {
             node_ptr_t dataExprNode = createNodeAs<ReservedExprLoad>(op);
-            setNodeTokenRangeByContext(dataExprNode, context->dataExpr());
+            // Located at the operator: that is where its diagnostics point.
+            antlr4::Token *opToken = tokenFromTree(context->children[1]);
+            setNodeTokenRange(dataExprNode, opToken->getTokenIndex(), opToken->getTokenIndex() + 1);
+            setNodeOriginByOffsets(
+                dataExprNode,
+                static_cast<size_t>(opToken->getStartIndex()),
+                static_cast<size_t>(opToken->getStopIndex() + 1));
             node_ptr_t rhsNode = any2node(visitDataExpr(context->dataExpr()));
             *dataExprNode << res << rhsNode;
             registerAstSemanticBundle(
@@ -2056,12 +2093,15 @@ any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
         setNodeTokenRangeByContext(linkNode, context);
         node_ptr_t rhsNode = any2node(visitCompExpr(context->compExpr(i)));
         if (strOp == "?->") {
-            // Used to be accepted with a warning and compiled as `->`.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(tokenFromTree(context->children[i * 2 - 1]))
-                .commit(strOp, "the operator is not implemented");
+            // `x ?-> f`: a branch on the tag of `x`; the call is the arm taken when `x` has
+            // not failed (design principles 2.9). The marked receiver tells the GCT builder.
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            setNodeTokenRangeByContext(notNullNode, context->compExpr(i));
+            antlr4::Token *opToken = tokenFromTree(context->children[i * 2 - 1]);
+            setNodeTokenRange(notNullNode, opToken->getTokenIndex(), opToken->getTokenIndex() + 1);
+            setNodeOriginByOffsets(
+                notNullNode,
+                static_cast<size_t>(opToken->getStartIndex()),
+                static_cast<size_t>(opToken->getStopIndex() + 1));
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
@@ -2392,6 +2432,14 @@ tupleData
 */
 any Builder::visitTupleData(OpenCMLParser::TupleDataContext *context) {
     ENTER("TupleData");
+    // `(e)`: a parenthesized expression, not a tuple (three children: the brackets and the
+    // list; a trailing comma would be a fourth).
+    if (context->dataList() && context->dataList()->dataExpr().size() == 1 &&
+        context->children.size() == 3) {
+        any inner = visitDataExpr(context->dataList()->dataExpr(0));
+        LEAVE("TupleData");
+        return inner;
+    }
     node_ptr_t dataNode = createNodeAs<TupleDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->dataList()) {
@@ -2409,7 +2457,6 @@ primaryData
     | literal
     | arrayData
     | structData
-    | '(' dataExpr ')'
     | tupleData
     | funcData
     ;
@@ -2425,8 +2472,6 @@ any Builder::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
         Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
         res             = createNodeAs<LiteralLoad>(literal);
         setNodeTokenRangeByContext(res, context->literal());
-    } else if (context->dataExpr()) {
-        res = any2node(visitDataExpr(context->dataExpr()));
     } else {
         res = any2node(visit(context->children[0]));
     }
@@ -2494,14 +2539,14 @@ any Builder::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
             *typeExprNode << any2node(visitUnionType(context->unionType(1)));
             lhsNode = typeExprNode;
         } else {
-            // `T?` used to be compiled as `T`, silently.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(context->getStart(), context->getStop())
-                .commit(context->getText(), "nullable types are not implemented");
-            node_ptr_t nullableTypeNode = createNodeAs<NullableTypeLoad>();
-            setNodeTokenRangeByContext(nullableTypeNode, context);
-            *nullableTypeNode << lhsNode;
-            lhsNode = nullableTypeNode;
+            // `T?` and `T!`, innermost mark first: `T?!` is a fallible nullable.
+            for (size_t i = 1; i < context->children.size(); ++i) {
+                node_ptr_t markedTypeNode =
+                    createNodeAs<NullableTypeLoad>(context->children[i]->getText() == "!");
+                setNodeTokenRangeByContext(markedTypeNode, context);
+                *markedTypeNode << lhsNode;
+                lhsNode = markedTypeNode;
+            }
         }
     }
     LEAVE("TypeExpr");

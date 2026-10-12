@@ -13,15 +13,17 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/limits.h"
 #include "camel/execute/pass/runtime_sched.h"
 
 #include <algorithm>
@@ -30,6 +32,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <shared_mutex>
 #include <span>
@@ -65,7 +68,8 @@ class TaskflowFramePool {
         size_t frameSize{0};
         const camel::core::type::TupleType *runtimeDataType{nullptr};
         ::Tuple *staticArea{nullptr};
-        size_t chunkFrames{0};
+        size_t chunkFrames{0};     // Frames of a full chunk.
+        size_t nextChunkFrames{0}; // Frames of the next chunk: doubles up to chunkFrames.
         std::mutex mutex;
         std::vector<Frame *> freeFrames;
         std::unordered_set<Frame *> activeFrames;
@@ -227,7 +231,12 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     /// `max_concurrent_tasks` = 0: the thread limit of the context (`-t`), else the number of
     /// hardware threads.
     TaskflowExecSchedPass(const ctx::context_ptr_t &ctx, size_t max_concurrent_tasks = 0)
-        : RuntimeGraphSchedulePass(ctx), executor_(workerCount(ctx, max_concurrent_tasks)) {}
+        : RuntimeGraphSchedulePass(ctx), executor_(workerCount(ctx, max_concurrent_tasks)) {
+        if (ctx) {
+            const auto limit   = camel::execute::recursionLimit(*ctx);
+            maxRecursionDepth_ = limit.given ? limit.frames : 0;
+        }
+    }
     ~TaskflowExecSchedPass() override = default;
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
@@ -299,6 +308,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         std::atomic<uint32_t> *tailNode = nullptr;
         std::mutex errorMutex;
         std::exception_ptr error;
+        // Calls open on the thread that runs the scope; its tasks continue from there.
+        uint32_t parentDepth = 0;
     };
     struct PlanScope {
         std::vector<PlanItem> items; // linear order
@@ -344,6 +355,26 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     std::unordered_map<camel::runtime::GCGraph *, std::unique_ptr<GraphPlan>> plans_;
     // Set by the first task that fails; items not yet started then do nothing.
     std::atomic<bool> aborting_{false};
+    // The limit on calls open at once that are not tail calls, when one was given by the
+    // option or the environment; 0 when not: the native stack alone then bounds a recursion
+    // (camel/execute/limits.h). The count follows a call across threads: a task continues
+    // from the open calls of the thread that started it (ThreadState::callDepth).
+    size_t maxRecursionDepth_ = 0;
+    // The first fault of a run, the only one reported. Element functions that run
+    // concurrently can fault together; a fault ends the program, so one diagnostic is printed,
+    // and every later fault unwinds with what reporting the first one threw.
+    std::mutex faultMutex_;
+    std::exception_ptr firstFault_;
+    // Reports `fault` at node `nodeRef` of `graph` (at the graph when the node has no source
+    // position) unless a fault was reported already, and unwinds.
+    [[noreturn]] void raiseFault(
+        const camel::core::error::RuntimeFault &fault, camel::runtime::GCGraph *graph,
+        camel::runtime::gc_node_ref_t nodeRef);
+    // Raises MaxRecursionDepthExceeded at the call `callNode` of `callerGraph` when one more
+    // open call would exceed the limit or the native stack of the thread.
+    void requireCallRoom(
+        TaskflowGcGate::ThreadState &thread, camel::runtime::GCGraph *callerGraph,
+        camel::runtime::gc_node_ref_t callNode);
     // CAMEL_TF_LINEAR=1: evaluate every graph node by node (the behaviour between commit
     // 1559559a and the restore of graph-level tasks). For comparison and diagnosis.
     bool forceLinear_ = false;
@@ -394,12 +425,21 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     void executeCallNode(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         TaskflowGcRegion &region);
+    // Where the element calls of a higher-order operator come from: the operator node (a call
+    // that is too deep is reported there) and the calls open on the thread that started the
+    // operator, which every element continues from on the thread that runs it.
+    struct ElementCallSite {
+        camel::runtime::GCGraph *graph      = nullptr;
+        camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
+        uint32_t depth                      = 0;
+    };
     // Calls the function value held in slot `funcIdx` of `funcFrame` (its graph is
     // `targetGraph`): `fillArgs(span)` reads the arguments and `sink(result)` stores the
-    // result, both inside one region of the calling thread.
+    // result, both inside one region of the calling thread. The call is an open call like any
+    // other.
     template <typename FillArgs, typename Sink>
     void callClosure(
-        camel::runtime::GCGraph *targetGraph, ctx::Frame *funcFrame,
+        const ElementCallSite &site, camel::runtime::GCGraph *targetGraph, ctx::Frame *funcFrame,
         camel::runtime::gc_data_idx_t funcIdx, size_t argCount, FillArgs &&fillArgs,
         Sink &&sink);
     camel::runtime::gc_node_ref_t branchArmEntryForLinear(

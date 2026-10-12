@@ -1,0 +1,17 @@
+/**
+ * exit(9) in one element function of a map (element 3 of 8), after main has printed. Nothing
+ * after the map runs; the exit code is 9.
+ */
+module exit_in_map
+
+func check(x: int): int sync {
+    if x == 3 then sync { exit(9) }
+    return x
+}
+
+func main(): int sync {
+    println('before')
+    let ys = range(0, 8)->map<check>
+    println('not reached')
+    return 0
+}

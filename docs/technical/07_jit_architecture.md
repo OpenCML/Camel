@@ -1,5 +1,7 @@
 # FastVM JIT 架构文档
 
+> **适用范围（2026-10 更正）**：JIT 目前只编译"自足"的图——字节码里只有算术、比较、`BRCH`/`JOIN`/`JUMP`/`RETN`，以及目标是**本图自身**的 `FUNC`/`TAIL`。含 `OPER`、`CAST`、`COPY`、`FILL`、`CALL`、`ACCS` 或调用其他图的图在入口处（`describeFramelessSelfFuncFailure`）就被拒绝，留给解释器；`-v` 日志会给出原因。因此编译出的代码**不调用任何 C++**：自调用是原生调用，自尾调用是跳转。本文中关于跨图调用、trampoline 的内容描述的是保留但当前不可达的代码，已逐处标注。典型来源是 `std::inline` 之后只剩自递归的小函数。
+
 本文档描述 Camel FastVM 的 **JIT 编译 pipeline**：从字节码到 x86-64 机器码的完整流程，涵盖双入口函数布局、JIT 内部调用约定、Frame 池管理、frameless 栈分配优化、近期引入的 MIR 定向代码生成优化，以及与解释器/trampoline 的协同工作机制。
 
 ---
@@ -62,19 +64,19 @@ src/passes/sched/fastvm/jit/
                          │
                          ▼
                  ┌───────────────┐
-                 │  VReg 分配     │   linearScanVReg → VRegAllocation（vreg → preg）
+                 │  VReg 分配     │   linearScanVReg → VRegAllocation；失败则关掉跨字节码缓存重新下降一次
                  └───────┬───────┘
                          │
                          ▼
                  ┌───────────────┐
-                 │  C++ 包装器    │   生成 42 字节 Win64 ABI wrapper（原始字节）
+                 │  C++ 包装器    │   生成入口包装器（Win64 / SysV 各一份，原始字节）
                  └───────┬───────┘
                          │
                          ▼
                  ┌───────────────┐
                  │  MIR → x64    │   encodeMirBuffer 编码为 x64 机器码
                  └───────┬───────┘
-                         │
+                         │  + 故障桩与公共故障出口（见第 16 节）
                          ▼
                  ┌───────────────┐
                  │  跳转修补      │   JumpPatch + NativeJitFuncCall 内部 patch
@@ -108,11 +110,12 @@ struct CompilationUnit {
 `X64Backend::compileBytecode` 遍历字节码，调用 `MirBuilder` 生成线性 MIR：
 
 - **算术/比较**（LADD, LSUB, LLE..LNE 等）：先尝试将静态区操作数在编译期折叠为立即数，优先生成 `VLoadImm32/VLoadImm64`、`VAddImm/VSubImm/VCmpSet*Imm`；无法立即数化时再退回普通 `VAdd/VSub/VCmpSet*`。
-- **只读 slot 值缓存**：在 MIR 构建前先扫描所有 `bc.result`，识别“从未被写入”的动态槽位；对这类槽位的首次 `VLoadFromFrame` 结果缓存在 `slotCache` 中，后续再次读取同槽位时生成 `VCopy` 而不是重复 load。缓存跨普通跳转保留，仅在 `NativeJitFuncCall`/trampoline 调用后清空。
+- **只读 slot 值缓存**：在 MIR 构建前先扫描所有 `bc.result`，识别“从未被写入”的动态槽位；对这类槽位的首次 `VLoadFromFrame` 结果缓存在 `slotCache` 中，后续再次读取同槽位时生成 `VCopy` 而不是重复 load。缓存只在一个基本块内有效（在每个跳转目标和每条 BRCH/JUMP/RETN/TAIL 之后清空），调用之后也清空。第二次下降（见阶段 3）不使用这个缓存。
 - **分支**（BRCH）：支持两种路径。
   - 普通路径：`VLoad + VTest + VCmovnz + JzRel32 + JmpRel32`
   - 融合路径：若 BRCH 的条件恰好来自紧邻比较结果，则比较阶段只发射 `VCmpRegImm` 设置 flags，BRCH 直接发射对应的 `JccRel32`，跳过布尔物化与 branch-index 物化
-- **函数调用**（FUNC）：根据 `isSameGraph` 生成 `NativeJitFuncCall`（含 frameless 或 Frame-based 路径参数）或退回 trampoline 调用。对 frameless 调用，参数预加载和返回值写回都会显式体现在 MIR 中，便于后续 peephole 和 dead-store pass 继续优化。
+- **函数调用**（FUNC）：只可能是自调用，生成 `NativeJitFuncCall`（第 5 节）。参数预加载和返回值写回显式体现在 MIR 中，便于后续 peephole 和 dead-store pass 继续优化。
+- **尾调用**（TAIL）：只可能是自尾调用，改写形参槽后跳回入口（5.3）。
 - **返回**（RETN）：`VLoadFromFrame → VRet`（将值置于 rax 后 `ret`）。
 
 #### 阶段 2：MIR 优化
@@ -129,16 +132,17 @@ struct CompilationUnit {
 
 #### 阶段 3：虚拟寄存器分配
 
-`linearScanVReg(mirBuf, &vregAlloc)` 对 MIR 中所有 `V*` 指令进行线性扫描分配：
+`linearScanVReg(mirBuf, &vregAlloc, &reason)` 对 MIR 中所有 `V*` 指令做线性扫描分配：
 
-- **可分配寄存器**：8 个物理寄存器（rax=0, rcx=1, rdx=2, rbx=3, r8=4, r9=5, r10=6, r11=7）。
-- **保留寄存器**：rbx（index 3）被显式保留，不参与分配，用于缓存 `&FramePool::top_`。
-- **溢出处理**：分配不到寄存器的 VReg 标记为 `kSpilled`，编码时通过 frame slot 中转或使用 `push rbx / pop rbx` 的 scratch 机制。
-- **跨调用存活**：`spansCall == true` 的 VReg 不分配给易失寄存器（当前所有 allocatable 寄存器均为易失的，故跨调用 VReg 必然溢出）。
+- **可分配寄存器**：6 个（rax, rcx, rdx, r8, r9, r10）。rbx 保留（`&FramePool::top_`），**r11 保留给编码器当临时寄存器**（idiv 的除数、浮点比较的第二个标志、调用时搭建帧）。
+- **虚拟寄存器编号是 16 位**（`Mir::r0/r1`）。
+- **编码器没有溢出代码**，所以每个被使用的值在整个活跃区间内都必须有寄存器。分配在下列情况**失败并给出原因**，而不是留下没有寄存器的值：同时活跃的值多于寄存器数；某个值要跨过一次调用（调用会破坏全部可分配寄存器）；值在定义之前被使用。
+- **失败后的第二次下降**：`X64Backend::compileBytecode` 先带着"值跨字节码留在寄存器里"的优化（只读 slot 缓存、store→load 转发）下降一次；分配失败就关掉这两项再下降一次，此时每个值的寿命都在单条字节码的下降之内（最多 4 个临时值），必然放得下。`-vv` 日志里的 `is lowered again without values kept in registers` 就是这条路径。两次都失败才把图留给解释器。
+- 只有定义、从未被读的值没有寄存器，编码器跳过它的定义（除法除外：除法即使结果没人读也保留检查）。
 
-#### 阶段 4：C++ ABI 包装器生成
+#### 阶段 4：入口包装器生成
 
-在 MIR 编码之前，先在代码缓冲区中写入 42 字节的原始 C++ ABI 包装器（详见第 3 节）。
+在 MIR 编码之前，先在代码缓冲区中写入入口包装器（详见第 3 节）。
 
 #### 阶段 5：MIR → x64 编码
 
@@ -195,241 +199,121 @@ struct CompilationUnit {
 
 ### 3.1 内存布局
 
-每个 JIT 编译的函数在内存中的布局：
-
 ```
-┌─────────────────────────────────────────┐
-│  C++ ABI Wrapper (42 bytes)             │  ← offset 0（C++ 调用者入口）
-│  ┌─ push rdi; push rsi; push rbx       │
-│  │  push r12                            │
-│  │  mov rdi, rcx    ; Win64 → JIT conv  │
-│  │  mov rsi, rdx                        │
-│  │  mov rbx, imm64  ; &FramePool::top_  │
-│  │  mov r12, imm64  ; current Graph*    │
-│  │  call body       ; rel32             │
-│  │  pop r12; pop rbx; pop rsi; pop rdi  │
-│  └─ ret                                 │
-├─────────────────────────────────────────┤
-│  JIT Body (MIR 编码后的机器码)            │  ← jitEntryOffset（JIT-to-JIT 入口）
-│  ┌─ (无 prologue，直接执行)              │
-│  │  ... 函数逻辑 ...                     │
-│  │  ... NativeJitFuncCall 序列 ...       │
-│  └─ ret (bare: 仅 0xC3)                 │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│  入口包装器                                    │  ← offset 0（C++ 调用者入口）
+│  SysV:  push rbx, r12, r13, r14, r15          │
+│         mov r13, rsi        ; JitContext*     │
+│         mov r15, [rsi+24]   ; 递归深度余量     │
+│  Win64: push rdi, rsi, rbx, r12, r14, r15     │
+│         mov rdi, rcx; mov rsi, rdx            │
+│         mov r15, [rsi+24]                     │
+│  共同:  mov rbx, imm64  ; &FramePool::top_    │
+│         mov r12, imm64  ; 当前 Graph*          │
+│         mov r14, rsp    ; 故障出口要恢复的栈顶  │
+│         call body                             │
+│  epilogue:              ← 故障出口跳到这里      │
+│         pop ...; ret                          │
+├──────────────────────────────────────────────┤
+│  JIT Body（MIR 编码后的机器码）                 │  ← jitEntryOffset（自调用入口）
+│  无 prologue；返回是裸 ret                     │
+├──────────────────────────────────────────────┤
+│  故障桩（每个故障点一段）+ 公共故障出口          │
+└──────────────────────────────────────────────┘
 ```
 
 ### 3.2 入口选择
 
-| 调用来源 | 入口偏移 | 说明 |
-|----------|---------|------|
-| C++ / 解释器 | `offset 0`（包装器入口） | 走完整 Win64 ABI 转换：rcx/rdx → rdi/rsi，设置 rbx/r12 |
-| JIT 同图自调用 (frameless) | `jitEntryOffset`（body 入口） | 直接 `call rel32`，无 ABI 转换，rdi/rsi/rbx/r12 已就绪 |
-| JIT 同图调用 (Frame-based) | `jitEntryOffset`（body 入口） | 通过 NativeJitFuncCall 内部 `call rel32` 进入 |
-| JIT 跨图调用 | `offset 0`（包装器入口） | 走完整 Win64 ABI：`mov rcx,rdi; mov rdx,rsi; call rax` |
+| 调用来源 | 入口 | 说明 |
+|----------|------|------|
+| C++ / 解释器（`invokeOwnedJitFrame`） | `offset 0` | 包装器做 ABI 适配并装载 rbx/r12/r13/r14/r15 |
+| 本图自调用（`FUNC`） | `jitEntryOffset` | `call rel32` 直接进 body，被调方的帧在机器栈上 |
+| 本图自尾调用（`TAIL`） | `jitEntryOffset` | 改写参数槽后 `jmp rel32` 回到 body 入口，不产生新帧 |
 
-### 3.3 栈对齐约束
+跨图调用不会出现在被编译的图里（见文首的适用范围）。
 
-- Win64 ABI 要求 `CALL` 指令执行前 RSP ≡ 0 (mod 16)。
-- 包装器的 4 次 push（32 字节）使 body 入口时 RSP ≡ 0 (mod 16)。
-- 从 body 内执行 frameless 自调用：`push rdi` → RSP ≡ 8；`sub rsp, N`（N ≡ 0 mod 16）→ RSP ≡ 8；`call` → 被调方 body 入口 RSP ≡ 0。对齐保持一致。
+### 3.3 栈对齐
+
+包装器 push 的个数保持为：SysV 奇数（5）、Win64 偶数（6），与此前的 3 / 4 同奇偶，所以 body 入口处 RSP 的对齐与以前一致。自调用 `push rdi; sub rsp, N`（N 为 16 的倍数）`; call` 使被调方 body 入口的对齐与调用方相同。
 
 ---
 
 ## 4. JIT 内部调用约定
 
-### 4.1 寄存器用途
-
-| 寄存器 | 用途 | 生命周期 |
-|--------|------|---------|
-| **rdi** | 当前帧 slot 基址（`slot_t*`），所有 frame 访问通过 `[rdi + disp]` | JIT body 全程有效；NativeJitFuncCall 前后通过 push/pop 保存恢复 |
-| **rsi** | `JitContext*`（含 VM 指针和字节码基址） | JIT body 全程有效，传递给跨图 C++ 调用 |
-| **rbx** | `&FramePool::top_`（Frame 池顶地址的指针） | 包装器初始化，body 全程有效。**从寄存器分配池中保留**，不可被 VReg 占用 |
-| **r12** | 当前 `GIR::Graph*` 地址 | 包装器初始化，用于 Frame 获取时的图比较（`cmp r11, r12`），避免 10 字节 `mov rax, imm64` |
-| **rax** | 临时 / 返回值 | 调用前后不保证，用于算术中转和函数返回值 |
-| **rcx, rdx** | 临时 / Win64 ABI 参数 | VReg 可分配，跨图调用时用于 ABI 参数传递 |
-| **r8–r11** | 临时 / VReg 可分配 | r10/r11 也用于 NativeJitFuncCall 的 Frame 管理 |
-
-### 4.2 编码器中的 rbx scratch 机制
-
-由于 rbx 被保留缓存 `&FramePool::top_`，但部分编码器函数（`*FromMemAt` 系列）需要使用 rbx 作为临时寄存器加载 64 位地址，引入了安全的 scratch 对：
-
-```cpp
-void beginScratchAddr(uint64_t addr) {
-    push rbx           // 保存 &pool.top_
-    mov rbx, imm64     // 临时加载目标地址
-}
-void endScratch() {
-    pop rbx            // 恢复 &pool.top_
-}
-```
-
-`movRaxFromMemAt` 和 `movRegFromMemAt` 经过优化，直接将地址加载到目标寄存器自身再解引用，避免使用 rbx scratch。
+| 寄存器 | 用途 |
+|--------|------|
+| **rdi** | 当前帧 slot 基址，所有 frame 访问通过 `[rdi + disp]`；自调用前后 push/pop |
+| **rsi** | `JitContext*`。SysV 下 rsi 是调用者保存的，稳定副本在 **r13**；编码器访问 JitContext 时 SysV 用 r13、Win64 用 rsi |
+| **rbx** | `&FramePool::top_`（保留；当前可达路径不使用帧池） |
+| **r12** | 当前 `Graph*`（同上） |
+| **r14** | 包装器保存的 RSP，故障出口用它一步退回包装器（第 16 节） |
+| **r15** | 递归深度余量：每次原生自调用减 1，返回加 1，减到负数即故障（第 16 节） |
+| **r11** | 编码器的临时寄存器，不参与分配 |
+| **rax, rcx, rdx, r8, r9, r10** | 可分配给虚拟寄存器；rax 同时是返回值 |
+| **xmm0, xmm1** | 浮点运算的临时寄存器；浮点值以位模式放在通用寄存器里 |
 
 ---
 
-## 5. NativeJitFuncCall：函数调用编码
+## 5. NativeJitFuncCall：原生自调用
 
-`NativeJitFuncCall` 是 JIT 中最关键的"mega opcode"，负责同图/跨图函数调用的完整编码。它根据 `NativeJitCallParams` 中的标志选择不同路径。
+`NativeJitFuncCall` 编码"本图调用本图"。被调方的帧直接分配在机器栈上，不经过帧池，也不经过任何 C++。
 
-### 5.1 NativeJitCallParams 结构
+### 5.1 NativeJitCallParams
 
 ```cpp
 struct NativeJitCallParams {
-    uint64_t poolTopAddr;       // &FramePool::top_
-    uint64_t targetGraphAddr;   // 目标 Graph*
-    uint64_t slowPathFnAddr;    // 慢路径回退函数地址
-    uint64_t slowPathBcAddr;    // 慢路径用字节码地址
-    uint32_t slowPathPc;        // 慢路径用 PC
-    int32_t  resultDisp;        // 结果存储的 frame 偏移
-    uint8_t  argsCnt;           // 参数个数
-    int32_t  argSrcDisps[8];    // 各参数在 caller frame 中的偏移
-    int32_t  argDstDisps[8];    // 各参数在 callee frame 中的目标槽偏移
-    uint8_t  argVRegs[8];       // frameless 参数预加载得到的 vreg；0xFF 表示仍在 call 内部加载
-    uint8_t  resultVReg;        // frameless 返回值承载 vreg；0xFF 表示仍在 call 内部写回 frame
-    bool     isSameGraph;       // 是否同图调用
-    uint64_t jitFnAddr;         // bc->extra3() 地址（跨图 JIT 入口指针）
-    bool     frameless;         // 是否走 frameless 栈分配
-    uint32_t calleeSlotBytes;   // frameless 时栈分配大小（16 字节对齐）
+    struct Arg {
+        int32_t dstDisp;   // 被调方帧里形参槽的偏移
+        VRegId vreg;       // 调用前已装入寄存器的实参；否则在调用内部拷贝，来源是：
+        int32_t srcDisp;   //   调用方帧里的槽，或
+        bool isImm;        //   静态区常量
+        uint64_t imm;
+    };
+    std::vector<Arg> args;      // 任意个数
+    int32_t resultDisp;
+    VRegId resultVReg;          // 返回值所在的虚拟寄存器
+    uint32_t calleeSlotBytes;   // 被调方帧大小（16 字节对齐）
+    uint32_t pc;                // 该调用的字节码 pc（递归过深时报告的位置）
 };
 ```
 
-**设置逻辑**（`x64_backend.cpp` 中 `OpCode::FUNC` 处理）：
+实参不超过 4 个时全部预先装入寄存器（可见的 `VLoadFromFrame`，便于 peephole 融合前面的 store）；超过 4 个时逐个经 r11 从调用方的帧拷到被调方的帧。参数块由 `compileBytecodeWith` 持有，编码结束后释放。
 
-- `isSameGraph = (getFuncExtraGraph(&bc) == unit.graph)` — 目标图与当前编译图是否相同。
-- `frameless = isSameGraph` — 所有同图调用默认启用 frameless。
-- `calleeSlotBytes = round_up_16(graph->runtimeDataType()->size() * 8)` — 从目标图的运行时数据类型计算帧大小。
-
-### 5.2 路径 A：Frameless 栈分配（同图自递归）
-
-**适用条件**：`frameless == true`（当前等价于 `isSameGraph == true`）。
-
-**核心思想**：对于纯自递归函数（如 fib with inline），所有内部调用都是同图自调用，不需要通过 Frame 池分配/释放帧。直接在原生栈上分配被调方的 slot 空间，彻底消除 Frame 管理开销。
-
-**生成的 x64 序列**（以 1 个参数为例）：
+### 5.2 生成的序列
 
 ```asm
-; 参数预加载已在 MIR 中显式出现，可被 peephole / slot cache 继续优化
-mov rax, [rdi + argDisp]    ; (1) 从 caller frame 加载参数（或来自只读 slot cache）
-push rdi                     ; (2) 保存 caller frame 基址
-sub rsp, 80                  ; (3) 在栈上分配 callee 帧空间（80 = 10 slots × 8，16 对齐）
-mov rdi, rsp                 ; (4) callee slot 基址 = 栈顶
-mov [rdi + formalDisp], rax  ; (5) 写入参数到 callee 形式参数槽
-call body_start              ; (6) 直接 call rel32 到同函数 body 入口
-add rsp, 80                  ; (7) 释放 callee 帧空间
-pop rdi                      ; (8) 恢复 caller frame 基址
-; 若 resultVReg != 0xFF，rax 结果先映射到对应物理寄存器，再由显式 VStoreToFrame 写回
-mov [rdi + resultDisp], rax  ; (9) 存储返回值到 caller frame（或被后续优化删掉）
+sub r15, 1                   ; 递归深度余量
+jb  .fault_depth             ; 用尽 → 故障桩（第 16 节）
+push rdi                     ; 保存调用方 slot 基址
+sub rsp, N                   ; 被调方的帧
+mov [rsp + dst_i], reg_i     ; 已在寄存器里的实参
+mov r11, [rdi + src_j]       ; 其余实参逐个经 r11（常量用 mov r11, imm64）
+mov [rsp + dst_j], r11
+mov rdi, rsp                 ; 切到被调方的帧
+mov rsi, r13                 ; 仅 SysV
+call body
+add rsp, N
+pop rdi
+inc r15
+mov result_reg, rax
 ```
 
-**关键约束**：
+rdi 在所有实参写完之后才切换，所以实参的来源始终按调用方的帧寻址；r11 不可分配，不会与装着实参的寄存器冲突。帧大于 `kMaxNativeFrameBytes`（2 KB）的图含自调用时不编译：256 层这样的帧在较小的机器栈上放不下。
 
-1. **参数加载必须在 rdi 切换之前**：`movRegFromFrame` 依赖 rdi 指向 caller frame，所以先加载参数到临时寄存器（rax, rcx, rdx, r8, r9, r10, r11），再切换 rdi。最多支持 7 个参数。
-2. **栈分配大小必须 16 字节对齐**：`calleeSlotBytes = (slotCount * 8 + 15) & ~15`。确保 `push rdi; sub rsp, N; call` 后被调方 body 入口的 RSP 对齐与顶层一致。
-3. **slot[0] 未写入**：frameless 路径不写 Frame* 到 slot[0]，因为整条调用链上没有人会读取它（无 Frame 释放操作）。这在纯自递归场景下完全安全。
-4. **无慢路径**：自调用的目标就是当前正在编译的函数 body，`call rel32` 直接跳转到 body start，不存在"目标未编译"的情况。
-5. **与 Frame-based 路径可混用**：同一函数内，frameless 自调用和 Frame-based 跨图调用可以共存，互不干扰。
-6. **call 是只读 slot cache 的失效点**：所有 allocatable GPR 都可能被 clobber，因此 `slotCache` 仅在 call/trampoline 之后清空，而不会因普通 `JUMP/JOIN` 清空。
+### 5.3 自尾调用（TAIL）
 
-### 5.3 路径 B：Frame-based 调用（跨图或同图 fallback）
+两种 ABI 相同：把实参写进本帧的形参槽，然后 `jmp` 到 body 入口。
 
-**适用条件**：`frameless == false`（即跨图调用）。
+- 实参就是同一个形参（`f(a, b + 1)` 里的 `a`）时跳过。
+- 需要移动的实参不超过 4 个：先全部装入寄存器，再逐个写回（实参可以是另一个形参，如 `f(b, a)`，所以必须先读完再写）。
+- 超过 4 个：`push [rdi+src]` 逐个压栈，再按相反顺序 `pop [rdi+dst]`。
+- 回跳的目标在跳转之前，`eliminateDeadFrameStores` 的单趟逆向扫描在这样的跳转处把所有槽视为活跃，否则对形参槽的写会被当成死写删掉。
 
-分为**快速路径**（Frame 池成功获取）和**慢路径**（Frame 池失败，走 trampoline C++ 回退）。
+尾调用不消耗递归深度余量，也不增长机器栈；无论当前帧来自帧池还是位于机器栈上都成立。
 
-#### 快速路径序列
+### 5.4 已删除与不可达的路径
 
-```asm
-; ═══ 保存 caller ═══
-push rdi                         ; 保存 caller slot 基址
-
-; ═══ 跨图：检查目标是否已 JIT 编译 ═══
-; （仅 !isSameGraph 时生成）
-mov rax, [jitFnAddr]             ; 加载跨图 JIT 入口指针
-test rax, rax
-je slow_common                   ; 空指针 = 目标未编译，跳慢路径
-push rax                         ; 保存 fn 到栈上
-
-; ═══ Frame 获取检查 ═══
-mov r10, [rbx]                   ; r10 = pool top Frame*
-mov r11, [r10 + 8]               ; r11 = frame->graph_
-cmp r11, r12                     ; 同图：cmp r11, r12（3 字节）
-;   或
-; mov rax, imm64(targetGraphAddr); cmp r11, rax（跨图：13 字节）
-jne slow                         ; 图不匹配 → 慢路径
-
-; ═══ 获取 Frame ═══
-mov r11, [r10 + 16]              ; r11 = frame->next_
-mov [rbx], r11                   ; 更新池顶 = next
-lea r11, [r10 + 40]              ; r11 = &frame->dynamicArea_（slot 基址）
-mov [r11], r10                   ; slot[0] = Frame*
-
-; ═══ 拷贝参数 ═══
-mov rax, [rdi + argSrcDisp_i]    ; 从 caller 加载第 i 个参数
-mov [r11 + (i+1)*8], rax         ; 写入 callee slot[i+1]
-
-; ═══ 切换帧并调用 ═══
-mov rdi, r11                     ; rdi = callee slot 基址
-; 同图：call rel32(body)
-; 跨图：pop rax; mov rcx, rdi; mov rdx, rsi; sub rsp, 32; call rax; add rsp, 32
-
-; ═══ 释放 Frame ═══
-mov r10, [rdi]                   ; r10 = callee slot[0] = Frame*
-pop rdi                          ; 恢复 caller slot 基址
-mov r11, [rbx]                   ; r11 = 当前池顶
-mov [r10 + 16], r11              ; frame->next_ = 池顶
-mov [rbx], r10                   ; 池顶 = frame（归还）
-mov [rdi + resultDisp], rax      ; 存储结果
-jmp done
-
-; ═══ 慢路径 ═══
-slow:
-    ; 调用 directSelfFuncInvoke 或 trampolineFunc（C++ fallback）
-    mov rcx, rdi; mov rdx, rsi; mov r8, ...
-    mov rax, slowPathFnAddr
-    call rax
-    pop rdi
-    mov [rdi + resultDisp], rax
-done:
-```
-
-#### Frame 内存布局
-
-```
-Frame 对象:
-  Offset  0: [Object vtable/header]
-  Offset  8: graph_     (GIR::Graph*)    ← 用于图匹配检查
-  Offset 16: next_      (Frame*)         ← 池链表指针
-  Offset 24: staticArea_ (Tuple*)
-  Offset 32: dynamicAreaType_ (TupleType*)
-  Offset 40: dynamicArea_[0] = slot[0]   ← Frame* 自引用
-  Offset 48: dynamicArea_[1] = slot[1]   ← 第一个参数/数据
-  ...
-```
-
-**关键偏移常量**：`graph_` 在 +8，`next_` 在 +16，`dynamicArea_` 在 +40。
-
-### 5.4 Frame 池操作流程
-
-FramePool 是一个基于连续内存区域的 LIFO 栈式分配器：
-
-```
-             ┌─────────┐
-  pool.top_──►│ Frame A │──next_──► Frame B ──next_──► Frame C ──► ...
-             └─────────┘
-```
-
-**获取（acquire）**：
-1. `r10 = *(&pool.top_)`（通过 rbx 间接访问）
-2. 检查 `r10->graph_ == targetGraph`（快速路径通过 r12 缓存当前图）
-3. 若匹配：`pool.top_ = r10->next_`，返回 r10
-4. 若不匹配：跳转慢路径（C++ 分配新 Frame）
-
-**释放（release）**：
-1. `r10 = callee slot[0]`（Frame* 从 slot[0] 取回）
-2. `r10->next_ = pool.top_`
-3. `pool.top_ = r10`
-
-**store forwarding 依赖链**：释放写入 `[rbx]`，下一次获取从 `[rbx]` 读取。CPU store-to-load forwarding 约 4-5 cycle。随后 `[r10+8]` 和 `[r10+16]` 的读取依赖 r10，形成 2 级依赖链，总计约 10 cycle/次。这是 frameless 优化能大幅提升性能的根本原因。
+基于帧池的调用编码（跨图、慢路径 `directSelfFuncInvoke`）已从编码器中删除：入口处的过滤使它无法到达，而它在 SysV 下按 Win64 的寄存器传参。`trampolineFunc` / `trampolineTail` 仍在 `trampoline.cpp` 中，但编译出的代码不再引用它们。
 
 ---
 
@@ -447,11 +331,8 @@ FramePool 是一个基于连续内存区域的 LIFO 栈式分配器：
 在 Frame-based 路径中，`slot[0]` 恒存当前 Frame 指针：
 
 - 解释器/gotovm 在调用 JIT 入口前写入。
-- NativeJitFuncCall 的 Frame 获取路径在 `lea r11, [r10+40]; mov [r11], r10` 中写入。
-- `trampolineOper` 从 `slots[0]` 取 Frame，用 `FrameArgsView` 调用算子。
-- `trampolineFunc/Tail` 从 `callerSlots[0]` 取 caller Frame，支持负索引操作数（静态区）。
-
-在 **frameless** 路径中，slot[0] 不被写入，且整条调用链上无人读取。
+- 原生自调用的帧在机器栈上，**它的 slot[0] 不写**（只有开启 debug trace 时才把调用方的 slot[0] 抄过去，即最外层那个帧池帧的 `Frame*`）。
+- 所以 **slot[0] 不能用来读当前激活的数据**：`trampolineFunc/Tail/Oper` 都通过 `slots[0]` 的 `Frame*` 读操作数，在栈上帧里读不到当前激活的值。这是此前 SysV 下自尾调用算错的原因之一，也是 trampoline 目前不可达、不应在未重写前重新启用的原因。
 
 ### 6.3 静态区访问
 
@@ -518,76 +399,31 @@ extra 字段布局如下：
 
 ---
 
-## 8. Trampoline 系统
+## 8. Trampoline 系统（当前不可达）
 
-Trampoline 是 JIT 代码与 C++ 运行时的桥接层，用于处理 JIT 无法直接完成的操作。
+`trampoline.cpp` 中的 `trampolineFunc`、`trampolineTail`、`trampolineOper`、`trampolineCast`、`trampolineBytecode`、`directSelfFuncInvoke` 是为"JIT 代码调用 C++ 运行时"准备的桥接函数，`x64_backend.cpp` 中也保留着 `OPER`/`CAST`/`COPY`/`FILL`/`CALL`/`ACCS` 的下降代码。**入口处的过滤使它们全部不可达**：含这些字节码的图不编译。
 
-### 8.1 trampolineFunc / trampolineTail
+重新启用之前必须先解决两件事：
 
-**签名**：`extern "C" slot_t trampolineFunc(slot_t* callerSlots, void* ctx, size_t pc)`
-
-**执行流程**：
-1. 从 `base[pc]` 取字节码元信息。
-2. 若 `extra3 != 0`：直接取 JIT 入口，按字节码里预编译好的目标槽布局写参后调用 `fn(calleeSlots, ctx)`。
-3. 若 `extra3 == 0`：读取 `extra2` 中的 `targetPc`，按同一份字节码布局写参后走解释器 / `invokeCallOrJit`。
-4. 释放 Frame，返回结果。
-
-### 8.2 directSelfFuncInvoke
-
-NativeJitFuncCall 同图调用的慢路径回退函数。当 Frame 池获取失败（图不匹配）时调用：
-
-```cpp
-slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) {
-    // 从字节码获取目标图、参数信息
-    // 通过 C++ 运行时获取 Frame
-    // 调用 JIT 编译后的函数入口
-    // 释放 Frame，返回结果
-}
-```
-
-### 8.3 trampolineOper / trampolineCast
-
-**签名**：`extern "C" slot_t trampolineOper(slot_t* slots, void* ctx, size_t pc)`
-
-从 `slots[0]` 取 Frame*（slot[0] 规范），构造 `FrameArgsView` 调用算子或类型转换函数。
-
-### 8.4 JIT 代码中的 rdi 保存
-
-所有 trampoline 调用前后必须 `push rdi / pop rdi` 保存恢复 caller 的 slot 基址，因为 trampoline 内部会将 rdi 设为 callee 的 slot base。
+1. 这些函数通过 `slots[0]` 的 `Frame*` 读写数据，而原生自调用的帧在机器栈上（见 6.2）。
+2. 它们会抛 C++ 异常（算子故障），而 JIT 代码没有展开信息；异常必须在 trampoline 边界上被接住，转成第 16 节的故障记录后由 JIT 代码走故障出口。
 
 ---
 
 ## 9. 寄存器分配详解
 
-### 9.1 物理寄存器映射
-
 | 分配索引 | x64 寄存器 | 说明 |
 |---------|-----------|------|
-| 0 | rax | 临时 / 返回值 / 算术中转 |
-| 1 | rcx | 通用 / Win64 第 1 参数 |
-| 2 | rdx | 通用 / Win64 第 2 参数 |
-| 3 | **rbx** | **保留**：缓存 `&FramePool::top_`，不参与分配 |
-| 4 | r8 | 通用 / Win64 第 3 参数 |
-| 5 | r9 | 通用 / Win64 第 4 参数 |
-| 6 | r10 | 通用 / Frame 管理临时 |
-| 7 | r11 | 通用 / Frame 管理临时 |
+| 0 | rax | 可分配 / 返回值 |
+| 1 | rcx | 可分配 |
+| 2 | rdx | 可分配 |
+| 3 | **rbx** | **保留**：`&FramePool::top_` |
+| 4 | r8 | 可分配 |
+| 5 | r9 | 可分配 |
+| 6 | r10 | 可分配 |
+| 7 | **r11** | **保留**：编码器的临时寄存器 |
 
-### 9.2 专用寄存器（不参与分配）
-
-| 寄存器 | 用途 | 初始化位置 |
-|--------|------|-----------|
-| rdi | slot base（`slot_t*`） | C++ wrapper: `mov rdi, rcx` |
-| rsi | JitContext* | C++ wrapper: `mov rsi, rdx` |
-| rbx | `&FramePool::top_` | C++ wrapper: `mov rbx, imm64` |
-| r12 | 当前 `Graph*` | C++ wrapper: `mov r12, imm64` |
-
-### 9.3 溢出（Spill）处理
-
-当 VReg 无法分配物理寄存器时（`pregForVReg(v) == kSpilled`），编码器使用以下策略：
-
-- **VLoadFromFrame → VStoreToFrame**：直接生成 `mov [rdi+disp], rax` 等，通过 frame slot 中转。
-- **VCopy + VTest + VCmovnz 链（BRCH/JOIN 路径）**：使用 `push rbx; mov rbx, reg; cmovnz rbx, reg; mov [rdi+disp], rbx; pop rbx` 的 scratch 序列。
-- **SpillState 追踪**：编码器维护 `SpillState` 结构，跟踪延迟加载（`deferredLoad`）和溢出目标（`spilledDest`），确保 VCopy → VTest → VCmovnz → VStoreToFrame 链的正确物化。
+活跃区间是线性 MIR 上的 `[首次定义, 最后使用]`。寄存器在其值最后一次使用的那条指令上就空闲，所以**同一条指令的目的寄存器可以与某个操作数相同，两个操作数也可以是同一个寄存器**；编码器的每种二元下降都按这个前提写（第 10 节）。没有溢出：分配不下时失败，见 2.3 阶段 3。
 
 ---
 
@@ -601,15 +437,19 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 |--------|---------|---------|
 | LADD | `VLoad/VLoadImm` → `VAdd` or `VAddImm` → `VStore` | 优先 `add dst, src` / `add reg, imm32` |
 | LSUB | `VLoad/VLoadImm` → `VSub` or `VSubImm` → `VStore` | 优先 `sub dst, src` / `sub reg, imm32` |
-| LMUL | VLoad × 2 → VMul → VStore | `mov rax, lr; imul rax, rr` |
-| LDIV | VLoad × 2 → VIdiv → VStore | `mov rax, lr; cqo; idiv rr` |
-| LLE..LNE | `VLoad/VLoadImm` → `VCmpSet*` or `VCmpSet*Imm` → `VStore` | 普通路径：`cmp left, right; setcc al; movzx rax, al` |
+| LMUL | VLoad × 2 → VMul → VStore | `imul dst, src`（按下面的规则选操作数） |
+| LDIV | VLoad × 2 → VIdiv → VStore | `mov r11, rr; test r11, r11; jz .fault; cmp r11, -1; jne .div; mov dst, lr; neg dst; jmp .done; .div: push rax/rdx; mov rax, lr; cqo; idiv r11; mov dst, rax; pop rdx/rax; .done:` |
+| LLE..LNE | `VLoad/VLoadImm` → `VCmpSet*` or `VCmpSet*Imm` → `VStore` | 普通路径：`cmp left, right; setcc dst8; movzx dst, dst8` |
+
+**除法**：除数是 0 和 -1 以外的常量时不做检查；否则检查除数为零（走第 16 节的故障出口，诊断为 `DivisionByZero`），并把 `x / -1` 算成取负（最小整数除以 -1 的商放不下，`idiv` 会触发硬件异常；所有后端对它的结果都是回绕）。idiv 独占 rax 和 rdx，其中别的值在除法前后保存恢复。
 
 **reg-to-reg 编码规则**：
 
 - 若 `dst == left`：直接对目标寄存器原地运算
-- 若 `dst == right` 且操作满足交换律（如 add）：交换操作数，仍可原地运算
+- 若 `dst == right` 且操作满足交换律（add、imul）：交换操作数，仍可原地运算
+- 若 `dst == right` 且不满足交换律（sub）：`neg dst; add dst, left`
 - 若 `dst != left/right`：`mov dst, left; op dst, right`
+- 任何下降都不经过 rax 中转（rax 本身是可分配的，中转会破坏住在其中的值）
 - 对 `cmp`：不需要结果目标寄存器，直接 `cmp left, right` 或 `cmp left, imm32`
 
 ### 10.2 浮点运算（64 位双精度）
@@ -617,7 +457,9 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 | 字节码 | MIR 序列 | x64 编码 |
 |--------|---------|---------|
 | DADD | VXmmLoad × 2 → VXmmAdd → VXmmStore | `movq xmm0, lr; movq xmm1, rr; addsd xmm0, xmm1; movq dr, xmm0` |
-| DLT..DGE | VXmmLoad × 2 → VXmmCmpSet* → VStore | `ucomisd xmm0, xmm1; setb al; movzx rax, al` |
+| DDIV | 同上，VXmmDiv | 先检查除数是否等于零（`mov r11, rr; add r11, r11; jz .fault`，±0.0 都算），与解释器一致地报 `DivisionByZero` |
+| DLT..DGE | VXmmLoad × 2 → VXmmCmpSet* → VStore | `ucomisd` + `seta`/`setae`（小于类比较交换操作数），任一操作数为 NaN 时结果为假 |
+| DEQ / DNE | 同上 | `ucomisd; setnp r11b; sete dst8; and`（DNE：`setp; setne; or`），NaN 时 == 为假、!= 为真 |
 
 ### 10.3 32 位整数与 32 位浮点
 
@@ -631,10 +473,9 @@ slot_t directSelfFuncInvoke(slot_t* callerSlots, void* ctx, const Bytecode* bc) 
 | JOIN | 简化路径：`VLoad/VCopy + VStore`；普通路径：`VCopy + VTest + VCmovnz + VStore` | 对“仅 else-path 可达”的 JOIN，可直接选择 `w1`；若下一条是 `RETN`，可直接发射 `VRet` |
 | JUMP | `JmpRel32` 或直达 `VRet` | 当目标 `JOIN` 后紧跟 `RETN` 且读取该 `JOIN.result` 时，可直接返回 |
 | RETN | `VLoad → VRet` 或被前驱折叠掉 | `mov rax, vr; ret`；部分模式下由前驱 `JUMP/JOIN` 直接发射 `VRet` |
-| FUNC | NativeJitFuncCall | 详见第 5 节 |
-| TAIL | 跨图时走 trampoline + jmp | 释放当前帧后跳转到目标 |
-| OPER | trampolineOper 调用 | push rdi; Win64 ABI call; pop rdi |
-| CAST | trampolineCast 调用 | 同 OPER |
+| FUNC | NativeJitFuncCall | 只可能是自调用，详见第 5 节 |
+| TAIL | 写形参槽 + `JmpRel32(entry)` | 只可能是自尾调用，详见 5.3 |
+| OPER / CAST / COPY / FILL / CALL / ACCS | — | 含这些字节码的图在入口处被拒绝，不编译（下降代码保留但不可达，见第 8 节） |
 
 **比较-分支融合示例**：
 
@@ -655,7 +496,9 @@ jg  .recurse
 
 而不是先 `setcc`、再 store、再 reload、再 `test/cmov/jz`。
 
-**不支持的 opcode**（ACCS, FILL, CALL, SCHD 等）会导致 `compileBytecode` 返回 `false`，该图不进入 JIT 缓存。
+**BRCH 与 JOIN 的配合**：融合路径不写分支索引。只有当第一臂为空（它在跳转表里的那一项就是到 JOIN 的 JUMP，被下降成"取 w0 后离开"）时，JOIN 才直接取 w1；否则在两臂的入口（BRCH 之后的两项跳转表）分别写入索引 0 / 1，JOIN 按索引选择。臂的布局顺序是任意的（哪一臂落入 JOIN、哪一臂跳转由字节码编译器决定），不能假设"落入 JOIN 的一定是 else 臂"。
+
+**不支持的 opcode**（OPER, CAST, COPY, ACCS, FILL, CALL, SCHD，以及目标不是本图的 FUNC/TAIL）使该图在入口处被拒绝，不进入 JIT 缓存。
 
 ---
 
@@ -690,8 +533,8 @@ jg  .recurse
 |------|-----------|------|
 | 自递归（如 fib with inline） | ✅ | 所有调用同图自调用，无外部依赖 |
 | 同图内函数互调 | ✅ | `isSameGraph == true` |
-| 跨图函数调用 | ❌ | 需要 Frame 作为 trampoline 桥接 |
-| 包含 OPER 调用的函数 | 混合 | FUNC 同图调用走 frameless，OPER 走 trampoline |
+| 跨图函数调用 | ❌ 不编译 | 入口处拒绝调用其他图的图 |
+| 包含 OPER 调用的函数 | ❌ 不编译 | 入口处拒绝含 OPER 的图 |
 
 ---
 
@@ -702,9 +545,10 @@ jg  .recurse
 | 约束 | 位置 | 说明 |
 |------|------|------|
 | BRCH 仅支持 `withCnt()==0` | `x64_backend.cpp` BRCH case | 带 with 参数的 BRCH 无法编译，整个图退回解释器 |
-| 最大参数数 8 | `NativeJitCallParams::argSrcDisps[8]` | FUNC 字节码参数超过 8 个时，NativeJitFuncCall 无法处理 |
-| Frameless 最多 7 个参数 | frameless 编码路径 | 使用 7 个临时寄存器（rax,rcx,rdx,r8-r11）暂存参数 |
-| 不支持的 opcode 导致 bail out | `compileBytecode` default case | ACCS, FILL, CALL, SCHD 等不支持 |
+| 调用的参数个数不限 | `NativeJitCallParams::args` | 不超过 4 个走寄存器，更多的经 r11 / 机器栈逐个移动 |
+| 自调用的帧不超过 2 KB | `kMaxNativeFrameBytes` | 更大的帧配合 256 层递归会占用过多机器栈，该图不编译 |
+| 不支持的 opcode 导致整图不编译 | `describeFramelessSelfFuncFailure` | OPER, CAST, COPY, ACCS, FILL, CALL，以及目标不是本图的 FUNC/TAIL |
+| 寄存器分配失败时重新下降 | `X64Backend::compileBytecode` | 见 2.3 阶段 3 |
 | peephole 不跨控制流做传播 | `mir_optimize.cpp` | jump target、jump/call/native-call/push-pop rdi 都视为 barrier |
 | 只读 slot cache 只缓存“从不写入”的槽位 | `x64_backend.cpp` | 避免在无 CFG/别名分析下把可变 slot 的旧值错误传播过跳转或写回 |
 | dead-store pass 只删除 frame 写回，不删除任意计算 | `mir_optimize.cpp` | 当前仅基于 slot 活跃性，尚未扩展为通用 vreg DCE |
@@ -716,7 +560,7 @@ jg  .recurse
 |------|------|------|
 | Frame 池图匹配失败 → 慢路径 | Frame-based 调用 | 池顶 Frame 的 graph_ 与目标不匹配时走 C++ 分配 |
 | rbx 必须始终保持有效 | 所有 Frame-based 操作 | 任何使用 rbx 作为 scratch 的代码必须 push/pop 保护 |
-| 栈溢出风险 | frameless 深度递归 | fib(30) 约 30 层 × 80 字节 ≈ 2.4KB（安全），极深递归需注意 |
+| 递归深度上限 | 原生自调用 | 与解释器相同的 256，由 r15 计数，超限给出 `MaxRecursionDepthExceeded`（第 16 节） |
 | `fastop[1] == 0` 语义 | 跨图 JIT 状态检查 | 利用"第一条字节码的 targetPC 不会是 0"的不变量作为 JIT 编译标记 |
 | 静态常量内联以数值热点为主 | 编译期常量折叠 | 更复杂的引用/对象语义仍需后续更强类型约束 |
 
@@ -745,7 +589,7 @@ camel fib.cml std::inline std::rmir   # 输出原始 MIR（优化前）
 camel fib.cml std::inline std::asm    # 输出 x64 汇编（含偏移和指令注释）
 ```
 
-输出格式：`[offset]  instruction  ; annotation`。C++ wrapper 从 offset 0 开始，JIT body 从 `jitEntryOffset`（通常 42）开始。
+输出格式：`[offset]  instruction  ; annotation`。C++ wrapper 从 offset 0 开始，JIT body 从 `jitEntryOffset`（包装器之后）开始。
 
 ### 13.3 Debug Trace
 
@@ -769,17 +613,14 @@ camel fib.cml std::inline std::asm    # 输出 x64 汇编（含偏移和指令�
   ├─ shouldJit(count) → compile → fn(...)
   └─ 否则 → call(pc, frame) [解释执行]
 
-JIT body 内 NativeJitFuncCall
-  ├─ frameless (同图) → sub rsp, N; call body        [无 Frame，栈分配]
-  └─ Frame-based (跨图)
-       ├─ Frame acquire 成功 → 同图 call rel32 / 跨图 call through ABI
-       └─ Frame acquire 失败 → directSelfFuncInvoke / trampolineFunc [C++ fallback]
+JIT body 内 FUNC（自调用）
+  └─ sub r15,1 → 栈上分配帧 → call body → inc r15        [无 Frame，无 C++]
 
-JIT body 内 OPER/CAST → trampolineOper/Cast(slots, ctx, pc)  [C++ 调用]
+JIT body 内 TAIL（自尾调用）
+  └─ 改写形参槽 → jmp body 入口
 
-JIT body 内 TAIL
-  ├─ 跨图已 JIT → prepareDirectJitTailCall + jmp     [尾调用优化]
-  └─ 否则 → trampolineTail(slots, ctx, pc)
+JIT body 内故障点（除零、递归过深）
+  └─ 故障桩记录 kind/pc → mov rsp, r14 → 包装器 epilogue → C++ 抛出带位置的诊断
 ```
 
 ---
@@ -790,3 +631,46 @@ JIT body 内 TAIL
 - [05_graph_ir.md](./05_graph_ir.md) — GIR 图中间表示
 - [06_runtime_and_execution.md](./06_runtime_and_execution.md) — 运行时与执行模型
 - [08_fastvm_bytecode_semantics.md](./08_fastvm_bytecode_semantics.md) — 字节码语义定义
+
+---
+
+## 16. 故障出口与递归深度
+
+### 16.1 为什么不能抛异常
+
+JIT 代码没有展开信息，C++ 异常穿不过它的栈帧。但编译出的代码不调用任何 C++（见文首），所以从入口包装器到 body 中任意一点之间，机器栈上**只有本函数自己的帧**：返回地址、保存的 rdi、栈上分配的 slot 帧。这些帧没有需要释放的资源，可以一次性丢弃。
+
+### 16.2 机制
+
+1. 包装器在 `call body` 之前执行 `mov r14, rsp`。r14 是被调用者保存的寄存器，body 从不使用它。
+2. 故障点是一条向前的条件跳转，目标是 body 之后的一段**故障桩**。桩把故障种类和该字节码的 pc 写进 `JitContext`（`faultKind`、`faultPc`），然后跳到**公共故障出口**。
+3. 公共出口执行 `mov rsp, r14; jmp epilogue`：栈顶回到包装器调用 body 之后的状态，包装器像正常返回一样恢复寄存器并 `ret` 到 C++ 调用者。
+4. 唯一的 C++ 调用者是 `FastVMSchedPass::invokeOwnedJitFrame`。它在返回后检查 `faultKind`，非零时由 `raiseJitFault` 用记录的 pc 构造执行位置（`makePcExecutionSite`），释放入口帧，抛出与解释器相同的诊断（同样的名字、同样的源码位置）。之后的传播是普通的 C++ 异常。
+
+每个包装器激活有自己的 r14，所以解释器与 JIT 代码交替嵌套时也成立。
+
+### 16.3 覆盖的故障
+
+| 故障 | 检查位置 | 诊断 |
+|------|---------|------|
+| 整数除数为零（IDIV / LDIV） | 除法之前 | `RuntimeDiag::DivisionByZero`，位置是该除法 |
+| 浮点除数等于零（FDIV / DDIV，±0.0） | 除法之前 | 同上（解释器对浮点除零同样报故障） |
+| 原生自调用超过递归深度上限 | 调用之前 | `RuntimeDiag::MaxRecursionDepthExceeded`，位置是该调用，图名与上限同解释器 |
+
+最小整数除以 -1 不是故障：结果回绕（各后端一致）。整数取模是 `OPER`，含它的图不编译，由解释器检查。
+
+### 16.4 递归深度的计数
+
+解释器的上限是 `FastVMSchedPass::maxRecursionDepth_`（256），按 `push` 的次数计。为了让同一个递归无论由谁执行都在同一次调用上超限：
+
+- 解释器从字节码 `FUNC` 进入 JIT 代码时照常 `push` / `pop`（`gotovm.cpp` / `casevm.cpp`）。
+- `invokeOwnedJitFrame` 进入前把 `maxRecursionDepth_ - stackDepth_` 写入 `JitContext::depthBudget`，包装器装入 r15。
+- 每次原生自调用 `sub r15, 1`，借位即故障；返回后 `inc r15`。尾调用不计数。
+
+### 16.5 扩展时的注意事项
+
+这条出口依赖"JIT 代码不调用 C++"。一旦放开 `OPER` 等需要 trampoline 的字节码：
+
+- trampoline 必须接住 C++ 异常，把它存进 `JitContext`（例如 `std::exception_ptr`）并正常返回；JIT 代码在调用之后检查并走故障出口；`invokeOwnedJitFrame` 重新抛出。
+- 如果 trampoline 会再次进入 JIT 代码或解释器，中间的 C++ 帧属于内层的包装器激活，仍然成立；但要保证 trampoline 持有的资源在返回前释放。
+- 更彻底的做法是为 JIT 代码注册展开信息（Linux 上 `__register_frame` 的 DWARF CFI，Windows 上 `RtlAddFunctionTable`），那样 C++ 异常可以直接穿过，也能在调试器和崩溃转储里看到 JIT 帧。

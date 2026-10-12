@@ -1,0 +1,10 @@
+module fault_char_substr
+
+import { char_substr } from str
+
+func main(): int sync {
+    println('before')
+    println('h€'->char_substr<1, 2>)
+    println('not reached')
+    return 0
+}

@@ -1,0 +1,10 @@
+module fault_lcm_overflow
+
+import { lcm } from math
+
+func main(): int sync {
+    println('before')
+    println(lcm(9223372036854775807, 9223372036854775806))
+    println('not reached')
+    return 0
+}

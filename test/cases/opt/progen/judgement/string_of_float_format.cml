@@ -1,0 +1,12 @@
+/**
+ * progen question J3. `println(1.5)` and `'{}'->format<1.5>` write `1.5`; `string(1.5)` gives
+ * `1.500000`. The program prints the two lines `1.5` and `1.500000`.
+ * See README.md, "For the owner to decide", J3.
+ */
+module string_of_float_format
+
+func main(): int sync {
+    println(1.5)
+    println(string(1.5))
+    return 0
+}

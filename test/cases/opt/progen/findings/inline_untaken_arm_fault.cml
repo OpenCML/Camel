@@ -1,0 +1,24 @@
+/**
+ * progen finding F18 (branch arm). `std::inline` makes the body of a function called only in the
+ *   arm of `if false` run: the index it reads is out of range there, and the run fails with `Array
+ *   index out of bounds` (exit 1).
+ * Pipeline: std::inline std::nvm
+ * Expected output: (nothing)
+ * Actual: RUN_ERROR RuntimeDiag::RuntimeError: An error has occurred: Array index out of bounds..
+ * Reduced by test/tools/progen from seed 5 (generator version 1, all features).
+ */
+module inline_untaken_arm_fault
+
+func f10(a11: (a0: string) => float, a12: int[], a13: string): string {
+    return '<{}|{}|'->format<a11('a'), a12[1]>;
+}
+
+func main(): int sync {
+    if false then sync {
+        let n29 = f10((p27: string): float => 1.5, [0], '');
+        return null;
+    } else sync {
+        return null;
+    };
+    return 0;
+}

@@ -55,6 +55,8 @@ bool NnModule::load() {
     for (const char *uri : {"nn:sgd", "nn:adam_state", "nn:adam"}) {
         camel::core::OperatorTraitsRegistry::instance().set(uri, {.pure = true, .elementwise = false});
     }
+    // Writes a file.
+    camel::core::OperatorTraitsRegistry::instance().declare("nn", {{"save_params", false}});
     loaded_ = true;
     return true;
 }

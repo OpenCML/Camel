@@ -1,0 +1,10 @@
+/**
+ * Helper module: imports a generic function and builds its own instance of it.
+ */
+module export_mid
+
+import { rev } from export_lib
+
+export func rev_ints(xs: int[]): int[] {
+    return rev(xs)
+}

@@ -1,0 +1,79 @@
+id = "consistency.match"
+order = 354
+tier = "feat"
+tags = ["feat", "consistency", "runtime", "match"]
+desc = "A match without `case _` on the four back ends: a fault when no case matches, a warning at compile time"
+
+# DESIGN-QUESTION(match-default): whether a match must have `case _` is not decided. Until it
+# is, a match that can meet a value without a case compiles with the warning
+# SemanticDiag::MatchWithoutDefault and such a value is the fault
+# RuntimeDiag::MatchNotExhaustive, located at the match and naming the value. It used to read
+# an arm that does not exist: the match gave 0 or the scheduler crashed. The four back ends
+# agree on the exit code, on standard output and on the diagnostic.
+
+[defaults]
+kind = "negative"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_output_not_contains = ["not reached", "Floating point exception", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "match.no_case_matches_string"
+desc = "A string no case matches: the cases that match give their values first, then the fault at the match with the value in quotes."
+case = "../../../cases/consistency/match/no_case_matches_string.cml"
+expect_diagnostic_name = "RuntimeDiag::MatchNotExhaustive"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 12
+expect_stdout_starts_with = "1 2\n"
+expect_output_contains = ["No case of this 'match' matches the value 'zzz'."]
+expect_stderr_contains = ["name=SemanticDiag::MatchWithoutDefault, code=0x03100091", "This 'match' on a value of type 'string' has no 'case _'"]
+
+[[tests]]
+name = "match.no_case_matches_int"
+desc = "An int no case matches, in a match written as a statement of a sync body with block arms and a case of two patterns."
+case = "../../../cases/consistency/match/no_case_matches_int.cml"
+expect_diagnostic_name = "RuntimeDiag::MatchNotExhaustive"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 5
+expect_stdout_starts_with = "small small three\n"
+expect_output_contains = ["No case of this 'match' matches the value 42."]
+expect_stderr_contains = ["name=SemanticDiag::MatchWithoutDefault"]
+
+[[tests]]
+name = "match.one_bool_case"
+desc = "A match over a bool that lists only true is not complete: warned about, and false is the fault."
+case = "../../../cases/consistency/match/one_bool_case.cml"
+expect_diagnostic_name = "RuntimeDiag::MatchNotExhaustive"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 12
+expect_stdout_starts_with = "1\n"
+expect_output_contains = ["No case of this 'match' matches the value false."]
+expect_stderr_contains = ["name=SemanticDiag::MatchWithoutDefault"]
+
+[[tests]]
+name = "match.complete"
+desc = "A match with `case _`, one over a bool with both literals, and the fixed patterns over T? and T! get no warning and no faulting arm; their results are unchanged."
+kind = "behavior"
+case = "../../../cases/consistency/match/complete_matches.cml"
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+const out = input.normalized.stdout.trim()
+const want = ['1 0', 'yes no any any', '0 5', 'ok 12 ParseError'].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+assert(input.stderr === '', 'no warning: ' + input.stderr)
+"""
+
+[[tests]]
+name = "match.wno"
+desc = "-Wno-match-without-default switches the warning off; the fault stays."
+case = "../../../cases/consistency/match/no_case_matches_string.cml"
+args = ["-Wno-match-without-default", "${case}", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::MatchNotExhaustive"
+verify_script = """
+assert(input.stderr === '', 'no warning: ' + input.stderr)
+"""

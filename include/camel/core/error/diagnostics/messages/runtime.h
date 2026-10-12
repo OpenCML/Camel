@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 11, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,8 +45,27 @@ enum class RuntimeDiag : uint32_t {
     EntryArgumentInvalid      = 0x000011,
     EntryResultNotWritten     = 0x000012,
     GraphTooLarge             = 0x000013,
+    MemoryExhausted           = 0x000014,
+    // Faults of the built-in operators and of the general-purpose modules, each with the
+    // values that caused it. They took the place of RuntimeError at those sites; the numbers
+    // start at 0x30 to stay clear of the codes other work adds after GraphTooLarge.
+    InvalidNumberText      = 0x000030,
+    FormatFailed           = 0x000031,
+    OperandTypeUnsupported = 0x000032,
+    FieldNotFound          = 0x000033,
+    InvalidArgument        = 0x000034,
+    FileOpenFailed         = 0x000035,
+    FileSystemError        = 0x000036,
+    JsonDecodeFailed       = 0x000037,
+    JsonEncodeUnsupported  = 0x000038,
+    RegexInvalid           = 0x000039,
+    TimeFormatFailed       = 0x00003A,
+    OperatorNotImplemented = 0x00003B,
+    // 0x90 and up, clear of what other work adds after OperatorNotImplemented.
+    MatchNotExhaustive     = 0x000090,
     // Warnings (severity bits = Warn).
     PassesNeverRun = 0x10000F,
+    ConstantExpressionFaults = 0x100015,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

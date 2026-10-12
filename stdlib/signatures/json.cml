@@ -1,0 +1,43 @@
+/**
+ * Signatures of the `json` module (C++ operators, modules/json).
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+/// The JSON text of a value, on one line.
+/// @pure
+/// @fails fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold
+/// @example encode([1, 2])    // '[1,2]'
+inner func encode(value: any): string {
+    return 'json:encode'
+}
+
+/// The JSON text of a value, indented by indent spaces per level; a negative indent gives one
+/// line.
+/// @pure
+/// @fails fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold
+/// @example encode([1, 2], 2)    // '[\n  1,\n  2\n]'
+inner func encode(value: any, indent: int): string {
+    return 'json:encode'
+}
+
+/// The value a JSON text describes. Its static type is `any`.
+/// @pure
+/// @fails fault `JsonDecodeFailed` when the text is not JSON
+/// @example decode('[1, 2]')    // an array of 1 and 2, typed any
+inner func decode(text: string): any {
+    return 'json:decode'
+}
+
+/// The value a JSON text describes, decoded to the type of shape; the value of shape is not
+/// read. The result is an error value when the text does not have that type.
+/// @pure
+/// @fails error value `JsonTypeError` when the text is JSON of another type, with the path of
+///   the mismatch; error value `JsonDecodeFailed` when the text is not JSON
+/// @example decode_as<[] as Map<string, int>>('{"a": 1}')    // {a: 1}
+with <shape: any>
+inner func decode_as(text: string): any {
+    return 'json:decode_as'
+}

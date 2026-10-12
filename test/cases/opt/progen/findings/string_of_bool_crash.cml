@@ -1,0 +1,11 @@
+/**
+ * progen finding F26 ((other) crash without passes). `string(true)` is accepted by the compiler
+ * and the run dies with a segmentation fault (no diagnostic), without any pass.
+ * Expected output: true
+ */
+module string_of_bool_crash
+
+func main(): int sync {
+    println(string(true))
+    return 0
+}

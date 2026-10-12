@@ -84,6 +84,98 @@ the rule says about the scope they sit in. `CAMEL_TF_FANOUT_ALL=1` switches the 
 scope that is not totally ordered runs as a task graph) for comparison; `CAMEL_TF_GC_STATS=1`
 prints the number of task graphs a run started (`[taskflow] run: task_graphs=N`).
 
+### 4.4 How each back end runs a call, a fault and the end of a program
+
+Facts established while the four back ends were made to agree (`test/plans/feat/consistency`).
+They are what "the same behaviour on every back end" rests on. The numbers were measured on
+Linux x86-64 with a release build; nothing here has been run on Windows or macOS.
+
+#### 4.4.1 Calls and frames
+
+| | A call that is not a tail call | A tail call | Frame memory |
+|---|---|---|---|
+| `std::nvm` | a nested activation of `NodeVMSchedPass::call` on the native stack, for a direct call (`FUNC`), a call through a function value (`CALL`) and every element call of a higher-order operator alike | rebinds graph and frame inside the same activation (`goto loop_start`) | `FramePool`, a bump allocator over one block |
+| `std::fvm` | a direct call pushes its return pc and frame on the interpreter's own stack (`pcStack_` / `frameStack_`, vectors that grow up to the limit) and jumps: no native stack. A call through a function value and an element call of a higher-order operator run in a nested `callBorrowed` on the native stack | the `TAIL` bytecode: releases the frame, takes the callee's, jumps | `FramePool` |
+| `std::jit` | the interpreter of `std::fvm` for every graph the JIT does not compile (any graph with an operator, or that calls another graph). A compiled self-recursion nests on the native stack through the trampolines, uncounted | compiled as a jump | `FramePool` |
+| `std::tf` | `executeCallNode` -> `evalGraph` on the native stack of the thread that runs the call; a scope with independent heavy items becomes a task graph, whose tasks may run on other threads | the `for (;;)` loop of `evalGraph` | `TaskflowFramePool`: per graph, grown in chunks |
+| macro evaluator (`std::macro`) | `executeFunction` -> `executeGraph` on the native stack; no tail calls, every call nests | none | its own `FramePool` |
+
+Measured cost of one open call of `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`:
+`std::nvm` about 545 bytes of native stack and 100 bytes of frame; `std::fvm` about 100 bytes of
+heap for a direct call and about 1.7 KiB of native stack for a nested activation; `std::tf`
+about 520 bytes of native stack; the macro evaluator about 630 bytes of native stack a frame
+(two frames a level). On an 8 MiB stack the native stack ends near 15400 open calls on
+`std::nvm`, 4890 nested activations on `std::fvm`, 15860 calls on `std::tf` and 13400 frames in
+the macro evaluator.
+
+#### 4.4.2 The recursion limit
+
+One definition for all back ends (`include/camel/execute/limits.h`): the limit is on the calls
+open at once that were not tail calls; a call is a `FUNC`, a `CALL` or an element call of a
+higher-order operator; the entry graph's call of `main` is not counted (`kEntryCalls`).
+
+- `std::nvm` counts activations of `call` (`currRecursionDepth_`), minus the entry graph's.
+- `std::fvm` counts the entries of its call stack plus its nested activations
+  (`stackDepth_ + nestedCalls_`). Before, nested activations were not counted: a recursion
+  through a function value was unbounded and overflowed the native stack.
+- `std::tf` counts per thread (`ThreadState::callDepth`), and a task continues from the count of
+  the thread that started it (`InheritedDepth`), so the count follows a recursion across
+  workers. It applies the limit only when one is given; by default the native stack bounds it.
+- All of them raise the fault with `camel::execute::throwRecursionLimitReached`, in the caller
+  and before the callee's frame is taken, so the diagnostic is the same text at the same call
+  expression.
+
+Every call that nests on the native stack also asks `nativeStackNearlyExhausted()` (the
+thread's stack bounds, read once per thread). When less than a sixteenth of the stack (at least
+128 KiB) is left, the call is refused with the same diagnostic, saying the native stack is
+full. No value the limit can be set to ends in a stack overflow. The frame pool of `std::nvm`
+and `std::fvm` is sized from the limit (4 KiB a call, at most 256 MiB); filling it is the same
+located diagnostic.
+
+#### 4.4.3 Faults
+
+- A fault is a `RuntimeFault` thrown by an operator or by the scheduler. The scheduler that
+  catches it knows the node (or the bytecode pc) that was running and reports it there
+  (`reportRuntimeFault`), which gives the diagnostic its source position; the report is thrown
+  on as a `Diagnostic` and ends the pass.
+- `std::tf` reports the first fault of a run and no other (`TaskflowExecSchedPass::raiseFault`):
+  element functions that run concurrently can fault together, and each used to add its own
+  diagnostic (a different number of them from run to run). Which of several concurrent faults
+  is "the first" is whichever thread reports first; it is not defined. The other elements of
+  the operator are not stopped by a fault: in a `map` over 200 elements whose element 0
+  faults, between 16 and all 199 of the others ran (and printed) before the process ended, a
+  different number each run. The linear back ends run the elements in order and none after
+  the one that faults. Whether elements not yet started should be skipped is not laid down.
+- Integer division: a zero divisor is `DivisionByZero` (for `/`, `%`, `/=`, `%=`, and for
+  floats too). The one quotient that does not fit, the smallest integer divided by -1, wraps
+  like the other integer arithmetic (`camel/utils/int_div.h`); it used to be a hardware trap
+  (SIGFPE) on every back end.
+- `==` / `!=` on floats compare values (IEEE), in the operator as in the bytecode `std::fvm`
+  compiles them to; the operator used to compare bit patterns, so `std::nvm` and `std::tf` had
+  `nan == nan` true and `-0.0 == 0.0` false.
+
+#### 4.4.4 How a program ends
+
+- `main` returns: the scheduler hands the value to `Context::captureProcessExitCode`, the pass
+  driver sees the pipeline consumed, and the command line returns from `main` with the code.
+- A fault: the `Diagnostic` unwinds the scheduler (frames released, running tasks joined), the
+  pass driver records the failure, the command line prints the diagnostics after the program's
+  output on standard output and returns 1 from `main`.
+- `exit(n)`: the operator throws `camel::core::ProcessExit` (`camel/core/process_exit.h`). It
+  unwinds the scheduler like a fault; the pass driver turns it into a completed run with exit
+  code `n` and no diagnostic. `exit` and `sleep` are globals implemented in the `os` module;
+  the executor manager imports a module the first time an operator of it is needed, so they
+  work without `import`.
+
+All three leave through the return of the command line's `main`, never through `std::exit` or
+a signal, so the same clean-up runs: C++ streams are flushed (text written with `print`, which
+does not flush by itself, is not lost), files written by the `fs` operators are complete (each
+operator opens, writes and closes), and static destructors run. The Python bridge's
+interpreter is never finalized; its standard output is put in line mode when the module loads
+and flushed at process exit (`modules/python/module.cpp`), so Python's `print` output arrives
+and stays in order. Python objects still alive at exit are not finalized: a file a Python
+object holds open is not flushed (true for a normal return as well).
+
 ## 5. 算子与类型分发
 
 - **operator_t**（`core/operator.h`）：算子索引类型，与 GIR 的 **OperNode** 对应。

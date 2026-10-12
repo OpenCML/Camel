@@ -1,0 +1,11 @@
+/**
+ * A tuple index past the end is known at compile time: a compile-time error, nothing runs.
+ */
+module tuple_index_static
+
+func main(): int sync {
+    println('not reached')
+    let t = (1, 2, 3)
+    println(t.5)
+    return 0
+}

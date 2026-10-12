@@ -1,0 +1,22 @@
+/**
+ * The gradient of a loop written as a tail recursion. The forward function autodiff derives
+ * is a non-tail recursion (each step's pullback captures the next one's), so the number of
+ * iterations that can be differentiated is bounded by the recursion limit of the back end.
+ * The iteration count is read from the environment so that nothing unrolls it at compile time:
+ *   N=100 camel grad_tail.cml std::macro std::nvm
+ *   N=300 camel grad_tail.cml std::macro std::nvm
+ */
+module grad_tail
+import { grad } from autodiff
+import { get_env } from sys
+
+func iterate(i: int, n: int, v: float): float {
+    return if i >= n then v else iterate(i + 1, n, v * 0.999 + 0.001)
+}
+
+func main(): int sync {
+    let n = int(get_env('N'))
+    println(iterate(0, n, 2.0))
+    println(grad((x: float): float => iterate(0, n, x))(2.0))
+    return 0
+}

@@ -1,0 +1,20 @@
+/**
+ * A `match` without `case _` on a value no case matches is a fault with the position of the
+ * match and the value. It used to read an arm that does not exist: the match gave 0, or the
+ * scheduler crashed. A value a case matches behaves as before.
+ */
+module no_case_matches_string
+
+func f(s: string): int {
+    return match s {
+        case 'a' => 1
+        case 'b' => 2
+    }
+}
+
+func main(): int sync {
+    println(f('a'), f('b'))
+    println(f('zzz'))
+    println('not reached')
+    return 0
+}

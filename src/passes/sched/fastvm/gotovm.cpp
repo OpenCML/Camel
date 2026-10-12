@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include "camel/utils/int_div.h"
 #include "fastvm.h"
 
 #include "camel/core/effect_trace.h"
@@ -153,7 +154,7 @@ static thread_local size_t s_jit_save_depth = 0;
         if (rhs == ZERO_CHECK) {                                                                   \
             throwRuntimeFault(RuntimeDiag::DivisionByZero);                                        \
         }                                                                                          \
-        TYPE res = lhs / rhs;                                                                      \
+        TYPE res = camel::utils::quotient(lhs, rhs);                                               \
         fastFrameSet(currFrame, bc->result, res);                                                  \
         NEXT();                                                                                    \
     }
@@ -211,6 +212,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
     const Bytecode *base            = bytecodes_.data();
     const Bytecode *bc              = nullptr;
     const size_t stackDepthBase     = stackDepth_;
+    const size_t nestedCallsBase    = nestedCalls_;
 #if ENABLE_FASTVM_JIT
     const bool useJit = jitEnabled();
 #endif
@@ -455,10 +457,14 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             "FastVM indirect CALL requires a materialized runtime graph target.");
 
         const uint32_t callCount = noteIndirectCall(runtimeTarget);
+        // The call nests on the native stack: it is counted, and checked before the frame
+        // is taken.
+        requireNestedCallRoom(currFrame);
         Frame *funcFrame         = framePool_.acquire(runtimeTarget);
         populateIndirectCallFrame(currFrame, funcFrame, function, nargs, wargs);
 
         _timer.pause();
+        ++nestedCalls_;
         const auto &result = jitEnabled() ? invokeCallOrJit(
                                                 graphEntryPc(runtimeTarget),
                                                 runtimeTarget,
@@ -466,6 +472,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                                                 currentJitCtx_,
                                                 callCount)
                                           : call(graphEntryPc(runtimeTarget), funcFrame);
+        --nestedCalls_;
         _timer.resume();
 
         currFrame->set(bc->result, result);
@@ -513,7 +520,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             "FastVM direct FUNC target must have a materialized runtime graph.");
         if (getFuncExtraFn(bc) != nullptr) {
             JIT_SAVE_PC_BC(); /* save pc/bc before any call can clobber them (Build opt) */
-            JitEntryFn fn    = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
+            JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
+            // The call counts against the recursion limit as an interpreted one does; the
+            // compiled callee continues the count from here (invokeOwnedJitFrame).
+            push(pc, currFrame);
             Frame *funcFrame = [&]() {
                 Frame *frame = framePool_.acquire(runtimeTarget);
                 if (LIKELY(callSrcArgs.size() == 1)) {
@@ -527,6 +537,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 return frame;
             }();
             slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
+            (void)pop();
             JIT_RESTORE_PC_BC();
             if (bc->result != 0) {
                 currFrame->set(bc->result, result);
@@ -804,6 +815,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
         }
+        nestedCalls_ = nestedCallsBase;
         while (stackDepth_ > stackDepthBase) {
             releaseFrame(frameStack_[stackDepth_ - 1]);
             --stackDepth_;
@@ -833,6 +845,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         if (currFrame != rootActiveFrame) {
             releaseFrame(rootActiveFrame);
         }
+        nestedCalls_ = nestedCallsBase;
         while (stackDepth_ > stackDepthBase) {
             releaseFrame(frameStack_[stackDepth_ - 1]);
             --stackDepth_;

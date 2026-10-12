@@ -1,0 +1,10 @@
+module fault_clamp_nan
+
+import { clamp, nan } from math
+
+func main(): int sync {
+    println('before')
+    println(clamp(0.5, 0.0, nan()))
+    println('not reached')
+    return 0
+}

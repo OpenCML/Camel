@@ -1,0 +1,165 @@
+id = "consistency.values"
+order = 352
+tier = "feat"
+tags = ["feat", "consistency", "runtime"]
+desc = "Programs without faults on the four back ends: the same output, checked against a golden file"
+
+# Places where back ends are easily different: integer wrap-around and division, floating
+# point, strings, closures over var, wait, deep tail recursion, function values, with
+# parameters. Each case runs on std::nvm, std::fvm, std::jit and std::prl; the four agree on
+# exit code and standard output, and the output is the golden file's.
+
+[defaults]
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Floating point exception", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "value.closure_var"
+desc = "Nested closures capture a var by reference."
+case = "../../../cases/consistency/values/closure_var.cml"
+golden = "golden/closure_var.txt"
+
+[[tests]]
+name = "value.counter_closure"
+desc = "Closures returned by a function share the var of their own call."
+case = "../../../cases/consistency/values/counter_closure.cml"
+golden = "golden/counter_closure.txt"
+
+[[tests]]
+name = "value.effect_not_used"
+desc = "An effect whose result nothing uses, outside a sync block, does not run (design principles 2.1, 2.4)."
+case = "../../../cases/consistency/values/effect_not_used.cml"
+golden = "golden/effect_not_used.txt"
+
+[[tests]]
+name = "value.float_compare"
+desc = "IEEE comparisons: NaN equals nothing, itself included; the two zeros are equal. (std::nvm and std::tf compared the bit patterns.)"
+case = "../../../cases/consistency/values/float_compare.cml"
+golden = "golden/float_compare.txt"
+
+[[tests]]
+name = "value.float_to_int"
+desc = "A float inside the range of int converts by truncation toward zero."
+case = "../../../cases/consistency/values/float_to_int.cml"
+golden = "golden/float_to_int.txt"
+
+[[tests]]
+name = "value.function_values"
+desc = "Functions that return functions, composition, a function value as the element function of a map."
+case = "../../../cases/consistency/values/function_values.cml"
+golden = "golden/function_values.txt"
+
+[[tests]]
+name = "value.higher_order"
+desc = "map, filter, reduce and foreach: results in element order; reduce and foreach run in element order."
+case = "../../../cases/consistency/values/higher_order.cml"
+golden = "golden/higher_order.txt"
+
+[[tests]]
+name = "value.int_div_mod_sign"
+desc = "Integer division truncates toward zero; the remainder has the sign of the dividend."
+case = "../../../cases/consistency/values/int_div_mod_sign.cml"
+golden = "golden/int_div_mod_sign.txt"
+
+[[tests]]
+name = "value.int_literal_max"
+desc = "The largest int written as a literal (it was read back as the smallest: the literal went through a double)."
+case = "../../../cases/consistency/values/int_literal_max.cml"
+golden = "golden/int_literal_max.txt"
+
+[[tests]]
+name = "value.int_min_div"
+desc = "The smallest int divided by -1, and its remainder: no hardware trap; the quotient wraps like the other integer arithmetic. (It was SIGFPE on all four back ends.)"
+case = "../../../cases/consistency/values/int_min_div.cml"
+golden = "golden/int_min_div.txt"
+
+[[tests]]
+name = "value.int_wrap"
+desc = "64-bit integer arithmetic wraps around at the ends of the range."
+case = "../../../cases/consistency/values/int_wrap.cml"
+golden = "golden/int_wrap.txt"
+
+[[tests]]
+name = "value.match_values"
+desc = "match on ints and strings, with alternatives and a default."
+case = "../../../cases/consistency/values/match_values.cml"
+golden = "golden/match_values.txt"
+
+[[tests]]
+name = "value.non_tail_deep"
+desc = "Non-tail recursion inside the default limit: direct, through a function value, in a map."
+case = "../../../cases/consistency/values/non_tail_deep.cml"
+golden = "golden/non_tail_deep.txt"
+
+[[tests]]
+name = "value.strings"
+desc = "String concatenation, equality and byte-wise ordering."
+case = "../../../cases/consistency/values/strings.cml"
+golden = "golden/strings.txt"
+
+[[tests]]
+name = "value.structs_tuples"
+desc = "Struct fields and tuple elements through functions and a map."
+case = "../../../cases/consistency/values/structs_tuples.cml"
+golden = "golden/structs_tuples.txt"
+
+[[tests]]
+name = "value.sync_order"
+desc = "Effects in sync blocks happen in the order written, across calls, branches and recursion."
+case = "../../../cases/consistency/values/sync_order.cml"
+golden = "golden/sync_order.txt"
+
+[[tests]]
+name = "value.tagged_values"
+desc = "Nullable and fallible values: ??, !!, ?-> and match; an error value is a value, not a fault."
+case = "../../../cases/consistency/values/tagged_values.cml"
+golden = "golden/tagged_values.txt"
+
+[[tests]]
+name = "value.tail_deep"
+desc = "Tail recursion of 100000 and of 1000000 rounds."
+case = "../../../cases/consistency/values/tail_deep.cml"
+golden = "golden/tail_deep.txt"
+
+[[tests]]
+name = "value.tail_mutual"
+desc = "Mutual recursion in tail position, 200000 rounds."
+case = "../../../cases/consistency/values/tail_mutual.cml"
+golden = "golden/tail_mutual.txt"
+
+[[tests]]
+name = "value.wait_order"
+desc = "wait orders a call that writes its var parameter between the uses of the variable."
+case = "../../../cases/consistency/values/wait_order.cml"
+golden = "golden/wait_order.txt"
+
+[[tests]]
+name = "value.with_params"
+desc = "with parameters, in call and in chain form."
+case = "../../../cases/consistency/values/with_params.cml"
+golden = "golden/with_params.txt"
+
+# --- agreement only -------------------------------------------------------------------------
+
+[[tests]]
+name = "value.float_special"
+desc = "Infinities, NaN and negative zero, printed and compared. How a NaN prints depends on the C library (-nan with glibc), so the output is only compared between the back ends."
+kind = "behavior"
+case = "../../../cases/consistency/values/float_special.cml"
+expect_stdout_starts_with = "inf\n-inf\n"
+
+[[tests]]
+name = "value.float_to_int_range"
+desc = "int() of a float outside the range of int, of an infinity and of NaN. The result is not laid down (a question for the language author; today it is what the hardware conversion gives); no crash, and the four back ends agree."
+kind = "behavior"
+case = "../../../cases/consistency/values/float_to_int_range.cml"
+expect_stdout_starts_with = "before\n"
+expect_stdout_contains = ["after"]

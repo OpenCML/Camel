@@ -1,0 +1,18 @@
+/**
+ * The one integer division that overflows: the smallest int divided by -1, and its modulo.
+ */
+module int_min_div
+
+func div(a: int, b: int): int { return a / b }
+func rem(a: int, b: int): int { return a % b }
+
+func main(): int sync {
+    let half = 4611686018427387904
+    let min = 0 - half - half
+    println('before')
+    println(min)
+    println(rem(min, -1))
+    println(div(min, -1))
+    println('after')
+    return 0
+}

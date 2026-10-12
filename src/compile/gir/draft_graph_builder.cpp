@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,6 +41,11 @@ using camel::core::rtdata::toSlot;
 
 namespace {
 
+// First block of a graph's arena. The arena holds the graph's constant objects and function
+// values; a block of 256 KB for each graph that has one filled the 16 MB meta space with 62
+// graphs (62 functions that each return a string literal could not be compiled).
+constexpr size_t kInitialArenaBlockBytes = 1024;
+
 std::unordered_map<const runtime::GraphDraft *, DraftGraphBuilder *> &draftOwners() {
     static std::unordered_map<const runtime::GraphDraft *, DraftGraphBuilder *> owners;
     return owners;
@@ -49,7 +54,7 @@ std::unordered_map<const runtime::GraphDraft *, DraftGraphBuilder *> &draftOwner
 } // namespace
 
 DraftGraphBuilder::DraftGraphBuilder(camel::core::type::FunctionType *funcType)
-    : arena_(std::make_shared<GraphArena>(256 * 1024)),
+    : arena_(std::make_shared<GraphArena>(kInitialArenaBlockBytes)),
       draft_(std::make_unique<runtime::GraphDraft>()) {
     draft_->setFuncType(funcType);
     draftOwners()[draft_.get()] = this;

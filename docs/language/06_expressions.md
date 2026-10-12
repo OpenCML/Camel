@@ -135,6 +135,11 @@ shape(X)[1]
 
 - **`expr [ dataExpr ]`** 或 **`[ start : end : step? ]`**（若实现支持切片）。
 - 数组下标在运行期检查：越界（包括负数）是带位置的故障 `RuntimeDiag::IndexOutOfRange`，消息带下标与长度，各执行后端一致。
+- **映射的下标 `m[k]`** 是查找：结果类型是 `V?`，键不存在时为 `null`，不是故障；用 `??` 取出（`m['a'] ?? 0`）。它与数组下标共用语法，由左操作数的类型决定是哪一个：`xs[i]` 的类型是 `T`，`m[k]` 的类型是 `V?`。把 `m[k]` 直接当作 `V` 使用是编译期错误。集合没有下标，成员判断用 `contains<x>(s)`。见 [3.2.6](03_data_model.md)。
+- **字符串下标按字节**（设计原则 2.9：字符串按字节存储，长度与下标按字节）：`s[i]` 是第 `i` 个字节，
+  结果是只含这一个字节的字符串；越界同样是故障。多字节字符的单个字节本身不是合法的 UTF-8 文本，按
+  字符读取用 `str` 模块的 `char_at`、`codepoints`（见 [标准库参考](../stdlib-reference.md)）。
+  （下标的结果是单字节字符串还是数值，尚待语言作者裁定。）
 
 ```cml
 signals[0]
@@ -145,6 +150,7 @@ shape(X)[1]
 arr->slice<0, mid>
 arr->slice<mid, len(arr)>
 sorted->slice<0, m>
+m['a'] ?? 0
 ```
 
 ### 6.3.3 调用
@@ -216,8 +222,8 @@ append<p>
 ## 6.4 管道与组合
 
 - **`a->b`**：将 **a** 的求值结果作为参数传给 **b**（方法或函数）；左结合。
-- **`?->`**：可选管道。**未实现**：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在运算符处）。
-- **`..`**：组合。**`?..`** **未实现**，同一诊断。
+- **`x ?-> f`**：`x` 出错时把错误原样传下去，否则调用 `f`，见 [6.6](#66-空值与错误)。
+- **`..`**：组合。**`?..`** **未实现**：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在运算符处）。
 
 **示例**
 
@@ -256,12 +262,23 @@ v is int
 
 ---
 
-## 6.6 可空
+## 6.6 空值与错误
 
-- **`a ?? b`**：若 **a** 为 null 则取 **b**。
-- **`a !! b`**：若 **a** 出错则取 **b**。
+类型 `T?`（可能为空）与 `T!`（可能出错）见 [3.2.4](03_data_model.md)。这两种值只能用下面的运算符和 `match` 的固定模式（[6.9.2](#692-match)）拆开；它们在图上都是**一个分支**，条件是值上的一位标记，与 `if` 是同一种结构（设计原则 2.9）。
 
-> **未实现。** 可空值与错误值尚未实现（见设计原则 2.9）：使用 `??`、`!!`，或写可空类型 `T?`，是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在运算符或类型处）。此前它们只给出警告，右侧被丢弃，`T?` 被当作 `T`。
+- **`a ?? b`**：`a` 的类型是 `T?`，`b` 的类型是 `T`，结果是 `T`。`a` 为空取 `b`，否则取 `a` 里的值。
+- **`a !! b`**：`a` 的类型是 `T!`，`b` 的类型是 `T`，结果是 `T`。`a` 出错取 `b`，否则取 `a` 里的值。
+- **`x ?-> f`**：`x` 的类型是 `T!`。`x` 出错时把错误原样传下去，否则调用 `f`。结果是 `U!`：`f` 返回 `U` 或 `U!` 都可以。可以连写：`x ?-> f ?-> g`。
+- 右侧（`b`、对 `f` 的调用）是分支的一个臂，只在被选中时求值。
+- 左侧不是所要求的形式（例如对普通的 `int` 用 `??`，对 `T?` 用 `!!` 或 `?->`），或右侧类型不是 `T`：编译期错误 `SemanticDiag::TaggedOperandMismatch`（`??`、`!!` 定位在运算符处，`?->` 定位在表达式开头）。
+
+```cml
+let n = parse_int(text) !! 0                   // 解析失败取 0
+let v = lookup(key) ?? default_value           // 为空取默认值
+let r = parse_int(text) ?-> check ?-> double   // 任何一步出错，r 就是那个错误
+```
+
+错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障，带位置终止程序，`!!` 接不住它。
 
 ---
 
@@ -306,7 +323,7 @@ pred - y
 
 ### 6.7.3 关系与相等
 
-- 关系：**`<`**、**`>`**、**`<=`**、**`>=`**。
+- 关系：**`<`**、**`>`**、**`<=`**、**`>=`**。用于四种数值类型与字符串；字符串按字节逐个比较，真前缀在前。
 - 相等：**`===`**、**`!==`**、**`==`**、**`!=`**。
 
 ```cml
@@ -333,6 +350,15 @@ p.x < 0 || p.x >= WIDTH || p.y < 0 || p.y >= HEIGHT
 ## 6.8 赋值（表达式形式）
 
 - **`x = e`**、**`x += e`** 等；赋值为表达式时，其值为所赋之值（依实现）。
+- 复合赋值只用于下表列出的类型；其他组合是编译期错误 `SemanticDiag::NoMatchingFunction`（定位在该赋值处，消息写明运算符）。
+
+| 运算符 | 类型 |
+|---|---|
+| `+=` | `i32`、`i64`、`f32`、`f64`、`string`（拼接） |
+| `-=`、`*=`、`/=`、`^=` | `i32`、`i64`、`f32`、`f64` |
+| `%=` | `i32`、`i64`（除数为零是故障 `RuntimeDiag::DivisionByZero`） |
+| `&=`、`\|=` | `bool`（`a = a && b`、`a = a \|\| b`） |
+| `@=` | 内建类型都没有 |
 
 ```cml
 var c = 0
@@ -365,6 +391,32 @@ let res = if len(arr) <= 1e5 then sorted(arr) else {
 }
 ```
 
+**分支臂里的 `return` / `throw`。** 分支臂是自己的子图：臂里的 `return`（或 `throw`）结束的是这条臂，
+给出的是这个 `if`／`match` 的值，**不是离开函数**（设计原则 2.1、2.4）。所以当 `if`／`match` 只是一条
+语句、它的值没有被使用时，臂里的 `return v` 什么都没做，函数继续执行后面的语句：
+
+```cml
+func safe_div(a: int, b: int): int! {
+    if b == 0 then sync { throw error('DivByZero', '...') } else sync { return a / b }
+    return 0            // 两条臂里的 throw / return 都没有效果：总是返回 0
+}
+```
+
+编译器对这种写法给出警告 `SemanticDiag::ExitInUnusedBranch`（定位在臂里的 `return`／`throw`，次要位置
+指向那个值未被使用的 `if`／`match`；可用 `-Wno-exit-in-unused-branch` 关闭）。程序的行为不变。正确的
+写法是让分支成为函数体的最后一个表达式，或在它前面写 `return`：
+
+```cml
+func safe_div(a: int, b: int): int! {
+    return if b == 0 then sync { throw error('DivByZero', '...') } else sync { return a / b }
+}
+```
+
+判定条件：`if`／`match` 是一条表达式语句，且不是所在块的最后一条语句，或者所在块本身的值没有被使用
+（例如它又是另一个未被使用的分支的臂）；值被绑定、作实参、作操作数、作 `return` 的操作数、作函数体的
+最后一个表达式时都不报。`return null`（以及不带值的 `return`）不报：没有 `else` 的 `if`、或两臂的值
+类型不同的 `if`，要靠它让臂没有值才能通过编译。臂里的 lambda 与嵌套函数有自己的函数体，不受影响。
+
 **块形式**
 
 ```cml
@@ -394,8 +446,36 @@ return if snake->contains<p> then "O" else "."
 - **`match identRef '{' matchCase+ '}'`**。
 - **matchCase**：**`case pattern ('|' pattern)* '=>' blockExpr`**。
 - **pattern**：**identRef**、字面量、**`( dataList | identList )`**、**`{ pairedValues | identList }`**、**`_`**（通配符）。
-- 已实现的模式只有字面量与 `_`。标识符、元组、结构体模式**未实现**：编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该模式处）。
+- 对普通类型的值，已实现的模式只有字面量与 `_`。元组、结构体模式**未实现**，标识符模式只对 `T?`/`T!` 有定义（见下）：编译期错误 `SemanticDiag::ConstructNotSupported`。
 - `case a | b => body`：任一模式匹配即进入该分支。按书写顺序取第一个匹配的分支，`_` 之后的分支不可达。
+- **没有 `case _` 的 `match`**：是否必须写 `case _` 尚未裁定。目前：可以不写，编译期给出警告
+  `SemanticDiag::MatchWithoutDefault`（可用 `-Wno-match-without-default` 关闭）；运行时遇到没有任何
+  分支匹配的值是**故障** `RuntimeDiag::MatchNotExhaustive`，定位在这个 `match`，消息里带上那个值
+  （此前是静默算错：取了一条不存在的臂，结果为 0 或崩溃）。四个执行后端一致。对 `bool` 写全了
+  `case true` 与 `case false` 的 `match` 是完整的，不报警告。已匹配的情形行为不变。
+
+**对 `T?` 与 `T!` 的固定模式。** 被匹配的值是 `T?` 或 `T!` 时，`match` 是对它的标记位的一个分支，恰好两个分支（`case v` 写在前写在后都可以；`_` 仍然要写在最后）：
+
+- `T?`：`case null`，加上一个取值的分支：`case v`（把取出的值绑定为 `v`，类型 `T`）或 `case _`。
+- `T!`：`case error e`（把错误绑定为 `e`），加上一个取值的分支：`case v` 或 `case _`。
+- `e` 是固定的内建结构 `{ kind: string, message: string, location: string }`：种类名、消息、发生处的源码位置（`文件:行:列`）。
+- 缺分支、多分支，或混入字面量分支：编译期错误 `SemanticDiag::TaggedMatchCases`。
+
+```cml
+func describe(x: int?): string {
+    return match x {
+        case null => 'none'
+        case v => format<v>('some {}')
+    }
+}
+
+func show(r: int!): string {
+    return match r {
+        case error e => format<e.kind, e.message>('{}: {}')
+        case v => format<v>('ok {}')
+    }
+}
+```
 
 ```cml
 let new_head = match dir {
@@ -407,21 +487,14 @@ let new_head = match dir {
 }
 ```
 
-### 6.9.3 try（未实现）
+### 6.9.3 try（不属于语言）
 
-> **未实现。** 语法接受该写法，但异常机制（抛出、传播、捕获）没有实现：使用它是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该语句或 `try` 处）。
+`try`/`catch`/`finally` 不进入 Camel：它在图上的形状取决于块里写了什么，没有稳定的映射（设计原则 2.9）。文法仍然认得这个写法，只为了给出一条指引：编译期错误 `SemanticDiag::TryCatchNotInLanguage`（定位在 `try` 处）。
 
-- **`try stmtBlock catchClause+ (finally stmtBlock)?`**。
-- **catchClause**：**`catch identDef ':' typeExpr stmtBlock`**。
+可能失败的操作返回 `T!`，用 `a !! b` 给出替代值，用 `x ?-> f` 把错误传下去，用 `match` 的 `case error e` 查看错误（见 [6.6](#66-空值与错误)）。
 
 ```cml
-try {
-    risky_op()
-} catch e: IOError {
-    println('Failed')
-} finally {
-    cleanup()
-}
+let text = try_read_text(path) !! ''
 ```
 
 ---
@@ -431,6 +504,10 @@ try {
 - **`wait assignExpr`**：作用于其后的这一个表达式。`wait` 前后的操作如果用到了该表达式的值，或用到了被它
   修改的 `var`，就与它局部有序；排序依据是对 `var` 的使用，不是书写位置（见第 4 章 4.4.5）。表达式不涉及
   任何 `var` 时 `wait` 没有意义；在同步块内写不写 `wait` 都一样。
+- **目前实现的范围**：`wait` 写在调用、赋值、运算符表达式（以及访问、`with` 绑定）之前。文法还接受
+  `wait { ... }`（块语句）与写在名字、字面量、一元运算、lambda 之前的 `wait`，这些位置上它的含义
+  尚未确定，此前标记被静默丢弃；现在是编译期错误 `SemanticDiag::ConstructNotSupported`（定位在该
+  表达式或块处）。要让一个块里的语句按顺序执行，用 `sync { ... }`。
 
 ```cml
 wait update(c)

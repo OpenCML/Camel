@@ -20,8 +20,11 @@
 #pragma once
 
 #include "../backend/backend.h"
+#include "../mir/mir.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/rtdata.h"
+
+#include <cstddef>
 
 class FastVMSchedPass;
 
@@ -30,7 +33,17 @@ namespace camel::jit {
 struct JitContext {
     FastVMSchedPass *vm;
     const void *base; // Bytecode*
+    // Written by compiled code when it leaves through its fault exit (x64::JitFaultKind and the
+    // bytecode pc of the fault), read and cleared by the C++ code that called it.
+    uint32_t faultKind = 0;
+    uint32_t faultPc   = 0;
+    // Set by the C++ caller before it enters compiled code: how many calls the code may still
+    // nest before the interpreter's recursion limit is reached. Kept in r15 while it runs.
+    uint64_t depthBudget = 0;
 };
+static_assert(offsetof(JitContext, depthBudget) == x64::kJitCtxDepthBudgetOffset);
+static_assert(offsetof(JitContext, faultKind) == x64::kJitCtxFaultKindOffset);
+static_assert(offsetof(JitContext, faultPc) == x64::kJitCtxFaultPcOffset);
 
 } // namespace camel::jit
 

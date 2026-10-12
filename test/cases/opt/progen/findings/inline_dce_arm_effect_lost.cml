@@ -1,0 +1,20 @@
+/**
+ * progen finding F08 (branch arm). `std::inline std::opt::dce` drops the `println` of the taken
+ *   arm when the arm also declares a variable it does not use.
+ * Pipeline: std::inline std::opt::dce std::nvm
+ * Expected output: (empty line)
+ * Actual: (nothing)
+ * Reduced by test/tools/progen from seed 929 (generator version 1, all features).
+ */
+module inline_dce_arm_effect_lost
+
+func main(): int sync {
+    if false then sync {
+        return null;
+    } else sync {
+        var v71 = float(0);
+        println('');
+        return null;
+    };
+    return 0;
+}

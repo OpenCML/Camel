@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <set>
+#include <unordered_set>
 #include <iostream>
 #include <regex>
 #include <string>
@@ -63,6 +65,12 @@ class Builder {
     node_ptr_t root_;
     size_t idIndex_ = 0;
     scope_ptr_t<Reference, Type *> typeScope_;
+    // Type names whose declaration (or whose import) failed: a use of one is a consequence of
+    // that error and is not reported as an unresolved type of its own. When an import of a
+    // whole module failed, which names it would have brought is unknown, and no unresolved
+    // type is reported at all.
+    std::unordered_set<std::string> poisonedTypes_;
+    bool wholeImportFailed_ = false;
     std::unordered_map<void *, FunctionType *> funcDecls_;
 
     camel::core::context::context_ptr_t context_;
@@ -75,6 +83,48 @@ class Builder {
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
     std::pair<data_ptr_t, bool>
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
+
+    // Type variables and type functions (design principles 2.9; camel/core/type/typevar.h).
+    // `typeas T` binds a variable only among the parameters of a function declaration: the
+    // builder notes that the function type it is about to visit is such a signature
+    // (declSignature_, set from funcDeclPending_), allows binding while it visits the
+    // parameters (typeasAllowed_), and records what was bound (declaredTypeVars_) so the
+    // declaration can be checked. A type function may only appear as the base of
+    // `Name<...>` (typeFunctionBase_).
+    bool funcDeclPending_  = false;
+    bool declSignature_    = false;
+    bool typeasAllowed_    = false;
+    bool inDeclReturnType_ = false;
+    bool typeFunctionBase_ = false;
+    std::vector<std::string> declaredTypeVars_;
+
+    // Where the value of what is being lowered goes, as far as the warning
+    // ExitInUnusedBranch needs it. A `return` / `throw` in a branch arm ends the arm and
+    // gives the value of the `if` / `match` (an arm is a graph of its own); when nothing
+    // takes that value the statement has no effect at all, and the program most likely
+    // meant to leave the function.
+    struct ValueUse {
+        // The `if` / `match` about to be lowered that is a statement whose value nothing
+        // takes (not the last statement of its block, or the last one of a block whose own
+        // value nothing takes).
+        const AST::Node *unusedCtrl = nullptr;
+        // Set for the block about to be lowered: nothing takes its value.
+        bool blockUnused = false;
+        // The unused `if` / `match` whose arm is being lowered: exits written here are its.
+        AST::node_ptr_t unusedArmOf = nullptr;
+    };
+    ValueUse valueUse_;
+    // Restores valueUse_ when a construct with bodies of its own is left, also by an error.
+    struct ValueUseScope {
+        Builder &self;
+        ValueUse saved;
+        explicit ValueUseScope(Builder &b) : self(b), saved(b.valueUse_) {}
+        ~ValueUseScope() { self.valueUse_ = saved; }
+    };
+    std::set<std::pair<size_t, size_t>> reportedExits_;
+    // The next block lowered is an arm of `ctrl`, whose value is unused or not.
+    void enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused);
+    void reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow);
 
     void pushScope() { typeScope_ = std::make_shared<Scope<Reference, Type *>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
@@ -123,6 +173,9 @@ class Builder {
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
+    /// `[...] as Map<K, V>`: an error when two constant keys of the literal are equal.
+    void rejectDuplicateLiteralKeys(
+        const data_ptr_t &data, Type *targetType, const AST::node_ptr_t &ast);
 };
 
 } // namespace camel::compile::gct

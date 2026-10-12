@@ -1,0 +1,20 @@
+/**
+ * Two functions of one name with the same parameter types cannot be told apart by a call: the
+ * second is a redeclaration, reported where it is declared, whatever it returns and whatever
+ * its parameters are called.
+ */
+module same_signature
+
+func f(x: int): string {
+    return 'first'
+}
+
+func f(y: int): int {
+    return y
+}
+
+func main(): int sync {
+    println(f(1))
+    println('never printed')
+    return 0
+}

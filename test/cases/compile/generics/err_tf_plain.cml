@@ -1,0 +1,11 @@
+module err_tf_plain
+
+type Point = (int, int)
+
+func f(p: Point<int>): int {
+    return 1
+}
+
+func main(): int sync {
+    return 0
+}

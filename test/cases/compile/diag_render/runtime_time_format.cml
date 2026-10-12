@@ -1,0 +1,8 @@
+module runtime_time_format
+
+import { strptime } from time
+
+func main(): int sync {
+    println(strptime('not a date', '%Y-%m-%d'))
+    return 0
+}

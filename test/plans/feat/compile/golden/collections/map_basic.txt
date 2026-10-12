@@ -1,0 +1,18 @@
+{a: 1, b: 2}
+1
+-1
+{a: 1, b: 2, c: 3}
+{a: 1, b: 2}
+{a: 10, c: 3}
+true
+3 true false
+[a, b, c]
+[1, 2, 3]
+[(a, 1), (b, 2), (c, 3)]
+3 0
+42 1
+{a: 100, b: 2, z: 26}
+true false true
+{a: 1, b: 2}
+m = {a: 1, b: 2}, 2 entries
+[a!, b!, c!]

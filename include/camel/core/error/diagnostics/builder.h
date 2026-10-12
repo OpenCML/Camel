@@ -22,6 +22,9 @@
 #include "base.h"
 #include "range.h"
 
+#include <string>
+#include <vector>
+
 namespace camel::core::error {
 
 struct Diagnostic;
@@ -45,6 +48,13 @@ class DiagnosticBuilder {
     DiagnosticBuilder &at(antlr4::Token *start, antlr4::Token *end);
     DiagnosticBuilder &at(antlr4::Token *token);
 
+    // Secondary locations and remarks (see DiagLabel). They are taken verbatim: only the
+    // message and the suggestion of the catalog entry are format templates.
+    DiagnosticBuilder &relatedOrigin(camel::source::origin_id_t origin, std::string message);
+    DiagnosticBuilder &relatedSpan(camel::source::span_id_t span, std::string message);
+    DiagnosticBuilder &related(const CharRange &range, std::string message, std::string path = "");
+    DiagnosticBuilder &note(std::string text);
+
     // Message substitution + commit
     template <typename... Args> Diagnostic commit(Args &&...args);
 
@@ -64,6 +74,8 @@ class DiagnosticBuilder {
     std::string suggestion_;
     std::string moduleName_;
     std::string modulePath_;
+    std::vector<DiagLabel> related_;
+    std::vector<std::string> notes_;
 };
 
 } // namespace camel::core::error

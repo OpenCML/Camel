@@ -102,6 +102,8 @@ class MacroEvaluator {
     camel::core::context::FramePool framePool_;
     std::unique_ptr<MacroStaticAreaStore> staticAreas_;
     size_t recursionDepth_ = 0;
+    // Nested calls one evaluation may open (camel/execute/limits.h).
+    size_t maxDepth_;
 
     struct ValueRoot;
     std::vector<std::unique_ptr<ValueRoot>> valueRoots_;

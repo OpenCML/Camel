@@ -1,0 +1,13 @@
+/**
+ * A plain value is not passed where a `T?` is expected: nothing is converted implicitly at a
+ * call. Written `f(5 as int?)` it compiles.
+ */
+module err_argument
+
+func f(x: int?): int { return x ?? 0 }
+
+func main(): int sync {
+    println('never printed')
+    println(f(5))
+    return 0
+}

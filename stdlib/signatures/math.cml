@@ -1,0 +1,350 @@
+/**
+ * Signatures of the `math` module (C++ operators, modules/math).
+ *
+ * Numeric types are not converted implicitly. A function over floats takes `f32` or `float`
+ * and returns the type it was given; a function of several numbers takes numbers of one type.
+ * Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
+ * A constant is a function of no arguments: `pi()`.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+// ---- constants ----
+
+/// The ratio of a circle's circumference to its diameter.
+/// @pure
+/// @example pi()    // 3.14159...
+inner func pi(): float {
+    return 'math:pi'
+}
+
+/// The base of the natural logarithm.
+/// @pure
+/// @example log(e())    // 1
+inner func e(): float {
+    return 'math:e'
+}
+
+/// Positive infinity; negative infinity is -inf().
+/// @pure
+/// @example is_inf(-inf())    // true
+inner func inf(): float {
+    return 'math:inf'
+}
+
+/// A NaN. It equals nothing, itself included: test with is_nan.
+/// @pure
+/// @example is_nan(nan())    // true
+inner func nan(): float {
+    return 'math:nan'
+}
+
+// ---- elementary functions ----
+
+/// The absolute value. The smallest integer has no positive counterpart: its absolute value is
+/// not defined.
+/// @pure
+/// @example abs(-3)    // 3
+inner func abs(x: i32 | int | f32 | float): i32 | int | f32 | float {
+    return 'math:abs_*'
+}
+
+/// The square root. An integer argument is converted: i32 gives f32, int gives float.
+/// @pure
+/// @example sqrt(9.0)    // 3
+inner func sqrt(x: i32 | int | f32 | float): f32 | float {
+    return 'math:sqrt'
+}
+
+/// e raised to the power x.
+/// @pure
+/// @example exp(0.0)    // 1
+inner func exp(x: f32 | float): f32 | float {
+    return 'math:exp_*'
+}
+
+/// exp(x) - 1, accurate for x near 0.
+/// @pure
+/// @example expm1(0.0)    // 0
+inner func expm1(x: f32 | float): f32 | float {
+    return 'math:expm1_*'
+}
+
+/// The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
+/// @pure
+/// @example log(1.0)    // 0
+inner func log(x: f32 | float): f32 | float {
+    return 'math:log_*'
+}
+
+/// The logarithm to base 2.
+/// @pure
+/// @example log2(8.0)    // 3
+inner func log2(x: f32 | float): f32 | float {
+    return 'math:log2_*'
+}
+
+/// The logarithm to base 10.
+/// @pure
+/// @example log10(1000.0)    // 3
+inner func log10(x: f32 | float): f32 | float {
+    return 'math:log10_*'
+}
+
+/// log(1 + x), accurate for x near 0.
+/// @pure
+/// @example log1p(0.0)    // 0
+inner func log1p(x: f32 | float): f32 | float {
+    return 'math:log1p_*'
+}
+
+/// x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
+/// @pure
+/// @example pow(2.0, 10.0)    // 1024
+inner func pow(x: f32 | float, y: f32 | float): f32 | float {
+    return 'math:pow_*'
+}
+
+/// The square root of x*x + y*y, without overflow in the squares.
+/// @pure
+/// @example hypot(3.0, 4.0)    // 5
+inner func hypot(x: f32 | float, y: f32 | float): f32 | float {
+    return 'math:hypot_*'
+}
+
+/// The sine of x, x in radians.
+/// @pure
+/// @example sin(0.0)    // 0
+inner func sin(x: f32 | float): f32 | float {
+    return 'math:sin_*'
+}
+
+/// The cosine of x, x in radians.
+/// @pure
+/// @example cos(0.0)    // 1
+inner func cos(x: f32 | float): f32 | float {
+    return 'math:cos_*'
+}
+
+/// The tangent of x, x in radians.
+/// @pure
+/// @example tan(0.0)    // 0
+inner func tan(x: f32 | float): f32 | float {
+    return 'math:tan_*'
+}
+
+/// The arc sine, in radians; NaN outside -1 to 1.
+/// @pure
+/// @example asin(1.0)    // 1.5708
+inner func asin(x: f32 | float): f32 | float {
+    return 'math:asin_*'
+}
+
+/// The arc cosine, in radians; NaN outside -1 to 1.
+/// @pure
+/// @example acos(1.0)    // 0
+inner func acos(x: f32 | float): f32 | float {
+    return 'math:acos_*'
+}
+
+/// The arc tangent, in radians.
+/// @pure
+/// @example atan(1.0)    // 0.785398
+inner func atan(x: f32 | float): f32 | float {
+    return 'math:atan_*'
+}
+
+/// The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
+/// @pure
+/// @example atan2(1.0, 1.0)    // 0.785398
+inner func atan2(y: f32 | float, x: f32 | float): f32 | float {
+    return 'math:atan2_*'
+}
+
+/// The hyperbolic sine.
+/// @pure
+/// @example sinh(0.0)    // 0
+inner func sinh(x: f32 | float): f32 | float {
+    return 'math:sinh_*'
+}
+
+/// The hyperbolic cosine.
+/// @pure
+/// @example cosh(0.0)    // 1
+inner func cosh(x: f32 | float): f32 | float {
+    return 'math:cosh_*'
+}
+
+/// The hyperbolic tangent.
+/// @pure
+/// @example tanh(0.0)    // 0
+inner func tanh(x: f32 | float): f32 | float {
+    return 'math:tanh_*'
+}
+
+// ---- rounding ----
+
+/// The largest whole number not above x, as a float.
+/// @pure
+/// @example floor(-2.5)    // -3
+inner func floor(x: f32 | float): f32 | float {
+    return 'math:floor_*'
+}
+
+/// The smallest whole number not below x, as a float.
+/// @pure
+/// @example ceil(2.1)    // 3
+inner func ceil(x: f32 | float): f32 | float {
+    return 'math:ceil_*'
+}
+
+/// The nearest whole number, halves away from zero, as a float.
+/// @pure
+/// @example round(2.5)    // 3
+inner func round(x: f32 | float): f32 | float {
+    return 'math:round_*'
+}
+
+/// x without its fraction (rounded toward zero), as a float.
+/// @pure
+/// @example trunc(-2.7)    // -2
+inner func trunc(x: f32 | float): f32 | float {
+    return 'math:trunc_*'
+}
+
+// ---- comparing ----
+
+/// The smaller of two numbers of one type. With a NaN on either side the result is NaN.
+/// @pure
+/// @example min(3, 5)    // 3
+inner func min(a: i32 | int | f32 | float, b: i32 | int | f32 | float): i32 | int | f32 | float {
+    return 'math:min_*'
+}
+
+/// The larger of two numbers of one type. With a NaN on either side the result is NaN.
+/// @pure
+/// @example max(3, 5)    // 5
+inner func max(a: i32 | int | f32 | float, b: i32 | int | f32 | float): i32 | int | f32 | float {
+    return 'math:max_*'
+}
+
+/// x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
+/// @pure
+/// @fails fault `InvalidArgument` when lo is above hi, or a bound is NaN
+/// @example clamp(15, 0, 10)    // 10
+inner func clamp(x: i32 | int | f32 | float, lo: i32 | int | f32 | float, hi: i32 | int | f32 | float): i32 | int | f32 | float {
+    return 'math:clamp_*'
+}
+
+/// -1, 0 or 1 by the sign of x, in the type of x. The sign of a NaN is NaN.
+/// @pure
+/// @example sign(-2.5)    // -1
+inner func sign(x: i32 | int | f32 | float): i32 | int | f32 | float {
+    return 'math:sign_*'
+}
+
+/// Whether x is a NaN.
+/// @pure
+/// @example is_nan(inf() - inf())    // true
+inner func is_nan(x: f32 | float): bool {
+    return 'math:is_nan_*'
+}
+
+/// Whether x is positive or negative infinity.
+/// @pure
+/// @example is_inf(1.0)    // false
+inner func is_inf(x: f32 | float): bool {
+    return 'math:is_inf_*'
+}
+
+// ---- integers ----
+
+/// The greatest common divisor, never negative; gcd(0, 0) is 0.
+/// @pure
+/// @fails fault `InvalidArgument` when the result does not fit the type (the smallest integer with itself or with 0)
+/// @example gcd(12, 18)    // 6
+inner func gcd(a: i32 | int, b: i32 | int): i32 | int {
+    return 'math:gcd_*'
+}
+
+/// The least common multiple, never negative; 0 when either argument is 0.
+/// @pure
+/// @fails fault `InvalidArgument` when the result does not fit the type
+/// @example lcm(4, 6)    // 12
+inner func lcm(a: i32 | int, b: i32 | int): i32 | int {
+    return 'math:lcm_*'
+}
+
+/// The digits of x in base 2 with the prefix 0b; a negative number is shown as its 64-bit
+/// two's complement.
+/// @pure
+/// @example bin(5)    // '0b101'
+inner func bin(x: i32 | int): string {
+    return 'math:bin_*'
+}
+
+/// The digits of x in base 8 with the prefix 0o.
+/// @pure
+/// @example oct(8)    // '0o10'
+inner func oct(x: i32 | int): string {
+    return 'math:oct_*'
+}
+
+/// The digits of x in base 16, in upper case, with the prefix 0x.
+/// @pure
+/// @example hex(255)    // '0xFF'
+inner func hex(x: i32 | int): string {
+    return 'math:hex_*'
+}
+
+// ---- bits ----
+//
+// Bit operations are functions, not operators. Integers are two's complement: `int` has 64
+// bits, `i32` has 32.
+
+/// The bits set in both a and b.
+/// @pure
+/// @example bit_and(12, 10)    // 8
+inner func bit_and(a: i32 | int, b: i32 | int): i32 | int {
+    return 'math:bit_and_*'
+}
+
+/// The bits set in a or in b.
+/// @pure
+/// @example bit_or(12, 10)    // 14
+inner func bit_or(a: i32 | int, b: i32 | int): i32 | int {
+    return 'math:bit_or_*'
+}
+
+/// The bits set in exactly one of a and b.
+/// @pure
+/// @example bit_xor(12, 10)    // 6
+inner func bit_xor(a: i32 | int, b: i32 | int): i32 | int {
+    return 'math:bit_xor_*'
+}
+
+/// Every bit of x inverted; the same as the operator ~.
+/// @pure
+/// @example bit_not(0)    // -1
+inner func bit_not(x: i32 | int): i32 | int {
+    return 'math:bit_not_*'
+}
+
+/// x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+/// change. The count may be of either integer type.
+/// @pure
+/// @fails fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32)
+/// @example shl(1, 4)    // 16
+inner func shl(x: i32 | int, count: i32 | int): i32 | int {
+    return 'math:shl'
+}
+
+/// x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
+/// @pure
+/// @fails fault `InvalidArgument` when count is negative or not below the width of x
+/// @example shr(256, 4)    // 16
+inner func shr(x: i32 | int, count: i32 | int): i32 | int {
+    return 'math:shr'
+}

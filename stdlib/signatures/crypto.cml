@@ -1,0 +1,23 @@
+/**
+ * Signatures of the `crypto` module (C++ operators, modules/crypto).
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+/// The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
+/// @pure
+/// @example sha256('abc')    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+inner func sha256(s: string): string {
+    return 'crypto:sha256'
+}
+
+/// SHA-256 applied rounds times, each round to the hexadecimal text of the one before;
+/// 0 rounds gives s itself.
+/// @pure
+/// @fails fault `InvalidArgument` when rounds is negative
+/// @example sha256_rounds('abc', 1) == sha256('abc')    // true
+inner func sha256_rounds(s: string, rounds: int): string {
+    return 'crypto:sha256_rounds'
+}

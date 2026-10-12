@@ -1,0 +1,22 @@
+/**
+ * String comparison and concatenation.
+ */
+module strings
+
+func cat(a: string, b: string): string { return a + b }
+func lt(a: string, b: string): bool { return a < b }
+func eq(a: string, b: string): bool { return a == b }
+
+func main(): int sync {
+    println(cat('ab', 'cd'))
+    println(cat('', ''))
+    println(len(cat('abc', 'de')))
+    println(eq('abc', cat('ab', 'c')))
+    println(eq('abc', 'abd'))
+    println(lt('abc', 'abd'))
+    println(lt('abc', 'ab'))
+    println(lt('Z', 'a'))
+    println(lt('', 'a'))
+    println(cat(cat('x', string(12)), cat('y', string(-3))))
+    return 0
+}

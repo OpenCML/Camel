@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -181,6 +182,15 @@ void visitGraphsInStaticSlot(
         break;
     }
     default:
+        // A Map or a Set is a container of typed slots too.
+        if (const auto *coll = camel::core::type::asCollectionType(type)) {
+            camel::core::rtdata::table::forEachSlot(
+                fromSlot<camel::core::rtdata::Table *>(slot),
+                coll,
+                [&](slot_t inner, Type *innerType) {
+                    visitGraphsInStaticSlot(context, inner, innerType, visitor, visited);
+                });
+        }
         break;
     }
 }
@@ -289,6 +299,22 @@ slot_t cloneStaticSlot(
         return toSlot<Object *>(clonedStruct);
     }
     default:
+        // A Map or a Set may hold function values, which name graphs: its slots are rewritten
+        // like the elements of an array. It is copied only when a slot changed.
+        if (const auto *coll = camel::core::type::asCollectionType(type)) {
+            namespace rtdata = camel::core::rtdata;
+            Object *cloned   = rtdata::table::withSlots(
+                fromSlot<rtdata::Table *>(slot),
+                coll,
+                mm::autoSpace(),
+                [&](slot_t inner, Type *innerType) {
+                    return shouldTraverseStaticSlotType(innerType)
+                               ? cloneStaticSlot(context, inner, innerType, rewritten, objectCache)
+                               : inner;
+                });
+            objectCache.emplace(object, cloned);
+            return toSlot<Object *>(cloned);
+        }
         // Other objects (strings, tensors, ...) refer to no graph: the rewritten graph shares
         // them. Copying would duplicate every weight a program captures on every rewrite.
         return slot;
@@ -390,14 +416,27 @@ std::vector<GCGraph *> collectDraftDependencyGraphs(const GraphDraft &draft) {
     return dependencies;
 }
 
+/// The type of the draft's static area. A commit asks twice for every graph of the closure
+/// (for the size, then to encode), and most of those graphs are not changed by the rewrite:
+/// when the members are the ones the graph the draft came from already has, that graph's type
+/// is the answer, and nothing is added to the permanent space, which never releases.
 TupleType *draftStaticDataType(const GraphDraft &draft, const GCGraph *fallback) {
-    if (!draft.staticSlotTypes().empty()) {
-        std::vector<camel::core::type::Type *> staticTypes(
-            draft.staticSlotTypes().begin(),
-            draft.staticSlotTypes().end());
-        return TupleType::create(std::move(staticTypes));
+    auto *known          = fallback ? const_cast<TupleType *>(fallback->staticDataType()) : nullptr;
+    const auto slotTypes = draft.staticSlotTypes();
+    if (slotTypes.empty()) {
+        return known;
     }
-    return fallback ? const_cast<TupleType *>(fallback->staticDataType()) : nullptr;
+    if (known && known->size() == slotTypes.size()) {
+        bool same = true;
+        for (size_t i = 0; same && i < slotTypes.size(); ++i) {
+            same = known->typeAt(i) == slotTypes[i];
+        }
+        if (same) {
+            return known;
+        }
+    }
+    std::vector<camel::core::type::Type *> staticTypes(slotTypes.begin(), slotTypes.end());
+    return TupleType::create(std::move(staticTypes));
 }
 
 std::vector<GCGraph *> collectDraftStaticGraphRefs(
@@ -510,30 +549,46 @@ size_t draftGraphBytes(
         staticSlots);
 }
 
+/// The source position a failure to encode the graph `identity` is reported at, which only
+/// the session knows: the definition of the function the graph was compiled from; a graph a
+/// rewrite created (a specialization, a copy) has none and is reported at its first node that
+/// has one.
+uint64_t draftGraphOrigin(
+    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
+    const GraphDraft &draft) {
+    uint64_t origin = 0;
+    if (const auto source = context ? context->sourceContext() : nullptr) {
+        origin = source->debugMap().graphOrigin(identity.stableId);
+    }
+    return origin != 0 ? origin : draft.firstNodeOrigin();
+}
+
 /// draftGraphBytes for the graph `identity`: a draft too large for one runtime graph is
-/// reported with the graph's name and a source position, which only the session knows. The
-/// position is the definition of the function the graph was compiled from; a graph a rewrite
-/// created (a specialization, a copy) has none and is reported at its first node that has one.
+/// reported with the graph's name and a source position.
 size_t namedDraftGraphBytes(
     const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
     const GraphDraft &draft, const GCGraph *fallback) {
     try {
         return draftGraphBytes(context, draft, fallback);
     } catch (const GraphCapacityError &e) {
-        uint64_t origin = 0;
-        if (const auto source = context ? context->sourceContext() : nullptr) {
-            origin = source->debugMap().graphOrigin(identity.stableId);
-        }
-        throw e.inGraph(identity.name, origin != 0 ? origin : draft.firstNodeOrigin());
+        throw e.inGraph(identity.name, draftGraphOrigin(context, identity, draft));
     }
 }
 
-GCGraph *allocateGraph(size_t bytes, const std::string &name) {
-    void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
-    if (!mem) {
-        throw GraphSpaceExhausted(bytes, name);
+/// Room for the runtime graph of the draft `identity`. A graph space at its limit is reported
+/// with the graph's name and source position, like a draft that is too large.
+GCGraph *allocateGraph(
+    const camel::core::context::context_ptr_t &context, const RuntimeDraftIdentity &identity,
+    const GraphDraft &draft, size_t bytes) {
+    try {
+        return reinterpret_cast<GCGraph *>(mm::graphSpace().alloc(bytes, alignof(GCGraph)));
+    } catch (const mm::MemoryExhausted &e) {
+        throw GraphSpaceExhausted(
+            e,
+            bytes,
+            identity.name,
+            draftGraphOrigin(context, identity, draft));
     }
-    return reinterpret_cast<GCGraph *>(mem);
 }
 
 } // namespace
@@ -706,7 +761,7 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     for (GCGraph *graph : closure) {
         const DraftEntry &entry = *drafts_.at(graph);
         const size_t bytes = namedDraftGraphBytes(context_, entry.identity, *entry.draft, graph);
-        rewritten.emplace(graph, allocateGraph(bytes, entry.identity.name));
+        rewritten.emplace(graph, allocateGraph(context_, entry.identity, *entry.draft, bytes));
         allocatedBytes.emplace(graph, bytes);
     }
     for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
@@ -778,7 +833,7 @@ void GraphDraftGroup::encode() {
     for (GCGraph *key : order_) {
         const Member &m = member(key);
         bytes.emplace(key, namedDraftGraphBytes(context_, m.identity, *m.draft, nullptr));
-        rewritten.emplace(key, allocateGraph(bytes.at(key), m.identity.name));
+        rewritten.emplace(key, allocateGraph(context_, m.identity, *m.draft, bytes.at(key)));
     }
     // Graphs outside the group keep their identity.
     for (GCGraph *key : order_) {

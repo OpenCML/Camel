@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 09, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -76,11 +76,17 @@ void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {
         arena.chunkFrames = std::max(minChunkFrames_, chunkBytes_ / arena.frameSize);
         if (arena.chunkFrames == 0)
             arena.chunkFrames = 1;
+        arena.nextChunkFrames = std::min(minChunkFrames_, arena.chunkFrames);
     }
 
-    size_t frameCount = std::max(arena.chunkFrames, minFrameCount);
-    size_t chunkSize  = arena.frameSize * frameCount;
-    std::byte *chunk  = reinterpret_cast<std::byte *>(std::malloc(chunkSize));
+    // A graph starts with a few frames and each further chunk doubles, up to a full chunk.
+    // Every graph the scheduler prepares gets a chunk (warmup), and most are never active in
+    // more than a handful of frames at once: a full chunk for each (1 MB, constructed frame by
+    // frame) made a program of 2000 functions take 2.4 GB and most of its start-up time.
+    size_t frameCount     = std::max(arena.nextChunkFrames, minFrameCount);
+    arena.nextChunkFrames = std::min(arena.chunkFrames, arena.nextChunkFrames * 2);
+    size_t chunkSize      = arena.frameSize * frameCount;
+    std::byte *chunk      = reinterpret_cast<std::byte *>(std::malloc(chunkSize));
     if (chunk == nullptr)
         throw std::bad_alloc{};
 

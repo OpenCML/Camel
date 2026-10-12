@@ -1,0 +1,52 @@
+/**
+ * Type functions: a type declaration with parameters. `Pair<int>` is the right-hand side with
+ * the parameter replaced; it can be combined with `typeas`.
+ */
+module type_func
+
+type Pair<T> = (T, T)
+type Entry<K, V> = { key: K, value: V }
+type Mapper<A, B> = (x: A) => B
+type Grid<T> = T[][]
+type PairList<T> = Pair<T>[]
+
+func swap(p: Pair<typeas T>): Pair<T> {
+    return (p.1, p.0)
+}
+
+func sum_pair(p: Pair<int>): int {
+    return p.0 + p.1
+}
+
+func key_of(e: Entry<typeas K, typeas V>): K {
+    return e.key
+}
+
+func value_of(e: Entry<typeas K, typeas V>): V {
+    return e.value
+}
+
+func apply(f: Mapper<typeas A, typeas B>, x: A): B {
+    return f(x)
+}
+
+func corner(g: Grid<typeas T>): T {
+    return g[0][0]
+}
+
+func firsts(ps: PairList<typeas T>): T {
+    return ps[0].0
+}
+
+func main(): int sync {
+    println(swap((1, 2)))
+    println(swap(('a', 'b')))
+    println(sum_pair((20, 22)))
+    let e = { key: 'k', value: 3.5 }
+    println(key_of(e))
+    println(value_of(e))
+    println(apply((x: int) => x * 2, 21))
+    println(corner([[7, 8], [9]]))
+    println(firsts([('p', 'q')]))
+    return 0
+}

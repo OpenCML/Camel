@@ -1,0 +1,74 @@
+/**
+ * Every compound assignment on every type that has one: `+= -= *= /=` on the four numeric
+ * types, `%=` on the integers, `^=` on the numeric types, `&= |=` on bool. `%=`, `^=`, `&=`
+ * and `|=` used to fail when run ("assignment operator not fully implemented", progen F29).
+ */
+module compound_assign
+
+func main(): int sync {
+    var a = 17
+    a += 5
+    println(a)
+    a -= 2
+    println(a)
+    a *= 3
+    println(a)
+    a /= 7
+    println(a)
+    a %= 5
+    println(a)
+    a ^= 4
+    println(a)
+    var n = -17
+    n %= 5
+    println(n, -17 % 5)
+
+    var x = 1.5
+    x += 0.25
+    println(x)
+    x -= 0.5
+    println(x)
+    x *= 4.0
+    println(x)
+    x /= 2.0
+    println(x)
+    x ^= 2.0
+    println(x)
+
+    var b = true
+    b &= false
+    println(b)
+    b |= true
+    println(b)
+    b &= true
+    println(b)
+    b |= false
+    println(b)
+
+    var i = i32(7)
+    i += i32(3)
+    println(i)
+    i -= i32(1)
+    println(i)
+    i *= i32(2)
+    println(i)
+    i /= i32(4)
+    println(i)
+    i ^= i32(2)
+    println(i)
+    i %= i32(5)
+    println(i)
+
+    var f = f32(1.5)
+    f += f32(0.5)
+    println(f)
+    f -= f32(0.25)
+    println(f)
+    f *= f32(2.0)
+    println(f)
+    f /= f32(0.5)
+    println(f)
+    f ^= f32(2.0)
+    println(f)
+    return 0
+}

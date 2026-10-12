@@ -1,0 +1,14 @@
+/**
+ * A name bound to an operator can be called where it was bound, but a lambda cannot capture
+ * it: it has no single function value. Rejected at the use inside the lambda (it used to be
+ * "Function of type 'void' cannot be called").
+ */
+module capture_operator_name
+
+func main(): int sync {
+    let p = len
+    println(p('abc'))
+    println(['a']->map<(s: string): int => p(s)>)
+    println('never printed')
+    return 0
+}

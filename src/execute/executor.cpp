@@ -18,10 +18,13 @@
  */
 
 #include "camel/execute/executor.h"
+#include "camel/core/context/context.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
+
+#include <mutex>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
@@ -43,7 +46,13 @@ std::string Executor::getNameOfAnOperator(const operator_t &op) {
     return "";
 }
 
+bool ExecutorManager::factoryRegistered(const std::string &protocol) const {
+    std::shared_lock lock(loadedExecutorsMutex);
+    return executorFactories.find(protocol) != executorFactories.end();
+}
+
 void ExecutorManager::registerExecutorFactory(std::string name, executor_factory_t fact) {
+    std::unique_lock lock(loadedExecutorsMutex);
     EXEC_WHEN_DEBUG(
         CAMEL_LOG_DEBUG_S("ExecMgr", "Registering executor factory for protocol: <{}>", name));
     ASSERT(
@@ -73,11 +82,26 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
             return traced(itExec->second->find(uri.substr(pos + 1)));
         }
     }
+    if (!factoryRegistered(protocol)) {
+        // An operator of a module the program has not imported: the globals `exit` and `sleep`
+        // are implemented in the os module. Importing the module registers its executor.
+        static std::mutex importMutex;
+        std::lock_guard importLock(importMutex);
+        if (!factoryRegistered(protocol)) {
+            try {
+                if (!context_ || !context_->importModule(protocol)) {
+                    return std::nullopt;
+                }
+            } catch (const camel::core::error::Diagnostic &) {
+                return std::nullopt; // no such module: the operator stays unknown
+            }
+        }
+    }
+    std::unique_lock lock(loadedExecutorsMutex);
     auto itFact = executorFactories.find(protocol);
     if (itFact == executorFactories.end()) {
         return std::nullopt;
     }
-    std::unique_lock lock(loadedExecutorsMutex);
     auto itExec = loadedExecutors.find(protocol);
     if (itExec == loadedExecutors.end()) {
         CAMEL_LOG_INFO_S("ExecMgr", "Loading executor for protocol <{}>", protocol);

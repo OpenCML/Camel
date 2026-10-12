@@ -1,0 +1,85 @@
+/**
+ * The str module, by byte: length and indices count bytes (design principles 2.9).
+ * The subject is the ordinary argument, the rest are with-arguments
+ * (DESIGN-QUESTION(param-style)).
+ */
+module str_bytes
+
+import { split, trim, trim_start, trim_end, to_upper, to_lower, replace, find, substr, starts_with, ends_with, repeat, bytes, from_bytes } from str
+
+func show(label: string, s: string): void sync {
+    println(label + ' [' + s + '] ' + string(len(s)))
+}
+
+func main(): int sync {
+    // split
+    println('a,b,c'->split<','>)
+    println('a,,c,'->split<','>)
+    println(''->split<','>, len(''->split<','>))
+    println('abc'->split<','>)
+    println('a--b-c'->split<'--'>)
+    println('aaa'->split<'aa'>)
+    println('é,ü'->split<','>)
+    println(' x , y '->trim->split<' , '>)
+
+    // trim: ASCII white space only
+    show('trim', trim('  \t hi there \n\r '))
+    show('trim_start', trim_start('  hi  '))
+    show('trim_end', trim_end('  hi  '))
+    show('trim empty', trim(''))
+    show('trim blank', trim(' \t\n'))
+    show('trim none', trim('hi'))
+    // U+00A0 (no-break space) is not ASCII white space and stays
+    show('trim nbsp', trim('  x  '))
+
+    // case: ASCII letters only, other bytes are kept
+    show('upper', to_upper('hello, World 123'))
+    show('lower', to_lower('HELLO, World 123'))
+    show('upper non-ascii', to_upper('héllo ünï straße'))
+    show('lower non-ascii', to_lower('HÉLLO ÜNÏ'))
+    show('upper empty', to_upper(''))
+
+    // replace: every occurrence, left to right, not overlapping
+    show('replace', 'a-b-c'->replace<'-', '+'>)
+    show('replace none', 'abc'->replace<'x', 'y'>)
+    show('replace longer', 'aXbX'->replace<'X', '<->'>)
+    show('replace remove', 'banana'->replace<'an', ''>)
+    show('replace overlap', 'aaaa'->replace<'aa', 'b'>)
+    show('replace empty subject', ''->replace<'a', 'b'>)
+    show('replace non-ascii', 'héllo'->replace<'é', 'e'>)
+
+    // find: the byte index of the first occurrence, or null
+    println('hello'->find<'l'> ?? -1, 'hello'->find<'lo'> ?? -1, 'hello'->find<'z'> ?? -1)
+    println('hello'->find<''> ?? -1, ''->find<''> ?? -1, ''->find<'a'> ?? -1)
+    println('héllo'->find<'l'> ?? -1, 'hello'->find<'hello!'> ?? -1)
+
+    // substr<start, length>
+    show('substr', 'hello'->substr<1, 3>)
+    show('substr all', 'hello'->substr<0, 5>)
+    show('substr empty at end', 'hello'->substr<5, 0>)
+    show('substr empty', ''->substr<0, 0>)
+    show('substr one byte of é', 'é'->substr<0, 1>->bytes->from_bytes->bytes->len->string)
+
+    // starts_with / ends_with
+    println('hello'->starts_with<'he'>, 'hello'->starts_with<''>, 'hello'->starts_with<'hello!'>, ''->starts_with<''>)
+    println('hello'->ends_with<'lo'>, 'hello'->ends_with<''>, 'hello'->ends_with<'xhello'>, 'hello'->ends_with<'he'>)
+
+    // repeat
+    show('repeat', 'ab'->repeat<3>)
+    show('repeat zero', 'ab'->repeat<0>)
+    show('repeat empty', ''->repeat<5>)
+
+    // bytes / from_bytes
+    println(bytes('hé'), bytes(''), len(bytes('€')))
+    show('from_bytes', from_bytes([104, 105]))
+    show('from_bytes empty', from_bytes(bytes('')))
+    show('round trip', from_bytes(bytes('héllo €')))
+    // a string need not be valid UTF-8, and a zero byte is a byte like any other
+    println(len(from_bytes([255, 0, 104])), bytes(from_bytes([255, 0, 104])))
+
+    // indexing: the byte at the index, as a string of one byte (DESIGN-QUESTION(string-index))
+    let s = 'hello'
+    println(s[0], s[4], len(s[1]))
+    println(bytes('é'[0]), bytes('é'[1]))
+    return 0
+}

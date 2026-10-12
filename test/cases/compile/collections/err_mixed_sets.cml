@@ -1,0 +1,11 @@
+module main
+
+// The set operations take two sets of one type.
+
+func main(): int sync {
+    let a = [1, 2] as Set<int>
+    let b = ["x"] as Set<string>
+    println(union(a, b))
+    println("never printed")
+    return 0
+}

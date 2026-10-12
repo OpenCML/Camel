@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <format>
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
@@ -100,7 +101,10 @@ static Array *sampleArray(const Array *arr, int32_t n) {
 slot_t __rand_choice__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
     if (arr->size() == 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<choice> array is empty");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "random.choice",
+            "the array is empty, so there is nothing to choose");
     }
     size_t idx = std::uniform_int_distribution<size_t>(0, arr->size() - 1)(g_rng);
     return arr->get<slot_t>(idx);
@@ -110,7 +114,14 @@ slot_t __rand_sample__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
     Int64 n    = norm.get<Int64>(1);
     if (n < 0 || (size_t)n > arr->size()) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<sample> size out of range");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "random.sample",
+            std::format(
+                "the sample size is {} and the array has {} elements; the size must be between 0 "
+                "and the number of elements",
+                n,
+                arr->size()));
     }
     return toSlot(sampleArray(arr, static_cast<int32_t>(n)));
 }

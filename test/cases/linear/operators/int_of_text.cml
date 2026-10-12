@@ -1,0 +1,12 @@
+/**
+ * `int` of a string that is not a number is a located fault when it runs.
+ */
+module int_of_text
+
+func main(): int sync {
+    println(int('12'))
+    let s = 'abc'
+    println(int(s))
+    println('not reached')
+    return 0
+}

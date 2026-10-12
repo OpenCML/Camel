@@ -1,0 +1,30 @@
+/**
+ * IEEE comparisons: NaN equals nothing, itself included, and is unordered; the two zeros are
+ * equal.
+ */
+module float_compare
+
+func mul(a: float, b: float): float { return a * b }
+func sub(a: float, b: float): float { return a - b }
+func eq(a: float, b: float): bool { return a == b }
+func ne(a: float, b: float): bool { return a != b }
+func lt(a: float, b: float): bool { return a < b }
+func le(a: float, b: float): bool { return a <= b }
+func gt(a: float, b: float): bool { return a > b }
+func ge(a: float, b: float): bool { return a >= b }
+
+func main(): int sync {
+    let inf = mul(1.0e308, 10.0)
+    let nan = sub(inf, inf)
+    let nzero = mul(-1.0, 0.0)
+    println(eq(nan, nan), ne(nan, nan))
+    println(lt(nan, 1.0), le(nan, 1.0), gt(nan, 1.0), ge(nan, 1.0))
+    println(eq(nan, 1.0), ne(nan, 1.0))
+    println(eq(nzero, 0.0), ne(nzero, 0.0), lt(nzero, 0.0))
+    println(eq(inf, inf), gt(inf, 1.0e308), lt(0.0 - inf, inf))
+    println(eq(0.5, 0.5), ne(0.5, 0.25), le(0.5, 0.5), ge(0.25, 0.5))
+    println(nan == nan, nan != nan, nzero == 0.0)
+    println(if nan == nan then 'equal' else 'not equal')
+    println([1.0, nan, 3.0]->filter<(x: float): bool => x == x>)
+    return 0
+}

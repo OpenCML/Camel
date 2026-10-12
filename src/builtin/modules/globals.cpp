@@ -20,11 +20,15 @@
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/derivative.h"
+#include "builtin/operators/collection.h"
+#include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/resolver.h"
 
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
+
+#include <algorithm>
 
 using namespace std;
 using namespace camel::core::context;
@@ -245,6 +249,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             }),
 
         // ======= Assignment operators =======
+        // `=` takes any type. A compound assignment takes exactly the types listed for it: a
+        // combination without an implementation is rejected when the program is compiled.
         OperatorGroup::create(
             "__assn__",
             {
@@ -343,20 +349,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), true}, {Type::String(), false}},
                         Type::String()),
                 },
-                {
-                    ":op/assn_add",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__assn_sub__",
@@ -388,20 +380,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
-                },
-                {
-                    ":op/assn_sub",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
                 },
             }),
         OperatorGroup::create(
@@ -435,20 +413,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
-                {
-                    ":op/assn_mul",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__assn_div__",
@@ -481,20 +445,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Float64(), true}, {Type::Float64(), false}},
                         Type::Float64()),
                 },
-                {
-                    ":op/assn_div",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
         OperatorGroup::create(
             "__assn_mod__",
@@ -513,55 +463,39 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::Int64(), true}, {Type::Int64(), false}},
                         Type::Int64()),
                 },
-                {
-                    ":op/assn_mod",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
             }),
-        OperatorGroup::create(
-            "__assn_mat__",
-            {
-                {
-                    ":op/assn_mat",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
-                },
-            }),
+        // No built-in type has `@`; a module that has it (tensor) provides `@=` or it is rejected.
+        OperatorGroup::create("__assn_mat__", {}),
         OperatorGroup::create(
             "__assn_pow__",
             {
                 {
-                    ":op/assn_pow",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            // The target keeps its declared type; the value only has to fit it.
-                            if (!norm[0]->assignableFrom(norm[1])) {
-                                return nullopt;
-                            }
-                            return norm[0];
-                        }),
+                    ":op/assn_pow_i",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int32(), true}, {Type::Int32(), false}},
+                        Type::Int32()),
+                },
+                {
+                    ":op/assn_pow_l",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Int64(), true}, {Type::Int64(), false}},
+                        Type::Int64()),
+                },
+                {
+                    ":op/assn_pow_f",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float32(), true}, {Type::Float32(), false}},
+                        Type::Float32()),
+                },
+                {
+                    ":op/assn_pow_d",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{Type::Float64(), true}, {Type::Float64(), false}},
+                        Type::Float64()),
                 },
             }),
         OperatorGroup::create(
@@ -1139,14 +1073,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/neg_d",
                     StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64()),
                 },
-                {
-                    ":op/neg",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(self: typeas T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> { return norm[0]; }),
-                },
             }),
         OperatorGroup::create(
             "__inv__",
@@ -1158,14 +1084,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/inv_l",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64()),
-                },
-                {
-                    ":op/inv",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(self: typeas T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> { return norm[0]; }),
                 },
             }),
         // ======= IO (built-in input/print/println) ======
@@ -1470,13 +1388,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "contains",
             {
                 {
-                    ":struct/contains_str",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::String(), false}, {Type::String(), false}},
-                        Type::Bool()),
-                },
-                {
                     ":struct/contains_arr",
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
@@ -1660,7 +1571,29 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     registerBuiltinOperatorTraits();
     registerBuiltinDerivatives();
+    // The operators over Map and Set (design principles 2.9). Those named like a group of
+    // this module (`len`, `contains`, `__idx__`, `__eq__`, `__neq__`) are further overloads
+    // of it: one group is exported per name, the existing overloads first.
+    std::vector<oper_group_ptr_t> collectionGroups = getCollectionOperatorGroups();
     for (const auto &group : getGlobalOperatorGroups()) {
+        const auto extra = std::find_if(
+            collectionGroups.begin(),
+            collectionGroups.end(),
+            [&](const oper_group_ptr_t &other) { return other->name() == group->name(); });
+        if (extra == collectionGroups.end()) {
+            exportEntity(group->name(), group);
+            continue;
+        }
+        auto resolvers = group->resolvers();
+        resolvers.insert(resolvers.end(), (*extra)->resolvers().begin(), (*extra)->resolvers().end());
+        exportEntity(group->name(), OperatorGroup::create(group->name(), resolvers));
+        collectionGroups.erase(extra);
+    }
+    for (const auto &group : collectionGroups) {
+        exportEntity(group->name(), group);
+    }
+    // The operators over T? and T! (design principles 2.9).
+    for (const auto &group : getTaggedOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }

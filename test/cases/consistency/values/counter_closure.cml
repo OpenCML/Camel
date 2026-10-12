@@ -1,0 +1,24 @@
+/**
+ * A function that returns closures over its own var: each call makes a new variable, and the
+ * closures of one call share it.
+ */
+module counter_closure
+
+func counter(start: int): () => int sync {
+    var n = start
+    return sync (): int => sync {
+        n = n + 1
+        return n
+    }
+}
+
+func main(): int sync {
+    let a = counter(0)
+    let b = counter(100)
+    println(a())
+    println(a())
+    println(b())
+    println(a())
+    println(b())
+    return 0
+}

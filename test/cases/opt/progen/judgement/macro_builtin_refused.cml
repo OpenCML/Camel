@@ -1,0 +1,17 @@
+/**
+ * progen question J1. `total` is a pure function declared `macro`. Without std::macro the
+ * program prints 6. With std::macro (`camel macro_builtin_refused.cml std::macro`) it is
+ * rejected before anything runs: RuntimeDiag::MacroEvaluationFailed at the call, "Operator
+ * ':mark/reduce_arr' is unavailable in macro execution" (the same for map and filter).
+ * See README.md, "For the owner to decide", J1.
+ */
+module macro_builtin_refused
+
+macro func total(n: int): int {
+    return range(0, n)->reduce<(acc: int, x: int): int => acc + x, 0>
+}
+
+func main(): int sync {
+    println(total(4))
+    return 0
+}

@@ -1,0 +1,27 @@
+/**
+ * progen finding F21 ((other) crash after a rewrite). Segmentation fault after `std::inline`: a
+ *   lambda that captures a parameter is passed to a function that does not call it.
+ * Pipeline: std::inline std::nvm
+ * Expected output: (nothing)
+ * Actual: CRASH
+ * Reduced by test/tools/progen from seed 1192 (generator version 1, all features).
+ */
+module inline_crash_capturing_lambda
+
+func f1(a2: (a0: string) => float, a3: float, a4: bool): string {
+    return ([false]->map<(p7: bool): int => 1>)->reduce<(p5: string, p6: int): string => '', match a4 {
+        case true => 'pq'
+        case false => ''
+    }>;
+}
+
+func r8(a9: int, a10: string): string {
+    return if (0 <= 0) then f1((p11: string): float => {
+        return [a10, 'ab', 'cd']->reduce<(p13: float, p14: string): float => 1.0, 1.0>;
+    }, 3.0, true) else r8(0, '');
+}
+
+func main(): int sync {
+    let n53 = '' + r8(8, 'x');
+    return 0;
+}

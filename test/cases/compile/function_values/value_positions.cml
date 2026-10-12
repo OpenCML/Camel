@@ -1,0 +1,84 @@
+/**
+ * A function is usable wherever a value is: one line per position, each with a function
+ * declared at module level (inc, dec), a nested function that captures a local (g, h) and a
+ * lambda (lam). The name of a function used to be a value only as an argument, as the
+ * initializer of a let and after return: in an array, tuple or struct literal it was an
+ * unresolved reference, and as the value of a branch or match arm the branch had type void.
+ */
+module value_positions
+
+func inc(x: int): int { return x + 1 }
+func dec(x: int): int { return x - 1 }
+
+func apply(f: (x: int) => int, x: int): int { return f(x) }
+
+with <f: (x: int) => int>
+func withf(x: int): int { return f(x) }
+
+func pick(): (x: int) => int { return inc }
+func choose(c: bool): (x: int) => int { return if c then inc else dec }
+
+func main(): int sync {
+    let b = 10
+    let c = b > 5
+    let s = 'a'
+    func g(a: int): int { return a + b }
+    func h(a: int): int { return a - b }
+    let lam = (x: int) => x * 2
+
+    // argument
+    println('arg', apply(inc, 1), apply(g, 1), apply(lam, 1))
+    // returned
+    func pick_g(): (x: int) => int { return g }
+    println('return', pick()(1), choose(c)(1), choose(!c)(1), pick_g()(1))
+    // bound with let
+    let k1 = inc
+    let k2 = g
+    println('let', k1(1), k2(1))
+    // element of an array literal
+    let fs = [inc, dec]
+    let gs = [g, h]
+    println('array', fs[0](1), fs[1](1), gs[0](1), gs[1](1), [inc, lam][1](4))
+    println('array map', [inc, dec]->map<(f: (x: int) => int) => f(10)>)
+    // element of a tuple literal
+    let t = (inc, g, 3)
+    println('tuple', t.0(1), t.1(1))
+    // field of a struct literal
+    let st = { f: inc, k: g, l: lam }
+    println('struct', st.f(1), st.k(1), st.l(1))
+    // nested literals
+    let ps = [(inc, 1), (g, 2)]
+    let nested = { fs: [inc, dec], t: (lam, h) }
+    println('nested', ps[0].0(ps[0].1), ps[1].0(ps[1].1), nested.fs[1](5), nested.t.1(5))
+    // value of a branch arm
+    let a1 = if c then inc else dec
+    let a2 = if c then g else h
+    let a3 = if c then inc else lam
+    let a4 = if c then sync { println('arm block'); inc } else dec
+    println('if arm', a1(1), a2(1), a3(7), a4(1), (if c then inc else dec)(5))
+    println('if arm as argument', apply(if c then inc else dec, 1), [1, 2]->map<if c then g else h>)
+    // value of a match arm
+    let m1 = match s { case 'a' => inc  case _ => dec }
+    let m2 = match s { case 'b' => g  case _ => h }
+    println('match arm', m1(1), m2(1))
+    // captured by a lambda
+    let l1 = (x: int) => inc(x) + g(x)
+    let l2 = (x: int) => k1(x)
+    let l3 = (x: int) => apply(inc, x) + apply(g, x)
+    println('capture', l1(1), l2(1), l3(1))
+    // with argument
+    let w1 = withf<inc>(1)
+    let w2 = withf<g>(1)
+    let w3 = withf<lam>(1)
+    println('with', w1, w2, w3, [1, 2]->map<inc>, [1, 2]->map<g>)
+    // stored in a var, replaced, read back and called
+    var v = inc
+    println('var', v(1))
+    v = dec
+    println('var', v(1))
+    v = g
+    println('var', v(1))
+    v = lam
+    println('var', v(1))
+    return 0
+}

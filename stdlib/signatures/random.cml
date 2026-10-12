@@ -1,0 +1,62 @@
+/**
+ * Signatures of the `random` module (C++ operators, modules/random).
+ *
+ * One generator for the whole process. Every function reads or advances it and is declared with
+ * effects; none is ever folded or merged by a pass.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+/// Sets the state of the generator: the same seed gives the same sequence.
+/// @effect sets the generator
+/// @example seed(42)
+inner func seed(value: int): void {
+    return 'rand:seed'
+}
+
+/// A float drawn uniformly from 0 (included) to 1 (excluded).
+/// @effect advances the generator
+/// @example rand()    // 0.374540
+inner func rand(): float {
+    return 'rand:rand'
+}
+
+/// A float drawn from the normal distribution with mean 0 and deviation 1.
+/// @effect advances the generator
+/// @example randn()    // -0.138264
+inner func randn(): float {
+    return 'rand:randn'
+}
+
+/// An integer drawn uniformly from low to high, both included; the two are swapped when low is
+/// above high.
+/// @effect advances the generator
+/// @example randint(1, 6)    // 4
+inner func randint(low: int, high: int): int {
+    return 'rand:randint'
+}
+
+/// One element of xs, drawn uniformly.
+/// @effect advances the generator
+/// @fails fault `InvalidArgument` when xs is empty
+/// @example choice(['a', 'b', 'c'])    // 'b'
+inner func choice(xs: T[]): T {
+    return 'rand:choice'
+}
+
+/// n elements of xs drawn without replacement, as a new array.
+/// @effect advances the generator
+/// @fails fault `InvalidArgument` when n is negative or above the number of elements
+/// @example sample([1, 2, 3, 4], 2)    // [3, 1]
+inner func sample(xs: T[], n: int): T[] {
+    return 'rand:sample'
+}
+
+/// The elements of xs in a random order, as a new array; xs is not changed.
+/// @effect advances the generator
+/// @example shuffle([1, 2, 3])    // [2, 3, 1]
+inner func shuffle(xs: T[]): T[] {
+    return 'rand:shuffle'
+}

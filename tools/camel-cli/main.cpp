@@ -14,7 +14,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: May. 03, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,11 +24,13 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
+#include "camel/core/module/introspect.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/snapshot.h"
+#include "camel/execute/pass/warnings.h"
 #include "camel/init.h"
 #include "camel/parse/antlr/OpenCMLLexer.h"
 #include "camel/parse/antlr/OpenCMLParser.h"
@@ -119,14 +121,11 @@ void passDumpHandler(const char *passName, size_t, camel::runtime::GCGraph *grap
 int main(int argc, char *argv[]) {
     camel::ScopedRuntime camelRuntime;
     if (!parseArgs(argc, argv))
-        return 0;
+        return exitCode;
 
     ostream &os = cout;
 
-    string errorFormat = Run::errorFormat;
-    if (selectedCommand == Command::Check) {
-        errorFormat = Check::outputFormat;
-    }
+    const string errorFormat = Diag::format;
 
     std::unique_ptr<istream> input;
 
@@ -144,14 +143,23 @@ int main(int argc, char *argv[]) {
         input = std::move(file);
         CAMEL_LOG_INFO_S("Main", "Reading from file '{}'.", targetFile);
     }
+    // Compile errors are collected up to --max-errors, so one run reports all it can find. A
+    // limit of N lets N errors through: the container gives up when one more than its limit
+    // has been stored, hence N - 1.
+    const DiagsConfig compileDiagsConfig =
+        Diag::maxErrors > 0
+            ? DiagsConfig{
+                  .total_limit         = -1,
+                  .per_severity_limits = {{Severity::Error, Diag::maxErrors - 1}},
+              }
+            : DiagsConfig{.total_limit = -1};
+    // A run-time fault ends the run: the first one stored is the last.
+    const DiagsConfig runtimeDiagsConfig{
+        .total_limit         = -1,
+        .per_severity_limits = {{Severity::Error, 0}},
+    };
     diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
-    if (selectedCommand == Command::Run || selectedCommand == Command::Inspect) {
-        diagnostics->setConfig(
-            DiagsConfig{
-                .total_limit         = -1,
-                .per_severity_limits = {{Severity::Error, 0}},
-            });
-    }
+    diagnostics->setConfig(compileDiagsConfig);
 
     bool useJsonFormat = (errorFormat == "json");
 
@@ -199,18 +207,52 @@ int main(int argc, char *argv[]) {
             .entryFile   = targetFile,
             .searchPaths = std::move(searchPaths),
             .maxThreads  = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
+            .maxRecursionDepth = Run::maxRecursionDepth,
+            .maxMacroDepth     = Run::maxMacroDepth,
         },
-        DiagsConfig{
-            .total_limit         = -1,
-            .per_severity_limits = {{Severity::Error, 0}},
-        });
+        compileDiagsConfig);
+    ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig);
 
     parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
     auto mainModule     = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
     ctx->setMainModule(mainModule);
 
+    // Printed after the compile diagnostics in the text formats meant for a person: how many
+    // there were, and whether the compiler stopped at the limit.
+    auto compileSummary = [&](bool limitReached) {
+        if (useJsonFormat || diagnosticFormat() != DiagFormat::Rich) {
+            return;
+        }
+        size_t errors = 0, warnings = 0;
+        for (const auto &mod : ctx->allUserModules()) {
+            auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+            if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+                errors += ud->diagnostics()->count(Severity::Error);
+                warnings += ud->diagnostics()->count(Severity::Warn);
+            }
+        }
+        if (errors == 0) {
+            return;
+        }
+        os << "\ncamel: " << errors << (errors == 1 ? " error" : " errors");
+        if (warnings > 0) {
+            os << ", " << warnings << (warnings == 1 ? " warning" : " warnings");
+        }
+        if (limitReached) {
+            os << "; stopped at the limit of " << Diag::maxErrors
+               << " errors (--max-errors <n> raises it, 0 removes it)";
+        }
+        os << endl;
+    };
+
     try {
-        parser->parse(*input);
+        if (!parser->parse(*input)) {
+            // Syntax errors: nothing after the parser can run, and compiling the module would
+            // only read and parse the file a second time.
+            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+            compileSummary(false);
+            return selectedCommand == Command::Check ? 0 : 1;
+        }
         CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", targetFile);
 
         if (selectedCommand == Command::Inspect) {
@@ -235,7 +277,7 @@ int main(int argc, char *argv[]) {
                     os << generator.generate(ast);
                 }
             }
-            if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
+            if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -246,7 +288,7 @@ int main(int argc, char *argv[]) {
             if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
                 mainModule->compile(CompileStage::GCT);
             }
-            if (Inspect::dumpGIR || Inspect::dumpTNS) {
+            if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps) {
                 mainModule->compile(CompileStage::Done);
             }
         } else {
@@ -267,11 +309,23 @@ int main(int argc, char *argv[]) {
                 TopoNodeSeqDumpPass pass(ctx);
                 (void)pass.apply(entry, os);
             }
+            if (Inspect::dumpOps) {
+                // An import that names nothing the program uses is loaded here, so that the
+                // listing does not depend on what the program happens to call.
+                auto modules = ctx->importedModules();
+                for (const auto &module : modules) {
+                    if (!module->loaded()) {
+                        module->load();
+                    }
+                }
+                camel::core::module::dumpOperators(modules, os);
+            }
             return 0;
         }
 
         if (!mainModule->loaded()) {
             ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+            compileSummary(false);
             return selectedCommand == Command::Check ? 0 : 1;
         }
         // The program compiled. Its warnings go to stderr, before anything runs and whatever
@@ -281,10 +335,20 @@ int main(int argc, char *argv[]) {
         std::vector<Diagnostic> commandLineWarnings;
         if (selectedCommand == Command::Run) {
             if (auto neverRun = passesNeverRunWarning(Run::resolvedPassList, ctx)) {
-                commandLineWarnings.push_back(std::move(*neverRun));
+                // Not added to a container, so the warning policy is applied here.
+                if (applyWarningPolicy(*neverRun)) {
+                    commandLineWarnings.push_back(std::move(*neverRun));
+                }
             }
         }
         ctx->dumpModuleWarnings(std::cerr, useJsonFormat, commandLineWarnings);
+        for (const Diagnostic &warning : commandLineWarnings) {
+            if (warning.severity == Severity::Error) {
+                // -Werror made a command-line warning an error: it was reported above with
+                // the warnings, and the program is not run.
+                return 1;
+            }
+        }
 
         CAMEL_LOG_INFO_S(
             "Main",
@@ -344,6 +408,38 @@ int main(int argc, char *argv[]) {
                         writePassDump(passDump, "input", graph);
                         setPassSnapshotHandler(&passDumpHandler, &passDump);
                     }
+                    // A pass's warnings about the program go where the compiler's go: to
+                    // stderr, in the format of the diagnostics, when the pass has run.
+                    static bool passWarningsAsJson = false;
+                    passWarningsAsJson             = useJsonFormat;
+                    setPassWarningHandler(
+                        [](const char *, const std::vector<Diagnostic> &raised, void *) {
+                            std::vector<const Diagnostic *> warnings;
+                            for (const Diagnostic &warning : raised) {
+                                if (admitShownWarning()) {
+                                    warnings.push_back(&warning);
+                                }
+                            }
+                            if (warnings.empty()) {
+                                return;
+                            }
+                            const bool rich = diagnosticFormat() == DiagFormat::Rich;
+                            if (passWarningsAsJson) {
+                                std::cerr << "[\n";
+                            }
+                            for (size_t i = 0; i < warnings.size(); ++i) {
+                                const bool last = i + 1 == warnings.size();
+                                std::cerr << (passWarningsAsJson ? warnings[i]->toJson()
+                                                                 : warnings[i]->toText(std::cerr))
+                                          << (passWarningsAsJson ? (last ? "\n" : ",\n")
+                                                                 : (rich ? "\n\n" : "\n"));
+                            }
+                            if (passWarningsAsJson) {
+                                std::cerr << "]\n";
+                            }
+                            std::cerr << std::flush;
+                        },
+                        nullptr);
                     auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
                     graph       = result.graph;
                     if (result.failed()) {
@@ -387,6 +483,12 @@ int main(int argc, char *argv[]) {
 
             memperf::report(os);
 
+            if (!useJsonFormat && warningsNotShown() > 0) {
+                std::cerr << "camel: " << warningsNotShown()
+                          << " more warning(s) not shown (--max-warning " << Diag::maxWarnings
+                          << ")" << std::endl;
+            }
+
             EXEC_WHEN_DEBUG({
                 if (Run::profile) {
                     profiler::stop_advanced_tracing();
@@ -398,12 +500,31 @@ int main(int argc, char *argv[]) {
         }
     } catch (DiagnosticsLimitExceededBaseException &e) {
         ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+        compileSummary(true);
         return selectedCommand == Command::Check ? 0 : 1;
     } catch (Diagnostic &d) {
         RangeConverter conv(parser->getTokens());
         d.fetchRange(conv);
-        os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;
+        os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText(os)) << endl;
         return selectedCommand == Command::Check ? 0 : 1;
+    } catch (const mm::MemoryExhausted &e) {
+        // A memory space reached its limit outside any pass (while the program was compiled
+        // into graphs). The pass driver and the graph builder report theirs; this is the rest.
+        // It is a limit the program ran into, told as a diagnostic with the space, the usage,
+        // the limit and the setting that raises it.
+        setPipelineStage("compile");
+        try {
+            auto diag = ctx->runtimeDiagSink()->of(RuntimeDiag::MemoryExhausted);
+            if (e.origin() != camel::source::kInvalidOriginId) {
+                diag.atOrigin(e.origin());
+            }
+            diag.commit(std::string(), std::string(e.what()));
+        } catch (const DiagnosticsLimitExceededBaseException &) {
+            // The sink stops at its first error; the diagnostic is recorded and dumped below.
+        }
+        setPipelineStage("");
+        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
+        return 1;
     } catch (exception &e) {
         // An exception that is not a diagnostic and was not raised inside a pass (the pass
         // driver reports those itself). JSON output stays a diagnostics array.
