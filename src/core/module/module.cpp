@@ -289,6 +289,31 @@ bool Module::importAllRefsFromImportedNamespace(const Reference &localPrefix) {
     return importedAny;
 }
 
+void Module::noteNamedImport(
+    const Reference &ref, const module_ptr_t &mod, camel::source::origin_id_t origin,
+    size_t tokenStart, size_t tokenEnd) {
+    namedImports_.emplace_back(ref, NamedImport{mod, origin, tokenStart, tokenEnd});
+}
+
+std::vector<std::pair<Reference, std::vector<Module::NamedImport>>>
+Module::namesImportedMoreThanOnce() const {
+    std::vector<std::pair<Reference, std::vector<NamedImport>>> result;
+    for (const auto &[ref, site] : namedImports_) {
+        auto it = std::find_if(result.begin(), result.end(), [&](const auto &entry) {
+            return entry.first == ref;
+        });
+        if (it == result.end()) {
+            result.emplace_back(ref, std::vector<NamedImport>{site});
+        } else if (std::none_of(it->second.begin(), it->second.end(), [&](const auto &have) {
+                       return have.mod == site.mod;
+                   })) {
+            it->second.push_back(site);
+        }
+    }
+    std::erase_if(result, [](const auto &entry) { return entry.second.size() < 2; });
+    return result;
+}
+
 bool Module::hasImportedRef(const Reference &ref) const {
     return !importedBindingsForRef(ref).empty();
 }

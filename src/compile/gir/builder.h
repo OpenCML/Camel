@@ -281,6 +281,8 @@ class Builder {
     // Set while an instance of a generic function imported from another module is built: the
     // name of that function. Such a body cannot capture a module-level value of its module.
     std::string foreignInstanceOf_;
+    // Where each function imported from another module was last named in this module.
+    std::unordered_map<const void *, camel::source::origin_id_t> importedUseOrigins_;
     std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
 
     // A type read from the GCT, with the type variables of the current instance replaced.
@@ -370,6 +372,11 @@ class Builder {
     std::unordered_set<FunctionType *> redeclaredFuncTypes_;
     void leaveScope();
 
+    // Reports a name imported from two modules with the same signature (ImportNameConflict).
+    void reportImportNameConflicts();
+    // Refuses the use of a function of another module that captures values of the top level
+    // of its own module (ImportedFunctionUsesModuleValue).
+    void rejectImportedFunctionWithCaptures(const compile_graph_ptr_t &graph);
     node_handle_t createFuncDataNode(
         const compile_graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as

@@ -961,9 +961,9 @@ kind = "negative"
 case = "../../../cases/compile/generics/err_export_capture.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::GenericFunctionUnsupported"
+expect_diagnostic_name = "SemanticDiag::ImportedFunctionUsesModuleValue"
 expect_diagnostic_line = 36
-expect_output_contains = ["export_lib.cml:36:1", "The generic function 'biased' cannot be instantiated in another module while its body uses 'bias'"]
+expect_output_contains = ["export_lib.cml:36:1", "The function 'biased' is used from another module, but it uses 'bias' of the top level of its own module"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

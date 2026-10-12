@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-118 diagnostics: 107 errors, 11 warnings.
+120 diagnostics: 109 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -75,6 +75,8 @@ prints one entry.
 | `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
 | `0x03000024` | [SemanticDiag::IfArmValueWithoutElse](#ifarmvaluewithoutelse) | Error |
 | `0x03000025` | [SemanticDiag::ImportCycle](#importcycle) | Error |
+| `0x03000026` | [SemanticDiag::ImportedFunctionUsesModuleValue](#importedfunctionusesmodulevalue) | Error |
+| `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error |
@@ -1507,12 +1509,72 @@ The module '{0}' is imported while it is itself being loaded ({1}).
 A module cannot import itself, directly or through the modules it imports. A file that imports a module of its own name imports itself. Move what the modules share into another module.
 ```
 
-**Example** (`test/cases/compile/surface/self_import.cml`, run as `camel -E short test/cases/compile/surface/self_import.cml`)
+**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
 
 ```camel
-import self_import
+import { even } from cyc_a
 
 func main(): int sync {
+    println(even(10))
+    return 0
+}
+```
+
+### ImportedFunctionUsesModuleValue
+
+`0x03000026` · Error · `SemanticDiag::ImportedFunctionUsesModuleValue`
+
+**Message**
+
+```text
+The function '{0}' is used from another module, but it uses '{1}' of the top level of its own module, directly or through a function it calls.
+```
+
+**Help**
+
+```text
+A function used from another module cannot yet read a 'let' or a 'var' of the top level of the module that declares it: the name would be looked up in the importing module. Pass the value as a parameter or a 'with' parameter, or write it as a function without parameters ('func base(): int { return 10 }').
+```
+
+**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
+
+```camel
+module err_export_capture
+
+import { biased } from export_lib
+
+func main(): int sync {
+    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
+    // cannot capture a top-level value of the module that declares it.
+    println(biased(1))
+    return 0
+}
+```
+
+### ImportNameConflict
+
+`0x03000027` · Error · `SemanticDiag::ImportNameConflict`
+
+**Message**
+
+```text
+The name '{0}' is imported from the modules '{1}' and '{2}' with the same signature {3}.
+```
+
+**Help**
+
+```text
+Two imports that bring the same name with the same parameter types conflict; neither is chosen silently. Import the name from one of the modules only, and reach the other through its module ('import m' and then 'm::name').
+```
+
+**Example** (`test/cases/compile/module_imports/d5_conflict.cml`, run as `camel -E short test/cases/compile/module_imports/d5_conflict.cml`)
+
+```camel
+import { f } from conf_b
+import { f } from conf_c
+
+func main(): int sync {
+    println(f(1))
     return 0
 }
 ```
@@ -1785,17 +1847,22 @@ The generic function '{0}' cannot be {1}.
 This use of a generic function is not supported.
 ```
 
-**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
+**Example** (`test/cases/compile/generics/err_decorated.cml`, run as `camel test/cases/compile/generics/err_decorated.cml`)
 
 ```camel
-module err_export_capture
+module err_decorated
 
-import { biased } from export_lib
+func deco(f: (x: int) => int): (x: int) => int {
+    return f
+}
+
+@deco
+func id(x: typeas T): T {
+    return x
+}
 
 func main(): int sync {
-    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
-    // cannot capture a top-level value of the module that declares it.
-    println(biased(1))
+    println(id(1))
     return 0
 }
 ```
@@ -2076,12 +2143,13 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-**Example** (`test/cases/compile/surface/self_import.cml`, run as `camel -E short test/cases/compile/surface/self_import.cml`)
+**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
 
 ```camel
-import self_import
+import { even } from cyc_a
 
 func main(): int sync {
+    println(even(10))
     return 0
 }
 ```

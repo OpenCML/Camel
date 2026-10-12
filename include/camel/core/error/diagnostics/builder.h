@@ -53,6 +53,7 @@ class DiagnosticBuilder {
     DiagnosticBuilder &relatedOrigin(camel::source::origin_id_t origin, std::string message);
     DiagnosticBuilder &relatedSpan(camel::source::span_id_t span, std::string message);
     DiagnosticBuilder &related(const CharRange &range, std::string message, std::string path = "");
+    DiagnosticBuilder &related(const TokenRange &range, std::string message);
     DiagnosticBuilder &note(std::string text);
 
     // Message substitution + commit

@@ -729,6 +729,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     genericCalleeAllowed_ = false;
     recorder_             = context_ ? context_->semanticRecorder() : nullptr;
     declOrigins_.clear();
+    importedUseOrigins_.clear();
 
     nodeScope_      = node_scope_t::create();
     graphScope_     = graph_scope_t::create();
@@ -742,6 +743,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     currGraph_ = rootGraph_;
 
     try {
+        reportImportNameConflicts();
         visit(gct);
         reportIgnoredCapturedWrites();
         reportUndeclaredCapturedWrites();
@@ -1001,14 +1003,9 @@ node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::strin
             auto origin        = (sourceContext && currGraph_)
                                      ? sourceContext->debugMap().graphOrigin(currGraph_->stableId())
                                      : camel::source::kInvalidOriginId;
-            diags_->of(SemanticDiag::GenericFunctionUnsupported)
+            diags_->of(SemanticDiag::ImportedFunctionUsesModuleValue)
                 .atOrigin(origin)
-                .commit(
-                    foreignInstanceOf_,
-                    std::format(
-                        "instantiated in another module while its body uses '{}', a value of "
-                        "the top level of its own module",
-                        name));
+                .commit(foreignInstanceOf_, name);
             throw BuildAbortException();
         }
     }
@@ -2250,10 +2247,17 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         const auto &e = opt.value();
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
-            ASSERT(false, "Cannot import a data node directly.");
-            const auto node = asCompileNode(camel::core::module::detail::EntityAccess::node(e));
-            LEAVE("DREF");
-            return node;
+            // The node is on the root graph of the module that exports it, which is not a
+            // graph of this program (the roots of modules are not merged yet). Using it as a
+            // node of the current graph crashed the compiler.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .atOrigin(gct->load()->origin())
+                .commit(
+                    name,
+                    "a value exported by another module cannot be used yet; only functions, "
+                    "operators and types can be imported. Export a function without parameters "
+                    "that returns the value");
+            throw BuildAbortException();
         } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(e)) {
             // A generic function of another module: like a local one it can only be called;
             // the call builds the instance in this module (instantiateGeneric).
@@ -2273,6 +2277,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isGraphSet(e)) {
             auto graphs = asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(e));
+            for (const auto &imported : *graphs) {
+                importedUseOrigins_[imported.get()] = gct->load()->origin();
+            }
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
@@ -2297,6 +2304,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isDecoratedGraph(e)) {
             auto decorated = camel::core::module::detail::EntityAccess::decoratedGraph(e);
+            importedUseOrigins_[decorated.get()] = gct->load()->origin();
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{decorated})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
@@ -2703,6 +2711,149 @@ void Builder::rejectNameWithoutValue(
     throw BuildAbortException();
 }
 
+void Builder::reportImportNameConflicts() {
+    // Two imports by name that bring functions of the same name and the same parameter types
+    // (design principles 2.10): the call used to take the function of the import written
+    // first, silently. Functions of different parameter types form a set of overloads, as
+    // before; whether that stays is undecided.
+    if (!module_) {
+        return;
+    }
+    const auto sameSignature = [](FunctionType *a, FunctionType *b) {
+        if (!a || !b || a->withTypesCount() != b->withTypesCount() ||
+            a->normTypesCount() != b->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < a->withTypesCount(); ++i) {
+            if (!a->withTypeAt(i)->equals(b->withTypeAt(i))) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < a->normTypesCount(); ++i) {
+            if (!a->normTypeAt(i)->equals(b->normTypeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const auto signatureOf = [](FunctionType *type) {
+        std::string text;
+        if (type->withTypesCount() > 0) {
+            text += "<";
+            for (size_t i = 0; i < type->withTypesCount(); ++i) {
+                text += (i ? ", " : "") + type->withTypeAt(i)->toString();
+            }
+            text += "> ";
+        }
+        text += "(";
+        for (size_t i = 0; i < type->normTypesCount(); ++i) {
+            text += (i ? ", " : "") + type->normTypeAt(i)->toString();
+        }
+        return text + ")";
+    };
+    bool found = false;
+    for (const auto &[ref, imports] : module_->namesImportedMoreThanOnce()) {
+        for (size_t later = 1; later < imports.size(); ++later) {
+            bool reported = false;
+            for (size_t earlier = 0; earlier < later && !reported; ++earlier) {
+                const auto first  = imports[earlier].mod->getExportedEntity(ref);
+                const auto second = imports[later].mod->getExportedEntity(ref);
+                if (!first || !second ||
+                    !camel::core::module::detail::EntityAccess::isGraphSet(*first) ||
+                    !camel::core::module::detail::EntityAccess::isGraphSet(*second)) {
+                    continue;
+                }
+                const auto firstSet =
+                    asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(*first));
+                const auto secondSet =
+                    asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(*second));
+                for (const auto &f : *firstSet) {
+                    for (const auto &g : *secondSet) {
+                        if (reported || f == g || !sameSignature(f->funcType(), g->funcType())) {
+                            continue;
+                        }
+                        auto diag = diags_->of(SemanticDiag::ImportNameConflict);
+                        const auto &here  = imports[later];
+                        const auto &there = imports[earlier];
+                        if (here.origin != camel::source::kInvalidOriginId) {
+                            diag.atOrigin(here.origin);
+                        } else {
+                            diag.at(TokenRange{here.tokenStart, here.tokenEnd});
+                        }
+                        if (there.origin != camel::source::kInvalidOriginId) {
+                            diag.relatedOrigin(there.origin, "also imported here");
+                        } else {
+                            diag.related(
+                                TokenRange{there.tokenStart, there.tokenEnd},
+                                "also imported here");
+                        }
+                        diag.commit(
+                                ref.toString(),
+                                imports[earlier].mod->name(),
+                                imports[later].mod->name(),
+                                signatureOf(f->funcType()));
+                        reported = true;
+                        found    = true;
+                    }
+                }
+            }
+        }
+    }
+    if (found) {
+        throw BuildAbortException();
+    }
+}
+
+void Builder::rejectImportedFunctionWithCaptures(const compile_graph_ptr_t &graph) {
+    // A function of the top level of another module that captures: what it captures are values
+    // of the top level of its own module. A capture is bound by name where the function is
+    // used, so here the name would be looked up in this module: not found, or, worse, found as
+    // a value of this module that happens to have the name (the program then silently computed
+    // with the wrong value). Until the roots of modules are merged this is refused.
+    compile_graph_ptr_t home = graph;
+    while (home->outerGraph()) {
+        home = home->outerGraph();
+    }
+    if (!rootGraph_ || home == rootGraph_ || home == graph) {
+        return;
+    }
+    std::vector<std::string> names = closureRefNames(graph);
+    if (graph->funcType()) {
+        for (const auto &ref : graph->funcType()->closureRefs()) {
+            if (std::find(names.begin(), names.end(), ref) == names.end()) {
+                names.emplace_back(ref);
+            }
+        }
+    }
+    if (names.empty()) {
+        return;
+    }
+    std::string list;
+    for (const auto &captured : names) {
+        list += (list.empty() ? "" : "', '") + captured;
+    }
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    auto declOrigin    = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
+                                       : camel::source::kInvalidOriginId;
+    camel::source::origin_id_t useOrigin = camel::source::kInvalidOriginId;
+    if (auto it = importedUseOrigins_.find(graph.get()); it != importedUseOrigins_.end()) {
+        useOrigin = it->second;
+    } else if (sourceContext && currGraph_) {
+        useOrigin = sourceContext->debugMap().graphOrigin(currGraph_->stableId());
+    }
+    if (declOrigin == camel::source::kInvalidOriginId) {
+        std::swap(declOrigin, useOrigin);
+    }
+    const size_t diagsBefore = diags_->count();
+    diags_->of(SemanticDiag::ImportedFunctionUsesModuleValue)
+        .atOrigin(declOrigin)
+        .relatedOrigin(useOrigin, "used from another module here")
+        .commit(graph->name(), list);
+    // The declaration is in the other module's file.
+    diags_->locateByOriginFrom(diagsBefore);
+    throw BuildAbortException();
+}
+
 node_handle_t Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
@@ -2710,6 +2861,8 @@ node_handle_t Builder::createFuncDataNode(
         "Cannot enable both callableAsResult and allowParameterization options.");
     ASSERT(currGraph_ != nullptr, "Current owner graph is null when creating a function node.");
     ASSERT(graph != nullptr, "Target graph is null when creating a function node.");
+
+    rejectImportedFunctionWithCaptures(graph);
 
     // Centralize dependency bookkeeping here so every FUNC node and static Function value obeys
     // the same graph-reference invariant. Self-dependency is intentional: recursive graphs are

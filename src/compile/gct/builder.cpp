@@ -463,6 +463,12 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         // Import specific references
         for (const Reference &ref : refs) {
             module_->markImportedRefFromMod(ref, mod);
+            module_->noteNamedImport(
+                ref,
+                mod,
+                ast->load()->origin(),
+                load->tokenRange().start,
+                load->tokenRange().end);
             module_->markImportedNamespaceFromMod(ref, ref, mod);
         }
     }

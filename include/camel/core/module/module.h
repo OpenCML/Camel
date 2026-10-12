@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "camel/core/source/ids.h"
+
 #include <memory>
 #include <optional>
 #include <string>
@@ -78,6 +80,16 @@ using type_ns_ptr_t   = std::shared_ptr<Namespace<std::string, Type *>>;
 using context_ptr_t = camel::core::context::context_ptr_t;
 
 class Module : public std::enable_shared_from_this<Module> {
+  public:
+    /// One `import { name } from mod`: the module, and where the import stands.
+    struct NamedImport {
+        std::shared_ptr<Module> mod;
+        camel::source::origin_id_t origin;
+        /// The tokens of the import, for an import without an origin.
+        size_t tokenStart;
+        size_t tokenEnd;
+    };
+
   protected:
     struct ImportedRefBinding {
         std::shared_ptr<Module> mod;
@@ -104,6 +116,8 @@ class Module : public std::enable_shared_from_this<Module> {
     std::vector<ImportedNamespaceBinding> importedNamespaceBindings_;
     /// Cache merged imported entities to avoid re-merging on every query.
     mutable std::unordered_map<Reference, entity> importedEntityCache_;
+    /// The imports by name, in the order they were written (see noteNamedImport).
+    std::vector<std::pair<Reference, NamedImport>> namedImports_;
 
     std::vector<ImportedRefBinding> importedBindingsForRef(const Reference &ref) const;
 
@@ -129,6 +143,14 @@ class Module : public std::enable_shared_from_this<Module> {
     void importDefaultRefsFromMod(const std::shared_ptr<Module> &mod);
     void importAllRefsFromMod(const std::shared_ptr<Module> &mod);
     bool hasImportedRef(const Reference &ref) const;
+
+    /// Records that `ref` was imported by name from `mod` by the import at `origin`.
+    void noteNamedImport(
+        const Reference &ref, const std::shared_ptr<Module> &mod,
+        camel::source::origin_id_t origin, size_t tokenStart, size_t tokenEnd);
+    /// The names imported by name from more than one module, each with its imports in the
+    /// order they were written.
+    std::vector<std::pair<Reference, std::vector<NamedImport>>> namesImportedMoreThanOnce() const;
 
     bool exportDefaultImportRef(const Reference &ref);
     bool exportType(const Reference &ref, Type *type);
