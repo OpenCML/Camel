@@ -307,6 +307,7 @@ The other limits marked "no" are compile-time constants (`generic.h`, the inline
 - `-c`, `-C`, `--gct`, `--graph-construct-tree`: Print Graph Construction Tree (GCT)  
 - `-g`, `-G`, `--gir`, `--graph-ir`: Print Graph Intermediate Representation (GIR)  
 - `--tns`, `--topo-node-seq`: Print topologically sorted node sequence  
+- `--ops`, `--operators`: List the operators of the built-in module and of every module the program imports, one line `OPERATOR {json}` per overload: module, name, URI, parameter counts, declared purity (`pure`, `effectful`, `state`, `undeclared`) and signature  
 - `--gen`, `--gene-code`: Generate code from AST  
 - `-p`, `-P`, `--pass-until <n>`: Execute up to a specified graph optimization stage  
 - Available global options: `-v` / `-vv` / `-vvv` / `-vvvv`, `--verbose`, `--log-level`, `--log-preset`, `--log-include`

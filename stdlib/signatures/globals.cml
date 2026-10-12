@@ -1,356 +1,277 @@
 /**
-Built-in global function signatures.
-For reference only; these are implemented in the runtime.
-*/
+ * Signatures of the built-in functions: they need no import.
+ *
+ * The operators behind the language's own operators (`+`, `==`, `[]`, `??`, assignment, ...) are
+ * registered under reserved names (`__add__`, ...) and are not listed here.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
 
-// io（内置 input/print/println）
+// ---- conversions ----
+//
+// Numeric types are never converted implicitly; these functions do it. Converting a float to
+// an integer drops the fraction.
 
-inner func print(args: any...): void {
+/// x as a 64-bit integer.
+/// @pure
+/// @fails fault `InvalidNumberText` when x is a string that is not an integer; use parse_int to handle that in the program
+/// @example int(2.9)    // 2
+inner func int(x: i32 | int | f32 | float | string): int {
+    return ':op/*tol'
+}
+
+/// The same as int.
+/// @pure
+/// @fails fault `InvalidNumberText` when x is a string that is not an integer
+/// @example i64('42')    // 42
+inner func i64(x: i32 | int | f32 | float | string): int {
+    return ':op/*tol'
+}
+
+/// x as a 32-bit integer.
+/// @pure
+/// @fails fault `InvalidNumberText` when x is a string that is not an integer
+/// @example i32(7)    // 7
+inner func i32(x: i32 | int | f32 | float | string): i32 {
+    return ':op/*toi'
+}
+
+/// x as a 64-bit float.
+/// @pure
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; use parse_float to handle that in the program
+/// @example float(3)    // 3
+inner func float(x: i32 | int | f32 | float | string): float {
+    return ':op/*tod'
+}
+
+/// The same as float.
+/// @pure
+/// @fails fault `InvalidNumberText` when x is a string that is not a number
+/// @example f64('2.5')    // 2.5
+inner func f64(x: i32 | int | f32 | float | string): float {
+    return ':op/*tod'
+}
+
+/// x as a 32-bit float.
+/// @pure
+/// @fails fault `InvalidNumberText` when x is a string that is not a number
+/// @example f32(0.5)    // 0.5
+inner func f32(x: i32 | int | f32 | float | string): f32 {
+    return ':op/*tof'
+}
+
+/// x as text. A float is written with six decimals: string(2.5) is '2.500000'.
+/// @pure
+/// @example string(42)    // '42'
+inner func string(x: any): string {
+    return ':op/*tos'
+}
+
+/// The integer a text spells, or an error value.
+/// @pure
+/// @fails error `ParseError` when the text is not an integer
+/// @example parse_int('42') !! 0    // 42
+inner func parse_int(text: string): int! {
+    return ':op/parse_int'
+}
+
+/// The number a text spells, or an error value.
+/// @pure
+/// @fails error `ParseError` when the text is not a number
+/// @example parse_float('2.5') !! 0.0    // 2.5
+inner func parse_float(text: string): float! {
+    return ':op/parse_float'
+}
+
+/// An Error value of the given kind with the given message; the compiler adds the source
+/// position of the call. `throw error(...)` returns it from a function declared `T!`.
+/// @pure
+/// @example throw error('RangeError', 'too large')
+inner func error(kind: string, message: string): Error {
+    return ':op/error_new'
+}
+
+// ---- input and output ----
+
+/// Writes the arguments, separated by spaces, without a line end.
+/// @effect writes to standard output
+/// @example print('a', 1)    // a 1
+inner func print(...args: any): void {
     return ':io/print'
 }
 
-inner func println(args: any...): void {
+/// Writes the arguments, separated by spaces, and a line end.
+/// @effect writes to standard output
+/// @example println('a', 1)    // a 1
+inner func println(...args: any): void {
     return ':io/println'
 }
 
+/// Writes prompt and reads one line from standard input.
+/// @effect reads standard input
+/// @example input('name: ')    // what the user typed
 inner func input(prompt: string): string {
     return ':io/input'
 }
 
-// os
+/// Suspends the program for the given number of milliseconds.
+/// @effect waits
+/// @fails fault `InvalidArgument` when the duration is negative
+/// @example sleep(100)
+inner func sleep(milliseconds: int): void {
+    return 'os:sleep'
+}
 
+/// Ends the program with the given exit code, after writing buffered output.
+/// @effect ends the program
+/// @example exit(2)
 inner func exit(code: int): void {
     return 'os:exit'
 }
 
-inner func sleep(seconds: number): void {
-    return 'os:sleep'
-}
+// ---- strings ----
 
-// str
-
-with <s: string>
-inner func len(): int {
-    return ':str/len'
-}
-
-with <s: string>
-inner func to_upper(): string {
-    return ':str/to_upper'
-}
-
-with <s: string>
-inner func to_lower(): string {
-    return ':str/to_lower'
-}
-
-with <s: string>
-inner func trim(): string {
-    return ':str/trim'
-}
-
-with <s: string>
-inner func split(separator: string): string[] {
-    return ':str/split'
-}
-
-with <s: string>
-inner func replace(old: string, new: string): string {
-    return ':str/replace'
-}
-
-with <s: string>
-inner func contains(substr: string): bool {
-    return ':str/contains'
-}
-
-with <s: string>
-inner func starts_with(prefix: string): bool {
-    return ':str/starts_with'
-}
-
-with <s: string>
-inner func ends_with(suffix: string): bool {
-    return ':str/ends_with'
-}
-
-with <s: string>
-inner func substr(start: int, end: int): string {
-    return ':str/substr'
-}
-
-with <s: string>
-inner func char_at(index: int): string {
-    return ':str/char_at'
-}
-
-with <s: string>
-inner func index_of(substr: string): int {
-    return ':str/index_of'
-}
-
-with <s: string>
-inner func last_index_of(substr: string): int {
-    return ':str/last_index_of'
-}
-
-with <s: string>
-inner func repeat(count: int): string {
-    return ':str/repeat'
-}
-
-with <s: string>
-inner func format(args: any...): string {
+/// The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
+/// format specifications such as `{:.2f}` and `{:>8}`.
+/// @pure
+/// @fails fault `FormatFailed` when the placeholders and the arguments do not fit
+/// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
+with <...args: any>
+inner func format(fmt: string): string {
     return ':str/format'
 }
 
-// math
-
-inner func abs(value: number): number {
-    return 'math:abs'
+/// The strings of xs joined with sep between them.
+/// @pure
+/// @example ['a', 'b']->join<', '>    // 'a, b'
+with <sep: string>
+inner func join(xs: string[]): string {
+    return ':str/join'
 }
 
-inner func sqrt(value: number): number {
-    return 'math:sqrt'
+/// The number of bytes of a string, or of elements of an array.
+/// @pure
+/// @example len('h€')    // 4
+inner func len(x: string | T[]): int {
+    return ':struct/len_*'
 }
 
-inner func pow(base: number, exponent: number): number {
-    return ':op/pow'
+// ---- arrays ----
+
+/// The integers from start up to, not including, end; empty when end is not above start.
+/// @pure
+/// @example range(0, 3)    // [0, 1, 2]
+inner func range(start: int, end: int): int[] {
+    return ':struct/range'
 }
 
-inner func sin(value: number): number {
-    return ':math/sin'
+/// The first element. An empty array has none: check len first.
+/// @pure
+/// @example head([1, 2, 3])    // 1
+inner func head(xs: T[]): T {
+    return ':struct/head_arr'
 }
 
-inner func cos(value: number): number {
-    return ':math/cos'
+/// The elements after the first; empty for an array of fewer than two elements.
+/// @pure
+/// @example tail([1, 2, 3])    // [2, 3]
+inner func tail(xs: T[]): T[] {
+    return ':struct/tail_arr'
 }
 
-inner func tan(value: number): number {
-    return ':math/tan'
+/// The elements from index start up to, not including, end. A negative index counts from the
+/// end, and a range reaching outside the array is cut to it: this never faults.
+/// @pure
+/// @example [1, 2, 3, 4]->slice<1, 3>    // [2, 3]
+with <start: int, end: int>
+inner func slice(xs: T[]): T[] {
+    return ':struct/slice_arr'
 }
 
-inner func log(value: number): number {
-    return ':math/log'
+/// The elements of xs followed by those of ys, as a new array.
+/// @pure
+/// @example concat([1], [2, 3])    // [1, 2, 3]
+inner func concat(xs: T[], ys: T[]): T[] {
+    return ':struct/concat_arr'
 }
 
-inner func exp(value: number): number {
-    return 'math:exp'
+/// Whether an element of xs equals value.
+/// @pure
+/// @example [1, 2, 3]->contains<2>    // true
+with <value: T>
+inner func contains(xs: T[]): bool {
+    return ':struct/contains_arr'
 }
 
-inner func round(value: number): int {
-    return 'math:round'
+/// Two arrays combined element by element into pairs. They must have the same length.
+/// @pure
+/// @fails fault `InvalidArgument` when the lengths differ
+/// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]
+inner func zip(xs: T[], ys: U[]): (T, U)[] {
+    return ':struct/zip'
 }
 
-inner func floor(value: number): int {
-    return 'math:floor'
+/// Adds value at the end of the variable xs, in place, and returns it.
+/// @effect changes its argument
+/// @example append<4>(xs)
+with <value: T>
+inner func append(var xs: T[]): T[] {
+    return ':struct/append_arr'
 }
 
-inner func ceil(value: number): int {
-    return 'math:ceil'
+/// Adds the elements of other at the end of the variable xs, in place, and returns it.
+/// @effect changes its argument
+/// @example extend<[4, 5]>(xs)
+with <other: T[]>
+inner func extend(var xs: T[]): T[] {
+    return ':struct/extend_arr'
 }
 
-inner func random(min: int, max: int): int {
-    return 'rand:randint'
+// ---- higher-order functions ----
+//
+// `map` and `filter` apply f to the elements with no order among the calls: the parallel
+// scheduler may run them at the same time, and the result is by position. `foreach` and
+// `reduce` call f element by element in order. They are declared with effects because what a
+// call does is what f does.
+
+/// f applied to every element; the calls have no order among them.
+/// @effect what f does
+/// @example [1, 2, 3]->map<(x: int) => x * 2>    // [2, 4, 6]
+with <f: (item: T) => U>
+inner func map(xs: T[]): U[] {
+    return ':mark/map_arr'
 }
 
-// list
-
-with <lst: any[]>
-inner func append(item: any): void {
-    return ':list/append'
+/// The elements for which f is true, in order; the calls of f have no order among them.
+/// @effect what f does
+/// @example [1, 2, 3, 4]->filter<(x: int) => x % 2 == 0>    // [2, 4]
+with <f: (item: T) => bool>
+inner func filter(xs: T[]): T[] {
+    return ':mark/filter_arr'
 }
 
-with <lst: any[]>
-inner func remove(index: int): void {
-    return ':list/remove'
+/// The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
+/// @effect what f does
+/// @example [1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>    // 6
+with <f: (acc: U, item: T) => U, initial: U>
+inner func reduce(xs: T[]): U {
+    return ':mark/reduce_arr'
 }
 
-with <lst: any[]>
-inner func insert(index: int, item: any): void {
-    return ':list/insert'
+/// Calls f for every element, in order.
+/// @effect what f does
+/// @example xs->foreach<(x: int) => println(x)>
+with <f: (item: T) => void>
+inner func foreach(xs: T[]): void {
+    return ':mark/foreach_arr'
 }
 
-with <lst: any[]>
-inner func index_of(item: any): int {
-    return ':list/index_of'
-}
-
-with <lst: any[]>
-inner func contains(item: any): bool {
-    return ':list/contains'
-}
-
-with <lst: any[]>
-inner func len(): int {
-    return ':list/len'
-}
-
-with <lst: any[]>
-inner func clear(): void {
-    return ':list/clear'
-}
-
-with <lst: any[]>
-inner func sort(): void {
-    return ':list/sort'
-}
-
-with <lst: any[]>
-inner func reverse(): void {
-    return ':list/reverse'
-}
-
-with <lst: any[]>
-inner func extend(items: any[]): void {
-    return ':list/extend'
-}
-
-// map
-
-with <d: Map<string, any>>
-inner func keys(): string[] {
-    return ':dict/keys'
-}
-
-with <d: Map<string, any>>
-inner func values(): any[] {
-    return ':dict/values'
-}
-
-with <d: Map<string, any>>
-inner func items(): (string, any)[] {
-    return ':dict/items'
-}
-
-with <d: Map<string, any>>
-inner func contains(key: string): bool {
-    return ':dict/contains'
-}
-
-with <d: Map<string, any>>
-inner func len(): int {
-    return ':dict/len'
-}
-
-with <d: Map<string, any>>
-inner func clear(): void {
-    return ':dict/clear'
-}
-
-with <d: Map<string, any>>
-inner func remove(key: string): void {
-    return ':dict/remove'
-}
-
-with <d: Map<string, any>>
-inner func update(other: Map<string, any>): void {
-    return ':dict/update'
-}
-
-// set
-
-with <s: Set<any>>
-inner func insert(item: any): void {
-    return ':set/insert'
-}
-
-with <s: Set<any>>
-inner func remove(item: any): void {
-    return ':set/remove'
-}
-
-with <s: Set<any>>
-inner func contains(item: any): bool {
-    return ':set/contains'
-}
-
-with <s: Set<any>>
-inner func len(): int {
-    return ':set/len'
-}
-
-with <s: Set<any>>
-inner func clear(): void {
-    return ':set/clear'
-}
-
-with <s: Set<any>>
-inner func union(other: Set<any>): Set<any> {
-    return ':set/union'
-}
-
-with <s: Set<any>>
-inner func intersection(other: Set<any>): Set<any> {
-    return ':set/intersection'
-}
-
-with <s: Set<any>>
-inner func difference(other: Set<any>): Set<any> {
-    return ':set/difference'
-}
-
-// time
-
-inner func now(): number {
-    return 'time:now'
-}
-
-with <time: number>
-inner func strftime(format_str: string): string {
-    return 'time:strftime'
-}
-
-inner func strptime(format_str: string, time_str: string): number {
-    return 'time:strptime'
-}
-
-// sys
-
-inner func get_env(var_name: string): string {
-    return ':sys/get_env'
-}
-
-inner func set_env(var_name: string, value: string): void {
-    return ':sys/set_env'
-}
-
-inner func unset_env(var_name: string): void {
-    return ':sys/unset_env'
-}
-
-inner func get_cwd(): string {
-    return ':sys/get_cwd'
-}
-
-// re
-
-namespace re {
-
-inner func test(pattern: string, text: string): bool {
-    return ':re/match'
-}
-
-inner func search(pattern: string, text: string): (int, int) {
-    return ':re/search'
-}
-
-inner func replace(pattern: string, repl: string, text: string): string {
-    return ':re/replace'
-}
-
-}
-
-// json
-
-namespace json {
-
-inner func encode(value: any): string {
-    return ':json/encode'
-}
-
-inner func decode(json_str: string): any {
-    return ':json/decode'
-}
-
+/// Replaces every element of the variable xs by f of it, in place.
+/// @effect changes its argument
+/// @example apply<(x: int) => x * 2>(xs)
+with <f: (item: T) => T>
+inner func apply(var xs: T[]): T[] {
+    return ':mark/apply_arr'
 }

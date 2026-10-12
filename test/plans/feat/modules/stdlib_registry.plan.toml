@@ -63,3 +63,27 @@ assert(undeclared.length === 0, `operators without a purity declaration: ${undec
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "registry.signatures_match"
+desc = "stdlib/signatures/*.cml list exactly the operators the modules register: every registered operator is declared, every declaration names a registered operator, the parameter counts agree and @pure / @effect is the declared purity."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--verify-ops"]
+expect_exit = 0
+expect_stdout_contains = ["the signature files agree with the"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "registry.reference_is_generated"
+desc = "docs/stdlib-reference.md is what scripts/stdlib-reference.mjs --write produces from the signature files and the library sources: it is generated, not edited."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--verify-doc"]
+expect_exit = 0
+expect_stdout_contains = ["docs/stdlib-reference.md is up to date"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000

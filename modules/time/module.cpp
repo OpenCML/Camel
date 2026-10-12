@@ -73,7 +73,8 @@ bool TimeModule::load() {
         {
             // The clock.
             {"now", false},
-            // Formatting and parsing a time may consult the time zone of the process.
+            // strptime reads the time zone of the process. strftime formats in UTC and could
+            // be declared pure; it is kept with the rest of the module until that is decided.
             {"strftime", false},
             {"strptime", false},
         });

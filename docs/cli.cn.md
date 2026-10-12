@@ -117,6 +117,7 @@
 - `-c`, `-C`, `--gct`, `--graph-construct-tree`：打印图构造树（GCT）
 - `-g`, `-G`, `--gir`, `--graph-ir`：打印图中间表示（GIR）
 - `--tns`, `--topo-node-seq`：打印拓扑排序后的节点序列
+- `--ops`, `--operators`：列出内建模块与该程序导入的每个模块的算子，每个重载一行 `OPERATOR {json}`：模块、名字、URI、参数个数、声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名
 - `--gen`, `--gene-code`：从 AST 生成代码
 - `-p`, `-P`, `--pass-until <n>`：执行到指定图优化阶段
 - 可用的通用选项：`-v` / `-vv` / `-vvv` / `-vvvv`、`--verbose`、`--log-level`、`--log-preset`、`--log-include`
