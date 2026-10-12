@@ -299,7 +299,7 @@ desc = "A large array filled with young strings by plain stores (random.sample, 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
 args = ["${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_POISON=1"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_POISON=1"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -311,7 +311,7 @@ desc = "A large array filled with young strings by plain stores (random.sample, 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
 args = ["${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -323,7 +323,7 @@ desc = "A large array filled with young strings by plain stores (random.sample, 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
 args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_POISON=1"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_POISON=1"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -335,7 +335,7 @@ desc = "A large array filled with young strings by plain stores (random.sample, 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
 args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -347,7 +347,7 @@ desc = "A large array filled with young strings by plain stores (random.sample, 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
 args = ["${case}", "${run_prl}"]
-envs = ["CAMEL_GC_POISON=1"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_POISON=1"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -359,7 +359,7 @@ desc = "A large array filled with young strings by plain stores (random.sample, 
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_born_old.cml"
 args = ["${case}", "${run_prl}"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_LARGE_THRESHOLD_KB=4", "CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

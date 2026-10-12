@@ -225,13 +225,24 @@ GenerationalAllocatorWithGC &autoSpace() {
         // Safepoint poisoning is a mode of the moving collector, so it turns it on.
         const bool youngCopying = collectorMode() == CollectorMode::Generational;
         autoSpaceCreated.store(true, std::memory_order_release);
+        // The birth space (CAMEL_GC_NURSERY_MB, default 4). Untouched pages cost nothing, so
+        // the mark-sweep collector, which does not use it, does not pay for it.
+        const size_t nurseryMb   = envSize("CAMEL_GC_NURSERY_MB");
+        const size_t nurseryBytes = std::clamp<size_t>(nurseryMb != 0 ? nurseryMb : 4, 1, 1024) * MB;
+        // What counts as a large object (CAMEL_GC_LARGE_THRESHOLD_KB). Large objects get a
+        // block of their own and never move. With mark-sweep the threshold is 4 KB. With the
+        // generational collector it is 64 KB: an object born outside the birth space is old
+        // from birth, and an array of a few thousand elements that dies young would keep
+        // every young element it points at alive until the next major collection.
+        const size_t thresholdKb = envSize("CAMEL_GC_LARGE_THRESHOLD_KB");
+        const size_t largeThreshold =
+            thresholdKb != 0 ? std::min(thresholdKb * KB, nurseryBytes / 8)
+                             : (youngCopying ? std::min<size_t>(64 * KB, nurseryBytes / 8) : 4 * KB);
         auto *instance = new GenerationalAllocatorWithGC(GenerationalAllocatorWithGC::Config{
-            // Keep the default process-start footprint modest. The current runtime disables
-            // young-generation copying, so large preallocated semispaces only add startup cost.
-            .birthSize             = 4 * MB,
+            .birthSize             = nurseryBytes,
             // Under safepoint poisoning nothing is promoted by age, so the survivor spaces
             // must hold whatever the birth space can.
-            .havenSize             = debugConfig.poisonAtSafepoints ? 4 * MB : 1 * MB,
+            .havenSize = debugConfig.poisonAtSafepoints ? nurseryBytes : nurseryBytes / 4,
             .elderGenSize          = 32 * MB,
             // Minor collections an object survives before it is promoted
             // (CAMEL_GC_PROMOTION_AGE, 1 to 15; 1 promotes at the first one, which is the
@@ -241,7 +252,7 @@ GenerationalAllocatorWithGC &autoSpace() {
                     envSize("CAMEL_GC_PROMOTION_AGE") != 0 ? envSize("CAMEL_GC_PROMOTION_AGE") : 4,
                     1,
                     15),
-            .largeObjThreshold     = 4 * KB, // Large-object threshold.
+            .largeObjThreshold     = largeThreshold,
             // Large-object bytes between collections (CAMEL_GC_LARGE_BUDGET_MB overrides).
             .largeObjCollectionBudget = largeObjectBudgetFromEnv(),
             .largeObjGrowthPercent    = largeObjectGrowthPercentFromEnv(),
