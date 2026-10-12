@@ -1,0 +1,8 @@
+import { find as str_find } from str
+import math
+
+func main(): int sync {
+    println(str_find('hello', 'l'))
+    println(math::pi())
+    return 0
+}

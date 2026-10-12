@@ -1,0 +1,10 @@
+func f(): int {
+    return a + 1
+}
+
+let a = f()
+
+func main(): int sync {
+    println(a)
+    return 0
+}

@@ -1,0 +1,6 @@
+import { double } from lib
+
+func main(): int sync {
+    println(double(21))
+    return 0
+}
