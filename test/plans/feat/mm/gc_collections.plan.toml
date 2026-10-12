@@ -1,0 +1,92 @@
+id = "mm.gc_collections"
+order = 369
+tier = "feat"
+tags = ["feat", "mm", "gc", "collections", "map", "set"]
+desc = "Maps and sets under collection stress: a table keeps its keys and values alive and follows them when they move (docs/technical/31_map_and_set.md, section 5; docs/technical/24_gc_verification_guide.md)."
+
+# One program builds maps and sets entry by entry out of strings, arrays, tuples, boxes of
+# `T?` and other maps, so that almost every table it allocates becomes garbage. It runs with
+# heap verification around every collection and a collection requested every third
+# allocation, with the collector that does not move objects and with the one that does. The
+# output must be exactly that of an undisturbed run.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_collections.cml"
+expect_exit = 0
+expect_stdout_contains = ["\"ok\":true", "map entries=60 total=73810", "m[7]=[7, 49, 8] m[59]=[59, 3481, 60] has60=false", "after remove: 10 [key-0, key-1, key-2, key-3, key-4, key-5, key-6, key-7, key-8, key-9]", "set size=80 has79=true has80=false", "intersect=60 union=80 difference=20", "pairs=40 hit=key-26 miss=?", "nested=12 last=12 total=650", "merge same=true items=[(key-0, [0, 0, 1]),"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "\"ok\":false", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc.collections_major_stable_nvm"
+desc = "Maps and sets on std::nvm with the non-moving collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_major_stable_fvm"
+desc = "Maps and sets on std::fvm with the non-moving collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_major_stable_prl"
+desc = "Maps and sets on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_major_young_nvm"
+desc = "Maps and sets on std::nvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_major_young_fvm"
+desc = "Maps and sets on std::fvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_major_young_prl"
+desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_both_stable_nvm"
+desc = "Maps and sets on std::nvm with the non-moving collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_both_stable_fvm"
+desc = "Maps and sets on std::fvm with the non-moving collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_both_stable_prl"
+desc = "Maps and sets on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_both_young_nvm"
+desc = "Maps and sets on std::nvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_both_young_fvm"
+desc = "Maps and sets on std::fvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_both_young_prl"
+desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]

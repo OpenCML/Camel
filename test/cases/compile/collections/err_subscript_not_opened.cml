@@ -1,0 +1,10 @@
+module main
+
+// `m[k]` is a `V?`, not a `V`: it is opened with `??` before it is used as an int.
+
+func main(): int sync {
+    let m = [("a", 1)] as Map<string, int>
+    println(m["a"] + 1)
+    println("never printed")
+    return 0
+}

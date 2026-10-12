@@ -1,0 +1,9 @@
+module main
+
+// An array is not an element type of a set: it can be changed in place.
+
+func main(): int sync {
+    let s = [[1], [2]] as Set<int[]>
+    println("never printed")
+    return 0
+}
