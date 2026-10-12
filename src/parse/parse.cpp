@@ -45,7 +45,7 @@ CamelParser::Backend initialBackend() {
             return CamelParser::Backend::Antlr;
         }
     }
-    return CamelParser::Backend::Antlr;
+    return CamelParser::Backend::Hand;
 }
 
 std::atomic<CamelParser::Backend> &defaultBackendSlot() {

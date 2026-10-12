@@ -83,7 +83,11 @@ bool ParserImpl::startsExpr(TK kind) const {
     }
 }
 
-/// dataExpr : waitExpr | ctrlExpr          waitExpr : 'wait'? assignExpr
+/// dataExpr : waitExpr | ctrlExpr
+/// waitExpr : 'wait'? assignExpr
+/// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
+///          | 'match' identRef '{' matchCase+ '}'
+///          | 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 void ParserImpl::parseExpr() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -262,9 +266,10 @@ void ParserImpl::parseNullable() {
 }
 
 /// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
-///           | ('!' | '-' | '~') linkExpr            unless the `-` is the sign of a number
-/// A `-` or `+` followed by a number is the sign of a literal (see parseLiteral): `-2->f` passes
-/// the literal -2 to `f`, `-a->f` negates `a->f`.
+///           | ('!' | '-' | '~') linkExpr
+/// The second alternative does not apply to a `-` that is the sign of a number: a `-` that
+/// touches a number (and a `+` before one) belongs to the literal, so `-2->f` passes the
+/// literal -2 to `f`, while `-a->f` and `- 2->f` negate the call.
 void ParserImpl::parseUnary() {
     const size_t m = mark();
     if ((cur_ == TK::Bang || cur_ == TK::Minus || cur_ == TK::Tilde) && !literalSignAhead()) {
@@ -695,7 +700,7 @@ void ParserImpl::parseFuncData() {
     close(m, NK::FuncData);
 }
 
-/// ctrlExpr (1) : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
+/// The `if` of ctrlExpr.
 /// An `else` belongs to the nearest `if`, on whatever line it stands.
 void ParserImpl::parseIf() {
     const size_t m = mark();
@@ -717,7 +722,7 @@ void ParserImpl::parseIf() {
     close(m, NK::IfExpr);
 }
 
-/// ctrlExpr (2) : 'match' identRef '{' matchCase+ '}'
+/// The `match` of ctrlExpr.
 void ParserImpl::parseMatch() {
     const size_t m = mark();
     bump();
@@ -821,7 +826,7 @@ void ParserImpl::parsePattern() {
     close(m, NK::Pattern);
 }
 
-/// ctrlExpr (3) : 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
+/// The `try` of ctrlExpr (reserved: the AST builder reports it as not part of the language).
 void ParserImpl::parseTry() {
     const size_t m = mark();
     bump();

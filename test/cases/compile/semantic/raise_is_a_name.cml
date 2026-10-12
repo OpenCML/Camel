@@ -1,9 +1,15 @@
 /**
- * `raise` is in the grammar but exceptions are not implemented. It is a compile-time error at
- * the statement (line 8); nothing of the program runs.
+ * `raise` is not part of the language (design principles 2.10): it is an ordinary name. An
+ * error value is returned with `throw`.
  */
-module raise_not_supported
+module raise_is_a_name
+
+func raise(amount: int): int {
+    return amount + 1
+}
 
 func main(): int sync {
-    raise 'failed'
+    let raised = raise(41)
+    println(raised)
+    return 0
 }

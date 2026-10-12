@@ -863,7 +863,8 @@ void ParserImpl::parseIdentList() {
     close(m, NK::IdentList);
 }
 
-/// parentIdents : '(' identList? ','? ')'    bracedIdents : '{' identList? ','? '}'
+/// parentIdents : '(' identList? ','? ')'
+/// bracedIdents : '{' identList? ','? '}'
 /// bracketIdents : '[' identList? ','? ']'
 void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
     const size_t m = mark();
@@ -918,8 +919,10 @@ void ParserImpl::parseParentParams() {
     }
     {
         Scope scope(*this, false);
-        if (cur_ != TK::RParen && cur_ != TK::Comma) {
+        if (cur_ == TK::Identifier || cur_ == TK::KwVar) {
             parsePairedParams(TK::RParen);
+        } else if (cur_ != TK::RParen && cur_ != TK::Comma) {
+            unexpected({e(TK::Comma), e(TK::RParen), e(TK::KwVar), e(TK::Identifier)});
         }
         eat(TK::Comma);
     }

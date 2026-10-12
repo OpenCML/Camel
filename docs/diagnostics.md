@@ -566,12 +566,12 @@ This '>' is read as a comparison with the next line, which starts with {0}: two 
 A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.
 ```
 
-**Example** (`test/cases/compile/surface/angle_then_string_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_string_line.cml`)
+**Example** (`test/cases/compile/surface/angle_then_name_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_name_line.cml`)
 
 ```camel
 func main(): int sync {
     let total = [1, 2]->reduce<(acc: int, x: int): int => acc + x, 0>
-    'total = {}'->format<total>->println
+    total->format<total>->println
     return 0
 }
 ```
@@ -1389,13 +1389,17 @@ func main(): int sync {
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/semantic/raise_not_supported.cml`, run as `camel test/cases/compile/semantic/raise_not_supported.cml`)
+**Example** (`test/cases/compile/not_supported/list_comprehension.cml`, run as `camel test/cases/compile/not_supported/list_comprehension.cml`)
 
 ```camel
-module raise_not_supported
+module list_comprehension
 
 func main(): int sync {
-    raise 'failed'
+    let xs = [1, 2, 3]
+    let ys = [x * 2 for x in xs if x > 1]
+    println('never printed')
+    println(ys)
+    return 0
 }
 ```
 

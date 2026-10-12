@@ -62,18 +62,13 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "semantic.raise_not_supported"
-desc = "`raise` is rejected at compile time with ConstructNotSupported at the statement; it is no longer compiled as `return`."
-kind = "negative"
-case = "../../../cases/compile/semantic/raise_not_supported.cml"
+name = "semantic.raise_is_a_name"
+desc = "`raise` is not a keyword and not a statement: it is an ordinary name, here a function (design principles 2.10)."
+kind = "behavior"
+case = "../../../cases/compile/semantic/raise_is_a_name.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 8
-expect_diagnostic_column = 5
-expect_output_contains = ["'raise' is not supported: exceptions are not implemented."]
-expect_output_not_contains = ["never printed", "UnknownInternalError"]
+expect_exit = 0
+expect_stdout_contains = ["42"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

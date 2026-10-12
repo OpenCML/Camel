@@ -123,21 +123,25 @@ expect_output_contains = ["function composition is not implemented"]
 
 [[tests]]
 name = "surface.angle_then_string_line"
-desc = "A statement ending in `>` followed by a line with `<...>` of its own is read as one comparison chain: the warning at that `>` says the two statements may have been joined, next to the error that follows."
-kind = "negative"
+desc = "A statement ending in the `>` of angle arguments, followed by a line that starts with a string: two statements. The `>` touches the last argument, so it closes the list, and the line break ends the statement (it used to be read as one comparison chain)."
+kind = "behavior"
 case = "../../../cases/compile/surface/angle_then_string_line.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_output_contains = ["angle_then_string_line.cml:2:69: [Warn]", "name=SyntaxDiag::ComparisonAcrossLines", "name=SemanticDiag::NoMatchingFunction"]
+expect_exit = 0
+expect_stdout_contains = ["total = 3"]
+expect_output_not_contains = ["Warn", "Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
 
 [[tests]]
 name = "surface.angle_then_name_line"
-desc = "The same when the next line starts with a name: the warning explains the `Unresolved reference` to the name the statement declares."
+desc = "The same when the next line starts with a name: the name declared on the first line is known on the second (what is reported is that `format` wants a string, at line 3)."
 kind = "negative"
 case = "../../../cases/compile/surface/angle_then_name_line.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["angle_then_name_line.cml:2:69: [Warn]", "name=SyntaxDiag::ComparisonAcrossLines", "name=SemanticDiag::UnresolvedReference"]
+expect_output_contains = ["angle_then_name_line.cml:3:5: [Error]", "name=SemanticDiag::NoMatchingFunction"]
+expect_output_not_contains = ["ComparisonAcrossLines", "UnresolvedReference"]
 
 [[tests]]
 name = "surface.angle_then_semicolon"
