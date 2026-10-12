@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 09, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -39,15 +39,56 @@ using namespace camel::core::rtdata;
 
 namespace fs_impl = std::filesystem;
 
+namespace {
+
+// Why a file could not be opened, in the same words on every platform: the text of
+// std::generic_category() is the C library's (glibc "No such file or directory", the MSVC
+// runtime "no such file or directory"), and the diagnostic is compared with recorded output.
+std::string openFailureReason(int code) {
+    switch (code) {
+    case ENOENT:
+        return "No such file or directory";
+    case EACCES:
+        return "Permission denied";
+    case EISDIR:
+        return "Is a directory";
+    case ENOTDIR:
+        return "Not a directory";
+    case EEXIST:
+        return "File exists";
+    case EMFILE:
+    case ENFILE:
+        return "Too many open files";
+    case ENOSPC:
+        return "No space left on device";
+    case EROFS:
+        return "Read-only file system";
+    case ENAMETOOLONG:
+        return "File name too long";
+    case EINVAL:
+        return "Invalid argument";
+    case 0:
+        return "The file cannot be opened";
+    default:
+        return std::generic_category().message(code);
+    }
+}
+
+} // namespace
+
+// Files are opened in binary mode: what is written is the bytes of the string and what is read
+// is the bytes of the file, on every platform. (In text mode the C runtime of Windows writes
+// "\r\n" for every "\n", so file_size differed from the length of what was written.)
 slot_t __fs_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *path = norm.get<String *>(0);
-    std::ifstream f(path->c_str());
+    errno        = 0;
+    std::ifstream f(path->c_str(), std::ios::binary);
     if (!f.is_open()) {
         throwRuntimeFault(
             RuntimeDiag::FileOpenFailed,
             "fs.read_text",
             std::string(path->c_str()),
-            std::generic_category().message(errno));
+            openFailureReason(errno));
     }
     std::ostringstream oss;
     oss << f.rdbuf();
@@ -90,13 +131,14 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 "cannot create the directory '" + parent.string() + "': " + ec.message());
         }
     }
-    std::ofstream f(path->c_str());
+    errno = 0;
+    std::ofstream f(path->c_str(), std::ios::binary | std::ios::trunc);
     if (!f.is_open()) {
         throwRuntimeFault(
             RuntimeDiag::FileOpenFailed,
             "fs.write_text",
             std::string(path->c_str()),
-            std::generic_category().message(errno));
+            openFailureReason(errno));
     }
     f << content->c_str();
     return NullSlot;
@@ -145,13 +187,14 @@ slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 size));
     }
 
+    errno = 0;
     std::ifstream f(path->c_str(), std::ios::binary);
     if (!f.is_open()) {
         throwRuntimeFault(
             RuntimeDiag::FileOpenFailed,
             "fs.read_chunk",
             std::string(path->c_str()),
-            std::generic_category().message(errno));
+            openFailureReason(errno));
     }
 
     f.seekg(0, std::ios::end);

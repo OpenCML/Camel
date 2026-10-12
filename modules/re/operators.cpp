@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,10 +23,52 @@
 #include "camel/core/operator.h"
 
 #include <regex>
+#include <string>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
+
+namespace {
+
+// What is wrong with a pattern, in the same words on every platform: the text of
+// std::regex_error::what() is the standard library's (libstdc++, libc++ and the MSVC library
+// each have their own), and the diagnostic is compared with recorded output.
+std::string regexErrorReason(const std::regex_error &e) {
+    namespace rc = std::regex_constants;
+    switch (e.code()) {
+    case rc::error_collate:
+        return "Invalid collating element in regular expression";
+    case rc::error_ctype:
+        return "Invalid character class in regular expression";
+    case rc::error_escape:
+        return "Invalid escape in regular expression";
+    case rc::error_backref:
+        return "Invalid back reference in regular expression";
+    case rc::error_brack:
+        return "Mismatched '[' and ']' in regular expression";
+    case rc::error_paren:
+        return "Mismatched '(' and ')' in regular expression";
+    case rc::error_brace:
+        return "Mismatched '{' and '}' in regular expression";
+    case rc::error_badbrace:
+        return "Invalid range in '{}' in regular expression";
+    case rc::error_range:
+        return "Invalid character range in regular expression";
+    case rc::error_space:
+        return "Not enough memory to compile the regular expression";
+    case rc::error_badrepeat:
+        return "A repetition ('*', '?', '+', '{') with nothing to repeat in regular expression";
+    case rc::error_complexity:
+        return "The regular expression is too complex";
+    case rc::error_stack:
+        return "Not enough stack to match the regular expression";
+    default:
+        return "Invalid regular expression";
+    }
+}
+
+} // namespace
 
 slot_t __re_test__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *pattern = norm.get<String *>(0);
@@ -40,7 +82,7 @@ slot_t __re_test__(ArgsView &with, ArgsView &norm, Context &ctx) {
             RuntimeDiag::RegexInvalid,
             "re.test",
             std::string(pattern->c_str()),
-            std::string(e.what()));
+            regexErrorReason(e));
     }
 }
 
