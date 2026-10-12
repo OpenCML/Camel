@@ -328,6 +328,14 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         auto it = modules_.find(name);
         if (it != modules_.end()) {
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in cache.", name));
+            // The module being loaded names itself (a file `m.cml` with `import m`): it is
+            // in the cache, registered before its load, and not yet a module. Handing it out
+            // gave the importer a module without graphs, and the compiler crashed.
+            if (name == currentModuleName && !it->second->loaded() &&
+                std::dynamic_pointer_cast<UserDefinedModule>(it->second)) {
+                throw DiagnosticBuilder::of(SemanticDiag::ImportCycle)
+                    .commit(name, "file " + it->second->path());
+            }
             return it->second;
         }
 

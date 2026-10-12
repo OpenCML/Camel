@@ -4215,6 +4215,9 @@ node_handle_t Builder::buildBranch(
         {});
 
     Type *joinType = nullptr;
+    // The arm being added is the one an `if` without `else` has in its place.
+    bool absentElse = false;
+    bool ifArmSeen  = false;
 
     linkNodes(LinkType::Norm, condNode, brchNode);
     std::vector<runtime::GCBranchArm> branchArms;
@@ -4270,6 +4273,17 @@ node_handle_t Builder::buildBranch(
                 joinType = unified;
                 setNodeType(joinNode, joinType);
             }
+            if (unified == nullptr && absentElse) {
+                // `if c then println('x')`: without `else` the `if` gives nothing when the
+                // condition is false, and the arm gives a value. The message used to be
+                // "expected 'string', found 'void'", with types the program does not show.
+                diags_->of(SemanticDiag::IfArmValueWithoutElse)
+                    .atOrigin(gct->load()->origin())
+                    .commit(
+                        joinType->toString(),
+                        currGraph_->name() + ": " + currGraph_->funcType()->toString());
+                throw BuildAbortException();
+            }
             if (unified == nullptr) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
                     .atOrigin(gct->load()->origin())
@@ -4300,11 +4314,13 @@ node_handle_t Builder::buildBranch(
             case GCT::CaseLoad::CaseType::True:
                 ASSERT(caseNode->size() == 1, "True case should have only one child.");
                 caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                ifArmSeen    = true;
                 break;
             case GCT::CaseLoad::CaseType::Else:
                 ASSERT(i == gct->size() - 1, "Else case should be the last case.");
                 ASSERT(caseNode->size() == 1, "Else case should have only one child.");
                 caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                absentElse   = ifArmSeen && caseExecNode->size() == 0;
                 break;
             case GCT::CaseLoad::CaseType::Value: {
                 ASSERT(caseNode->size() == 2, "Value case should have two children.");

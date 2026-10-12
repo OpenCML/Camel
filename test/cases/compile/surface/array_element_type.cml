@@ -1,0 +1,5 @@
+func main(): int sync {
+    println([1, 2,
+        3.0, 4])
+    return 0
+}

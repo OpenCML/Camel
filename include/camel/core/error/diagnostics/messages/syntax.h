@@ -39,6 +39,9 @@ enum class SyntaxDiag : uint32_t {
     MissingToken              = 0x000009,
     UnexpectedToken           = 0x00000A,
     UnexpectedEndOfFile       = 0x00000B,
+
+    // Warnings (severity bits = Warn).
+    ComparisonAcrossLines = 0x100001,
 };
 
 constexpr DiagType diagTypeOf(SyntaxDiag) { return DiagType::SyntaxDiag; }

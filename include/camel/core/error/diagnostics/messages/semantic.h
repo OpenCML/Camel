@@ -64,6 +64,8 @@ enum class SemanticDiag : uint32_t {
     ArgumentNeedsConversion      = 0x000021,
     ReturnNeedsConversion        = 0x000022,
     LiteralOutOfRange            = 0x000023,
+    IfArmValueWithoutElse        = 0x000024,
+    ImportCycle                  = 0x000025,
     // An error: the construct it reports is not compiled, so a program that uses it must not
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
     // dropped while the rest of the program went on.

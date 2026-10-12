@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-115 diagnostics: 105 errors, 10 warnings.
+118 diagnostics: 107 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -36,6 +36,7 @@ prints one entry.
 | `0x02000009` | [SyntaxDiag::MissingToken](#missingtoken) | Error |
 | `0x0200000A` | [SyntaxDiag::UnexpectedToken](#unexpectedtoken) | Error |
 | `0x0200000B` | [SyntaxDiag::UnexpectedEndOfFile](#unexpectedendoffile) | Error |
+| `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
 | `0x03000000` | [SemanticDiag::UnknownSemanticError](#unknownsemanticerror) | Error |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
 | `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error |
@@ -72,6 +73,8 @@ prints one entry.
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
 | `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
+| `0x03000024` | [SemanticDiag::IfArmValueWithoutElse](#ifarmvaluewithoutelse) | Error |
+| `0x03000025` | [SemanticDiag::ImportCycle](#importcycle) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error |
@@ -178,7 +181,14 @@ Illegal character '{0}'.
 No token starts with this character. Outside strings and comments a program consists of ASCII characters; a name is made of letters, digits and '_'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/check/lexical_error.cml`, run as `camel check --lexical-only -O short test/cases/compile/check/lexical_error.cml`)
+
+```camel
+func main(): int sync {
+    let x = 1 $ 2
+    return 0
+}
+```
 
 ### InvalidNumberFormat
 
@@ -454,14 +464,14 @@ Expected {0} before {1}.
 Unexpected {0}{1}.
 ```
 
-**Example** (`test/cases/compile/diag_render/syntax_unexpected_token.cml`, run as `camel --error-format text test/cases/compile/diag_render/syntax_unexpected_token.cml`)
+**Example** (`test/cases/compile/check/syntax_error.cml`, run as `camel check --syntax-only -O short test/cases/compile/check/syntax_error.cml`)
 
 ```camel
-module syntax_unexpected_token
+module my_module
 
 func main(): int sync {
-    let x = 1 else 2
-    return x
+    let x =
+    return 0
 }
 ```
 
@@ -482,6 +492,32 @@ Something opened earlier is not finished: check the last declaration of the file
 ```
 
 *No example: no test small enough to show raises it.*
+
+### ComparisonAcrossLines
+
+`0x02100001` · Warn · `SyntaxDiag::ComparisonAcrossLines`
+
+**Message**
+
+```text
+This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.
+```
+
+**Help**
+
+```text
+A newline does not end a statement, and a '>' followed by an expression is the comparison operator. If this '>' was meant to close '<...>' arguments and the next line to be a new statement, write ';' after the '>'.
+```
+
+**Example** (`test/cases/compile/surface/angle_then_string_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_string_line.cml`)
+
+```camel
+func main(): int sync {
+    let total = [1, 2]->reduce<(acc: int, x: int): int => acc + x, 0>
+    'total = {}'->format<total>->println
+    return 0
+}
+```
 
 ## Semantic (`SemanticDiag`)
 
@@ -764,14 +800,11 @@ Unresolved reference: '{0}'.
 Make sure the name is declared and in scope.
 ```
 
-**Example** (`test/cases/compile/semantic/unresolved_reference.cml`, run as `camel test/cases/compile/semantic/unresolved_reference.cml`)
+**Example** (`test/cases/compile/check/semantic_error.cml`, run as `camel check -O short test/cases/compile/check/semantic_error.cml`)
 
 ```camel
-module semantic_unresolved_reference
-
 func main(): int sync {
-    let value = missing_name + 1
-    println(value)
+    let x = undefined_name + 1
     return 0
 }
 ```
@@ -978,7 +1011,15 @@ Cannot insert data of type '{1}' into a(n) {0} with element type '{2}'.
 Ensure the data type matches the {0}'s element type, or convert the data to the appropriate type before inserting.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/surface/array_element_type.cml`, run as `camel -E short test/cases/compile/surface/array_element_type.cml`)
+
+```camel
+func main(): int sync {
+    println([1, 2,
+        3.0, 4])
+    return 0
+}
+```
 
 ### CallingIncompleteFunction
 
@@ -1420,6 +1461,58 @@ A literal that its type cannot hold is not wrapped around or cut off. Write a va
 ```camel
 func main(): int sync {
     println(9223372036854775808)
+    return 0
+}
+```
+
+### IfArmValueWithoutElse
+
+`0x03000024` · Error · `SemanticDiag::IfArmValueWithoutElse`
+
+**Message**
+
+```text
+This 'if' has no 'else' arm with a value, but its 'then' arm gives a value of type '{0}' (in function '{1}').
+```
+
+**Help**
+
+```text
+An 'if' without 'else' gives nothing when its condition is false, so its arm must give nothing either. A call such as 'println(...)' has a value. When the 'if' is a statement run for its effect, end the arm with 'return null': 'if c then sync { println(x); return null }'. When its value is wanted, add an 'else' arm of the same type.
+```
+
+**Example** (`test/cases/compile/surface/if_without_else.cml`, run as `camel -E short test/cases/compile/surface/if_without_else.cml`)
+
+```camel
+func main(): int sync {
+    let a = 1
+    if a < 2 then println('lt')
+    return 0
+}
+```
+
+### ImportCycle
+
+`0x03000025` · Error · `SemanticDiag::ImportCycle`
+
+**Message**
+
+```text
+The module '{0}' is imported while it is itself being loaded ({1}).
+```
+
+**Help**
+
+```text
+A module cannot import itself, directly or through the modules it imports. A file that imports a module of its own name imports itself. Move what the modules share into another module.
+```
+
+**Example** (`test/cases/compile/surface/self_import.cml`, run as `camel -E short test/cases/compile/surface/self_import.cml`)
+
+```camel
+import self_import
+
+func main(): int sync {
     return 0
 }
 ```
@@ -1983,7 +2076,15 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/surface/self_import.cml`, run as `camel -E short test/cases/compile/surface/self_import.cml`)
+
+```camel
+import self_import
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### CollectionKeyNotAllowed
 

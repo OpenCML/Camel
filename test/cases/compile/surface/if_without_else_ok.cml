@@ -1,0 +1,7 @@
+func main(): int sync {
+    let a = 1
+    if a < 2 then sync { println('lt'); return null }
+    if a > 2 then sync { println('gt'); return null }
+    println('done')
+    return 0
+}

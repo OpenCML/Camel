@@ -39,6 +39,21 @@ inline camel::source::origin_id_t nodeOrigin(const node_ptr_t &node) {
     return node ? node->load()->origin() : camel::source::kInvalidOriginId;
 }
 
+// A token as a diagnostic shows it: quoted, on one line, not longer than a few words.
+inline std::string quoteForDiagnostic(std::string text) {
+    if (const size_t nl = text.find('\n'); nl != std::string::npos) {
+        text = text.substr(0, nl) + "...";
+    }
+    if (text.size() > 24) {
+        size_t cut = 20;
+        while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) {
+            --cut;
+        }
+        text = text.substr(0, cut) + "...";
+    }
+    return "'" + text + "'";
+}
+
 inline void setNodeOriginByOffsets(
     node_ptr_t node, size_t startOffset, size_t endOffset, const std::string &label = "ast") {
     if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId) {
@@ -365,6 +380,8 @@ importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
 any Builder::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
     ENTER("ImportDecl");
     auto import_ = std::make_shared<ImportLoad>();
+    // Where the import is: a module that is not found is reported here.
+    import_->setTokenRange(extractTokenRangeFromContext(context));
     if (context->moduleName()) {
         import_->setPath(context->moduleName()->getText());
     }
@@ -1803,6 +1820,22 @@ any Builder::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) 
         } else {
             throw std::runtime_error("Invalid relational operator: " + strOp);
         }
+        if (strOp == ">" && context->additiveExpr().size() > 2) {
+            // `f<a, 0>` at the end of a line, followed by a line that goes on to contain a
+            // `<...>` of its own (`'total = {}'->format<total>->println`): the first `>` is
+            // read as a comparison between `0` and the next line, that line's `<` as another,
+            // and its `>` closes the arguments. The errors that follow (an undefined
+            // operator, a name used before its declaration) do not point there. A chain of
+            // comparisons (`a > b < c`) is never what a program means, so a `>` in one that
+            // ends its line is reported.
+            antlr4::Token *opToken   = tokenFromTree(context->children[i * 2 - 1]);
+            antlr4::Token *nextToken = context->additiveExpr(i)->getStart();
+            if (opToken && nextToken && nextToken->getLine() > opToken->getLine()) {
+                diags_->of(SyntaxDiag::ComparisonAcrossLines)
+                    .at(opToken)
+                    .commit(quoteForDiagnostic(nextToken->getText()));
+            }
+        }
         node_ptr_t rhsNode      = any2node(visitAdditiveExpr(context->additiveExpr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
         setNodeTokenRangeByContext(dataExprNode, context->additiveExpr(i));
@@ -2162,6 +2195,17 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
         node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Comp);
         setNodeTokenRangeByContext(dataNode, context);
         node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
+        if (strOp == "..") {
+            // `f..g` is in the grammar, but what it builds is not a function: its result
+            // could not be called and printed as 0. Its meaning is not specified (the order
+            // of the two functions, functions of several parameters).
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .at(tokenFromTree(context->children[i * 2 - 1]))
+                .commit(
+                    strOp,
+                    "function composition is not implemented; write a lambda, e.g. "
+                    "'(x: int): int => g(f(x))'");
+        }
         if (strOp == "?..") {
             // Used to be accepted with a warning and compiled as `..`.
             diags_->of(SemanticDiag::ConstructNotSupported)

@@ -436,6 +436,9 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         }
         if (ast->load()->origin() != camel::source::kInvalidOriginId) {
             d.range = ast->load()->origin();
+        } else {
+            // An import has no origin of its own; its tokens say where it is.
+            d.range = load->tokenRange();
         }
         diags_->add(std::move(d));
         throw BuildAbortException();
@@ -2103,7 +2106,15 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
         auto [data, _]      = extractData(dataNode, execNode, dangling);
-        factory.add(data);
+        try {
+            factory.add(data);
+        } catch (Diagnostic &d) {
+            // The element that does not fit the others: the data layer knows the types, the
+            // position is known here.
+            d.range = item->load()->tokenRange();
+            diags_->add(std::move(d));
+            throw BuildAbortException();
+        }
     }
 
     auto arrayData = factory.build();

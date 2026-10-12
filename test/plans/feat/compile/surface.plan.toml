@@ -1,0 +1,172 @@
+id = "compile.surface"
+order = 332
+tier = "feat"
+tags = ["feat", "compile", "semantic", "negative", "surface"]
+desc = "Located diagnostics for ways of writing a program that ended in an internal error, in a diagnostic without a position, or in one that named types the program does not show"
+
+# docs/issues/2026-10-12-language-surface-findings.md. No program here may print the text of a
+# C++ exception or an internal error.
+
+[defaults]
+expect_output_not_contains = ["bad any_cast", "live DREF", "internal error", "Internal", "Segmentation fault", "dumped core", ":?:?"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "surface.name_as_value_operator"
+desc = "`println(println)`: an operator whose signature depends on its arguments has no function value (it was an internal error about a live DREF node)."
+kind = "negative"
+case = "../../../cases/compile/surface/name_as_value_operator.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+expect_output_contains = ["'println' is used as a value here"]
+
+[[tests]]
+name = "surface.name_as_value_bound_operator"
+desc = "`println(len<1>)`: the same for an operator with `with` arguments bound (it was the same internal error)."
+kind = "negative"
+case = "../../../cases/compile/surface/name_as_value_bound_operator.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_line = 2
+expect_output_contains = ["'len' is used as a value here"]
+
+[[tests]]
+name = "surface.name_as_value_overloads"
+desc = "`xs->map<abs>`: `abs` has four signatures and `map` does not say which it wants; the diagnostic lists them, each once."
+kind = "negative"
+case = "../../../cases/compile/surface/name_as_value_overloads.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 26
+expect_output_contains = ["an operator with 4 signatures [(i32) => i32; (i64) => i64; (f32) => f32; (f64) => f64]"]
+
+[[tests]]
+name = "surface.name_as_value_user_overloads"
+desc = "Two user functions of one name passed where neither has the expected type: FunctionNameAsValue with both signatures."
+kind = "negative"
+case = "../../../cases/compile/surface/name_as_value_user_overloads.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_line = 6
+expect_output_contains = ["2 functions of that name [(x: i64) => i64; (x: f64) => f64]"]
+
+[[tests]]
+name = "surface.if_without_else"
+desc = "`if c then println(...)`: the diagnostic says that the `if` has no `else` and its arm has a value, and how to write it (it named the types string and void, which the program does not show)."
+kind = "negative"
+case = "../../../cases/compile/surface/if_without_else.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::IfArmValueWithoutElse"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 5
+expect_output_contains = ["has no 'else' arm with a value", "return null"]
+
+[[tests]]
+name = "surface.if_without_else_ok"
+desc = "The rule is unchanged: an `if` without `else` whose arm ends with `return null` is a statement; the arm of the false one does not run."
+kind = "behavior"
+case = "../../../cases/compile/surface/if_without_else_ok.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["lt\ndone"]
+expect_output_not_contains = ["gt", "Error"]
+
+[[tests]]
+name = "surface.array_element_type"
+desc = "An array literal with an element of another type is reported at that element (it had no position)."
+kind = "negative"
+case = "../../../cases/compile/surface/array_element_type.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 9
+
+[[tests]]
+name = "surface.import_missing"
+desc = "A module that is not found is reported at the import (it had no position)."
+kind = "negative"
+case = "../../../cases/compile/surface/import_missing.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["import_missing.cml:3:1: [Error]: Module 'nosuch_module_anywhere' not found", "name=SemanticDiag::ModuleNotFound"]
+
+[[tests]]
+name = "surface.self_import"
+desc = "A file that imports a module of its own name imports itself: ImportCycle at the import (the compiler crashed)."
+kind = "negative"
+case = "../../../cases/compile/surface/self_import.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["name=SemanticDiag::ImportCycle", "self_import.cml:1:1", "name=SemanticDiag::ImportedModuleHasErrors"]
+
+[[tests]]
+name = "surface.composition"
+desc = "`f..g` is ConstructNotSupported at the operator until its meaning is decided (its result could not be called, and printed as 0)."
+kind = "negative"
+case = "../../../cases/compile/surface/composition.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 16
+expect_output_contains = ["function composition is not implemented"]
+
+[[tests]]
+name = "surface.angle_then_string_line"
+desc = "A statement ending in `>` followed by a line with `<...>` of its own is read as one comparison chain: the warning at that `>` says the two statements may have been joined, next to the error that follows."
+kind = "negative"
+case = "../../../cases/compile/surface/angle_then_string_line.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["angle_then_string_line.cml:2:69: [Warn]", "name=SyntaxDiag::ComparisonAcrossLines", "name=SemanticDiag::NoMatchingFunction"]
+
+[[tests]]
+name = "surface.angle_then_name_line"
+desc = "The same when the next line starts with a name: the warning explains the `Unresolved reference` to the name the statement declares."
+kind = "negative"
+case = "../../../cases/compile/surface/angle_then_name_line.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["angle_then_name_line.cml:2:69: [Warn]", "name=SyntaxDiag::ComparisonAcrossLines", "name=SemanticDiag::UnresolvedReference"]
+
+[[tests]]
+name = "surface.angle_then_semicolon"
+desc = "With `;` after the `>` the two statements are two; a single comparison broken after `>` inside angle arguments is not reported."
+kind = "behavior"
+case = "../../../cases/compile/surface/angle_then_semicolon.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["total = 3\n[5, 9]"]
+expect_output_not_contains = ["Warn", "Error"]
+
+[[tests]]
+name = "surface.main_implicit_result"
+desc = "A `main` without a declared return type whose body ends in `println(...)` returns what that call returns, its text: the default pipeline writes the result of main to the output, so the line appears twice. This is the rule for undeclared return types (the value of the last statement), recorded here, not a defect of the entry."
+kind = "behavior"
+case = "../../../cases/compile/surface/main_implicit_result.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["printed by the program\nprinted by the program"]
+
+[[tests]]
+name = "surface.main_void_result"
+desc = "Declared `: void`, the same `main` returns nothing and the line appears once."
+kind = "behavior"
+case = "../../../cases/compile/surface/main_void_result.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === 'printed by the program', JSON.stringify(input.normalized.stdout))
+}
+"""
