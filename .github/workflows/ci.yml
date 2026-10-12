@@ -142,7 +142,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip "conan>=2.10,<3" $TEST_PIP_PACKAGES
           # CPU-only wheels: the default Linux wheel on PyPI pulls in the CUDA runtime.
-          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # The wheel host is occasionally unreachable from a runner; try a few times.
+          for attempt in 1 2 3 4; do
+            python -m pip install torch --index-url https://download.pytorch.org/whl/cpu && break
+            [ "$attempt" = 4 ] && exit 1
+            sleep $((attempt * 20))
+          done
 
       - name: Cache Conan packages
         uses: actions/cache@v4
@@ -157,8 +162,15 @@ jobs:
         run: |
           conan profile detect --force
           profile="$(conan profile path default)"
-          sed -i.bak -E 's/^compiler\.cppstd=.*/compiler.cppstd=23/' "$profile"
-          printf '\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n' >> "$profile"
+          # Not `sed -i`: on the Windows runner its rename crosses devices and fails.
+          python - "$profile" <<'EOF'
+          import re, sys
+          path = sys.argv[1]
+          text = open(path, encoding="utf-8").read()
+          text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
+          text += "\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n"
+          open(path, "w", encoding="utf-8", newline="\n").write(text)
+          EOF
           cat "$profile"
 
       - name: Install npm dependencies (skip husky / prepare)
@@ -244,8 +256,15 @@ jobs:
         run: |
           conan profile detect --force
           profile="$(conan profile path default)"
-          sed -i.bak -E 's/^compiler\.cppstd=.*/compiler.cppstd=23/' "$profile"
-          printf '\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n' >> "$profile"
+          # Not `sed -i`: on the Windows runner its rename crosses devices and fails.
+          python - "$profile" <<'EOF'
+          import re, sys
+          path = sys.argv[1]
+          text = open(path, encoding="utf-8").read()
+          text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
+          text += "\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n"
+          open(path, "w", encoding="utf-8", newline="\n").write(text)
+          EOF
           cat "$profile"
 
       - name: Install npm dependencies (skip husky / prepare)
