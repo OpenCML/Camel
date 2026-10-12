@@ -164,6 +164,8 @@ class Context : public std::enable_shared_from_this<Context> {
      * to a file on request). Called from captureProcessExitCode, while the value is live.
      */
     using EntryResultHandler = std::function<void(camel::runtime::GCGraph *, slot_t)>;
+    /** The program ended itself with `exit(code)` (camel/core/process_exit.h). */
+    void setProcessExitCode(int code) { processExitCode_ = code; }
     void setEntryResultHandler(EntryResultHandler handler) {
         entryResultHandler_ = std::move(handler);
     }

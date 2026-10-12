@@ -19,6 +19,7 @@
 
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
+#include "camel/core/process_exit.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/source/manager.h"
@@ -804,6 +805,12 @@ PassApplyResult applyPassesDetailed(
                 graph = pass->apply(graph, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
                 throw; // diagnostics already recorded; the caller dumps them
+            } catch (const camel::core::ProcessExit &exit) {
+                // The program called exit(code): the run is over, with that exit code and no
+                // diagnostic. The pipeline ends as after a scheduling pass that completed.
+                ctx->setProcessExitCode(exit.code);
+                CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> exit({})", p, exit.code);
+                return {nullptr, PassApplyStatus::Consumed};
             } catch (const camel::runtime::GraphCapacityError &e) {
                 // The pass built a graph larger than a graph can be. That is a limit of the
                 // representation the program ran into, not a broken graph: it is reported with

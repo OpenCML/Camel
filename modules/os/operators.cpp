@@ -23,6 +23,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+#include "camel/core/process_exit.h"
 #include "camel/core/rtdata/string.h"
 
 #include <memory>
@@ -189,10 +190,11 @@ slot_t __os_cpu_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(static_cast<Int64>(count));
 }
 
+// Ends the program with the given exit code: see camel/core/process_exit.h for how the run is
+// unwound. The process leaves through main, not through std::exit, so that buffered output is
+// written and what the run holds is released as after a normal return.
 slot_t __os_exit__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "<exit> operator invoked");
-    exit(1);
-    return NullSlot;
+    throw camel::core::ProcessExit{static_cast<int>(norm.get<Int64>(0))};
 }
 
 slot_t __os_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx) {
