@@ -1,0 +1,8 @@
+// The smallest program: `main` is the entry, and its body is a sync block.
+// Run: camel docs/tutorial/examples/01_hello.cml
+module hello
+
+func main(): int sync {
+    println('Hello, Camel!')
+    return 0
+}

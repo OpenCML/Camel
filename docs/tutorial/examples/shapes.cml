@@ -1,0 +1,14 @@
+// A library module used by 12_modules.cml.
+module shapes
+
+import { sqrt } from math
+
+export type Vec = { x: float, y: float }
+
+export func hypot(v: Vec): float {
+    return sqrt(v.x * v.x + v.y * v.y)
+}
+
+export func area(w: float, h: float): float {
+    return w * h
+}

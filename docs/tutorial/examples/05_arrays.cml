@@ -1,0 +1,23 @@
+// Arrays and the higher-order operators map, filter, reduce and foreach.
+// Run: camel docs/tutorial/examples/05_arrays.cml
+module arrays
+
+func main(): int sync {
+    let xs = range(1, 11)                                     // [1, ..., 10]
+    let squares = xs->map<(x: int): int => x * x>
+    let evens = squares->filter<(x: int): bool => x % 2 == 0>
+    let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
+
+    println(xs)
+    println(squares)
+    println(evens)
+    println(total)
+
+    // Arrays are values: slice and concat return new arrays.
+    let ys = concat(xs->slice<0, 3>, [99])
+    println(ys, len(ys), head(ys))
+
+    // foreach runs its function for each element, in order.
+    ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
+    return 0
+}
