@@ -1059,6 +1059,30 @@ std::string RuntimeCppEmitter::emitExecutableEntryCall(GCGraph *root, GCGraph *g
             "std::cpp executable bootstrap could not resolve the entry graph function literal");
     }
 
+    // What the entry function is given is written out as an expression of `int main()`. Only
+    // a literal has one there: a value of the top level that is computed ('let k = f()') is
+    // a node of the root graph, which is not translated (the emitter crashed on it).
+    const auto requireLiteral = [&](gc_node_ref_t argRef) {
+        const auto *argNode = root->node(argRef);
+        if (argNode && argNode->kind == GCNodeKind::Data) {
+            return;
+        }
+        throw CppTranslationRefusal{RuntimeCppLoweringIssue{
+            .graph   = root,
+            .nodeRef = argRef,
+            .reason  = "the entry function uses a value of the top level of the module that is "
+                       "computed, and std::cpp translates only literal top-level values yet "
+                       "(compute the value inside a function instead)",
+            .unsupported = true,
+        }};
+    };
+    for (gc_node_ref_t argRef : root->normInputsOf(callRef)) {
+        requireLiteral(argRef);
+    }
+    for (gc_node_ref_t argRef : root->withInputsOf(fillRef)) {
+        requireLiteral(argRef);
+    }
+
     expr_cache_t cache;
     RuntimeCppGraphPlan bootstrapPlan;
     bootstrapPlan.graph = root;
