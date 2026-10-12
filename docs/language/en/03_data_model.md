@@ -261,7 +261,7 @@ func main(): int sync {
 | `items(s)` | `T[]` | Ascending |
 | `a == b`, `a != b` | `bool` | Equal when the entries are the same |
 
-An operation with `with` arguments has three equivalent forms: `put<k, v>(m)`, `m->put<k, v>`, `put(m, k, v)`.
+An operation with `with` arguments has one calling form, the convention of the standard library: the map or set that is worked on is the ordinary argument and the rest goes in angle brackets, `put<k, v>(m)` or, as a pipe, `m->put<k, v>` (the same call); an operation on two operands of equal standing takes both as ordinary arguments (`merge(m1, m2)`, `union(a, b)`). Writing everything as ordinary arguments (`put(m, k, v)`, `get(m, k)`, `has(m, k)`) is the compile-time error `SemanticDiag::NoMatchingFunction`, and the diagnostic names the arguments that belong in angle brackets and gives the call as it should be written; the same holds for the other library functions (`split('a,b', ',')` is written `'a,b'->split<','>`). Two prefix-form calls in one argument list (`f(has<a>(m), has<b>(m))`) are currently parsed as comparisons; use the pipe form there, `f(m->has<a>, m->has<b>)`.
 
 To iterate, first take an array, then use a higher-order operator:
 

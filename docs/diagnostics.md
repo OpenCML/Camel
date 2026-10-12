@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-120 diagnostics: 109 errors, 11 warnings.
+121 diagnostics: 110 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -75,8 +75,6 @@ prints one entry.
 | `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
 | `0x03000024` | [SemanticDiag::IfArmValueWithoutElse](#ifarmvaluewithoutelse) | Error |
 | `0x03000025` | [SemanticDiag::ImportCycle](#importcycle) | Error |
-| `0x03000026` | [SemanticDiag::ImportedFunctionUsesModuleValue](#importedfunctionusesmodulevalue) | Error |
-| `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error |
@@ -135,6 +133,9 @@ prints one entry.
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error |
 | `0x0400003B` | [RuntimeDiag::OperatorNotImplemented](#operatornotimplemented) | Error |
+| `0x04000050` | [RuntimeDiag::ConversionOutOfRange](#conversionoutofrange) | Error |
+| `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
+| `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
 | `0x04000090` | [RuntimeDiag::MatchNotExhaustive](#matchnotexhaustive) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
@@ -1509,72 +1510,12 @@ The module '{0}' is imported while it is itself being loaded ({1}).
 A module cannot import itself, directly or through the modules it imports. A file that imports a module of its own name imports itself. Move what the modules share into another module.
 ```
 
-**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
+**Example** (`test/cases/compile/surface/self_import.cml`, run as `camel -E short test/cases/compile/surface/self_import.cml`)
 
 ```camel
-import { even } from cyc_a
+import self_import
 
 func main(): int sync {
-    println(even(10))
-    return 0
-}
-```
-
-### ImportedFunctionUsesModuleValue
-
-`0x03000026` · Error · `SemanticDiag::ImportedFunctionUsesModuleValue`
-
-**Message**
-
-```text
-The function '{0}' is used from another module, but it uses '{1}' of the top level of its own module, directly or through a function it calls.
-```
-
-**Help**
-
-```text
-A function used from another module cannot yet read a 'let' or a 'var' of the top level of the module that declares it: the name would be looked up in the importing module. Pass the value as a parameter or a 'with' parameter, or write it as a function without parameters ('func base(): int { return 10 }').
-```
-
-**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
-
-```camel
-module err_export_capture
-
-import { biased } from export_lib
-
-func main(): int sync {
-    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
-    // cannot capture a top-level value of the module that declares it.
-    println(biased(1))
-    return 0
-}
-```
-
-### ImportNameConflict
-
-`0x03000027` · Error · `SemanticDiag::ImportNameConflict`
-
-**Message**
-
-```text
-The name '{0}' is imported from the modules '{1}' and '{2}' with the same signature {3}.
-```
-
-**Help**
-
-```text
-Two imports that bring the same name with the same parameter types conflict; neither is chosen silently. Import the name from one of the modules only, and reach the other through its module ('import m' and then 'm::name').
-```
-
-**Example** (`test/cases/compile/module_imports/d5_conflict.cml`, run as `camel -E short test/cases/compile/module_imports/d5_conflict.cml`)
-
-```camel
-import { f } from conf_b
-import { f } from conf_c
-
-func main(): int sync {
-    println(f(1))
     return 0
 }
 ```
@@ -1847,22 +1788,17 @@ The generic function '{0}' cannot be {1}.
 This use of a generic function is not supported.
 ```
 
-**Example** (`test/cases/compile/generics/err_decorated.cml`, run as `camel test/cases/compile/generics/err_decorated.cml`)
+**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
 
 ```camel
-module err_decorated
+module err_export_capture
 
-func deco(f: (x: int) => int): (x: int) => int {
-    return f
-}
-
-@deco
-func id(x: typeas T): T {
-    return x
-}
+import { biased } from export_lib
 
 func main(): int sync {
-    println(id(1))
+    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
+    // cannot capture a top-level value of the module that declares it.
+    println(biased(1))
     return 0
 }
 ```
@@ -2143,13 +2079,12 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
+**Example** (`test/cases/compile/surface/self_import.cml`, run as `camel -E short test/cases/compile/surface/self_import.cml`)
 
 ```camel
-import { even } from cyc_a
+import self_import
 
 func main(): int sync {
-    println(even(10))
     return 0
 }
 ```
@@ -2461,12 +2396,12 @@ import { grad } from autodiff
 
 func through_map(x: float): float {
     let m = [(1, x)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func beside_map(x: float): float {
     let m = [(1, 2.0)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
@@ -2828,12 +2763,12 @@ import { grad } from autodiff
 
 func through_map(x: float): float {
     let m = [(1, x)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func beside_map(x: float): float {
     let m = [(1, 2.0)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
@@ -2913,7 +2848,15 @@ Cannot write the result of 'main' to '{0}': {1}.
 --output <file> (-o) writes the value 'main' returns: a number, bool or text as a text file, a tensor as a .npy file, a struct or tuple as a directory with one file per member. Without it the value is printed on standard output.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/consistency/entry/undeclared_println.cml`, run as `camel -o tmp/entry_undeclared.out test/cases/consistency/entry/undeclared_println.cml`)
+
+```camel
+module undeclared_println
+
+func main() sync {
+    println('a')
+}
+```
 
 ### GraphTooLarge
 
@@ -3002,18 +2945,19 @@ Cannot convert the string '{0}' to {1}.
 **Help**
 
 ```text
-The string must hold {2} and nothing else that the conversion cannot skip. Check the value before converting it; a conversion that fails is a fault and ends the program.
+The whole string must be {2}: no blanks before or after it and nothing else. A conversion that fails is a fault and ends the program; parse_int and parse_float return an error value (T!) instead.
 ```
 
-**Example** (`test/cases/linear/operators/int_of_text.cml`, run as `camel test/cases/linear/operators/int_of_text.cml std::nvm`)
+**Example** (`test/cases/consistency/faults/int_text_trailing.cml`, run as `camel `)
 
 ```camel
-module int_of_text
+module int_text_trailing
+
+func conv(s: string): int { return int(s) }
 
 func main(): int sync {
-    println(int('12'))
-    let s = 'abc'
-    println(int(s))
+    println(conv('12'))
+    println(conv('12abc'))
     println('not reached')
     return 0
 }
@@ -3227,6 +3171,110 @@ The name exists so that programs using it are recognised; calling it is not poss
 ```
 
 *No example: no test small enough to show raises it.*
+
+### ConversionOutOfRange
+
+`0x04000050` · Error · `RuntimeDiag::ConversionOutOfRange`
+
+**Message**
+
+```text
+Cannot convert {0} to {1}: {2}.
+```
+
+**Help**
+
+```text
+A conversion whose value does not fit the target type is a fault (design principles 2.10): a float that is NaN, infinite or beyond the integer's range, or an integer beyond the range of a narrower integer type. Check the value before converting it, or clamp it (min, max) to the range of the target.
+```
+
+**Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel `)
+
+```camel
+module float_to_int_range
+
+func conv(x: float): int { return int(x) }
+func mul(a: float, b: float): float { return a * b }
+
+func main(): int sync {
+    let inf = mul(1.0e308, 10.0)
+    println('before')
+    println(conv(9.0e18))
+    println(conv(1.0e30))
+    println(conv(-1.0e30))
+    println(conv(inf))
+    println(conv(inf - inf))
+    println('not reached')
+    return 0
+}
+```
+
+### UnhandledError
+
+`0x04000051` · Error · `RuntimeDiag::UnhandledError`
+
+**Message**
+
+```text
+An error value reached the exit of 'main' without being handled: {0}: {1}.
+```
+
+**Help**
+
+```text
+A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+```
+
+**Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel `)
+
+```camel
+module error_thrown
+
+func check(x: int): int! {
+    if x < 0 then {
+        throw error('Negative', 'the argument is negative')
+    } else {
+        return x
+    }
+}
+
+func main(): int! sync {
+    println('before')
+    return check(-1)
+}
+```
+
+### SliceOutOfRange
+
+`0x04000052` · Error · `RuntimeDiag::SliceOutOfRange`
+
+**Message**
+
+```text
+The range {0} to {1} is out of range for {2} of length {3}.
+```
+
+**Help**
+
+```text
+A bound of 'slice' is a position from 0 to the length; the end is one past the last element taken. A range that leaves the sequence is a fault, as an index out of range is. To take or leave out at most n elements, use 'take' and 'drop' of the module 'array', which cut by definition.
+```
+
+**Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel `)
+
+```camel
+module slice_out_of_range
+
+func head(xs: int[], n: int): int[] { return xs->slice<0, n> }
+
+func main(): int sync {
+    let xs = [10, 20, 30]
+    println(head(xs, 2))
+    println(head(xs, 7))
+    println('not reached')
+    return 0
+}
+```
 
 ### MatchNotExhaustive
 

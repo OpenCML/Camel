@@ -114,12 +114,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "contains_string"
-desc = "contains of two strings, declared without an implementation, is rejected when compiled; it used to give false"
+desc = "contains('abc', 'b') with both strings in the parentheses is rejected when compiled, with the hint that gives the kept form 'abc'->contains<'b'> (a string has contains since the ruling of 2.10; before that this spelling was rejected for want of an implementation, and before that it gave false)"
 kind = "negative"
 case = "../../../cases/compile/operators/contains_string.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "contains_string.cml:8:21:", "(string, string)"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "contains_string.cml:8:21:", "(string, string)", "write contains<'b'>('abc') or 'abc'->contains<'b'>"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

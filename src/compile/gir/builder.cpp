@@ -1378,6 +1378,27 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     const size_t withCount = signature->withTypesCount();
     const size_t normCount = signature->normTypesCount();
     if (withCount != withTypes.size()) {
+        // Every argument written in the parentheses (`take(xs, 2)`): say which parameters
+        // are with-parameters and how the call is written.
+        if (withTypes.empty() && normCount > 0 && withCount + normCount == normTypes.size() &&
+            signature->argNamesCount() >= withCount + normCount) {
+            const auto names = [&](size_t from, size_t count) {
+                std::string out;
+                for (size_t i = 0; i < count; ++i) {
+                    out += (i == 0 ? "" : ", ") + std::string(signature->argNameAt(from + i));
+                }
+                return out;
+            };
+            const std::string withs = names(0, withCount), norms = names(withCount, normCount);
+            reject(std::format(
+                "it takes '{}' in angle brackets, not in the parentheses: write {}<{}>({}){}",
+                withs,
+                tmpl->name,
+                withs,
+                norms,
+                normCount == 1 ? std::format(" or {}->{}<{}>", norms, tmpl->name, withs)
+                               : std::string()));
+        }
         reject(std::format(
             "it takes {} with-argument(s) and {} were given",
             withCount,
@@ -3191,6 +3212,41 @@ StaticArg Builder::staticArgOf(node_handle_t node) const {
     return arg;
 }
 
+// The part of a "no matching function" message for a call that wrote every argument in the
+// parentheses although `name` takes all but the first `normCount` in angle brackets: the
+// standard library's convention is that the value worked on is an ordinary argument and what
+// configures the operation a with-argument (design principles 2.10). Names the misplaced
+// arguments and gives the call as it should be written.
+std::string Builder::withArgumentsHint(
+    const std::string &name, const std::vector<Argument> &arguments, size_t normCount) const {
+    std::vector<std::string> texts;
+    texts.reserve(arguments.size());
+    for (size_t i = 0; i < arguments.size(); ++i) {
+        std::string text = sourceTextOf(arguments[i].expr);
+        texts.push_back(text.empty() ? std::format("arg{}", i + 1) : std::move(text));
+    }
+    const auto joined = [&](size_t from, size_t to) {
+        std::string out;
+        for (size_t i = from; i < to; ++i) {
+            out += (i == from ? "" : ", ") + texts[i];
+        }
+        return out;
+    };
+    const std::string withs = joined(normCount, texts.size());
+    const std::string norms = joined(0, normCount);
+    std::string hint        = std::format(
+        "; '{}' takes {} in angle brackets, not in the parentheses: write {}<{}>({})",
+        name,
+        "'" + withs + "'",
+        name,
+        withs,
+        norms);
+    if (normCount == 1) {
+        hint += std::format(" or {}->{}<{}>", norms, name, withs);
+    }
+    return hint;
+}
+
 std::string Builder::sourceTextOf(const GCT::node_ptr_t &expr) const {
     const auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr;
     if (sourceContext == nullptr || expr == nullptr) {
@@ -3563,6 +3619,27 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     "<{}> ({})",
                     strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
                     strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
+                // Every argument written in the parentheses of a function that takes some of
+                // them in angle brackets: say which, and how the call is written.
+                if (withInputTypes.empty()) {
+                    for (const auto &g : *graphs) {
+                        FunctionType *type     = signatureOf(g);
+                        const size_t normCount = type->normTypesCount();
+                        const size_t withCount = type->withTypesCount();
+                        bool fits = withCount > 0 && normCount > 0 &&
+                                    withCount + normCount == normInputTypes.size();
+                        for (size_t i = 0; fits && i < normInputTypes.size(); ++i) {
+                            Type *param = i < normCount ? type->normTypeAt(i)
+                                                        : type->withTypeAt(i - normCount);
+                            fits = containsTypeVar(param) || param->equals(normInputTypes[i]) ||
+                                   param->assignableFrom(normInputTypes[i]);
+                        }
+                        if (fits) {
+                            argTypesStr += withArgumentsHint(g->name(), normInputs, normCount);
+                            break;
+                        }
+                    }
+                }
                 std::string overloadsStr =
                     "\n    " +
                     strutil::join(
@@ -3625,6 +3702,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     argTypesStr += std::format(
                         "; operator '{}' is not defined for these operand types",
                         symbol);
+                }
+                // Every argument written in the parentheses of an operator that takes some of
+                // them in angle brackets (`split('a,b', ',')`, `put(m, k, v)`): if the call
+                // resolves with the trailing arguments moved there, say so.
+                if (withInputTypes.empty() && operatorSymbolOf(ops->name()) == nullptr) {
+                    for (size_t normCount = 1; normCount < normInputTypes.size(); ++normCount) {
+                        const type_vec_t asNorm(
+                            normInputTypes.begin(),
+                            normInputTypes.begin() + static_cast<std::ptrdiff_t>(normCount));
+                        const type_vec_t asWith(
+                            normInputTypes.begin() + static_cast<std::ptrdiff_t>(normCount),
+                            normInputTypes.end());
+                        const std::vector<StaticArg> statics(
+                            normStatics.begin(),
+                            normStatics.begin() + static_cast<std::ptrdiff_t>(normCount));
+                        if (ops->resolve(asWith, asNorm, statics, Modifier::None).has_value()) {
+                            argTypesStr += withArgumentsHint(ops->name(), normInputs, normCount);
+                            break;
+                        }
+                    }
                 }
                 std::string overloadsStr =
                     "\n    " +

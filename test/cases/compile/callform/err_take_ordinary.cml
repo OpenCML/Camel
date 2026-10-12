@@ -1,0 +1,9 @@
+module err_take_ordinary
+
+import { take } from array
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(take(xs, 2))
+    return 0
+}

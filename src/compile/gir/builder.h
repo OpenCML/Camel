@@ -154,6 +154,9 @@ class Builder {
     // The source text of the expression `expr` when it is short and on one line; empty
     // otherwise. For diagnostics that suggest source text.
     std::string sourceTextOf(const GCT::node_ptr_t &expr) const;
+    // See the definition: the hint for a call that put with-arguments in the parentheses.
+    std::string withArgumentsHint(
+        const std::string &name, const std::vector<Argument> &arguments, size_t normCount) const;
     // A use of a variable that no writer has been ordered after yet. A read (`:var/get`) hands
     // the value on, so the operations that take the read's result are the direct users of the
     // value; an operation that uses the variable itself (a call of a function that captured

@@ -5,8 +5,8 @@ module main
 
 func lookup(m: Map<string, int>, s: Set<int>, xs: int[], k: string): int {
     let found = m[k] ?? 0
-    let grown = put(m, k, found + xs[0])
-    return if contains(s, found) then len(grown) else found
+    let grown = m->put<k, found + xs[0]>
+    return if s->contains<found> then len(grown) else found
 }
 
 func main(): int sync {

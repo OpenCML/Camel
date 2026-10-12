@@ -138,7 +138,8 @@ x as a 32-bit float.
 string: (x: any) => string
 ```
 
-x as text. A float is written with six decimals: string(2.5) is '2.500000'.
+x as text, as println writes it. A float is written as the shortest text that reads back as
+the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 
 - Pure.
 - Example: `string(42)` gives `'42'`
@@ -497,7 +498,7 @@ get: <key: K> (m: Map<K, V>) => V?
 The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 
 - Pure.
-- Example: `get(m, 'z') ?? 0` gives `0 when m has no 'z'`
+- Example: `m->get<'z'> ?? 0` gives `0 when m has no 'z'`
 
 #### `get_or`
 
@@ -508,7 +509,7 @@ get_or: <key: K, fallback: V> (m: Map<K, V>) => V
 The value stored under key, or fallback when the map has no such key.
 
 - Pure.
-- Example: `get_or(m, 'z', -1)` gives `-1 when m has no 'z'`
+- Example: `m->get_or<'z', -1>` gives `-1 when m has no 'z'`
 
 #### `put`
 
@@ -519,7 +520,7 @@ put: <key: K, value: V> (m: Map<K, V>) => Map<K, V>
 A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
 
 - Pure.
-- Example: `put([('a', 1), ('b', 2)] as Map<string, int>, 'c', 3)` gives `{a: 1, b: 2, c: 3}`
+- Example: `([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>` gives `{a: 1, b: 2, c: 3}`
 
 #### `remove`
 
@@ -530,7 +531,7 @@ remove: <key: K> (c: Map<K, V> | Set<K>) => Map<K, V> | Set<K>
 A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
 
 - Pure.
-- Example: `remove([('a', 1), ('b', 2)] as Map<string, int>, 'a')` gives `{b: 2}`
+- Example: `([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>` gives `{b: 2}`
 
 #### `has`
 
@@ -541,7 +542,7 @@ has: <key: K> (c: Map<K, V> | Set<K>) => bool
 Whether a map has an entry of key, or a set has the element.
 
 - Pure.
-- Example: `has([('a', 1)] as Map<string, int>, 'a')` gives `true`
+- Example: `([('a', 1)] as Map<string, int>)->has<'a'>` gives `true`
 
 #### `keys`
 
@@ -618,7 +619,7 @@ add: <value: T> (s: Set<T>) => Set<T>
 A set with value added; s is unchanged.
 
 - Pure.
-- Example: `add([1, 2, 3] as Set<int>, 9)` gives `{1, 2, 3, 9}`
+- Example: `([1, 2, 3] as Set<int>)->add<9>` gives `{1, 2, 3, 9}`
 
 #### `union`
 

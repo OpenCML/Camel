@@ -25,7 +25,7 @@ func key_set(m: Map<typeas K, typeas V>): Set<K> {
 }
 
 func singleton(k: typeas K, v: typeas V): Map<K, V> {
-    return put([] as Map<K, V>, k, v)
+    return ([] as Map<K, V>)->put<k, v>
 }
 
 func count_words(words: string[]): Map<string, int> {

@@ -397,15 +397,25 @@ The conversion runs when the program runs (a `CAST` node), also for a literal; s
 All are declared pure (`registerBuiltinOperatorTraits`, the `coll/` family). Key and value
 arguments must have exactly the key and value type.
 
-**Calling form (`DESIGN-QUESTION(map-call-form)`).** The built-in functions that exist put
-the collection that flows through as the ordinary argument and what configures the operation
-as a `with` argument (`contains<v>(xs)`, `slice<a, b>(xs)`, `map<f>(xs)`), which also gives
-the chained form `m->put<k, v>->remove<k2>`; an operation on two collections of equal
-standing takes both as ordinary arguments (`concat(a, b)`). The operators here follow that.
-The sketch in the principles writes `put(m, 'c', 3)`, and the grammar mis-parses two
-`with`-form calls in one argument list (`f(has<a>(m), has<b>(m))` is read as comparisons;
-found here, not caused by this work). So **a configuring argument is accepted in both
-positions**: `put<k, v>(m)`, `m->put<k, v>` and `put(m, k, v)` are one operator node.
+**Calling form (ruled: design principles 2.10).** One form only, the convention of the whole
+standard library: the collection that flows through is the ordinary argument and what
+configures the operation is a `with` argument, `put<k, v>(m)` or, chained,
+`m->put<k, v>->remove<k2>` (as `contains<v>(xs)`, `slice<a, b>(xs)`, `map<f>(xs)`); an
+operation on two collections of equal standing takes both as ordinary arguments
+(`merge(m1, m2)`, `union(s1, s2)`, as `concat(a, b)`).
+
+`put(m, k, v)`, `get(m, k)`, `has(m, k)`, `remove(m, k)`, `add(s, x)`, `contains(s, x)` and
+`get_or(m, k, d)` were accepted as a second spelling of the same operator node and no longer
+are. Written that way, a call is `NoMatchingFunction` with a hint that names the misplaced
+arguments and gives the call as it should be written (`'put' takes 'k, v' in angle brackets,
+not in the parentheses: write put<k, v>(m) or m->put<k, v>`). The hint is given for every
+function and operator whose call resolves once the trailing arguments are moved into angle
+brackets (`split('a,b', ',')`, `take(xs, 2)`), not only for these.
+
+The ANTLR grammar still mis-parses two prefix `with`-form calls in one argument list
+(`f(has<a>(m), has<b>(m))` is read as comparisons), which is why the second spelling had been
+accepted. Inside an argument list write the arrow form, `f(m->has<a>, m->has<b>)`, until the
+hand-written parser applies the "angle brackets touch" rule of 2.10.
 
 **`map_values` and `filter` are not operators.** An operator that calls a function value is
 a "marked" operator that each backend implements itself (`:mark/map_arr` in NVM, FVM, JIT,
@@ -603,10 +613,8 @@ Each is implemented as recommended here; the tag is in the code.
 - **`map-nullable-value`.** For `Map<string, int?>`, `m[k]` is `int?` and does not tell an
   absent key from a null value (`has` does). Candidates: reject `m[k]` and `get` for such a
   map and require `has` + `get_or`; reject nullable value types altogether.
-- **`map-call-form`.** `put<k, v>(m)`, `m->put<k, v>` and `put(m, k, v)` are all accepted.
-  Candidates: only the `with` form (consistent with `contains<v>(xs)`); only the plain form
-  (the sketch in the principles). Related, not decided here: `f(a<b>(x), c<d>(y))` is parsed
-  as comparisons.
+- *Ruled (design principles 2.10; was `map-call-form`):* one calling form, `put<k, v>(m)` /
+  `m->put<k, v>`; `put(m, k, v)` is refused with a hint (section 6.2).
 - **`map-persistence`.** Done: a persistent B+ tree behind the same operators (sections 5 and 9).
 - **`json-typed-decode`.** `json::decode_as<shape>(text): T!` (section 7, with the two
   alternatives).

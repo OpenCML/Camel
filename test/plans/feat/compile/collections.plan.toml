@@ -873,6 +873,25 @@ envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOU
 golden = "golden/collections/map_basic.txt"
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core", "invalid"]
+# --- one calling form (design principles 2.10) ---------------------------------------------
+# The value worked on is the ordinary argument, the rest are with-arguments: put<k, v>(m) or
+# m->put<k, v>. The spelling with everything in the parentheses is no longer accepted, and a
+# call written that way (of these operators or of any library function) gets a hint that names
+# the misplaced arguments and gives the call as it should be written.
+
+[[tests]]
+name = "callform_kept"
+desc = "The kept forms of every Map/Set operator, before the parentheses and after an arrow, chained; merge/union/intersect/difference/is_subset keep two ordinary arguments."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/compile/callform/kept_forms.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+golden = "golden/collections/callform_kept.txt"
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000
 
@@ -1076,3 +1095,72 @@ expect_stdout_contains = ["128 of 128 runs agree with the reference", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
+name = "callform_err_put"
+desc = "put(m, 'c', 3) is refused; the hint names the two arguments and gives both kept spellings."
+kind = "negative"
+case = "../../../cases/compile/callform/err_put_ordinary.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_put_ordinary.cml:5:16: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "'put' takes ''c', 3' in angle brackets, not in the parentheses: write put<'c', 3>(m) or m->put<'c', 3>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "callform_err_has"
+desc = "has(s, 2) on a set."
+kind = "negative"
+case = "../../../cases/compile/callform/err_has_ordinary.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_has_ordinary.cml:5:16: [Error]: No matching function found", "'has' takes '2' in angle brackets, not in the parentheses: write has<2>(s) or s->has<2>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "callform_err_get_or"
+desc = "get_or(m, key, 0 - 1): the hint quotes the argument expressions as written."
+kind = "negative"
+case = "../../../cases/compile/callform/err_get_or_ordinary.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_get_or_ordinary.cml:4:18: [Error]: No matching function found", "write get_or<key, 0 - 1>(m) or m->get_or<key, 0 - 1>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "callform_err_split"
+desc = "A module operator called the same way, split('a,b', ','): the same hint."
+kind = "negative"
+case = "../../../cases/compile/callform/err_split_ordinary.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_split_ordinary.cml:6:18: [Error]: No matching function found", "write split<','>('a,b') or 'a,b'->split<','>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "callform_err_slice"
+desc = "A built-in with two with-arguments, slice(xs, 0, 2)."
+kind = "negative"
+case = "../../../cases/compile/callform/err_slice_ordinary.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_slice_ordinary.cml:5:18: [Error]: No matching function found", "'slice' takes '0, 2' in angle brackets, not in the parentheses: write slice<0, 2>(xs) or xs->slice<0, 2>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "callform_err_take"
+desc = "A generic function written in Camel, take(xs, 2): the hint names its with-parameter."
+kind = "negative"
+case = "../../../cases/compile/callform/err_take_ordinary.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_take_ordinary.cml:7:17: [Error]: The generic function 'take' cannot be called", "(name=SemanticDiag::GenericArgumentsMismatch", "it takes 'n' in angle brackets, not in the parentheses: write take<n>(xs) or xs->take<n>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "callform_err_no_hint"
+desc = "No hint when moving the arguments into angle brackets would not make the call resolve (put(m, 3, 'c') on a Map<string, int>): the plain message."
+kind = "negative"
+case = "../../../cases/compile/callform/err_unrelated.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_unrelated.cml:5:16: [Error]: No matching function found", "(Map<string, i64>, i64, string). Check"]
+expect_output_not_contains = ["in angle brackets"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
