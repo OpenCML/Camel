@@ -1,0 +1,7 @@
+with <step: int>
+func inc(x: int): int { return x + step }
+func main(): int sync {
+    let g = inc<'a'>
+    println(g(2))
+    return 0
+}

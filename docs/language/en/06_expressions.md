@@ -58,8 +58,13 @@ func main(): int sync {
 ```
 
 - Ordinary arguments are written in parentheses, `with` arguments in angle brackets; both must directly follow the function name. When the function has no `with` parameters, no angle brackets are written.
-- Arguments correspond to parameters by position, and the types must match exactly (no implicit conversions). A mismatch is `SemanticDiag::NoMatchingFunction` or `SemanticDiag::ArgumentsMismatch`, and the diagnostic lists the available signatures.
+- Arguments correspond to parameters by position, and the types must match: numbers are not converted implicitly; only a value that enters a `T?` or `T!` parameter is put into the form by itself ([3.4](03_data_model.md)). A mismatch is `SemanticDiag::NoMatchingFunction` or `SemanticDiag::ArgumentsMismatch`, and the diagnostic lists the available signatures.
 - When there are several functions of the same name, one is selected by the overloading rules ([7.4.3](07_statements.md#743-overloading)).
+- **`f<w>` is a partial application.** Without parentheses, `f<w>` is a value: a function that already has its context arguments. After `let g = inc<1>`, `g(2)` is `inc<1>(2)`; `w` is evaluated once, where `f<w>` is written. It can be bound to a name, passed, returned, and handed to a higher-order operator directly (`xs->map<inc<10>>`).
+  - When only the first context parameters are given, the rest remain context parameters of the result: after `let above = clamp<0>`, write `above<5>(9)`. A function that has all of them cannot be given more (`g<2>` is an error).
+  - `f` must be one function that these arguments determine. Among several functions of one name, the only one that takes these context arguments is meant; if several do, the function type of the position (a parameter) decides, and when nothing does it is `SemanticDiag::PartialApplicationRefused`.
+  - On the graph it is a function value that carries the captured arguments, the shape a closure has: a subgraph of its own which the bound arguments enter through ports. No node kind is added.
+  - Not supported yet: functions with a `var` context parameter (`SemanticDiag::ConstructNotSupported`) and built-in operators whose type rule depends on their arguments (such as `len`; `SemanticDiag::FunctionNameAsValue`). Write the call in a lambda there.
 - Keyword arguments `f(a: 1)` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`).
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
 - A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->` and `?->`: `3->(x: int): int => x + 1`, `parse_int(s) ?-> (x: int): int => x * 2`.

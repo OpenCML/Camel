@@ -136,6 +136,9 @@ class Builder {
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
     // closure FILL whose with-inputs are its captures) that the binding must not alter.
     std::unordered_map<node_handle_t, std::vector<Argument>> boundWithArgs_;
+    // The callee expression of such a binding, for the binding used as a value
+    // (partialApplicationOf builds the call from it).
+    std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithCallee_;
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
@@ -415,6 +418,20 @@ class Builder {
     // captured and calls it with them: what a function value of `target` refers to once the
     // captures of `target` have become with-parameters (createFuncDataNode).
     compile_graph_ptr_t forwardingGraphOf(const compile_graph_ptr_t &target);
+    /// `f<w>` used as a value (design principles 2.10): the function that calls `f` with the
+    /// `with` arguments bound to `target` and takes the rest, as its function value. It is a
+    /// closure: a graph of its own that captures the bound values, which enter it through
+    /// ports like any captured name; no node kind is added. `expected`, when given, is the
+    /// function type the position asks for and selects among overloads. Returns nullptr,
+    /// leaving the binding in place, when `target` does not name one function for these
+    /// arguments.
+    node_handle_t partialApplicationOf(
+        node_handle_t target, const GCT::node_ptr_t &origin,
+        camel::core::type::FunctionType *expected = nullptr);
+    /// An error at `origin` when `node` still carries `with` arguments no partial
+    /// application could be made of (PartialApplicationRefused): the binding is never
+    /// dropped without a word.
+    void rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin);
     // The functions named `name` when `decorated` is one of several of that name (the set a
     // call chooses from); null when the decorated function is the only one.
     graph_set_ptr_t

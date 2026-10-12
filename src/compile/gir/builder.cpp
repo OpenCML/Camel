@@ -1818,6 +1818,16 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         throw;
     }
     declaresVariable_ = isVar;
+    // `let g = f<w>` where `f<w>` is not one function: the name would be bound to `f` and the
+    // arguments lost.
+    try {
+        rejectUnappliedBinding(node, gct->at(0));
+    } catch (const BuildAbortException &) {
+        if (!declScope->has(ident, false)) {
+            poisonedNames_[declScope].insert(ident);
+        }
+        throw;
+    }
     // Design principles 2.10: the empty literal `[]` takes its element type from where it
     // stands (an annotation, a parameter, the other arm of a branch, `as`). A name bound to
     // it without one has no element type; say so here, where the type can be written. (A
@@ -2580,6 +2590,19 @@ node_handle_t Builder::namedValueOf(
 }
 
 node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
+    if (boundWithArgs_.contains(node)) {
+        // `f<w>` as a value is a partial application (design principles 2.10). The binding
+        // used to be dropped here, without a word.
+        if (node_handle_t applied = partialApplicationOf(node, origin)) {
+            return applied;
+        }
+        // Not one function for these arguments. A name may still be settled by the position
+        // it stands in (a parameter of function type); a value cannot.
+        if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+            rejectUnappliedBinding(node, origin);
+        }
+        return node;
+    }
     if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
         return node;
     }
@@ -2754,6 +2777,7 @@ void Builder::rejectNameWithoutValue(
     if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
         return;
     }
+    rejectUnappliedBinding(node, origin);
     const auto &target = nodeGraphOf(node)->drefTarget(node);
     std::string what   = "an operator with several signatures";
     if (std::holds_alternative<graph_vec_ptr_t>(target)) {
@@ -3082,6 +3106,253 @@ node_handle_t Builder::createFuncDataNode(
     // used only after all updates finish.
     usedGraphs_.insert(graph.get());
     return resultNode;
+}
+
+node_handle_t Builder::partialApplicationOf(
+    node_handle_t target, const GCT::node_ptr_t &origin, FunctionType *expected) {
+    const auto boundIt = boundWithArgs_.find(target);
+    if (boundIt == boundWithArgs_.end() || genericDrefs_.contains(target)) {
+        return nullptr;
+    }
+    std::vector<Argument> bound = boundIt->second;
+    type_vec_t boundTypes;
+    for (Argument &arg : bound) {
+        arg.node = functionValueOf(arg.node, arg.expr);
+        if (nodeIsKind(arg.node, runtime::GCNodeKind::Dref)) {
+            return nullptr; // a name without a function value among the arguments
+        }
+        boundTypes.push_back(valueTypeOf(nodeTypeOf(arg.node)));
+    }
+    // The one function the callee stands for with these `with` arguments (and, when the
+    // position says which function it wants, with the parameters that are left).
+    const auto fits = [&](FunctionType *type) {
+        if (type == nullptr || !type->hasExitType() || type->withTypesCount() < bound.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < bound.size(); ++i) {
+            if (!entersImplicitly(type->withTypeAt(i), boundTypes[i])) {
+                return false;
+            }
+        }
+        if (expected == nullptr) {
+            return true;
+        }
+        if (type->withTypesCount() - bound.size() != expected->withTypesCount() ||
+            type->normTypesCount() != expected->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < expected->withTypesCount(); ++i) {
+            if (!type->withTypeAt(bound.size() + i)->equals(expected->withTypeAt(i))) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < expected->normTypesCount(); ++i) {
+            if (!type->normTypeAt(i)->equals(expected->normTypeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    FunctionType *calleeType = nullptr;
+    if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
+        const auto &drefTarget = nodeGraphOf(target)->drefTarget(target);
+        size_t candidates      = 0;
+        if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
+            if (auto graphs = asCompileGraphVec(drefTarget)) {
+                for (const auto &g : *graphs) {
+                    if (!decoratedOf_.contains(g.get()) && fits(g->funcType())) {
+                        calleeType = g->funcType();
+                        ++candidates;
+                    }
+                }
+            }
+        } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
+            // An operator whose signature does not depend on its arguments. One whose type
+            // is computed from the argument types has no parameter types before it is
+            // called, so its binding cannot stand alone.
+            for (const auto &[uri, resolver] : std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
+                auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver);
+                if (fixed && fits(fixed->funcType())) {
+                    calleeType = fixed->funcType();
+                    ++candidates;
+                }
+            }
+        }
+        if (candidates != 1) {
+            return nullptr;
+        }
+    } else if (Type *type = valueTypeOf(nodeTypeOf(target));
+               type != nullptr && type->code() == TypeCode::Function &&
+               fits(tt::as_ptr<FunctionType>(type))) {
+        calleeType = tt::as_ptr<FunctionType>(type);
+    } else {
+        return nullptr;
+    }
+    for (size_t i = 0; i < calleeType->withTypesCount(); ++i) {
+        if (calleeType->withIsVarAt(i)) {
+            // DESIGN-QUESTION(partial-application-var): a `with` parameter declared `var`
+            // is a variable the function writes. Binding one ahead of the call would make
+            // the function value a writer of a captured variable; whether that is meant has
+            // not been decided, so it is refused rather than guessed.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .atOrigin(origin->load()->origin())
+                .commit(
+                    "f<w> as a value",
+                    "a partial application is implemented for functions without 'var' "
+                    "context parameters; this one has '" +
+                        calleeType->toString() + "'. Call it with its arguments in place");
+            throw BuildAbortException();
+        }
+    }
+
+    // The bound values and, unless it is named, the callee: bound to names no program can
+    // write, in the scope the expression stands in, so that the new graph captures them the
+    // way any closure captures a name. Nothing refers to a node of another graph.
+    std::vector<std::string> boundNames;
+    for (const Argument &arg : bound) {
+        boundNames.push_back(bindTemporary(valueOf(arg.node)));
+    }
+    const auto make = [&](GCT::load_ptr_t load) {
+        load->setOrigin(origin->load()->origin());
+        return std::make_shared<GCT::Node>(std::move(load));
+    };
+    const auto nameNode = [&](const std::string &name) {
+        return make(std::make_shared<GCT::DRefLoad>(Reference(name)));
+    };
+    GCT::node_ptr_t callee;
+    if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
+        const auto known = boundWithCallee_.find(target);
+        ASSERT(known != boundWithCallee_.end(), "A bound callee has its expression recorded.");
+        callee = known->second->clone();
+    } else {
+        callee = nameNode(bindTemporary(target));
+    }
+    boundWithArgs_.erase(target);
+    boundWithCallee_.erase(target);
+
+    // The function: the `with` parameters that are left, then the ordinary parameters.
+    FunctionTypeFactory factory;
+    factory.setModifiers(calleeType->modifiers());
+    factory.setExitType(calleeType->exitType());
+    const size_t withCount = calleeType->withTypesCount();
+    const auto nameAt      = [&](size_t argIndex, const char *prefix, size_t i) {
+        return argIndex < calleeType->argNamesCount() && !calleeType->argNameAt(argIndex).empty()
+                   ? std::string(calleeType->argNameAt(argIndex))
+                   : std::format("{}{}", prefix, i);
+    };
+    for (size_t i = bound.size(); i < withCount; ++i) {
+        factory.addWithArg(nameAt(i, "__w", i), calleeType->withTypeAt(i), false);
+    }
+    for (size_t i = 0; i < calleeType->normTypesCount(); ++i) {
+        factory.addNormArg(
+            nameAt(withCount + i, "__n", i),
+            calleeType->normTypeAt(i),
+            calleeType->normIsVarAt(i));
+    }
+    FunctionType *type = factory.build();
+
+    compile_graph_ptr_t graph     = enterScope(type);
+    const bool outerSynced        = synced_;
+    const node_handle_t outerLast = lastSyncedNode_;
+    const auto restore            = [&] {
+        synced_                  = outerSynced;
+        lastSyncedNode_          = outerLast;
+        bodyStates_[graph.get()] = BodyState::Built;
+    };
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        // Its body is the one call `f<bound..., rest...>(args...)`, built as any call is.
+        GCT::node_ptr_t with = make(std::make_shared<GCT::WithLoad>(withCount));
+        *with << callee;
+        for (const std::string &name : boundNames) {
+            *with << nameNode(name);
+        }
+        size_t index = 0;
+        for (draft_node_ref_t port : graph->draft().withPorts()) {
+            const std::string name = "$with" + std::to_string(index++);
+            nodeScope_->insert(name, graph->draft().node(port));
+            *with << nameNode(name);
+        }
+        GCT::node_ptr_t call =
+            make(std::make_shared<GCT::LinkLoad>(calleeType->normTypesCount()));
+        *call << with;
+        index = 0;
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            const std::string name = "$norm" + std::to_string(index++);
+            nodeScope_->insert(name, graph->draft().node(port));
+            *call << nameNode(name);
+        }
+        // The call is the value of the function, so it runs whenever the function is called.
+        synced_             = true;
+        lastSyncedNode_     = {};
+        node_handle_t value = visitLinkNode(call);
+        setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
+        restore();
+        builtBodies_.push_back(graph);
+    } catch (...) {
+        restore();
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return createFuncDataNode(graph, true, false);
+}
+
+void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin) {
+    const auto boundIt = boundWithArgs_.find(node);
+    if (boundIt == boundWithArgs_.end()) {
+        return;
+    }
+    const std::string given =
+        strutil::join(boundIt->second, ", ", [&](const Argument &arg) {
+            return valueTypeOf(nodeTypeOf(arg.node))->toString();
+        });
+    std::string name = "the function";
+    if (const auto callee = boundWithCallee_.find(node);
+        callee != boundWithCallee_.end() && callee->second->type() == GCT::LoadType::DREF) {
+        name = callee->second->loadAs<GCT::DRefLoad>()->ref().toString();
+    }
+    std::string why;
+    if (genericDrefs_.contains(node)) {
+        why = "it is a generic function, whose type variables are fixed by a call";
+    } else if (nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        const auto &target = nodeGraphOf(node)->drefTarget(node);
+        if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+            auto graphs = asCompileGraphVec(target);
+            why         = std::format(
+                "{} function(s) of that name, and not exactly one takes them [{}]; where "
+                "several do, a declared type or a parameter must say which is meant",
+                graphs ? graphs->size() : 0,
+                graphs ? strutil::join(
+                             *graphs,
+                             "; ",
+                             [](const graph_ptr_t &g) { return g->funcType()->toString(); })
+                       : std::string());
+        } else if (std::holds_alternative<oper_group_ptr_t>(target)) {
+            const auto &ops = std::get<oper_group_ptr_t>(target);
+            why             = std::format(
+                "it is an operator whose signature depends on its arguments [{}], so it has "
+                "no parameter types before it is called; write the call in a function, e.g. "
+                "'(x: int) => {}<...>(x)'",
+                strutil::join(
+                    ops->resolvers(),
+                    "; ",
+                    [](const std::pair<std::string, resolver_ptr_t> &p) {
+                        return p.second->signature();
+                    }),
+                name);
+        } else {
+            why = "it is a decorated function";
+        }
+    } else {
+        why = "its type is '" + valueTypeOf(nodeTypeOf(node))->toString() + "'";
+    }
+    boundWithArgs_.erase(node);
+    boundWithCallee_.erase(node);
+    diags_->of(SemanticDiag::PartialApplicationRefused)
+        .atOrigin(origin->load()->origin())
+        .commit(given, name, why);
+    throw BuildAbortException();
 }
 
 compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target) {
@@ -3464,7 +3735,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     type_vec_t withInputTypes, normInputTypes;
 
     if (auto bound = boundWithArgs_.find(targetNode); bound != boundWithArgs_.end()) {
-        withInputs = bound->second;
+        // Consumed by this call: a callee that is a value (`g<2>(x)` with `g` a variable) is
+        // the same node at its next use, which must not find these arguments again.
+        withInputs = std::move(bound->second);
+        boundWithArgs_.erase(bound);
+        boundWithCallee_.erase(targetNode);
     }
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
@@ -3563,7 +3838,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     }
                 }
                 node_handle_t chosen{};
-                if (expected != nullptr && expected->code() == TypeCode::Function) {
+                if (boundWithArgs_.contains(node)) {
+                    // `apply(scale<2>, x)`: the partial application the parameter asks for.
+                    chosen = partialApplicationOf(
+                        node,
+                        inputs[i].expr,
+                        expected != nullptr && expected->code() == TypeCode::Function
+                            ? tt::as_ptr<FunctionType>(expected)
+                            : nullptr);
+                }
+                if (chosen == nullptr && expected != nullptr &&
+                    expected->code() == TypeCode::Function) {
                     chosen = overloadValueFor(
                         node,
                         tt::as_ptr<FunctionType>(expected),
@@ -4118,6 +4403,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     }
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());
+    boundWithCallee_.try_emplace(targetNode, gct->at(0));
     LEAVE("WITH");
     return targetNode;
 }

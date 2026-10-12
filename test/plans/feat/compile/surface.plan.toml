@@ -26,14 +26,14 @@ expect_output_contains = ["'println' is used as a value here"]
 
 [[tests]]
 name = "surface.name_as_value_bound_operator"
-desc = "`println(len<1>)`: the same for an operator with `with` arguments bound (it was the same internal error)."
+desc = "`println(len<1>)`: an operator whose signature depends on its arguments, with `with` arguments bound, is no partial application (it was an internal error, then FunctionNameAsValue; since `f<w>` is a partial application the diagnostic says why this one cannot be made)."
 kind = "negative"
 case = "../../../cases/compile/surface/name_as_value_bound_operator.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_name = "SemanticDiag::PartialApplicationRefused"
 expect_diagnostic_line = 2
-expect_output_contains = ["'len' is used as a value here"]
+expect_output_contains = ["The context arguments <int> cannot be bound to 'len' as a value", "an operator whose signature depends on its arguments"]
 
 [[tests]]
 name = "surface.name_as_value_overloads"

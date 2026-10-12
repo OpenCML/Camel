@@ -634,6 +634,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::PartialApplicationRefused,
+            {
+                "PartialApplicationRefused",
+                "The context arguments <{0}> cannot be bound to '{1}' as a value: {2}.",
+                "'f<w>' used as a value is a partial application: a function that already has "
+                "its context ('with') arguments, 'let g = inc<1>' then 'g(2)'. It needs 'f' "
+                "to be one function that takes these arguments. Called in place, "
+                "'f<w>(x)', the arguments of the call choose the function.",
+            },
+        },
+        {
             SemanticDiag::MatchWithoutDefault,
             {
                 "MatchWithoutDefault",
