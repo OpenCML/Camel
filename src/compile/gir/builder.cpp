@@ -3298,6 +3298,38 @@ node_handle_t Builder::partialApplicationOf(
     return createFuncDataNode(graph, true, false);
 }
 
+node_handle_t Builder::compoundAssignmentByRebinding(
+    const std::string &group, const GCT::node_ptr_t &gct, const std::vector<Argument> &operands) {
+    static const std::unordered_map<std::string, std::string> kPlainOperator = {
+        {"__assn_add__", "__add__"}, {"__assn_sub__", "__sub__"}, {"__assn_mul__", "__mul__"},
+        {"__assn_div__", "__div__"}, {"__assn_mod__", "__mod__"}, {"__assn_mat__", "__mat__"},
+        {"__assn_pow__", "__pow__"},
+    };
+    const auto plain = kPlainOperator.find(group);
+    if (plain == kPlainOperator.end() || operands.size() != 2) {
+        return nullptr;
+    }
+    // Only for a type a module defines. The built-in types have their own operators, and
+    // where one is missing (`%=` on a float, `+=` on an array) that stays an error.
+    Type *target = valueTypeOf(nodeTypeOf(operands[0].node));
+    if (target == nullptr || !target->isOtherType()) {
+        return nullptr;
+    }
+    const auto make = [&](GCT::load_ptr_t load) {
+        load->setOrigin(gct->load()->origin());
+        return std::make_shared<GCT::Node>(std::move(load));
+    };
+    // The right operand is evaluated once: it was built already, and is named here.
+    const std::string right = bindTemporary(valueOf(operands[1].node));
+    GCT::node_ptr_t value   = make(std::make_shared<GCT::LinkLoad>(2));
+    *value << make(std::make_shared<GCT::DRefLoad>(Reference(plain->second)))
+           << operands[0].expr->clone() << make(std::make_shared<GCT::DRefLoad>(Reference(right)));
+    GCT::node_ptr_t assign = make(std::make_shared<GCT::LinkLoad>(2));
+    *assign << make(std::make_shared<GCT::DRefLoad>(Reference("__assn__")))
+            << operands[0].expr->clone() << value;
+    return visitLinkNode(assign);
+}
+
 void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin) {
     const auto boundIt = boundWithArgs_.find(node);
     if (boundIt == boundWithArgs_.end()) {
@@ -4076,6 +4108,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             const auto &res =
                 ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
+            if (!res.has_value() && withInputs.empty()) {
+                // `t += u` on a tensor: no operator changes the tensor in place; the new
+                // tensor is computed and `t` bound to it, as for a number.
+                if (node_handle_t rebound =
+                        compoundAssignmentByRebinding(ops->name(), gct, normInputs)) {
+                    LEAVE("LINK");
+                    return rebound;
+                }
+            }
             if (!res.has_value()) {
                 std::string argTypesStr = std::format(
                     "<{}> ({})",

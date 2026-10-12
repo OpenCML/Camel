@@ -387,6 +387,8 @@ If the element function of `foreach` is to produce side effects, its body must b
   | `&=`, `\|=` | `bool` (`a = a && b`, `a = a \|\| b`) |
   | `@=` | None of the built-in types |
 
+- **A compound assignment changes nothing in place.** `x op= e` computes the new value and binds `x` to it. A type defined by a module (a tensor) has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, wherever the binary operator is defined for the types): after `let a = t`, `t += u` leaves `a` unchanged. To change a value in place, use an explicit operator.
+
 - For `wait e` see [4.4](04_execution_model.md#44-var-references-and-wait).
 
 ## 6.12 Operator precedence

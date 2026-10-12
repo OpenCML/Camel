@@ -428,6 +428,14 @@ class Builder {
     node_handle_t partialApplicationOf(
         node_handle_t target, const GCT::node_ptr_t &origin,
         camel::core::type::FunctionType *expected = nullptr);
+    /// `t += u` for a `t` of a module type without a compound-assignment operator of its
+    /// own (a tensor): the new value is computed and the variable bound to it, `t = t + u`
+    /// (design principles 2.10). `group` is the operator group of the compound assignment
+    /// and `operands` its two operands, already built. Returns nullptr when the form does
+    /// not apply.
+    node_handle_t compoundAssignmentByRebinding(
+        const std::string &group, const GCT::node_ptr_t &gct,
+        const std::vector<Argument> &operands);
     /// An error at `origin` when `node` still carries `with` arguments no partial
     /// application could be made of (PartialApplicationRefused): the binding is never
     /// dropped without a word.

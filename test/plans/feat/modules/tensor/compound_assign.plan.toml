@@ -1,0 +1,39 @@
+id = "modules.tensor.compound_assign"
+order = 364
+tier = "feat"
+tags = ["feat", "modules", "tensor", "assignment"]
+desc = "t += u on a tensor computes a new tensor and rebinds the variable; nothing is changed in place (design principles 2.10)"
+
+[[tests]]
+name = "tensor.compound_assign"
+desc = "+=, -=, *=, /= with a tensor and with a scalar on the right, and through a var parameter: the variable holds the new tensor, another name of the old one keeps its value. Alike on the four back ends. (These were compile-time errors: no such operator for tensors.)"
+kind = "behavior"
+case = "../../../../cases/modules/tensor/compound_assign.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "4 2\n2 2\n4 2\n2 2\n6 2\n18 2\n16 2\n8 2\n10 10 2\n"
+expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "tensor.compound_assign.opt"
+desc = "The same through std::opt."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/compound_assign.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "4 2\n2 2\n4 2\n2 2\n6 2\n18 2\n16 2\n8 2\n10 10 2\n"
+timeout_ms = 30000
+
+[[tests]]
+name = "tensor.compound_assign.inline"
+desc = "The same through std::inline."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/compound_assign.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+expect_stdout_starts_with = "4 2\n2 2\n4 2\n2 2\n6 2\n18 2\n16 2\n8 2\n10 10 2\n"
+timeout_ms = 30000
