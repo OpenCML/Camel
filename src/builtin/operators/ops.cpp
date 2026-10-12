@@ -318,6 +318,20 @@ slot_t __builtin__and__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 }
 
+// `==` on two scalars. Floats compare as numbers (IEEE: NaN equals nothing, itself included,
+// and the two zeros are equal), which is what FastVM and the JIT compile `==` on floats to;
+// comparing the slots would compare bit patterns. Everything else is equal when its slots are.
+static Bool scalarSlotsEqual(ArgsView &norm, TypeCode code) {
+    switch (code) {
+    case TypeCode::Float32:
+        return norm.get<Float32>(0) == norm.get<Float32>(1);
+    case TypeCode::Float64:
+        return norm.get<Float64>(0) == norm.get<Float64>(1);
+    default:
+        return norm.slot(0) == norm.slot(1);
+    }
+}
+
 slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
     TypeCode lhsType = norm.code(0);
 
@@ -328,10 +342,7 @@ slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Bool res       = lhs->equals(rhs, ty, false);
         return toSlot(res);
     } else {
-        slot_t lhs = norm.slot(0);
-        slot_t rhs = norm.slot(1);
-        Bool res   = lhs == rhs;
-        return toSlot(res);
+        return toSlot(scalarSlotsEqual(norm, lhsType));
     }
 }
 
@@ -345,10 +356,7 @@ slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Bool res       = !lhs->equals(rhs, ty, false);
         return toSlot(res);
     } else {
-        slot_t lhs = norm.slot(0);
-        slot_t rhs = norm.slot(1);
-        Bool res   = !(lhs == rhs);
-        return toSlot(res);
+        return toSlot(!scalarSlotsEqual(norm, lhsType));
     }
 }
 
