@@ -156,6 +156,29 @@ or run the program: F25 (three programs; two were reduced, the third was matched
 only), F31 (four) and F33 (two). No disagreement was a wrong reference. Earlier self-check
 runs over seeds 1-1500 (before the batches) agreed on 1499; the one failure was F25.
 
+**Larger programs, without passes** (2026-10-12, branch `lane/function-values`, matrix
+`reference`: the run without passes against the reference, one cell per program).
+
+| seeds | `--size` | lines per program (mean) | programs | agree | bad |
+|---|---|---|---|---|---|
+| 1-200 | 4 | 481 | 200 | 200 | 0 |
+| 201-600 | 4 | 486 | 400 | 400 | 0 |
+| 1-100 | 8 | 890 | 100 | 100 | 0 |
+
+An earlier run of seeds 1-200 at size 4 had five programs that failed without a pass: seeds 71,
+76 and 140 crashed (140 was reduced to a nested function that captures a local and is passed to
+`map`, the shape of F25), seed 110 ended in "live DREF" (the symptom of F31) and seed 27 in
+"Function of type 'void' cannot be called" (the symptom of F33). All five pass on this branch,
+before and after its own changes; the commit that fixed them was not bisected (F25, F31 and F33
+were fixed in `60f20e76`, and the five have their symptoms). No new finding came out of these
+batches, so nothing is archived for them.
+
+Seen in the same session and not reduced: seed 249 at the default size under the `quick` matrix
+(seeds 1-300, 33 cells each: 9888 of 9900 cells agree) prints 1 or 0 of its 5 lines under
+`std::inline` and `std::opt` on the node VM and the parallel scheduler and does not finish
+within 30 s on `std::fvm` and `std::jit`; its run without passes agrees. The inliner was not
+looked at here.
+
 ## Findings
 
 Ordered by severity: silent wrong results from standard passes; faults and crashes from
