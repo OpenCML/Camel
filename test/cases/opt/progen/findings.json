@@ -478,5 +478,19 @@
   ],
   "class": "(other) wrong value after inlining",
   "fixed": "jit: the JOIN of a fused compare-branch takes the arm that reached it"
+ },
+ {
+  "id": "F38",
+  "file": "findings/inline_prl_tail_call_arguments.cml",
+  "pipeline": [
+   "std::inline",
+   "std::prl"
+  ],
+  "env": {},
+  "expected": [
+   "L4 0 6"
+  ],
+  "class": "(other) wrong value after inlining",
+  "fixed": "sched: a self tail call reads all its arguments before it writes a parameter"
  }
 ]

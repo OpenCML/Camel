@@ -834,15 +834,6 @@ void fillFrameForDirectInvoke(
                 targetGraph->name(),
                 targetNormPorts.size()));
     }
-    for (size_t i = 0; i < callerNormInputs.size(); ++i) {
-        const auto *argRecord  = callerGraph->node(callerNormInputs[i]);
-        const auto *portRecord = targetGraph->node(targetNormPorts[i]);
-        if (argRecord == nullptr || portRecord == nullptr) {
-            throw std::runtime_error("Runtime direct invoke norm argument/port record is null.");
-        }
-        dest->set(portRecord->dataIndex, from->get<slot_t>(argRecord->dataIndex));
-    }
-
     const auto callerWithInputs = callerGraph->withInputsOf(callNodeIndex);
     const auto targetWithPorts  = targetGraph->withPorts();
     if (callerWithInputs.size() != targetWithPorts.size()) {
@@ -856,13 +847,46 @@ void fillFrameForDirectInvoke(
                 targetGraph->name(),
                 targetWithPorts.size()));
     }
-    for (size_t i = 0; i < callerWithInputs.size(); ++i) {
-        const auto *argRecord  = callerGraph->node(callerWithInputs[i]);
-        const auto *portRecord = targetGraph->node(targetWithPorts[i]);
-        if (argRecord == nullptr || portRecord == nullptr) {
-            throw std::runtime_error("Runtime direct invoke with argument/port record is null.");
+
+    // All arguments are read before the first parameter is written. A self tail call refills
+    // the frame it runs in (from == dest), and an argument may be a parameter of that frame, or
+    // a GATE forwarding one, which shares the parameter's slot: `r(a, b) = ... r(0, a)` binds
+    // b to the old a. Writing in argument order stored 0 into a first and then read it for b.
+    static constexpr size_t kInlineArgs = 16;
+    const size_t argCount               = callerNormInputs.size() + callerWithInputs.size();
+    using Staged = std::pair<decltype(camel::runtime::GCNode::dataIndex), slot_t>;
+    std::array<Staged, kInlineArgs> inlineStaged;
+    std::vector<Staged> heapStaged;
+    Staged *staged = inlineStaged.data();
+    if (argCount > kInlineArgs) {
+        heapStaged.resize(argCount);
+        staged = heapStaged.data();
+    }
+    size_t stagedCount = 0;
+    const auto stage   = [&](std::span<const gc_node_ref_t> args,
+                           std::span<const gc_node_ref_t> ports,
+                           const char *what) {
+        for (size_t i = 0; i < args.size(); ++i) {
+            const auto *argRecord  = callerGraph->node(args[i]);
+            const auto *portRecord = targetGraph->node(ports[i]);
+            if (argRecord == nullptr || portRecord == nullptr) {
+                throw std::runtime_error(what);
+            }
+            staged[stagedCount++] = {
+                portRecord->dataIndex,
+                from->get<slot_t>(argRecord->dataIndex)};
         }
-        dest->set(portRecord->dataIndex, from->get<slot_t>(argRecord->dataIndex));
+    };
+    stage(
+        callerNormInputs,
+        targetNormPorts,
+        "Runtime direct invoke norm argument/port record is null.");
+    stage(
+        callerWithInputs,
+        targetWithPorts,
+        "Runtime direct invoke with argument/port record is null.");
+    for (size_t i = 0; i < stagedCount; ++i) {
+        dest->set(staged[i].first, staged[i].second);
     }
 }
 
