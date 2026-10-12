@@ -30,3 +30,14 @@ inner func encode(value: any, indent: int): string {
 inner func decode(text: string): any {
     return 'json:decode'
 }
+
+/// The value a JSON text describes, decoded to the type of shape; the value of shape is not
+/// read. The result is an error value when the text does not have that type.
+/// @pure
+/// @fails error value `JsonTypeError` when the text is JSON of another type, with the path of
+///   the mismatch; error value `JsonDecodeFailed` when the text is not JSON
+/// @example decode_as<[] as Map<string, int>>('{"a": 1}')    // {a: 1}
+with <shape: any>
+inner func decode_as(text: string): any {
+    return 'json:decode_as'
+}

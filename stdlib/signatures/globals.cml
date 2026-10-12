@@ -275,3 +275,133 @@ with <f: (item: T) => T>
 inner func apply(var xs: T[]): T[] {
     return ':mark/apply_arr'
 }
+
+// ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
+// Built-in collection types (docs/technical/31_map_and_set.md). Every operator returns a new
+// value. Each also takes its with-parameters as ordinary arguments: put(m, k, v) is m->put<k, v>.
+
+/// The number of entries of a map or of elements of a set.
+/// @pure
+/// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
+inner func len(c: Map<K, V> | Set<T>): int {
+    return ':coll/len'
+}
+
+/// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
+/// @pure
+/// @example get(m, 'z') ?? 0    // 0 when m has no 'z'
+with <key: K>
+inner func get(m: Map<K, V>): V? {
+    return ':coll/map_get'
+}
+
+/// The value stored under key, or fallback when the map has no such key.
+/// @pure
+/// @example get_or(m, 'z', -1)    // -1 when m has no 'z'
+with <key: K, fallback: V>
+inner func get_or(m: Map<K, V>): V {
+    return ':coll/map_get_or'
+}
+
+/// A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
+/// @pure
+/// @example put([('a', 1), ('b', 2)] as Map<string, int>, 'c', 3)    // {a: 1, b: 2, c: 3}
+with <key: K, value: V>
+inner func put(m: Map<K, V>): Map<K, V> {
+    return ':coll/map_put'
+}
+
+/// A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
+/// @pure
+/// @example remove([('a', 1), ('b', 2)] as Map<string, int>, 'a')    // {b: 2}
+with <key: K>
+inner func remove(c: Map<K, V> | Set<K>): Map<K, V> | Set<K> {
+    return ':coll/remove'
+}
+
+/// Whether a map has an entry of key, or a set has the element.
+/// @pure
+/// @example has([('a', 1)] as Map<string, int>, 'a')    // true
+with <key: K>
+inner func has(c: Map<K, V> | Set<K>): bool {
+    return ':coll/has'
+}
+
+/// The keys of a map, in ascending order.
+/// @pure
+/// @example keys([('b', 2), ('a', 1)] as Map<string, int>)    // [a, b]
+inner func keys(m: Map<K, V>): K[] {
+    return ':coll/keys'
+}
+
+/// The values of a map, in the ascending order of their keys.
+/// @pure
+/// @example values([('b', 2), ('a', 1)] as Map<string, int>)    // [1, 2]
+inner func values(m: Map<K, V>): V[] {
+    return ':coll/map_values'
+}
+
+/// The entries of a map as (key, value) tuples, in ascending order of the keys.
+/// @pure
+/// @example items([('b', 2), ('a', 1)] as Map<string, int>)    // [(a, 1), (b, 2)]
+inner func items(m: Map<K, V>): (K, V)[] {
+    return ':coll/map_items'
+}
+
+/// The elements of a set as an array, in ascending order.
+/// @pure
+/// @example items([3, 1, 2] as Set<int>)    // [1, 2, 3]
+inner func items(s: Set<T>): T[] {
+    return ':coll/set_items'
+}
+
+/// A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
+/// @pure
+/// @example merge(m, n)    // {a: 1, b: 20, c: 30} for m = {a: 1, b: 2}, n = {b: 20, c: 30}
+inner func merge(m: Map<K, V>, other: Map<K, V>): Map<K, V> {
+    return ':coll/merge'
+}
+
+/// Whether value is an element of the set.
+/// @pure
+/// @example ([1, 2, 3] as Set<int>)->contains<9>    // false
+with <value: T>
+inner func contains(s: Set<T>): bool {
+    return ':coll/set_contains'
+}
+
+/// A set with value added; s is unchanged.
+/// @pure
+/// @example add([1, 2, 3] as Set<int>, 9)    // {1, 2, 3, 9}
+with <value: T>
+inner func add(s: Set<T>): Set<T> {
+    return ':coll/set_add'
+}
+
+/// The set of the elements that are in either set.
+/// @pure
+/// @example union([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2, 3, 4}
+inner func union(s: Set<T>, other: Set<T>): Set<T> {
+    return ':coll/set_union'
+}
+
+/// The set of the elements that are in both sets.
+/// @pure
+/// @example intersect([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {3}
+inner func intersect(s: Set<T>, other: Set<T>): Set<T> {
+    return ':coll/set_intersect'
+}
+
+/// The set of the elements of s that are not in other.
+/// @pure
+/// @example difference([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2}
+inner func difference(s: Set<T>, other: Set<T>): Set<T> {
+    return ':coll/set_difference'
+}
+
+/// Whether every element of s is an element of other.
+/// @pure
+/// @example is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)    // true
+inner func is_subset(s: Set<T>, other: Set<T>): bool {
+    return ':coll/set_is_subset'
+}

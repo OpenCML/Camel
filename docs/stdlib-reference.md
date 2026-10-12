@@ -31,7 +31,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 32 |
+| [built-in](#built-in-functions) | none | C++ | 46 |
 | [str](#str) | `import { ... } from str` | C++ | 20 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 45 |
@@ -42,7 +42,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [fs](#fs) | `import { ... } from fs` | C++ | 10 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
 | [sys](#sys) | `import { ... } from sys` | C++ | 2 |
-| [json](#json) | `import { ... } from json` | C++ | 2 |
+| [json](#json) | `import { ... } from json` | C++ | 3 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
 | [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
@@ -438,6 +438,193 @@ Replaces every element of the variable xs by f of it, in place.
 
 - With effects: changes its argument.
 - Example: `apply<(x: int) => x * 2>(xs)`
+
+#### `len`
+
+```camel
+len: (c: Map<K, V> | Set<T>) => int
+```
+
+The number of entries of a map or of elements of a set.
+
+- Pure.
+- Example: `len([('a', 1), ('b', 2)] as Map<string, int>)` gives `2`
+
+#### `get`
+
+```camel
+get: <key: K> (m: Map<K, V>) => V?
+```
+
+The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
+
+- Pure.
+- Example: `get(m, 'z') ?? 0` gives `0 when m has no 'z'`
+
+#### `get_or`
+
+```camel
+get_or: <key: K, fallback: V> (m: Map<K, V>) => V
+```
+
+The value stored under key, or fallback when the map has no such key.
+
+- Pure.
+- Example: `get_or(m, 'z', -1)` gives `-1 when m has no 'z'`
+
+#### `put`
+
+```camel
+put: <key: K, value: V> (m: Map<K, V>) => Map<K, V>
+```
+
+A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
+
+- Pure.
+- Example: `put([('a', 1), ('b', 2)] as Map<string, int>, 'c', 3)` gives `{a: 1, b: 2, c: 3}`
+
+#### `remove`
+
+```camel
+remove: <key: K> (c: Map<K, V> | Set<K>) => Map<K, V> | Set<K>
+```
+
+A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
+
+- Pure.
+- Example: `remove([('a', 1), ('b', 2)] as Map<string, int>, 'a')` gives `{b: 2}`
+
+#### `has`
+
+```camel
+has: <key: K> (c: Map<K, V> | Set<K>) => bool
+```
+
+Whether a map has an entry of key, or a set has the element.
+
+- Pure.
+- Example: `has([('a', 1)] as Map<string, int>, 'a')` gives `true`
+
+#### `keys`
+
+```camel
+keys: (m: Map<K, V>) => K[]
+```
+
+The keys of a map, in ascending order.
+
+- Pure.
+- Example: `keys([('b', 2), ('a', 1)] as Map<string, int>)` gives `[a, b]`
+
+#### `values`
+
+```camel
+values: (m: Map<K, V>) => V[]
+```
+
+The values of a map, in the ascending order of their keys.
+
+- Pure.
+- Example: `values([('b', 2), ('a', 1)] as Map<string, int>)` gives `[1, 2]`
+
+#### `items`
+
+```camel
+items: (m: Map<K, V>) => (K, V)[]
+```
+
+The entries of a map as (key, value) tuples, in ascending order of the keys.
+
+- Pure.
+- Example: `items([('b', 2), ('a', 1)] as Map<string, int>)` gives `[(a, 1), (b, 2)]`
+
+#### `items`
+
+```camel
+items: (s: Set<T>) => T[]
+```
+
+The elements of a set as an array, in ascending order.
+
+- Pure.
+- Example: `items([3, 1, 2] as Set<int>)` gives `[1, 2, 3]`
+
+#### `merge`
+
+```camel
+merge: (m: Map<K, V>, other: Map<K, V>) => Map<K, V>
+```
+
+A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
+
+- Pure.
+- Example: `merge(m, n)` gives `{a: 1, b: 20, c: 30} for m = {a: 1, b: 2}, n = {b: 20, c: 30}`
+
+#### `contains`
+
+```camel
+contains: <value: T> (s: Set<T>) => bool
+```
+
+Whether value is an element of the set.
+
+- Pure.
+- Example: `([1, 2, 3] as Set<int>)->contains<9>` gives `false`
+
+#### `add`
+
+```camel
+add: <value: T> (s: Set<T>) => Set<T>
+```
+
+A set with value added; s is unchanged.
+
+- Pure.
+- Example: `add([1, 2, 3] as Set<int>, 9)` gives `{1, 2, 3, 9}`
+
+#### `union`
+
+```camel
+union: (s: Set<T>, other: Set<T>) => Set<T>
+```
+
+The set of the elements that are in either set.
+
+- Pure.
+- Example: `union([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{1, 2, 3, 4}`
+
+#### `intersect`
+
+```camel
+intersect: (s: Set<T>, other: Set<T>) => Set<T>
+```
+
+The set of the elements that are in both sets.
+
+- Pure.
+- Example: `intersect([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{3}`
+
+#### `difference`
+
+```camel
+difference: (s: Set<T>, other: Set<T>) => Set<T>
+```
+
+The set of the elements of s that are not in other.
+
+- Pure.
+- Example: `difference([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{1, 2}`
+
+#### `is_subset`
+
+```camel
+is_subset: (s: Set<T>, other: Set<T>) => bool
+```
+
+Whether every element of s is an element of other.
+
+- Pure.
+- Example: `is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)` gives `true`
 
 <a id="str"></a>
 
@@ -2088,6 +2275,20 @@ The value a JSON text describes. Its static type is `any`.
 - Pure.
 - Failure: fault `JsonDecodeFailed` when the text is not JSON.
 - Example: `decode('[1, 2]')` gives `an array of 1 and 2, typed any`
+
+#### `decode_as`
+
+```camel
+decode_as: <shape: any> (text: string) => any
+```
+
+The value a JSON text describes, decoded to the type of shape; the value of shape is not
+read. The result is an error value when the text does not have that type.
+  the mismatch; error value `JsonDecodeFailed` when the text is not JSON
+
+- Pure.
+- Failure: error value `JsonTypeError` when the text is JSON of another type, with the path of.
+- Example: `decode_as<[] as Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 <a id="re"></a>
 

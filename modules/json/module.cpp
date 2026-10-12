@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -93,6 +93,7 @@ bool JsonModule::load() {
             // Functions of their argument: the same text or value gives the same result.
             {"encode", true},
             {"decode", true},
+            {"decode_as", true},
         });
     loaded_ = true;
     return true;
