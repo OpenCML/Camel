@@ -233,6 +233,8 @@ class Node {
         return p == Tree::kNoNode ? Node() : Node(tree_, p);
     }
 
+    /// Whether the node covers no token at all (possible only in a text with errors).
+    bool empty() const { return (tree_->data(id_).flags & 1) != 0; }
     size_t childCount() const { return tree_->data(id_).childCount; }
     Child child(size_t index) const {
         const NodeData &d = tree_->data(id_);

@@ -1,0 +1,53 @@
+id = "parse.frontend"
+order = 305
+tier = "feat"
+tags = ["feat", "parse", "grammar", "format"]
+desc = "The hand-written front end as a whole: the grammar in the language reference is the one the parser implements, every file of the repository is read as recorded, the formatter keeps the meaning of what it formats, and the parser returns a lossless tree for wrong programs."
+
+[[tests]]
+name = "grammar.reference_in_step"
+desc = "The productions written above the parser's functions, the grammar blocks of the language reference (both languages), the token table and the node kinds agree (scripts/check-grammar.mjs --check)."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/check-grammar.mjs"
+args = ["${case}", "--check"]
+expect_exit = 0
+expect_stdout_contains = ["in step with the parser"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "frontend.ast_snapshot"
+desc = "Every .cml file of the repository and every probe of the grammar's decisions (test/tools/parsecheck/probes.py) gives the AST, node for node with token ranges and origins, that was recorded when the parser was compared with the ANTLR parser it replaced."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/parsecheck/check.py"
+args = ["${case}", "snapshot"]
+expect_exit = 0
+expect_stdout_contains = ["files read as recorded"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "frontend.format_keeps_ast"
+desc = "Formatting an accepted file gives a text that parses to the same AST (the order of imports aside): where the formatter breaks a line or removes a space, the two layout rules must not change the meaning."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/parsecheck/check.py"
+args = ["${case}", "format"]
+expect_exit = 0
+expect_stdout_contains = ["changed=0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "frontend.fuzz_lossless_tree"
+desc = "3000 mutated programs (tokens deleted, duplicated, swapped, inserted, files cut and spliced, white space changed): the parser returns for each a tree whose leaves are exactly the tokens of the text, and the AST builder accepts every tree without errors."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/parsecheck/check.py"
+args = ["${case}", "fuzz", "3000", "1"]
+expect_exit = 0
+expect_stdout_contains = ["failures=0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 300000

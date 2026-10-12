@@ -5,7 +5,7 @@
 #                not fail the run).
 #   sanitizers   Manual only (Run workflow -> sanitizers): ASan + UBSan Debug build on Linux, smoke plan.
 #
-# Toolchain follows docs/setup.en.md (Clang >= 19, CMake, Ninja, Conan >= 2.10, Node 20, Java 21).
+# Toolchain follows docs/setup.en.md (Clang >= 19, CMake, Ninja, Conan >= 2.10, Node 20).
 # libcamel is built for the same portable baseline as the release wheels (CAMEL_TARGET_ARCH), so what is
 # tested here is what build-pypi.yml ships; hosted runners do not share one CPU model.
 
@@ -79,12 +79,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java (ANTLR)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -132,7 +126,6 @@ jobs:
           cmake --version
           ninja --version
           node --version
-          java -version
           python --version
           major=$(clang -dumpversion | cut -d. -f1)
           if [ "$major" -lt 19 ]; then
@@ -179,9 +172,6 @@ jobs:
       - name: Install npm dependencies (skip husky / prepare)
         run: npm ci --ignore-scripts
 
-      - name: Generate ANTLR C++ sources
-        run: npm run psrgen
-
       - name: Conan install (Release, Debug, RelWithDebInfo)
         run: node scripts/install.js
 
@@ -215,12 +205,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Java (ANTLR)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -272,9 +256,6 @@ jobs:
 
       - name: Install npm dependencies (skip husky / prepare)
         run: npm ci --ignore-scripts
-
-      - name: Generate ANTLR C++ sources
-        run: npm run psrgen
 
       - name: Conan install (Release, Debug, RelWithDebInfo)
         run: node scripts/install.js

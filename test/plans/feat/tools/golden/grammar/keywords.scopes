@@ -265,7 +265,7 @@
 #            ^ meta.block.camel variable.parameter.camel
 #             ^ meta.block.camel punctuation.separator.colon.camel
 #                     ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
->        raise e
+>        throw e
 #        ^^^^^ meta.block.camel meta.block.camel keyword.control.flow.camel
 >    } finally {
 #    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel

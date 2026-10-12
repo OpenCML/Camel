@@ -19,11 +19,11 @@
 
 #pragma once
 
-#include "antlr4-runtime/antlr4-runtime.h"
 #include "camel/core/source/ids.h"
 
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace camel::core::error {
 
@@ -37,7 +37,6 @@ struct CharRange {
     CharPos start;
     CharPos end;
 
-    static CharRange fromTokens(antlr4::Token *start, antlr4::Token *end);
 };
 
 struct TokenRange {

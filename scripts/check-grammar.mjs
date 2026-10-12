@@ -10,7 +10,8 @@
 //       - every name used on a right-hand side is a production (or a token class),
 //       - every quoted literal is a token of include/camel/parse/syntax/token_kinds.def,
 //       - every production has a `parse` function or is listed as folded into another one,
-//       - every node kind of node_kinds.def names a production in its comment.
+//       - every node kind of node_kinds.def names a production in its comment,
+//       - the keyword table of the reference (02, section 2.4) lists exactly the keywords.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -35,6 +36,7 @@ const FOLDED = {
     decl: 'parseDecl',
     namespaceItem: 'parseNamespaceDecl',
     carrier: 'parseDataDecl',
+    blockStmt: 'parseStmt',
     parentIdents: 'parseBracketedIdents',
     bracedIdents: 'parseBracketedIdents',
     bracketIdents: 'parseBracketedIdents',
@@ -147,6 +149,26 @@ for (const m of fs.readFileSync(NODES, 'utf8').matchAll(/^CAMEL_NODE\((\w+), \w+
     const owner = NODE_OF[production] || production
     if (!names.has(owner)) {
         errors.push(`node kind ${kind} of node_kinds.def corresponds to no production ('${owner}')`)
+    }
+}
+
+// The keyword table of the reference (2.4) lists exactly the keywords of the token table.
+const keywords = new Set([...tokenText.matchAll(/^CAMEL_KEYWORD\(\w+, "(\w+)"/gm)].map((m) => m[1]))
+for (const doc of DOCS.map((d) => d.replace('08_top_level_and_grammar.md', '02_lexical.md'))) {
+    const rel = path.relative(ROOT, doc).split(path.sep).join('/')
+    const text = fs.readFileSync(doc, 'utf8')
+    const from = text.indexOf('## 2.4')
+    const to = text.indexOf('## 2.5')
+    const listed = new Set()
+    for (const line of text.slice(from, to).split('\n')) {
+        if (!line.startsWith('|')) continue
+        for (const m of line.matchAll(/`([a-z_]+)`/g)) listed.add(m[1])
+    }
+    for (const word of keywords) {
+        if (!listed.has(word)) errors.push(`${rel}: the keyword table (2.4) lacks '${word}'`)
+    }
+    for (const word of listed) {
+        if (!keywords.has(word)) errors.push(`${rel}: the keyword table (2.4) lists '${word}', which is not a keyword`)
     }
 }
 

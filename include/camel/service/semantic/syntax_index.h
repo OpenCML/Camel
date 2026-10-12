@@ -26,8 +26,8 @@
  * member names after a dot, the keys of struct literals and types, and the tokens. Each
  * reference is then resolved by the scoping rules of the language as far as the text allows.
  *
- * It needs no successful compilation: the tree ANTLR recovers from a file with syntax errors
- * is enough (CamelParser::syntaxTree), so a file being edited keeps its outline, its local
+ * It needs no successful compilation: the tree the parser returns for a file with syntax
+ * errors is enough (CamelParser::tree), so a file being edited keeps its outline, its local
  * names and its completions. What only the compiler knows (types, the overload a call chose,
  * what an imported name is) is joined to these records by source range in model.h.
  *

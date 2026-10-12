@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Assembles the corpus the parser harness (camel-parsediff) runs on.
+"""Assembles the corpus the parser harness (camel-parsecheck) runs on.
 
-    python3 test/tools/parsediff/corpus.py --out DIR [--progen N] [--progen-big M]
+    python3 test/tools/parsecheck/corpus.py --out DIR [--progen N] [--progen-big M]
 
 Writes DIR/list.txt, one source path per line:
 

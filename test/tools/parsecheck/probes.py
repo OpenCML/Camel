@@ -3,7 +3,7 @@
 is ambiguous or a decision needs more than one token (docs/technical/34_handwritten_parser.md,
 section 4).
 
-    python3 test/tools/parsediff/probes.py DIR      # writes DIR/probe_NNN.cml and DIR/list.txt
+    python3 test/tools/parsecheck/probes.py DIR      # writes DIR/probe_NNN.cml and DIR/list.txt
 
 Each probe is a statement or a declaration; statements are wrapped in a function.
 """

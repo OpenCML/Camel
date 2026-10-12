@@ -28,13 +28,9 @@
 
 namespace camel::parse::syntax {
 
-Tree Parser::parse(std::string source, ParseOptions options) {
-    return parse(Lexer::tokenize(std::move(source)), options);
-}
+Tree Parser::parse(std::string source) { return parse(Lexer::tokenize(std::move(source))); }
 
-Tree Parser::parse(TokenBuffer tokens, ParseOptions options) {
-    return ParserImpl(std::move(tokens), options).run();
-}
+Tree Parser::parse(TokenBuffer tokens) { return ParserImpl(std::move(tokens)).run(); }
 
 // ---- Node access (cst.h) ----
 
@@ -42,7 +38,7 @@ std::string Node::text() const {
     std::string out;
     const NodeData &d      = tree_->data(id_);
     const TokenBuffer &buf = tree_->tokens();
-    if (d.childCount == 0) {
+    if ((d.flags & 1) != 0) {
         return out;
     }
     for (uint32_t i = d.firstToken; i <= d.lastToken; ++i) {
@@ -121,9 +117,7 @@ size_t Node::tokCount(TokenKind k) const {
 
 // ---- Infrastructure ----
 
-ParserImpl::ParserImpl(TokenBuffer tokens, ParseOptions options)
-    : tree_(std::move(tokens)), lineBreaks_(options.lineBreaksEndStatements),
-      nl_(options.lineBreaksEndStatements) {
+ParserImpl::ParserImpl(TokenBuffer tokens) : tree_(std::move(tokens)) {
     toks_  = tree_.tokens_.tokens().data();
     count_ = static_cast<uint32_t>(tree_.tokens_.size());
     // About one node per two tokens and one child slot per token and per node.
@@ -150,22 +144,34 @@ void ParserImpl::close(size_t mark, NK kind) {
     node.firstChild = static_cast<uint32_t>(tree_.children_.size());
     node.childCount = static_cast<uint32_t>(stack_.size() - mark);
     const uint32_t id = static_cast<uint32_t>(tree_.nodes_.size());
-    if (node.childCount == 0) {
-        node.firstToken = node.lastToken = pos_;
-    } else {
-        const uint32_t first = stack_[mark];
-        const uint32_t last  = stack_.back();
-        node.firstToken      = (first & Tree::kTokenBit) != 0 ? (first & ~Tree::kTokenBit)
-                                                             : tree_.nodes_[first].firstToken;
-        node.lastToken       = (last & Tree::kTokenBit) != 0 ? (last & ~Tree::kTokenBit)
-                                                            : tree_.nodes_[last].lastToken;
-        for (size_t i = mark; i < stack_.size(); ++i) {
-            const uint32_t word = stack_[i];
-            if ((word & Tree::kTokenBit) == 0) {
-                tree_.nodes_[word].parent = id;
+    // The node spans from its first to its last token. A child without tokens (a node the
+    // parser closed empty in a wrong text) does not count.
+    bool any = false;
+    for (size_t i = mark; i < stack_.size(); ++i) {
+        const uint32_t word = stack_[i];
+        uint32_t first, last;
+        if ((word & Tree::kTokenBit) != 0) {
+            first = last = word & ~Tree::kTokenBit;
+        } else {
+            NodeData &child = tree_.nodes_[word];
+            child.parent    = id;
+            if ((child.flags & kEmptyNode) != 0) {
+                tree_.children_.push_back(word);
+                continue;
             }
-            tree_.children_.push_back(word);
+            first = child.firstToken;
+            last  = child.lastToken;
         }
+        if (!any) {
+            node.firstToken = first;
+            any             = true;
+        }
+        node.lastToken = last;
+        tree_.children_.push_back(word);
+    }
+    if (!any) {
+        node.firstToken = node.lastToken = pos_;
+        node.flags |= kEmptyNode;
     }
     stack_.resize(mark);
     tree_.nodes_.push_back(node);
@@ -402,6 +408,7 @@ void ParserImpl::parseDecl() {
 
 /// stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt
 ///      | blockStmt
+/// blockStmt : 'wait'? stmtBlock
 /// Decided on the first token, except:
 ///   - modifiers (`sync`, `macro`, ...) are skipped to see what they modify: `func` (a
 ///     declaration), `{` after a lone `sync` (a block), anything else (a lambda expression);

@@ -16,9 +16,6 @@ __pycache__/
 
 cmake-build-debug/
 node_modules/
-antlr/.antlr/
-src/parse/antlr
-include/camel/parse/antlr
 vendor/
 legacy/
 build/

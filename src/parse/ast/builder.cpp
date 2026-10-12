@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "camel/parse/ast/cst_builder.h"
+#include "camel/parse/ast/builder.h"
 
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
@@ -61,7 +61,7 @@ inline void setNodeOriginByOffsets(
     if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId) {
         return;
     }
-    auto span = g_sourceContext->createSpanAtBytes(g_sourceFileId, startOffset, endOffset);
+    auto span = g_sourceContext->createSpan(g_sourceFileId, startOffset, endOffset);
     if (span == camel::source::kInvalidSpanId) {
         return;
     }
@@ -97,7 +97,7 @@ deriveAstAnchorOrigin(const node_ptr_t &owner, syn::TokenRef token, const std::s
         !token) {
         return camel::source::kInvalidOriginId;
     }
-    auto span = g_sourceContext->createSpanAtBytes(
+    auto span = g_sourceContext->createSpan(
         g_sourceFileId,
         static_cast<size_t>(token->begin()),
         static_cast<size_t>(token->end()));
@@ -126,7 +126,7 @@ inline camel::source::origin_id_t deriveAstAnchorOrigin(
         !context->firstToken() || !context->lastToken()) {
         return camel::source::kInvalidOriginId;
     }
-    auto span = g_sourceContext->createSpanAtBytes(
+    auto span = g_sourceContext->createSpan(
         g_sourceFileId,
         static_cast<size_t>(context->firstToken()->begin()),
         static_cast<size_t>(context->lastToken()->end()));
@@ -232,7 +232,7 @@ inline void setNodeTokenRangeBetween(node_ptr_t node, syn::Node first, syn::Node
 
 inline node_ptr_t any2node(const std::any &a) { return std::any_cast<node_ptr_t>(a); }
 
-Reference CstBuilder::qualifyRef(const Reference &ref) const {
+Reference Builder::qualifyRef(const Reference &ref) const {
     if (namespaceStack_.empty()) {
         return ref;
     }
@@ -242,12 +242,12 @@ Reference CstBuilder::qualifyRef(const Reference &ref) const {
     return Reference(paths, ref.ident());
 }
 
-void CstBuilder::pushNamespace(const Reference &ref) {
+void Builder::pushNamespace(const Reference &ref) {
     namespaceStack_.insert(namespaceStack_.end(), ref.paths().begin(), ref.paths().end());
     namespaceStack_.push_back(ref.ident());
 }
 
-void CstBuilder::popNamespace(size_t previousSize) {
+void Builder::popNamespace(size_t previousSize) {
     ASSERT(previousSize <= namespaceStack_.size(), "Invalid namespace stack restore point");
     namespaceStack_.resize(previousSize);
 }
@@ -255,7 +255,7 @@ void CstBuilder::popNamespace(size_t previousSize) {
 /*
 program : SEP? (decl SEP?)* EOF;
 */
-any CstBuilder::visitProgram(cst::Program context) {
+any Builder::visitProgram(cst::Program context) {
     ENTER("Program");
     g_sourceContext = sourceContext_;
     g_sourceFileId  = sourceFileId_;
@@ -309,7 +309,7 @@ decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
 namespaceItem : the same without moduleDecl and dataDecl.
 The tree has no node for either rule: the declaration itself is the child.
 */
-any CstBuilder::visitDecl(syn::Node context) {
+any Builder::visitDecl(syn::Node context) {
     switch (context.kind()) {
     case NK::ModuleDecl:
         return visitModuleDecl(cst::ModuleDecl(context));
@@ -339,7 +339,7 @@ stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl 
      | blockStmt ;
 The tree has no node for the rule: the statement itself is the child.
 */
-any CstBuilder::visitStmt(syn::Node context) {
+any Builder::visitStmt(syn::Node context) {
     if (context.isExpr()) {
         node_ptr_t expr = any2node(visitExpr(context));
         node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
@@ -366,14 +366,14 @@ any CstBuilder::visitStmt(syn::Node context) {
         return visitStmtBlock(cst::StmtBlock(context));
     default:
         throw std::runtime_error(
-            "CstBuilder: not a statement: " + std::string(syn::nodeKindName(context.kind())));
+            "Builder: not a statement: " + std::string(syn::nodeKindName(context.kind())));
     }
 }
 
 /*
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
-any CstBuilder::visitStmtList(cst::StmtList context) {
+any Builder::visitStmtList(cst::StmtList context) {
     ENTER("StmtList");
     node_ptr_t block = createNodeAs<StmtBlockLoad>();
     setNodeTokenRangeByContext(block, context);
@@ -393,7 +393,7 @@ any CstBuilder::visitStmtList(cst::StmtList context) {
 /*
 moduleDecl : MODULE identDef ;
 */
-any CstBuilder::visitModuleDecl(cst::ModuleDecl context) {
+any Builder::visitModuleDecl(cst::ModuleDecl context) {
     ENTER("ModuleDecl");
     Reference ref(context->get<cst::IdentDef>()->text());
     module_->setRef(ref);
@@ -404,7 +404,7 @@ any CstBuilder::visitModuleDecl(cst::ModuleDecl context) {
 /*
 importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
 */
-any CstBuilder::visitImportDecl(cst::ImportDecl context) {
+any Builder::visitImportDecl(cst::ImportDecl context) {
     ENTER("ImportDecl");
     auto import_ = std::make_shared<ImportLoad>();
     // Where the import is: a module that is not found is reported here.
@@ -429,7 +429,7 @@ any CstBuilder::visitImportDecl(cst::ImportDecl context) {
 /*
 exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 */
-any CstBuilder::visitExportDecl(cst::ExportDecl context) {
+any Builder::visitExportDecl(cst::ExportDecl context) {
     ENTER("ExportDecl");
     node_ptr_t res = nullptr;
     if (context->get<cst::DataDecl>()) {
@@ -457,7 +457,7 @@ any CstBuilder::visitExportDecl(cst::ExportDecl context) {
 /*
 usingNamespaceDecl : USING NAMESPACE identRef ;
 */
-any CstBuilder::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
+any Builder::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
     ENTER("UsingNamespaceDecl");
     Reference ref        = qualifyRef(any_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
     node_ptr_t usingNode = createNodeAs<UsingNamespaceLoad>(ref);
@@ -469,7 +469,7 @@ any CstBuilder::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
 /*
 blockStmt  : WAIT? stmtBlock ;
 */
-any CstBuilder::visitBlockStmt(cst::BlockStmt context) {
+any Builder::visitBlockStmt(cst::BlockStmt context) {
     ENTER("BlockStmt");
     node_ptr_t res = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
     if (context->tok(TK::KwWait)) {
@@ -482,7 +482,7 @@ any CstBuilder::visitBlockStmt(cst::BlockStmt context) {
 /*
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
-any CstBuilder::visitStmtBlock(cst::StmtBlock context) {
+any Builder::visitStmtBlock(cst::StmtBlock context) {
     ENTER("StmtBlock");
     node_ptr_t blockNode = nullptr;
     if (context->get<cst::StmtList>()) {
@@ -505,7 +505,7 @@ any CstBuilder::visitStmtBlock(cst::StmtBlock context) {
 blockExpr  : stmtBlock | dataExpr ;
 The tree has no node for the rule: the block or the expression itself is the child.
 */
-any CstBuilder::visitBlockExpr(syn::Node context) {
+any Builder::visitBlockExpr(syn::Node context) {
     node_ptr_t res = nullptr;
     if (context.is(NK::StmtBlock)) {
         res = any2node(visitStmtBlock(cst::StmtBlock(context)));
@@ -527,7 +527,7 @@ any CstBuilder::visitBlockExpr(syn::Node context) {
 /*
 funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 */
-any CstBuilder::visitFuncData(cst::FuncData context) {
+any Builder::visitFuncData(cst::FuncData context) {
     ENTER("FuncData");
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     setNodeTokenRangeByContext(funcTypeNode, context);
@@ -624,7 +624,7 @@ any CstBuilder::visitFuncData(cst::FuncData context) {
 /*
 funcAnno   : '@' identRef angledValues? ;
 */
-any CstBuilder::visitFuncAnno(cst::FuncAnno context) {
+any Builder::visitFuncAnno(cst::FuncAnno context) {
     ENTER("FuncAnno");
 
     Reference ref = any_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>()));
@@ -654,7 +654,7 @@ funcDecl   :
         EXPORT? implMark? modifiers?
         FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
-any CstBuilder::visitFuncDecl(cst::FuncDecl context) {
+any Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
     node_ptr_t annoListNode = nullptr;
@@ -785,7 +785,7 @@ any CstBuilder::visitFuncDecl(cst::FuncDecl context) {
 /*
 namespaceDecl : NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}' ;
 */
-any CstBuilder::visitNamespaceDecl(cst::NamespaceDecl context) {
+any Builder::visitNamespaceDecl(cst::NamespaceDecl context) {
     ENTER("NamespaceDecl");
     const Reference nsRef     = any_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>()));
     const size_t previousSize = namespaceStack_.size();
@@ -824,7 +824,7 @@ any CstBuilder::visitNamespaceDecl(cst::NamespaceDecl context) {
 /*
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 */
-any CstBuilder::visitDataDecl(cst::DataDecl context) {
+any Builder::visitDataDecl(cst::DataDecl context) {
     ENTER("DataDecl");
     bool isVar = false;
     if (context->tok(TK::KwVar)) {
@@ -897,7 +897,7 @@ typeDecl
       (typeExpr | STRING)
     ;
 */
-any CstBuilder::visitTypeDecl(cst::TypeDecl context) {
+any Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
     string uri;
     ImplMark implMark = ImplMark::Graph;
@@ -941,7 +941,7 @@ any CstBuilder::visitTypeDecl(cst::TypeDecl context) {
 /*
 useDecl    : USE (identDef '=')? identRef ;
 */
-any CstBuilder::visitUseDecl(cst::UseDecl context) {
+any Builder::visitUseDecl(cst::UseDecl context) {
     ENTER("UseDecl");
     Reference ref;
     if (context->get<cst::IdentDef>()) {
@@ -957,7 +957,7 @@ any CstBuilder::visitUseDecl(cst::UseDecl context) {
 /*
 retStmt    : (RETURN | THROW) dataList ;
 */
-any CstBuilder::visitRetStmt(cst::RetStmt context) {
+any Builder::visitRetStmt(cst::RetStmt context) {
     ENTER("RetStmt");
     // `throw e` returns an error value: an exit like `return`, whose value is the failed form
     // of the function's declared `T!` (design principles 2.9; the graph builder checks the
@@ -977,7 +977,7 @@ any CstBuilder::visitRetStmt(cst::RetStmt context) {
 /*
 indexValue   : '...'? dataExpr ;
 */
-any CstBuilder::visitSpreadValue(cst::SpreadValue context) {
+any Builder::visitSpreadValue(cst::SpreadValue context) {
     ENTER("IndexValue");
     if (context->childCount() > 1) {
         // `...xs` is in the grammar but spreading is not implemented. The marker used to be
@@ -994,7 +994,7 @@ any CstBuilder::visitSpreadValue(cst::SpreadValue context) {
 /*
 keyTypePair  : identDef ':' typeExpr ;
 */
-any CstBuilder::visitKeyTypePair(cst::KeyTypePair context) {
+any Builder::visitKeyTypePair(cst::KeyTypePair context) {
     ENTER("KeyTypePair");
     Reference ref(context->get<cst::IdentDef>()->text());
     node_ptr_t namedTypeNode = createNodeAs<NamedTypeLoad>(ref);
@@ -1009,7 +1009,7 @@ any CstBuilder::visitKeyTypePair(cst::KeyTypePair context) {
 /*
 keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
-any CstBuilder::visitKeyValuePair(cst::KeyValuePair context) {
+any Builder::visitKeyValuePair(cst::KeyValuePair context) {
     ENTER("KeyValuePair");
     if (!context->get<cst::IdentDef>()) {
         // `...s` in a struct literal or an argument list: in the grammar, not implemented. It
@@ -1032,7 +1032,7 @@ any CstBuilder::visitKeyValuePair(cst::KeyValuePair context) {
 /*
 keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
 */
-any CstBuilder::visitKeyParamPair(cst::KeyParamPair context) {
+any Builder::visitKeyParamPair(cst::KeyParamPair context) {
     ENTER("KeyParamPair");
     bool isVar = false;
     if (context->tok(TK::KwVar)) {
@@ -1055,7 +1055,7 @@ any CstBuilder::visitKeyParamPair(cst::KeyParamPair context) {
 /*
 dataList     : dataExpr (',' dataExpr)* ;
 */
-any CstBuilder::visitDataList(cst::DataList context) {
+any Builder::visitDataList(cst::DataList context) {
     ENTER("DataList");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(rep, context);
@@ -1069,7 +1069,7 @@ any CstBuilder::visitDataList(cst::DataList context) {
 /*
 identList    : identDef (',' identDef)* ;
 */
-any CstBuilder::visitIdentList(cst::IdentList context) {
+any Builder::visitIdentList(cst::IdentList context) {
     ENTER("IdentList");
     std::vector<Reference> refs;
     for (const auto &identDef : context->all<cst::IdentDef>()) {
@@ -1082,7 +1082,7 @@ any CstBuilder::visitIdentList(cst::IdentList context) {
 /*
 indexValues  : indexValue (',' indexValue)* ;
 */
-any CstBuilder::visitIndexValues(cst::IndexValues context) {
+any Builder::visitIndexValues(cst::IndexValues context) {
     ENTER("IndexValues");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(rep, context);
@@ -1096,7 +1096,7 @@ any CstBuilder::visitIndexValues(cst::IndexValues context) {
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
 */
-any CstBuilder::visitPairedValues(cst::PairedValues context) {
+any Builder::visitPairedValues(cst::PairedValues context) {
     ENTER("PairedValues");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedData");
     setNodeTokenRangeByContext(rep, context);
@@ -1110,7 +1110,7 @@ any CstBuilder::visitPairedValues(cst::PairedValues context) {
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
-any CstBuilder::visitPairedParams(cst::PairedParams context) {
+any Builder::visitPairedParams(cst::PairedParams context) {
     ENTER("PairedParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
@@ -1124,7 +1124,7 @@ any CstBuilder::visitPairedParams(cst::PairedParams context) {
 /*
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 */
-any CstBuilder::visitArgumentList(cst::ArgumentList context) {
+any Builder::visitArgumentList(cst::ArgumentList context) {
     ENTER("ArgumentList");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     if (context->get<cst::IndexValues>()) {
@@ -1143,7 +1143,7 @@ any CstBuilder::visitArgumentList(cst::ArgumentList context) {
 /*
 indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 */
-any CstBuilder::visitIndices(cst::Indices context) {
+any Builder::visitIndices(cst::Indices context) {
     ENTER("Indices");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
@@ -1163,7 +1163,7 @@ any CstBuilder::visitIndices(cst::Indices context) {
 /*
 parentParams : '(' pairedParams? ','? ')' ;
 */
-any CstBuilder::visitParentParams(cst::ParentParams context) {
+any Builder::visitParentParams(cst::ParentParams context) {
     ENTER("ParentParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
@@ -1178,7 +1178,7 @@ any CstBuilder::visitParentParams(cst::ParentParams context) {
 /*
 parentArgues : '(' argumentList? ','? ')' ;
 */
-any CstBuilder::visitParentArgues(cst::ParentArgues context) {
+any Builder::visitParentArgues(cst::ParentArgues context) {
     ENTER("ParentArgues");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
@@ -1196,7 +1196,7 @@ any CstBuilder::visitParentArgues(cst::ParentArgues context) {
 /*
 angledParams : '<' pairedParams? ','? '>' ;
 */
-any CstBuilder::visitAngledParams(cst::AngledParams context) {
+any Builder::visitAngledParams(cst::AngledParams context) {
     ENTER("AngledParams");
     node_ptr_t res = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(res, context);
@@ -1211,7 +1211,7 @@ any CstBuilder::visitAngledParams(cst::AngledParams context) {
 /*
 angledValues : '<' argumentList? ','? '>' ;
 */
-any CstBuilder::visitAngledValues(cst::AngledValues context) {
+any Builder::visitAngledValues(cst::AngledValues context) {
     ENTER("AngledValues");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
@@ -1235,7 +1235,7 @@ pattern
     | '_' // wildcard
     ;
 */
-any CstBuilder::visitPattern(cst::Pattern context) {
+any Builder::visitPattern(cst::Pattern context) {
     ENTER("Pattern");
     node_ptr_t res;
     if (context->get<cst::Literal>()) {
@@ -1290,7 +1290,7 @@ matchCase
     : CASE pattern ('|' pattern)* '=>' blockExpr
     ;
 */
-any CstBuilder::visitMatchCase(cst::MatchCase context) {
+any Builder::visitMatchCase(cst::MatchCase context) {
     ENTER("MatchCase");
     // `case a | b => body` enters the body when any of its patterns matches. A branch has one
     // value per arm, so the case becomes one arm per pattern, each with its own copy of the
@@ -1344,7 +1344,7 @@ ctrlExpr
     | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
     ;
 */
-any CstBuilder::visitCtrlExpr(syn::Node context) {
+any Builder::visitCtrlExpr(syn::Node context) {
     ENTER("CtrlExpr");
     node_ptr_t ctrlNode = nullptr;
     switch (context.kind()) {
@@ -1515,7 +1515,7 @@ any CstBuilder::visitCtrlExpr(syn::Node context) {
 /*
 waitExpr : WAIT? assignExpr ;
 */
-any CstBuilder::visitWaitExpr(cst::WaitExpr context) {
+any Builder::visitWaitExpr(cst::WaitExpr context) {
     ENTER("WaitExpr");
     node_ptr_t dataNode = any2node(visitExpr(context->expr()));
     if (context->tok(TK::KwWait)) {
@@ -1533,7 +1533,7 @@ assignExpr
     )?
     ;
 */
-any CstBuilder::visitAssignExpr(cst::AssignExpr context) {
+any Builder::visitAssignExpr(cst::AssignExpr context) {
     ENTER("AssignExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
@@ -1591,7 +1591,7 @@ logicalOrExpr
     : logicalAndExpr ('||' logicalAndExpr)*
     ;
 */
-any CstBuilder::visitLogicalOrExpr(cst::LogicalOrExpr context) {
+any Builder::visitLogicalOrExpr(cst::LogicalOrExpr context) {
     ENTER("LogicalOrExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); ++i) {
@@ -1624,7 +1624,7 @@ logicalAndExpr
     : equalityExpr ('&&' equalityExpr)*
     ;
 */
-any CstBuilder::visitLogicalAndExpr(cst::LogicalAndExpr context) {
+any Builder::visitLogicalAndExpr(cst::LogicalAndExpr context) {
     ENTER("LogicalAndExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); ++i) {
@@ -1657,7 +1657,7 @@ equalityExpr
     : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
     ;
 */
-any CstBuilder::visitEqualityExpr(cst::EqualityExpr context) {
+any Builder::visitEqualityExpr(cst::EqualityExpr context) {
     ENTER("EqualityExpr");
     node_ptr_t lhsNode = any2node(visitExpr(
         context->expr(0))); // get the left hand side of the equality expr
@@ -1704,7 +1704,7 @@ relationalExpr
     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
     ;
 */
-any CstBuilder::visitRelationalExpr(cst::RelationalExpr context) {
+any Builder::visitRelationalExpr(cst::RelationalExpr context) {
     ENTER("RelationalExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); ++i) {
@@ -1766,7 +1766,7 @@ additiveExpr
     : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
     ;
 */
-any CstBuilder::visitAdditiveExpr(cst::AdditiveExpr context) {
+any Builder::visitAdditiveExpr(cst::AdditiveExpr context) {
     ENTER("AdditiveExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
@@ -1808,7 +1808,7 @@ multiplicativeExpr
     : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
     ;
 */
-any CstBuilder::visitMultiplicativeExpr(cst::MultiplicativeExpr context) {
+any Builder::visitMultiplicativeExpr(cst::MultiplicativeExpr context) {
     ENTER("MultiplicativeExpr");
     BinaryDataOp op;
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
@@ -1856,7 +1856,7 @@ nullableExpr
     : unaryExpr (('??' | '!!') dataExpr)?
     ;
 */
-any CstBuilder::visitNullableExpr(cst::NullableExpr context) {
+any Builder::visitNullableExpr(cst::NullableExpr context) {
     ENTER("NullableExpr");
     node_ptr_t res = any2node(visitExpr(context->expr()));
 
@@ -1914,7 +1914,7 @@ unaryExpr
     | ('!' | '-' | '~') linkExpr
     ;
 */
-any CstBuilder::visitUnaryExpr(syn::Node context) {
+any Builder::visitUnaryExpr(syn::Node context) {
     ENTER("UnaryExpr");
     node_ptr_t res = nullptr;
 
@@ -2015,7 +2015,7 @@ linkExpr
     : compExpr (('->' | '?->') compExpr)*
     ;
 */
-any CstBuilder::visitLinkExpr(cst::LinkExpr context) {
+any Builder::visitLinkExpr(cst::LinkExpr context) {
     ENTER("LinkExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
@@ -2085,7 +2085,7 @@ compExpr
     : annoExpr (('..' | '?..') annoExpr)*
     ;
 */
-any CstBuilder::visitCompExpr(cst::CompExpr context) {
+any Builder::visitCompExpr(cst::CompExpr context) {
     ENTER("CompExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
@@ -2140,7 +2140,7 @@ annoExpr
     : accessExpr (({isAdjacent()}? (indices | parentArgues | angledValues | '!')) | memberAccess)*
     ;
 */
-any CstBuilder::visitAnnoExpr(cst::AnnoExpr context) {
+any Builder::visitAnnoExpr(cst::AnnoExpr context) {
     ENTER("AnnoExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr()));
     for (size_t i = 1; i < context->childCount(); i++) {
@@ -2252,7 +2252,7 @@ any CstBuilder::visitAnnoExpr(cst::AnnoExpr context) {
     return lhsNode;
 }
 
-node_ptr_t CstBuilder::makeMemberAccess(
+node_ptr_t Builder::makeMemberAccess(
     node_ptr_t lhs, syn::Child dot, syn::Child member,
     syn::Node range) {
     syn::TokenRef memberToken = tokenOf(member);
@@ -2351,7 +2351,7 @@ accessExpr
     : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
     ;
 */
-any CstBuilder::visitAccessExpr(cst::AccessExpr context) {
+any Builder::visitAccessExpr(cst::AccessExpr context) {
     ENTER("AccessExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr()));
     for (size_t i = 1; i < context->childCount(); i += 2) {
@@ -2370,7 +2370,7 @@ structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
     ;
 */
-any CstBuilder::visitStructData(cst::StructData context) {
+any Builder::visitStructData(cst::StructData context) {
     ENTER("StructData");
     node_ptr_t dataNode = createNodeAs<StructDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
@@ -2388,7 +2388,7 @@ arrayData
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 */
-any CstBuilder::visitArrayData(cst::ArrayData context) {
+any Builder::visitArrayData(cst::ArrayData context) {
     ENTER("ArrayData");
     node_ptr_t dataNode = createNodeAs<ArrayDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
@@ -2418,7 +2418,7 @@ tupleData
     : '(' dataList? ','? ')'
     ;
 */
-any CstBuilder::visitTupleData(cst::TupleData context) {
+any Builder::visitTupleData(cst::TupleData context) {
     ENTER("TupleData");
     // `(e)`: a parenthesized expression, not a tuple (three children: the brackets and the
     // list; a trailing comma would be a fourth).
@@ -2443,14 +2443,14 @@ any CstBuilder::visitTupleData(cst::TupleData context) {
 primaryData : identRef | literal | arrayData | structData | tupleData | funcData ;
 The tree has no node for the rule. A name as an operand is a RefData node, a literal a Literal.
 */
-any CstBuilder::visitRefData(cst::RefData context) {
+any Builder::visitRefData(cst::RefData context) {
     Reference ref(context->text());
     node_ptr_t res = createNodeAs<RefDataLoad>(ref);
     setNodeTokenRangeByContext(res, context);
     return res;
 }
 
-any CstBuilder::visitLiteralData(cst::Literal context) {
+any Builder::visitLiteralData(cst::Literal context) {
     Literal literal = any_cast<Literal>(visitLiteral(context));
     node_ptr_t res  = createNodeAs<LiteralLoad>(literal);
     setNodeTokenRangeByContext(res, context);
@@ -2469,7 +2469,7 @@ literal
     | NULL
     ;
 */
-any CstBuilder::visitLiteral(cst::Literal context) {
+any Builder::visitLiteral(cst::Literal context) {
     LiteralType type;
     string data = context->text();
     if (context->tok(TK::Integer)) {
@@ -2505,7 +2505,7 @@ typeExpr
     : unionType ('?' unionType?)?
     ;
 */
-any CstBuilder::visitTypeExpr(cst::TypeExpr context) {
+any Builder::visitTypeExpr(cst::TypeExpr context) {
     ENTER("TypeExpr");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
     if (context->childCount() > 1) {
@@ -2534,7 +2534,7 @@ unionType
     : interType ('|' interType)*
     ;
 */
-any CstBuilder::visitUnionType(cst::UnionType context) {
+any Builder::visitUnionType(cst::UnionType context) {
     ENTER("UnionType");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
     for (size_t i = 1; i < context->types().size(); ++i) {
@@ -2553,7 +2553,7 @@ interType
     : diffType ('&' diffType)*
     ;
 */
-any CstBuilder::visitInterType(cst::InterType context) {
+any Builder::visitInterType(cst::InterType context) {
     ENTER("InterType");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
     for (size_t i = 1; i < context->types().size(); ++i) {
@@ -2572,7 +2572,7 @@ diffType
     : keyUnionDiffType ('\\' keyUnionDiffType)*
     ;
 */
-any CstBuilder::visitDiffType(cst::DiffType context) {
+any Builder::visitDiffType(cst::DiffType context) {
     ENTER("DiffType");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
     for (size_t i = 1; i < context->types().size(); ++i) {
@@ -2591,7 +2591,7 @@ keyUnionDiffType
     : keyInterType (('+' | '-') keyInterType)*
     ;
 */
-any CstBuilder::visitKeyUnionDiffType(cst::KeyUnionDiffType context) {
+any Builder::visitKeyUnionDiffType(cst::KeyUnionDiffType context) {
     ENTER("KeyUnionDiffType");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
     for (size_t i = 1; i < context->types().size(); ++i) {
@@ -2619,7 +2619,7 @@ keyInterType
     : typeUnit ('^' typeUnit)*
     ;
 */
-any CstBuilder::visitKeyInterType(cst::KeyInterType context) {
+any Builder::visitKeyInterType(cst::KeyInterType context) {
     ENTER("KeyInterType");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
     for (size_t i = 1; i < context->types().size(); ++i) {
@@ -2636,7 +2636,7 @@ any CstBuilder::visitKeyInterType(cst::KeyInterType context) {
 /*
 typeUnit : (identDef OF)? arrayType ;
 */
-any CstBuilder::visitTypeUnit(cst::TypeUnit context) {
+any Builder::visitTypeUnit(cst::TypeUnit context) {
     ENTER("TypeUnit");
     node_ptr_t res = nullptr;
     if (context->get<cst::IdentDef>()) {
@@ -2660,7 +2660,7 @@ arrayType
     : specType ('[' ']')*
     ;
 */
-any CstBuilder::visitArrayType(cst::ArrayType context) {
+any Builder::visitArrayType(cst::ArrayType context) {
     ENTER("ArrayType");
     node_ptr_t res = any2node(visitType(context->type()));
     if (context->childCount() > 1) {
@@ -2678,7 +2678,7 @@ any CstBuilder::visitArrayType(cst::ArrayType context) {
 typeOrData : typeExpr | CONST dataExpr ;
 The tree has a node for the second alternative only.
 */
-any CstBuilder::visitConstData(cst::ConstData context) { return visitExpr(context->expr()); }
+any Builder::visitConstData(cst::ConstData context) { return visitExpr(context->expr()); }
 
 /*
 specType
@@ -2686,7 +2686,7 @@ specType
     ;
 The node exists only with arguments: its first type child is the type that is specialized.
 */
-any CstBuilder::visitSpecType(cst::SpecType context) {
+any Builder::visitSpecType(cst::SpecType context) {
     const auto types        = context->types();
     const size_t count      = types.size();
     node_ptr_t res          = any2node(visitType(types[0]));
@@ -2711,20 +2711,20 @@ primaryType
     ;
 The tree has no node for the rule, one kind per alternative instead.
 */
-any CstBuilder::visitRefType(cst::RefType context) {
+any Builder::visitRefType(cst::RefType context) {
     node_ptr_t res = createNodeAs<RefTypeLoad>(Reference(context->text()));
     setNodeTokenRangeByContext(res, context);
     return res;
 }
 
-any CstBuilder::visitTypeOfType(cst::TypeOfType context) {
+any Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
     *res << any2node(visitExpr(context->expr()));
     return res;
 }
 
-any CstBuilder::visitTypeAsType(cst::TypeAsType context) {
+any Builder::visitTypeAsType(cst::TypeAsType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeAs);
     setNodeTokenRangeByContext(res, context);
     Reference ref(context->get<cst::IdentDef>()->text());
@@ -2738,7 +2738,7 @@ structType
     : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
     ;
 */
-any CstBuilder::visitStructType(cst::StructType context) {
+any Builder::visitStructType(cst::StructType context) {
     ENTER("StructType");
     node_ptr_t res        = createNodeAs<StructTypeLoad>();
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("NamedType");
@@ -2757,7 +2757,7 @@ typeList
     : typeExpr (',' typeExpr)*
     ;
 */
-any CstBuilder::visitTypeList(cst::TypeList context) {
+any Builder::visitTypeList(cst::TypeList context) {
     ENTER("TypeList");
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("Type");
     setNodeTokenRangeByContext(repeatNode, context);
@@ -2774,7 +2774,7 @@ tupleType
     : '(' typeList? ','? ')'
     ;
 */
-any CstBuilder::visitTupleType(cst::TupleType context) {
+any Builder::visitTupleType(cst::TupleType context) {
     ENTER("TupleType");
     node_ptr_t res = createNodeAs<TupleTypeLoad>();
     setNodeTokenRangeByContext(res, context);
@@ -2793,7 +2793,7 @@ funcType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 */
-any CstBuilder::visitFuncType(cst::FuncType context) {
+any Builder::visitFuncType(cst::FuncType context) {
     ENTER("FuncType");
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
@@ -2848,7 +2848,7 @@ any CstBuilder::visitFuncType(cst::FuncType context) {
 /*
 identDef : IDENTIFIER ;
 */
-any CstBuilder::visitIdentDef(cst::IdentDef context) {
+any Builder::visitIdentDef(cst::IdentDef context) {
     ENTER("IdentDef");
     Reference ref(context->tok(TK::Identifier)->text());
     LEAVE("IdentDef");
@@ -2858,7 +2858,7 @@ any CstBuilder::visitIdentDef(cst::IdentDef context) {
 /*
 identRef : (IDENTIFIER '::')* IDENTIFIER ;
 */
-any CstBuilder::visitIdentRef(cst::IdentRef context) {
+any Builder::visitIdentRef(cst::IdentRef context) {
     ENTER("IdentRef");
     Reference ref(context->text());
     LEAVE("IdentRef");
@@ -2868,7 +2868,7 @@ any CstBuilder::visitIdentRef(cst::IdentRef context) {
 // ---- Dispatch on the kind of a node ----
 
 /// Any expression (what `dataExpr` derives).
-any CstBuilder::visitExpr(syn::Node context) {
+any Builder::visitExpr(syn::Node context) {
     switch (context.kind()) {
     case NK::SpreadValue:
         return visitSpreadValue(cst::SpreadValue(context));
@@ -2919,12 +2919,12 @@ any CstBuilder::visitExpr(syn::Node context) {
         return visitFuncData(cst::FuncData(context));
     default:
         throw std::runtime_error(
-            "CstBuilder: not an expression: " + std::string(syn::nodeKindName(context.kind())));
+            "Builder: not an expression: " + std::string(syn::nodeKindName(context.kind())));
     }
 }
 
 /// Any type expression (what `typeExpr` and `typeOrData` derive).
-any CstBuilder::visitType(syn::Node context) {
+any Builder::visitType(syn::Node context) {
     switch (context.kind()) {
     case NK::TypeExpr:
         return visitTypeExpr(cst::TypeExpr(context));
@@ -2962,6 +2962,6 @@ any CstBuilder::visitType(syn::Node context) {
         return visitTypeAsType(cst::TypeAsType(context));
     default:
         throw std::runtime_error(
-            "CstBuilder: not a type: " + std::string(syn::nodeKindName(context.kind())));
+            "Builder: not a type: " + std::string(syn::nodeKindName(context.kind())));
     }
 }

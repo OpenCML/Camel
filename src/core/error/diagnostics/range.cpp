@@ -23,25 +23,6 @@
 
 namespace camel::core::error {
 
-CharRange CharRange::fromTokens(antlr4::Token *start, antlr4::Token *end) {
-    CharRange r{{0, 0}, {0, 0}};
-    if (start) {
-        r.start = {
-            static_cast<size_t>(start->getLine() - 1),
-            static_cast<size_t>(start->getCharPositionInLine())};
-    }
-    if (end) {
-        r.end = {
-            static_cast<size_t>(end->getLine() - 1),
-            static_cast<size_t>(end->getCharPositionInLine() + end->getText().length())};
-    } else if (start) {
-        r.end = {
-            static_cast<size_t>(start->getLine() - 1),
-            static_cast<size_t>(start->getCharPositionInLine() + start->getText().length())};
-    }
-    return r;
-}
-
 // ---- RangeConverter implementation ----
 CharRange RangeConverter::conv(const TokenRange &tr) const {
     size_t startIdx = tr.start;

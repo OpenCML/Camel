@@ -43,13 +43,12 @@ using NK = NodeKind;
 
 class ParserImpl {
   public:
-    ParserImpl(TokenBuffer tokens, ParseOptions options);
+    explicit ParserImpl(TokenBuffer tokens);
     Tree run();
 
   private:
     // ---- State ----
     Tree tree_;
-    bool lineBreaks_   = true;     // ParseOptions::lineBreaksEndStatements
     const Token *toks_ = nullptr;
     uint32_t count_    = 0;
     uint32_t pos_      = 0;        // the current token (never trivia)
@@ -58,6 +57,7 @@ class ParserImpl {
     std::vector<uint32_t> stack_;  // children of the nodes under construction
 
     static constexpr uint32_t kNone = UINT32_MAX;
+    static constexpr uint8_t kEmptyNode = 1; // NodeData::flags: the node has no token
 
     // Layout context (see Scope). `nl_`: a line break before a token that could also start a
     // statement ends the expression. `angle_`: the `<` of the angle-bracket list the parser is
@@ -84,7 +84,7 @@ class ParserImpl {
             : p(parser), nl(parser.nl_), angle(parser.angle_),
               typeBeforeBlock(parser.typeBeforeBlock_), castType(parser.castType_),
               spacedGt(parser.spacedGt_) {
-            p.nl_              = newNl && parser.lineBreaks_;
+            p.nl_              = newNl;
             p.angle_           = newAngle;
             p.typeBeforeBlock_ = false;
             p.castType_        = false;

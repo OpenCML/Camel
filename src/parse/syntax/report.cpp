@@ -153,9 +153,16 @@ struct BracketScan {
             if (isOpener(token.kind)) {
                 stack.push_back({buffer.text(token)[0], i});
             } else if (isCloser(token.kind)) {
+                // A closer closes the nearest opener of its kind; openers above that one were
+                // left open (reported where the parser misses their closer) and end here too.
+                // Only a closer with no opener of its kind is stray.
                 const char closer = buffer.text(token)[0];
-                if (!stack.empty() && stack.back().kind == openerOf(closer)) {
-                    stack.pop_back();
+                size_t match      = stack.size();
+                while (match > 0 && stack[match - 1].kind != openerOf(closer)) {
+                    --match;
+                }
+                if (match > 0) {
+                    stack.resize(match - 1);
                 } else {
                     strays.emplace_back(i, stack);
                 }

@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include "antlr4-runtime/antlr4-runtime.h"
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/source/ids.h"
 
@@ -161,7 +160,7 @@ class SourceManager {
     const SourceFile *file(source_file_id_t id) const;
     /// Line and column (both 0-based) of a byte offset; the column counts code points.
     camel::core::error::CharPos offsetToPos(source_file_id_t fileId, size_t offset) const;
-    /// The byte offset of the `index`-th code point of the file (ANTLR character index).
+    /// The byte offset of the `index`-th code point of the file.
     size_t codePointToByteOffset(source_file_id_t fileId, size_t index) const;
     /// The text of a 0-based line without its line terminator; empty when out of range.
     std::string_view lineText(source_file_id_t fileId, size_t line) const;
@@ -248,16 +247,8 @@ class SourceContext {
     source_file_id_t registerFile(const std::string &path, const std::string &content);
     std::optional<source_file_id_t> findFileId(const std::string &path) const;
 
-    /// `startIndex` / `endIndex` are character indices as ANTLR reports them (code points);
-    /// the span stores the corresponding byte offsets.
-    span_id_t createSpan(source_file_id_t fileId, size_t startIndex, size_t endIndex);
-    /// The same from byte offsets into the file's text, which is what a span stores.
-    span_id_t createSpanAtBytes(source_file_id_t fileId, size_t startOffset, size_t endOffset);
-    span_id_t spanFromTokenRange(
-        source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens,
-        const camel::core::error::TokenRange &range);
-    span_id_t spanFromToken(
-        source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens, antlr4::Token *token);
+    /// A span of `fileId` from byte offset `startOffset` to `endOffset` (half-open).
+    span_id_t createSpan(source_file_id_t fileId, size_t startOffset, size_t endOffset);
 
     origin_id_t createOrigin(
         span_id_t primarySpan, OriginStage stage, OriginKind kind, std::string label = "",

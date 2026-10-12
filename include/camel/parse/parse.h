@@ -20,54 +20,31 @@
 /*
  * CamelParser: one source file from text to abstract syntax tree.
  *
- *   text -> tokens (syntax::Lexer) -> concrete syntax tree (syntax::Parser) -> AST (CstBuilder)
+ *   text -> tokens (syntax::Lexer) -> concrete syntax tree (syntax::Parser) -> AST (ast::Builder)
  *
- * and the diagnostics of each step. The concrete tree is kept whatever the outcome: tools that
- * describe a file being edited (the language server, the formatter) work on it.
- *
- * TRANSITION. The ANTLR parser this replaces is still here as a second backend, so that the
- * two can be compared tree for tree (tools/parsediff) and the consumers of the ANTLR parse tree
- * can move one at a time. It is selected per instance (setBackend) or for the process
- * (setDefaultBackend, or the environment variable CAMEL_PARSER=antlr|hand) and goes away with
- * the grammar files.
+ * and the diagnostics of each step. The concrete tree is kept whatever the outcome: the tools
+ * that describe a file being edited (the language server, the formatter) work on it.
+ * See docs/technical/34_handwritten_parser.md.
  */
 
 #pragma once
 
-#include <iomanip>
+#include <iosfwd>
 #include <memory>
+#include <string>
 
-#include "antlr4-runtime/antlr4-runtime.h"
+#include "ast.h"
+#include "syntax/cst.h"
 
-#include "camel/parse/antlr/OpenCMLLexer.h"
-#include "camel/parse/antlr/OpenCMLParser.h"
-
-#include "ast/builder.h"
-#include "cst_dumper.h"
-#include "syntax/parser.h"
-#include "syntax_errors.h"
-
-#include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
-#include "camel/utils/log.h"
+#include "camel/core/source/manager.h"
 
 namespace camel::parse {
 
 class CamelParser {
   public:
-    enum class Backend { Antlr, Hand };
-
-    /// The backend of the parsers created from now on.
-    static void setDefaultBackend(Backend backend);
-    static Backend defaultBackend();
-
     explicit CamelParser(camel::core::error::diagnostics_ptr_t diagnostics);
     ~CamelParser();
-
-    void setBackend(Backend backend) { backend_ = backend; }
-    /// For the differential harness only (see syntax::ParseOptions).
-    void setParseOptions(syntax::ParseOptions options) { parseOptions_ = options; }
-    Backend backend() const { return backend_; }
 
     /// The parser does not own SourceContext; it only records parse results into it.
     void setSourceContext(camel::source::source_context_ptr_t sourceContext) {
@@ -91,8 +68,8 @@ class CamelParser {
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
     /// The concrete syntax tree of the last parse, whatever its outcome: with Error nodes and
-    /// incomplete nodes where the text is wrong. Null before a parse (and with the ANTLR
-    /// backend).
+    /// incomplete nodes where the text is wrong. After lex() it holds the tokens only. Null
+    /// before the first call.
     const syntax::Tree *tree() const { return tree_.get(); }
     /// Whether the last parse found neither a lexical nor a syntax error.
     bool parsed() const { return parsed_; }
@@ -111,22 +88,12 @@ class CamelParser {
     void dumpCST(std::ostream &os);
     void dumpDiagnostics(std::ostream &os, bool json = false);
 
-    // ---- ANTLR backend only (TRANSITION) ----
-    const std::vector<antlr4::Token *> getTokens() {
-        return tokens_ ? tokens_->getTokens() : std::vector<antlr4::Token *>{};
-    }
-    antlr4::tree::ParseTree *cst() const { return cst_; }
-    /// The tree of the last parse also when the file has errors: what ANTLR recovered.
-    antlr4::tree::ParseTree *syntaxTree() const { return syntaxTree_; }
-
   private:
     class Positions;
 
     camel::core::error::diagnostics_ptr_t diagnostics_;
     camel::source::source_context_ptr_t
         sourceContext_; // Parse-stage spans/origins are written here.
-    Backend backend_;
-    syntax::ParseOptions parseOptions_;
     // Logical ID of the source file currently being parsed in SourceContext.
     camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
     AST::node_ptr_t ast_                          = nullptr;
@@ -135,20 +102,10 @@ class CamelParser {
     std::unique_ptr<syntax::Tree> tree_;
     std::unique_ptr<Positions> positions_;
 
-    // ANTLR backend.
-    antlr4::ANTLRInputStream input_;
-    std::unique_ptr<OpenCMLLexer> lexer_;
-    std::unique_ptr<LexerErrorListener> lexerListener_;
-    std::unique_ptr<antlr4::CommonTokenStream> tokens_;
-    std::unique_ptr<OpenCMLParser> parser_;
-    antlr4::tree::ParseTree *cst_        = nullptr;
-    antlr4::tree::ParseTree *syntaxTree_ = nullptr;
-
     std::string readAndRegister(std::istream &is);
     void nameModuleFromTokens();
     bool buildCST(std::istream &is);
     bool buildAST();
-    bool buildAntlrCST(const std::string &text);
 };
 
 using parser_ptr_t = std::shared_ptr<CamelParser>;

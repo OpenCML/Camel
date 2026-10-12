@@ -27,8 +27,13 @@
 #include "diagnostics/range.h"
 #include "diagnostics/render.h"
 
+#include <deque>
 #include <format>
 #include <iosfwd>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
 #include <optional>
 #include <string_view>
 #include <tuple>

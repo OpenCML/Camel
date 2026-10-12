@@ -20,8 +20,8 @@
 /*
  * Builds the syntactic index of a file from its parse tree (see syntax_index.h).
  *
- * The tree may be one that ANTLR recovered from a syntax error: any child may be missing and
- * a context may have no stop token. Every access below goes through helpers that accept
+ * The tree may be that of a text with syntax errors: any child may be missing and a node may
+ * cover no token. Every access below goes through helpers that accept
  * that, and a construct that is incomplete contributes what it has.
  */
 
@@ -141,7 +141,7 @@ class Walker {
         return token ? Range{token.begin(), token.end()} : Range{};
     }
     Range rangeOf(syn::Node node) const {
-        if (!node || node.childCount() == 0) {
+        if (!node || node.empty()) {
             return {};
         }
         Range r           = rangeOf(node.firstToken());

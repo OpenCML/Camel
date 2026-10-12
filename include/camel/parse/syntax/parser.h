@@ -37,19 +37,12 @@
 
 namespace camel::parse::syntax {
 
-struct ParseOptions {
-    /// Rule 2: a line break ends a statement. Switched off only by the differential harness
-    /// (tools/parsediff), to tell the differences from the ANTLR parser that the rule causes
-    /// from the others. TRANSITION: goes away with the ANTLR parser.
-    bool lineBreaksEndStatements = true;
-};
-
 class Parser {
   public:
     /// Lexes and parses `source`.
-    static Tree parse(std::string source, ParseOptions options = {});
+    static Tree parse(std::string source);
     /// Parses an already lexed buffer.
-    static Tree parse(TokenBuffer tokens, ParseOptions options = {});
+    static Tree parse(TokenBuffer tokens);
 };
 
 } // namespace camel::parse::syntax

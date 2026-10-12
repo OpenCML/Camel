@@ -41,9 +41,9 @@
 
 namespace camel::parse::ast {
 
-class CstBuilder {
+class Builder {
   public:
-    CstBuilder() = default;
+    Builder() = default;
 
     node_ptr_t build(const syntax::Tree &tree, camel::core::error::diagnostics_ptr_t diags) {
         diags_         = diags;

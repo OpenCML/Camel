@@ -37,7 +37,7 @@
 #include <sstream>
 #include <string>
 
-namespace parsediff {
+namespace parsecheck {
 
 inline void dumpOrigin(
     std::ostream &os, const camel::source::source_context_ptr_t &sc,
@@ -51,8 +51,8 @@ inline void dumpOrigin(
         os << "?";
         return;
     }
-    // Not the id: the ANTLR-based builder also created origins for nodes it then dropped (one
-    // per type, in visitSpecType), so the numbering differs while every kept origin is the same.
+    // Not the id, which is only a handle: what an origin says is its span, its label and where
+    // it derives from.
     if (const auto *span = sc->span(rec->primarySpan)) {
         os << "[" << span->startOffset << "," << span->endOffset << ")";
     }
@@ -65,9 +65,11 @@ inline void dumpOrigin(
     }
 }
 
+/// `positions`: with token ranges, origins and semantic bundles; without, the structure only
+/// (what must survive reformatting).
 inline void dumpAstNode(
     std::ostream &os, const AST::node_ptr_t &node, const camel::source::source_context_ptr_t &sc,
-    int depth) {
+    int depth, bool positions = true) {
     for (int i = 0; i < depth; ++i) {
         os << ' ';
     }
@@ -82,9 +84,12 @@ inline void dumpAstNode(
             c = ' ';
         }
     }
-    os << text << " @" << load->tokenRange().start << ".." << load->tokenRange().end << " ";
-    dumpOrigin(os, sc, load->origin());
-    if (sc && load->origin() != camel::source::kInvalidOriginId) {
+    os << text;
+    if (positions) {
+        os << " @" << load->tokenRange().start << ".." << load->tokenRange().end << " ";
+        dumpOrigin(os, sc, load->origin());
+    }
+    if (positions && sc && load->origin() != camel::source::kInvalidOriginId) {
         if (const auto *bundle = sc->astSemantic(load->origin())) {
             os << " {";
             for (const auto &part : bundle->parts) {
@@ -97,7 +102,7 @@ inline void dumpAstNode(
     }
     os << "\n";
     for (const auto &child : *node) {
-        dumpAstNode(os, child, sc, depth + 1);
+        dumpAstNode(os, child, sc, depth + 1, positions);
     }
 }
 
@@ -117,4 +122,4 @@ inline std::string dumpParse(
     return os.str();
 }
 
-} // namespace parsediff
+} // namespace parsecheck

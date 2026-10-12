@@ -93,6 +93,59 @@ await withServer(async (ls) => {
         await ls.diagnosticsFor(uri)
     }
 
+    // ---- what is recovered from a document with syntax errors ----
+    // Two independent mistakes, in two functions; the rest of the file is intact. Each mistake
+    // is reported once, where it is, and nothing else is; the outline still has every
+    // declaration, and navigation works in the functions around the errors.
+    {
+        const broken = `module main
+
+func first(a: int): int {
+    let x = (a + 1
+    return x
+}
+
+func second(n: int): int {
+    let y = if n > 0 n else 0
+    return y
+}
+
+func third(k: int): int {
+    let local = k * 2
+    return local + 1
+}
+
+func main(): int sync {
+    println(third(1))
+    return 0
+}
+`
+        uri = ls.open('recovery.cml', broken)
+        pushed = await ls.diagnosticsFor(uri)
+        const lines = pushed.diagnostics.map((d) => d.range.start.line)
+        checkEq(JSON.stringify(lines), JSON.stringify([4, 8]),
+            'two independent syntax errors are each reported once', pushed.diagnostics)
+        check(/'\)'/.test(pushed.diagnostics[0].message) && /'then'/.test(pushed.diagnostics[1].message),
+            'each says what is missing', pushed.diagnostics.map((d) => d.message))
+        const outline = await ls.request('textDocument/documentSymbol', { textDocument: { uri } })
+        checkEq(JSON.stringify(outline.map((s) => s.name)), JSON.stringify(['first', 'second', 'third', 'main']),
+            'the outline of a document with syntax errors has every function')
+        const use = broken.split('\n').findIndex((l) => l.includes('return local'))
+        const d = await ls.request('textDocument/definition', {
+            textDocument: { uri }, position: { line: use, character: 12 },
+        })
+        checkEq(d.length === 1 && d[0].range.start.line, use - 1,
+            'a local is found in a function after the errors')
+        const completion = await ls.request('textDocument/completion', {
+            textDocument: { uri }, position: { line: use, character: 11 },
+        })
+        const items = Array.isArray(completion) ? completion : completion.items
+        check(items.some((i) => i.label === 'local') && items.some((i) => i.label === 'third'),
+            'completion after the errors offers the local and the functions of the file')
+        ls.notify('textDocument/didClose', { textDocument: { uri } })
+        await ls.diagnosticsFor(uri)
+    }
+
     // ---- positions in UTF-16 ----
     // Line 3 has Chinese text (3 bytes, 1 unit each) and emoji (4 bytes, 2 units each) before
     // the names that are asked about.
