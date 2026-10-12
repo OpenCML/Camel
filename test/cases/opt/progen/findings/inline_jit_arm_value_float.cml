@@ -1,0 +1,34 @@
+/**
+ * progen finding F37 ((other) wrong value after inlining). After `std::inline`, the JIT returns
+ *   the unwritten slot of the other arm for `if (0 <= 0) then 1.0 + 1.0 else r6(...)`: a
+ *   comparison fused with its branch, whose first arm has code of its own (same cause as F17).
+ *   The node VM, the bytecode VM and the parallel scheduler print 3.5.
+ * Pipeline: std::inline std::jit
+ * Expected output: L8 3.5
+ * Actual: L8 1.5 (the unreduced program printed `L8 -nan` where `L8 -2` is expected)
+ * Reduced by test/tools/progen from seed 944 (generator version 1, all features).
+ */
+module inline_jit_arm_value_float
+
+func r6(a7: int, a8: float, a9: string): float {
+    return if (0 <= 0) then 1.0 + 1.0 else r6(0, 1.5, '');
+}
+
+func main(): int sync {
+    let n37 = '';
+    var v61 = -0.5;
+    let n66 = match n37 {
+        case 'ab' => sync {
+            return 1.0;
+        }
+        case 'a' => 1.0
+        case _ => sync {
+            range(2, 4)->foreach<sync (p63: int) => sync {
+                v61 += r6(0, -1.5, 'ab');
+            }>;
+            return v61;
+        }
+    };
+    println('L8 {}'->format<n66>);
+    return 0;
+}

@@ -62,7 +62,8 @@ pass; the status column of the tables names the cause.
   constant an argument is so that specialization can bind it, looked through CAST nodes: the
   constant under `i as float` was bound without being converted (F35, found by hand).
 
-Not fixed: **F17** and **F36** (below) are in the JIT back end.
+**F17** and **F36** were in the JIT back end and are fixed on branch `lane/jit-fixes` (see
+"Fixed in the JIT" below).
 
 F12 and F19 (found with `std::opt::simplify`, which runs the same inliner) have cause A: the
 simplify line reached it independently, with `GATE(constant)` in front of the body where A
@@ -79,9 +80,30 @@ Seeds 1-1000 of the `cross` matrix (41 cells per program, all features), before 
 | before | 40126 | 24 | 545 | 39 | 7 | 4 | 255 | 52 |
 | after A, B and C | 40975 | 24 | 1 | 0 | 0 | 0 | 0 | 1 |
 
-No cell is bad after that was not bad before. The cell left is seed 944 under
-`std::inline std::jit` (`L8 -nan` where `L8 -2` is expected; the other schedulers print `-2`);
-it was not reduced.
+No cell is bad after that was not bad before. The cell left is seed 944 (generator version 1)
+under `std::inline std::jit` (`L8 -nan` where `L8 -2` is expected; the other schedulers print
+`-2`). It has since been reduced to F37 and has the cause of F17.
+
+## Fixed in the JIT (branch `lane/jit-fixes`)
+
+The JIT compiles a graph made of arithmetic, branches and calls to itself, which is what
+`std::inline` leaves of a small recursive function. Its findings had two causes, and the review
+of the encoder found more defects of the second kind than the findings showed:
+
+- **J-A: the JOIN of a fused compare-branch took the wrong arm (F17, F37, and seeds 5254,
+  47 and 187 of the larger batches).** `cmp` + `jcc` replaces the comparison and its BRCH, and
+  the branch index is not written. The JOIN then took its second input unconditionally. That
+  is right only when the first arm is empty; `if a <= 0 then 12 * 2 else r1(a - 1, 31)` has
+  code in the first arm, and returned the slot of the other one, which was never written (0, a
+  stale pointer, or `null`). The index is now written at the head of each arm unless the first
+  arm is empty.
+- **J-B: two-operand instructions were only right for some register assignments (F36).**
+  Multiplication moved its left operand to rax before reading the right one, which was in rax:
+  `i * j` became `i * i` once the function was compiled (its first call is interpreted). The
+  same pattern was in division, the 32-bit forms and every comparison, and several encodings
+  were wrong for r8-r11. See the commits of the branch for the list (register ids cut to 8
+  bits, values without a register silently dropped, self tail calls reading another
+  activation's frame).
 
 ## How they were found
 
@@ -160,9 +182,10 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 | F14 | `inline_branch_value_null.cml` | `std::inline` | nvm, fvm, jit | `L4 (0, [0]) 0` | `L4 null 0` | branch arm | fixed (A, e82fa21e) |
 | F15 | `inline_match_value_null.cml` | `std::inline` | all | `L6 { n: 5, tag:  }` | `L6 null` | branch arm | fixed (A, e82fa21e) |
 | F16 | `fold_inline_env_value.cml` | `std::opt::fold std::inline` | all | `L11 false 4` | `L11 false 0` (a value read from the environment) | (other) wrong value after inlining | fixed (A, e82fa21e) |
-| F17 | `inline_jit_argument_value.cml` | `std::inline` | jit | `L8 0 0 24` | `L8 0 0 0` (nvm, fvm and prl print 24) | (other) wrong value after inlining | open: in the JIT back end, see F36 |
+| F17 | `inline_jit_argument_value.cml` | `std::inline` | jit | `L8 0 0 24` | `L8 0 0 0` (nvm, fvm and prl print 24) | (other) wrong value after inlining | fixed (J-A) |
+| F37 | `inline_jit_arm_value_float.cml` | `std::inline` | jit | `L8 3.5` | `L8 1.5` (from seed 944 of generator version 1, which printed `-nan`) | (other) wrong value after inlining | fixed (J-A) |
 | F32 | `fold_inline_match_arm_value.cml` | `std::opt::fold std::inline` | all | `L4 0 3 a` | `L4 0 0 a` (a pure function; no effect, no variable) | branch arm | fixed (A, e82fa21e) |
-| F36 | `inline_jit_second_call.cml` | `std::inline` | jit | `1`, `1`, `11` | `1`, `2`, `17` (found by hand: a self-tail-recursive function, right on its first call, wrong on later ones) | (other) wrong value after inlining | open: in the JIT back end |
+| F36 | `inline_jit_second_call.cml` | `std::inline` | jit | `1`, `1`, `11` | `1`, `2`, `17` (found by hand: a self-tail-recursive function, right on its first call, wrong on later ones) | (other) wrong value after inlining | fixed (J-B) |
 | F35 | `opt_cast_argument_value.cml` | `std::opt`, `std::opt::simplify`, `std::specialize` | all | `7.5`, `17.25`, `10.75` | `0.5`, `-1.75`, `7.75` (found by hand: an argument written `i as float`) | (other) wrong value after a rewrite | fixed (D, ca28e0b8) |
 
 ### Faults and crashes after a standard pass
@@ -221,18 +244,14 @@ Notes on single findings:
   the program behaves the same with and without optimization"): without passes the function is
   never called, so nothing faults. The index is not a literal one; the reducer rejects
   candidates with a literal index outside a literal array (2.7 makes those compile-time errors).
-- **F17, F36.** The graph and the bytecode `std::inline` leaves are right: `std::inline std::fvm`
+- **F17, F36, F37.** The graph and the bytecode `std::inline` leaves are right: `std::inline std::fvm`
   runs the same bytecode and prints the expected lines, and so do the node VM and the parallel
   scheduler. Inlining the arms into the function makes it call only itself, which is the
   condition for the JIT to compile it (`std::jit` alone reports "targets non-self graph" for it
-  and interprets). The MIR of one activation (`std::mir`) is right as well; the self tail call
-  is not native on Linux but goes through `trampolineTail`
-  (`src/passes/sched/fastvm/jit/runtime/trampoline.cpp`, the JIT-to-JIT path: release the
-  caller's frame, acquire one, `invokeOwnedJitFrame`), reached from `case OpCode::TAIL` of
-  `src/passes/sched/fastvm/jit/backend/x64/x64_backend.cpp`. In F36 the first call of
-  the function is right and every later one is wrong (each `i * j` is added twice), which fits a
-  function that is interpreted first and compiled later; that, and what goes wrong on the
-  compiled path, was not established.
+  and interprets). In F36 the first call of the function is right and every later one is wrong
+  because the function is interpreted first and compiled at its second call. The causes (J-A,
+  J-B) are under "Fixed in the JIT"; the `trampolineTail` path the first analysis suspected
+  was not the cause of either, though it had a defect of its own and is no longer used.
 - **F01, F03, F18** are one symptom (code of an arm that is not taken runs) and **F04-F10**
   another (an effect that must run is dropped). Hand-simplifying them usually loses the failure:
   each needs its particular shape (F01 passes when either the `var` declaration or the tuple

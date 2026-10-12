@@ -234,7 +234,8 @@
   "expected": [
    "L8 0 0 24"
   ],
-  "class": "(other) wrong value after inlining"
+  "class": "(other) wrong value after inlining",
+  "fixed": "jit: the JOIN of a fused compare-branch takes the arm that reached it"
  },
  {
   "id": "F18",
@@ -461,6 +462,21 @@
    "1",
    "11"
   ],
-  "class": "(other) wrong value after inlining"
+  "class": "(other) wrong value after inlining",
+  "fixed": "jit: two-operand instructions are encoded for any register assignment"
+ },
+ {
+  "id": "F37",
+  "file": "findings/inline_jit_arm_value_float.cml",
+  "pipeline": [
+   "std::inline",
+   "std::jit"
+  ],
+  "env": {},
+  "expected": [
+   "L8 3.5"
+  ],
+  "class": "(other) wrong value after inlining",
+  "fixed": "jit: the JOIN of a fused compare-branch takes the arm that reached it"
  }
 ]
