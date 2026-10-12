@@ -48,6 +48,8 @@ class CamelParser {
     std::unique_ptr<OpenCMLParser> parser_;
 
     antlr4::tree::ParseTree *cst_ = nullptr;
+    // The tree of the last parse whatever its outcome (see syntaxTree).
+    antlr4::tree::ParseTree *syntaxTree_ = nullptr;
     AST::node_ptr_t ast_          = nullptr;
     // Logical ID of the source file currently being parsed in SourceContext.
     camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
@@ -70,10 +72,12 @@ class CamelParser {
             cst_ = parser_->program();
 
             if (listener->hasErrors()) {
-                cst_ = nullptr;
+                syntaxTree_ = cst_;
+                cst_        = nullptr;
                 return false;
             }
         }
+        syntaxTree_ = cst_;
         // A lexical error leaves the parser a token stream without the offending text, which
         // may well parse; the file is in error all the same.
         if (diagnostics_->hasErrors()) {
@@ -121,6 +125,10 @@ class CamelParser {
     }
 
     antlr4::tree::ParseTree *cst() const { return cst_; }
+    /// The tree of the last parse also when the file has errors: what ANTLR recovered, with
+    /// error nodes and incomplete contexts. For tools that describe a file being edited
+    /// (camel/service/semantic); the compiler only ever uses cst().
+    antlr4::tree::ParseTree *syntaxTree() const { return syntaxTree_; }
     AST::node_ptr_t ast() const { return ast_; }
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 

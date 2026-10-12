@@ -359,6 +359,30 @@ std::optional<entity> Module::getExportedEntity(const Reference &ref) const {
     return exportedEntityNS_->get(ref);
 };
 
+std::vector<Reference> Module::importedRefs() const {
+    std::vector<Reference> refs;
+    refs.reserve(importedRefMap_.size());
+    for (const auto &[ref, bindings] : importedRefMap_) {
+        refs.push_back(ref);
+    }
+    return refs;
+}
+
+std::vector<std::pair<std::string, std::shared_ptr<Module>>> Module::importedNamespaces() const {
+    std::vector<std::pair<std::string, std::shared_ptr<Module>>> out;
+    for (const auto &binding : importedNamespaceBindings_) {
+        std::string prefix;
+        for (const auto &part : binding.localPrefixParts) {
+            if (!prefix.empty()) {
+                prefix += "::";
+            }
+            prefix += part;
+        }
+        out.emplace_back(std::move(prefix), binding.mod);
+    }
+    return out;
+}
+
 const std::vector<Reference> &Module::defaultImportedRefs() const { return defaultImportedRefs_; }
 
 type_ns_ptr_t Module::exportedTypeNS() const {

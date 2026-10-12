@@ -20,6 +20,7 @@
 #include <exception>
 #include "builder.h"
 
+#include "camel/compile/semantic_recorder.h"
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
@@ -2310,6 +2311,9 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
+    if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
+        recorder->typeExpression(ast->load()->origin(), res);
+    }
     LEAVE("Type");
     return res;
 }

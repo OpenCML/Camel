@@ -41,6 +41,10 @@ namespace camel::core::module {
 class Module;
 }
 
+namespace camel::compile {
+class SemanticRecorder;
+}
+
 // Forward declarations for execute (avoid circular include with executor.h)
 class Executor;
 class ExecutorManager;
@@ -91,6 +95,8 @@ class Context : public std::enable_shared_from_this<Context> {
     mutable std::string lastCmoLoadError_;
     /// See setPassFact.
     std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
+    /// See setSemanticRecorder.
+    camel::compile::SemanticRecorder *semanticRecorder_ = nullptr;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>
@@ -196,6 +202,16 @@ class Context : public std::enable_shared_from_this<Context> {
         const auto it = passFacts_.find(key);
         return it == passFacts_.end() ? nullptr : it->second;
     }
+
+    /**
+     * Who is told what the builders learn about the names and types of the modules compiled on
+     * this context (camel/compile/semantic_recorder.h). Null, the default, for a compilation
+     * that only wants the graph. Not owned: it must outlive the compilations.
+     */
+    void setSemanticRecorder(camel::compile::SemanticRecorder *recorder) {
+        semanticRecorder_ = recorder;
+    }
+    camel::compile::SemanticRecorder *semanticRecorder() const { return semanticRecorder_; }
 
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

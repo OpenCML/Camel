@@ -29,6 +29,7 @@
 
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/compile/semantic_recorder.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
@@ -91,6 +92,24 @@ class Builder {
     // is skipped (and what *it* declares is poisoned in turn).
     std::map<node_scope_ptr_t, std::unordered_set<std::string>> poisonedNames_;
     bool isPoisonedName(const std::string &name) const;
+
+    // ---- Facts for tools (camel/compile/semantic_recorder.h) ----
+    // Null unless the context has a recorder; every report is guarded by it. The origin of
+    // the declaration that bound each name, by the scope it was bound in, so that a reference
+    // can report which declaration it resolved to. Filled only while recording.
+    camel::compile::SemanticRecorder *recorder_ = nullptr;
+    std::unordered_map<
+        const node_scope_t *, std::unordered_map<std::string, camel::source::origin_id_t>>
+        declOrigins_;
+    // Reports that `decl` bound `name` (to `node`) in the current scope.
+    void
+    recordDeclaration(const std::string &name, node_handle_t node, const GCT::node_ptr_t &decl);
+    // The declaration a reference to `name` from the current scope resolved to.
+    camel::source::origin_id_t declarationOf(const std::string &name) const;
+    // Reports the type of the value `res` that visiting `gct` produced.
+    void recordResult(const GCT::node_ptr_t &gct, const std::any &res);
+    // visit() without the report.
+    std::any dispatch(const GCT::node_ptr_t &gct);
     // Functions whose body is in error. One declared without a return type then never gets
     // one, and a call of it would be reported as a call of an incomplete function.
     std::unordered_set<const void *> failedBodies_;

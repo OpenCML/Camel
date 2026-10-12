@@ -144,6 +144,10 @@ class Module : public std::enable_shared_from_this<Module> {
     std::optional<entity> getExportedEntity(const Reference &ref) const;
 
     const std::vector<Reference> &defaultImportedRefs() const;
+    /// For tools that list what a module can name (camel/service/semantic): the local names
+    /// it imported, and the namespaces it imported (`a::b`) with the module behind each.
+    std::vector<Reference> importedRefs() const;
+    std::vector<std::pair<std::string, std::shared_ptr<Module>>> importedNamespaces() const;
     type_ns_ptr_t exportedTypeNS() const;
     entity_ns_ptr_t exportedEntityNS() const;
 };

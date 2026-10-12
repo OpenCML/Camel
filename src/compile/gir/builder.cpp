@@ -727,6 +727,8 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     genericDrefs_.clear();
     instantiationDepth_   = 0;
     genericCalleeAllowed_ = false;
+    recorder_             = context_ ? context_->semanticRecorder() : nullptr;
+    declOrigins_.clear();
 
     nodeScope_      = node_scope_t::create();
     graphScope_     = graph_scope_t::create();
@@ -1089,7 +1091,67 @@ bool Builder::isPoisonedName(const std::string &name) const {
     return false;
 }
 
+namespace {
+// Reports that the name at `gct` stands for the functions `graphs`.
+void reportFunctionReference(
+    camel::compile::SemanticRecorder *recorder, const GCT::node_ptr_t &gct, const std::string &name,
+    const std::optional<graph_set_ptr_t> &graphs) {
+    std::vector<std::string> ids;
+    if (graphs.has_value() && *graphs) {
+        for (const auto &g : **graphs) {
+            if (g) {
+                ids.push_back(g->stableId());
+            }
+        }
+    }
+    recorder->functionReferenced(gct->load()->origin(), name, std::move(ids));
+}
+} // namespace
+
+void Builder::recordDeclaration(
+    const std::string &name, node_handle_t node, const GCT::node_ptr_t &decl) {
+    const auto origin                    = decl->load()->origin();
+    declOrigins_[nodeScope_.get()][name] = origin;
+    recorder_->valueDeclared(origin, name, valueTypeOf(nodeTypeOf(node)), isVariable(node));
+}
+
+camel::source::origin_id_t Builder::declarationOf(const std::string &name) const {
+    // A capture port is entered into the scopes between the reference and the declaration
+    // without a record: the first scope that has one is the scope of the declaration.
+    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
+        if (!scope->has(name, false)) {
+            continue;
+        }
+        if (auto it = declOrigins_.find(scope.get()); it != declOrigins_.end()) {
+            if (auto found = it->second.find(name); found != it->second.end()) {
+                return found->second;
+            }
+        }
+    }
+    return camel::source::kInvalidOriginId;
+}
+
+void Builder::recordResult(const GCT::node_ptr_t &gct, const std::any &res) {
+    if (res.type() != typeid(node_handle_t)) {
+        return;
+    }
+    node_handle_t node = any_cast<node_handle_t>(res);
+    if (node == nullptr || nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        return;
+    }
+    recorder_->expressionTyped(gct->load()->origin(), valueTypeOf(nodeTypeOf(node)));
+}
+
 any Builder::visit(const GCT::node_ptr_t &node) {
+    if (recorder_ == nullptr) [[likely]] {
+        return dispatch(node);
+    }
+    any res = dispatch(node);
+    recordResult(node, res);
+    return res;
+}
+
+any Builder::dispatch(const GCT::node_ptr_t &node) {
     switch (node->type()) {
     case GCT::LoadType::DECL:
         return visitDeclNode(node);
@@ -1208,6 +1270,9 @@ void Builder::buildFuncBody(
             if (i < funcType->withTypesCount() && funcType->withIsVarAt(i)) {
                 variables_.insert(port);
             }
+            if (recorder_) {
+                recordDeclaration(graph->nodePortName(port), port, gct);
+            }
         }
         const auto normPorts = graph->draft().normPorts();
         for (size_t i = 0; i < normPorts.size(); ++i) {
@@ -1216,12 +1281,18 @@ void Builder::buildFuncBody(
             if (i < funcType->normTypesCount() && funcType->normIsVarAt(i)) {
                 variables_.insert(port);
             }
+            if (recorder_) {
+                recordDeclaration(graph->nodePortName(port), port, gct);
+            }
         }
         bodyStates_[graph.get()] = BodyState::Open;
         setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
         bodyStates_[graph.get()] = BodyState::Built;
         builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
         builtBodies_.push_back(graph);
+        if (recorder_) {
+            recorder_->functionBuilt(gct->load()->origin(), name, graph->stableId(), funcType);
+        }
     } catch (const camel::core::mm::MemoryExhausted &e) {
         // Say which function was being compiled; the allocator does not know.
         bodyStates_[graph.get()] = BodyState::Built;
@@ -1694,10 +1765,14 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     declaresVariable_ = isVar;
     // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
-    bool success = insertNode(ident, isVar ? newVariable(node) : node);
+    node_handle_t bound = isVar ? newVariable(node) : node;
+    bool success        = insertNode(ident, bound);
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
         throw BuildAbortException();
+    }
+    if (recorder_ && !nodeIsKind(bound, runtime::GCNodeKind::Dref)) {
+        recordDeclaration(ident, bound, gct);
     }
     LEAVE("NREF");
     return node;
@@ -2098,6 +2173,13 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             node = resolveCrossGraphRef(node, name);
             ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
         }
+        if (recorder_ && !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+            recorder_->valueReferenced(
+                gct->load()->origin(),
+                name,
+                declarationOf(name),
+                valueTypeOf(nodeTypeOf(node)));
+        }
         LEAVE("DREF");
         return valueOf(node);
     }
@@ -2116,6 +2198,12 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
                 std::make_shared<graph_set_t>()});
         genericDrefs_[drefNode] = optTemplate.value();
         registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
+        if (recorder_) {
+            recorder_->genericReferenced(
+                gct->load()->origin(),
+                name,
+                optTemplate.value()->func->load()->origin());
+        }
         LEAVE("DREF");
         return drefNode;
     }
@@ -2129,6 +2217,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         node_handle_t drefNode = graph->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{optDecorated.value()});
         registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
+        if (recorder_) {
+            reportFunctionReference(recorder_, gct, name, graphsAt(name));
+        }
         LEAVE("DREF");
         return drefNode;
     }
@@ -2139,6 +2230,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+            if (recorder_) {
+                reportFunctionReference(recorder_, gct, name, graphs);
+            }
             LEAVE("DREF");
             return drefNode;
         }
@@ -2182,6 +2276,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+            if (recorder_) {
+                reportFunctionReference(recorder_, gct, name, graphs);
+            }
             LEAVE("DREF");
             return drefNode;
         } else if (e.isOperGroup()) {
@@ -2189,6 +2286,13 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{ops})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+            if (recorder_) {
+                std::vector<std::string> signatures;
+                for (const auto &[uri, resolver] : ops->resolvers()) {
+                    signatures.push_back(resolver->signature());
+                }
+                recorder_->operatorReferenced(gct->load()->origin(), name, std::move(signatures));
+            }
             LEAVE("DREF");
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isDecoratedGraph(e)) {
@@ -2196,6 +2300,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{decorated})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
+            if (recorder_) {
+                recorder_->functionReferenced(gct->load()->origin(), name, {});
+            }
             LEAVE("DREF");
             return drefNode;
         }
@@ -2838,6 +2945,13 @@ node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node
         const std::string name = expr->loadAs<GCT::DRefLoad>()->ref().toString();
         if (nodeAt(name).has_value()) {
             if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                if (recorder_) {
+                    recorder_->valueReferenced(
+                        expr->load()->origin(),
+                        name,
+                        declarationOf(name),
+                        valueTypeOf(nodeTypeOf(node)));
+                }
                 return node;
             }
         }
@@ -3232,6 +3346,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
 
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
+    if (recorder_) {
+        recorder_->callResolved(
+            gct->load()->origin(),
+            gct->at(0)->load()->origin(),
+            targetGraph ? targetGraph->stableId() : std::string(),
+            targetOperator ? targetOperator->uri() : std::string(),
+            targetFuncType);
+    }
     // A direct call is located at the call expression, not at the callee's definition.
     if (targetGraph && targetNode && targetNode->header.kind == camel::runtime::GCNodeKind::Func) {
         registerNodeOrigin(context_, targetNode, gct, "gir.link.func");
