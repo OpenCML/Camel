@@ -248,6 +248,13 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
             stats_.safepoints % debugConfig_.stressEveryNSafepoints == 0) {
             requestStressCollectionUnlocked("safepoint interval");
         }
+        if (detail::nativeCodeDepth.load(std::memory_order_relaxed) != 0) [[unlikely]] {
+            throw std::logic_error(
+                std::format(
+                    "GC invariant violated: safepoint '{}' reached while JIT-compiled code is "
+                    "on the stack (native frames have no stack maps)",
+                    reason));
+        }
         if (collectionInhibit_.load() != 0) {
             // A NoCollectionScope is open: native code holds raw pointers across this
             // safepoint. Whatever was asked for stays pending.

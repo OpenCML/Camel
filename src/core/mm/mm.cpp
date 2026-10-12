@@ -30,6 +30,7 @@ namespace camel::core::mm {
 
 namespace detail {
 std::atomic_bool autoSpaceSafepointSlowPath{false};
+std::atomic<uint32_t> nativeCodeDepth{0};
 }
 
 namespace {

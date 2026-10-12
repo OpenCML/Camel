@@ -196,6 +196,10 @@ namespace detail {
 // Set only when diagnostic GC stress or a deferred safepoint collection can require real work.
 // Hot schedulers use this as the single cheap predicate before taking the allocator mutex.
 extern std::atomic_bool autoSpaceSafepointSlowPath;
+// Activations of JIT-compiled code now on a native stack. Compiled code has no stack maps, so
+// no collection may run while one exists: a safepoint reached with this above zero is refused
+// (GenerationalAllocatorWithGC::safepoint).
+extern std::atomic<uint32_t> nativeCodeDepth;
 } // namespace detail
 
 GrowableFreeListAllocator &graphSpace();
