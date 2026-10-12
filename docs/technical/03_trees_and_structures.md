@@ -25,7 +25,7 @@
 
 ### 2.1 角色与来源
 
-- **CST** 由语法分析器（ANTLR4）根据 **antlr/OpenCML.g4**、**OpenCMLLex.g4** 直接产生。
+- **CST** 由手写的解析器（`src/parse/syntax/`）直接产生：一棵平铺存储的无损语法树，节点种类见 `include/camel/parse/syntax/node_kinds.def`（[34_handwritten_parser.md](34_handwritten_parser.md)）。
 - 保留**语法规则与词法单元**：括号、关键字、运算符的层次与顺序，与源码一一对应，便于错误定位和格式化。
 
 ### 2.2 顶层结构

@@ -42,7 +42,7 @@ var count = 0
 - `throw e` gives an error value and has the same structure as `return`: it does not unwind the call stack, and there is no "propagation" or "catching".
   - The enclosing function must declare its return type as `T!`; otherwise it is `SemanticDiag::ThrowOutsideFallible`.
   - `e` must be an error value: one constructed by `error(kind, message)`, or one bound by `case error e`; otherwise it is `SemanticDiag::ThrowNotAnError`.
-- Whether `raise` stays or goes is undecided; using it is `SemanticDiag::ConstructNotSupported`.
+- `raise` is not part of the language and is not a reserved word (it is an ordinary name); an error value is returned with `throw`.
 
 ```cml
 func check_age(age: int): int! {

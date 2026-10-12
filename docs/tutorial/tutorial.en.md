@@ -110,7 +110,7 @@ Key points:
 - `let` is an immutable name, and `var` is a mutable variable. Camel favours immutability: most programs hardly ever need `var`.
 - **Fields and elements cannot be assigned to** (`p.x = 5` and `xs[0] = 5` are errors). To "modify" something, build a new value: `{ x: 5, y: p.y }`, `concat(xs, [4])`.
 - Strings can use either single or double quotes. Strings are measured in bytes: `len('中文')` is 6. Functions for splitting, trimming, searching and so on are in the `str` module (section 12).
-- A detail of how code is written: the parenthesis of a call must directly follow the function name (`f(1)`, not `f (1)`).
+- Two details of how code is written: the parenthesis of a call must directly follow the function name (`f(1)`, not `f (1)`); and when a statement is continued on the next line, leave the operator at the end of the line, or start the next line with an operator that can only be binary such as `->`, `.`, `*`, `&&` (a line that starts with `-` or `+` is a new statement).
 
 ## 3. Functions
 
@@ -821,7 +821,7 @@ HELLO a+b+c 6 5
 - **The calling convention**: the value a function works on is its ordinary parameter, and the values that configure the call are `with` parameters. So every library function can be attached to a pipe: `s->trim->split<','>`, `xs->unique->sort_by<key>->take<2>`.
 - Strings are measured in bytes: `len('héllo')` is 6; to count by character use `char_count`, which gives 5. `s[i]` takes out the `i`-th byte.
 - A function that may have no result returns `T?` (such as `find` when nothing is found), taken out with `??`; out-of-range arguments and arguments outside the domain are faults.
-- A detail of writing: when one argument list contains two calls with angle brackets (`f<a>(x), g<b>(y)`), it is read as a comparison. That is why the two calls of `find` above are written as two `let`s.
+- A detail of writing: angle brackets touch the name before them (`find<x>`), and the comparison `<` has a space before it (`a < b`). The two are never confused, and one argument list may hold several calls with angle brackets: `f<a>(x), g<b>(y)`.
 - The `array` module consists of generic functions written in Camel, which are visible subgraphs on the graph; the functions of `str` and `math` are C++ operators, each a single node on the graph.
 
 To find out which operators a program can use, and whether each is declared pure, ask the compiler:

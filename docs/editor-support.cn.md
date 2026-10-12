@@ -278,7 +278,7 @@ Helix 用 tree-sitter 语法做高亮，而 Camel 还没有 tree-sitter 语法�
 
 ## 5. 修改语法文件
 
-TextMate 语法（`editors/vscode/syntaxes/camel.tmLanguage.json`）由 `antlr/OpenCMLLex.g4` 与 `antlr/OpenCML.g4` 推导而来。两类测试保证这一点，它们都随默认测试集（`npm run test`）运行：
+TextMate 语法（`editors/vscode/syntaxes/camel.tmLanguage.json`）与词法分析器自己的记号表（`include/camel/parse/syntax/token_kinds.def`）保持一致。两类测试保证这一点，它们都随默认测试集（`npm run test`）运行：
 
 ```bash
 node scripts/test.js test/plans/feat/tools/grammar.plan.toml

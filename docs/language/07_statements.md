@@ -2,7 +2,7 @@
 
 [English](en/07_statements.md) | 中文
 
-块由语句组成。语句是：表达式、`let`/`var` 声明、`return`/`throw`、嵌套的块，以及函数与类型的声明。
+块由语句组成，一行一条；一条语句在哪里结束见 [2.1](02_lexical.md#21-行空白与分隔)。语句是：表达式、`let`/`var` 声明、`return`/`throw`、嵌套的块，以及函数与类型的声明。
 
 ---
 
@@ -42,7 +42,7 @@ var count = 0
 - `throw e` 给出一个错误值，与 `return` 同构：它不展开调用栈，没有“传播”与“捕获”。
   - 所在的函数必须把返回类型声明为 `T!`，否则是 `SemanticDiag::ThrowOutsideFallible`。
   - `e` 必须是错误值：`error(kind, message)` 构造的，或 `case error e` 绑定的；否则是 `SemanticDiag::ThrowNotAnError`。
-- `raise` 的去留未定，使用它是 `SemanticDiag::ConstructNotSupported`。
+- `raise` 不属于语言，也不是保留字（它是一个普通的名字）；返回错误值用 `throw`。
 
 ```cml
 func check_age(age: int): int! {

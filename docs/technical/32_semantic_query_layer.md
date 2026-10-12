@@ -19,7 +19,7 @@ serve the debugger and are not used here (section 6 says why).
 | Which overload a call chose, which instance of a generic function | GIR builder (`visitLinkNode`, `resolveGenericCall`) | Only as the callee of the node |
 | The body of a generic function | Built once per instance; a function that is never called is never built | Nothing for an uninstantiated function |
 | Names and ranges of declarations | Parse tree | AST anchors exist for some (`BindingName`, `FuncName`), not for parameters |
-| Anything in a file with a syntax error | Only the parse tree ANTLR recovers | The compiler stops before the AST |
+| Anything in a file with a syntax error | Only the syntax tree, with Error nodes where the parser resynchronized | The compiler stops before the AST |
 | Anything in a module with a GCT-stage error | Parse tree, AST | The GIR is not built |
 | A statement that failed in the GIR builder | The statements around it are built ([30](30_diagnostics_reporting.md), section 3) | Nothing for the failed statement |
 
@@ -106,7 +106,7 @@ Definition and references use the chosen one where there is a call.
 | Compiles (warnings allowed) | Everything |
 | A statement fails in the GIR builder | Everything for the other statements; in the failed one, names resolve by scope, without types |
 | GCT-stage error (unresolved type, unsupported construct) | Syntactic index; types of declarations from the last text that compiled |
-| Syntax error | Syntactic index of what ANTLR recovered; types of declarations from the last text that compiled; module members after `::` for the imports that can still be read |
+| Syntax error | Syntactic index of the tree the parser recovered; types of declarations from the last text that compiled; module members after `::` for the imports that can still be read |
 
 "From the last text that compiled": `AnalysisOptions::previous` names an earlier model of the
 same file. A declaration without facts takes the types of the declaration with the same name

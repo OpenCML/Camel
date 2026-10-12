@@ -22,4 +22,4 @@
 - [入门教程](../tutorial/tutorial.cn.md) 与 [示例集](../../examples/README.cn.md)
 - [命令行](../cli.cn.md)、[诊断目录](../diagnostics.md)
 - [技术文档](../technical/README.md)：编译流水线、图的中间表示、运行时
-- 文法：[`antlr/OpenCML.g4`](../../antlr/OpenCML.g4)、[`antlr/OpenCMLLex.g4`](../../antlr/OpenCMLLex.g4)
+- 文法：[8.5 完整文法](08_top_level_and_grammar.md#85-完整文法)，由解析器源码（`src/parse/syntax/`）中每个函数上方的产生式生成；记号表在 `include/camel/parse/syntax/token_kinds.def`
