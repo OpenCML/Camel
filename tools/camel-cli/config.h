@@ -29,6 +29,9 @@
 enum class Command { Run, Info, Check, Inspect };
 
 bool parseArgs(int argc, char *argv[]);
+/// The exit code of the process when parseArgs returns false (an info command such as
+/// --explain can fail; a usage error is reported by the caller as before).
+extern int exitCode;
 
 namespace CmdLineArgs {
 extern Command selectedCommand;
@@ -38,6 +41,23 @@ namespace Global {
 /// in config.cpp.
 extern std::string logLevelArg;
 } // namespace Global
+
+/// How diagnostics are reported; shared by the run, check and inspect commands.
+namespace Diag {
+/// "text" (source excerpts), "short" (one line per diagnostic) or "json". Resolved after
+/// parsing: the option, else the environment variable CAMEL_ERROR_FORMAT, else "text".
+extern std::string format;
+/// --color auto|always|never (default auto: colours only on a terminal).
+extern std::string color;
+/// --max-errors <n>: compile errors reported before the compiler gives up (0: no limit).
+extern int maxErrors;
+/// -N / --max-warning <n>: warnings shown (the rest are counted, not printed).
+extern int maxWarnings;
+/// The -W... arguments in command-line order, without the leading "-W".
+extern std::vector<std::string> warningSpecs;
+/// --explain <name|code>: the catalog entry to print ("" = none).
+extern std::string explain;
+} // namespace Diag
 
 namespace Run {
 extern std::string outputFile;
@@ -74,7 +94,6 @@ extern bool syntaxOnly;            // Whether to check syntax only
 extern bool ignoreDefiFile;        // Whether to ignore the definition file
 extern std::string outputFormat;   // Output format (default to JSON)
 extern std::string configFilePath; // Configuration file path
-extern unsigned int maxWaring;     // Max warnings
 } // namespace Check
 
 namespace Inspect {

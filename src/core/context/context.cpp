@@ -179,11 +179,15 @@ size_t Context::dumpModuleWarnings(
         }
         resolveTokenRanges(ud);
         for (const Diagnostic *diag : ud->diagnostics()->findBySeverity(Severity::Warn)) {
-            lines.push_back(json ? diag->toJson() : diag->toText());
+            if (admitShownWarning()) {
+                lines.push_back(json ? diag->toJson() : diag->toText(os));
+            }
         }
     }
     for (const Diagnostic &diag : extra) {
-        lines.push_back(json ? diag.toJson() : diag.toText());
+        if (admitShownWarning()) {
+            lines.push_back(json ? diag.toJson() : diag.toText(os));
+        }
     }
     if (lines.empty()) {
         return 0;
@@ -191,7 +195,8 @@ size_t Context::dumpModuleWarnings(
     if (json) {
         os << "[\n" << join(lines, ",\n") << "\n]\n";
     } else {
-        os << join(lines, "\n") << "\n";
+        const bool rich = camel::core::error::diagnosticFormat() == DiagFormat::Rich;
+        os << join(lines, rich ? "\n\n" : "\n") << (rich ? "\n\n" : "\n");
     }
     os << std::flush;
     return lines.size();

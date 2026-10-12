@@ -616,6 +616,9 @@ function runOneTest(test, sharedVars, logContext) {
     }
     const args = expandArgs(test.args || [], scope)
     const env = { ...process.env }
+    // Assertions on diagnostics (name, code, line, column) read the one-line text format.
+    // A test of the format with source excerpts passes --error-format text, which wins.
+    env.CAMEL_ERROR_FORMAT = 'short'
     for (const entry of test.envs || []) {
         const text = String(entry)
         const eq = text.indexOf('=')

@@ -1370,20 +1370,17 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         throw BuildAbortException();
     }
 
-    // Where an error in the body is reported it also says which call asked for the instance.
-    std::string note = std::format(
-        " [in the instance '{}' of the generic function '{}' with {}",
-        instanceName,
-        tmpl->name,
-        typeBindingsToString(bindings));
-    if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
-        const CharRange at = sourceContext->resolveOrigin(call->load()->origin());
-        note += std::format(
-            ", instantiated by the call at {}:{}",
-            at.start.line + 1,
-            at.start.character + 1);
-    }
-    note += "]";
+    // Where an error in the body is reported it also says which call asked for the instance:
+    // a secondary location at the call. The one-line format prints it after the message as
+    // " [in the instance ..., instantiated by the call at line:col]".
+    const DiagLabel instanceLabel{
+        SourceRange{call->load()->origin()},
+        std::format(
+            "in the instance '{}' of the generic function '{}' with {}, instantiated by the call",
+            instanceName,
+            tmpl->name,
+            typeBindingsToString(bindings)),
+        ""};
 
     // The instance is built where the function was declared, not where it is called.
     struct BuildState {
@@ -1454,14 +1451,14 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         if (instanceIndex < tmpl->instances.size()) {
             tmpl->instances[instanceIndex].failed = true;
         }
-        diags_->annotateErrorsFrom(diagsBefore, note, " [in the instance", 3);
+        diags_->addRelatedToErrorsFrom(diagsBefore, instanceLabel, 3);
         throw;
     }
     // A statement of the body that fails is skipped so that the rest is still checked; the
     // instance is unusable all the same.
     if (diags_->count(Severity::Error) > errorsBefore) {
         tmpl->instances[instanceIndex].failed = true;
-        diags_->annotateErrorsFrom(diagsBefore, note, " [in the instance", 3);
+        diags_->addRelatedToErrorsFrom(diagsBefore, instanceLabel, 3);
         throw BuildAbortException();
     }
     return graph;
