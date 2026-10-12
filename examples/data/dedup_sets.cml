@@ -1,0 +1,26 @@
+// Removes duplicates and compares two groups with Set<T>: union, intersection, difference.
+// Run: camel examples/data/dedup_sets.cml
+module dedup_sets
+
+// Keeps the first occurrence of every element, in the original order.
+func dedup(xs: int[], i: int, seen: Set<int>, out: int[]): int[] {
+    return if i >= len(xs) then out
+        else if seen->contains<xs[i]> then dedup(xs, i + 1, seen, out)
+        else dedup(xs, i + 1, seen->add<xs[i]>, concat(out, [xs[i]]))
+}
+
+func main(): int sync {
+    let readings = [7, 3, 7, 9, 3, 1, 9, 7]
+    let no_ints: int[] = []
+    println('first occurrences:', dedup(readings, 0, [] as Set<int>, no_ints))
+    println('as a set:', readings as Set<int>)          // a set prints in element order
+
+    let monday = ['ann', 'bob', 'cy', 'dee'] as Set<string>
+    let tuesday = ['bob', 'dee', 'eve'] as Set<string>
+    println('either day:', union(monday, tuesday))
+    println('both days:', intersect(monday, tuesday))
+    println('monday only:', difference(monday, tuesday))
+    println('eve came on monday:', monday->contains<'eve'>)
+    println('people seen:', len(union(monday, tuesday)))
+    return 0
+}

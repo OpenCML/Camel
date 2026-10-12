@@ -1,0 +1,38 @@
+// Lookups that may find nothing return T?; `??` supplies a default and `match` tells the
+// two cases apart.
+// Run: camel examples/data/nullable_lookup.cml
+module nullable_lookup
+
+type Product = { id: int, name: string, price: float }
+
+func find(items: Product[], id: int, i: int): Product? {
+    return if i >= len(items) then { return null }
+        else if items[i].id == id then { return items[i] }
+        else find(items, id, i + 1)
+}
+
+func label(p: Product?): string {
+    return match p {
+        case null => 'no such product'
+        case v => v.name + ' costs ' + format<v.price>('{:.2f}')
+    }
+}
+
+func main(): int sync {
+    let catalog: Product[] = [
+        { id: 10, name: 'lamp', price: 19.5 },
+        { id: 20, name: 'desk', price: 120.0 },
+        { id: 30, name: 'chair', price: 64.25 }
+    ]
+    println(label(find(catalog, 20, 0)))
+    println(label(find(catalog, 99, 0)))
+
+    // A Map lookup is nullable as well.
+    let stock = [('lamp', 4), ('desk', 0)] as Map<string, int>
+    println('lamps:', stock['lamp'] ?? 0, 'chairs:', stock['chair'] ?? 0)
+    println('chair is listed:', stock->has<'chair'>)
+
+    let nothing: int? = null
+    println(nothing, nothing ?? -1)
+    return 0
+}

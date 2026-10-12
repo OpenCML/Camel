@@ -1,0 +1,6 @@
+exists: true is a file: true bytes: 23
+first line
+second line
+exists: false
+<unreadable: IOError>
+default contents

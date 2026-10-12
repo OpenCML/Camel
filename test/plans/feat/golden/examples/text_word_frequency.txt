@@ -1,0 +1,6 @@
+words: 13 distinct: 7
+{and: 1, dog: 2, fox: 2, lazy: 1, quick: 1, sees: 2, the: 4}
+top 3:
+  the    4
+  dog    2
+  fox    2

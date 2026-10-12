@@ -1,0 +1,30 @@
+// Writes a text file, reads it back, and handles a file that does not exist without
+// stopping: `try_read_text` returns a string! that is opened with `!!` or `match`.
+// Run: camel examples/files/read_write.cml
+module read_write
+
+import { exists, is_file, mkdirs, write_text, try_read_text, file_size } from fs
+
+func load(path: string): string {
+    let r = try_read_text(path)
+    return match r {
+        case error e => '<unreadable: ' + e.kind + '>'
+        case text => text
+    }
+}
+
+func main(): int sync {
+    let dir = 'tmp/examples'
+    let path = dir + '/notes.txt'
+    mkdirs(dir)                                     // creates missing parent directories
+
+    write_text(path, 'first line\nsecond line\n')
+    println('exists:', exists(path), 'is a file:', is_file(path), 'bytes:', file_size(path))
+    print(load(path))
+
+    let missing = dir + '/no_such_file.txt'
+    println('exists:', exists(missing))
+    println(load(missing))
+    println(try_read_text(missing) !! 'default contents')
+    return 0
+}

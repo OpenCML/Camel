@@ -1,0 +1,29 @@
+// A command-line tool: the parameters of `main` are the program's inputs and get their
+// values from `--arg name=value`.
+// Run: camel examples/cli/temperature.cml --arg value=21.5 --arg unit=C --arg steps=3
+module temperature
+
+func convert(value: float, unit: string): float! {
+    return if unit == 'C' then { return value * 9.0 / 5.0 + 32.0 }
+        else if unit == 'F' then { return (value - 32.0) * 5.0 / 9.0 }
+        else { throw error('UnknownUnit', 'unit must be C or F, got ' + unit) }
+}
+
+func other(unit: string): string {
+    return if unit == 'C' then 'F' else 'C'
+}
+
+func row(value: float, unit: string): string {
+    let r = convert(value, unit)
+    return match r {
+        case error e => 'error: ' + e.message
+        case v => format<value, unit, v, other(unit)>('{:8.2f} {} = {:8.2f} {}')
+    }
+}
+
+// Prints `steps` rows, starting at `value` and going up by one degree per row.
+func main(value: float, unit: string, steps: int): int sync {
+    let rows = range(0, steps)->map<(i: int): string => row(value + float(i), unit)>
+    println(rows->join<'\n'>)
+    return 0
+}

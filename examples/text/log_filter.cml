@@ -1,0 +1,32 @@
+// Filters log lines with a regular expression (`re.test`) and counts them per level.
+// Run: camel examples/text/log_filter.cml
+module log_filter
+
+import { test } from re
+
+func count_matching(lines: string[], pattern: string): int {
+    return len(lines->filter<(l: string): bool => test(pattern, l)>)
+}
+
+func main(): int sync {
+    let lines = [
+        '09:00:01 INFO  service started',
+        '09:00:07 WARN  disk usage at 81%',
+        '09:01:12 ERROR cannot open cache.db',
+        '09:01:13 INFO  retrying in 5s',
+        '09:01:18 ERROR cannot open cache.db',
+        '09:02:00 INFO  shutdown requested'
+    ]
+
+    let levels = ['INFO', 'WARN', 'ERROR']
+    levels->foreach<(level: string) => sync {
+        println(format<level, count_matching(lines, ' ' + level + ' ')>('{:<5} {}'))
+    }>
+
+    println('problems:')
+    lines->filter<(l: string): bool => test('(WARN|ERROR)', l)>
+        ->foreach<(l: string) => sync { println('  ' + l) }>
+
+    println('lines with a number followed by a unit:', count_matching(lines, '[0-9]+(%|s)'))
+    return 0
+}

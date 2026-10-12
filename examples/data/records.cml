@@ -1,0 +1,42 @@
+// Transforms an array of struct records: filter, derive new records, group totals in a Map.
+// Fields cannot be assigned, so a changed record is a new value.
+// Run: camel examples/data/records.cml
+module records
+
+type Employee = { name: string, dept: string, salary: int }
+
+func with_raise(e: Employee, percent: int): Employee {
+    return { name: e.name, dept: e.dept, salary: e.salary + e.salary * percent / 100 }
+}
+
+func line(e: Employee): string {
+    return format<e.name, e.dept, e.salary>('{:<4} {:<6} {}')
+}
+
+func total_by_dept(staff: Employee[]): Map<string, int> {
+    return staff->reduce<
+        (acc: Map<string, int>, e: Employee): Map<string, int> => acc->put<e.dept, (acc[e.dept] ?? 0) + e.salary>,
+        [] as Map<string, int>
+    >
+}
+
+func main(): int sync {
+    let staff: Employee[] = [
+        { name: 'ann', dept: 'eng', salary: 5200 },
+        { name: 'bob', dept: 'ops', salary: 4100 },
+        { name: 'cy', dept: 'eng', salary: 6100 },
+        { name: 'dee', dept: 'sales', salary: 3900 }
+    ]
+
+    let engineers = staff->filter<(e: Employee): bool => e.dept == 'eng'>
+    println('engineers:', engineers->map<(e: Employee): string => e.name>)
+
+    // Engineers get a 10% raise; everybody else is kept as is.
+    let updated = staff->map<(e: Employee): Employee => with_raise(e, if e.dept == 'eng' then 10 else 0)>
+    println(updated->map<line>->join<'\n'>)
+
+    println('before:', total_by_dept(staff))
+    println('after: ', total_by_dept(updated))
+    println('the first record is unchanged:', staff[0])
+    return 0
+}

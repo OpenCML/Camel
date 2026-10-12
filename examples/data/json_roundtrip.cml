@@ -1,0 +1,33 @@
+// Encodes a value as JSON and decodes JSON text into a typed value; text of the wrong shape
+// gives an error value, not a crash.
+// Run: camel examples/data/json_roundtrip.cml
+module json_roundtrip
+
+import json
+
+type User = { name: string, age: int, tags: string[] }
+
+func describe(r: User!): string {
+    return match r {
+        case error e => 'rejected (' + e.kind + ')'
+        case u => u.name + ', ' + string(u.age) + ', tags: ' + join<'/'>(u.tags)
+    }
+}
+
+func main(): int sync {
+    let ada: User = { name: 'ada', age: 36, tags: ['admin', 'dev'] }
+
+    let text = json::encode(ada)
+    println(text)
+    println(json::encode(ada, 2))                    // pretty-printed with an indent of 2
+
+    // decode_as takes the JSON text and a value of the wanted type; the result is a User!.
+    println(describe(json::decode_as(text, ada)))
+    println(describe(json::decode_as('{"name": "bob", "age": "old", "tags": []}', ada)))
+    println(describe(json::decode_as('{"name": "bob"', ada)))
+
+    // Containers decode the same way.
+    let scores = json::decode_as('{"math": 91, "art": 78}', [] as Map<string, int>) !! ([] as Map<string, int>)
+    println(scores, scores['math'] ?? 0, scores['music'] ?? 0)
+    return 0
+}

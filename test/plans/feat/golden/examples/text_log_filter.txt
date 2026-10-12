@@ -1,0 +1,8 @@
+INFO  3
+WARN  1
+ERROR 2
+problems:
+  09:00:07 WARN  disk usage at 81%
+  09:01:12 ERROR cannot open cache.db
+  09:01:18 ERROR cannot open cache.db
+lines with a number followed by a unit: 2

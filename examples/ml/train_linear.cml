@@ -1,0 +1,43 @@
+// A minimal training loop: a linear model as a struct of tensors, the gradient of the loss
+// from `autodiff.grad`, the update from `nn.sgd`, and the loop as a tail recursion.
+// Run: camel examples/ml/train_linear.cml
+module train_linear
+
+import { grad } from autodiff
+import { Tensor, reshape, shape, sum } from tensor
+import { sgd } from nn
+
+type Linear = { weight: Tensor }
+
+// Mean squared error of the model on (X, y). The model and the targets are `with`
+// parameters: `grad` differentiates with respect to them.
+with <layer: Linear, y: Tensor>
+func mse_loss(X: Tensor): float {
+    let errors = X @ layer.weight - y
+    return sum(errors * errors) / float(shape(X)[0])
+}
+
+func train(layer: Linear, X: Tensor, y: Tensor, rate: float, steps: int): Linear {
+    let grads = grad(mse_loss)<layer, y>(X)       // a tuple: one gradient per `with` parameter
+    return if steps == 0 then layer
+        else train(sgd(layer, grads.0, rate), X, y, rate, steps - 1)
+}
+
+func init(): Linear {
+    return { weight: reshape([0.0, 0.0], [2, 1]) }
+}
+
+func main(): int sync {
+    // Four samples of y = 2 * x1 - 1 * x2.
+    let X = reshape([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0], [4, 2])
+    let y = reshape([2.0, -1.0, 1.0, 3.0], [4, 1])
+    let start = init()
+
+    println(format<mse_loss<start, y>(X)>('loss before training: {:.4f}'))
+    let after10 = train(start, X, y, 0.1, 10)
+    println(format<mse_loss<after10, y>(X)>('loss after 10 steps:  {:.4f}'))
+    let after200 = train(start, X, y, 0.1, 200)
+    println(format<mse_loss<after200, y>(X)>('loss after 200 steps: {:.4f}'))
+    println(after200.weight)
+    return 0
+}

@@ -1,0 +1,40 @@
+// Counts how often each word occurs with a Map<string, int> and lists the most frequent ones.
+// The input is an array of words: strings are not split into words in the program.
+// Run: camel examples/text/word_frequency.cml
+module word_frequency
+
+type Entry = (string, int)
+
+// Does `a` come before `b`? Higher count first, then alphabetical order.
+func before(a: Entry, b: Entry): bool {
+    return if a.1 == b.1 then a.0 < b.0 else a.1 > b.1
+}
+
+// Inserts `e` into an array that is already ordered by `before`.
+func insert(ordered: Entry[], e: Entry): Entry[] {
+    let front = ordered->filter<(x: Entry): bool => before(x, e)>
+    let back = ordered->filter<(x: Entry): bool => !before(x, e)>
+    return concat(concat(front, [e]), back)
+}
+
+func show(e: Entry): string {
+    return format<e.0, e.1>('  {:<6} {}')
+}
+
+func main(): int sync {
+    let words = ['the', 'quick', 'fox', 'sees', 'the', 'lazy', 'dog', 'and', 'the', 'dog', 'sees', 'the', 'fox']
+
+    let counts = words->reduce<
+        (acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>,
+        [] as Map<string, int>
+    >
+    println('words:', len(words), 'distinct:', len(counts))
+    println(counts)
+
+    let no_entries: Entry[] = []
+    let ranked = items(counts)->reduce<insert, no_entries>
+    let top = slice<0, 3>(ranked)
+    println('top 3:')
+    println(top->map<show>->join<'\n'>)
+    return 0
+}

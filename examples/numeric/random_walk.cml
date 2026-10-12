@@ -1,0 +1,31 @@
+// A seeded random walk: the `random` module with a fixed seed, state carried through a
+// tail recursion, summary with `statistics`.
+// Run: camel examples/numeric/random_walk.cml
+module random_walk
+
+import { seed, randint } from random
+import { mean, stdev } from statistics
+
+// Position after `steps` moves of -1 or +1.
+func walk(steps: int, position: int): int sync {
+    return if steps == 0 then position
+        else walk(steps - 1, position + randint(0, 1) * 2 - 1)
+}
+
+// End positions of `count` walks made one after another. The walks share one generator, so
+// the order in which they are made is part of the result: it is fixed by the recursion.
+func walks(count: int, ends: int[]): int[] sync {
+    return if count == 0 then ends
+        else walks(count - 1, concat(ends, [walk(100, 0)]))
+}
+
+func main(): int sync {
+    seed(2024)
+    let no_ints: int[] = []
+    let ends = walks(12, no_ints)
+    println(ends)
+
+    let distances = ends->map<(e: int): float => float(if e < 0 then 0 - e else e)>
+    println(format<mean(distances), stdev(distances)>('mean distance {:.2f}  stdev {:.2f}'))
+    return 0
+}

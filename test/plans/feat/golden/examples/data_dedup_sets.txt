@@ -1,0 +1,7 @@
+first occurrences: [7, 3, 9, 1]
+as a set: {1, 3, 7, 9}
+either day: {ann, bob, cy, dee, eve}
+both days: {bob, dee}
+monday only: {ann, cy}
+eve came on monday: false
+people seen: 5

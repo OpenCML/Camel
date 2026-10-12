@@ -1,0 +1,23 @@
+// Estimates pi by Monte Carlo sampling with a seeded generator, so every run prints the
+// same numbers; the batches are summarised with `statistics`.
+// Run: camel examples/numeric/monte_carlo_pi.cml
+module monte_carlo_pi
+
+import { pi_hits } from sim
+import { mean, stdev } from statistics
+
+func show(estimate: float): string {
+    return format<estimate>('{:.4f}')
+}
+
+func main(): int sync {
+    let samples = 20000
+    let seeds = [11, 23, 37, 41, 53, 67, 79, 97]
+
+    // pi_hits(n, seed) draws n points in the unit square and counts those inside the circle.
+    let estimates = seeds->map<(s: int): float => 4.0 * float(pi_hits(samples, s)) / float(samples)>
+
+    println(estimates->map<show>->join<' '>)
+    println(format<mean(estimates), stdev(estimates)>('mean {:.4f}  stdev {:.4f}'))
+    return 0
+}

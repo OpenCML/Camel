@@ -1,0 +1,38 @@
+// Exports a small two-layer model to an ONNX file with `onnx.export_model`: the function to
+// export, an example input (its type and shape become the model input) and the file path.
+// Run: camel examples/ml/export_onnx.cml
+//      camel examples/ml/export_onnx.cml std::macro std::opt::simplify onnx::export
+// The first command runs the program; the second translates it without running it and
+// writes the same model.
+module export_onnx
+
+import { Tensor, tanh, reshape } from tensor
+import { export_model } from onnx
+import { mkdirs, file_size } from fs
+
+type Weights = { hidden: Tensor, out: Tensor }
+
+func forward(x: Tensor, w: Weights): Tensor {
+    return tanh(x @ w.hidden) @ w.out
+}
+
+func weights(): Weights {
+    return {
+        hidden: reshape([0.5, -0.25, 0.1, 0.3, 0.2, -0.4], [2, 3]),
+        out: reshape([1.0, -1.0, 0.5], [3, 1])
+    }
+}
+
+func main(): int sync {
+    let w = weights()
+    let x = reshape([1.0, 2.0, 0.5, -1.0], [2, 2])       // two samples with two features
+    println(forward(x, w))
+
+    let path = 'tmp/examples/tiny_model.onnx'
+    mkdirs('tmp/examples')
+    // The closure captures the weights, so they are stored in the model; `[0]` leaves the
+    // first axis (the batch size) open.
+    export_model((t: Tensor): Tensor => forward(t, w), x, path, [0])
+    println('model file written:', file_size(path) > 0)
+    return 0
+}

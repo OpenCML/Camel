@@ -1,0 +1,53 @@
+// Functions as values: returning a closure, composing functions, a table of operations,
+// `with` parameters, and a counter that keeps its own state.
+// Run: camel examples/functions/closures.cml
+module closures
+
+type IntFn = (x: int) => int
+
+func adder(n: int): IntFn {
+    return (x: int): int => x + n
+}
+
+func compose(f: IntFn, g: IntFn): IntFn {
+    return (x: int): int => g(f(x))
+}
+
+// Applies every function of `steps` in turn.
+func pipeline(steps: IntFn[]): IntFn {
+    return steps->reduce<compose, (x: int): int => x>
+}
+
+// A `with` parameter is given in angle brackets, before the ordinary argument.
+with <factor: int>
+func scale(x: int): int {
+    return x * factor
+}
+
+// Each call makes a new counter with its own `count`.
+func make_counter(): () => int {
+    var count = 0
+    return sync (): int => sync {
+        count = count + 1
+        return count
+    }
+}
+
+func main(): int sync {
+    let add3 = adder(3)
+    let double = (x: int): int => x * 2
+    println(add3(4), double(4), compose(add3, double)(4))
+
+    let steps = [add3, double, adder(-1)]
+    println(pipeline(steps)(4))
+    println([1, 2, 3]->map<pipeline(steps)>)
+
+    let direct = scale<10>(7)
+    let piped = 7->scale<10>
+    println(direct, piped)
+
+    let next = make_counter()
+    let other = make_counter()
+    println(next(), next(), next(), other())
+    return 0
+}

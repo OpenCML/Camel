@@ -1,0 +1,30 @@
+// Builds an aligned text table from rows of data with `format` width specifiers and `join`.
+// Run: camel examples/text/table_report.cml
+module table_report
+
+type Item = { name: string, qty: int, price: float }
+
+func line(it: Item): string {
+    return format<it.name, it.qty, it.price, float(it.qty) * it.price>('{:<10}{:>5}{:>9.2f}{:>10.2f}')
+}
+
+// A string made of `n` copies of `s`.
+func repeat(s: string, n: int): string {
+    return range(0, n)->map<(i: int): string => s>->join<''>
+}
+
+func main(): int sync {
+    let items: Item[] = [
+        { name: 'notebook', qty: 3, price: 2.5 },
+        { name: 'pen', qty: 12, price: 0.8 },
+        { name: 'backpack', qty: 1, price: 34.99 }
+    ]
+    let total = items->reduce<(acc: float, it: Item): float => acc + float(it.qty) * it.price, 0.0>
+
+    println(format<'item', 'qty', 'price', 'amount'>('{:<10}{:>5}{:>9}{:>10}'))
+    println(repeat('-', 34))
+    println(items->map<line>->join<'\n'>)
+    println(repeat('-', 34))
+    println(format<'total', total>('{:<24}{:>10.2f}'))
+    return 0
+}
