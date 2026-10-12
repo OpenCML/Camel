@@ -26,6 +26,7 @@
 #include "../backend/backend.h"
 #include "../runtime/trampoline.h"
 #include "camel/core/context/frame.h"
+#include <unordered_map>
 #endif
 
 #include <iomanip>
@@ -102,6 +103,15 @@ JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
 
     std::span<const Bytecode> bcSpan(linked.codes.data(), linked.codes.size());
 
+    // The backend compiles one graph's own bytecode: it needs the length of each graph.
+    std::unordered_map<camel::runtime::GCGraph *, size_t> graphLengths;
+    for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
+        (void)offset;
+        if (runtimeGraph) {
+            graphLengths.emplace(runtimeGraph, length);
+        }
+    }
+
     for (const auto &[runtimeGraph, entryPc] : linked.offsetMap) {
         ASSERT(runtimeGraph != nullptr, "JIT machine-code dump requires a runtime graph.");
         ASSERT(
@@ -113,16 +123,22 @@ JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
             .instructionBoundaries = &instructionBoundaries,
             .enableDebugTrace      = true,
         };
+        // As at run time: with a frame-pool address the backend encodes self calls natively.
+        static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
-            .runtimeGraph       = runtimeGraph,
-            .bytecodes          = bcSpan,
-            .entryPc            = entryPc,
-            .trampolineFunc     = reinterpret_cast<void *>(&trampolineFunc),
-            .trampolineTail     = reinterpret_cast<void *>(&trampolineTail),
-            .trampolineOper     = reinterpret_cast<void *>(&trampolineOper),
-            .trampolineCast     = reinterpret_cast<void *>(&trampolineCast),
-            .trampolineBytecode = reinterpret_cast<void *>(&trampolineBytecode),
-            .debug              = &debugOptions,
+            .runtimeGraph = runtimeGraph,
+            .bytecodes    = bcSpan,
+            .entryPc      = entryPc,
+            .graphLength  = graphLengths.contains(runtimeGraph) ? graphLengths.at(runtimeGraph)
+                                                                : static_cast<size_t>(0),
+            .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
+            .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+            .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
+            .poolTopAddr              = &dummyPoolTop,
+            .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
+            .debug                    = &debugOptions,
         };
 
         std::string failureReason;
