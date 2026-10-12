@@ -17,3 +17,24 @@ timeout_ms = 60000
 name = "lsp.basics"
 desc = "Lifecycle, full document synchronisation, pull diagnostics (code, data, range), whole-document formatting, MethodNotFound for an unknown request."
 case = "../../../cases/tools/lsp/basics.test.mjs"
+
+[[tests]]
+name = "lsp.navigation"
+desc = "Push diagnostics, incremental synchronisation, hover (source spelling of types, signatures, documentation comments, generic instances, overloads, diagnostic codes), definition (also across files), references, highlights, document and workspace symbols."
+case = "../../../cases/tools/lsp/navigation.test.mjs"
+
+[[tests]]
+name = "lsp.editing"
+desc = "Completion (scope, fields after a dot, module members after ::, on text that does not parse), signature help, rename and its refusals, semantic tokens (var/let, sync)."
+case = "../../../cases/tools/lsp/editing.test.mjs"
+
+[[tests]]
+name = "lsp.robustness"
+desc = "Malformed frames, empty and half-written documents, positions outside the text, UTF-16 positions on lines with Chinese text and emoji, a document of 20000 lines, a burst of edits, cancellation: every request is answered and the server stays up."
+case = "../../../cases/tools/lsp/robustness.test.mjs"
+timeout_ms = 180000
+
+[[tests]]
+name = "lsp.graph"
+desc = "camel/graph: the std::rgir text of the function at the cursor, of the whole program, after a pass sequence, for unsaved text, and the compiler's report when the program is in error."
+case = "../../../cases/tools/lsp/graph.test.mjs"

@@ -149,6 +149,12 @@ export class LspClient {
     /** Sends a request and resolves with the whole response (`result` or `error`). */
     requestRaw(method, params, timeoutMs = 20000) {
         const id = this.nextId++
+        if (this.exitCode !== undefined || this.exitSignal !== undefined) {
+            // The server is gone: say so at once instead of waiting for the timeout.
+            return Promise.resolve({
+                error: { code: -1, message: `server exited (code ${this.exitCode}, signal ${this.exitSignal})` },
+            })
+        }
         return new Promise((resolve) => {
             const timer = setTimeout(() => {
                 this.pending.delete(id)
@@ -185,6 +191,9 @@ export class LspClient {
         if (i >= 0) {
             const [n] = this.notifications.splice(i, 1)
             return Promise.resolve(n.params)
+        }
+        if (this.exitCode !== undefined || this.exitSignal !== undefined) {
+            return Promise.resolve(null)
         }
         return new Promise((resolve) => {
             const waiter = { method, predicate, resolve: undefined }
