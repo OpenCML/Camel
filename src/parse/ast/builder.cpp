@@ -2401,15 +2401,15 @@ any Builder::visitArrayData(cst::ArrayData context) {
             // are kept as they are written, after the (empty) element list: the element
             // expression, the name, the source and the optional condition. The GCT builder
             // lowers them to the two calls (visitComprehension).
-            std::vector<cst::Node> exprs;
+            std::vector<syn::Node> exprs;
             for (const auto &expr : context->exprs()) {
                 exprs.push_back(expr);
             }
             // The name after `for` is an expression node of its own when a bare name is one.
             const size_t written = 2 + (context->has(TK::KwIf) ? 1 : 0);
             const bool nameIsExpr = exprs.size() == written + 1;
-            const cst::Node nameSyntax =
-                nameIsExpr ? exprs[1] : cst::Node(context->get<cst::IdentRef>());
+            const syn::Node nameSyntax =
+                nameIsExpr ? exprs[1] : syn::Node(context->get<cst::IdentRef>());
             if (nameIsExpr) {
                 exprs.erase(exprs.begin() + 1);
             }

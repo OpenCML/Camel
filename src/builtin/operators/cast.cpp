@@ -61,18 +61,18 @@ slot_t __ltol__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot
 
 slot_t __ftol__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 v = norm.get<Float32>(0);
-    return toSlot(camel::core::checkedTruncate<Int64>(v, "i64"));
+    return toSlot(camel::core::checkedTruncate<Int64>(v, "int"));
 }
 
 slot_t __dtol__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 v = norm.get<Float64>(0);
-    return toSlot(camel::core::checkedTruncate<Int64>(v, "i64"));
+    return toSlot(camel::core::checkedTruncate<Int64>(v, "int"));
 }
 
 slot_t __stol__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // The whole string must be one number (design principles 2.10).
     String *s = norm.get<String *>(0);
-    return toSlot(camel::core::integerFromText<Int64>(s->view(), "i64"));
+    return toSlot(camel::core::integerFromText<Int64>(s->view(), "int"));
 }
 
 slot_t __itof__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -118,7 +118,7 @@ slot_t __dtod__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot
 slot_t __stod__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // The whole string must be one number (design principles 2.10).
     String *s = norm.get<String *>(0);
-    return toSlot(camel::core::floatFromText<Float64>(s->view(), "f64"));
+    return toSlot(camel::core::floatFromText<Float64>(s->view(), "float"));
 }
 
 slot_t __itos__(ArgsView &with, ArgsView &norm, Context &ctx) {
