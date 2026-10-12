@@ -1,0 +1,26 @@
+/**
+ * 64-bit integer arithmetic past the ends of the range wraps around. The largest and smallest
+ * int are computed, not written as literals.
+ */
+module int_wrap
+
+func add(a: int, b: int): int { return a + b }
+func sub(a: int, b: int): int { return a - b }
+func mul(a: int, b: int): int { return a * b }
+func neg(a: int): int { return 0 - a }
+
+func main(): int sync {
+    let half = 4611686018427387904
+    let max = half - 1 + half
+    let min = neg(max) - 1
+    println(max)
+    println(min)
+    println(add(max, 1))
+    println(sub(min, 1))
+    println(mul(max, 2))
+    println(mul(min, min))
+    println(neg(min))
+    println(mul(4294967296, 4294967296))
+    println(mul(3037000500, 3037000500))
+    return 0
+}

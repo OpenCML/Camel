@@ -1,0 +1,16 @@
+/**
+ * A literal case cannot be compared with a value that is not opened: TaggedMatchCases.
+ */
+module err_match_literal
+
+func main(): int sync {
+    println('never printed')
+    let a = 1 as int?
+    let s = match a {
+        case null => 0
+        case 1 => 1
+        case v => v
+    }
+    println(s)
+    return 0
+}

@@ -1,0 +1,16 @@
+/**
+ * A loop evaluated ahead of time by std::macro: the evaluator has no tail calls and stops at
+ * 64 frames.  N=20 and N=100:
+ *   camel macro_loop.cml std::macro std::nvm
+ */
+module macro_loop
+
+macro func count(i: int, n: int, acc: int): int {
+    return if i >= n then acc else count(i + 1, n, acc + i)
+}
+
+func main(): int sync {
+    println(count(0, 20, 0))
+    println(count(0, 100, 0))
+    return 0
+}

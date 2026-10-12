@@ -22,6 +22,7 @@
 #include "antlr4-runtime/antlr4-runtime.h"
 #include "camel/core/source/ids.h"
 
+#include <string>
 #include <variant>
 
 namespace camel::core::error {
@@ -46,6 +47,17 @@ struct TokenRange {
 
 using SourceRange = std::variant<
     std::monostate, CharRange, TokenRange, camel::source::span_id_t, camel::source::origin_id_t>;
+
+/// A secondary location of a diagnostic: a place that explains the primary one ("the parameter
+/// is declared here", "instantiated by this call"). `message` reads as a sentence fragment that
+/// the location completes; the one-line text format prints it as " [message at line:col]".
+struct DiagLabel {
+    SourceRange range{};
+    std::string message;
+    /// File of `range` when it is a CharRange in another file than the diagnostic's; a span or
+    /// an origin names its own file.
+    std::string path;
+};
 
 // ---- RangeConverter ----
 class RangeConverter {

@@ -1,0 +1,18 @@
+/**
+ * Float division by zero in a function the JIT compiles (arithmetic and self recursion,
+ * already run once with a nonzero divisor): the located DivisionByZero of the interpreters at
+ * the division (line 9, column 29), not inf.
+ */
+module float_divide_by_zero_hot
+
+func g(a: float, b: float, n: int): float {
+    return if n <= 0 then a / b else g(a, b, n - 1)
+}
+
+func main(): int sync {
+    println(g(1.0, 2.0, 3))
+    let z = 0.0
+    println(g(1.0, z, 3))
+    println('not reached')
+    return 0
+}

@@ -1,0 +1,12 @@
+/**
+ * A program without `T?` / `T!`: nothing of them appears in its graph.
+ */
+module graph_plain_if
+
+func pick(c: bool, a: int, b: int): int {
+    return if c then a else b
+}
+
+func main(): int {
+    return pick(true, 3, 4)
+}

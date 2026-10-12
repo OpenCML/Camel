@@ -25,3 +25,4 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/composite/union.h"
+#include "camel/core/type/typevar.h"

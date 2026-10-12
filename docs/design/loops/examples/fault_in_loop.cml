@@ -1,0 +1,13 @@
+/**
+ * A fault in the 501st iteration of a loop written as a tail recursion: what the diagnostic says.
+ */
+module fault_in_loop
+
+func loop(i: int, n: int, acc: int): int {
+    return if i >= n then acc else loop(i + 1, n, acc + 1000 / (500 - i))
+}
+
+func main(): int sync {
+    println(loop(0, 1000, 0))
+    return 0
+}

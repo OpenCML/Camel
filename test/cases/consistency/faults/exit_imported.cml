@@ -1,0 +1,20 @@
+/**
+ * exit(3) with the os module imported, in a function, after output.
+ */
+module exit_imported
+
+import { exit } from os
+
+func stop(code: int): int sync {
+    println('stopping')
+    exit(code)
+    println('not reached in stop')
+    return 0
+}
+
+func main(): int sync {
+    println('before')
+    stop(3)
+    println('not reached')
+    return 0
+}

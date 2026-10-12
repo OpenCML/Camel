@@ -217,7 +217,29 @@ namespace Models {
 
 ---
 
-## 5.6 完整示例：多模块协作
+## 5.6 标准库
+
+各模块导出的函数（签名、是否纯、失败时的行为、例子）见 [标准库参考](../stdlib-reference.md)，它由
+`stdlib/signatures/*.cml` 与用 Camel 写的库（`stdlib/*.cml`）生成。约定：
+
+- 被处理的值是普通参数，配置它的值是 `with` 参数，因此可以链式书写：
+
+  ```cml
+  import { trim, split, to_upper } from str
+  import { sort_by, take } from array
+
+  let words = '  pear, fig ,apple '->trim->split<','>->map<(w: string) => trim(w)>
+  let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
+  ```
+
+- 找不到的结果是 `T?`（`find`、`index_of`、`min`、`max`、`median`），用 `??` 处理；只有声明为可能失败的
+  操作返回 `T!`（如按码点解码一个不是合法 UTF-8 的字符串）；越界与不在定义域内的实参是故障。
+- 用 Camel 写的库（如 `array`）导出的是泛型函数，在调用它的模块里按元素类型实例化（见 7.2.5）。
+- 模块不能导出值，常量写成无参函数：`pi()`、`e()`。
+- 传给 `array` 模块高阶函数的函数用 `map` 施加：各元素上的调用之间没有顺序约定（并行调度器可以同时
+  执行），结果按位置排列；需要顺序的副作用用内建的 `foreach`、`reduce`。
+
+## 5.7 完整示例：多模块协作
 
 **主模块（入口）**
 

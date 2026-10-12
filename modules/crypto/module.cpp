@@ -17,6 +17,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "operators.h"
 
@@ -56,6 +57,13 @@ bool CryptoModule::load() {
     context_->registerExecutorFactory("crypto", [ctx = context_]() {
         return createCryptoExecutor(ctx);
     });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "crypto",
+        {
+            {"sha256", true},
+            {"sha256_rounds", true},
+        });
     loaded_ = true;
     return true;
 }

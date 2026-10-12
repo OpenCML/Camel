@@ -94,7 +94,7 @@ const std::string FuncTypeLoad::toString() const {
     return result;
 }
 
-const std::string NullableTypeLoad::geneCode() const { return "?"; }
+const std::string NullableTypeLoad::geneCode() const { return fallible_ ? "!" : "?"; }
 
 const std::string TypeExprLoad::geneCode() const { return to_string(op_); }
 

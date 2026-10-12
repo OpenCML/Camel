@@ -1,0 +1,19 @@
+module ns
+
+namespace util {
+    func id(x: typeas T): T {
+        return x
+    }
+    type Pair<T> = (T, T)
+    func dup(x: typeas T): util::Pair<T> {
+        return (util::id(x), x)
+    }
+}
+
+func main(): int sync {
+    println(util::id(3))
+    println(util::dup('s'))
+    let p: util::Pair<int> = (1, 2)
+    println(p)
+    return 0
+}

@@ -411,12 +411,22 @@ void NodeVMSchedPass::releaseTailFrames(Frame *&tailLow, Frame *&tailHigh) {
 
 // Execute one runtime graph call. Arguments for CALL/FUNC are copied from the
 // source frame into the callee frame's ports and closure slots.
+NodeVMSchedPass::NodeVMSchedPass(const ctx::context_ptr_t &ctx)
+    : RuntimeGraphSchedulePass(ctx),
+      maxRecursionDepth_(camel::execute::recursionLimit(*ctx).frames),
+      framePool_(camel::execute::framePoolBytes(maxRecursionDepth_)) {
+    framePool_.registerGcTracer();
+}
+
 void NodeVMSchedPass::requireRecursionRoom(const camel::runtime::GCGraph *caller) const {
-    if (currRecursionDepth_ >= maxRecursionDepth_) {
-        throwRuntimeFault(
-            RuntimeDiag::MaxRecursionDepthExceeded,
-            caller->name(),
-            maxRecursionDepth_);
+    // currRecursionDepth_ includes the activation of the entry graph and its call of main,
+    // which are not calls of the program (camel/execute/limits.h).
+    const size_t openCalls = currRecursionDepth_ - 1;
+    if (openCalls >= maxRecursionDepth_ + camel::execute::kEntryCalls) {
+        camel::execute::throwRecursionLimitReached(caller->name(), maxRecursionDepth_);
+    }
+    if (camel::execute::nativeStackNearlyExhausted()) [[unlikely]] {
+        camel::execute::throwNativeStackExhausted(caller->name(), openCalls);
     }
 }
 
@@ -440,13 +450,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
     // The node being executed, so a fault points at its source expression.
     gc_node_ref_t faultNodeRef = kInvalidNodeRef;
     try {
-        if (currRecursionDepth_ > maxRecursionDepth_) {
-            throwRuntimeFault(
-                RuntimeDiag::MaxRecursionDepthExceeded,
-                rootRuntimeGraph->name(),
-                maxRecursionDepth_);
-        }
-
         std::span<const gc_node_ref_t> currNodes = topoNodesFor(currRuntimeGraph);
         auto *currCache                          = nodeVmCacheOf(currRuntimeGraph);
         ASSERT(currCache != nullptr, "NodeVM graph cache must be initialized before execution.");
@@ -897,6 +900,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
         Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
+        requireRecursionRoom(graph);
         Frame *frame   = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(func->graph(), frame);
@@ -920,6 +924,7 @@ void NodeVMSchedPass::evalMarkedOperator_apply_arr(
         Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
+        requireRecursionRoom(graph);
         Frame *frame   = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(func->graph(), frame);
@@ -949,6 +954,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
         Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
+        requireRecursionRoom(graph);
         Frame *frame   = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         slot_t result = call(func->graph(), frame);
@@ -984,6 +990,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
         Array *arr          = currFrame.get<Array *>(arrSlot);
         Function *func      = currFrame.get<Function *>(funcSlot);
         const slot_t args[] = {currFrame.get<slot_t>(resultSlot), arr->data()[i]};
+        requireRecursionRoom(graph);
         Frame *frame        = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
         currFrame.set(resultSlot, call(func->graph(), frame));
@@ -1005,6 +1012,7 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         Array *arr     = currFrame.get<Array *>(arrSlot);
         Function *func = currFrame.get<Function *>(funcSlot);
         slot_t element = arr->data()[i];
+        requireRecursionRoom(graph);
         Frame *frame   = framePool_.acquire(func->graph());
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
         call(func->graph(), frame);

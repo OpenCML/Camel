@@ -118,6 +118,8 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
 
     std::string signature() const override { return funcType_->toString(); }
 
+    FunctionType *funcType() const { return funcType_; }
+
   private:
     FunctionType *funcType_;
 };
@@ -155,6 +157,10 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         const ModifierSet &modifiers) const override;
 
     std::string signature() const override { return signature_; }
+
+    /// The declared number of with- and ordinary parameters; -1 for any number.
+    int withCount() const { return withVars_.first; }
+    int normCount() const { return normVars_.first; }
 
   private:
     std::string signature_;

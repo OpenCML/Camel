@@ -1,0 +1,10 @@
+module main
+
+// A set has no subscript; membership is `contains`.
+
+func main(): int sync {
+    let s = [1, 2] as Set<int>
+    println(s[1])
+    println("never printed")
+    return 0
+}

@@ -1,0 +1,116 @@
+id = "consistency.cleanup"
+order = 353
+tier = "feat"
+tags = ["feat", "consistency", "runtime", "cleanup"]
+desc = "What a program wrote before a fault or an exit() is there afterwards, on the four back ends"
+
+# Before a program is stopped by a fault its output is flushed and its external resources are
+# released (design principles 2.9). exit(n) leaves through the same path as a fault and as a
+# normal return: the scheduler is unwound and the process returns from main with the exit code.
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "cleanup.unflushed_print_fault"
+desc = "Text written with print (no line end, so not flushed by the call) before a fault is on standard output, ahead of the diagnostic."
+case = "../../../cases/consistency/cleanup/unflushed_print_fault.cml"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 15
+expect_stdout_starts_with = "line\npending text"
+
+[[tests]]
+name = "cleanup.unflushed_print_exit"
+desc = "Text written with print before exit(4) is written; the exit code is 4."
+case = "../../../cases/consistency/cleanup/unflushed_print_exit.cml"
+expect_exit = 4
+verify_script = """
+assert(input.normalized.stdout === 'line\npending', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "cleanup.file_written_before_fault"
+desc = "A file written (twice) before a fault holds the second, complete content after the program has stopped."
+case = "../../../cases/consistency/cleanup/file_written_before_fault.cml"
+envs = ["CAMEL_TEST_DIR=tmp/test/consistency", "CAMEL_TEST_FILE=before_fault.txt"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_stdout_starts_with = "28\n"
+verify_script = """
+const file = input.repo_root + '/tmp/test/consistency/before_fault.txt'
+const text = fs.readFileSync(file, 'utf8')
+assert(text === 'complete content, 28 bytes.\n', JSON.stringify(text))
+fs.rmSync(file)
+"""
+
+[[tests]]
+name = "cleanup.file_written_before_exit"
+desc = "A file written before exit(5) is complete; the write after the exit did not happen."
+case = "../../../cases/consistency/cleanup/file_written_before_exit.cml"
+envs = ["CAMEL_TEST_DIR=tmp/test/consistency", "CAMEL_TEST_FILE=before_exit.txt"]
+expect_exit = 5
+verify_script = """
+const file = input.repo_root + '/tmp/test/consistency/before_exit.txt'
+const text = fs.readFileSync(file, 'utf8')
+assert(text === 'complete content, 28 bytes.\n', JSON.stringify(text))
+assert(input.normalized.stdout === '28\n', JSON.stringify(input.normalized.stdout))
+fs.rmSync(file)
+"""
+
+[[tests]]
+name = "cleanup.exit_zero"
+desc = "exit(0) from a nested sync call: what was printed before it, nothing after it, exit code 0 whatever main would have returned."
+case = "../../../cases/consistency/cleanup/exit_zero.cml"
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'level 3\nlevel 2\nlevel 1\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "cleanup.exit_in_map"
+desc = "exit(9) in one element function of a map: the exit code is 9 and nothing after the map runs."
+case = "../../../cases/consistency/cleanup/exit_in_map.cml"
+expect_exit = 9
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+"""
+
+# --- the Python bridge -----------------------------------------------------------------------
+# Python buffers its standard output when that is a pipe, and the embedded interpreter is not
+# finalized. What a Python print wrote used to be lost, also after a normal return.
+
+[[tests]]
+name = "cleanup.python_output_normal"
+desc = "Lines printed by Python through the bridge arrive, in order with the program's own lines."
+case = "../../../cases/consistency/cleanup/python_output_normal.cml"
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'camel 1\npython 1\ncamel 2\npython 2\ncamel 3\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "cleanup.python_output_before_fault"
+desc = "Lines printed by Python before a fault of the program are there, ahead of the diagnostic."
+case = "../../../cases/consistency/cleanup/python_output_before_fault.cml"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 15
+expect_stdout_starts_with = "camel 1\npython 1\ncamel 2\npython 2\n"
+
+[[tests]]
+name = "cleanup.python_output_before_exit"
+desc = "Lines printed by Python before exit(6) are there."
+case = "../../../cases/consistency/cleanup/python_output_before_exit.cml"
+expect_exit = 6
+verify_script = """
+assert(input.normalized.stdout === 'camel 1\npython 1\n', JSON.stringify(input.normalized.stdout))
+"""

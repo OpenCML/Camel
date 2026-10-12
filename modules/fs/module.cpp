@@ -1,7 +1,9 @@
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 
 using namespace camel::core::context;
@@ -24,6 +26,17 @@ FsModule::FsModule(context_ptr_t ctx) : BuiltinModule("fs", ctx) {
                   {},
                   {{Type::String(), false}, {Type::String(), false}},
                   Type::Void())}}));
+    // The same read as an operation that can fail (design principles 2.9): an error value
+    // instead of a fault when the file cannot be opened.
+    exportEntity(
+        "try_read_text",
+        OperatorGroup::create(
+            "try_read_text",
+            {{"fs:try_read_text",
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{Type::String(), false}},
+                  TupleType::fallible(Type::String()))}}));
     exportEntity(
         "exists",
         OperatorGroup::create(
@@ -77,6 +90,22 @@ bool FsModule::load() {
     if (loaded_)
         return true;
     context_->registerExecutorFactory("fs", [ctx = context_]() { return createFsExecutor(ctx); });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "fs",
+        {
+            // Reading depends on what is in the file system at the time.
+            {"read_text", false},
+            {"try_read_text", false},
+            {"read_chunk", false},
+            {"exists", false},
+            {"is_file", false},
+            {"is_dir", false},
+            {"file_size", false},
+            {"write_text", false},
+            {"mkdir", false},
+            {"mkdirs", false},
+        });
     loaded_ = true;
     return true;
 }

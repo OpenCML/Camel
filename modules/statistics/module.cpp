@@ -21,6 +21,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
 #include "executor.h"
@@ -33,6 +34,27 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 namespace {
+bool isNumberArray(Type *type) {
+    if (type->code() != TypeCode::Array)
+        return false;
+    const TypeCode elemCode = tt::as_ptr<ArrayType>(type)->elemType()->code();
+    return elemCode == TypeCode::Int32 || elemCode == TypeCode::Int64 ||
+           elemCode == TypeCode::Float32 || elemCode == TypeCode::Float64;
+}
+
+// (arr: T[]) => result, for an array of numbers.
+resolver_ptr_t numbers(Type *result) {
+    return DynamicFuncTypeResolver::create(
+        {{0, {}}, {1, {false}}},
+        "(arr: (typeas T)[]) => " + result->toString(),
+        [result](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+            -> std::optional<Type *> {
+            if (!isNumberArray(norm[0]))
+                return std::nullopt;
+            return result;
+        });
+}
+
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
@@ -67,6 +89,22 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                           return Type::Float64();
                       return std::nullopt;
                   })}}),
+        OperatorGroup::create("variance", {{"statistics:variance", numbers(Type::Float64())}}),
+        OperatorGroup::create(
+            "median",
+            {{"statistics:median", numbers(TupleType::nullable(Type::Float64()))}}),
+        OperatorGroup::create(
+            "quantile",
+            {{"statistics:quantile",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {1, {false}}},
+                  "<q: float> (arr: (typeas T)[]) => float?",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      if (with[0]->code() != TypeCode::Float64 || !isNumberArray(norm[0]))
+                          return std::nullopt;
+                      return TupleType::nullable(Type::Float64());
+                  })}}),
     };
     return groups;
 }
@@ -87,6 +125,12 @@ bool StatisticsModule::load() {
     context_->registerExecutorFactory("statistics", [ctx = context_]() {
         return createStatisticsExecutor(ctx);
     });
+    // Every operator of this module is a function of its arguments.
+    for (const auto &[name, op] : getStatisticsOpsMap()) {
+        camel::core::OperatorTraitsRegistry::instance().set(
+            "statistics:" + name,
+            {.pure = true, .elementwise = false});
+    }
     loaded_ = true;
     return true;
 }

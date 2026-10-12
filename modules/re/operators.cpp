@@ -37,8 +37,10 @@ slot_t __re_test__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return toSlot(match);
     } catch (const std::regex_error &e) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string("<re.test> regex error: ") + e.what());
+            RuntimeDiag::RegexInvalid,
+            "re.test",
+            std::string(pattern->c_str()),
+            std::string(e.what()));
     }
 }
 

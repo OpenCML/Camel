@@ -1,0 +1,23 @@
+module lit
+
+func zero_of(x: typeas T): T {
+    let z: T = 0
+    return z
+}
+
+func none_of(x: typeas T): T[] {
+    let e: T[] = []
+    return e
+}
+
+func as_lit(x: typeas T): T {
+    return 1 as T
+}
+
+func main(): int sync {
+    println(zero_of(5))
+    println(none_of('s'))
+    println(len(none_of(1)))
+    println(as_lit(7))
+    return 0
+}

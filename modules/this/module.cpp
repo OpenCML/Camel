@@ -20,6 +20,7 @@
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "operators.h"
 
@@ -43,6 +44,13 @@ bool ThisModule::load() {
     context_->registerExecutorFactory("this", [ctx = context_]() {
         return createThisExecutor(ctx);
     });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "this",
+        {
+            // A constant text.
+            {"zen", true},
+        });
     loaded_ = true;
     return true;
 }

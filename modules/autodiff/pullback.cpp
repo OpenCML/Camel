@@ -34,6 +34,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/manager.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/passes/opt/inline.h"
@@ -682,6 +683,9 @@ class Backward final : public VjpBuilder {
     void visitFill(gc_node_ref_t node);
     void visitForward(gc_node_ref_t node, bool convert);
     void checkVariableReads(const std::vector<gc_node_ref_t> &order);
+    /// Refuses `node` when it is a Map or a Set of differentiable values built from an
+    /// active value.
+    void refuseActiveCollection(gc_node_ref_t node, Type *type);
     std::string_view operUri(gc_node_ref_t node) const;
     /// Why the gradient cannot pass the call `call` (a CALL, or a FUNC left alone).
     std::string refusalReason(gc_node_ref_t call) const;
@@ -1522,6 +1526,36 @@ gc_node_ref_t Backward::gradient(gc_node_ref_t primal) {
     return materialize(tangent, type, needsPrimal ? ref(primal) : kInvalidNodeRef);
 }
 
+// A Map or a Set has no tangent, so activity would end at one, and what is read back out of
+// it would be taken for a constant: a wrong gradient without a word. A collection that holds
+// differentiable values and is built from an active value is refused instead, where it is
+// built. One that does not depend on a parameter is a constant like any other.
+void Backward::refuseActiveCollection(gc_node_ref_t node, Type *type) {
+    const type::CollectionType *coll = type::asCollectionType(type);
+    if (coll == nullptr) {
+        return;
+    }
+    const bool differentiable =
+        tangentTypeOf(coll->keyType()) != nullptr ||
+        (coll->valueType() != nullptr && tangentTypeOf(coll->valueType()) != nullptr);
+    if (!differentiable) {
+        return;
+    }
+    for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
+        for (gc_node_ref_t input : inputs) {
+            if (active_.contains(input)) {
+                failAt(
+                    forward_.nodeOrigin(node),
+                    "a value that depends on a differentiated parameter is put into a '" +
+                        type->toString() +
+                        "'. Gradients do not flow through a Map or a Set: there is no "
+                        "derivative rule for their operators. Keep the differentiated values "
+                        "outside the collection");
+            }
+        }
+    }
+}
+
 void Backward::run(const std::vector<gc_node_ref_t> &order) {
     primals_.insert(order.begin(), order.end());
     // Activity analysis: a value is active when it has a tangent and depends on a parameter that
@@ -1543,6 +1577,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // A variable is state, not a differentiable input: its cell is never active, and a
         // read of it (checked above) is a constant of the call.
         if ((tangentTypeOf(type) == nullptr && !carrier) || isCellType(type)) {
+            refuseActiveCollection(node, type);
             continue;
         }
         if (kindOf(forward_, node) == GCNodeKind::Oper && operUri(node) == ":var/get") {

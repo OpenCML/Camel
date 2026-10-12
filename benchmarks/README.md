@@ -27,6 +27,8 @@ benchmarks/
     camel.py                plug-in driver for native Camel configs
     torch_utils.py / tf_utils.py / runner.py / memory.py   shared helpers
     camel_bench.cml         shared Camel driver: weight loading, warmup/timed loops, output
+  train.py                  training workload: gradient, K-step and exported-step checks, step timing
+  tools/grad_referee.py     gradient referee: Camel, PyTorch float32 and float64 (see "Gradient agreement")
   mlp/ lenet/ gru/ transformer/
     model_torch.py          PyTorch implementation
     model_tf.py             TensorFlow implementation
@@ -198,14 +200,28 @@ and shape) instead of timing it, and prints `CAMEL_BENCH export_ms=<float>`,
 the time spent inside the exporter. `common/export.py --exporter camel` wraps
 this, so `run.py` records `export_s` for Camel as it does for torch and tf.
 
-The training models (`mlp`, `gru`, `transformer`) also export their training
-step: with `CAMEL_BENCH_WORKLOAD=train_export`, `model.cml` exports
+Every model's `model.cml` also has a training-step export: with
+`CAMEL_BENCH_WORKLOAD=train_export` it exports
 `step(m, x) = (loss, sgd(m, grad, 0.01))` to `CAMEL_BENCH_EXPORT`. The weights
 become graph inputs named after the weight files, the input is `input1`, and
 the outputs are `output_0` (the loss) and `output_1_<weight>` (the updated
-weights). `train.py --check-onnx` exports it for each model, runs
-`onnx.checker`, runs one step on ONNX Runtime, and compares the loss and the
-updated weights with one step of Camel's own execution.
+weights; `resnetbn` adds `output_2_<name>`, the updated running statistics).
+`train.py --check-onnx` exports it for each model, runs `onnx.checker`, runs
+one step on ONNX Runtime, and compares the loss and the updated weights with
+one step of Camel's own execution.
+
+The export succeeds for nine of the eleven models: `mlp`, `mlp_big`, `lenet`,
+`lenet_big`, `transformer`, `transformer4`, `transformer_big`, `resnet` and
+`resnetbn`. **The training steps of `gru` and `gru_big` do not export**:
+`onnx.export_model` refuses them. ONNX has no calls, so the exporter inlines
+every call and unrolls the 16 time steps into one graph, and the unrolled
+forward and backward pass need 86,928 edge table entries where one graph holds
+at most 65,535 (16-bit addressing, `docs/cli.md`). The refusal is a diagnostic
+at the `export_model` call that names the graph, the size it needs and the
+limit. The limit is not going to be widened (`docs/design-principles.cn.md`:
+a graph that does not fit means a pass flattened too much). The forward
+functions of `gru` and `gru_big` export and their training steps run natively;
+`train.py --check-onnx` and the `camel_export_ort` timing fail on these two.
 
 ## Running
 
@@ -411,6 +427,104 @@ ones every consumer of the result) next to the graph it read.
 `d13_train_eval.py --out <dir>` runs the whole sequence (weights,
 reconciliation under both protocols, timing) and writes the raw logs,
 summaries and `meta.json` into `<dir>`.
+
+## Gradient agreement
+
+There are two numerical comparisons and they answer different questions: the
+exported artifact against Camel's native execution (`train.py --check-onnx`),
+and Camel's native execution against PyTorch. This section is the second.
+
+`train.py --check` compares Camel's gradient of the loss (`grad(loss)` dumped
+with `nn.save_params`; the same loss `mean(y * y)`, the same weights and input,
+with respect to every weight) with PyTorch float32 autograd, per weight:
+`max|diff| / max(max|ref|, floor)` with `floor` = 1e-3 of the model's largest
+gradient entry, tolerance 1e-4. Nine models pass (worst 6.7e-06). `resnet`
+(3.0e-03) and `resnetbn` (9.5e-02) do not, and `tools/grad_referee.py`
+establishes why. It adds PyTorch float64 as a referee, and central differences
+of the float64 loss to check the referee (along random directions they agree
+with float64 autograd to 3e-06 on `resnet` and 3e-07 on `resnetbn`).
+
+**Both models compute the same thing on both sides.** Losses agree to 2e-07,
+and so do the 40 running statistics `resnetbn`'s forward leaves behind.
+
+**Camel's derivative rules are right.** With relu replaced by tanh on both
+sides, Camel is within 1.4e-06 (`resnet`) and 7.8e-06 (`resnetbn`) of float64
+on every weight that has a gradient; with softplus, `resnetbn` is within
+6.3e-06 on all 82 weights.
+
+**The gap is the relu kink, crossed by float32 rounding of the forward pass.**
+The models evaluate 8.9 million relu inputs, of which 2 to 5 lie within one
+float32 rounding of zero. Each float32 forward (Camel's, PyTorch's) lands some
+of them on the other side than float64 does, and the gradient is discontinuous
+there: this is not an error that shrinks with care, it is the derivative on
+the other side of the kink.
+
+| | `resnet` | `resnetbn` |
+|---|---|---|
+| Camel ~ float64, worst weight | 3.1e-03 (`stem_w`) | 7.6e-02 (`b42_c1_w`) |
+| PyTorch float32 ~ float64, worst weight | 1.6e-03 (`b21_c1_w`) | 9.5e-02 (`b41_c1_w`) |
+| Camel ~ PyTorch float32 (what `--check` reports) | 3.0e-03 | 9.5e-02 |
+| weights over 1e-4, Camel / PyTorch float32 | 4 / 7 of 42 | 57 / 62 of 82 |
+| median over weights, Camel ~ float64 | 1.7e-07 | 2.8e-03 |
+| relu decisions PyTorch float32 takes differently from float64 | 1 | 7 |
+| float64 gradient with those reversed ~ PyTorch float32 | 3.9e-06 | 3.0e-04 (a zero-gradient bias, see below; 77 of 82 weights within 1e-4) |
+| relu decisions that explain Camel | 2 (inputs -3.9e-09, +4.0e-08) | 3 (inputs -3.8e-08, -1.8e-07, -2.4e-07) |
+| float64 gradient with those reversed ~ Camel | 3.9e-07 | 5.4e-06 (8.1e-05 on a zero-gradient bias) |
+| float64 gradient after moving weights and input by one float32 rounding (3 trials) | 9.2e-04, 3.1e-03, 1.3e-07 | 7.6e-02, 1.0e-06, 2.3e-03 |
+
+Along the direction Camel - float64 on the worst weight, the two one-sided
+slopes of the float64 loss are the two gradients (`resnetbn`: left -8.317e-04,
+float64 autograd -8.317e-04; right 3.400e-03, Camel 3.408e-03) and the central
+difference is their mean. With weights and input drawn from seeds 1 to 3
+instead of the benchmark's, the gap moves from side to side: on `resnet`
+Camel is 3.8e-05, 3.0e-07 and 1.5e-04 from float64 while PyTorch float32 is
+3.8e-05, 2.8e-03 and 4.0e-06. On `resnetbn` every draw has such a unit (Camel
+1.1e-01, 9.6e-02, 8.1e-02; PyTorch float32 1.1e-01, 9.6e-02, 6.1e-03).
+
+The effect is far larger in `resnetbn`. The mechanism proposed for that, not
+separately measured: a relu unit there sits behind a batch_norm over as few as
+256 values per channel (16 x 4 x 4 in the last stage), so one reversed decision
+changes one of the 256 terms a kernel-gradient entry sums, and those terms
+largely cancel.
+
+**A second, smaller effect in `resnetbn`: gradients that are exactly zero.** A
+conv bias in front of a batch_norm does not affect the loss (float64 gradient:
+1e-17). Float32 computes the rounding of a sum that cancels, and the check
+measures it against the floor. With tanh, Camel is up to 2.7e-04 of the floor
+there (2.7e-07 of the model's largest gradient entry; 5 of 20 biases over
+1e-4) and PyTorch float32 up to 1.0e-03 (12 of 20). On the benchmark model the
+figures are 8.1e-05 and 3.0e-04. `grad_referee.py` accepts such a weight
+within 1e-4 or when Camel is no farther from float64 than PyTorch float32 on
+it. **Open:** whether exactly-zero gradients should have a bound of their own
+(with the floor, 1e-4 means 1e-7 of the model's gradient scale, which is
+float32 rounding itself) is a question for the language author; the criterion
+above is a placeholder that keeps the comparison running.
+
+Consequences for the checks. `train.py --check` on `resnet` and `resnetbn`
+reports MISMATCH, and that is a correct report of two float32 gradients that
+differ; it is not evidence about either. Their gradients are checked instead by
+`grad_referee.py --require`: with tanh at 1e-4 against float64, and as
+benchmarked at 1e-4 against the float64 gradient with the named near-zero relu
+decisions reversed (candidates are the units whose float64 input is within
+half the layer's float32/float64 forward drift of zero; the units found are
+within 0.03 of it). All four, and `train.py --check` on the other nine models,
+are in `test/plans/feat/modules/autodiff.plan.toml`. `lenet` and `mlp` also use
+relu and pass directly: they evaluate far fewer units, so a unit within
+rounding of zero is unlikely there, not impossible.
+
+```bash
+.venv/bin/python train.py --check --models resnet,resnetbn         # the two raw numbers
+.venv/bin/python tools/grad_referee.py --model resnetbn --kinks    # three-way, differences, relu units, sensitivity
+.venv/bin/python tools/grad_referee.py --model resnetbn --activation tanh --all
+.venv/bin/python tools/grad_referee.py --model resnetbn --activation softplus --no-fd
+.venv/bin/python tools/grad_referee.py --model resnet --seed 1 --seed 2 --seed 3 --no-fd
+```
+
+Numbers: torch 2.14.0 CPU, Linux x86-64. The earlier
+`resnetbn/tools/grad_envelope.py` called the gap "physically unreachable in
+float32" and showed a kink from one coordinate's one-sided differences. The
+kink is right; the gap is not a precision limit (it is absent without relu and
+absent on some draws), and that script is replaced by `grad_referee.py`.
 
 ## Numerical agreement
 

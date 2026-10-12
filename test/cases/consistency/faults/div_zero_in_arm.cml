@@ -1,0 +1,16 @@
+/**
+ * Division by zero in the arm of a branch that is taken, and none in the arm that is not:
+ * pick(1, 0) is fine, pick(-1, 0) faults at the division.
+ */
+module div_zero_in_arm
+
+func pick(a: int, b: int): int {
+    return if a > 0 then a + b else 100 / b
+}
+
+func main(): int sync {
+    println(pick(1, 0))
+    println(pick(-1, 0))
+    println('not reached')
+    return 0
+}

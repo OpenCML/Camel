@@ -1,0 +1,27 @@
+/**
+ * `let g = f` binds `g` to the function value of `f`: it can be called, passed on, and
+ * captured by a lambda. The capture used to be rejected ("Function of type 'void' cannot be
+ * called", progen finding F33).
+ */
+module let_named_function
+
+func inc(a: int): int {
+    return a + 1
+}
+
+let top = inc
+
+func use_top(a: int): int {
+    return top(a) * 2
+}
+
+func main(): int sync {
+    let g = inc
+    println(g(1))
+    println([1]->map<(x: int): int => g(x)>)
+    println([1, 2]->map<g>)
+    println(use_top(4))
+    let h = g
+    println(h(10))
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 04, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -32,9 +32,27 @@
 
 #pragma once
 
+#include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft.h"
 
+#include <string_view>
+
 namespace camel::runtime {
+
+/**
+ * The function type the overload of operator `uri` has for arguments of these types, when the
+ * values of constant arguments are left out of the question (they only refine the result type);
+ * nullptr when the operator is unknown or rejects the types.
+ *
+ * Asking a resolver builds a new function type in the permanent space every time, and that
+ * space never releases. Rewrites ask the same question over and over (is this argument a var
+ * parameter, what does this operator return), so the answer is kept per (operator, argument
+ * types): types are permanent objects, their addresses identify them for good, and a repeated
+ * question allocates nothing.
+ */
+camel::core::type::FunctionType *operatorOverloadType(
+    std::string_view uri, const camel::core::type::type_vec_t &with,
+    const camel::core::type::type_vec_t &norm);
 
 /**
  * True when the argument at position `index` of `user`'s norm (or with) inputs is passed to a

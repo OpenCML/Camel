@@ -143,6 +143,11 @@ export function parseTomlString(content) {
             current = entry
             continue
         }
+        const table = line.match(/^\[([A-Za-z0-9_-]+)\]$/)
+        if (table) {
+            current = doc[table[1]] = doc[table[1]] || {}
+            continue
+        }
         const match = line.match(/^([A-Za-z0-9_.-]+)\s*=\s*(.*)$/)
         if (!match) {
             throw new Error(`unsupported TOML line: ${rawLine}`)

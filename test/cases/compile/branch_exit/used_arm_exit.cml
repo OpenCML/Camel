@@ -1,0 +1,77 @@
+/**
+ * `return` and `throw` in arms of an `if` / `match` whose value is used: none of these is
+ * reported by ExitInUnusedBranch.
+ */
+module used_arm_exit
+
+// The branch is the last expression of the function body: its value is the result.
+func safe_div(a: int, b: int): int! {
+    if b == 0 then sync { throw error('DivByZero', 'the divisor is zero') } else sync { return a / b }
+}
+
+// The branch is the operand of a return.
+func sign(x: int): int {
+    return if x < 0 then { return -1 } else { return if x == 0 then 0 else 1 }
+}
+
+func twice(x: int): int { return x * 2 }
+
+// The value is bound to a name, passed as an argument, an operand, an element.
+func uses(x: int): int {
+    let a = if x > 0 then { return 1 } else { return 2 }
+    let b = [if x > 1 then { return 10 } else { return 20 }]
+    let c = twice(if x > 2 then { return 100 } else { return 200 })
+    let d = 1 + (if x > 3 then { return 1000 } else { return 2000 })
+    return a + b[0] + c + d
+}
+
+// A match as the last expression; the last statement of an arm of a used branch.
+func name_of(k: int): string {
+    match k {
+        case 1 => { return 'one' }
+        case 2 | 3 => {
+            if k == 2 then { return 'two' } else { return 'three' }
+        }
+        case _ => { return 'many' }
+    }
+}
+
+// A function declared after the branch does not make the branch a statement in the middle.
+func before_decl(x: int): int {
+    if x > 0 then { return x * 2 } else { return 0 }
+    func unused_helper(y: int): int { return y * 2 }
+}
+
+// A lambda or a nested function in an arm of an unused branch has a body of its own: its
+// return is its own.
+func lambda_in_arm(x: int): int sync {
+    var total = 0
+    if x > 0 then sync {
+        let dbl = (y: int) => { return y * 2 }
+        func thrice(y: int): int { return y * 3 }
+        total = dbl(x) + thrice(x)
+        return null
+    }
+    return total
+}
+
+// A used branch inside an arm of an unused one.
+func used_inside_unused(x: int): int sync {
+    var total = 0
+    if x > 0 then sync {
+        let k = if x > 5 then { return 2 } else { return 1 }
+        total = k
+        return null
+    }
+    return total
+}
+
+func main(): int sync {
+    println(safe_div(6, 3) !! -1, safe_div(6, 0) !! -1)
+    println(sign(-3), sign(0), sign(3))
+    println(uses(0), uses(9))
+    println(name_of(1), name_of(2), name_of(3), name_of(9))
+    println(before_decl(4))
+    println(lambda_in_arm(2), used_inside_unused(9))
+    return 0
+}

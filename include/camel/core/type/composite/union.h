@@ -45,6 +45,7 @@ class UnionType : public CompositeType {
 
     void add(Type *type);
     bool has(Type *type) const;
+    const std::unordered_set<Type *> &types() const { return types_; }
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;

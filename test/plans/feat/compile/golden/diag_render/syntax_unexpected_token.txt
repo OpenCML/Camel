@@ -1,0 +1,8 @@
+error[SyntaxDiag::UnexpectedToken]: Unexpected 'else'; expected '}'.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_unexpected_token.cml:4:15
+   |
+ 4 |     let x = 1 else 2
+   |               ^^^^
+note: 'else' belongs to a conditional: if <condition> then <value> else <value>
+
+camel: 1 error

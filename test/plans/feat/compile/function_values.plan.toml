@@ -1,0 +1,317 @@
+id = "compile.function_values"
+order = 325
+tier = "feat"
+tags = ["feat", "compile", "closures", "functions"]
+desc = "Functions named as values: bound with let, returned, captured, and the value of a function that captures names."
+
+[[tests]]
+name = "nested_function_value.nvm"
+desc = "A function that captures a name, called directly and also used as a value; the value used to lack the captures and the run crashed (progen F25) (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/nested_function_value.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[1]",
+  "2 [2, 3]",
+  "[11, 12]",
+  "13",
+  "[201]",
+  "6",
+  "[8, 9]",
+  "42",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "nested_function_value.fvm"
+desc = "A function that captures a name, called directly and also used as a value; the value used to lack the captures and the run crashed (progen F25) (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/nested_function_value.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[1]",
+  "2 [2, 3]",
+  "[11, 12]",
+  "13",
+  "[201]",
+  "6",
+  "[8, 9]",
+  "42",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "nested_function_value.jit"
+desc = "A function that captures a name, called directly and also used as a value; the value used to lack the captures and the run crashed (progen F25) (jit)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/nested_function_value.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[1]",
+  "2 [2, 3]",
+  "[11, 12]",
+  "13",
+  "[201]",
+  "6",
+  "[8, 9]",
+  "42",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "nested_function_value.prl"
+desc = "A function that captures a name, called directly and also used as a value; the value used to lack the captures and the run crashed (progen F25) (prl)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/nested_function_value.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[1]",
+  "2 [2, 3]",
+  "[11, 12]",
+  "13",
+  "[201]",
+  "6",
+  "[8, 9]",
+  "42",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "return_named_function.nvm"
+desc = "A function named after return is returned as its function value; it used to be an internal error without a position (progen F31) (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/return_named_function.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true false",
+  "6",
+  "[6, 7, 8]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "return_named_function.fvm"
+desc = "A function named after return is returned as its function value; it used to be an internal error without a position (progen F31) (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/return_named_function.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true false",
+  "6",
+  "[6, 7, 8]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "return_named_function.jit"
+desc = "A function named after return is returned as its function value; it used to be an internal error without a position (progen F31) (jit)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/return_named_function.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true false",
+  "6",
+  "[6, 7, 8]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "return_named_function.prl"
+desc = "A function named after return is returned as its function value; it used to be an internal error without a position (progen F31) (prl)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/return_named_function.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true false",
+  "6",
+  "[6, 7, 8]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "let_named_function.nvm"
+desc = "let g = f binds the function value of f, which a lambda can capture; the capture used to be rejected (progen F33) (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/let_named_function.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "2",
+  "[2]",
+  "[2, 3]",
+  "10",
+  "11",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "let_named_function.fvm"
+desc = "let g = f binds the function value of f, which a lambda can capture; the capture used to be rejected (progen F33) (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/let_named_function.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "2",
+  "[2]",
+  "[2, 3]",
+  "10",
+  "11",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "let_named_function.jit"
+desc = "let g = f binds the function value of f, which a lambda can capture; the capture used to be rejected (progen F33) (jit)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/let_named_function.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "2",
+  "[2]",
+  "[2, 3]",
+  "10",
+  "11",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "let_named_function.prl"
+desc = "let g = f binds the function value of f, which a lambda can capture; the capture used to be rejected (progen F33) (prl)"
+kind = "behavior"
+case = "../../../cases/compile/function_values/let_named_function.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "2",
+  "[2]",
+  "[2, 3]",
+  "10",
+  "11",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "return_operator_name"
+desc = "Returning the name of an operator with several signatures is rejected at the return; it used to be an internal error without a position"
+kind = "negative"
+case = "../../../cases/compile/function_values/return_operator_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_code = "0x03000060"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 5
+expect_output_contains = ["'println' is used as a value here, but it names an operator with several signatures"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "capture_operator_name"
+desc = "A lambda cannot capture a name bound to an operator; rejected at the use in the lambda"
+kind = "negative"
+case = "../../../cases/compile/function_values/capture_operator_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_code = "0x03000060"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 44
+expect_output_contains = ["'p' is used as a value here, but it names an operator with several signatures"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -1,0 +1,1279 @@
+id = "compile.tagged"
+order = 324
+tier = "feat"
+tags = ["feat", "compile", "nullable", "fallible", "types"]
+desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` (design principles 2.9; docs/technical/29_nullable_and_fallible_values.md)."
+
+[[tests]]
+name = "nullable"
+desc = "`T?`: `null`, `v as T?`, an annotated `let`, `return` under a declared `T?`, `??` (its right side evaluated only when taken), `match` with `case null` in either order, printing."
+kind = "behavior"
+case = "../../../cases/compile/tagged/nullable.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "null",
+  "5",
+  "0",
+  "some 5",
+  "none",
+  "7",
+  "1",
+  "9",
+  "1.5",
+  "true",
+  "false",
+  "5",
+  "fallback evaluated",
+  "-1",
+  "[5, null, 7]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "fallible"
+desc = "`T!`: `throw error(kind, message)` with the position of the call, `return` under a declared `T!`, `!!`, `?->` (one step and chained, with a callee that returns `U` or `U!`), `match` with `case error e`, rethrowing a caught error."
+kind = "behavior"
+case = "../../../cases/compile/tagged/fallible.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "error DivByZero: the divisor is zero",
+  "5",
+  "-1",
+  "ok 5",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 10",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 4",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 6",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "stdlib"
+desc = "Library operators that can fail return a `T!`: parse_int, parse_float, fs::try_read_text."
+kind = "behavior"
+case = "../../../cases/compile/tagged/stdlib.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "42",
+  "-7",
+  "0",
+  "ParseError: 'oops' is not an integer at <parse_int>",
+  "ParseError: '99999999999999999999' is out of the range of an integer at <parse_int>",
+  "2.5",
+  "-1",
+  "error IOError: cannot open 'tagged_no_such_file.txt'",
+  "<no file>",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "generic"
+desc = "`(typeas T)?` and `(typeas T)!` bind `T` from the payload; `T?` and `T!` as declared return types of a generic function."
+kind = "behavior"
+case = "../../../cases/compile/tagged/generic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3",
+  "4",
+  "a",
+  "z",
+  "1.5",
+  "8",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "combined.nvm"
+desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/combined.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "anonymous",
+  "1",
+  "KeyError",
+  "-1",
+  "5",
+  "null",
+  "error IOError: disk",
+  "2",
+  "9",
+  "4",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "combined.fvm"
+desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/combined.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "anonymous",
+  "1",
+  "KeyError",
+  "-1",
+  "5",
+  "null",
+  "error IOError: disk",
+  "2",
+  "9",
+  "4",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "combined.jit"
+desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::jit`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/combined.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "anonymous",
+  "1",
+  "KeyError",
+  "-1",
+  "5",
+  "null",
+  "error IOError: disk",
+  "2",
+  "9",
+  "4",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "combined.prl"
+desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::prl`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/combined.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "anonymous",
+  "1",
+  "KeyError",
+  "-1",
+  "5",
+  "null",
+  "error IOError: disk",
+  "2",
+  "9",
+  "4",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "combined.inline_nvm"
+desc = "The forms in a struct field, as array elements, combined (`int?!`), as `void!`, returned by a lambda, in a `var` and an annotated `let`: through `std::inline std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/combined.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "anonymous",
+  "1",
+  "KeyError",
+  "-1",
+  "5",
+  "null",
+  "error IOError: disk",
+  "2",
+  "9",
+  "4",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.nvm"
+desc = "The program over both tagged forms gives the same result through `std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fallible.nvm"
+desc = "The `T!` program gives the same result through `std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/fallible.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "error DivByZero: the divisor is zero",
+  "5",
+  "-1",
+  "ok 5",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 10",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 4",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 6",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.nullable.nvm"
+desc = "The `T?` program gives the same result through `std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/nullable.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "null",
+  "5",
+  "0",
+  "some 5",
+  "none",
+  "7",
+  "1",
+  "9",
+  "1.5",
+  "true",
+  "false",
+  "5",
+  "fallback evaluated",
+  "-1",
+  "[5, null, 7]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fvm"
+desc = "The program over both tagged forms gives the same result through `std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fallible.fvm"
+desc = "The `T!` program gives the same result through `std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/fallible.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "error DivByZero: the divisor is zero",
+  "5",
+  "-1",
+  "ok 5",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 10",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 4",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 6",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.nullable.fvm"
+desc = "The `T?` program gives the same result through `std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/nullable.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "null",
+  "5",
+  "0",
+  "some 5",
+  "none",
+  "7",
+  "1",
+  "9",
+  "1.5",
+  "true",
+  "false",
+  "5",
+  "fallback evaluated",
+  "-1",
+  "[5, null, 7]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.jit"
+desc = "The program over both tagged forms gives the same result through `std::jit`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fallible.jit"
+desc = "The `T!` program gives the same result through `std::jit`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/fallible.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "error DivByZero: the divisor is zero",
+  "5",
+  "-1",
+  "ok 5",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 10",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 4",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 6",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.nullable.jit"
+desc = "The `T?` program gives the same result through `std::jit`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/nullable.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "null",
+  "5",
+  "0",
+  "some 5",
+  "none",
+  "7",
+  "1",
+  "9",
+  "1.5",
+  "true",
+  "false",
+  "5",
+  "fallback evaluated",
+  "-1",
+  "[5, null, 7]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.prl"
+desc = "The program over both tagged forms gives the same result through `std::prl`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fallible.prl"
+desc = "The `T!` program gives the same result through `std::prl`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/fallible.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "error DivByZero: the divisor is zero",
+  "5",
+  "-1",
+  "ok 5",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 10",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 4",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 6",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.nullable.prl"
+desc = "The `T?` program gives the same result through `std::prl`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/nullable.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "null",
+  "5",
+  "0",
+  "some 5",
+  "none",
+  "7",
+  "1",
+  "9",
+  "1.5",
+  "true",
+  "false",
+  "5",
+  "fallback evaluated",
+  "-1",
+  "[5, null, 7]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.opt_nvm"
+desc = "The program over both tagged forms gives the same result through `std::opt std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fallible.opt_nvm"
+desc = "The `T!` program gives the same result through `std::opt std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/fallible.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "error DivByZero: the divisor is zero",
+  "5",
+  "-1",
+  "ok 5",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 10",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 4",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 6",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.opt_fvm"
+desc = "The program over both tagged forms gives the same result through `std::opt std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.inline_nvm"
+desc = "The program over both tagged forms gives the same result through `std::inline std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fallible.inline_nvm"
+desc = "The `T!` program gives the same result through `std::inline std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/fallible.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "error DivByZero: the divisor is zero",
+  "5",
+  "-1",
+  "ok 5",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 10",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 4",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "ok 6",
+  "DivByZero: the divisor is zero at fallible.cml:10:15",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.nullable.inline_nvm"
+desc = "The `T?` program gives the same result through `std::inline std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/nullable.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "null",
+  "5",
+  "0",
+  "some 5",
+  "none",
+  "7",
+  "1",
+  "9",
+  "1.5",
+  "true",
+  "false",
+  "5",
+  "fallback evaluated",
+  "-1",
+  "[5, null, 7]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.inline_fvm"
+desc = "The program over both tagged forms gives the same result through `std::inline std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.simplify_nvm"
+desc = "The program over both tagged forms gives the same result through `std::opt::simplify std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fold_nvm"
+desc = "The program over both tagged forms gives the same result through `std::opt::fold std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.cse_dce_nvm"
+desc = "The program over both tagged forms gives the same result through `std::opt::cse std::opt::dce std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::opt::cse", "std::opt::dce", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.macro_opt_fvm"
+desc = "The program over both tagged forms gives the same result through `std::macro std::opt std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::macro", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.inline_opt_jit"
+desc = "The program over both tagged forms gives the same result through `std::inline std::opt std::jit`."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pipelines.cml"
+args = ["${case}", "std::inline", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "4",
+  "0",
+  "3",
+  "-1",
+  "5",
+  "DivByZero",
+  "12",
+  "0",
+  "28",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "graph.null_then"
+desc = "`a ?? b` on the graph: one OPER reading the tag, one BRCH/JOIN pair with two arms (FUNC subgraphs), and the OPER that takes the value out inside an arm. No node kind of its own."
+kind = "behavior"
+case = "../../../cases/compile/tagged/graph_null_then.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n')
+const count = (text) => out.split(text).length - 1
+const idOf = (text) => {
+  const line = lines.find((l) => l.includes('[label="' + text + '"'))
+  assert(line, 'a node ' + text)
+  return line.trim().split(' ')[0]
+}
+assert(count('type="BRCH"') === 1, 'one BRCH')
+assert(count('type="JOIN"') === 1, 'one JOIN')
+assert(count('label=":op/tag_is_null"') === 1, 'one tag read')
+assert(count('label=":op/tag_null_value"') === 1, 'one value read')
+const brch = idOf('BRCH'), join = idOf('JOIN'), tag = idOf(':op/tag_is_null')
+assert(out.includes(tag + ' -> ' + brch + ' [label="0|0", type="NORM"]'), 'the tag is the condition')
+const arms = lines.filter((l) => l.trim().startsWith(brch + ' -> ') && l.includes('type="CTRL"'))
+assert(arms.length === 2, 'BRCH enters two arms')
+for (const arm of arms) {
+  const node = arm.trim().split(' ')[2]
+  assert(lines.some((l) => l.trim().startsWith(node + ' [') && l.includes('type="FUNC"')), 'an arm is a subgraph')
+  assert(lines.some((l) => l.trim().startsWith(node + ' -> ' + join + ' ') && l.includes('type="WITH"')), 'an arm feeds JOIN')
+}
+// The value is taken out inside an arm (a nested cluster), not beside the BRCH.
+const indent = (text) => lines.find((l) => l.includes(text)).search(/[^ ]/)
+assert(indent('label=":op/tag_null_value"') > indent('[label="BRCH"'), 'the value read is inside an arm')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "graph.null_then_snapshot"
+desc = "Snapshot of the graph of `a ?? b`."
+kind = "snapshot"
+case = "../../../cases/compile/tagged/graph_null_then.cml"
+args = ["${case}", "${run_gir}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "gir_dot_isomorphic"
+golden = "./golden/tagged_null_then.dot"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "graph.throw_and_pass"
+desc = "`throw e` is the exit of its graph (OPER, CAST, EXIT, no branch); `x ?-> f` is one BRCH/JOIN."
+kind = "behavior"
+case = "../../../cases/compile/tagged/graph_throw_pass.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n')
+const count = (text) => out.split(text).length - 1
+const idOf = (text) => {
+  const line = lines.find((l) => l.includes('[label="' + text + '"'))
+  assert(line, 'a node ' + text)
+  return line.trim().split(' ')[0]
+}
+assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch: the one of ?->')
+assert(count('label=":op/tag_throw"') === 1, 'one throw')
+assert(count('label=":op/tag_is_error"') === 1, 'one tag read')
+assert(count('label=":op/tag_error_value"') === 1, 'one value read')
+const thrown = idOf(':op/tag_throw')
+const next = lines.find((l) => l.trim().startsWith(thrown + ' -> '))
+assert(next, 'the thrown value is used')
+const cast = next.trim().split(' ')[2]
+assert(lines.some((l) => l.trim().startsWith(cast + ' [label="CAST"')), 'throw feeds a CAST')
+assert(lines.some((l) => l.trim().startsWith(cast + ' -> O') && l.includes('type="EXIT"')), 'the CAST is the exit of the graph')
+assert(out.includes('label="graph_throw_pass.cml:9:11"'), 'the position of error(...) is a constant argument')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "graph.no_cost_without_tagged"
+desc = "A program that uses neither form has no node of them: an `if` compiles to the same BRCH/JOIN and nothing else."
+kind = "behavior"
+case = "../../../cases/compile/tagged/graph_plain_if.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (text) => out.split(text).length - 1
+assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch')
+assert(count(':op/tag_') === 0 && count('type="CAST"') === 0, 'no tagged operator and no cast')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "throw_outside_fallible"
+desc = "`throw` in a function that does not declare a `T!`."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_throw_plain.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ThrowOutsideFallible"
+expect_diagnostic_code = "0x03000070"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 9
+expect_output_contains = ["'throw' needs a function declared to return 'T!': the function around it returns 'i64'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "throw_not_an_error"
+desc = "`throw` takes an error value."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_throw_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ThrowNotAnError"
+expect_diagnostic_code = "0x03000071"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 9
+expect_output_contains = ["'throw' takes an error value, not a value of type 'string'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "nesting"
+desc = "The same mark twice (`(int?)?`) is rejected where it is written; `int?!` on the line before is accepted."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_nesting.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
+expect_diagnostic_code = "0x03000072"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 11
+expect_output_contains = ["The type 'i64??' marks 'i64' twice."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "nesting_by_substitution"
+desc = "The same mark twice produced by a type variable (`T?` with `T = int?`) is rejected at the call."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_generic_nesting.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
+expect_diagnostic_code = "0x03000072"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 17
+expect_output_contains = ["The type 'i64??' marks 'i64' twice."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "member_access"
+desc = "A tagged value has the layout of a tuple and is not one: `.0` is rejected."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_member.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedValueNotOpened"
+expect_diagnostic_code = "0x03000073"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 13
+expect_output_contains = ["A value of type 'i64!' cannot be used here: a member cannot be read from it."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "null_then_plain_left"
+desc = "`??` over a plain `int`, at the operator. (It used to be reported as not implemented.)"
+kind = "negative"
+case = "../../../cases/compile/tagged/err_plain_left.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
+expect_diagnostic_code = "0x03000075"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 15
+expect_output_contains = ["'??' cannot be applied here: its left side has type 'i64', which is not a 'T?'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "error_then_wrong_form"
+desc = "`!!` over a `T?`, at the operator."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_wrong_form.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
+expect_diagnostic_code = "0x03000075"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 15
+expect_output_contains = ["'!!' cannot be applied here: its left side has type 'i64?', which is not a 'T!'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "null_then_right_type"
+desc = "The right side of `??` must have the payload type."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_right_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
+expect_diagnostic_code = "0x03000075"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 15
+expect_output_contains = ["'??' cannot be applied here: its right side has type 'string', but the left side holds a 'i64'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_over_nullable"
+desc = "`?->` hands on errors only: over a `T?` it is rejected, at the start of the expression."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_pass_nullable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
+expect_diagnostic_code = "0x03000075"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 13
+expect_output_contains = ["'?->' cannot be applied here: its left side has type 'i64?', which is not a 'T!'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_missing_case"
+desc = "A `match` on a `T!` without `case error e`."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_match_missing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
+expect_diagnostic_code = "0x03000076"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["This 'match' on a value of type 'i64!' is not well formed: 'case error e' is missing."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_literal_case"
+desc = "A literal case in a `match` on a `T?`."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_match_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
+expect_diagnostic_code = "0x03000076"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["a literal case cannot be compared with a value that is not opened yet"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "argument_not_converted"
+desc = "A plain value is not converted at a call (`f(5)` with `f(x: int?)`)."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_argument.cml:11:14:", "<> (i64)", "f: (x: i64?) => i64"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "not_a_plain_value"
+desc = "A `T!` is not accepted where a `T` is: `parse_int('1') + 1`."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_plain_use.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_plain_use.cml:8:30:", "<> (i64!, i64)"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "bind_pattern_plain_scrutinee"
+desc = "`case error e` over an `int`: the patterns that bind are defined over `T?` / `T!` only."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_bind_plain.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_code = "0x0300001F"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 9
+expect_output_contains = ["'error e' is not supported: the pattern 'error e' is implemented only for a value of type 'T?' or 'T!'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

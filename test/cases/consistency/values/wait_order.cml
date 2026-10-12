@@ -1,0 +1,23 @@
+/**
+ * wait: a function that writes its var parameter is ordered between the uses of the variable
+ * before and after it.
+ */
+module wait_order
+
+sync func bump(var x: int) {
+    wait x += 5
+}
+
+func main(): int sync {
+    var i = 1
+    let a = i + 1
+    wait bump(i)
+    let b = i + 1
+    wait bump(i)
+    let c = i + 1
+    println(a)
+    println(b)
+    println(c)
+    println(i)
+    return 0
+}

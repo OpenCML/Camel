@@ -1,0 +1,10 @@
+module fault_repeat_huge
+
+import { repeat } from str
+
+func main(): int sync {
+    println('before')
+    println(len('ab'->repeat<9223372036854775807>))
+    println('not reached')
+    return 0
+}

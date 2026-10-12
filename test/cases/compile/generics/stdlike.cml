@@ -1,0 +1,49 @@
+/**
+ * Signatures that the built-in operators implement with C++ type rules, written in Camel.
+ */
+module stdlike
+
+// head: (xs: T[]) => T
+func my_head(xs: (typeas T)[]): T {
+    return xs[0]
+}
+
+// tail: (xs: T[]) => T[]
+func my_tail(xs: (typeas T)[]): T[] {
+    return xs->slice<1, len(xs)>
+}
+
+// zip of two arrays: (xs: T[], ys: U[]) => (T, U)[]
+func zip_from(xs: (typeas T)[], ys: (typeas U)[], i: int): (T, U)[] {
+    let empty: (T, U)[] = []
+    return if i >= len(xs) || i >= len(ys)
+        then empty
+        else concat([(xs[i], ys[i])], zip_from(xs, ys, i + 1))
+}
+
+func my_zip(xs: (typeas T)[], ys: (typeas U)[]): (T, U)[] {
+    return zip_from(xs, ys, 0)
+}
+
+// map / filter / reduce
+with <f: (x: typeas T) => typeas U>
+func my_map(xs: T[]): U[] {
+    return xs->map<f>
+}
+
+with <f: (acc: typeas U, x: typeas T) => U, init: U>
+func my_reduce(xs: T[]): U {
+    return xs->reduce<f, init>
+}
+
+func main(): int sync {
+    println(my_head([3, 4]))
+    println(my_head(['h', 't']))
+    println(my_tail([3, 4, 5]))
+    println(my_tail(['h', 't']))
+    println(my_zip([1, 2, 3], ['a', 'b', 'c']))
+    println(my_zip([1.5], [true, false]))
+    println([1, 2]->my_map<(x: int) => 'v{}'->format<x>>)
+    println([1, 2, 3]->my_reduce<(acc: int, x: int) => acc + x, 0>)
+    return 0
+}

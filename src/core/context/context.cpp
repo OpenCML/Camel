@@ -17,11 +17,13 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <unordered_set>
 
 #include "camel/core/context/context.h"
+#include "camel/core/module/introspect.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
@@ -179,11 +181,15 @@ size_t Context::dumpModuleWarnings(
         }
         resolveTokenRanges(ud);
         for (const Diagnostic *diag : ud->diagnostics()->findBySeverity(Severity::Warn)) {
-            lines.push_back(json ? diag->toJson() : diag->toText());
+            if (admitShownWarning()) {
+                lines.push_back(json ? diag->toJson() : diag->toText(os));
+            }
         }
     }
     for (const Diagnostic &diag : extra) {
-        lines.push_back(json ? diag.toJson() : diag.toText());
+        if (admitShownWarning()) {
+            lines.push_back(json ? diag.toJson() : diag.toText(os));
+        }
     }
     if (lines.empty()) {
         return 0;
@@ -191,7 +197,8 @@ size_t Context::dumpModuleWarnings(
     if (json) {
         os << "[\n" << join(lines, ",\n") << "\n]\n";
     } else {
-        os << join(lines, "\n") << "\n";
+        const bool rich = camel::core::error::diagnosticFormat() == DiagFormat::Rich;
+        os << join(lines, rich ? "\n\n" : "\n") << (rich ? "\n\n" : "\n");
     }
     os << std::flush;
     return lines.size();
@@ -207,6 +214,11 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
             modsErr.push_back(mod);
         }
     }
+    // An imported module's errors come before those of the entry module, which may follow
+    // from them (ImportedModuleHasErrors).
+    std::stable_partition(modsErr.begin(), modsErr.end(), [&](const module_ptr_t &mod) {
+        return mod != mainModule_;
+    });
     if (json) {
         if (modsErr.empty()) {
             os << "[]\n" << std::flush;
@@ -241,6 +253,9 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
                 }
             }
             ud->diagnostics()->dump(os, false);
+            if (camel::core::error::diagnosticFormat() == DiagFormat::Rich && mod != modsErr.back()) {
+                os << "\n";
+            }
         }
         if (modsErr.empty()) {
             os << "[camel] Compilation failed but no diagnostics were collected. Try `npm run "
@@ -256,6 +271,19 @@ void Context::captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t resu
     if (entryResultHandler_) {
         entryResultHandler_(graph, result);
     }
+}
+
+std::vector<module_ptr_t> Context::importedModules() const {
+    std::vector<module_ptr_t> result;
+    for (const auto &[name, mod] : modules_) {
+        if (mod) {
+            result.push_back(mod);
+        }
+    }
+    std::sort(result.begin(), result.end(), [](const module_ptr_t &a, const module_ptr_t &b) {
+        return a->name() < b->name();
+    });
+    return result;
 }
 
 std::vector<module_ptr_t> Context::allUserModules() const {
@@ -314,9 +342,23 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             modules_[name] = module;
             if (!module->loaded()) {
                 if (!module->load()) {
+                    // A module that was found and is in error is not a module that was not
+                    // found: its own diagnostics say what is wrong with it.
+                    auto ud = std::dynamic_pointer_cast<UserDefinedModule>(module);
+                    if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+                        throw DiagnosticBuilder::of(SemanticDiag::ImportedModuleHasErrors)
+                            .commit(name, module->path());
+                    }
                     throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
                         .commit(name, "failed to compile or load module from " + module->path());
                 }
+            }
+            // The purity of an operator must be declared (design principles 2.9). A module
+            // that leaves it out still works, with its operators treated as having side
+            // effects; it is told so. The modules of this repository are held to it by a
+            // test (test/plans/feat/modules/stdlib_registry.plan.toml).
+            if (module->loaded() && !std::dynamic_pointer_cast<UserDefinedModule>(module)) {
+                camel::core::module::warnUndeclaredOperatorTraits(*module);
             }
             return module;
         }

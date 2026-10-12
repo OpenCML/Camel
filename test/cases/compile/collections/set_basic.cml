@@ -1,0 +1,21 @@
+module main
+
+// Set<T>: construction (duplicates are dropped), membership, and the set operations.
+
+func main(): int sync {
+    let s = [3, 1, 2, 3, 1] as Set<int>
+    println(s, len(s))
+    println(s->contains<2>, contains(s, 9), s->has<3>, has(s, 0))
+    println(add(s, 0), s->add<2> == s, s->remove<3>, remove(s, 7) == s)
+    println(s)
+    let t = [2, 3, 4] as Set<int>
+    println(union(s, t), intersect(s, t), difference(s, t), difference(t, s))
+    println(is_subset(s, t), is_subset(intersect(s, t), s), is_subset([] as Set<int>, s))
+    println(items(s), items(s)->map<(x: int): int => x * x>)
+    println(s == ([1, 2, 3] as Set<int>), s == t, s != t)
+    let words = ['pear', 'apple', 'fig', 'apple'] as Set<string>
+    println(words, words->contains<'fig'>, words->contains<'plum'>)
+    println([true, false, true] as Set<bool>)
+    println(string(words), format<s>('s = {}'))
+    return 0
+}

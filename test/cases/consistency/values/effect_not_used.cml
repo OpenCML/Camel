@@ -1,0 +1,17 @@
+/**
+ * Outside a sync block a call with an effect whose result nobody uses does not run (design
+ * principles 2.1, 2.4): log prints nothing, on every back end.
+ */
+module effect_not_used
+
+func log(x: int): int {
+    println(x)
+    return x + 1
+}
+
+func main(): int sync {
+    let a = log(1)
+    let b = log(a)
+    println(b)
+    return 0
+}

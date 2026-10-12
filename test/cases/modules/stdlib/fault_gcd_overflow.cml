@@ -1,0 +1,10 @@
+module fault_gcd_overflow
+
+import { gcd } from math
+
+func main(): int sync {
+    println('before')
+    println(gcd(-9223372036854775807 - 1, 0))
+    println('not reached')
+    return 0
+}

@@ -24,6 +24,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/assert.h"
+#include "camel/utils/int_div.h"
 
 #include <cmath>
 
@@ -97,6 +98,13 @@ slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     lhs += rhs;
     cell->set(0, lhs);
     return toSlot(lhs);
+}
+
+slot_t __builtin__assn_add_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *cell    = variableOf(norm);
+    String *result = String::concat(cell->get<String *>(0), norm.get<String *>(1), mm::autoSpace());
+    cell->set<slot_t>(0, toSlot(result), static_cast<TupleType *>(norm.type(0)));
+    return toSlot(result);
 }
 
 slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -177,10 +185,10 @@ slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs = norm.get<Int32>(1);
 
     if (rhs == 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
-    lhs /= rhs;
+    lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
@@ -191,10 +199,10 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs = norm.get<Int64>(1);
 
     if (rhs == 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
-    lhs /= rhs;
+    lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
@@ -205,10 +213,10 @@ slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
 
     if (rhs == 0.0f) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
-    lhs /= rhs;
+    lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
@@ -219,32 +227,73 @@ slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
 
     if (rhs == 0.0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
-    lhs /= rhs;
+    lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
 
-slot_t __builtin__assn_mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
+// `%=` on the two integer types: the remainder `%` gives, stored back.
+template <typename T> static slot_t assignMod(ArgsView &norm) {
+    Tuple *cell = variableOf(norm);
+    T lhs       = cell->get<T>(0);
+    T rhs       = norm.get<T>(1);
+    if (rhs == 0) {
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
+    }
+    lhs = camel::utils::remainder(lhs, rhs);
+    cell->set(0, lhs);
+    return toSlot(lhs);
 }
 
-slot_t __builtin__assn_pow__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
+slot_t __builtin__assn_mod_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignMod<Int32>(norm);
 }
 
+slot_t __builtin__assn_mod_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignMod<Int64>(norm);
+}
+
+// `^=` on the four numeric types: what `^` gives (__builtin__pow__), stored back.
+template <typename T> static slot_t assignPow(ArgsView &norm) {
+    Tuple *cell = variableOf(norm);
+    T lhs       = static_cast<T>(std::pow(cell->get<T>(0), norm.get<T>(1)));
+    cell->set(0, lhs);
+    return toSlot(lhs);
+}
+
+slot_t __builtin__assn_pow_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignPow<Int32>(norm);
+}
+
+slot_t __builtin__assn_pow_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignPow<Int64>(norm);
+}
+
+slot_t __builtin__assn_pow_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignPow<Float32>(norm);
+}
+
+slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return assignPow<Float64>(norm);
+}
+
+// `&=` and `|=` on bool: `a = a && b` and `a = a || b`. The right side is an operand like any
+// other, evaluated before the operator runs.
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
+    Tuple *cell = variableOf(norm);
+    Bool lhs    = cell->get<Bool>(0) && norm.get<Bool>(1);
+    cell->set(0, lhs);
+    return toSlot(lhs);
 }
 
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "assignment operator not fully implemented");
-}
-
-slot_t __builtin__assn_mat__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "Invalid tensor assignment operation");
+    Tuple *cell = variableOf(norm);
+    Bool lhs    = cell->get<Bool>(0) || norm.get<Bool>(1);
+    cell->set(0, lhs);
+    return toSlot(lhs);
 }
 
 slot_t __builtin__or__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -269,6 +318,20 @@ slot_t __builtin__and__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 }
 
+// `==` on two scalars. Floats compare as numbers (IEEE: NaN equals nothing, itself included,
+// and the two zeros are equal), which is what FastVM and the JIT compile `==` on floats to;
+// comparing the slots would compare bit patterns. Everything else is equal when its slots are.
+static Bool scalarSlotsEqual(ArgsView &norm, TypeCode code) {
+    switch (code) {
+    case TypeCode::Float32:
+        return norm.get<Float32>(0) == norm.get<Float32>(1);
+    case TypeCode::Float64:
+        return norm.get<Float64>(0) == norm.get<Float64>(1);
+    default:
+        return norm.slot(0) == norm.slot(1);
+    }
+}
+
 slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
     TypeCode lhsType = norm.code(0);
 
@@ -279,10 +342,7 @@ slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Bool res       = lhs->equals(rhs, ty, false);
         return toSlot(res);
     } else {
-        slot_t lhs = norm.slot(0);
-        slot_t rhs = norm.slot(1);
-        Bool res   = lhs == rhs;
-        return toSlot(res);
+        return toSlot(scalarSlotsEqual(norm, lhsType));
     }
 }
 
@@ -296,10 +356,7 @@ slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Bool res       = !lhs->equals(rhs, ty, false);
         return toSlot(res);
     } else {
-        slot_t lhs = norm.slot(0);
-        slot_t rhs = norm.slot(1);
-        Bool res   = !(lhs == rhs);
-        return toSlot(res);
+        return toSlot(!scalarSlotsEqual(norm, lhsType));
     }
 }
 
@@ -315,6 +372,27 @@ slot_t __builtin__strict_ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t rhs = norm.slot(1);
     Bool res   = (lhs != rhs);
     return toSlot(res);
+}
+
+// Strings are ordered by their bytes (design principles 2.9); a proper prefix comes first.
+static int compareStrings(ArgsView &norm) {
+    return norm.get<String *>(0)->compare(norm.get<String *>(1));
+}
+
+slot_t __builtin__lt_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(Bool(compareStrings(norm) < 0));
+}
+
+slot_t __builtin__le_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(Bool(compareStrings(norm) <= 0));
+}
+
+slot_t __builtin__gt_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(Bool(compareStrings(norm) > 0));
+}
+
+slot_t __builtin__ge_s__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot(Bool(compareStrings(norm) >= 0));
 }
 
 slot_t __builtin__add_ii__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -403,8 +481,10 @@ slot_t __builtin__mul__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<mul> operator not supported for type " + typeCodeToString(lhsType));
+            RuntimeDiag::OperandTypeUnsupported,
+            "*",
+            typeCodeToString(lhsType),
+            "a number");
     }
 }
 
@@ -417,7 +497,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs / rhs);
+        return toSlot(camel::utils::quotient(lhs, rhs));
     }
 
     case TypeCode::Int64: {
@@ -426,7 +506,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs / rhs);
+        return toSlot(camel::utils::quotient(lhs, rhs));
     }
 
     case TypeCode::Float32: {
@@ -435,7 +515,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0.0f) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs / rhs);
+        return toSlot(camel::utils::quotient(lhs, rhs));
     }
 
     case TypeCode::Float64: {
@@ -444,13 +524,15 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0.0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs / rhs);
+        return toSlot(camel::utils::quotient(lhs, rhs));
     }
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<div> operator not supported for type " + typeCodeToString(lhsType));
+            RuntimeDiag::OperandTypeUnsupported,
+            "/",
+            typeCodeToString(lhsType),
+            "a number");
     }
 }
 
@@ -463,7 +545,7 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs % rhs);
+        return toSlot(camel::utils::remainder(lhs, rhs));
     }
 
     case TypeCode::Int64: {
@@ -472,17 +554,16 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs % rhs);
+        return toSlot(camel::utils::remainder(lhs, rhs));
     }
 
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<mod> operator only supports integer types");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "%",
+            typeCodeToString(lhsType),
+            "an integer");
     }
-}
-
-slot_t __builtin__mat__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    ASSERT(false, "mat operator not implemented");
-    return NullSlot;
 }
 
 // Exponentiation operator.
@@ -515,8 +596,10 @@ slot_t __builtin__pow__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<pow> operator not supported for type " + typeCodeToString(lhsType));
+            RuntimeDiag::OperandTypeUnsupported,
+            "**",
+            typeCodeToString(lhsType),
+            "a number");
     }
 }
 
@@ -547,6 +630,20 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
             }
             return arr->get<slot_t>(idx);
         }
+        case TypeCode::String: {
+            // A string is bytes and its indices count bytes (design principles 2.9).
+            // DESIGN-QUESTION(string-index): the byte at the index is returned as a string
+            // of that one byte; the alternative is a number (there is no byte type in the
+            // language). A byte of a multi-byte character is not a valid string by itself.
+            String *str = norm.get<String *>(0);
+            Int64 raw   = norm.get<Int64>(1);
+            size_t idx  = static_cast<size_t>(raw);
+            if (raw < 0 || idx >= str->size()) {
+                throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "a string", str->size());
+            }
+            const char byte = str->data()[idx];
+            return toSlot(String::from(std::string(1, byte), mm::autoSpace()));
+        }
         case TypeCode::Struct: {
             Struct *st = norm.get<Struct *>(0);
             Int64 raw  = norm.get<Int64>(1);
@@ -558,8 +655,10 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
         default: {
             throwRuntimeFault(
-                RuntimeDiag::RuntimeError,
-                "<idx> operator not supported for type " + typeCodeToString(containerType));
+                RuntimeDiag::OperandTypeUnsupported,
+                "[]",
+                typeCodeToString(containerType),
+                "an array, a tuple, a struct or a string");
         }
         }
     }
@@ -572,14 +671,17 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         const Type *structType      = norm.type(0);
         if (!st->has(key, structType)) {
             throwRuntimeFault(
-                RuntimeDiag::RuntimeError,
-                "Struct does not have field: " + std::string(key));
+                RuntimeDiag::FieldNotFound,
+                std::string(key));
         }
         return st->get<slot_t>(key, structType);
     }
 
-    // Unsupported index type.
-    return NullSlot;
+    throwRuntimeFault(
+        RuntimeDiag::OperandTypeUnsupported,
+        "[]",
+        typeCodeToString(idxType),
+        "an integer index, or a field name for a struct");
 }
 
 slot_t __builtin__not__(ArgsView &with, ArgsView &norm, Context &) {
@@ -612,8 +714,10 @@ slot_t __builtin__neg__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<neg> operator not supported for type " + typeCodeToString(t));
+            RuntimeDiag::OperandTypeUnsupported,
+            "-",
+            typeCodeToString(t),
+            "a number");
     }
 }
 
@@ -632,8 +736,9 @@ slot_t __builtin__inv__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<inv> operator only supported for integer types (Int / Long), got " +
-                typeCodeToString(t));
+            RuntimeDiag::OperandTypeUnsupported,
+            "~",
+            typeCodeToString(t),
+            "an integer");
     }
 }

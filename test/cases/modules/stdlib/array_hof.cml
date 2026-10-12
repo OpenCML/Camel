@@ -1,0 +1,59 @@
+/**
+ * The array module (written in Camel): higher-order functions. A function passed to one of
+ * them is applied with map: there is no order among its calls and the result is by position,
+ * the same on every back end (including the parallel one).
+ */
+module array_hof
+
+import { find, any, all, count, flat_map, sort_by, zip_with } from array
+import { to_lower } from str
+
+type Person = { name: string, age: int }
+
+func is_even(x: int): bool {
+    return x % 2 == 0
+}
+
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func label(w: string, n: int): string {
+    return w + string(n)
+}
+
+func main(): int sync {
+    let xs = [3, 1, 4, 1, 5, 9, 2, 6]
+    let none = tail([0])
+    let words = ['pear', 'Apple', 'fig', 'apple', 'Fig']
+
+    println(xs->find<is_even> ?? -1, xs->find<(x: int) => x > 4> ?? -1, xs->find<(x: int) => x > 9> ?? -1, none->find<is_even> ?? -1)
+    println(words->find<(w: string) => len(w) == 3> ?? '?', words->find<(w: string) => len(w) > 9> ?? '?')
+    println(xs->any<is_even>, xs->any<(x: int) => x > 9>, none->any<is_even>)
+    println(xs->all<(x: int) => x > 0>, xs->all<is_even>, none->all<is_even>)
+    println(xs->count<is_even>, xs->count<(x: int) => x > 100>, none->count<is_even>, words->count<(w: string) => len(w) == 5>)
+
+    println(xs->flat_map<(x: int) => [x, x * 10]>->len, [1, 2, 3]->flat_map<(x: int) => range(0, x)>)
+    println(words->flat_map<(w: string) => [w, to_lower(w)]>->len, none->flat_map<(x: int) => [x]>)
+    println([1, 2]->flat_map<(x: int) => tail([x])>)
+
+    println(xs->sort_by<(x: int) => x>, xs->sort_by<(x: int) => -x>, none->sort_by<(x: int) => x>)
+    // stable: equal keys keep their order
+    println(words->sort_by<(w: string) => len(w)>)
+    println(words->sort_by<(w: string) => to_lower(w)>)
+    println(words->sort_by<(w: string) => w>)
+    println([2.5, -1.0, 0.0]->sort_by<(x: float) => x>, [true, false, true]->sort_by<(b: bool) => b>)
+    let people = [{ name: 'Ann', age: 31 }, { name: 'Bob', age: 25 }, { name: 'Cy', age: 31 }, { name: 'Di', age: 25 }]
+    println(people->sort_by<(p: Person) => p.age>->map<(p: Person) => p.name>)
+    println(people->sort_by<(p: Person) => p.name>->sort_by<(p: Person) => -p.age>->map<(p: Person) => p.name>)
+
+    // one call with with-arguments per statement: `f<a>(x), g<b>(y)` in one argument list
+    // is read as comparisons
+    println(zip_with<add>([1, 2, 3], [10, 20, 30]))
+    println(zip_with<label>(['a', 'b'], [1, 2]))
+    println(zip_with<add>(none, none))
+
+    // chained
+    println(xs->filter<is_even>->sort_by<(x: int) => -x>->map<(x: int) => x * x>)
+    return 0
+}

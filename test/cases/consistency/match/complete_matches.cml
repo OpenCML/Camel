@@ -1,0 +1,51 @@
+/**
+ * Matches that cannot meet a value without a case, and so get neither the warning
+ * MatchWithoutDefault nor the faulting arm: one with `case _`, one over a bool that lists
+ * `true` and `false`, and the fixed patterns over `T?` and `T!`. Their results are what they
+ * always were.
+ */
+module complete_matches
+
+func with_default(s: string): int {
+    return match s {
+        case 'a' => 1
+        case _ => 0
+    }
+}
+
+func both(b: bool): string {
+    return match b {
+        case true => 'yes'
+        case false => 'no'
+    }
+}
+
+func either(b: bool): string {
+    return match b {
+        case true | false => 'any'
+    }
+}
+
+func or_zero(x: int?): int {
+    return match x {
+        case null => 0
+        case v => v
+    }
+}
+
+func text_of(r: int!): string {
+    return match r {
+        case error e => e.kind
+        case v => format<v>('ok {}')
+    }
+}
+
+func main(): int sync {
+    let none: int? = null
+    let some: int? = 5
+    println(with_default('a'), with_default('q'))
+    println(both(true), both(false), either(true), either(false))
+    println(or_zero(none), or_zero(some))
+    println(text_of(parse_int('12')), text_of(parse_int('x')))
+    return 0
+}

@@ -1,0 +1,33 @@
+/**
+ * 25 independent errors, to test the limit on reported errors.
+ */
+module many_errors
+
+func main(): int sync {
+    println(u0)
+    println(u1)
+    println(u2)
+    println(u3)
+    println(u4)
+    println(u5)
+    println(u6)
+    println(u7)
+    println(u8)
+    println(u9)
+    println(u10)
+    println(u11)
+    println(u12)
+    println(u13)
+    println(u14)
+    println(u15)
+    println(u16)
+    println(u17)
+    println(u18)
+    println(u19)
+    println(u20)
+    println(u21)
+    println(u22)
+    println(u23)
+    println(u24)
+    return 0
+}

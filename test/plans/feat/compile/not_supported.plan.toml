@@ -21,7 +21,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "not_supported.pattern_identifier"
-desc = "An identifier pattern in a `case` is rejected at the pattern, instead of an internal error without a position."
+desc = "An identifier pattern over a plain value is rejected at the case, instead of an internal error without a position. (Over a `T?` / `T!` it binds the value: tagged.plan.toml.)"
 kind = "negative"
 case = "../../../cases/compile/not_supported/pattern_identifier.cml"
 args = ["${case}"]
@@ -29,8 +29,8 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
 expect_diagnostic_code = "0x0300001F"
 expect_diagnostic_line = 9
-expect_diagnostic_column = 14
-expect_output_contains = ["'other' is not supported: an identifier pattern is not implemented"]
+expect_diagnostic_column = 9
+expect_output_contains = ["'other' is not supported: an identifier pattern is implemented only for a value of type 'T?' or 'T!'; over 'i64' only literal patterns and '_' are."]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
@@ -63,54 +63,6 @@ expect_diagnostic_code = "0x0300001F"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 14
 expect_output_contains = ["'{x:1}' is not supported: a struct pattern is not implemented"]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "not_supported.null_then"
-desc = "`??` is rejected at the operator; it used to be a warning with the right-hand side dropped."
-kind = "negative"
-case = "../../../cases/compile/not_supported/null_then.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 15
-expect_output_contains = ["'??' is not supported: the operator is not implemented."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "not_supported.error_then"
-desc = "`!!` is rejected at the operator; it used to be a warning with the right-hand side dropped."
-kind = "negative"
-case = "../../../cases/compile/not_supported/error_then.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 15
-expect_output_contains = ["'!!' is not supported: the operator is not implemented."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "not_supported.optional_link"
-desc = "`?->` is rejected at the operator; it used to be a warning and compiled as `->`."
-kind = "negative"
-case = "../../../cases/compile/not_supported/optional_link.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 14
-expect_output_contains = ["'?->' is not supported: the operator is not implemented."]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
@@ -159,22 +111,6 @@ expect_diagnostic_code = "0x0300001F"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 14
 expect_output_contains = ["'!' is not supported: the postfix non-null assertion is not implemented."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "not_supported.nullable_type"
-desc = "`T?` is rejected at the type; it used to be compiled as `T`, silently (design principles 2.9)."
-kind = "negative"
-case = "../../../cases/compile/not_supported/nullable_type.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 7
-expect_diagnostic_column = 11
-expect_output_contains = ["'int?' is not supported: nullable types are not implemented."]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
@@ -289,4 +225,25 @@ expect_diagnostic_column = 13
 expect_output_contains = ["Type 'i64[]' does not support index access."]
 expect_output_not_contains = ["never printed", "42949672963"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "not_supported.wait_ignored"
+desc = "wait before a block, a name, a literal, a unary operator or a lambda is rejected where it stands; the mark used to be dropped, silently. wait before a call, an assignment and an operator expression is not reported."
+kind = "negative"
+case = "../../../cases/compile/not_supported/wait_ignored.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_line = 24
+expect_diagnostic_column = 12
+expect_output_contains = ["'wait' is not supported: it is not implemented before a block", "'wait' is not supported: it is implemented before a call, an assignment or a binary operator expression only"]
+expect_output_not_contains = ["never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const at = [...input.stdout.matchAll(/wait_ignored[.]cml:([0-9]+):([0-9]+): .Error/g)].map(m => m[1] + ':' + m[2])
+assert(at.join(' ') === '24:12 30:10 35:10 41:10 46:10', `reported at: ${at.join(' ')}`)
+}
+"""
 timeout_ms = 8000

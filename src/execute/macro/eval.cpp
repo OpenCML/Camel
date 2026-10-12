@@ -39,6 +39,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/limits.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -64,7 +65,17 @@ namespace camel::execute::macro_runtime {
 
 namespace {
 
-constexpr size_t kMaxMacroRecursionDepth = 64;
+// Why a macro call is not evaluated when it nests deeper than the limit of the evaluator
+// (camel/execute/limits.h), with the limit and how to change it.
+std::string tooManyNestedCalls(size_t limit, std::string_view graphName) {
+    return std::format(
+        "the evaluation needs more than {} nested calls (at '{}'). The limit is set with {} <n> "
+        "or {}=<n>",
+        limit,
+        graphName,
+        camel::execute::kMaxMacroDepthOption,
+        camel::execute::kMaxMacroDepthEnvVar);
+}
 constexpr size_t kMacroFramePoolSize     = 8 * mm::MB;
 
 class MacroExecutionError : public std::runtime_error {
@@ -204,8 +215,13 @@ struct MacroEvaluator::ValueRoot {
 };
 
 MacroEvaluator::MacroEvaluator(const context_ptr_t &context)
-    : context_(context), framePool_(kMacroFramePoolSize),
-      staticAreas_(std::make_unique<MacroStaticAreaStore>()) {
+    : context_(context),
+      framePool_(
+          std::max<size_t>(
+              kMacroFramePoolSize,
+              camel::execute::framePoolBytes(camel::execute::macroDepthLimit(*context)))),
+      staticAreas_(std::make_unique<MacroStaticAreaStore>()),
+      maxDepth_(camel::execute::macroDepthLimit(*context)) {
     framePool_.registerGcTracer();
     mm::autoSpace().registerExternalRootTracer(
         this,
@@ -644,11 +660,17 @@ slot_t MacroEvaluator::executeFunction(
         throw MacroExecutionError(
             std::format("'{}' is not marked as macro.", runtimeGraph->name()));
     }
-    if (recursionDepth_ >= kMaxMacroRecursionDepth) {
+    if (recursionDepth_ >= maxDepth_) {
+        throw MacroExecutionError(tooManyNestedCalls(maxDepth_, runtimeGraph->name()));
+    }
+    // The evaluator nests on the native stack for every call.
+    if (camel::execute::nativeStackNearlyExhausted()) [[unlikely]] {
         throw MacroExecutionError(
             std::format(
-                "the evaluation needs more than {} nested calls (at '{}')",
-                kMaxMacroRecursionDepth,
+                "the evaluation needs more native stack than the thread has ({} nested calls on "
+                "{} KiB, at '{}')",
+                recursionDepth_,
+                camel::execute::nativeStackSize() / 1024,
                 runtimeGraph->name()));
     }
 
@@ -687,12 +709,8 @@ slot_t MacroEvaluator::executeFunction(
 
 slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     ASSERT(runtimeGraph != nullptr, "Macro runtime graph execution requires a runtime graph.");
-    if (recursionDepth_ > kMaxMacroRecursionDepth) {
-        throw MacroExecutionError(
-            std::format(
-                "the evaluation needs more than {} nested calls (at '{}')",
-                kMaxMacroRecursionDepth,
-                runtimeGraph->name()));
+    if (recursionDepth_ > maxDepth_) {
+        throw MacroExecutionError(tooManyNestedCalls(maxDepth_, runtimeGraph->name()));
     }
     auto runtimeTopoIndices = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
     std::optional<uint32_t> tillRuntimeIndex;

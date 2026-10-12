@@ -74,3 +74,19 @@ assert(out === want, `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "nested_return.compile_time"
+desc = "A return nested 20 deep in the operands of returns compiles at once; the operand of a return was lowered twice, 2^20 times at this depth (45 s)."
+kind = "behavior"
+case = "../../../cases/compile/return_type/nested_return.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '19 0', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 5000

@@ -89,8 +89,9 @@ slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
             flush = true;
         } catch (const fmt::format_error &e) {
             throwRuntimeFault(
-                RuntimeDiag::RuntimeError,
-                std::string("<format>") + std::string(e.what()));
+                RuntimeDiag::FormatFailed,
+                std::string(fmtStr),
+                std::string(e.what()));
         }
 
         if (norm.size() > 0) {
@@ -150,8 +151,9 @@ slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
             flush = true;
         } catch (const fmt::format_error &e) {
             throwRuntimeFault(
-                RuntimeDiag::RuntimeError,
-                std::string("<format>") + std::string(e.what()));
+                RuntimeDiag::FormatFailed,
+                std::string(fmtStr),
+                std::string(e.what()));
         }
 
         if (norm.size() > 0) {

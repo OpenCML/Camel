@@ -1,0 +1,10 @@
+module sem_failed_type
+
+type T = Unknown
+
+func f(a: T): T { return a }
+
+func main(): int sync {
+    let v: T = 1
+    return 0
+}

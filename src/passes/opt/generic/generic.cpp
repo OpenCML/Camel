@@ -33,6 +33,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/warnings.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/runtime/draft_inline.h"
@@ -716,6 +717,17 @@ size_t foldDraft(
             slot_t result          = NullSlot;
             try {
                 result = (*op)(*with, *norm, ctx);
+            } catch (const camel::core::error::RuntimeFault &fault) {
+                // A constant expression that can only fault (`1 / 0`) is not folded: it is
+                // left as written, to fault with its position if the run reaches it, so the
+                // program behaves the same with and without the pass. The user is told once,
+                // where the expression is written (design principles 2.9).
+                raisePassWarning(
+                    ctx,
+                    camel::core::error::RuntimeDiag::ConstantExpressionFaults,
+                    draft.nodeOrigin(id),
+                    fault.what());
+                continue;
             } catch (...) {
                 continue; // leave the failure to be reported when the program runs
             }
@@ -844,13 +856,18 @@ size_t dceDraft(GraphDraft &draft) {
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
             // A SYNC only joins control; replaceNode hands its predecessors to its users, which
             // keeps every ordering it expressed.
-            // A GATE only forwards its value once its control inputs ran; unread, it is dead
-            // unless it is the only way something it waits on reaches the exit.
+            // A GATE only forwards its value once its control inputs ran. When no node reads the
+            // value it is a SYNC that also depends on a value, and it goes the same way: the
+            // nodes that wait on it wait on what it waited on instead (its control inputs and
+            // the ordered nodes its value came from). Keeping such a GATE because other nodes
+            // wait on it kept its value alive for nothing: a closure that is only called
+            // through a branch stayed read by the dead GATE, and the export could not split
+            // that call across the branch. A GATE that nothing uses at all stays when it is the
+            // only way something it waits on reaches the exit.
             const auto *h     = draft.header(id);
             const bool isJoin = h && h->kind == GCNodeKind::Sync;
             const bool isDeadGate =
-                h && h->kind == GCNodeKind::Gate && draft.ctrlUsersOf(id).empty() &&
-                gateInputsSurvive(draft, id);
+                h && h->kind == GCNodeKind::Gate && gateInputsSurvive(draft, id);
             if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);

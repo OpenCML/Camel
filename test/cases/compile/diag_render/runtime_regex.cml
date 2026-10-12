@@ -1,0 +1,8 @@
+module runtime_regex
+
+import { test } from re
+
+func main(): int sync {
+    println(test('(unclosed', 'abc'))
+    return 0
+}

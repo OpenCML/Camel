@@ -1,0 +1,20 @@
+/**
+ * with parameters: the configuration of a function, given in angle brackets, also in a chain.
+ */
+module with_params
+
+with <k: int>
+func scale(x: int): int { return x * k }
+
+with <lo: int, hi: int>
+func clamp(x: int): int {
+    return if x < lo then lo else if x > hi then hi else x
+}
+
+func main(): int sync {
+    println(scale<3>(7))
+    println(7->scale<3>)
+    println(7->scale<3>->clamp<0, 10>)
+    println(range(-2, 3)->map<(x: int): int => x->scale<4>->clamp<-3, 3>>)
+    return 0
+}

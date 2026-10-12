@@ -1,0 +1,52 @@
+error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'undefined_in_body'.
+  --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:4:17
+   |
+ 4 |     let n = x + undefined_in_body
+   |                 ^^^^^^^^^^^^^^^^^
+note: in the instance 'twice<i64>' of the generic function 'twice' with T = i64, instantiated by the
+      call
+  --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:9:18
+   |
+ 9 |     println(twice(21))
+   |                  ----
+help: Make sure the name is declared and in scope.
+
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (i64[], i64[]); operator '+' is not defined for these operand types.
+   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:5:16
+    |
+  5 |     return x + x
+    |                ^
+note: in the instance 'twice<i64[]>' of the generic function 'twice' with T = i64[], instantiated by
+      the call
+   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:10:18
+    |
+ 10 |     println(twice([1]))
+    |                  -----
+help: Check the number and types of arguments to ensure they match one of the available overloaded
+      function signatures. Available overloads:
+          <:op/add_i>: (i32, i32) => i32
+          <:op/add_l>: (i64, i64) => i64
+          <:op/add_f>: (f32, f32) => f32
+          <:op/add_d>: (f64, f64) => f64
+          <:op/add_s>: (string, string) => string
+
+error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (bool, bool); operator '+' is not defined for these operand types.
+   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:5:16
+    |
+  5 |     return x + x
+    |                ^
+note: in the instance 'twice<bool>' of the generic function 'twice' with T = bool, instantiated by
+      the call
+   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:11:18
+    |
+ 11 |     println(twice(true))
+    |                  ------
+help: Check the number and types of arguments to ensure they match one of the available overloaded
+      function signatures. Available overloads:
+          <:op/add_i>: (i32, i32) => i32
+          <:op/add_l>: (i64, i64) => i64
+          <:op/add_f>: (f32, f32) => f32
+          <:op/add_d>: (f64, f64) => f64
+          <:op/add_s>: (string, string) => string
+
+camel: 3 errors

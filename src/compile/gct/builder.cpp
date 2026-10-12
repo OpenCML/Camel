@@ -17,12 +17,15 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <exception>
 #include "builder.h"
 
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
 #include "camel/utils/scope.h"
@@ -253,6 +256,16 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
     return make_pair(refData, dang);
 }
 
+namespace {
+
+/// Whether `type` is what the built-in names `Map` and `Set` resolve to.
+bool isCollectionPrototype(Type *type) {
+    const CollectionType *coll = asCollectionTypeOrPrototype(type);
+    return coll != nullptr && !coll->complete();
+}
+
+} // namespace
+
 void Builder::initInnerTypes() {
     typeScope_->clear();
     typeScope_->insert(Reference("i32"), Type::Int32());
@@ -265,6 +278,9 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("string"), Type::String());
     typeScope_->insert(Reference("any"), Type::Any());
     typeScope_->insert(Reference("void"), Type::Void());
+    // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 2.9).
+    typeScope_->insert(Reference("Map"), MapType::prototype());
+    typeScope_->insert(Reference("Set"), SetType::prototype());
 }
 
 /*
@@ -280,9 +296,14 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
     auto stmtNodes     = ast->atAs<AST::RepeatedLoad>(2);
 
-    // Process import declarations
+    // Process import declarations. One that fails is reported and the others are still
+    // processed.
     for (const auto &import : *importNodes) {
-        visitImport(import);
+        try {
+            visitImport(import);
+        } catch (const BuildAbortException &) {
+            continue;
+        }
     }
 
     vector<node_ptr_t> decls;
@@ -383,8 +404,25 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     const auto &path = load->getPath();
     const auto &refs = load->refs();
 
-    // Attempt to import the module (importModule throws ModuleNotFound with detail on failure)
-    const module_ptr_t &mod = context_->importModule(path, module_->name());
+    // Attempt to import the module (importModule throws ModuleNotFound with detail on failure).
+    // The failure is reported at the import, and what the import would have declared is
+    // remembered so that its uses are not reported as well.
+    module_ptr_t mod;
+    try {
+        mod = context_->importModule(path, module_->name());
+    } catch (Diagnostic &d) {
+        if (refs.empty()) {
+            wholeImportFailed_ = true;
+        }
+        for (const Reference &ref : refs) {
+            poisonedTypes_.insert(ref.toString());
+        }
+        if (ast->load()->origin() != camel::source::kInvalidOriginId) {
+            d.range = ast->load()->origin();
+        }
+        diags_->add(std::move(d));
+        throw BuildAbortException();
+    }
     if (!mod) {
         diags_->of(SemanticDiag::ModuleNotFound)
             .at(load->tokenRange())
@@ -556,7 +594,21 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(i);
                     Type *type              = visitType(typeASTNode);
                     // Try a static type conversion first.
-                    if (dataNode->type() == LoadType::DATA) {
+                    if (asTagged(type) != nullptr ||
+                        (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
+                        // Decided when the generic function is instantiated. A declared
+                        // `T?` / `T!` puts the value into that form (design principles 2.9;
+                        // DESIGN-QUESTION(nullable-error) Q1): a CAST, for any expression.
+                        node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
+                        *castNode << dataNode;
+                        setOriginFromAst(
+                            context_,
+                            castNode,
+                            ast,
+                            camel::source::OriginKind::GctNode,
+                            "gct.cast");
+                        dataNode = castNode;
+                    } else if (dataNode->type() == LoadType::DATA) {
                         const auto &dataLoad = dataNode->loadAs<DataLoad>();
                         const auto &data     = dataLoad->data();
                         auto convertedData   = data->convertTo(type);
@@ -606,7 +658,21 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
                     Type *type              = visitType(typeASTNode);
                     // Try a static type conversion first.
-                    if (dataNode->type() == LoadType::DATA) {
+                    if (asTagged(type) != nullptr ||
+                        (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
+                        // Decided when the generic function is instantiated. A declared
+                        // `T?` / `T!` puts the value into that form (design principles 2.9;
+                        // DESIGN-QUESTION(nullable-error) Q1): a CAST, for any expression.
+                        node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
+                        *castNode << dataNode;
+                        setOriginFromAst(
+                            context_,
+                            castNode,
+                            ast,
+                            camel::source::OriginKind::GctNode,
+                            "gct.cast");
+                        dataNode = castNode;
+                    } else if (dataNode->type() == LoadType::DATA) {
                         const auto &dataLoad = dataNode->loadAs<DataLoad>();
                         const auto &data     = dataLoad->data();
                         auto convertedData   = data->convertTo(type);
@@ -706,6 +772,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->size() >= 1, "FuncDecl AST should have at least one child.");
 
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(ast->size() - 1);
+    funcDeclPending_         = true;
     node_ptr_t funcNode      = visitFuncData(funcDataNode);
 
     // Decorator annotations are lowered to ANNO nodes attached after FUNC payload.
@@ -734,8 +801,56 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     Type *type;
     ASSERT(typeNode, "TypeDecl must have a type");
-    type                 = visitType(typeNode);
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
+    // A declaration in error declares nothing; uses of the name follow from that error.
+    struct PoisonOnFailure {
+        Builder &self;
+        std::string name;
+        int exceptions = std::uncaught_exceptions();
+        ~PoisonOnFailure() {
+            if (std::uncaught_exceptions() > exceptions) {
+                self.poisonedTypes_.insert(name);
+            }
+        }
+    } poisonOnFailure{*this, typeLoad->ref().toString()};
+    if (typeLoad->params().empty()) {
+        type = visitType(typeNode);
+    } else {
+        // A type function (`type Pair<T> = (T, T)`): the right-hand side is an ordinary type
+        // expression in which the parameters are type variables. A use `Pair<int>` replaces
+        // them (visitSpecType); nothing of the declaration reaches a graph.
+        const string typeName = typeLoad->ref().toString();
+        struct TypeScopeGuard {
+            Builder &self;
+            scope_ptr_t<Reference, Type *> outer;
+            ~TypeScopeGuard() { self.typeScope_ = outer; }
+        } typeScopeGuard{*this, typeScope_};
+        pushScope();
+        for (const string &param : typeLoad->params()) {
+            const Reference paramRef(param);
+            if (typeScope_->has(paramRef, false)) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .at(ast->load()->tokenRange())
+                    .commit(param);
+                throw BuildAbortException();
+            }
+            if (typeScope_->get(paramRef).has_value() ||
+                module_->getImportedType(paramRef).has_value()) {
+                diags_->of(SemanticDiag::TypeFunctionArguments)
+                    .at(ast->load()->tokenRange())
+                    .commit(typeName, "its parameter '" + param + "' already denotes a type here");
+                throw BuildAbortException();
+            }
+            typeScope_->insert(paramRef, TypeVarType::create(param, false));
+        }
+        type = TypeFunctionType::create(typeName, typeLoad->params(), visitType(typeNode));
+    }
+    // A program's own `Map` or `Set` takes the place of the built-in collection type of that
+    // name: programs written before those existed keep their meaning.
+    if (const auto builtin = typeScope_->get(typeLoad->ref(), false);
+        builtin.has_value() && isCollectionPrototype(builtin.value())) {
+        typeScope_->erase(typeLoad->ref(), false);
+    }
     typeScope_->insert(typeLoad->ref(), type);
     node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref(), false);
     *declNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
@@ -793,8 +908,12 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
 
-    // Create an ExitLoad node to represent the exit statement
-    node_ptr_t exitNode = createNodeAs<ExitLoad>();
+    // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
+    // it returns the failed form of the function's declared `T!` (the graph builder checks).
+    const bool isThrow = ast->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Throw;
+    node_ptr_t exitNode =
+        createNodeAs<ExitLoad>(isThrow ? ExitType::Throw : ExitType::Return);
+    reportExitInUnusedArm(ast, isThrow);
 
     // Retrieve the data nodes associated with the exit statement
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
@@ -803,9 +922,10 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     if (dataNodes->size() > 0) {
         // Case 1: Single data node
         if (dataNodes->size() == 1) {
-            const auto &dataNode = dataNodes->front();
-            node_ptr_t d         = visitData(dataNode);
-            *exitNode << visitData(dataNode);
+            // Lowered once. It used to be lowered twice and the first result dropped: every
+            // `return` nested in the returned expression doubled the work (2^n lowerings at
+            // depth n) and repeated the diagnostics of the expression.
+            *exitNode << visitData(dataNodes->front());
         } else {
             // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
             TupleDataFactory tupleFactory;
@@ -834,6 +954,51 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     return exitNode;
 }
 
+void Builder::enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused) {
+    valueUse_.unusedCtrl  = nullptr;
+    valueUse_.blockUnused = valueUnused;
+    valueUse_.unusedArmOf = valueUnused ? ctrl : nullptr;
+}
+
+void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
+    const AST::node_ptr_t &ctrl = valueUse_.unusedArmOf;
+    if (ctrl == nullptr) {
+        return;
+    }
+    if (!isThrow) {
+        // `return null` (and a bare `return`) is how an arm is given no value: an `if`
+        // without `else`, or one whose arms end in values of different types, compiles only
+        // when its arms end that way. It is not a value somebody meant to hand to a caller.
+        const auto &values = exit->atAs<AST::RepeatedLoad>(0);
+        if (values->size() == 0) {
+            return;
+        }
+        if (values->size() == 1) {
+            const auto &value = values->front();
+            if (value->type() == AST::LoadType::Data &&
+                value->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Literal &&
+                value->loadAs<AST::LiteralLoad>()->value().type() == LiteralType::Null) {
+                return;
+            }
+        }
+    }
+    // One report per statement: the arm of `case a | b` is lowered once for each pattern.
+    const auto range = exit->load()->tokenRange();
+    if (!reportedExits_.insert({range.start, range.end}).second) {
+        return;
+    }
+    const bool isMatch =
+        ctrl->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
+    const char *keyword = isThrow ? "throw" : "return";
+    const char *branch  = isMatch ? "match" : "if";
+    diags_->of(SemanticDiag::ExitInUnusedBranch)
+        .at(range)
+        .relatedOrigin(
+            ctrl->load()->origin(),
+            std::format("the value of this '{}' is not used", branch))
+        .commit(keyword, branch);
+}
+
 /*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
@@ -845,17 +1010,60 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
     // Extract the statement block load and create an ExecLoad node
     // The ExecLoad node represents the execution of the statement block
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
+    if (stmtBlock->waited()) {
+        // `wait { ... }`: the grammar takes it and the mark was dropped. `wait` is defined
+        // for one expression (design principles 2.6); what it means for a block is not.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit(
+                "wait",
+                "it is not implemented before a block and would be ignored; write 'sync { ... }' "
+                "to run the statements of a block in order");
+        throw BuildAbortException();
+    }
     node_ptr_t execNode   = createNodeAs<ExecLoad>(stmtBlock->synced());
 
     // Push a new scope for the statement block
     pushScope();
 
-    for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
+    // Whether anything takes the value of this block (see ValueUse). The value of a block is
+    // that of its last statement; the value of any other statement nothing takes.
+    // (A function or type declaration is not a statement with a value.)
+    const bool blockUnused = std::exchange(valueUse_.blockUnused, false);
+    const auto &stmts      = ast->atAs<AST::RepeatedLoad>(0);
+    const AST::Node *last  = nullptr;
+    for (const auto &stmt : *stmts) {
+        const auto stmtType = stmt->loadAs<AST::StmtLoad>()->stmtType();
+        if (stmtType != AST::StmtType::Func && stmtType != AST::StmtType::Type) {
+            last = stmt.get();
+        }
+    }
+    for (const auto &stmt : *stmts) {
         // Ensure each item in the block is a statement
         ASSERT(stmt->type() == AST::LoadType::Stmt, "Expected a statement in StmtBlock");
+        const bool stmtUnused = blockUnused || stmt.get() != last;
+        const auto stmtType   = stmt->loadAs<AST::StmtLoad>()->stmtType();
+        valueUse_.unusedCtrl  = nullptr;
+        valueUse_.blockUnused = false;
+        if (stmtUnused && stmtType == AST::StmtType::Expr && stmt->size() > 0) {
+            // An `if` / `match` written as a statement whose value nothing takes.
+            const auto &expr = stmt->at(0);
+            const auto kind  = expr->type() == AST::LoadType::Data
+                                   ? expr->loadAs<AST::DataLoad>()->dataType()
+                                   : AST::DataType::Literal;
+            if (kind == AST::DataType::IfExpr || kind == AST::DataType::MatchExpr) {
+                valueUse_.unusedCtrl = expr.get();
+            }
+        } else if (stmtType == AST::StmtType::Block) {
+            // A block written as a statement is part of this body: its exits are exits of
+            // the enclosing arm, and its value is used when the statement's is.
+            valueUse_.blockUnused = stmtUnused;
+        }
         // Process the statement and attach it to the ExecLoad node
         *execNode << visitStmt(stmt);
     }
+    valueUse_.unusedCtrl  = nullptr;
+    valueUse_.blockUnused = false;
 
     // Pop the scope after processing the block
     popScope();
@@ -912,6 +1120,20 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
         break;
     default:
         throw std::runtime_error("Unknown data type");
+    }
+    if (data->waited() && data->dataType() != AST::DataType::BinaryExpr &&
+        data->dataType() != AST::DataType::ReservedExpr) {
+        // `wait` orders the one expression after it (design principles 2.6). Only an operator
+        // expression, an assignment, a call, an access or a binding is lowered with the mark;
+        // on anything else (a name, a literal, a unary operator, a lambda) the mark was
+        // dropped without a word. What it should order there has not been decided.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit(
+                "wait",
+                "it is implemented before a call, an assignment or a binary operator "
+                "expression only, and would be ignored before this expression");
+        throw BuildAbortException();
     }
 
     LEAVE("Data");
@@ -1225,22 +1447,39 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     // Handle different reserved operators
     switch (reservedExpr->op()) {
-    case AST::ReservedDataOp::NullThen: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("NullThen Operator");
-        res = visitData(lhsASTNode);
-    } break;
+    case AST::ReservedDataOp::NullThen:
     case AST::ReservedDataOp::ErrorThen: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("ErrorThen Operator");
-        res = visitData(lhsASTNode);
+        // `a ?? b` / `a !! b`: a branch on the tag of `a` whose first arm is `b` (design
+        // principles 2.9). The graph builder knows the types; it adds the arm that takes the
+        // value out of `a`.
+        const bool onNull = reservedExpr->op() == AST::ReservedDataOp::NullThen;
+        res               = createNodeAs<BrchLoad>(
+            onNull ? BrchLoad::Kind::NullThen : BrchLoad::Kind::ErrorThen);
+        // The node is located at the operator.
+        setOriginFromAst(
+            context_,
+            res,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.tagged.branch");
+        node_ptr_t lhsNode  = visitData(lhsASTNode);
+        node_ptr_t rhsNode  = visitData(ast->atAs<AST::DataLoad>(1));
+        node_ptr_t execNode = createNodeAs<ExecLoad>();
+        setOriginFromOrigin(
+            context_,
+            execNode,
+            nodeOrigin(rhsNode),
+            camel::source::OriginKind::GctNode,
+            "gct.tagged.fallback");
+        *execNode << rhsNode;
+        node_ptr_t caseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
+        *caseNode << execNode;
+        *res << lhsNode << caseNode;
     } break;
     case AST::ReservedDataOp::NotNullThen: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("NotNullThen Operator");
+        // The marked receiver of `x ?-> f` is taken apart where the call is lowered (Call,
+        // below); it does not occur anywhere else.
+        ASSERT(false, "The receiver of '?->' is lowered with its call.");
         res = visitData(lhsASTNode);
     } break;
 
@@ -1257,8 +1496,29 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         };
         std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(calleeNode)};
         int32_t argSlot                                      = 0;
+        // `x ?-> f`: the receiver is marked (NotNullThen). The call becomes the arm of a
+        // branch on the tag of `x`, taken when `x` has not failed, and receives the value
+        // taken out of `x` under a reserved name (design principles 2.9).
+        node_ptr_t passedNode       = nullptr;
+        AST::node_ptr_t passOperator = nullptr;
         for (auto &argNode : *argsNode) {
-            node_ptr_t gctArg = visitData(argNode);
+            node_ptr_t gctArg;
+            const auto &argData = argNode->loadAs<AST::DataLoad>();
+            if (argData->dataType() == AST::DataType::ReservedExpr &&
+                argNode->loadAs<AST::ReservedExprLoad>()->op() ==
+                    AST::ReservedDataOp::NotNullThen) {
+                passedNode   = visitData(argNode->atAs<AST::DataLoad>(0));
+                passOperator = argNode;
+                gctArg     = createNodeAs<DRefLoad>(Reference(kPassedValueName));
+                setOriginFromOrigin(
+                    context_,
+                    gctArg,
+                    nodeOrigin(passedNode),
+                    camel::source::OriginKind::GctNode,
+                    "gct.tagged.passed");
+            } else {
+                gctArg = visitData(argNode);
+            }
             *res << gctArg;
             mergedInputs.push_back(nodeOrigin(gctArg));
             parts.push_back(semanticPart(
@@ -1283,6 +1543,28 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // }
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
+        if (passedNode != nullptr) {
+            node_ptr_t execNode = createNodeAs<ExecLoad>();
+            setOriginFromAst(
+                context_,
+                execNode,
+                ast,
+                camel::source::OriginKind::GctNode,
+                "gct.tagged.call");
+            *execNode << res;
+            node_ptr_t caseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+            *caseNode << execNode;
+            node_ptr_t brchNode = createNodeAs<BrchLoad>(BrchLoad::Kind::ErrorPass);
+            // Located at the operator, as the marked receiver is.
+            setOriginFromAst(
+                context_,
+                brchNode,
+                passOperator,
+                camel::source::OriginKind::GctNode,
+                "gct.tagged.branch");
+            *brchNode << passedNode << caseNode;
+            res = brchNode;
+        }
     } break;
 
     case AST::ReservedDataOp::Bind: {
@@ -1359,7 +1641,18 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         const auto &rhsASTNode = ast->atAs<AST::TypeLoad>(1);
         const auto &dataNode   = visitData(lhsASTNode);
         const auto &dstType    = visitType(rhsASTNode);
-        if (dataNode->type() == LoadType::DATA) {
+        // A conversion to a type written with a type variable is decided when the generic
+        // function is instantiated, for a literal as for any other value.
+        // A conversion into `T?` / `T!` is a CAST node for a literal too: the value is put
+        // into the form when the program runs.
+        // A conversion into a Map or a Set builds the collection when the program runs (a
+        // CAST), for a literal too; what can be said about the literal is said here.
+        const bool intoCollection = asCollectionTypeOrPrototype(dstType) != nullptr;
+        if (intoCollection && dataNode->type() == LoadType::DATA) {
+            rejectDuplicateLiteralKeys(dataNode->loadAs<DataLoad>()->data(), dstType, ast);
+        }
+        if (dataNode->type() == LoadType::DATA && !containsTypeVar(dstType) &&
+            asTagged(dstType) == nullptr && !intoCollection) {
             const auto &dataLoad = dataNode->loadAs<DataLoad>();
             const auto &data     = dataLoad->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
@@ -1484,6 +1777,11 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     node_ptr_t brchNode = createNodeAs<BrchLoad>();
     setOriginFromAst(context_, brchNode, ast, camel::source::OriginKind::GctNode, "gct.if");
 
+    // Whether this `if` is a statement whose value nothing takes: its arms are then lowered
+    // as arms of an unused branch (see ValueUse).
+    const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
+    const ValueUseScope valueUseScope(*this);
+
     // condition
     // Process the condition expression and attach it to the branch node
     node_ptr_t condNode = visitData(ast->atAs<AST::DataLoad>(0));
@@ -1491,6 +1789,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 
     // Process the "then" block and attach it as the "True" case
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
+    enterArmOf(ast, valueUnused);
     node_ptr_t thenNode   = visitStmtBlock(thenBlock);
     node_ptr_t trueCase   = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
     setOriginFromOrigin(
@@ -1520,6 +1819,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     *brchNode << elseCase;
     if (elseNode) {
         // If an "else" block exists, process and attach it
+        enterArmOf(ast, valueUnused);
         node_ptr_t elseBlock = visitStmtBlock(elseNode);
         *elseCase << elseBlock;
     } else {
@@ -1565,6 +1865,9 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     const auto &matchExprLoad = ast->loadAs<AST::MatchExprLoad>();
     const Reference &matchRef = matchExprLoad->ref();
 
+    const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
+    const ValueUseScope valueUseScope(*this);
+
     // Create a reference node for the condition and a branch node for the match expression
     node_ptr_t dRefNode = createNodeAs<DRefLoad>(matchRef); // condition node
     node_ptr_t brchNode = createNodeAs<BrchLoad>();
@@ -1593,9 +1896,25 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
         const auto &caseLoadType = aCaseNode->front()->type();
         node_ptr_t gCaseNode     = nullptr;
 
-        if (caseLoadType != AST::LoadType::Null) {
+        if (caseLoadType == AST::LoadType::Data &&
+            aCaseNode->front()->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Ref) {
+            // `case v` / `case error e`: the fixed patterns over a `T?` / `T!` (design
+            // principles 2.9). The graph builder, which knows the scrutinee's type, binds
+            // the name in the arm or reports the pattern.
+            const auto &pattern = aCaseNode->front();
+            const bool isError  = pattern->size() > 0;
+            const std::string name =
+                (isError ? pattern->front() : pattern)->loadAs<AST::RefDataLoad>()->ref().toString();
+            gCaseNode = createNodeAs<CaseLoad>(
+                isError ? CaseLoad::CaseType::Error : CaseLoad::CaseType::Bind,
+                name);
+            enterArmOf(ast, valueUnused);
+            node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
+            *gCaseNode << caseExprNode;
+        } else if (caseLoadType != AST::LoadType::Null) {
             gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Value);
             node_ptr_t caseDataNode = visitData(aCaseNode->atAs<AST::DataLoad>(0));
+            enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseDataNode << caseExprNode;
             mergedInputs.push_back(nodeOrigin(caseDataNode));
@@ -1607,6 +1926,7 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
         } else {
             // Handle the "else" case
             gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+            enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseExprNode;
         }
@@ -1827,9 +2147,49 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     ENTER("FuncData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for FuncData");
     const auto &funcData = ast->loadAs<AST::FuncDataLoad>();
+    // The type variables a declaration binds are in scope in the rest of its signature and in
+    // its body, and nowhere else.
+    const bool isDecl = std::exchange(funcDeclPending_, false);
+    struct TypeScopeGuard {
+        Builder &self;
+        scope_ptr_t<Reference, Type *> outer;
+        std::vector<std::string> outerVars;
+        ~TypeScopeGuard() {
+            self.typeScope_        = outer;
+            self.declaredTypeVars_ = std::move(outerVars);
+        }
+    } typeScopeGuard{*this, typeScope_, std::exchange(declaredTypeVars_, {})};
+    pushScope();
+    declSignature_ = isDecl;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    if (!declaredTypeVars_.empty()) {
+        // Every variable needs a position in an argument type to take its type from.
+        std::vector<std::string> bindable;
+        for (Type *param : funcType->withTypesSpan()) {
+            collectBindableTypeVars(param, bindable);
+        }
+        for (Type *param : funcType->normTypesSpan()) {
+            collectBindableTypeVars(param, bindable);
+        }
+        for (const std::string &name : declaredTypeVars_) {
+            if (std::find(bindable.begin(), bindable.end(), name) == bindable.end()) {
+                diags_->of(SemanticDiag::TypeVariableNotBindable)
+                    .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                    .commit(
+                        name,
+                        funcData->ref().toString(),
+                        "its 'typeas' is inside a union, or is the argument of a type function "
+                        "that does not use it");
+                throw BuildAbortException();
+            }
+        }
+    }
     node_ptr_t typeNode  = createNodeAs<TypeLoad>(funcType, funcType->implMark());
+    // The body of a function or lambda is a body of its own: its value is the function's
+    // result, and its exits are the function's, wherever the function is written.
+    const ValueUseScope valueUseScope(*this);
+    valueUse_            = {};
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().toString());
     *funcNode << typeNode << stmtsNode;
@@ -1884,6 +2244,8 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     // Extract the type load from the AST node
     const auto &type = ast->loadAs<AST::TypeLoad>();
     Type *res;
+    // Whether this type is the base of `Name<...>`, the one place a type function may stand.
+    const bool asTypeFunctionBase = std::exchange(typeFunctionBase_, false);
 
     // Handle different type categories based on the TypeType enumeration
     switch (type->typeType()) {
@@ -1924,6 +2286,30 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         throw std::runtime_error("Unknown type type");
     }
 
+    // `Map` and `Set` are always written with their arguments.
+    if (const CollectionType *coll = res ? asCollectionTypeOrPrototype(res) : nullptr;
+        coll != nullptr && !coll->complete() && !asTypeFunctionBase) {
+        diags_->of(SemanticDiag::InvalidTypeArgument)
+            .at(ast->load()->tokenRange())
+            .commit(
+                coll->toString(),
+                coll->isMap() ? "it is written Map<K, V>, with a key type and a value type"
+                              : "it is written Set<T>, with an element type");
+        throw BuildAbortException();
+    }
+
+    if (res != nullptr && res->code() == TypeCode::TypeFunc && !asTypeFunctionBase) {
+        const auto *typeFunc = static_cast<TypeFunctionType *>(res);
+        diags_->of(SemanticDiag::TypeFunctionArguments)
+            .at(ast->load()->tokenRange())
+            .commit(
+                typeFunc->toString(),
+                std::format(
+                    "it takes {} type argument(s) and is used without any",
+                    typeFunc->params().size()));
+        throw BuildAbortException();
+    }
+
     LEAVE("Type");
     return res;
 }
@@ -1934,7 +2320,17 @@ NullableType : Type type ;
 Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
     ENTER("NullableType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for NullableType");
-    Type *type = visitType(ast->atAs<AST::TypeLoad>(0));
+    Type *payload       = visitType(ast->atAs<AST::TypeLoad>(0));
+    const bool fallible = ast->loadAs<AST::NullableTypeLoad>()->fallible();
+    // The same mark twice (`T??`, `T!!`) adds nothing a program could tell apart; `T?!` and
+    // `T!?` are allowed (DESIGN-QUESTION(nullable-error) Q2).
+    if (TupleType *inner = asTagged(payload); inner && inner->isFallible() == fallible) {
+        diags_->of(SemanticDiag::TaggedTypeNesting)
+            .at(ast->load()->tokenRange())
+            .commit(payload->toString() + (fallible ? "!" : "?"), inner->payloadType()->toString());
+        throw BuildAbortException();
+    }
+    Type *type = fallible ? TupleType::fallible(payload) : TupleType::nullable(payload);
     LEAVE("NullableType");
     return type;
 }
@@ -2029,10 +2425,27 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::TypeOp::TypeAs: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::TypeAs");
-        throw BuildAbortException();
+        // `typeas T`: the type found at this position of an argument type becomes `T`.
+        const Reference &ref = ast->atAs<AST::TypeLoad>(0)->loadAs<AST::RefTypeLoad>()->ref();
+        const string name    = ref.toString();
+        if (!typeasAllowed_) {
+            diags_->of(SemanticDiag::TypeVariableNotAllowed)
+                .at(ast->load()->tokenRange())
+                .commit(
+                    name,
+                    inDeclReturnType_ ? "a return type has no argument to take the type from"
+                                      : "this is not a parameter of a function declaration");
+            throw BuildAbortException();
+        }
+        if (typeScope_->get(ref).has_value() || module_->getImportedType(ref).has_value()) {
+            diags_->of(SemanticDiag::TypeVariableRedeclared)
+                .at(ast->load()->tokenRange())
+                .commit(name);
+            throw BuildAbortException();
+        }
+        typeScope_->insert(ref, TypeVarType::create(name, false));
+        declaredTypeVars_.push_back(name);
+        res = TypeVarType::create(name, true);
     } break;
 
     default:
@@ -2116,17 +2529,24 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // Extract the function type load from the AST node
     auto const &typeLoad = ast->loadAs<AST::FuncTypeLoad>();
 
-    // Initialize the exit type (return type) as nullptr
-    Type *exitType = nullptr;
-
-    // Process the optional exit type node
-    const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
-    if (exitTypeNode) {
-        exitType = visitType(exitTypeNode);
+    // The signature of a function declaration may bind type variables among its parameters
+    // (`typeas T`), not in its return type. In a function type written inside such a
+    // parameter both positions bind: `f: (x: T) => typeas U`.
+    const bool signature = std::exchange(declSignature_, false);
+    struct FlagGuard {
+        bool &allowed, &inReturn;
+        bool outerAllowed, outerInReturn;
+        ~FlagGuard() {
+            allowed  = outerAllowed;
+            inReturn = outerInReturn;
+        }
+    } flagGuard{typeasAllowed_, inDeclReturnType_, typeasAllowed_, inDeclReturnType_};
+    if (signature) {
+        typeasAllowed_    = true;
+        inDeclReturnType_ = false;
     }
 
     FunctionTypeFactory factory;
-    factory.setExitType(exitType);
     factory.setImplMark(typeLoad->implMark());
     factory.setModifiers(typeLoad->modifiers());
 
@@ -2222,6 +2642,16 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         factory.addNormArg(name, type, isVar);
     }
 
+    // The return type comes after the parameters: it may name the type variables they bind.
+    const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
+    if (exitTypeNode) {
+        if (signature) {
+            typeasAllowed_    = false;
+            inDeclReturnType_ = true;
+        }
+        factory.setExitType(visitType(exitTypeNode));
+    }
+
     LEAVE("FuncType");
     return factory.build();
 }
@@ -2259,6 +2689,41 @@ Type *Builder::visitDataType(const AST::node_ptr_t &ast) {
     return nullptr;
 }
 
+// DESIGN-QUESTION(map-duplicate-keys): in an array literal written under `as Map<...>`, two
+// equal constant keys are an error. Entries that are not constants (they refer to a name) are
+// not looked at; at run time the later entry of two equal keys wins. A set takes duplicates.
+void Builder::rejectDuplicateLiteralKeys(
+    const data_ptr_t &data, Type *targetType, const AST::node_ptr_t &ast) {
+    const CollectionType *coll = asCollectionTypeOrPrototype(targetType);
+    const auto array           = std::dynamic_pointer_cast<ArrayData>(data);
+    if (coll == nullptr || !coll->isMap() || !array) {
+        return;
+    }
+    const auto holes = array->holes();
+    // Candidates by their text, so that a long literal is not compared pair by pair.
+    std::unordered_map<std::string, std::vector<data_ptr_t>> seen;
+    for (size_t i = 0; i < array->raw().size(); ++i) {
+        if (std::find(holes.begin(), holes.end(), i) != holes.end()) {
+            continue;
+        }
+        const auto entry = std::dynamic_pointer_cast<TupleData>(array->raw()[i]);
+        if (!entry || !entry->resolved() || entry->raw().size() != 2 || !entry->raw()[0]) {
+            continue;
+        }
+        const data_ptr_t &key = entry->raw()[0];
+        std::vector<data_ptr_t> &sameText = seen[key->toString()];
+        for (const data_ptr_t &earlier : sameText) {
+            if (earlier->equals(key)) {
+                diags_->of(SemanticDiag::DuplicateCollectionKey)
+                    .at(ast->load()->tokenRange())
+                    .commit(key->toString(), targetType->toString());
+                throw BuildAbortException();
+            }
+        }
+        sameText.push_back(key);
+    }
+}
+
 /*
 SpecType : Type base, RepeatedLoad typeOrData ;
 */
@@ -2266,7 +2731,8 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     ENTER("SpecType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for SpecType");
     ASSERT(ast->size() >= 1, "SpecType must have base type");
-    Type *base = visitType(ast->atAs<AST::TypeLoad>(0));
+    typeFunctionBase_ = ast->size() >= 2;
+    Type *base        = visitType(ast->atAs<AST::TypeLoad>(0));
     if (ast->size() < 2) {
         LEAVE("SpecType");
         return base;
@@ -2290,9 +2756,64 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         }
         arguments.push_back(TypeArgument{.type = nullptr, .data = data});
     }
+    if (base->code() == TypeCode::TypeFunc) {
+        // A type declared with parameters: the arguments replace them in its body.
+        const auto *typeFunc = static_cast<TypeFunctionType *>(base);
+        type_vec_t types;
+        for (const TypeArgument &argument : arguments) {
+            if (argument.type == nullptr) {
+                diags_->of(SemanticDiag::TypeFunctionArguments)
+                    .at(ast->load()->tokenRange())
+                    .commit(
+                        typeFunc->toString(),
+                        "its parameters are types, and a constant ('const ...') was given");
+                throw BuildAbortException();
+            }
+            types.push_back(argument.type);
+        }
+        if (types.size() != typeFunc->params().size()) {
+            diags_->of(SemanticDiag::TypeFunctionArguments)
+                .at(ast->load()->tokenRange())
+                .commit(
+                    typeFunc->toString(),
+                    std::format(
+                        "it takes {} type argument(s) and {} were given",
+                        typeFunc->params().size(),
+                        types.size()));
+            throw BuildAbortException();
+        }
+        LEAVE("SpecType");
+        return typeFunc->apply(types);
+    }
     if (arguments.empty()) {
         LEAVE("SpecType");
         return base;
+    }
+    if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
+        coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {
+        // The key of a map, the element of a set (DESIGN-QUESTION(map-key-types)).
+        Type *keyType = arguments.front().type;
+        if (std::string problem = collectionKeyProblem(keyType); !problem.empty()) {
+            diags_->of(SemanticDiag::CollectionKeyNotAllowed)
+                .at(ast->load()->tokenRange())
+                .commit(keyType->toString(), coll->toString(), problem);
+            throw BuildAbortException();
+        }
+    }
+    if (base->isOtherType() && !static_cast<OtherType *>(base)->typeArguments()) {
+        // What the arguments of a module type mean is defined by the type, which sees
+        // concrete types only. A type whose arguments are plain types (Map, Set) takes
+        // variables like an array or a tuple does.
+        for (const TypeArgument &argument : arguments) {
+            if (argument.type != nullptr && containsTypeVar(argument.type)) {
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(ast->load()->tokenRange())
+                    .commit(
+                        base->toString(),
+                        "a type variable cannot be an argument of a module type");
+                throw BuildAbortException();
+            }
+        }
     }
     if (!base->isOtherType()) {
         diags_->of(SemanticDiag::InvalidTypeArgument)
@@ -2328,6 +2849,13 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     const auto &type = typeScope_->get(ref);
 
     if (type) {
+        // An imported type named `Map` or `Set` comes before the built-in of that name.
+        if (isCollectionPrototype(type.value())) {
+            if (const auto imported = module_->getImportedType(ref); imported.has_value()) {
+                LEAVE("RefType");
+                return imported.value();
+            }
+        }
         // If the type is found in the current scope, return it
         LEAVE("RefType");
         return type.value();
@@ -2337,6 +2865,9 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     const auto &importedType = module_->getImportedType(ref);
 
     if (!importedType.has_value()) {
+        if (wholeImportFailed_ || poisonedTypes_.contains(ref.toString())) {
+            throw BuildAbortException();
+        }
         // If the type cannot be resolved, log a diagnostic and throw an exception
         diags_->of(SemanticDiag::UnresolvedTypeReference)
             .at(ast->load()->tokenRange())

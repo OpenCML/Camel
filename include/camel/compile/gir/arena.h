@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 12, 2026
- * Updated: Apr. 11, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -45,7 +45,6 @@ class GraphArena {
         size_t wasteBytes      = 0;
         size_t blockCount      = 0;
         size_t draftFreedBytes = 0;
-        size_t allocFailCount  = 0;
     };
 
     explicit GraphArena(size_t initialBlockBytes)
@@ -144,7 +143,11 @@ class GraphArena {
         size_t rawCapacity                  = 0;
         size_t capacity                     = 0;
     };
-    static constexpr size_t kMinBlockBytes_ = 32 * 1024;
+    // A block is at least this large, each further block of a region doubles, up to the
+    // maximum. The minimum is small on purpose: every graph that owns a constant object or a
+    // function value has an arena (a function, a lambda, a branch arm), and what most of them
+    // put in it is a few dozen bytes.
+    static constexpr size_t kMinBlockBytes_ = 1024;
     static constexpr size_t kMaxBlockBytes_ = 1024 * 1024;
     static constexpr size_t kGuardBytes_    = 64;
     static constexpr uint8_t kGuardPattern_ = 0xA5;
@@ -167,12 +170,9 @@ class GraphArena {
     Block &allocateBlock(Region region, size_t minBytes) {
         auto &nextBytes           = nextBlockBytesOf(region);
         const size_t requestBytes = std::max({kMinBlockBytes_, minBytes, nextBytes});
+        // Throws mm::MemoryExhausted when the meta space is at its limit.
         void *basePayload =
             camel::core::mm::metaSpace().alloc(requestBytes + kGuardBytes_ * 2, alignof(slot_t));
-        if (basePayload == nullptr) {
-            metrics_.allocFailCount++;
-            throw std::bad_alloc();
-        }
         auto *header             = camel::core::mm::headerOf(static_cast<std::byte *>(basePayload));
         const size_t rawCapacity = header->objSize();
         ASSERT(
@@ -288,19 +288,13 @@ class GraphArena {
             }
         }
         if (!blocks.empty()) {
-            auto &meta             = camel::core::mm::metaSpace();
-            const bool metaHealthy = meta.validate();
-            if (!metaHealthy) {
-                CAMEL_LOG_WARN_S(
-                    "GIR",
-                    "Skip GraphArena {:p} block recycle because metaSpace is already "
-                    "corrupted.",
-                    static_cast<void *>(this));
-                heads.clear();
-                blocks.clear();
-                return;
-            }
+            auto &meta = camel::core::mm::metaSpace();
+            // The structural check walks the whole meta space, so it belongs to debug builds:
+            // run for every arena in a release build it made the release of the arenas
+            // quadratic in their number (a program of 8000 functions with a string constant
+            // took 4.9 s with the check and 3.0 s without).
             EXEC_WHEN_DEBUG({
+                ASSERT(meta.validate(), "metaSpace is corrupted before GraphArena recycle.");
                 for (const auto &blk : blocks) {
                     auto *hdr = camel::core::mm::headerOf(blk.basePayload);
                     ASSERT(hdr != nullptr, "GraphArena block payload has null header.");

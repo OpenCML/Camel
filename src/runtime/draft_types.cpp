@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 30, 2026
- * Updated: Sep. 30, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,11 +23,14 @@
 
 #include "camel/runtime/draft_types.h"
 
+#include "camel/core/mm/alloc/growable.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/draft_writes.h"
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -105,12 +108,23 @@ std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_
             return std::nullopt;
         }
     }
+    // Without a constant argument the answer depends on the argument types alone and is kept
+    // (operatorOverloadType): a rewrite re-infers every node it touches, at every commit.
+    const bool anyStatic = std::any_of(statics.begin(), statics.end(), [](const auto &arg) {
+        return arg.value.has_value() || arg.elements.has_value();
+    });
+    if (!anyStatic) {
+        const type::FunctionType *overload = operatorOverloadType(body->uri(), with, norm);
+        return overload ? std::optional<type::Type *>(overload->exitType()) : std::nullopt;
+    }
     try {
         const auto resolved = resolver->resolveWith(with, norm, statics, Modifier::None);
         if (!resolved || !*resolved) {
             return std::nullopt;
         }
         return (*resolved)->exitType();
+    } catch (const camel::core::mm::MemoryExhausted &) {
+        throw; // the permanent space is full: not a reason to keep the node's type
     } catch (const std::exception &) {
         return std::nullopt; // the node keeps the type compilation gave it
     }

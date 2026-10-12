@@ -84,6 +84,13 @@ const std::string TypeDeclLoad::toString() const {
         result += to_string(implMark_) + " ";
     }
     result += ref_.toString();
+    if (!params_.empty()) {
+        result += "<";
+        for (size_t i = 0; i < params_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + params_[i];
+        }
+        result += ">";
+    }
     if (!uri_.empty()) {
         result += " [" + uri_ + "]";
     }
@@ -138,6 +145,13 @@ const std::string TypeDeclLoad::geneCode() const {
         result += to_string(implMark_) + " ";
     }
     result += ref_.toString();
+    if (!params_.empty()) {
+        result += "<";
+        for (size_t i = 0; i < params_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + params_[i];
+        }
+        result += ">";
+    }
     return result;
 }
 

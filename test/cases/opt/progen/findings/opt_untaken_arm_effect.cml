@@ -1,0 +1,36 @@
+/**
+ * progen finding F03 (branch arm). `std::opt` makes a lambda defined and called in the arm of `if
+ *   false` run: its `println` prints although the arm is never taken.
+ * Pipeline: std::opt std::nvm
+ * Expected output: (nothing)
+ * Actual: L2 0 0 0 0
+ * Reduced by test/tools/progen from seed 1659 (generator version 1, all features).
+ */
+module opt_untaken_arm_effect
+
+type P = { x: int, y: int }
+
+func f1(a2: string[]): int {
+    return if true then 0 else {
+        return -3;
+    };
+}
+
+func e8(): P sync {
+    if false then sync {
+        let h11 = (p9: int): int => sync {
+            println('L2 {} {} {} {}'->format<0, 0, 0, f1(if false then [''] else [''])>);
+            return 0;
+        };
+        let n12 = h11(100);
+        return null;
+    } else sync {
+        return null;
+    };
+    return { x: 0, y: 0 };
+}
+
+func main(): int sync {
+    let n24 = e8();
+    return 0;
+}

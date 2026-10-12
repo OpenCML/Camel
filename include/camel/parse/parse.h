@@ -28,42 +28,13 @@
 
 #include "ast/builder.h"
 #include "cst_dumper.h"
+#include "syntax_errors.h"
 
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
 
 namespace camel::parse {
-
-class ParserErrorListener : public antlr4::BaseErrorListener {
-  protected:
-    bool hasErrors_ = false;
-    camel::core::error::diagnostics_ptr_t diagnostics_;
-
-  public:
-    ParserErrorListener(camel::core::error::diagnostics_ptr_t diagnostics)
-        : diagnostics_(diagnostics) {}
-    virtual ~ParserErrorListener() = default;
-
-    bool hasErrors() const { return hasErrors_; }
-
-    virtual void syntaxError(
-        antlr4::Recognizer *recognizer, antlr4::Token *offendingSymbol, size_t line,
-        size_t charPositionInLine, const std::string &msg, std::exception_ptr e) override {
-        hasErrors_ = true;
-        if (offendingSymbol) {
-            diagnostics_->of(camel::core::error::SyntaxDiag::UnknownSyntaxError)
-                .at(offendingSymbol)
-                .commit(msg);
-        } else {
-            diagnostics_->of(camel::core::error::SyntaxDiag::UnknownSyntaxError)
-                .at(camel::core::error::CharRange{
-                    {line, charPositionInLine},
-                    {line, charPositionInLine}})
-                .commit(msg);
-        }
-    }
-};
 
 class CamelParser {
     camel::core::error::diagnostics_ptr_t diagnostics_;
@@ -72,6 +43,7 @@ class CamelParser {
     antlr4::ANTLRInputStream input_;
 
     std::unique_ptr<OpenCMLLexer> lexer_;
+    std::unique_ptr<LexerErrorListener> lexerListener_;
     std::unique_ptr<antlr4::CommonTokenStream> tokens_;
     std::unique_ptr<OpenCMLParser> parser_;
 
@@ -101,6 +73,12 @@ class CamelParser {
                 cst_ = nullptr;
                 return false;
             }
+        }
+        // A lexical error leaves the parser a token stream without the offending text, which
+        // may well parse; the file is in error all the same.
+        if (diagnostics_->hasErrors()) {
+            cst_ = nullptr;
+            return false;
         }
         EXEC_WHEN_DEBUG({
             if (cst_)
@@ -166,7 +144,12 @@ class CamelParser {
                 sourceContext_->registerFile(diagnostics_->modulePath(), input_.toString());
         }
 
-        lexer_  = std::make_unique<OpenCMLLexer>(&input_);
+        lexer_ = std::make_unique<OpenCMLLexer>(&input_);
+        // Lexical errors become diagnostics; ANTLR's default listener printed them raw on
+        // standard error and left the diagnostics empty.
+        lexerListener_ = std::make_unique<LexerErrorListener>(diagnostics_);
+        lexer_->removeErrorListeners();
+        lexer_->addErrorListener(lexerListener_.get());
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
         parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
         EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("CTS", this); });

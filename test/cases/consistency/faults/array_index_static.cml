@@ -1,0 +1,12 @@
+/**
+ * A constant index past the end of an array literal.
+ */
+module array_index_static
+
+func main(): int sync {
+    println('before')
+    let xs = [1, 2, 3]
+    println(xs[5])
+    println('not reached')
+    return 0
+}

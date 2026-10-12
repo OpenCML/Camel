@@ -1,0 +1,17 @@
+/**
+ * A fault inside a closure that captured the divisor, called through a function value.
+ */
+module fault_in_closure
+
+func divider(d: int): (x: int) => int {
+    return (x: int): int => x / d
+}
+
+func main(): int sync {
+    let by2 = divider(2)
+    let by0 = divider(0)
+    println(by2(10))
+    println(by0(10))
+    println('not reached')
+    return 0
+}

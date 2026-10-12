@@ -1,0 +1,10 @@
+module main
+
+import json
+
+func main(): int sync {
+    let f = (x: int): int => x + 1
+    println(json::decode_as('1', f))
+    println("never printed")
+    return 0
+}

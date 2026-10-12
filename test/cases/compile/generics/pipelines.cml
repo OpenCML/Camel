@@ -1,0 +1,50 @@
+/**
+ * One program with the main forms (one and several variables, nested positions, several
+ * instances of one function, recursion, a type function, a function argument), run on every
+ * backend and through the optimizing pipelines.
+ */
+module pipelines
+
+type Pair<T> = (T, T)
+
+func first(xs: (typeas T)[]): T {
+    return xs[0]
+}
+
+func swap(p: Pair<typeas T>): Pair<T> {
+    return (p.1, p.0)
+}
+
+func zip2(a: typeas A, b: typeas B): (A, B) {
+    return (a, b)
+}
+
+func count(xs: (typeas T)[], i: int): int {
+    return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
+}
+
+func sum_to(xs: (typeas T)[], i: int, acc: T): T {
+    return if i >= len(xs) then acc else sum_to(xs, i + 1, acc + xs[i])
+}
+
+with <f: (x: typeas T) => typeas U>
+func my_map(xs: T[]): U[] {
+    return xs->map<f>
+}
+
+func main(): int sync {
+    println(first([1, 2, 3]))
+    println(first(['a', 'b']))
+    println(first([[1.5], [2.5]]))
+    println(swap((1, 2)))
+    println(swap(('l', 'r')))
+    println(zip2(1, 'one'))
+    println(count([1, 2, 3], 0))
+    println(count(['x'], 0))
+    println(sum_to([1, 2, 3, 4], 0, 0))
+    println(sum_to([0.5, 0.25], 0, 0.0))
+    println(sum_to(['a', 'b', 'c'], 0, ''))
+    println([1, 2, 3]->my_map<(x: int) => x * 10>)
+    println(['a']->my_map<(s: string) => len(s)>)
+    return 0
+}

@@ -30,6 +30,7 @@ slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, camel::core::cont
 slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_add_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_add_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_add_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __builtin__assn_sub_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_sub_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
@@ -46,9 +47,12 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, camel::core::cont
 slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
-slot_t __builtin__assn_mod__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__assn_mat__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__assn_pow__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_mod_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_mod_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
@@ -80,6 +84,11 @@ slot_t __builtin__ge__(ArgsView &with, ArgsView &norm, camel::core::context::Con
     return toSlot(Bool(lhs >= rhs));
 }
 
+slot_t __builtin__lt_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__le_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__gt_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __builtin__ge_s__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+
 slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__strict_eq__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
@@ -104,8 +113,6 @@ slot_t __builtin__mul__(ArgsView &with, ArgsView &norm, camel::core::context::Co
 slot_t __builtin__div__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-
-slot_t __builtin__mat__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __builtin__pow__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 

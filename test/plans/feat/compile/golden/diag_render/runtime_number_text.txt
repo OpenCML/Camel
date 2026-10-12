@@ -1,0 +1,7 @@
+error[RuntimeDiag::InvalidNumberText]: Cannot convert the string 'abc' to i64.
+  --> <ROOT>/test/cases/compile/diag_render/runtime_number_text.cml:5:13
+   |
+ 5 |     println(int(s))
+   |             ^^^
+help: The string must hold an integer and nothing else that the conversion cannot skip. Check the
+      value before converting it; a conversion that fails is a fault and ends the program.

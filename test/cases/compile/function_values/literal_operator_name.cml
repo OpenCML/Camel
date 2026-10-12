@@ -1,0 +1,18 @@
+/**
+ * `println` names an operator with several signatures and `over` two functions: neither has
+ * one function value, so neither can be an element of a literal or the value of an arm.
+ */
+module literal_operator_name
+
+func inc(x: int): int { return x + 1 }
+func over(x: int): int { return x }
+func over(x: float): float { return x }
+
+func main(): int sync {
+    let c = true
+    let fs = [println, inc]
+    let t = (over, 1)
+    let k = if c then println else inc
+    println('never printed')
+    return 0
+}

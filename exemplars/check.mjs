@@ -65,7 +65,8 @@ function runOne(dir, run, update, log) {
     const failures = []
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-exemplar-'))
     const fill = (text) => String(text).replaceAll('{tmp}', tmp)
-    const env = { ...process.env, CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest') }
+    // The diagnostic of a refused example is matched in the one-line text format.
+    const env = { ...process.env, CAMEL_ERROR_FORMAT: 'short', CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest') }
     for (const entry of run.env || []) {
         const text = fill(entry)
         const eq = text.indexOf('=')

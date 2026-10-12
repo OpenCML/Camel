@@ -1,0 +1,14 @@
+/**
+ * A fault while a module-level value is computed.
+ */
+module top_level_fault
+
+let ZERO = 0
+let BAD = 10 / ZERO
+
+func main(): int sync {
+    println('before')
+    println(BAD)
+    println('not reached')
+    return 0
+}

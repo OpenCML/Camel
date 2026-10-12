@@ -23,10 +23,13 @@
 #include <atomic>
 #include <cctype>
 #include <charconv>
+#include <cstdlib>
 #include <string_view>
 #include <vector>
 
 #include "build_config.h"
+#include "camel/core/error/diagnostics.h"
+#include "camel/execute/limits.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
 #include "clipp/clipp.h"
@@ -132,6 +135,33 @@ bool parseTimeitSpecValue(
     return true;
 }
 
+/// Reads a depth limit given by `option` (its raw text in `optionText`; empty when the option
+/// is absent) or else by the environment variable `envName`. `out` gets the option's value;
+/// the environment's is read where it is used (camel::execute::recursionLimit) and is only
+/// checked here. False, with a message on stderr, when the text in effect is no limit.
+bool readDepthLimit(
+    const std::string &optionText, const char *option, const char *envName, size_t &out) {
+    const auto refuse = [](const char *what, std::string_view text) {
+        std::cerr << "Invalid " << what << " value: '" << text << "'. Expected an integer from 1 to "
+                  << camel::execute::kMaxDepthLimit << "." << std::endl;
+        return false;
+    };
+    if (!optionText.empty()) {
+        const auto value = camel::execute::parseDepthLimit(optionText);
+        if (!value) {
+            return refuse(option, optionText);
+        }
+        out = *value;
+        return true;
+    }
+    if (const char *raw = std::getenv(envName)) {
+        if (!camel::execute::parseDepthLimit(raw)) {
+            return refuse(envName, raw);
+        }
+    }
+    return true;
+}
+
 /// Left-to-right over argv: last `--log-level` / `-v*` wins; then applies preset/include and stderr
 /// sink.
 void applyCamelCliLogging(int argc, char **argv) {
@@ -191,7 +221,18 @@ void applyCamelCliLogging(int argc, char **argv) {
     }
 }
 
+const char *kWarningOptionsHelp =
+    "\nWARNINGS\n"
+    "        -Wno-<name>        do not report the warning <name> (e.g. -Wno-ignored-side-effect)\n"
+    "        -Wnone             report no warnings\n"
+    "        -Werror            report every warning as an error\n"
+    "        -Werror=<name>     report the warning <name> as an error\n"
+    "        -Wno-error=<name>  keep <name> a warning under -Werror\n"
+    "        <name> is a diagnostic name as --explain prints it; case, '-' and '_' are ignored.\n";
+
 } // namespace
+
+int exitCode = 0;
 
 namespace CmdLineArgs {
 Command selectedCommand = Command::Run;
@@ -200,11 +241,20 @@ namespace Global {
 string logLevelArg;
 } // namespace Global
 
+namespace Diag {
+string format               = "";
+string color                = "auto";
+int maxErrors               = 20;
+int maxWarnings             = 1000;
+vector<string> warningSpecs = {};
+string explain              = "";
+} // namespace Diag
+
 namespace Run {
 string outputFile               = "";
 string package                  = "";
 string schedular                = "";
-string errorFormat              = "text";
+string errorFormat              = ""; // "" = not given; see Diag::format
 string stdLibPath               = ""; // "" means use the default path
 vector<string> includeDirs      = {}; // Include directories
 vector<string> targetFiles      = {};
@@ -225,15 +275,19 @@ bool profile      = false;
 bool noCache      = false;
 bool semanticOnly = false;
 int maxThreads    = -1; // -1 means use the maximum number of threads
+
+string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
+string maxMacroDepthOpt     = ""; // raw --max-macro-depth
+size_t maxRecursionDepth    = 0;  // 0: not given on the command line
+size_t maxMacroDepth        = 0;
 } // namespace Run
 
 namespace Check {
 bool lexical           = false;  // Whether to check lexical errors
 bool syntaxOnly        = false;  // Whether to check syntax only
 bool ignoreDefiFile    = false;  // Whether to ignore the definition file
-string outputFormat    = "text"; // Output format (text or json)
-string configFilePath  = "";     // Configuration file path
-unsigned int maxWaring = 1000;   // Max warnings
+string outputFormat    = ""; // Output format; "" = not given, see Diag::format
+string configFilePath  = ""; // Configuration file path
 } // namespace Check
 
 namespace Inspect {
@@ -243,6 +297,7 @@ bool dumpAST    = false; // Whether to dump Abstract Syntax Tree
 bool dumpGCT    = false; // Whether to dump Graph Construction Tree
 bool dumpGIR    = false; // Whether to dump Graph Intermediate Representation
 bool dumpTNS    = false; // Whether to dump Topological Node Sequence
+bool dumpOps    = false; // Whether to dump the operators of the imported modules
 bool geneCode   = false; // Whether to generate code from GIR
 int passUntil   = -1;    // Pass until the given pass
 } // namespace Inspect
@@ -254,12 +309,174 @@ using namespace CmdLineArgs::Run;
 using namespace CmdLineArgs::Check;
 using namespace CmdLineArgs::Inspect;
 
+namespace {
+
+/// Removes the -W... arguments from argv and records them (without "-W") in Diag::warningSpecs.
+/// Only arguments in front of the first positional one after which passes follow are options;
+/// a pass is never named -W..., so the whole argv is scanned.
+std::vector<char *> takeWarningArguments(int argc, char *argv[]) {
+    std::vector<char *> rest;
+    for (int i = 0; i < argc; ++i) {
+        std::string_view a = argv[i];
+        if (i > 0 && a.size() > 2 && a.starts_with("-W")) {
+            Diag::warningSpecs.emplace_back(a.substr(2));
+        } else {
+            rest.push_back(argv[i]);
+        }
+    }
+    return rest;
+}
+
+/// Turns the diagnostics options into the process-wide render configuration and warning
+/// policy. Returns false (after printing why) on a value or a warning name that does not exist.
+bool applyDiagnosticOptions() {
+    using namespace camel::core::error;
+
+    // Format: -E/--error-format (run) or -O/--output-format (check), else the environment.
+    std::string format = selectedCommand == Command::Check ? Check::outputFormat : Run::errorFormat;
+    if (format.empty()) {
+        if (const char *env = std::getenv("CAMEL_ERROR_FORMAT"); env != nullptr && env[0] != '\0') {
+            format = env;
+        } else {
+            format = "text";
+        }
+    }
+    if (format != "text" && format != "short" && format != "json") {
+        std::cerr << "Error: unknown diagnostics format '" << format
+                  << "'. Expected text, short or json." << std::endl;
+        return false;
+    }
+    Diag::format = format;
+
+    ColorMode color = ColorMode::Auto;
+    if (Diag::color == "always") {
+        color = ColorMode::Always;
+    } else if (Diag::color == "never") {
+        color = ColorMode::Never;
+    } else if (Diag::color != "auto") {
+        std::cerr << "Error: unknown --color value '" << Diag::color
+                  << "'. Expected auto, always or never." << std::endl;
+        return false;
+    }
+    setDiagnosticRenderConfig(format == "short" ? DiagFormat::Short : DiagFormat::Rich, color);
+
+    if (Diag::maxErrors < 0 || Diag::maxWarnings < 0) {
+        std::cerr << "Error: --max-errors and --max-warning take a non-negative number."
+                  << std::endl;
+        return false;
+    }
+
+    // Warning names are checked against the catalog: a misspelt -Wno-<name> that silently did
+    // nothing would be worse than no option.
+    std::vector<std::string> known;
+    for (const DiagCatalogEntry &entry : diagnosticCatalog()) {
+        if (entry.severity == Severity::Warn) {
+            known.push_back(normalizeDiagnosticName(entry.name));
+        }
+    }
+    auto checkName = [&](const std::string &spec, const std::string &name) {
+        const std::string key = normalizeDiagnosticName(name);
+        if (std::find(known.begin(), known.end(), key) != known.end()) {
+            return true;
+        }
+        std::cerr << "Error: -W" << spec << ": no warning is named '" << name
+                  << "'. The warnings are:";
+        for (const DiagCatalogEntry &entry : diagnosticCatalog()) {
+            if (entry.severity == Severity::Warn) {
+                std::cerr << " " << entry.name;
+            }
+        }
+        std::cerr << std::endl;
+        return false;
+    };
+    WarningPolicy policy;
+    policy.maxShown = static_cast<size_t>(Diag::maxWarnings);
+    for (const std::string &spec : Diag::warningSpecs) {
+        if (spec == "error") {
+            policy.allAsErrors = true;
+        } else if (spec == "none") {
+            policy.disableAll = true;
+        } else if (spec.starts_with("error=")) {
+            if (!checkName(spec, spec.substr(6)))
+                return false;
+            policy.asErrors.push_back(spec.substr(6));
+        } else if (spec.starts_with("no-error=")) {
+            if (!checkName(spec, spec.substr(9)))
+                return false;
+            policy.notAsErrors.push_back(spec.substr(9));
+        } else if (spec.starts_with("no-")) {
+            if (!checkName(spec, spec.substr(3)))
+                return false;
+            policy.disabled.push_back(spec.substr(3));
+        } else {
+            std::cerr << "Error: unknown option -W" << spec << "." << kWarningOptionsHelp;
+            return false;
+        }
+    }
+    setWarningPolicy(std::move(policy));
+    return true;
+}
+
+/// --explain: prints the catalog entry named by `target` (a name, with or without the type
+/// prefix, or a code such as 0x04000002). Returns false when nothing matches.
+bool explainDiagnostic(const std::string &target) {
+    using namespace camel::core::error;
+    const std::string key = normalizeDiagnosticName(target);
+    uint32_t code         = 0;
+    bool isCode           = false;
+    if (target.starts_with("0x") || target.starts_with("0X")) {
+        const char *begin = target.data() + 2;
+        const char *end   = target.data() + target.size();
+        auto [ptr, ec]    = std::from_chars(begin, end, code, 16);
+        isCode            = ec == std::errc() && ptr == end;
+    }
+    bool found = false;
+    for (const DiagCatalogEntry &entry : diagnosticCatalog()) {
+        if (isCode ? entry.code != code : normalizeDiagnosticName(entry.name) != key) {
+            continue;
+        }
+        if (found) {
+            cout << "\n";
+        }
+        found = true;
+        // The templates of every type but RuntimeDiag are std::format strings, in which a
+        // literal brace is written twice.
+        auto literal = [&](std::string text) {
+            if (entry.type == DiagType::RuntimeDiag) {
+                return text;
+            }
+            for (const char *doubled : {"{{", "}}"}) {
+                for (size_t at = text.find(doubled); at != std::string::npos;
+                     at        = text.find(doubled, at + 1)) {
+                    text.erase(at, 1);
+                }
+            }
+            return text;
+        };
+        cout << to_string(entry.type) << "::" << entry.name << "  (0x"
+             << Diagnostic::hex8(entry.code) << ", " << to_string(entry.severity) << ")\n\n"
+             << "  message: " << literal(entry.message) << "\n";
+        if (!entry.suggestion.empty()) {
+            cout << "  help:    " << literal(entry.suggestion) << "\n";
+        }
+        cout << "\n  {0}, {1}, ... stand for the values a concrete report fills in. A triggering "
+                "example is in docs/diagnostics.md.\n";
+    }
+    if (!found) {
+        std::cerr << "Error: no diagnostic is named or numbered '" << target
+                  << "'. docs/diagnostics.md lists them all." << std::endl;
+    }
+    return found;
+}
+
+} // namespace
+
 void _printCheckArgs() {
     cout << "Check args: " << endl;
     cout << "\tlexical-only:" << lexical << endl;
     cout << "\tsyntax-only:" << syntaxOnly << endl;
-    cout << "\toutput-format:" << outputFormat << endl;
-    cout << "\tmax-warning:" << maxWaring << endl;
+    cout << "\toutput-format:" << Diag::format << endl;
+    cout << "\tmax-warning:" << Diag::maxWarnings << endl;
     cout << "\tconfig-file:" << configFilePath << endl;
     cout << "\tignore:" << Check::ignoreDefiFile << endl;
     cout << "\ttarget-file:";
@@ -319,15 +536,33 @@ bool parseArgs(int argc, char *argv[]) {
          ((option("--log-include") & value("scopes", logIncludeConsumed)) %
           "comma-separated scope prefixes (overrides preset list)"));
 
+    // How diagnostics are reported, for every command that compiles. The -W... options are
+    // taken out of argv before clipp sees it (applyWarningArguments): their value is joined to
+    // the flag, which clipp cannot express.
+    auto diagOps =
+        ((option("--color") & value("when", Diag::color)) %
+             "colours in diagnostics: auto (only on a terminal), always or never",
+         (option("--max-errors") & integer("n", Diag::maxErrors)) %
+             "compile errors reported before giving up (default 20; 0: no limit)",
+         (option("-N", "--max-warning") & integer("n", Diag::maxWarnings)) %
+             "warnings shown (default 1000); further ones are counted, not printed");
+
     auto run =
         (option("-P", "--profile").set(profile) % "profile the perf",
          (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
          (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
+         (option("--max-recursion-depth") & value("calls", maxRecursionDepthOpt)) %
+             "limit on calls open at once that are not tail calls (default: 256 on std::nvm and "
+             "std::fvm, the native stack on std::tf; also CAMEL_MAX_RECURSION_DEPTH)",
+         (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
+             "limit on nested calls while std::macro evaluates a call (default: 64; also "
+             "CAMEL_MAX_MACRO_DEPTH)",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
          (option("-E", "--error-format", "--output-format") & value("error format", errorFormat)) %
-             "error format: text or json",
+             "diagnostics format: text (source excerpts), short (one line each) or json",
+         diagOps,
          (option("--passes") & value("pass1,pass2,...", passesOpt)) %
              "pass list as comma-separated (e.g. --passes std::gir,other)",
          (option("--timeit") & value("pass/iterations", timeitSpec)) %
@@ -356,6 +591,9 @@ bool parseArgs(int argc, char *argv[]) {
              "show documentation",
          option("-a", "--about").set(showAbout).set(selectedCommand, Command::Info) %
              "show copyright and related information",
+         (option("--explain").set(selectedCommand, Command::Info) &
+          value("name or code", Diag::explain)) %
+             "describe a diagnostic by its name or code (e.g. --explain IndexOutOfRange)",
          option("-z", "--zen").set(showZen).set(selectedCommand, Command::Info) %
              "show the Zen of Camel");
 
@@ -364,8 +602,8 @@ bool parseArgs(int argc, char *argv[]) {
          option("-i", "--lexical-only").set(lexical) % "indentation size in spaces",
          option("-s", "--syntax-only").set(syntaxOnly) % "syntax only",
          (option("-O", "--output-format") & value("output format", outputFormat)) %
-             "output format: text or json",
-         (option("-N", "--max-warning") & integer("max warnings", maxWaring)) % "max warnings",
+             "diagnostics format: text, short or json",
+         diagOps,
          (option("-c", "--config") & value("config file path", configFilePath)) %
              "config file path",
          option("-e", "--ignore").set(Check::ignoreDefiFile) % "ignore the definition file",
@@ -387,22 +625,40 @@ bool parseArgs(int argc, char *argv[]) {
          option("--gct", "--graph-construct-tree").set(dumpGCT) % "dump graph construct tree",
          option("--gir", "--graph-ir").set(dumpGIR) % "dump graph intermediate representation",
          option("--tns", "--topo-node-seq").set(dumpTNS) % "dump topological sorted node sequence",
+         option("--ops", "--operators").set(dumpOps) %
+             "list the operators of the built-in module and of every module the program "
+             "imports: name, URI, parameter counts, declared purity, signature",
          option("--gen", "--gene-code").set(geneCode) % "generate code from AST",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",
+         diagOps,
          globalOps,
          values("input", targetFiles) % "input file");
 
     auto cli = run | info | check | inspect;
 
+    std::vector<char *> args = takeWarningArguments(argc, argv);
+    argc                     = static_cast<int>(args.size());
+    argv                     = args.data();
+
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;
         cout << "\tcamel [options] [<target file>]  (run: need --input or positional)\n";
         cout << usage_lines(cli, "camel") << endl;
+        cout << kWarningOptionsHelp;
         return false;
     }
 
     applyCamelCliLogging(argc, argv);
+    if (!applyDiagnosticOptions()) {
+        exitCode = 1;
+        return false;
+    }
+
+    if (!Diag::explain.empty()) {
+        exitCode = explainDiagnostic(Diag::explain) ? 0 : 1;
+        return false;
+    }
 
     if (showVersion) {
 #ifdef NDEBUG
@@ -414,6 +670,7 @@ bool parseArgs(int argc, char *argv[]) {
 
     if (showHelp) {
         cout << make_man_page(cli, "camel");
+        cout << kWarningOptionsHelp;
     }
 
     if (showDocs) {
@@ -485,6 +742,21 @@ bool parseArgs(int argc, char *argv[]) {
             scriptDir,
             Run::resolvedPassList,
             &Run::fallbackPasses);
+
+        // The two depth limits: the option, else the environment variable. A value that is not
+        // an integer in range is refused here, before anything is compiled or run.
+        if (!readDepthLimit(
+                Run::maxRecursionDepthOpt,
+                camel::execute::kMaxRecursionDepthOption,
+                camel::execute::kMaxRecursionDepthEnvVar,
+                Run::maxRecursionDepth) ||
+            !readDepthLimit(
+                Run::maxMacroDepthOpt,
+                camel::execute::kMaxMacroDepthOption,
+                camel::execute::kMaxMacroDepthEnvVar,
+                Run::maxMacroDepth)) {
+            std::exit(1);
+        }
 
         if (Run::timeitEnabled && Run::profile) {
             std::cerr << "Error: --timeit cannot be combined with --profile." << std::endl;

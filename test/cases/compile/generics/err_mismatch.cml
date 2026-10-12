@@ -1,0 +1,10 @@
+module err_mismatch
+
+func pick(c: bool, a: typeas T, b: T): T {
+    return if c then a else b
+}
+
+func main(): int sync {
+    println(pick(true, 1, 2.5))
+    return 0
+}

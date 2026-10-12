@@ -18,6 +18,10 @@
  */
 
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/typevar.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/allocator.h"
@@ -25,6 +29,7 @@
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
+#include <functional>
 #include <mutex>
 
 namespace mm = camel::core::mm;
@@ -158,6 +163,70 @@ TupleType *TupleType::cell(Type *valueType) {
     return type;
 }
 
+namespace {
+
+/// One object per payload type and form, as for cells.
+TupleType *internTagged(
+    std::vector<TupleType *> &known, Type *payloadType,
+    const std::function<TupleType *()> &make) {
+    // Occurrences of one type variable are equal whether or not they bind (`typeas T` and
+    // `T`), so a type written with variables is never shared: sharing would drop the mark.
+    if (containsTypeVar(payloadType)) {
+        return make();
+    }
+    for (TupleType *type : known) {
+        if (type->typeAt(0) == payloadType || type->typeAt(0)->equals(payloadType)) {
+            return type;
+        }
+    }
+    TupleType *type = make();
+    known.push_back(type);
+    return type;
+}
+
+} // namespace
+
+TupleType *TupleType::nullable(Type *payloadType) {
+    ASSERT(payloadType != nullptr, "A nullable type needs a payload type.");
+    static std::mutex mutex;
+    static std::vector<TupleType *> known;
+    std::lock_guard lock(mutex);
+    return internTagged(known, payloadType, [&] {
+        TupleType *type = create(std::vector<Type *>{payloadType});
+        type->tag_      = Tag::Nullable;
+        return type;
+    });
+}
+
+TupleType *TupleType::fallible(Type *payloadType) {
+    ASSERT(payloadType != nullptr, "A fallible type needs a payload type.");
+    static std::mutex mutex;
+    static std::vector<TupleType *> known;
+    std::lock_guard lock(mutex);
+    return internTagged(known, payloadType, [&] {
+        TupleType *type = create(std::vector<Type *>{payloadType, errorType()});
+        type->tag_      = Tag::Fallible;
+        return type;
+    });
+}
+
+StructType *camel::core::type::errorType() {
+    static StructType *type = [] {
+        StructTypeFactory factory;
+        factory.add("kind", Type::String());
+        factory.add("message", Type::String());
+        factory.add("location", Type::String());
+        return factory.build();
+    }();
+    return type;
+}
+
+size_t camel::core::type::errorFieldIndex(std::string_view name) {
+    const auto index = errorType()->findField(name);
+    ASSERT(index.has_value(), "Unknown field of the built-in error structure.");
+    return *index;
+}
+
 TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
     size_t size     = factory.types_.size();
     size_t refCount = 0;
@@ -237,6 +306,13 @@ string TupleType::toString() const {
     if (cell_) {
         return "var " + typesPtr_[0]->toString();
     }
+    if (isTagged()) {
+        // A function or union payload is parenthesised, as it must be when written.
+        const TypeCode payload = typesPtr_[0]->code();
+        const bool parens      = payload == TypeCode::Function || payload == TypeCode::Union;
+        const string inner     = typesPtr_[0]->toString();
+        return (parens ? "(" + inner + ")" : inner) + (isNullable() ? "?" : "!");
+    }
     string result = "(";
     for (size_t i = 0; i < size_; ++i) {
         Type *type = typesPtr_[i];
@@ -258,6 +334,9 @@ std::string TupleType::mangle() const {
     if (cell_) {
         return "V" + typesPtr_[0]->mangle();
     }
+    if (isTagged()) {
+        return (isNullable() ? "N" : "E") + typesPtr_[0]->mangle();
+    }
     std::string result = "P";
     result += std::to_string(size_);
     for (size_t i = 0; i < size_; ++i) {
@@ -267,7 +346,7 @@ std::string TupleType::mangle() const {
 }
 
 Type *TupleType::clone(bool deep /* = false */) const {
-    if (cell_) {
+    if (cell_ || isTagged()) {
         return const_cast<TupleType *>(this);
     }
     std::vector<Type *> clonedTypes;
@@ -292,7 +371,7 @@ bool TupleType::equals(Type *other) const {
         return false;
     }
     const TupleType &otherTuple = static_cast<const TupleType &>(*other);
-    if (size_ != otherTuple.size_ || cell_ != otherTuple.cell_) {
+    if (size_ != otherTuple.size_ || cell_ != otherTuple.cell_ || tag_ != otherTuple.tag_) {
         return false;
     }
     for (size_t i = 0; i < size_; i++) {
@@ -308,7 +387,46 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
         return *r;
     if (this == sourceType)
         return CastSafety::Safe;
+    if (isTagged() && sourceType != nullptr) {
+        if (equals(sourceType)) {
+            return CastSafety::Safe;
+        }
+        // `null` is the literal of every nullable type.
+        if (isNullable() && sourceType->code() == TypeCode::Void) {
+            return CastSafety::Safe;
+        }
+        // A value enters the form: `v as T?`, `v as T!` (also a tagged one: `T?` into `T?!`).
+        if (typesPtr_[0]->assignableFrom(sourceType)) {
+            return CastSafety::Safe;
+        }
+        if (TupleType *source = asTagged(sourceType)) {
+            // Retyping a failed `U!` as `T!` is the error arm of `?->` and the last step of
+            // `throw`: sound only where the compiler knows the value has failed, so it is
+            // not a conversion a program may write.
+            return source->tag_ == tag_ && isFallible() ? CastSafety::Unsafe
+                                                         : CastSafety::Forbidden;
+        }
+    }
     return CastSafety::Forbidden;
+}
+
+slot_t TupleType::castSlotFrom(slot_t value, Type *sourceType) const {
+    if (!isTagged() || sourceType == nullptr || sourceType->code() == TypeCode::Any) {
+        return Type::castSlotFrom(value, sourceType);
+    }
+    if (equals(sourceType)) {
+        return value;
+    }
+    if (isNullable() && sourceType->code() == TypeCode::Void) {
+        return NullSlot;
+    }
+    if (asTagged(sourceType) != nullptr && !typesPtr_[0]->assignableFrom(sourceType)) {
+        // A failed value retyped (see castSafetyFrom): the same object.
+        return value;
+    }
+    ::Tuple *box = ::Tuple::create(size_, mm::autoSpace());
+    box->set<slot_t>(0, value, this);
+    return camel::core::rtdata::toSlot(box);
 }
 
 // Elements are immutable, so a tuple accepts any same-length tuple of assignable element types.
@@ -320,7 +438,7 @@ bool TupleType::assignableFrom(Type *sourceType) const {
         return false;
     }
     const TupleType &other = static_cast<const TupleType &>(*sourceType);
-    if (size_ != other.size_ || cell_ != other.cell_) {
+    if (size_ != other.size_ || cell_ != other.cell_ || tag_ != other.tag_) {
         return false;
     }
     if (cell_) {
@@ -338,6 +456,13 @@ bool TupleType::assignableFrom(Type *sourceType) const {
 Type *TupleType::widened() const {
     if (cell_) {
         return const_cast<TupleType *>(this);
+    }
+    if (isTagged()) {
+        Type *payload = typesPtr_[0]->widened();
+        if (payload == typesPtr_[0]) {
+            return const_cast<TupleType *>(this);
+        }
+        return isNullable() ? nullable(payload) : fallible(payload);
     }
     std::vector<Type *> types;
     bool changed = false;

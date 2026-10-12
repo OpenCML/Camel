@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 04, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,10 +23,14 @@
 
 #include "camel/runtime/draft_writes.h"
 
+#include "camel/core/mm/alloc/growable.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/composite/func.h"
 
+#include <mutex>
 #include <optional>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::runtime {
@@ -35,13 +39,35 @@ namespace type = camel::core::type;
 
 namespace {
 
+struct OperQueryKey {
+    std::string uri;
+    size_t withCount = 0;
+    type::type_vec_t types; // with types, then norm types
+
+    bool operator==(const OperQueryKey &other) const = default;
+};
+
+struct OperQueryKeyHash {
+    size_t operator()(const OperQueryKey &key) const {
+        size_t seed = std::hash<std::string>{}(key.uri) ^ (key.withCount * 0x9e3779b97f4a7c15ULL);
+        for (const type::Type *t : key.types) {
+            seed ^=
+                std::hash<const void *>{}(t) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+        }
+        return seed;
+    }
+};
+
+std::mutex operQueryMutex;
+std::unordered_map<OperQueryKey, type::FunctionType *, OperQueryKeyHash> &operQueryMemo() {
+    static auto *memo =
+        new std::unordered_map<OperQueryKey, type::FunctionType *, OperQueryKeyHash>();
+    return *memo;
+}
+
 /// The function type an OPER's overload has for the types its arguments have now, or nullptr
 /// when the overload is unknown or rejects them.
 type::FunctionType *operFuncType(const GraphDraft &draft, gc_node_ref_t id, std::string_view uri) {
-    const auto resolver = camel::core::OperatorResolverRegistry::instance().find(uri);
-    if (!resolver) {
-        return nullptr;
-    }
     type::type_vec_t with, norm;
     for (auto [inputs, types] :
          {std::pair{draft.withInputsOf(id), &with}, std::pair{draft.normInputsOf(id), &norm}}) {
@@ -53,14 +79,7 @@ type::FunctionType *operFuncType(const GraphDraft &draft, gc_node_ref_t id, std:
             types->push_back(h->dataType);
         }
     }
-    try {
-        // The values of constant arguments only refine the result type, never the parameters.
-        const std::vector<type::StaticArg> statics(norm.size());
-        const auto resolved = resolver->resolveWith(with, norm, statics, Modifier::None);
-        return resolved ? *resolved : nullptr;
-    } catch (const std::exception &) {
-        return nullptr;
-    }
+    return operatorOverloadType(uri, with, norm);
 }
 
 bool isVarParam(const type::FunctionType *funcType, bool isWith, size_t index) {
@@ -72,6 +91,32 @@ bool isVarParam(const type::FunctionType *funcType, bool isWith, size_t index) {
 }
 
 } // namespace
+
+type::FunctionType *operatorOverloadType(
+    std::string_view uri, const type::type_vec_t &with, const type::type_vec_t &norm) {
+    OperQueryKey key{std::string(uri), with.size(), with};
+    key.types.insert(key.types.end(), norm.begin(), norm.end());
+    {
+        std::lock_guard lock(operQueryMutex);
+        if (const auto it = operQueryMemo().find(key); it != operQueryMemo().end()) {
+            return it->second;
+        }
+    }
+    type::FunctionType *answer = nullptr;
+    if (const auto resolver = camel::core::OperatorResolverRegistry::instance().find(uri)) {
+        try {
+            const std::vector<type::StaticArg> statics(norm.size());
+            const auto resolved = resolver->resolveWith(with, norm, statics, Modifier::None);
+            answer              = resolved ? *resolved : nullptr;
+        } catch (const camel::core::mm::MemoryExhausted &) {
+            throw; // not an answer about the overload
+        } catch (const std::exception &) {
+            answer = nullptr;
+        }
+    }
+    std::lock_guard lock(operQueryMutex);
+    return operQueryMemo().emplace(std::move(key), answer).first->second;
+}
 
 bool isVarArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, size_t index) {
     const DraftNodeHeader *h = draft.header(user);

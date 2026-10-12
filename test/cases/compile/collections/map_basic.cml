@@ -1,0 +1,29 @@
+module main
+
+// Map<K, V>: construction from an array literal with `as`, lookup (`m[k]` is a `V?`), and
+// the operations, each of which returns a new value and leaves its argument as it was.
+
+func main(): int sync {
+    let m = [('b', 2), ('a', 1)] as Map<string, int>
+    println(m)
+    println(m['a'] ?? 0)
+    println(m['zz'] ?? -1)
+    let m2 = put(m, 'c', 3)
+    println(m2)
+    println(m)
+    println(m2->put<'a', 10>->remove<'b'>)
+    println(remove(m2, 'nope') == m2)
+    println(len(m2), has(m2, 'c'), m2->has<'q'>)
+    println(keys(m2))
+    println(values(m2))
+    println(items(m2))
+    println(get(m2, 'c') ?? 0, m2->get<'x'> ?? 0)
+    println(get_or(m2, 'q', 42), m2->get_or<'a', 42>)
+    println(merge(m, [('a', 100), ('z', 26)] as Map<string, int>))
+    println(m == ([('a', 1), ('b', 2)] as Map<string, int>), m == m2, m != m2)
+    println(string(m))
+    println(format<m, len(m)>('m = {}, {} entries'))
+    let ks = keys(m2)->map<(k: string): string => k + '!'>
+    println(ks)
+    return 0
+}

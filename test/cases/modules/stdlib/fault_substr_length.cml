@@ -1,0 +1,11 @@
+module fault_substr_length
+
+import { substr } from str
+
+func main(): int sync {
+    println('before')
+    // DESIGN-QUESTION(slice-bounds): a range past the end is a fault; slice on arrays clamps
+    println('hello'->substr<3, 3>)
+    println('not reached')
+    return 0
+}

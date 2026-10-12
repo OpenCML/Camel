@@ -1,0 +1,8 @@
+error[SyntaxDiag::UnexpectedEndOfFile]: The file ends in the middle of a construct; expected '{' or 'sync'.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_unexpected_end.cml:3:17
+   |
+ 3 | func main(): int
+   |                 ^
+help: Something opened earlier is not finished: check the last declaration of the file.
+
+camel: 1 error

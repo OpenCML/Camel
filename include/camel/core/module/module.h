@@ -55,12 +55,19 @@ class Entity {
     using graph_payload_t     = std::shared_ptr<camel::compile::gir::DraftGraphBuilder>;
     using graph_set_payload_t = std::vector<graph_payload_t>;
     using graph_set_ptr_t     = std::shared_ptr<graph_set_payload_t>;
-    using storage_t =
-        std::variant<node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t>;
+    /// A generic function exported by a module written in Camel: the template its instances
+    /// are built from, opaque outside the GIR builder. The importing module builds the
+    /// instances (DESIGN-QUESTION(generic-export)).
+    struct generic_payload_t {
+        std::shared_ptr<void> tmpl;
+    };
+    using storage_t = std::variant<
+        node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t, generic_payload_t>;
 
     explicit Entity(node_payload_t node) : storage_(node) {}
     explicit Entity(graph_set_ptr_t graphs) : storage_(std::move(graphs)) {}
     explicit Entity(graph_payload_t graph) : storage_(std::move(graph)) {}
+    explicit Entity(generic_payload_t generic) : storage_(std::move(generic)) {}
 
     storage_t storage_;
 };

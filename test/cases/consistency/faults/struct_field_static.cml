@@ -1,0 +1,11 @@
+/**
+ * A field the struct does not have is known at compile time: a compile-time error, nothing runs.
+ */
+module struct_field_static
+
+func main(): int sync {
+    println('not reached')
+    let p = { x: 1, y: 2 }
+    println(p.z)
+    return 0
+}

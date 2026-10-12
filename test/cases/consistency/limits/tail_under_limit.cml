@@ -1,0 +1,17 @@
+/**
+ * A limit of 8 open calls does not bound tail recursion: a million rounds run.
+ */
+module tail_under_limit
+
+func loop(i: int, n: int, acc: int): int {
+    return if i > n then acc else loop(i + 1, n, acc + i)
+}
+
+func even(n: int): bool { return if n == 0 then true else odd(n - 1) }
+func odd(n: int): bool { return if n == 0 then false else even(n - 1) }
+
+func main(): int sync {
+    println(loop(0, 1000000, 0))
+    println(even(100000))
+    return 0
+}

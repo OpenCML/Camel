@@ -1,0 +1,50 @@
+/**
+ * A function that captures a name, called directly and also used as a value. The direct call
+ * turns the captures into parameters that every direct call passes; the function value used to
+ * be made without them, and the function then read parameters nobody had set (a crash, progen
+ * finding F25). In either order, in a nested function, at module level, and with a captured
+ * variable.
+ */
+module nested_function_value
+
+let base = 100
+
+func plus_base(a: int): int {
+    return a + base
+}
+
+func call_then_value(): int[] {
+    let direct = plus_base(1)
+    return [direct]->map<plus_base>
+}
+
+func main(): int sync {
+    let b = 1
+    func g(a: int): int {
+        return a + b
+    }
+    func h(a: int): int {
+        return g(a)
+    }
+    println([0]->map<g>)
+    println(h(1), [1, 2]->map<g>)
+
+    func early(a: int): int {
+        return a * b + 10
+    }
+    println([1, 2]->map<early>)
+    println(early(3))
+
+    println(call_then_value())
+
+    var c = 5
+    func read_c(a: int): int {
+        return a + c
+    }
+    println(read_c(1))
+    c = 7
+    println([1, 2]->map<read_c>)
+    let k = g
+    println(k(41))
+    return 0
+}

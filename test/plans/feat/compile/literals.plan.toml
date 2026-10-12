@@ -1,0 +1,193 @@
+id = "compile.literals"
+order = 327
+tier = "feat"
+tags = ["feat", "compile", "literals"]
+desc = "Numeric literals."
+
+[[tests]]
+name = "real_literals.nvm"
+desc = "A real literal is the double nearest to the number written, in every build; it used to be summed digit by digit and came out one or two units off (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/literals/real_literals.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "0.77470000000000006",
+  "0.69059999999999999",
+  "0.10000000000000001",
+  "0.20000000000000001",
+  "0.29999999999999999",
+  "1.5",
+  "3.1415926535897931",
+  "2.7182818284590451",
+  "0.01",
+  "1e+22",
+  "9.9999999999999992e+22",
+  "8.4099999999999995e+21",
+  "123456789.12345679",
+  "9.9999999999999995e-07",
+  "9007199254740992",
+  "1.7976931348623157e+308",
+  "2.2250738585072014e-308",
+  "4.9406564584124654e-324",
+  "1",
+  "1",
+  "-0.77470000000000006",
+  "4.9406564584124654e-324",
+  "0.30000000000000004",
+  "6.9999999999999996e-10",
+  "2500",
+  "0.5",
+  "true true true",
+  "false true",
+  "100000 100001",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "real_literals.fvm"
+desc = "A real literal is the double nearest to the number written, in every build; it used to be summed digit by digit and came out one or two units off (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/literals/real_literals.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "0.77470000000000006",
+  "0.69059999999999999",
+  "0.10000000000000001",
+  "0.20000000000000001",
+  "0.29999999999999999",
+  "1.5",
+  "3.1415926535897931",
+  "2.7182818284590451",
+  "0.01",
+  "1e+22",
+  "9.9999999999999992e+22",
+  "8.4099999999999995e+21",
+  "123456789.12345679",
+  "9.9999999999999995e-07",
+  "9007199254740992",
+  "1.7976931348623157e+308",
+  "2.2250738585072014e-308",
+  "4.9406564584124654e-324",
+  "1",
+  "1",
+  "-0.77470000000000006",
+  "4.9406564584124654e-324",
+  "0.30000000000000004",
+  "6.9999999999999996e-10",
+  "2500",
+  "0.5",
+  "true true true",
+  "false true",
+  "100000 100001",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "real_literals.jit"
+desc = "A real literal is the double nearest to the number written, in every build; it used to be summed digit by digit and came out one or two units off (jit)"
+kind = "behavior"
+case = "../../../cases/compile/literals/real_literals.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "0.77470000000000006",
+  "0.69059999999999999",
+  "0.10000000000000001",
+  "0.20000000000000001",
+  "0.29999999999999999",
+  "1.5",
+  "3.1415926535897931",
+  "2.7182818284590451",
+  "0.01",
+  "1e+22",
+  "9.9999999999999992e+22",
+  "8.4099999999999995e+21",
+  "123456789.12345679",
+  "9.9999999999999995e-07",
+  "9007199254740992",
+  "1.7976931348623157e+308",
+  "2.2250738585072014e-308",
+  "4.9406564584124654e-324",
+  "1",
+  "1",
+  "-0.77470000000000006",
+  "4.9406564584124654e-324",
+  "0.30000000000000004",
+  "6.9999999999999996e-10",
+  "2500",
+  "0.5",
+  "true true true",
+  "false true",
+  "100000 100001",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "real_literals.prl"
+desc = "A real literal is the double nearest to the number written, in every build; it used to be summed digit by digit and came out one or two units off (prl)"
+kind = "behavior"
+case = "../../../cases/compile/literals/real_literals.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "0.77470000000000006",
+  "0.69059999999999999",
+  "0.10000000000000001",
+  "0.20000000000000001",
+  "0.29999999999999999",
+  "1.5",
+  "3.1415926535897931",
+  "2.7182818284590451",
+  "0.01",
+  "1e+22",
+  "9.9999999999999992e+22",
+  "8.4099999999999995e+21",
+  "123456789.12345679",
+  "9.9999999999999995e-07",
+  "9007199254740992",
+  "1.7976931348623157e+308",
+  "2.2250738585072014e-308",
+  "4.9406564584124654e-324",
+  "1",
+  "1",
+  "-0.77470000000000006",
+  "4.9406564584124654e-324",
+  "0.30000000000000004",
+  "6.9999999999999996e-10",
+  "2500",
+  "0.5",
+  "true true true",
+  "false true",
+  "100000 100001",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

@@ -1,0 +1,657 @@
+id = "linear.operators"
+order = 347
+tier = "feat"
+tags = ["feat", "linear", "ops", "runtime"]
+desc = "Built-in operators on the types that have them, the same result on every back end: string ordering, compound assignment, conversions."
+
+[[tests]]
+name = "string_ordering.nvm"
+desc = "Strings are ordered by their bytes with < <= > >=; the four used to compile and give false (progen F27) (nvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_ordering.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true false false",
+  "false false true true",
+  "false true false true",
+  "true true false false",
+  "false true false true",
+  "true true false false",
+  "false false true true",
+  "true true false false",
+  "true true false false",
+  "true true false false",
+  "true",
+  "true",
+  "true",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_ordering.fvm"
+desc = "Strings are ordered by their bytes with < <= > >=; the four used to compile and give false (progen F27) (fvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_ordering.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true false false",
+  "false false true true",
+  "false true false true",
+  "true true false false",
+  "false true false true",
+  "true true false false",
+  "false false true true",
+  "true true false false",
+  "true true false false",
+  "true true false false",
+  "true",
+  "true",
+  "true",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_ordering.jit"
+desc = "Strings are ordered by their bytes with < <= > >=; the four used to compile and give false (progen F27) (jit)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_ordering.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true false false",
+  "false false true true",
+  "false true false true",
+  "true true false false",
+  "false true false true",
+  "true true false false",
+  "false false true true",
+  "true true false false",
+  "true true false false",
+  "true true false false",
+  "true",
+  "true",
+  "true",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_ordering.prl"
+desc = "Strings are ordered by their bytes with < <= > >=; the four used to compile and give false (progen F27) (prl)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_ordering.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "true true false false",
+  "false false true true",
+  "false true false true",
+  "true true false false",
+  "false true false true",
+  "true true false false",
+  "false false true true",
+  "true true false false",
+  "true true false false",
+  "true true false false",
+  "true",
+  "true",
+  "true",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_plus_assign.nvm"
+desc = "+= on a string variable appends, also through a var parameter; it used to leave the variable unchanged (progen F28) (nvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ab",
+  "abab",
+  "0",
+  "ababz",
+  "ababz",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_plus_assign.fvm"
+desc = "+= on a string variable appends, also through a var parameter; it used to leave the variable unchanged (progen F28) (fvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ab",
+  "abab",
+  "0",
+  "ababz",
+  "ababz",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_plus_assign.jit"
+desc = "+= on a string variable appends, also through a var parameter; it used to leave the variable unchanged (progen F28) (jit)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ab",
+  "abab",
+  "0",
+  "ababz",
+  "ababz",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "string_plus_assign.prl"
+desc = "+= on a string variable appends, also through a var parameter; it used to leave the variable unchanged (progen F28) (prl)"
+kind = "behavior"
+case = "../../../cases/linear/operators/string_plus_assign.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ab",
+  "abab",
+  "0",
+  "ababz",
+  "ababz",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "compound_assign.nvm"
+desc = "Every compound assignment on every type that has one; %= ^= &= |= used to fail when run (progen F29) (nvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/compound_assign.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "22",
+  "20",
+  "60",
+  "8",
+  "3",
+  "81",
+  "-2 -2",
+  "1.75",
+  "1.25",
+  "5",
+  "2.5",
+  "6.25",
+  "false",
+  "true",
+  "true",
+  "true",
+  "10",
+  "9",
+  "18",
+  "4",
+  "16",
+  "1",
+  "2",
+  "1.75",
+  "3.5",
+  "7",
+  "49",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "compound_assign.fvm"
+desc = "Every compound assignment on every type that has one; %= ^= &= |= used to fail when run (progen F29) (fvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/compound_assign.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "22",
+  "20",
+  "60",
+  "8",
+  "3",
+  "81",
+  "-2 -2",
+  "1.75",
+  "1.25",
+  "5",
+  "2.5",
+  "6.25",
+  "false",
+  "true",
+  "true",
+  "true",
+  "10",
+  "9",
+  "18",
+  "4",
+  "16",
+  "1",
+  "2",
+  "1.75",
+  "3.5",
+  "7",
+  "49",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "compound_assign.jit"
+desc = "Every compound assignment on every type that has one; %= ^= &= |= used to fail when run (progen F29) (jit)"
+kind = "behavior"
+case = "../../../cases/linear/operators/compound_assign.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "22",
+  "20",
+  "60",
+  "8",
+  "3",
+  "81",
+  "-2 -2",
+  "1.75",
+  "1.25",
+  "5",
+  "2.5",
+  "6.25",
+  "false",
+  "true",
+  "true",
+  "true",
+  "10",
+  "9",
+  "18",
+  "4",
+  "16",
+  "1",
+  "2",
+  "1.75",
+  "3.5",
+  "7",
+  "49",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "compound_assign.prl"
+desc = "Every compound assignment on every type that has one; %= ^= &= |= used to fail when run (progen F29) (prl)"
+kind = "behavior"
+case = "../../../cases/linear/operators/compound_assign.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "22",
+  "20",
+  "60",
+  "8",
+  "3",
+  "81",
+  "-2 -2",
+  "1.75",
+  "1.25",
+  "5",
+  "2.5",
+  "6.25",
+  "false",
+  "true",
+  "true",
+  "true",
+  "10",
+  "9",
+  "18",
+  "4",
+  "16",
+  "1",
+  "2",
+  "1.75",
+  "3.5",
+  "7",
+  "49",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "mod_assign_by_zero.nvm"
+desc = "%= by zero is DivisionByZero at the operator, as % by zero is (nvm)"
+kind = "negative"
+case = "../../../cases/linear/operators/mod_assign_by_zero.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 7
+expect_output_contains = ["2", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mod_assign_by_zero.fvm"
+desc = "%= by zero is DivisionByZero at the operator, as % by zero is (fvm)"
+kind = "negative"
+case = "../../../cases/linear/operators/mod_assign_by_zero.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 7
+expect_output_contains = ["2", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mod_assign_by_zero.jit"
+desc = "%= by zero is DivisionByZero at the operator, as % by zero is (jit)"
+kind = "negative"
+case = "../../../cases/linear/operators/mod_assign_by_zero.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 7
+expect_output_contains = ["2", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mod_assign_by_zero.prl"
+desc = "%= by zero is DivisionByZero at the operator, as % by zero is (prl)"
+kind = "negative"
+case = "../../../cases/linear/operators/mod_assign_by_zero.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 7
+expect_output_contains = ["2", "Attempted division by zero."]
+expect_output_not_contains = ["not reached", "Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "conversions.nvm"
+desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (nvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/conversions.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 4 2 -2 2 42 -7",
+  "3 4 2 2 42",
+  "3 4 2 2 42",
+  "3 4 1.5 0.5 2.5 1000",
+  "3 4 1.5 0.5 2.5",
+  "3 4 1.5 0.5 0.25",
+  "42 7 s -1",
+  "true false",
+  "true! 5",
+  "[1, 2, 3]",
+  "(1, a, true)",
+  "{ x: 1, y: b }",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "conversions.fvm"
+desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (fvm)"
+kind = "behavior"
+case = "../../../cases/linear/operators/conversions.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 4 2 -2 2 42 -7",
+  "3 4 2 2 42",
+  "3 4 2 2 42",
+  "3 4 1.5 0.5 2.5 1000",
+  "3 4 1.5 0.5 2.5",
+  "3 4 1.5 0.5 0.25",
+  "42 7 s -1",
+  "true false",
+  "true! 5",
+  "[1, 2, 3]",
+  "(1, a, true)",
+  "{ x: 1, y: b }",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "conversions.jit"
+desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (jit)"
+kind = "behavior"
+case = "../../../cases/linear/operators/conversions.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 4 2 -2 2 42 -7",
+  "3 4 2 2 42",
+  "3 4 2 2 42",
+  "3 4 1.5 0.5 2.5 1000",
+  "3 4 1.5 0.5 2.5",
+  "3 4 1.5 0.5 0.25",
+  "42 7 s -1",
+  "true false",
+  "true! 5",
+  "[1, 2, 3]",
+  "(1, a, true)",
+  "{ x: 1, y: b }",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "conversions.prl"
+desc = "int, i32, i64, float, f32, f64 and string on every argument type they take; string(true) used to crash (progen F26) (prl)"
+kind = "behavior"
+case = "../../../cases/linear/operators/conversions.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 4 2 -2 2 42 -7",
+  "3 4 2 2 42",
+  "3 4 2 2 42",
+  "3 4 1.5 0.5 2.5 1000",
+  "3 4 1.5 0.5 2.5",
+  "3 4 1.5 0.5 0.25",
+  "42 7 s -1",
+  "true false",
+  "true! 5",
+  "[1, 2, 3]",
+  "(1, a, true)",
+  "{ x: 1, y: b }",
+  "true",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "int_of_text.nvm"
+desc = "int of a string that is not a number is a located fault when it runs, InvalidNumberText with the string and the target type (nvm)"
+kind = "negative"
+case = "../../../cases/linear/operators/int_of_text.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
+expect_diagnostic_code = "0x04000030"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["12", "Cannot convert the string"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_of_text.fvm"
+desc = "int of a string that is not a number is a located fault when it runs, InvalidNumberText with the string and the target type (fvm)"
+kind = "negative"
+case = "../../../cases/linear/operators/int_of_text.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
+expect_diagnostic_code = "0x04000030"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["12", "Cannot convert the string"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_of_text.jit"
+desc = "int of a string that is not a number is a located fault when it runs, InvalidNumberText with the string and the target type (jit)"
+kind = "negative"
+case = "../../../cases/linear/operators/int_of_text.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
+expect_diagnostic_code = "0x04000030"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["12", "Cannot convert the string"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_of_text.prl"
+desc = "int of a string that is not a number is a located fault when it runs, InvalidNumberText with the string and the target type (prl)"
+kind = "negative"
+case = "../../../cases/linear/operators/int_of_text.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
+expect_diagnostic_code = "0x04000030"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["12", "Cannot convert the string"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

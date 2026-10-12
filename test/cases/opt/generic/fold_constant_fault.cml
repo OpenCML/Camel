@@ -1,0 +1,19 @@
+/**
+ * A constant expression that can only fault is not folded (design principles 2.9): std::opt::fold
+ * and std::opt::simplify leave `1 / 0` as written and warn where it is written, once. The program
+ * behaves the same with and without the pass.
+ *
+ * Here the division is an operand in the arm of an `if` that is not taken (`n` is 3, but only known when the
+ * program runs, so the `if` stays): nothing faults, 7 is printed and the exit code is 0, with or
+ * without passes.
+ */
+module fold_constant_fault
+
+import { now } from time
+
+func main(): int sync {
+    let n = int(now() * 0.0) + 3
+    let a = if n > 5 then 1 / 0 + n else 7
+    println(a)
+    return 0
+}

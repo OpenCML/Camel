@@ -578,6 +578,40 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
         pushOutputs(graph->withOutputsOf(nodeRef));
     }
 
+    // An arm's code is also what its tail depends on inside the branch. The head alone does not
+    // find it: a rewrite can leave the head a node nothing in the arm follows any more (a pure
+    // value whose only user was removed, or was pruned with an inner branch) while the rest of
+    // the arm waits on the BRCH directly. The execution order lays an arm out from its tail
+    // (buildReachableExecutionTopoIndices), so the tail is where the arm is looked for here too;
+    // otherwise the arm is taken to be empty and its effects never run. A tail outside the
+    // branch (a value computed before it) is not code of the arm.
+    if (const gc_node_ref_t tail = branchArms[armIndex].tail;
+        tail != camel::runtime::kInvalidNodeRef && tail != brchRef && tail != brchBody->join &&
+        graph->containsNodeRef(tail) && !armRegion.contains(tail)) {
+        std::unordered_set<gc_node_ref_t> seen;
+        std::vector<gc_node_ref_t> work{brchRef};
+        bool inBranch = false;
+        while (!work.empty() && !inBranch) {
+            const gc_node_ref_t nodeRef = work.back();
+            work.pop_back();
+            for (auto outputs :
+                 {graph->ctrlOutputsOf(nodeRef),
+                  graph->normOutputsOf(nodeRef),
+                  graph->withOutputsOf(nodeRef)}) {
+                for (gc_node_ref_t outputRef : outputs) {
+                    if (outputRef == tail) {
+                        inBranch = true;
+                    } else if (outputRef != brchBody->join && seen.insert(outputRef).second) {
+                        work.push_back(outputRef);
+                    }
+                }
+            }
+        }
+        if (inBranch) {
+            armRegion.insert(tail);
+        }
+    }
+
     std::unordered_set<gc_node_ref_t> dependencyVisited;
     std::function<void(gc_node_ref_t)> collectInputs = [&](gc_node_ref_t nodeRef) {
         if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||

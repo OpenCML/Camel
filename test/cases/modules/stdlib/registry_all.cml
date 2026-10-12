@@ -1,0 +1,27 @@
+/**
+ * Imports every standard library module that needs no external runtime, so that
+ * `camel inspect --ops` lists their operators (see stdlib_registry.plan.toml).
+ */
+module registry_all
+
+import algo
+import crypto
+import fs
+import io
+import json
+import math
+import os
+import para
+import random
+import re
+import sim
+import statistics
+import str
+import sys
+import this
+import time
+import array
+
+func main(): int {
+    return 0
+}

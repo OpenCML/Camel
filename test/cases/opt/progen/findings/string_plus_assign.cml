@@ -1,0 +1,14 @@
+/**
+ * progen finding F28 ((other) operator not implemented). `s += 'b'` on a string variable compiles,
+ * runs without a diagnostic and leaves the variable unchanged, without any pass. `s = s + 'b'`
+ * works.
+ * Expected output: ab
+ */
+module string_plus_assign
+
+func main(): int sync {
+    var s = 'a'
+    s += 'b'
+    println(s)
+    return 0
+}

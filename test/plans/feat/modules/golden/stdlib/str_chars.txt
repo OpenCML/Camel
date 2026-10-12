@@ -1,0 +1,21 @@
+10 4
+[104, 8364, 128512, 233]
+[] 0
+h€😀é
+20
+[0, 127, 128, 2047, 2048, 65535, 65536, 1114111]
+h € 😀 é
+€😀 h€😀é
+0 0
+true true true
+false false false false false false
+error EncodingError: the string is not valid UTF-8 (byte 1)
+error EncodingError: the string is not valid UTF-8 (byte 0)
+error EncodingError: the string is not valid UTF-8 (byte 0)
+error EncodingError: the string is not valid UTF-8 (byte 0)
+[-1] -1 ?
+EncodingError / the string is not valid UTF-8 (byte 1) / <str::codepoints>
+error EncodingError: element 0 is 55296, not a Unicode code point
+bad bad
+0
+[104, 128] 2

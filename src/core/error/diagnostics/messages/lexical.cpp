@@ -26,41 +26,43 @@ const std::unordered_map<LexicalDiag, DiagInfo> &getLexicalDiagInfoMap() {
         {
             LexicalDiag::IllegalCharacter,
             {
-                "LEX_ILLEGAL_CHAR",
-                "Illegal character encountered: {0}",
-                "Remove or replace the unsupported character",
+                "IllegalCharacter",
+                "Illegal character '{0}'.",
+                "No token starts with this character. Outside strings and comments a program "
+                "consists of ASCII characters; a name is made of letters, digits and '_'.",
             },
         },
         {
             LexicalDiag::InvalidNumberFormat,
             {
-                "LEX_INVALID_NUMBER",
-                "Invalid number format: {0}",
-                "Check numeric literal syntax",
+                "InvalidNumberFormat",
+                "Invalid number format: {0}.",
+                "Check the syntax of the numeric literal.",
             },
         },
         {
             LexicalDiag::UnclosedStringLiteral,
             {
-                "LEX_UNCLOSED_STRING",
-                "Unclosed string literal: {0}",
-                "Ensure all string literals are properly closed",
+                "UnclosedStringLiteral",
+                "This string literal is not closed.",
+                "A string ends with the quote character it starts with ({0}). Add the closing "
+                "quote; to put a quote character inside the string, write it with a backslash.",
             },
         },
         {
             LexicalDiag::UnterminatedComment,
             {
-                "LEX_UNTERMINATED_COMMENT",
-                "Unterminated comment: {0}",
-                "Ensure all comments are properly closed",
+                "UnterminatedComment",
+                "Unterminated comment: {0}.",
+                "Close the comment with '*/'.",
             },
         },
         {
             LexicalDiag::InvalidEscapeSequence,
             {
-                "LEX_INVALID_ESCAPE",
-                "Invalid escape sequence in string: {0}",
-                "Check and correct the escape sequences",
+                "InvalidEscapeSequence",
+                "Invalid escape sequence in string: {0}.",
+                "Check and correct the escape sequence.",
             },
         },
     };

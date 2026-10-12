@@ -1,0 +1,29 @@
+/**
+ * progen finding F16 ((other) wrong value after inlining). After `std::opt::fold std::inline` a
+ *   value read from the environment prints as 0 instead of 4; the value is also named in an arm
+ *   that is never taken.
+ * Pipeline: std::opt::fold std::inline std::nvm
+ * Environment: PROGEN_I0=4
+ * Expected output: L11 false 4
+ * Actual: L11 false 0
+ * Reduced by test/tools/progen (an early batch, before the seed stream was versioned).
+ */
+module fold_inline_env_value
+
+import { get_env } from sys
+
+type P = { x: int, y: int }
+
+func main(): int sync {
+    let n41 = int(get_env('PROGEN_I0'));
+    let n59 = if 7 != (if false then 0 else 0) then {
+        let n56 = string(if false then n41 else 3);
+        return (match n56 {
+            case 'x' => 0
+            case 'pq' => n41
+            case _ => 3
+        }) < 0;
+    } else false;
+    println('L11 {} {}'->format<false, n41>);
+    return 0;
+}

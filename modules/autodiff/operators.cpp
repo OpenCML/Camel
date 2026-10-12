@@ -214,6 +214,12 @@ std::unordered_map<std::string, operator_t> operatorKernels() {
 }
 
 void registerOperatorMetadata() {
+    // The transformations take a function: what a call does is what that function does, and
+    // std::macro rewrites the call away before anything runs. Declared, as every operator
+    // must be (design principles 2.9), as not pure.
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "autodiff",
+        {{"grad", false}, {"value_and_grad", false}, {"vjp", false}});
     camel::core::OperatorTraitsRegistry::instance().set(
         "autodiff:stop_gradient",
         {.pure = true, .elementwise = false});

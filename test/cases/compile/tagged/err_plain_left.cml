@@ -1,0 +1,12 @@
+/**
+ * `??` needs a `T?` on its left: TaggedOperandMismatch at the operator.
+ */
+module err_plain_left
+
+func main(): int sync {
+    println('never printed')
+    let a = 1
+    let b = a ?? 7
+    println(b)
+    return 0
+}

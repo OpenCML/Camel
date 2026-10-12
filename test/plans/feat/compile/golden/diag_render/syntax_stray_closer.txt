@@ -1,0 +1,13 @@
+error[SyntaxDiag::UnmatchedClosingDelimiter]: Unexpected ')': no '(' is open here.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_stray_closer.cml:4:17
+   |
+ 4 |     let x = 1 + )
+   |                 ^
+note: the innermost open bracket is this '{', which ')' does not close
+  --> <ROOT>/test/cases/compile/diag_render/syntax_stray_closer.cml:3:23
+   |
+ 3 | func main(): int sync {
+   |                       -
+help: Remove the ')', or add the '(' it was meant to close.
+
+camel: 1 error

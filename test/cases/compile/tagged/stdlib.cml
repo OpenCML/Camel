@@ -1,0 +1,27 @@
+/**
+ * Library operators that can fail return a `T!`: parse_int, parse_float, fs::try_read_text.
+ */
+module stdlib
+
+import { try_read_text } from fs
+
+func show(r: int!): string {
+    return match r {
+        case error e => format<e.kind, e.message, e.location>('{}: {} at {}')
+        case v => format<v>('ok {}')
+    }
+}
+
+func main(): int sync {
+    println(parse_int('42') !! 0)
+    println(parse_int(' -7 ') !! 0)
+    println(parse_int('4x2') !! 0)
+    println(show(parse_int('oops')))
+    println(show(parse_int('99999999999999999999')))
+    println(parse_float('2.5') !! 0.0)
+    println(parse_float('abc') !! -1.0)
+    let missing = try_read_text('tagged_no_such_file.txt')
+    println(missing)
+    println(missing !! '<no file>')
+    return 0
+}

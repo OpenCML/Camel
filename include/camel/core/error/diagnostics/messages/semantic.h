@@ -67,12 +67,40 @@ enum class SemanticDiag : uint32_t {
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
     // dropped while the rest of the program went on.
     FeatureNotSupported          = 0x000040,
+    // Generic functions and type functions (design principles 2.9).
+    TypeVariableNotAllowed       = 0x000050,
+    TypeVariableRedeclared       = 0x000051,
+    TypeVariableNotBindable      = 0x000052,
+    GenericArgumentsMismatch     = 0x000053,
+    GenericFunctionAsValue       = 0x000054,
+    GenericInstantiationTooDeep  = 0x000055,
+    TypeFunctionArguments        = 0x000056,
+    GenericFunctionUnsupported   = 0x000057,
+    // Functions as values.
+    FunctionNameAsValue          = 0x000060,
+    // Nullable and fallible values (design principles 2.9;
+    // docs/technical/29_nullable_and_fallible_values.md).
+    ThrowOutsideFallible         = 0x000070,
+    ThrowNotAnError              = 0x000071,
+    TaggedTypeNesting            = 0x000072,
+    TaggedValueNotOpened         = 0x000073,
+    TryCatchNotInLanguage        = 0x000074,
+    TaggedOperandMismatch        = 0x000075,
+    TaggedMatchCases             = 0x000076,
+    // Reporting several errors (0x80 and up, clear of the blocks above).
+    ImportedModuleHasErrors      = 0x000080,
+    // Map and Set (design principles 2.9; docs/technical/31_map_and_set.md).
+    CollectionKeyNotAllowed      = 0x0000A0,
+    DuplicateCollectionKey       = 0x0000A1,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,
     IgnoredSideEffect       = 0x100002,
     CapturedWriteInAsyncFunction = 0x100003,
     EffectNotExecuted            = 0x100004,
+    // 0x90 and up, clear of what other work adds after EffectNotExecuted.
+    ExitInUnusedBranch           = 0x100090,
+    MatchWithoutDefault          = 0x100091,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

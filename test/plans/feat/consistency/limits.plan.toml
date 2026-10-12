@@ -1,0 +1,268 @@
+id = "consistency.limits"
+order = 354
+tier = "feat"
+tags = ["feat", "consistency", "runtime", "limits"]
+desc = "The configurable limit on non-tail recursion (--max-recursion-depth) and on the macro evaluator (--max-macro-depth)"
+
+# The limit counts the calls open at once that are not tail calls. With the same limit the same
+# program gives the same result on std::nvm, std::fvm, std::jit and std::prl: the deepest
+# recursion that runs is the same, and past it the diagnostic is the same, at the call.
+#
+# The cases under test/cases/consistency/limits recurse to the depth N of the environment:
+# directly (depth_direct), through a function value (depth_value) and inside a map element
+# (depth_map). With a limit of L, depth(L - 1) called from main is the deepest that runs: L
+# calls of depth are open at the bottom (the entry's call of main is not counted). Through a
+# function value every level is two calls (step and via), and a map element adds one call.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/consistency/limits/depth_direct.cml"
+args = ["--max-recursion-depth", "100", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+# --- the same boundary on every back end ----------------------------------------------------
+
+[[tests]]
+name = "limit.direct.fits"
+desc = "Limit 100: depth(99) runs."
+envs = ["N=99"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n99\ndone\n"
+
+[[tests]]
+name = "limit.direct.exceeds"
+desc = "Limit 100: depth(100) stops with MaxRecursionDepthExceeded at the recursive call, naming the limit and how to raise it."
+envs = ["N=100"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 43
+expect_stdout_starts_with = "start\n"
+expect_output_contains = ["Maximum recursion depth (100) exceeded", "--max-recursion-depth", "CAMEL_MAX_RECURSION_DEPTH"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "limit.value.fits"
+desc = "Limit 100, recursion through a function value (two calls a level): step(49) runs."
+case = "../../../cases/consistency/limits/depth_value.cml"
+envs = ["N=49"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n49\ndone\n"
+
+[[tests]]
+name = "limit.value.exceeds"
+desc = "Limit 100, recursion through a function value: step(50) stops with the same diagnostic, at the call through the value. (std::fvm did not count these calls and ran into a segmentation fault.)"
+case = "../../../cases/consistency/limits/depth_value.cml"
+envs = ["N=50"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 39
+expect_stdout_starts_with = "start\n"
+expect_output_contains = ["Maximum recursion depth (100) exceeded"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "limit.map.fits"
+desc = "Limit 100, recursion inside a map element (one more call open): depth(98) runs."
+case = "../../../cases/consistency/limits/depth_map.cml"
+envs = ["N=98"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n[98, 3, 1]\ndone\n"
+
+[[tests]]
+name = "limit.map.exceeds"
+desc = "Limit 100, recursion inside a map element: depth(99) stops with the same diagnostic. The count follows the element onto the thread that runs it under std::prl."
+case = "../../../cases/consistency/limits/depth_map.cml"
+envs = ["N=99"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 43
+expect_stdout_starts_with = "start\n"
+expect_output_contains = ["Maximum recursion depth (100) exceeded"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+# --- raising the limit ---------------------------------------------------------------------
+
+[[tests]]
+name = "limit.raised.option"
+desc = "depth(4000) does not run with the default limit of std::nvm and std::fvm (256) and runs on all four with --max-recursion-depth 5000."
+args = ["--max-recursion-depth", "5000", "${case}", "${backend}"]
+envs = ["N=4000"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n4000\ndone\n"
+
+[[tests]]
+name = "limit.raised.environment"
+desc = "The same with CAMEL_MAX_RECURSION_DEPTH=5000."
+args = ["${case}", "${backend}"]
+envs = ["N=4000", "CAMEL_MAX_RECURSION_DEPTH=5000"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n4000\ndone\n"
+
+[[tests]]
+name = "limit.option_over_environment"
+desc = "The option wins over the environment variable: limit 100 although the environment says 5000."
+envs = ["N=4000", "CAMEL_MAX_RECURSION_DEPTH=5000"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_output_contains = ["Maximum recursion depth (100) exceeded"]
+
+[[tests]]
+name = "limit.default_unchanged"
+desc = "Without option and variable std::nvm and std::fvm keep their default of 256: depth(255) runs and depth(256) does not, on both alike. (std::tf has no count by default and is not part of this test; whether the schedulers should share a default is undecided.)"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=255"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n255\ndone\n"
+
+[[tests]]
+name = "limit.default_exceeded"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+envs = ["N=256"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 43
+expect_output_contains = ["Maximum recursion depth (256) exceeded"]
+
+[[tests]]
+name = "limit.tail_calls_not_counted"
+desc = "A limit of 8 does not bound tail recursion: a million rounds of a self tail call and 100000 of a mutual one run."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/tail_under_limit.txt"
+case = "../../../cases/consistency/limits/tail_under_limit.cml"
+args = ["--max-recursion-depth", "8", "${case}", "${backend}"]
+expect_exit = 0
+
+# --- no settable limit ends in a crash -------------------------------------------------------
+
+[[tests]]
+name = "limit.largest.no_crash"
+desc = "The largest limit the option accepts (1000000) with a recursion of 900000: a back end that nests on the native stack (std::nvm, std::tf) stops with MaxRecursionDepthExceeded when the stack is nearly full, std::fvm keeps its calls off the native stack and may finish. Either way the process ends by itself with exit code 0 or 1, never by a signal."
+args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "prl"]
+backends_agree = []
+envs = ["N=900000"]
+timeout_ms = 120000
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+const stopped = input.exit_code === 1
+    && input.diagnostics.some((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
+const finished = input.exit_code === 0 && input.normalized.stdout === 'start\n900000\ndone\n'
+assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.slice(0, 300)}`)
+"""
+
+[[tests]]
+name = "limit.largest.value.no_crash"
+desc = "The same through a function value, where std::fvm nests on the native stack too."
+args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "prl"]
+backends_agree = []
+case = "../../../cases/consistency/limits/depth_value.cml"
+envs = ["N=400000"]
+timeout_ms = 120000
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+assert(input.exit_code === 1, `exit ${input.exit_code}`)
+assert(input.diagnostics.some((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded'), 'no MaxRecursionDepthExceeded')
+"""
+
+# --- values the option refuses ---------------------------------------------------------------
+
+[[tests]]
+name = "limit.option.zero"
+desc = "--max-recursion-depth 0 is refused before anything runs."
+backends = false
+args = ["--max-recursion-depth", "0", "${case}", "${run_nvm}"]
+envs = ["N=1"]
+expect_exit = 1
+expect_stderr_contains = ["Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000."]
+expect_output_not_contains = ["start"]
+
+[[tests]]
+name = "limit.option.too_large"
+desc = "A value above the largest safe limit is refused, not clamped."
+backends = false
+args = ["--max-recursion-depth", "1000001", "${case}", "${run_nvm}"]
+envs = ["N=1"]
+expect_exit = 1
+expect_stderr_contains = ["Invalid --max-recursion-depth value: '1000001'."]
+expect_output_not_contains = ["start"]
+
+[[tests]]
+name = "limit.option.not_a_number"
+backends = false
+args = ["--max-recursion-depth", "deep", "${case}", "${run_nvm}"]
+envs = ["N=1"]
+expect_exit = 1
+expect_stderr_contains = ["Invalid --max-recursion-depth value: 'deep'."]
+expect_output_not_contains = ["start"]
+
+[[tests]]
+name = "limit.environment.invalid"
+desc = "A bad value of the environment variable is refused the same way."
+backends = false
+args = ["${case}", "${run_fvm}"]
+envs = ["N=1", "CAMEL_MAX_RECURSION_DEPTH=12x"]
+expect_exit = 1
+expect_stderr_contains = ["Invalid CAMEL_MAX_RECURSION_DEPTH value: '12x'."]
+expect_output_not_contains = ["start"]
+
+# --- the macro evaluator -------------------------------------------------------------------
+
+[[tests]]
+name = "limit.macro.default"
+desc = "count(40) needs more nested calls than the evaluator's default limit of 64 (two frames a level): std::macro fails the call, naming the limit and how to raise it."
+backends = false
+case = "../../../cases/consistency/limits/macro_depth.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_output_contains = ["more than 64 nested calls", "--max-macro-depth", "CAMEL_MAX_MACRO_DEPTH"]
+
+[[tests]]
+name = "limit.macro.option"
+desc = "With --max-macro-depth 200 the call is evaluated ahead of time; the program then runs on each back end without recursing at all."
+case = "../../../cases/consistency/limits/macro_depth.cml"
+args = ["--max-macro-depth", "200", "--max-recursion-depth", "4", "${case}", "std::macro", "${backend}"]
+expect_exit = 0
+expect_stdout_starts_with = "40\n"
+
+[[tests]]
+name = "limit.macro.environment"
+backends = false
+case = "../../../cases/consistency/limits/macro_depth.cml"
+args = ["--max-recursion-depth", "4", "${case}", "std::macro", "std::fvm"]
+envs = ["CAMEL_MAX_MACRO_DEPTH=200"]
+expect_exit = 0
+expect_stdout_starts_with = "40\n"
+
+[[tests]]
+name = "limit.macro.option.invalid"
+backends = false
+case = "../../../cases/consistency/limits/macro_depth.cml"
+args = ["--max-macro-depth", "many", "${case}", "std::macro", "std::nvm"]
+expect_exit = 1
+expect_stderr_contains = ["Invalid --max-macro-depth value: 'many'."]
+
+# --- waiting for the JIT line ------------------------------------------------------------------
+
+[[tests]]
+name = "limit.direct.exceeds.native"
+desc = "The same limit under std::inline std::jit, where depth is compiled to native code: the compiled recursion counts its depth and leaves through the fault exit with the interpreter's diagnostic."
+backends = ["inline_jit"]
+envs = ["N=100"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 43

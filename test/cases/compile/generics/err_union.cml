@@ -1,0 +1,10 @@
+module err_union
+
+func f(x: int | typeas T): int {
+    return 1
+}
+
+func main(): int sync {
+    println(f(1))
+    return 0
+}

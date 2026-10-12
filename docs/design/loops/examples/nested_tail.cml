@@ -1,0 +1,18 @@
+/**
+ * Two nested loops as two tail recursions: the inner one is its own subgraph.
+ *   for i in range(0, n) { for j in range(0, m) { acc = acc + i * j } }
+ */
+module nested_tail
+
+func inner_loop(i: int, j: int, m: int, acc: int): int {
+    return if j >= m then acc else inner_loop(i, j + 1, m, acc + i * j)
+}
+
+func outer_loop(i: int, n: int, m: int, acc: int): int {
+    return if i >= n then acc else outer_loop(i + 1, n, m, inner_loop(i, 0, m, acc))
+}
+
+func main(): int sync {
+    println(outer_loop(0, 300, 300, 0))
+    return 0
+}

@@ -1,0 +1,8 @@
+module runtime_json
+
+import { decode } from json
+
+func main(): int sync {
+    println(decode('{bad json'))
+    return 0
+}

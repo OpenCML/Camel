@@ -1,0 +1,62 @@
+module main
+
+// Maps and sets whose keys and values are collected objects (strings, arrays, tuples, boxes
+// of `T?`, other maps), built entry by entry so that every step leaves garbage behind: each
+// `put` makes a new table and the previous one is unreachable once the loop moves on. Under
+// collection stress a key or a value that the table did not keep alive, or that was not
+// updated when it moved, shows as a wrong line or a failed heap verification.
+
+func key_of(i: int): string {
+    return 'key-' + string(i)
+}
+
+func build(n: int, i: int, acc: Map<string, int[]>): Map<string, int[]> {
+    if i >= n then {
+        return acc
+    } else {
+        return build(n, i + 1, acc->put<key_of(i), [i, i * i, i + 1]>)
+    }
+}
+
+func total(m: Map<string, int[]>): int {
+    return values(m)->reduce<(acc: int, xs: int[]): int => acc + xs[0] + xs[1] + xs[2], 0>
+}
+
+func words(n: int, i: int, acc: Set<string>): Set<string> {
+    if i >= n then {
+        return acc
+    } else {
+        return words(n, i + 1, acc->add<key_of(i % 17)>->add<key_of(i)>)
+    }
+}
+
+func pairs(n: int): Map<(int, string), string?> {
+    return range(0, n)->map<(i: int): ((int, string), string?) => ((i % 5, key_of(i)), (key_of(i * 2)) as string?)> as Map<(int, string), string?>
+}
+
+func nested(n: int, i: int, acc: Map<int, Map<string, int[]>>): Map<int, Map<string, int[]>> {
+    if i >= n then {
+        return acc
+    } else {
+        return nested(n, i + 1, acc->put<i, build(i + 1, 0, [] as Map<string, int[]>)>)
+    }
+}
+
+func main(): int sync {
+    let m = build(60, 0, [] as Map<string, int[]>)
+    println(format<len(m), total(m)>('map entries={} total={}'))
+    println(format<m['key-7'] ?? [0], m['key-59'] ?? [0], has(m, 'key-60')>('m[7]={} m[59]={} has60={}'))
+    let dropped = keys(m)->reduce<(acc: Map<string, int[]>, k: string): Map<string, int[]> => if len(k) > 5 then acc->remove<k> else acc, m>
+    println(format<len(dropped), keys(dropped)>('after remove: {} {}'))
+    let s = words(80, 0, [] as Set<string>)
+    println(format<len(s), contains(s, 'key-79'), contains(s, 'key-80')>('set size={} has79={} has80={}'))
+    let both = intersect(s, keys(m) as Set<string>)
+    println(format<len(both), len(union(s, keys(m) as Set<string>)), len(difference(s, both))>('intersect={} union={} difference={}'))
+    let p = pairs(40)
+    println(format<len(p), p[(3, 'key-13')] ?? '?', p[(3, 'key-14')] ?? '?'>('pairs={} hit={} miss={}'))
+    let deep = nested(12, 0, [] as Map<int, Map<string, int[]>>)
+    let last = deep[11] ?? ([] as Map<string, int[]>)
+    println(format<len(deep), len(last), total(last)>('nested={} last={} total={}'))
+    println(format<merge(m, m) == m, items(dropped)>('merge same={} items={}'))
+    return 0
+}

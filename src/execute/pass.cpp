@@ -13,12 +13,13 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
+#include "camel/core/process_exit.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/source/manager.h"
@@ -478,6 +479,112 @@ void setPassSnapshotHandler(PassSnapshotHandler handler, void *userData) {
     }
 }
 
+// -----------------------------------------------------------------------------
+// Warnings raised by passes (see pass/warnings.h).
+// -----------------------------------------------------------------------------
+namespace {
+
+/// The warnings of one context: those raised so far, and how many were handed to the handler.
+/// Held as a pass fact, so it lives and dies with the context.
+struct PassWarningState {
+    mutable std::vector<Diagnostic> raised;
+    mutable size_t delivered = 0;
+};
+
+constexpr const char *kPassWarningsFactKey = "pass.warnings";
+
+const PassWarningState &passWarningStateOf(Context &ctx) {
+    auto state =
+        std::static_pointer_cast<const PassWarningState>(ctx.passFact(kPassWarningsFactKey));
+    if (!state) {
+        state = std::make_shared<PassWarningState>();
+        ctx.setPassFact(kPassWarningsFactKey, state);
+    }
+    return *state;
+}
+
+std::atomic<PassWarningHandler> &passWarningHandlerSlot() {
+    static std::atomic<PassWarningHandler> slot{nullptr};
+    return slot;
+}
+
+std::atomic<void *> &passWarningUserDataSlot() {
+    static std::atomic<void *> slot{nullptr};
+    return slot;
+}
+
+/// Hands the warnings raised since the last call to the handler, as raised by pass `name`.
+void deliverPassWarnings(Context &ctx, const std::string &name) {
+    const PassWarningState &state = passWarningStateOf(ctx);
+    if (state.delivered >= state.raised.size()) {
+        return;
+    }
+    std::vector<Diagnostic> fresh(
+        state.raised.begin() + static_cast<std::ptrdiff_t>(state.delivered),
+        state.raised.end());
+    state.delivered = state.raised.size();
+    std::vector<Diagnostic> promoted;
+    for (auto it = fresh.begin(); it != fresh.end();) {
+        it->stage = "pass:" + name;
+        if (it->severity == Severity::Error) {
+            promoted.push_back(std::move(*it));
+            it = fresh.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (!fresh.empty()) {
+        if (PassWarningHandler handler =
+                passWarningHandlerSlot().load(std::memory_order_acquire)) {
+            handler(
+                name.c_str(),
+                fresh,
+                passWarningUserDataSlot().load(std::memory_order_acquire));
+        }
+    }
+    // A warning made an error on the command line (-Werror) is an error of the pipeline: it
+    // goes to the run-time sink, where the driver finds it and stops before the next pass.
+    for (Diagnostic &error : promoted) {
+        error.persisted = false;
+        ctx.rtmDiags()->add(std::move(error));
+    }
+}
+
+} // namespace
+
+void raisePassWarning(
+    Context &ctx, RuntimeDiag diag, camel::source::origin_id_t origin, const std::string &detail) {
+    // Built against a sink of its own: the position is resolved through the context's sources,
+    // and the run-time error sink stays free of warnings.
+    Diagnostics sink("", "", ctx.sourceContext());
+    auto builder = sink.of(diag);
+    if (origin != camel::source::kInvalidOriginId) {
+        builder.atOrigin(origin);
+    }
+    Diagnostic warning = builder.commit(detail);
+    if (warning.suppressed) {
+        return; // switched off on the command line (-Wno-<name>)
+    }
+    const PassWarningState &state = passWarningStateOf(ctx);
+    const std::string text        = warning.toText();
+    for (const Diagnostic &known : state.raised) {
+        if (known.toText() == text) {
+            return;
+        }
+    }
+    state.raised.push_back(std::move(warning));
+}
+
+void setPassWarningHandler(PassWarningHandler handler, void *userData) {
+    if (handler) {
+        passWarningUserDataSlot().store(userData, std::memory_order_release);
+        passWarningHandlerSlot().store(handler, std::memory_order_release);
+    } else {
+        passWarningHandlerSlot().store(nullptr, std::memory_order_release);
+        passWarningUserDataSlot().store(nullptr, std::memory_order_release);
+    }
+}
+
 void registerModulePass(const std::string &path, PassFactory factory) {
     auto &registry = modulePasses();
     std::lock_guard lock(registry.mutex);
@@ -698,6 +805,12 @@ PassApplyResult applyPassesDetailed(
                 graph = pass->apply(graph, os);
             } catch (const DiagnosticsLimitExceededBaseException &) {
                 throw; // diagnostics already recorded; the caller dumps them
+            } catch (const camel::core::ProcessExit &exit) {
+                // The program called exit(code): the run is over, with that exit code and no
+                // diagnostic. The pipeline ends as after a scheduling pass that completed.
+                ctx->setProcessExitCode(exit.code);
+                CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> exit({})", p, exit.code);
+                return {nullptr, PassApplyStatus::Consumed};
             } catch (const camel::runtime::GraphCapacityError &e) {
                 // The pass built a graph larger than a graph can be. That is a limit of the
                 // representation the program ran into, not a broken graph: it is reported with
@@ -716,6 +829,19 @@ PassApplyResult applyPassesDetailed(
                     e.limit());
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (graph too large)", p);
                 return {nullptr, PassApplyStatus::Failed};
+            } catch (const camel::core::mm::MemoryExhausted &e) {
+                // A memory space is at its limit, or the host has no memory left. Like a graph
+                // that is too large this is a limit the program (or what the pass made of it)
+                // ran into: it is reported with the space, the usage, the limit and the
+                // setting that raises it, at the graph that was being built when one is known.
+                setPipelineStage("pass:" + p);
+                auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);
+                if (e.origin() != camel::source::kInvalidOriginId) {
+                    diag.atOrigin(e.origin());
+                }
+                diag.commit(std::format(" in pass '{}'", p), std::string(e.what()));
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (memory exhausted)", p);
+                return {nullptr, PassApplyStatus::Failed};
             } catch (const std::exception &e) {
                 // A pass that gives up with a plain exception (graph validation at commit, the
                 // execution-order builder meeting a cycle, an arena limit) hit a defect of the
@@ -733,6 +859,8 @@ PassApplyResult applyPassesDetailed(
                 return {nullptr, PassApplyStatus::Failed};
             }
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
+            // What the pass had to say about the program, before the next pass runs it.
+            deliverPassWarnings(*ctx, p);
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};

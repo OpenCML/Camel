@@ -1,0 +1,13 @@
+module sem_generic_instance
+
+func twice(x: typeas T): T {
+    let n = x + undefined_in_body
+    return x + x
+}
+
+func main(): int sync {
+    println(twice(21))
+    println(twice([1]))
+    println(twice(true))
+    return 0
+}

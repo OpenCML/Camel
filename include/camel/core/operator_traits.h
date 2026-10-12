@@ -34,6 +34,7 @@
 #include "camel/core/type/resolver.h"
 
 #include <functional>
+#include <initializer_list>
 #include <optional>
 #include <span>
 #include <shared_mutex>
@@ -63,6 +64,19 @@ class OperatorTraitsRegistry {
 
     /// Registers (or replaces) the traits of `uri`, e.g. "tensor:matmul" or ":op/add_i".
     void set(std::string_view uri, OperatorTraits traits);
+
+    /// Declares the purity of the operators `protocol:name`, one `{name, pure}` each. Every
+    /// operator of a module has to be declared, the ones with side effects too (design
+    /// principles 2.9): an operator nobody declared is treated as having side effects, and
+    /// its module is told so when it is loaded. `pure` means the result depends on the
+    /// arguments only: not on a clock, a random generator, the environment or a file.
+    void declare(
+        std::string_view protocol,
+        std::initializer_list<std::pair<std::string_view, bool>> operators) {
+        for (const auto &[name, pure] : operators) {
+            set(std::string(protocol) + ":" + std::string(name), {.pure = pure});
+        }
+    }
 
     /// Traits of `uri`, or nullopt when nothing was registered.
     std::optional<OperatorTraits> find(std::string_view uri) const;
