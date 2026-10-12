@@ -328,6 +328,18 @@ class Encoder {
         emitBytes({0x4c, 0x89, 0xf4});
         asmLineAt(at, "mov rsp, r14");
     }
+    // The recursion budget lives in r15 (callee-saved, loaded by the entry wrapper).
+    // sub r15, 1: CF is set when the budget was already used up.
+    void takeDepthBudget() {
+        size_t at = here();
+        emitBytes({0x49, 0x83, 0xef, 0x01});
+        asmLineAt(at, "sub r15, 1  ; recursion budget");
+    }
+    void returnDepthBudget() {
+        size_t at = here();
+        emitBytes({0x49, 0xff, 0xc7});
+        asmLineAt(at, "inc r15");
+    }
     void testRegReg32(uint8_t reg) {
         size_t at = here();
         emitRex(false, hw(reg), hw(reg));

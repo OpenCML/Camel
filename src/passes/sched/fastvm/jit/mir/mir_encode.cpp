@@ -560,6 +560,11 @@ void encodeMirBuffer(
         case MirOp::NativeJitFuncCall: {
             auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
 
+            // One more activation: the interpreter refuses the call that would nest deeper
+            // than its limit, and so does this one, at the same call.
+            enc.takeDepthBudget();
+            emitFaultIf(Encoder::kCondB, p->pc, JitFaultKind::MaxRecursionDepthExceeded);
+
             // The callee's frame is built below the saved slot base, with rdi still on the
             // caller's frame; arguments already in registers are not disturbed (r11 is not
             // allocatable).
@@ -595,6 +600,7 @@ void encodeMirBuffer(
 
             enc.addRspImm(p->calleeSlotBytes);
             enc.popRdi();
+            enc.returnDepthBudget();
             if (p->resultVReg != kInvalidVReg) {
                 // Result-visible mode: keep the call result in a vreg so a
                 // following VStore/VLoad pair can be optimized away upstream.

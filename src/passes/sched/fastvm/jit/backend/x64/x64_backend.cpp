@@ -925,6 +925,14 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             const size_t slotCount      = unit.runtimeGraph->runtimeDataType()->size();
             params->calleeSlotBytes =
                 static_cast<uint32_t>((slotCount * sizeof(slot_t) + 15u) & ~size_t{15});
+            if (params->calleeSlotBytes > x64::kMaxNativeFrameBytes)
+                return fail(
+                    std::format(
+                        "pc={} self call with a frame of {} bytes (more than {}): the recursion "
+                        "would not fit the machine stack at the recursion limit",
+                        pc,
+                        params->calleeSlotBytes,
+                        x64::kMaxNativeFrameBytes));
             // Phase L: the arguments of a call with few of them are loaded by visible
             // VLoadFromFrame, so that peephole can fuse a preceding store with the load.
             const bool inRegisters = srcArgs.size() <= kMaxRegisterArgs;
@@ -1188,11 +1196,15 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         code.push_back(0x53);                  // push rbx
         code.insert(code.end(), {0x41, 0x54}); // push r12
         code.insert(code.end(), {0x41, 0x56}); // push r14
-        code.insert(code.end(), {0x41, 0x57}); // push r15 (keeps the body's stack alignment)
+        code.insert(code.end(), {0x41, 0x57}); // push r15
         // mov rdi, rcx  (Win64 arg1 → JIT slot base)
         code.insert(code.end(), {0x48, 0x89, 0xCF});
         // mov rsi, rdx  (Win64 arg2 → JIT ctx)
         code.insert(code.end(), {0x48, 0x89, 0xD6});
+        // mov r15, [rsi + depthBudget]  — calls the body may still nest
+        code.insert(
+            code.end(),
+            {0x4C, 0x8B, 0x7E, static_cast<uint8_t>(x64::kJitCtxDepthBudgetOffset)});
         // mov rbx, imm64(poolTopAddr)  — cached &FramePool::top_
         code.push_back(0x48);
         code.push_back(0xBB);
@@ -1235,8 +1247,12 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         code.insert(code.end(), {0x41, 0x54});       // push r12
         code.insert(code.end(), {0x41, 0x55});       // push r13
         code.insert(code.end(), {0x41, 0x56});       // push r14
-        code.insert(code.end(), {0x41, 0x57}); // push r15 (keeps the body's stack alignment)
+        code.insert(code.end(), {0x41, 0x57});       // push r15
         code.insert(code.end(), {0x49, 0x89, 0xF5}); // mov r13, rsi
+        // mov r15, [rsi + depthBudget]  — calls the body may still nest
+        code.insert(
+            code.end(),
+            {0x4C, 0x8B, 0x7E, static_cast<uint8_t>(x64::kJitCtxDepthBudgetOffset)});
         // mov rbx, imm64(poolTopAddr)
         code.push_back(0x48);
         code.push_back(0xBB);

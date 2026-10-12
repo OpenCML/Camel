@@ -175,13 +175,20 @@ enum class MirOp : uint8_t {
 // JitContext, restores the stack pointer its entry wrapper saved and returns to the wrapper's
 // C++ caller, which raises the located diagnostic (FastVMSchedPass::invokeOwnedJitFrame).
 enum class JitFaultKind : uint32_t {
-    None           = 0,
-    DivisionByZero = 1,
+    None                      = 0,
+    DivisionByZero            = 1,
+    MaxRecursionDepthExceeded = 2,
 };
 
 // Where compiled code finds the fields of JitContext (runtime/trampoline.h asserts them).
 constexpr int32_t kJitCtxFaultKindOffset = 16;
 constexpr int32_t kJitCtxFaultPcOffset   = 20;
+constexpr int32_t kJitCtxDepthBudgetOffset = 24;
+
+// A native self call puts a frame of the graph on the machine stack, up to the interpreter's
+// recursion limit deep. A graph whose frame is larger than this is left to the interpreter, so
+// that a recursion at the limit stays within about half a megabyte of stack.
+constexpr uint32_t kMaxNativeFrameBytes = 2048;
 
 struct Mir {
     MirOp op{MirOp::Nop};

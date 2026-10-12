@@ -282,13 +282,17 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     runtimeTarget != nullptr,
                     "FastVM direct FUNC target must have a materialized runtime graph.");
                 if (getFuncExtraFn(callBc) != nullptr) {
-                    JitEntryFn fn    = reinterpret_cast<JitEntryFn>(getFuncExtraFn(callBc));
+                    JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(callBc));
+                    // The call counts against the recursion limit as an interpreted one does;
+                    // the compiled callee continues the count (invokeOwnedJitFrame).
+                    push(pc, currFrame);
                     Frame *funcFrame = [&]() {
                         Frame *frame = framePool_.acquire(runtimeTarget);
                         populateDirectCallFrame(currFrame, frame, callSrcArgs, callDstSlots);
                         return frame;
                     }();
                     slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
+                    (void)pop();
                     if (bc.result != 0) {
                         currFrame->set(bc.result, result);
                     }

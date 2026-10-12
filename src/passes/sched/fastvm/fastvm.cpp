@@ -627,6 +627,9 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     slot_t *slots = frame->slotBase();
     slots[0]      = reinterpret_cast<slot_t>(frame);
     auto *jc      = static_cast<JitContext *>(jitCtx);
+    // Compiled code counts its own nested calls against what the interpreter's stack has left,
+    // so that a recursion ends at the same call whichever of the two runs it.
+    jc->depthBudget = maxRecursionDepth_ - std::min(stackDepth_, maxRecursionDepth_);
     slot_t result;
     try {
         result = fn(slots, jitCtx);
@@ -658,11 +661,17 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
         0,
         "",
         ExecutionSiteKind::JitPc);
+    const std::string graphName = frame->graphName();
     if (framePool_.isActive(frame))
         framePool_.release(frame);
     const RuntimeFault fault =
         kind == x64::JitFaultKind::DivisionByZero
             ? RuntimeFault::make(RuntimeDiag::DivisionByZero)
+        : kind == x64::JitFaultKind::MaxRecursionDepthExceeded
+            ? RuntimeFault::make(
+                  RuntimeDiag::MaxRecursionDepthExceeded,
+                  graphName,
+                  maxRecursionDepth_)
             : RuntimeFault::make(
                   RuntimeDiag::RuntimeError,
                   std::format(
