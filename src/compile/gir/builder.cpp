@@ -1469,9 +1469,9 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
               bindings(b.typeBindings_), waited(b.waited_), synced(b.synced_), varied(b.varied_),
-              module(b.module_), foreignInstanceOf(b.foreignInstanceOf_),
               declaresVariable(b.declaresVariable_), calleeAllowed(b.genericCalleeAllowed_),
-              lastSynced(b.lastSyncedNode_), opened(t) {
+              lastSynced(b.lastSyncedNode_), module(b.module_),
+              foreignInstanceOf(b.foreignInstanceOf_), opened(t) {
             ++self.instantiationDepth_;
             ++opened.openInstances;
         }

@@ -24,6 +24,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
+#include "camel/core/module/introspect.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/execute/entry_args.h"
@@ -276,7 +277,7 @@ int main(int argc, char *argv[]) {
                     os << generator.generate(ast);
                 }
             }
-            if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS) {
+            if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -287,7 +288,7 @@ int main(int argc, char *argv[]) {
             if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
                 mainModule->compile(CompileStage::GCT);
             }
-            if (Inspect::dumpGIR || Inspect::dumpTNS) {
+            if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps) {
                 mainModule->compile(CompileStage::Done);
             }
         } else {
@@ -307,6 +308,17 @@ int main(int argc, char *argv[]) {
                 auto *entry = ctx->runtimeRootGraph();
                 TopoNodeSeqDumpPass pass(ctx);
                 (void)pass.apply(entry, os);
+            }
+            if (Inspect::dumpOps) {
+                // An import that names nothing the program uses is loaded here, so that the
+                // listing does not depend on what the program happens to call.
+                auto modules = ctx->importedModules();
+                for (const auto &module : modules) {
+                    if (!module->loaded()) {
+                        module->load();
+                    }
+                }
+                camel::core::module::dumpOperators(modules, os);
             }
             return 0;
         }

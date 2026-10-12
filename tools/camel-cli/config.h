@@ -107,6 +107,7 @@ extern bool dumpAST;    // Whether to dump Abstract Syntax Tree
 extern bool dumpGCT;    // Whether to dump Graph Construction Tree
 extern bool dumpGIR;    // Whether to dump Graph Intermediate Representation
 extern bool dumpTNS;    // Whether to dump Topological Node Sequence
+extern bool dumpOps;    // Whether to dump the operators of the imported modules
 extern bool geneCode;   // Whether to dump generate code from GIR
 extern int passUntil;   // Pass until the given pass
 } // namespace Inspect

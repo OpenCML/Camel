@@ -147,6 +147,9 @@ class Context : public std::enable_shared_from_this<Context> {
     /// Returns main module plus all UserDefinedModules from modules_ (excluding builtin)
     std::vector<module_ptr_t> allUserModules() const;
 
+    /// The built-in module and every module imported so far, sorted by name.
+    std::vector<module_ptr_t> importedModules() const;
+
     /// Dump diagnostics from main and all imported modules that have errors; json=true for JSON
     /// format
     void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
