@@ -1,0 +1,19 @@
+id = "tools.debugger"
+order = 910
+tier = "feat"
+tags = ["feat", "tools", "debugger"]
+desc = "camel-db, the debugger. Each test is a script that starts camel-db and talks to it by protocol (test/tools/debugger/client.mjs): the HTTP API of the Web UI, or the Debug Adapter Protocol over stdio."
+
+[defaults]
+kind = "behavior"
+tool = "node"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "ok "
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "debugger.http_gateway"
+desc = "The HTTP API as the Web UI uses it: a file becomes a task in a worker process; node breakpoints by origin, node steps into a callee and over it, continue, the task's log, the graph after each pass, restart with the breakpoints and passes kept, terminate."
+case = "../../../cases/tools/debugger/http_gateway.test.mjs"
