@@ -51,7 +51,8 @@ jobs:
             slug: linux-x64
             arch: x86-64-v2
             experimental: false
-          - runner: windows-latest
+          # Pinned: Conan maps this Clang to Visual Studio 17, which newer images no longer carry.
+          - runner: windows-2022
             slug: win-x64
             arch: x86-64-v2
             experimental: false
@@ -119,8 +120,10 @@ jobs:
         env:
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
         run: |
-          brew install llvm ninja
-          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          # Pinned to the major version of the Linux job: fmt 11.2 does not compile with the
+          # libc++ of the newest Homebrew LLVM.
+          brew install llvm@19 ninja
+          echo "$(brew --prefix llvm@19)/bin" >> "$GITHUB_PATH"
 
       - name: Verify toolchain
         run: |
