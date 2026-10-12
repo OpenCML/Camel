@@ -394,12 +394,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 try {
                     result = func(withView, normView, *context_);
                 } catch (const RuntimeFault &fault) {
-        // A debugger stops here, while every frame of the stack is still alive.
-        if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
-            observer->faultRaised(
-                fault,
-                faultIsolationDepth() != 0 && isIsolatableFault(fault.diag()));
-        }
+                    observeFault(fault); // a debugger stops here, every frame still alive
                     throw reportRuntimeFault(
                         *context_,
                         fault,
@@ -474,6 +469,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             pc += bc.opsize;
         }
     } catch (const RuntimeFault &fault) {
+        observeFault(fault); // a debugger stops here, before any frame is released
         std::unordered_set<Frame *> released;
         auto releaseFrame = [&](Frame *frame) {
             if (!frame || released.count(frame) != 0) {

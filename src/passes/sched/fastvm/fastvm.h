@@ -155,6 +155,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     /// Inspection mode only: records the origin of the instruction at `pc` as the current
     /// runtime origin and reports the instruction to the execution observer, if any.
     void inspectInstruction(size_t pc, ctx::Frame *frame);
+    /// Reports a fault to the execution observer, if any, where it is caught and before the
+    /// frames of the stack are released (a debugger shows the stack and the values there).
+    void observeFault(const camel::core::error::RuntimeFault &fault);
 
     void precompile(camel::runtime::GCGraph *runtimeRoot);
     /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).

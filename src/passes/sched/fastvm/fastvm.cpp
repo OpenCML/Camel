@@ -442,6 +442,12 @@ void FastVMSchedPass::inspectInstruction(size_t pc, Frame *frame) {
     observer->beforeInstruction(site);
 }
 
+void FastVMSchedPass::observeFault(const camel::core::error::RuntimeFault &fault) {
+    if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+        observer->faultRaised(fault, faultIsolationDepth() != 0 && isIsolatableFault(fault.diag()));
+    }
+}
+
 camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     (void)os;
     ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
