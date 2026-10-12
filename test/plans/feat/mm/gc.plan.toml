@@ -244,3 +244,209 @@ expect_exit = 0
 expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "gc.heap_workload.poison.nvm"
+desc = "Arrays, structs, strings, closures and captured variables under safepoint poisoning (nvm). A constant reached twice in one minor collection (as a graph root and through an active frame) was copied twice."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
+args = ["${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["gc_heap boxes=16 first=5 last=36 mapped3=9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gc.heap_workload.poison.fvm"
+desc = "Arrays, structs, strings, closures and captured variables under safepoint poisoning (fvm). A constant reached twice in one minor collection (as a graph root and through an active frame) was copied twice."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["gc_heap boxes=16 first=5 last=36 mapped3=9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gc.heap_workload.poison.prl"
+desc = "Arrays, structs, strings, closures and captured variables under safepoint poisoning (prl). A constant reached twice in one minor collection (as a graph root and through an active frame) was copied twice."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
+args = ["${case}", "${run_prl}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["gc_heap boxes=16 first=5 last=36 mapped3=9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gc.heap_workload.poison.jit"
+desc = "Arrays, structs, strings, closures and captured variables under safepoint poisoning (jit). A constant reached twice in one minor collection (as a graph root and through an active frame) was copied twice."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_heap_workload.cml"
+args = ["${case}", "${run_jit}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["gc_heap boxes=16 first=5 last=36 mapped3=9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gc.born_old.poison.nvm"
+desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (poison, nvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_born_old.cml"
+args = ["${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc.born_old.moving_stress.nvm"
+desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, nvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_born_old.cml"
+args = ["${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc.born_old.poison.fvm"
+desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (poison, fvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_born_old.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc.born_old.moving_stress.fvm"
+desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, fvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_born_old.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc.born_old.poison.prl"
+desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (poison, prl)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_born_old.cml"
+args = ["${case}", "${run_prl}"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc.born_old.moving_stress.prl"
+desc = "A large array filled with young strings by plain stores (random.sample, shuffle) keeps them through minor collections (moving stress, prl)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_born_old.cml"
+args = ["${case}", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["picked 600 600 64", "mixed 600 600 64"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "gc.jit_object_constant.poison"
+desc = "std::jit leaves a graph with an object constant to the interpreter when objects move (the constant would be baked into the code as an address), and still compiles the scalar one."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
+args = ["-vv", "${case}", "std::inline", "std::jit"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'count'", "compile skipped for graph 'tag'"]
+expect_stdout_contains = ["leaf 50", "leaf 60 200", "leaf 70 200"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gc.jit_object_constant.default"
+desc = "Without the moving collector std::jit compiles both graphs."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
+args = ["-vv", "${case}", "std::inline", "std::jit"]
+envs = ["CAMEL_GC_PRINT_CONFIG=0"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'count'", "compiled & cached graph 'tag'"]
+expect_stdout_contains = ["leaf 50", "leaf 60 200", "leaf 70 200"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gc.runtime_graph_constants.moving.nvm"
+desc = "The constants of graphs created while the program runs (autodiff pullbacks), reached only through Function values, are traced and updated by minor collections (nvm)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
+args = ["${case}", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc.runtime_graph_constants.moving.fvm"
+desc = "The constants of graphs created while the program runs (autodiff pullbacks), reached only through Function values, are traced and updated by minor collections (fvm)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc.live_table.generational.nvm"
+desc = "56,000 live rows are promoted while temporaries die: promotion into a full elder space used to throw std::bad_alloc; the space grows now (nvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_table.cml"
+args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_table total=11231"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc.live_table.generational.fvm"
+desc = "56,000 live rows are promoted while temporaries die: promotion into a full elder space used to throw std::bad_alloc; the space grows now (fvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_table.cml"
+args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_table total=11231"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc.live_table.generational.prl"
+desc = "56,000 live rows are promoted while temporaries die: promotion into a full elder space used to throw std::bad_alloc; the space grows now (prl)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_table.cml"
+args = ["${case}", "--arg", "rows=56000", "--arg", "reps=2", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_table total=11231"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

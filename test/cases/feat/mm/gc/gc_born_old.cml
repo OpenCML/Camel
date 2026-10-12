@@ -1,0 +1,32 @@
+/**
+ * Objects that are born old and filled by their creator with plain stores.
+ *
+ * An array of more than 512 elements has its backing store in the large-object space, which
+ * the moving collector does not move. `sample` fills such a store with references to strings
+ * that are still young; nothing records that edge when it is written. The calls that follow
+ * reach safepoints and allocate, so the strings move: the collector has to find the store
+ * and update it.
+ */
+module gc_born_old
+
+import { seed, sample, shuffle } from random
+
+func label(i: int): string { return 'item-' + string(i) }
+
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => label(i)>) }
+
+func good(xs: string[]): int {
+    return xs->map<(s: string): int => if len(s) >= 6 then 1 else 0>->reduce<(a: int, b: int): int => a + b, 0>
+}
+
+func main(): int sync {
+    seed(7)
+    let names = range(0, 700)->map<(i: int): string => label(i)>
+    let picked = sample(names, 600)
+    let c = churn(64)
+    println('picked', len(picked), good(picked), c)
+    let mixed = shuffle(picked)
+    let c2 = churn(64)
+    println('mixed', len(mixed), good(mixed), c2)
+    return 0
+}

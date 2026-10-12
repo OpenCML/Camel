@@ -1,0 +1,30 @@
+/**
+ * A self-recursive function that std::jit compiles and whose result is an object constant.
+ *
+ * Compiled code has no stack maps, and a static slot it reads is baked into the code as the
+ * address the object had when the function was compiled. With a collector that moves objects
+ * that address goes stale as soon as the constant moves, so such a graph must stay in the
+ * interpreter; `count`, which has no object constant, is still compiled.
+ */
+module gc_jit_constants
+
+func tag(n: int): string {
+    return if n <= 0 then 'leaf' else tag(n - 1)
+}
+
+func count(n: int, acc: int): int {
+    return if n <= 0 then acc else count(n - 1, acc + 1)
+}
+
+func label(i: int): string { return 'item-' + string(i) }
+
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => label(i)>) }
+
+func main(): int sync {
+    println(tag(50), count(50, 0))
+    let c = churn(200)
+    println(tag(60), count(60, 0), c)
+    let c2 = churn(200)
+    println(tag(70), count(70, 0), c2)
+    return 0
+}
