@@ -164,6 +164,8 @@ jobs:
           path = sys.argv[1]
           text = open(path, encoding="utf-8").read()
           text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
+          # The image has the 14.4x toolset; v143 makes Conan ask vcvars for 14.3, which is absent.
+          text = re.sub(r"(?m)^compiler\.runtime_version=v143$", "compiler.runtime_version=v144", text)
           text += "\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n"
           open(path, "w", encoding="utf-8", newline="\n").write(text)
           EOF
@@ -249,6 +251,8 @@ jobs:
           path = sys.argv[1]
           text = open(path, encoding="utf-8").read()
           text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
+          # The image has the 14.4x toolset; v143 makes Conan ask vcvars for 14.3, which is absent.
+          text = re.sub(r"(?m)^compiler\.runtime_version=v143$", "compiler.runtime_version=v144", text)
           text += "\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n"
           open(path, "w", encoding="utf-8", newline="\n").write(text)
           EOF
