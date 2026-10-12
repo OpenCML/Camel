@@ -1,0 +1,50 @@
+/**
+ * `==` and `!=` on arrays, tuples and structs compare by content, element by element
+ * (design principles 2.10): nested values, strings, `T?` / `T!` and maps or sets inside them
+ * included; float elements as floats (an array that holds a NaN does not equal itself).
+ * `contains` on an array uses the same equality, and a string has `contains` too.
+ */
+module content_equality
+
+type Point = { x: int, y: int }
+type Named = { name: string, at: Point, tags: string[] }
+
+func ints(n: int): int[] { return range(0, n) }
+func nan(): float { return (1.0e308 * 10.0) - (1.0e308 * 10.0) }
+func same(a: int[], b: int[]): bool { return a == b }
+
+func main(): int sync {
+    // arrays
+    println([1, 2] == [1, 2], [1, 2] != [1, 2])
+    println([1, 2] == [1, 3], [1, 2] != [1, 3])
+    println(ints(3) == [0, 1, 2], ints(3) == ints(4), same(ints(0), ints(0)))
+    println(['a', 'bc'] == ['a', 'b' + 'c'], [[1], [2, 3]] == [[1], [2, 3]], [[1], [2, 3]] != [[1], [2, 4]])
+    // tuples
+    println((1, 'a', true) == (1, 'a', true), (1, 'a', true) == (1, 'b', true), (1, (2, [3])) == (1, (2, [3])))
+    // structs
+    let p: Point = { x: 1, y: 2 }
+    let q: Point = { x: 1, y: 2 }
+    let r: Point = { x: 1, y: 3 }
+    println(p == q, p != q, p == r, p != r)
+    let n1: Named = { name: 'n', at: { x: 1, y: 2 }, tags: ['t', 'u'] }
+    let n2: Named = { name: 'n', at: { x: 1, y: 2 }, tags: ['t', 'u'] }
+    let n3: Named = { name: 'n', at: { x: 1, y: 2 }, tags: ['t'] }
+    println(n1 == n2, n1 == n3)
+    // floats as floats
+    let z = nan()
+    let fs = [1.0, z]
+    println([0.5, 1.5] == [0.5, 1.5], fs == fs, fs != fs, [0.0] == [0.0 - 0.0])
+    // T?, T!, maps and sets as parts
+    let a: int? = 1
+    let b: int? = 1
+    let c: int? = null
+    println([a, c] == [b, c], [a, c] == [c, a], (parse_int('7'), 1) == (parse_int('7'), 1), (parse_int('x'), 1) == (parse_int('7'), 1))
+    let m1 = [('k', 1)] as Map<string, int>
+    let m2 = [('k', 1)] as Map<string, int>
+    let m3 = [('k', 2)] as Map<string, int>
+    println([m1] == [m2], [m1] == [m3], ([1, 2] as Set<int>, 0) == ([2, 1] as Set<int>, 0))
+    // contains
+    println([[1, 2], [3]]->contains<[3]>, [[1, 2], [3]]->contains<[4]>, [p, r]->contains<q>, [1.0, z]->contains<z>)
+    println('hello'->contains<'ell'>, 'hello'->contains<'elo'>, 'hello'->contains<''>, ''->contains<''>, ''->contains<'a'>)
+    return 0
+}

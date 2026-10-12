@@ -61,6 +61,10 @@ enum class RuntimeDiag : uint32_t {
     RegexInvalid           = 0x000039,
     TimeFormatFailed       = 0x00003A,
     OperatorNotImplemented = 0x00003B,
+    // Faults and reports of the rulings of 2026-10-12 (design principles 2.10).
+    ConversionOutOfRange   = 0x000050,
+    UnhandledError         = 0x000051,
+    SliceOutOfRange        = 0x000052,
     // 0x90 and up, clear of what other work adds after OperatorNotImplemented.
     MatchNotExhaustive     = 0x000090,
     // Warnings (severity bits = Warn).

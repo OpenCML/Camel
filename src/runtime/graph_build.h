@@ -122,6 +122,10 @@ void collectStaticGraphRefsRecursive(
 /// and a control input, FUNC with a callee, CALL with a callee input. Throws std::runtime_error;
 /// inside a pass that becomes RuntimeDiag::PassInternalError naming the pass.
 void validateRuntimeGraphPayload(const GCGraph *graph);
+/// The branch-arm invariant (branch_arms.cpp; docs/technical/17_graph_rewrite_api_contracts.md,
+/// 4.1): between a BRCH and its JOIN every executed node belongs to exactly one arm. Part of
+/// validateRuntimeGraphPayload; throws std::runtime_error naming the graph, the node and the arms.
+void validateRuntimeBranchArms(const GCGraph *graph);
 /// The check that needs the callees encoded: every direct call passes as many arguments as its
 /// callee has ports. Run on each graph once the whole set of a commit is encoded.
 void validateRuntimeGraphCalls(const GCGraph *graph);

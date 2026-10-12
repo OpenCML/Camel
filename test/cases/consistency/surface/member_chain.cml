@@ -1,0 +1,23 @@
+/**
+ * `t.0.1`: the lexer reads `0.1` as one real number; the parser splits it into the two indices
+ * it stands for. It used to be a syntax error, with `(t.0).1` as the way round.
+ */
+type P = { pair: (int, (int, int)), name: string }
+
+func make(k: int): ((int, int), (int, (int, int))) {
+    return ((k, k + 1), (k + 2, (k + 3, k + 4)))
+}
+
+func main(): int sync {
+    let t = ((1, 2), (3, (4, 5)))
+    println(t.0.0, t.0.1, t.1.0, t.1.1.0, t.1.1.1)
+    println((t.0).1, (t.1.1).1, t.1.1)
+    let p: P = { pair: (7, (8, 9)), name: 'p' }
+    println(p.pair.0, p.pair.1.0, p.pair.1.1, p.name)
+    println(make(10).0.1, make(10).1.1.1)
+    let ts = [t, make(20)]
+    println(ts[1].0.1, ts[0].1.1.0)
+    // A real number is still a real number.
+    println(0.1 + 1.1, float(t.0.1) + 0.5)
+    return 0
+}

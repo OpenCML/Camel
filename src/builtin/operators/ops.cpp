@@ -21,7 +21,14 @@
 #include "camel/core/context/context.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/collection.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/int_div.h"
@@ -280,8 +287,9 @@ slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return assignPow<Float64>(norm);
 }
 
-// `&=` and `|=` on bool: `a = a && b` and `a = a || b`. The right side is an operand like any
-// other, evaluated before the operator runs.
+// `&=` and `|=` on bool: `a = a && b` and `a = a || b` (design principles 2.10: they are the
+// boolean and / or; bit operations are functions, `bit_and` and the like of `math`). The right
+// side is an operand like any other, evaluated before the operator runs.
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     Bool lhs    = cell->get<Bool>(0) && norm.get<Bool>(1);
@@ -318,46 +326,161 @@ slot_t __builtin__and__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 }
 
-// `==` on two scalars. Floats compare as numbers (IEEE: NaN equals nothing, itself included,
-// and the two zeros are equal), which is what FastVM and the JIT compile `==` on floats to;
-// comparing the slots would compare bit patterns. Everything else is equal when its slots are.
-static Bool scalarSlotsEqual(ArgsView &norm, TypeCode code) {
-    switch (code) {
-    case TypeCode::Float32:
-        return norm.get<Float32>(0) == norm.get<Float32>(1);
-    case TypeCode::Float64:
-        return norm.get<Float64>(0) == norm.get<Float64>(1);
-    default:
-        return norm.slot(0) == norm.slot(1);
+bool isContentComparable(const Type *type) {
+    if (type == nullptr) {
+        return false;
     }
+    switch (type->code()) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::Bool:
+    case TypeCode::Byte:
+    case TypeCode::String:
+        return true;
+    case TypeCode::Array:
+        return isContentComparable(static_cast<const ArrayType *>(type)->elemType());
+    case TypeCode::Tuple: {
+        const auto *tuple = static_cast<const TupleType *>(type);
+        if (tuple->isCell()) {
+            return false;
+        }
+        if (tuple->isTagged()) {
+            return isContentComparable(tuple->payloadType());
+        }
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (!isContentComparable(tuple->typeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    case TypeCode::Struct: {
+        const auto *st = static_cast<const StructType *>(type);
+        for (size_t i = 0; i < st->size(); ++i) {
+            if (!isContentComparable(st->typeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    default:
+        break;
+    }
+    if (const CollectionType *coll = asCollectionType(type)) {
+        // A key type is comparable by construction; the values of a map must be.
+        return !coll->isMap() || isContentComparable(coll->valueType());
+    }
+    return false;
 }
 
-slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    TypeCode lhsType = norm.code(0);
-
-    if (isGCTraced(lhsType)) {
-        Object *lhs    = norm.get<Object *>(0);
-        Object *rhs    = norm.get<Object *>(1);
-        const Type *ty = norm.type(0);
-        Bool res       = lhs->equals(rhs, ty, false);
-        return toSlot(res);
-    } else {
-        return toSlot(scalarSlotsEqual(norm, lhsType));
+bool valuesEqualByContent(slot_t a, slot_t b, const Type *type) {
+    switch (type->code()) {
+    case TypeCode::Float32:
+        return fromSlot<Float32>(a) == fromSlot<Float32>(b);
+    case TypeCode::Float64:
+        return fromSlot<Float64>(a) == fromSlot<Float64>(b);
+    case TypeCode::String: {
+        if (a == b) {
+            return true;
+        }
+        if (a == NullSlot || b == NullSlot) {
+            return false;
+        }
+        return fromSlot<const String *>(a)->view() == fromSlot<const String *>(b)->view();
     }
+    case TypeCode::Array: {
+        if (a == NullSlot || b == NullSlot) {
+            return a == b;
+        }
+        const auto *lhs      = fromSlot<const Array *>(a);
+        const auto *rhs      = fromSlot<const Array *>(b);
+        const Type *elemType = static_cast<const ArrayType *>(type)->elemType();
+        if (lhs->size() != rhs->size()) {
+            return false;
+        }
+        // Not short-cut by identity: an array that holds a NaN does not equal itself.
+        for (size_t i = 0; i < lhs->size(); ++i) {
+            if (!valuesEqualByContent(lhs->get<slot_t>(i), rhs->get<slot_t>(i), elemType)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    case TypeCode::Tuple: {
+        const auto *tuple = static_cast<const TupleType *>(type);
+        if (tuple->isNullable()) {
+            if (isNullValue(a) || isNullValue(b)) {
+                return isNullValue(a) && isNullValue(b);
+            }
+            return valuesEqualByContent(
+                nullablePayload(a),
+                nullablePayload(b),
+                tuple->payloadType());
+        }
+        if (tuple->isFallible()) {
+            const bool failedA = isErrorValue(a), failedB = isErrorValue(b);
+            if (failedA != failedB) {
+                return false;
+            }
+            if (failedA) {
+                return valuesEqualByContent(fallibleError(a), fallibleError(b), errorType());
+            }
+            return valuesEqualByContent(
+                falliblePayload(a),
+                falliblePayload(b),
+                tuple->payloadType());
+        }
+        if (a == NullSlot || b == NullSlot) {
+            return a == b;
+        }
+        const auto *lhs = fromSlot<const Tuple *>(a);
+        const auto *rhs = fromSlot<const Tuple *>(b);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (!valuesEqualByContent(lhs->get<slot_t>(i), rhs->get<slot_t>(i), tuple->typeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    case TypeCode::Struct: {
+        if (a == NullSlot || b == NullSlot) {
+            return a == b;
+        }
+        const auto *st  = static_cast<const StructType *>(type);
+        const auto *lhs = fromSlot<const Struct *>(a);
+        const auto *rhs = fromSlot<const Struct *>(b);
+        for (size_t i = 0; i < st->size(); ++i) {
+            if (!valuesEqualByContent(lhs->get<slot_t>(i), rhs->get<slot_t>(i), st->typeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    default:
+        break;
+    }
+    if (type->isGCTraced()) {
+        if (a == NullSlot || b == NullSlot) {
+            return a == b;
+        }
+        // Maps and sets (and anything else that is an object): the object's own deep equality.
+        return fromSlot<const Object *>(a)->equals(fromSlot<const Object *>(b), type, true);
+    }
+    return a == b;
+}
+
+// `==` and `!=`. Floats compare as numbers (IEEE: NaN equals nothing, itself included, and
+// the two zeros are equal), which is what FastVM and the JIT compile `==` on floats to;
+// comparing the slots would compare bit patterns. Arrays, tuples and structs compare by
+// content, element by element (design principles 2.10).
+slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return toSlot<Bool>(valuesEqualByContent(norm.slot(0), norm.slot(1), norm.type(0)));
 }
 
 slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    TypeCode lhsType = norm.code(0);
-
-    if (isGCTraced(lhsType)) {
-        Object *lhs    = norm.get<Object *>(0);
-        Object *rhs    = norm.get<Object *>(1);
-        const Type *ty = norm.type(0);
-        Bool res       = !lhs->equals(rhs, ty, false);
-        return toSlot(res);
-    } else {
-        return toSlot(!scalarSlotsEqual(norm, lhsType));
-    }
+    return toSlot<Bool>(!valuesEqualByContent(norm.slot(0), norm.slot(1), norm.type(0)));
 }
 
 slot_t __builtin__strict_eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -632,9 +755,9 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
         case TypeCode::String: {
             // A string is bytes and its indices count bytes (design principles 2.9).
-            // DESIGN-QUESTION(string-index): the byte at the index is returned as a string
-            // of that one byte; the alternative is a number (there is no byte type in the
-            // language). A byte of a multi-byte character is not a valid string by itself.
+            // Design principles 2.10: `'abc'[1]` is the string of that one byte (not a
+            // number; there is no byte type in the language). A byte of a multi-byte
+            // character is not a valid string by itself.
             String *str = norm.get<String *>(0);
             Int64 raw   = norm.get<Int64>(1);
             size_t idx  = static_cast<size_t>(raw);

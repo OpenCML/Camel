@@ -1,0 +1,16 @@
+// Tensors come from the `tensor` module.
+// Run: camel docs/tutorial/examples/15_tensor.cml
+module tensor_demo
+
+import { Tensor, ones, zeros, shape, sum, transpose } from tensor
+
+func main(): int sync {
+    let a = ones([2, 3])
+    let b = ones([3, 1])
+    let c = a @ b                    // matrix product: 2x3 @ 3x1
+    println(shape(a), shape(c))
+    println(c)
+    println(sum(a * 2.0 + 1.0))
+    println(shape(transpose(a)))
+    return 0
+}

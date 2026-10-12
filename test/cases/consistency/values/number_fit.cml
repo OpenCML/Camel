@@ -1,0 +1,29 @@
+/**
+ * Number to number: a value that does not fit the target type is a fault (design principles
+ * 2.10): a float that is NaN, infinite or beyond the integer's range, an int beyond i32. A
+ * float inside the range truncates toward zero. A float too large for f32 becomes an infinity
+ * (IEEE rounding, not a fault). The faults are shown through `attempt`.
+ */
+module number_fit
+
+func f2i(x: float): int { return int(x) }
+func f2i32(x: float): i32 { return i32(x) }
+func i2i32(x: int): i32 { return i32(x) }
+func f2f32(x: float): f32 { return f32(x) }
+func mul(a: float, b: float): float { return a * b }
+
+func main(): int sync {
+    let inf = mul(1.0e308, 10.0)
+    let floats = [1.9, 0.0 - 1.9, 9.2e18, 9.3e18, 0.0 - 9.3e18, 1.0e30, 2147483647.9, 2147483648.0, 0.0 - 2147483648.9, 0.0 - 2147483649.0, inf, 0.0 - inf, inf - inf]
+    floats->foreach<(x: float) => sync {
+        println(attempt(f2i, x))
+        println(attempt(f2i32, x))
+    }>
+    println(attempt(i2i32, 2147483647))
+    println(attempt(i2i32, 2147483648))
+    println(attempt(i2i32, 0 - 2147483648))
+    println(attempt(i2i32, 0 - 2147483649))
+    println(attempt(i2i32, 5000000000))
+    println(f2f32(1.0e39) == f2f32(inf))
+    return 0
+}

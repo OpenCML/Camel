@@ -1,6 +1,6 @@
 # JIT 文档
 
-本目录存放 FastVM JIT 的**实现级注解**，与 [../technical/07_jit_architecture.md](../technical/07_jit_architecture.md) 配合使用。
+本目录存放 FastVM JIT 的**实现级注解**，与 [../07_jit_architecture.md](../07_jit_architecture.md) 配合使用。
 
 | 文档 | 说明 |
 |------|------|

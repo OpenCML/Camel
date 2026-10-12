@@ -58,20 +58,20 @@ const SetType *setTypeOf(ArgsView &args, size_t index) {
 /// `m[k]`: null when absent, otherwise the value in the form the lookup type has
 /// (DESIGN-QUESTION(map-nullable-value)).
 slot_t lookup(const Table *table, slot_t key, const MapType *type) {
-    const ptrdiff_t at = table::find(table, key, type->keyType());
-    if (at < 0) {
+    slot_t value = NullSlot;
+    if (!table::lookup(table, key, type->keyType(), value)) {
         return NullSlot;
     }
-    const slot_t value = table->values()[at];
     if (!type->lookupBoxes()) {
         return value;
     }
     return makeSome(value, static_cast<const TupleType *>(type->lookupType()));
 }
 
-/// Argument `index` of those that configure an operation (the key, the value). They are
-/// written either as `with` arguments, `put<k, v>(m)`, or after the collection,
-/// `put(m, k, v)` (DESIGN-QUESTION(map-call-form)).
+/// Argument `index` of those that configure an operation (the key, the value). A program
+/// writes them as `with` arguments, `put<k, v>(m)` (design principles 2.10: the one calling
+/// form); the other branch only serves a caller inside the runtime that passes them after
+/// the collection.
 slot_t configArg(ArgsView &with, ArgsView &norm, size_t index) {
     return with.size() > 0 ? with.slot(index) : norm.slot(index + 1);
 }
@@ -87,10 +87,13 @@ slot_t __coll_map_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __coll_map_get_or__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const Table *table = norm.get<Table *>(0);
-    const ptrdiff_t at =
-        table::find(table, configArg(with, norm, 0), mapTypeOf(norm, 0)->keyType());
-    return at < 0 ? configArg(with, norm, 1) : table->values()[at];
+    slot_t value     = NullSlot;
+    const bool found = table::lookup(
+        norm.get<Table *>(0),
+        configArg(with, norm, 0),
+        mapTypeOf(norm, 0)->keyType(),
+        value);
+    return found ? value : configArg(with, norm, 1);
 }
 
 slot_t __coll_map_put__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -112,11 +115,8 @@ slot_t __coll_remove__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __coll_has__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const ptrdiff_t at = table::find(
-        norm.get<Table *>(0),
-        configArg(with, norm, 0),
-        collTypeOf(norm, 0)->keyType());
-    return toSlot<Bool>(at >= 0);
+    return toSlot<Bool>(
+        table::has(norm.get<Table *>(0), configArg(with, norm, 0), collTypeOf(norm, 0)->keyType()));
 }
 
 slot_t __coll_len__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -178,13 +178,14 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                 const type_vec_t &norm,
                 const ModifierSet &) -> optional<Type *> { return fn(with, norm); });
     };
-    // An operation on one collection configured by `count` arguments. They are accepted in
-    // both forms, `op<a, b>(c)` and `op(c, a, b)` (DESIGN-QUESTION(map-call-form)); `fn` is
-    // handed the collection's type and the configuring types.
+    // An operation on one collection configured by `count` arguments: the collection is the
+    // ordinary argument and what configures the operation is written in angle brackets,
+    // `put<k, v>(m)` or `m->put<k, v>`, the one calling form of the standard library (design
+    // principles 2.10). `fn` is handed the collection's type and the configuring types.
     using keyed_fn = std::function<optional<Type *>(Type *coll, const type_vec_t &config)>;
     const auto keyed = [](size_t count, const char *signature, keyed_fn fn) {
         return DynamicFuncTypeResolver::create(
-            {{-1, {}}, {-1, {}}},
+            {{static_cast<int>(count), std::vector<bool>(count, false)}, {1, {false}}},
             signature,
             [count, fn = std::move(fn)](
                 const type_vec_t &with,
@@ -192,9 +193,6 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
                 const ModifierSet &) -> optional<Type *> {
                 if (with.size() == count && norm.size() == 1) {
                     return fn(norm[0], with);
-                }
-                if (with.empty() && norm.size() == count + 1) {
-                    return fn(norm[0], type_vec_t(norm.begin() + 1, norm.end()));
                 }
                 return nullopt;
             });

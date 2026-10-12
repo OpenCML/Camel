@@ -1,0 +1,13 @@
+func main(): int sync {
+    let a = 3
+    let b = a - 1
+    println(a - 1, a - 1, a + 1, 3 - 1, a - -1, a - -1, -a, -1, +1, 2 * -3)
+    let t = ((1, 2), (3, (4, 5)))
+    println(t.0.1, t.1.1.0, (t.0).1)
+    println(xs[a - 1], [-1, a - 1], f(n - 1) + f(n - 2))
+    let m = match a {
+        case -1 => 'm'
+        case _ => 'o'
+    }
+    return 0
+}

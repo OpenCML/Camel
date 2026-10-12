@@ -45,11 +45,11 @@ func nested(n: int, i: int, acc: Map<int, Map<string, int[]>>): Map<int, Map<str
 func main(): int sync {
     let m = build(60, 0, [] as Map<string, int[]>)
     println(format<len(m), total(m)>('map entries={} total={}'))
-    println(format<m['key-7'] ?? [0], m['key-59'] ?? [0], has(m, 'key-60')>('m[7]={} m[59]={} has60={}'))
+    println(format<m['key-7'] ?? [0], m['key-59'] ?? [0], m->has<'key-60'>>('m[7]={} m[59]={} has60={}'))
     let dropped = keys(m)->reduce<(acc: Map<string, int[]>, k: string): Map<string, int[]> => if len(k) > 5 then acc->remove<k> else acc, m>
     println(format<len(dropped), keys(dropped)>('after remove: {} {}'))
     let s = words(80, 0, [] as Set<string>)
-    println(format<len(s), contains(s, 'key-79'), contains(s, 'key-80')>('set size={} has79={} has80={}'))
+    println(format<len(s), s->contains<'key-79'>, s->contains<'key-80'>>('set size={} has79={} has80={}'))
     let both = intersect(s, keys(m) as Set<string>)
     println(format<len(both), len(union(s, keys(m) as Set<string>)), len(difference(s, both))>('intersect={} union={} difference={}'))
     let p = pairs(40)

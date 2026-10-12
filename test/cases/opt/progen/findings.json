@@ -478,5 +478,57 @@
   ],
   "class": "(other) wrong value after inlining",
   "fixed": "jit: the JOIN of a fused compare-branch takes the arm that reached it"
+ },
+ {
+  "id": "F38",
+  "file": "findings/inline_prl_tail_call_arguments.cml",
+  "pipeline": [
+   "std::inline",
+   "std::prl"
+  ],
+  "env": {},
+  "expected": [
+   "L4 0 6"
+  ],
+  "class": "(other) wrong value after inlining",
+  "fixed": "sched: a self tail call reads all its arguments before it writes a parameter"
+ },
+ {
+  "id": "F39",
+  "file": "findings/opt_dead_branch_laid_out.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   ""
+  ],
+  "class": "branch arm",
+  "fixed": "execute: the execution order and the arm lookup leave out nodes the exit does not depend on"
+ },
+ {
+  "id": "F40",
+  "file": "findings/opt_rootless_callee_arm_tail.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "branch arm",
+  "fixed": "inline: the result of a body without entry roots waits on the call's predecessors"
+ },
+ {
+  "id": "F41",
+  "file": "findings/opt_argument_wait_on_join.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "branch arm",
+  "fixed": "opt: what an inlined arm tail ran after is waited on by the tail, not by the JOIN"
  }
 ]

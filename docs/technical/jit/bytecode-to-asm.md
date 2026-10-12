@@ -23,7 +23,7 @@
 - **入口**：Win64 下 **rcx** = `slot_t* slots`，**rdx** = `void* ctx`；SysV 下 **rdi** = slots，**rsi** = ctx。
 - **Prologue**（Win64）：将参数复制到 **rdi** / **rsi**，便于与 SysV 一致：`mov rdi, rcx`；`mov rsi, rdx`。
 - **之后**：所有槽访问均为 `[rdi + disp]`，disp 为 8 的倍数。
-- **ABI 注意**：`rdi`、`rsi` 均为 **caller-saved**；`call` 只会压返回地址，**不会**自动保存/恢复任何寄存器。trampoline 内部会调用 `fn(callee_slots)` 并覆盖 rdi，故 FUNC/TAIL/OPER 调用 trampoline 前需 `push rdi`、返回后 `pop rdi`。详见 [07_jit_architecture.md](../technical/07_jit_architecture.md) 2.1.1。
+- **ABI 注意**：`rdi`、`rsi` 均为 **caller-saved**；`call` 只会压返回地址，**不会**自动保存/恢复任何寄存器。trampoline 内部会调用 `fn(callee_slots)` 并覆盖 rdi，故 FUNC/TAIL/OPER 调用 trampoline 前需 `push rdi`、返回后 `pop rdi`。详见 [07_jit_architecture.md](../07_jit_architecture.md) 2.1.1。
 
 ### 1.4 寄存器用途（JIT 内）
 

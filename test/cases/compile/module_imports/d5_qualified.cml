@@ -1,0 +1,7 @@
+import conf_b
+import conf_c
+
+func main(): int sync {
+    println(conf_b::f(1), conf_c::f(1))
+    return 0
+}

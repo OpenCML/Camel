@@ -1,0 +1,19 @@
+import { pure, scaled, viaTen } from mi_values
+
+let base = 1000
+var total = 0
+
+func mine(x: int): int {
+    return x + base
+}
+
+sync func add(x: int): int sync {
+    total = total + x
+    return total
+}
+
+sync func main(): int sync {
+    println(pure(1), scaled(2, base), viaTen(1))
+    println(mine(1), add(5), add(6))
+    return 0
+}

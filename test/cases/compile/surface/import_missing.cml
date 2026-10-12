@@ -1,0 +1,7 @@
+module import_missing
+
+import nosuch_module_anywhere
+
+func main(): int sync {
+    return 0
+}

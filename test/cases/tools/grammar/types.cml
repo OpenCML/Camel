@@ -1,0 +1,37 @@
+// Type declarations and type expressions.
+module types
+
+type Point = {
+    x: int,
+    y: int
+}
+type Signal = (int, int)
+type Pair<T> = (T, T)
+type Entry<K, V> = { key: K, value: V }
+type Tight<T>= T[]
+type Predicate = (p: Point) => bool
+type Effect = sync (x: int) => void
+type Grid = float[][]
+type Shape = Tensor<f32, const [3, 4]>
+type Lookup = Map<string, Set<i64>>
+type Maybe = (int?)[]
+type Words = string[]
+type All = i32 | i64 | f32 | f64 | bool | any | void
+
+func or_else(x: (typeas T)?, d: T): T {
+    return x ?? d
+}
+
+func sum_pair(p: Pair<int>): int {
+    return p.0 + p.1
+}
+
+func build(): Entry<string, Point> {
+    let (a, b) = (1, 2)
+    let { x, y } = { x: a, y: b }
+    let [head, tail] = [a, b]
+    var m, n: int, int = 1, 2
+    let entry: Entry<string, Point> = { key: 'k', value: { x: x, y: y } }
+    let empty: Map<string, int> = [] as Map<string, int>
+    return entry
+}

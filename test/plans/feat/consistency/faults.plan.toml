@@ -217,13 +217,22 @@ expect_stdout_starts_with = "before\n"
 
 [[tests]]
 name = "fault.slice_out_of_range"
-desc = "A slice whose end is past the end of the array, bounds only known at run time. What it should do is not laid down (a question for the language author); the four back ends must agree."
-kind = "behavior"
+desc = "A slice whose end is past the end of the array, bounds only known at run time: a fault, as an index out of range is (design principles 2.10). It was cut to the array on all four back ends."
 case = "../../../cases/consistency/faults/slice_out_of_range.cml"
-backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
-expect_exit = false
-expect_output_not_contains = ["Segmentation fault", "dumped core"]
+expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
+expect_diagnostic_code = "0x04000052"
+expect_diagnostic_line = 6
 expect_stdout_starts_with = "[10, 20]\n"
+expect_output_contains = ["The range 0 to 7 is out of range for an array of length 3."]
+
+[[tests]]
+name = "fault.slice_negative_bound"
+desc = "A negative bound of a slice is a fault like a negative index; it used to count from the end."
+case = "../../../cases/consistency/faults/slice_negative_bound.cml"
+expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
+expect_diagnostic_line = 7
+expect_stdout_starts_with = "[20, 30]\n"
+expect_output_contains = ["The range -2 to 3 is out of range for an array of length 3."]
 
 [[tests]]
 name = "fault.tuple_index_static"
@@ -242,6 +251,53 @@ expect_diagnostic_line = 9
 expect_diagnostic_column = 13
 
 # --- conversions --------------------------------------------------------------------------
+
+[[tests]]
+name = "fault.int_text_trailing"
+desc = "int('12abc') is a fault: the whole string must be one number (design principles 2.10). It gave 12."
+case = "../../../cases/consistency/faults/int_text_trailing.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 36
+expect_stdout_starts_with = "12\n"
+expect_output_contains = ["Cannot convert the string '12abc' to i64."]
+
+[[tests]]
+name = "fault.int_text_blank"
+desc = "int(' 7') is a fault: blanks are not part of a number. It gave 7."
+case = "../../../cases/consistency/faults/int_text_blank.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
+expect_diagnostic_line = 6
+expect_stdout_starts_with = "7\n"
+expect_output_contains = ["Cannot convert the string ' 7' to i64."]
+
+[[tests]]
+name = "fault.float_to_int_range"
+desc = "int(1e30): a float beyond the range of int is a fault with a code of its own, the value and the target type in the message. (It gave what the hardware conversion gives.)"
+case = "../../../cases/consistency/faults/float_to_int_range.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_code = "0x04000050"
+expect_diagnostic_line = 6
+expect_stdout_starts_with = "before\n9000000000000000000\n"
+expect_output_contains = ["Cannot convert 1e+30 to i64: the value is outside the range of i64 (-9223372036854775808 to 9223372036854775807)."]
+
+[[tests]]
+name = "fault.float_nan_to_int"
+desc = "int(nan) is a fault."
+case = "../../../cases/consistency/faults/float_nan_to_int.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_line = 6
+expect_stdout_starts_with = "2\n"
+expect_output_contains = ["Cannot convert nan to i64: NaN is not a number an integer can hold."]
+
+[[tests]]
+name = "fault.i32_out_of_range"
+desc = "i32(5000000000): an int beyond i32 is a fault. It wrapped to 705032704."
+case = "../../../cases/consistency/faults/i32_out_of_range.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_line = 6
+expect_stdout_starts_with = "5\n"
+expect_output_contains = ["Cannot convert 5000000000 to i32: the value is outside the range of i32 (-2147483648 to 2147483647)."]
 
 [[tests]]
 name = "fault.parse_int"
@@ -325,8 +381,42 @@ expect_stdout_starts_with = "before\nafter\n"
 
 [[tests]]
 name = "end.error_reaches_main"
-desc = "An error value nobody handled is what main returns. What the process does then (exit code, where the error is printed) is not laid down (a question for the language author); the four back ends must agree."
+desc = "An error value nobody handled is what main returns: UnhandledError on standard error at the place the error was made, exit code 1 (design principles 2.10; consistency.entry has the other forms)."
 kind = "behavior"
 case = "../../../cases/consistency/faults/error_reaches_main.cml"
-expect_exit = false
+backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["DivByZero: the divisor is zero"]
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "fault.parallel_lowest_index"
+desc = "Every element of a map faults and nothing isolates it: the program ends with the fault of element 0 (Index 10), on the four back ends alike."
+case = "../../../cases/consistency/faults/parallel_lowest_index.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
 expect_stdout_starts_with = "before\n"
+expect_output_contains = ["Index 10 is out of range for an array of length 3."]
+
+# --- the first element of an empty array -----------------------------------------------------
+
+[[tests]]
+name = "fault.head_empty"
+desc = "`head` of an empty array is the fault of `xs[0]` (it returned a zero value)."
+case = "../../../cases/consistency/faults/head_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_stdout_starts_with = "7\n"
+
+[[tests]]
+name = "fault.zip_many_lengths"
+desc = "`zip` of three arrays of which the third is shorter: InvalidArgument naming the two lengths."
+case = "../../../cases/consistency/faults/zip_many_lengths.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+expect_output_contains = ["sequences 1 and 3 have 2 and 1 elements"]

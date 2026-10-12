@@ -16,7 +16,7 @@ verify_script = """
 const out = input.normalized.stdout
 const grid = match(/broadcast shape=\[3, 2\] sum=([0-9.]+)/, out)
 assert(Number(grid[1]) === 102, `expected grid sum 102, got ${grid[1]}`)
-const mask = match(/broadcast mask_sum=([0-9]+) clipped_sum=([0-9.]+)/, out)
+const mask = match(/broadcast mask_sum=([0-9.]+) clipped_sum=([0-9.]+)/, out)
 assert(Number(mask[1]) === 3 && Number(mask[2]) === 66, `unexpected mask/where results ${mask[0]}`)
 const act = match(/broadcast relu_sum=([0-9.]+) max_sum=([0-9.]+)/, out)
 assert(Number(act[1]) === 2 && Number(act[2]) === 2, `unexpected relu/maximum results ${act[0]}`)
@@ -37,7 +37,7 @@ verify_script = """
 const out = input.normalized.stdout
 const a = match(/reduce rows=([0-9.]+) cols_shape=\[1, 3\] mean=([0-9.]+)/, out)
 assert(Number(a[1]) === 21 && Number(a[2]) === 3.5, `unexpected sum/mean ${a[0]}`)
-const b = match(/reduce colmax_sum=([0-9.]+) argmax_sum=([0-9]+) mean_axis_sum=([0-9.eE+-]+)/, out)
+const b = match(/reduce colmax_sum=([0-9.]+) argmax_sum=([0-9.]+) mean_axis_sum=([0-9.eE+-]+)/, out)
 assert(Number(b[1]) === 15 && Number(b[2]) === 3, `unexpected max/argmax ${b[0]}`)
 assert(approx(Number(b[3]), 7, 1e-5), `unexpected mean axis ${b[3]}`)
 const c = match(/reduce softmax0_sum=([0-9.eE+-]+) logsoftmax_expsum=([0-9.eE+-]+)/, out)
@@ -63,7 +63,7 @@ const mv = match(/linalg matvec_shape=\[3\] matvec_sum=([0-9.]+)/, out)
 assert(Number(mv[1]) === 30, `unexpected matvec ${mv[0]}`)
 const ln = match(/linalg layernorm_sum=([0-9.eE+-]+)/, out)
 assert(approx(Number(ln[1]), 0, 1e-4), `layer_norm rows should be zero-mean, got ${ln[1]}`)
-assert(out.includes('layout permute=[4, 2, 3] slice=[2, 3, 2] slice_sum=144 flatten=[2, 12] unsqueeze=[1, 2, 4, 3]'), 'unexpected layout results')
+assert(out.includes('layout permute=[4, 2, 3] slice=[2, 3, 2] slice_sum=144.0 flatten=[2, 12] unsqueeze=[1, 2, 4, 3]'), 'unexpected layout results')
 }
 """
 timeout_ms = 4000
@@ -95,7 +95,7 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-assert(input.normalized.stdout.includes('static_types w_sum=5 pick=[3, 2] same_seed=true'), 'unexpected static type results')
+assert(input.normalized.stdout.includes('static_types w_sum=5.0 pick=[3, 2] same_seed=true'), 'unexpected static type results')
 }
 """
 timeout_ms = 4000
@@ -135,7 +135,7 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/struct_covariance.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["covariance struct=5 array=8 tuple=5"]
+expect_stdout_contains = ["covariance struct=5.0 array=8.0 tuple=5.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -172,7 +172,7 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/fuse_linear.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["fuse a=0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
+expect_stdout_contains = ["fuse a=0.0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -183,7 +183,7 @@ kind = "behavior"
 case = "../../../cases/modules/tensor/fuse_linear.cml"
 args = ["${case}", "tensor::fuse"]
 expect_exit = 0
-expect_stdout_contains = ["fuse a=0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
+expect_stdout_contains = ["fuse a=0.0 c=-12.825000286102295 chained=-12.825000286102295 product=-12.625 d=-12.825000286102295 e=-2.625"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

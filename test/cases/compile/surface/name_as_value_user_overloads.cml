@@ -1,0 +1,8 @@
+func twice(x: int): int { return x * 2 }
+func twice(x: float): float { return x * 2.0 }
+func on_string(f: (s: string) => string, s: string): string { return f(s) }
+
+func main(): int sync {
+    println(on_string(twice, 'a'))
+    return 0
+}

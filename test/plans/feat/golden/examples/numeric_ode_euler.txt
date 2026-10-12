@@ -1,0 +1,5 @@
+exact after 30 min: 23.4851
+      30 steps: 22.9674  error -0.51771
+     300 steps: 23.4329  error -0.05223
+    3000 steps: 23.4799  error -0.00523
+ 1000000 steps: 23.4851  error -0.00002

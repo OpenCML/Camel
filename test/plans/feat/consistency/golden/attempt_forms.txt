@@ -1,0 +1,13 @@
+25
+-1
+value 26
+error DivisionByZero
+error DivisionByZero
+error DivisionByZero: Attempted division by zero.
+20
+value 25
+error Negative
+error DivisionByZero
+error DivisionByZero
+value -5
+end

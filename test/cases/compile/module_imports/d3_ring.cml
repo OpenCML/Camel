@@ -1,0 +1,6 @@
+import { f } from ring_a
+
+func main(): int sync {
+    println(f(3))
+    return 0
+}

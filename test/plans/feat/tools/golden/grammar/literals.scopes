@@ -1,0 +1,300 @@
+>// Literals: every form the lexer accepts (antlr/OpenCMLLex.g4).
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>module literals
+#^^^^^^ keyword.control.import.module.camel
+#       ^^^^^^^^ entity.name.namespace.module.camel
+>
+>// INTEGER: DEC, OCT, HEX, BIN, each with an optional exponent
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let dec = 0
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^ constant.numeric.integer.decimal.camel
+>let big = 100000
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^^^^^^ constant.numeric.integer.decimal.camel
+>let oct = 0755
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^^^^ constant.numeric.integer.octal.camel
+>let hex = 0xFF
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^^^^ constant.numeric.integer.hexadecimal.camel
+>let hex_low = 0x1e5
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^^^ constant.numeric.integer.hexadecimal.camel
+>let bin = 0b1010
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^^^^^^ constant.numeric.integer.binary.camel
+>let exp_int = 1e6
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^ constant.numeric.integer.decimal.camel
+>let exp_neg = 2E-3
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^^ constant.numeric.integer.decimal.camel
+>let hex_exp = 0xFFe-3
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^^^^^ constant.numeric.integer.hexadecimal.camel
+>let bin_exp = 0b11e2
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^^^^ constant.numeric.integer.binary.camel
+>
+>// REAL
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^ comment.line.double-slash.camel
+>let real = 3.14
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^ meta.declaration.let.camel variable.other.constant.camel
+#         ^ keyword.operator.assignment.camel
+#           ^^^^ constant.numeric.float.camel
+>let real_exp = 6.02e23
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#             ^ keyword.operator.assignment.camel
+#               ^^^^^^^ constant.numeric.float.camel
+>let real_neg_exp = 1.5E-10
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                 ^ keyword.operator.assignment.camel
+#                   ^^^^^^^ constant.numeric.float.camel
+>let leading_zero = 00.5
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                 ^ keyword.operator.assignment.camel
+#                   ^^^^ constant.numeric.float.camel
+>
+>// a number carries no sign: '-' and '+' are operator tokens (the parser reads a sign before a
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>// number, where an operand is expected, as the sign of the literal)
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let neg = -1
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^ keyword.operator.arithmetic.camel
+#           ^ constant.numeric.integer.decimal.camel
+>let pos = +2.5
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^ keyword.operator.arithmetic.camel
+#           ^^^ constant.numeric.float.camel
+>let diff = dec - 1
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^ meta.declaration.let.camel variable.other.constant.camel
+#         ^ keyword.operator.assignment.camel
+#               ^ keyword.operator.arithmetic.camel
+#                 ^ constant.numeric.integer.decimal.camel
+>// after a name the sign is the binary operator, whatever the spacing
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let tight = dec -1
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#          ^ keyword.operator.assignment.camel
+#                ^ keyword.operator.arithmetic.camel
+#                 ^ constant.numeric.integer.decimal.camel
+>// '.0.1' is a REAL to the lexer; the parser splits it into the two tuple indices
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let nested = (pair.0).1 + deep.0.1
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#           ^ keyword.operator.assignment.camel
+#             ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                  ^ meta.parens.camel punctuation.accessor.camel
+#                   ^ meta.parens.camel constant.numeric.integer.index.camel
+#                    ^ meta.parens.camel punctuation.section.parens.end.camel
+#                     ^ punctuation.accessor.camel
+#                      ^ constant.numeric.integer.index.camel
+#                        ^ keyword.operator.arithmetic.camel
+#                              ^ punctuation.accessor.camel
+#                               ^^^ constant.numeric.float.camel
+>
+>// STRING
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^ comment.line.double-slash.camel
+>let single = 'Hello, Camel!'
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#           ^ keyword.operator.assignment.camel
+#             ^ string.quoted.single.camel punctuation.definition.string.begin.camel
+#              ^^^^^^^^^^^^^ string.quoted.single.camel
+#                           ^ string.quoted.single.camel punctuation.definition.string.end.camel
+>let double = "O"
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#           ^ keyword.operator.assignment.camel
+#             ^ string.quoted.double.camel punctuation.definition.string.begin.camel
+#              ^ string.quoted.double.camel
+#               ^ string.quoted.double.camel punctuation.definition.string.end.camel
+>let escapes = "tab\t newline\n quote\" backslash\\ hex\x1B oct\033 nul\0"
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#            ^ keyword.operator.assignment.camel
+#              ^ string.quoted.double.camel punctuation.definition.string.begin.camel
+#               ^^^ string.quoted.double.camel
+#                  ^^ string.quoted.double.camel constant.character.escape.camel
+#                    ^^^^^^^^ string.quoted.double.camel
+#                            ^^ string.quoted.double.camel constant.character.escape.camel
+#                              ^^^^^^ string.quoted.double.camel
+#                                    ^^ string.quoted.double.camel constant.character.escape.camel
+#                                      ^^^^^^^^^^ string.quoted.double.camel
+#                                                ^^ string.quoted.double.camel constant.character.escape.camel
+#                                                  ^^^^ string.quoted.double.camel
+#                                                      ^^^^ string.quoted.double.camel constant.character.escape.camel
+#                                                          ^^^^ string.quoted.double.camel
+#                                                              ^^^^ string.quoted.double.camel constant.character.escape.camel
+#                                                                  ^^^^ string.quoted.double.camel
+#                                                                      ^^ string.quoted.double.camel constant.character.escape.camel
+#                                                                        ^ string.quoted.double.camel punctuation.definition.string.end.camel
+>let single_escapes = 'it\'s \a\b\f\r\v'
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                   ^ keyword.operator.assignment.camel
+#                     ^ string.quoted.single.camel punctuation.definition.string.begin.camel
+#                      ^^ string.quoted.single.camel
+#                        ^^ string.quoted.single.camel constant.character.escape.camel
+#                          ^^ string.quoted.single.camel
+#                            ^^ string.quoted.single.camel constant.character.escape.camel
+#                              ^^ string.quoted.single.camel constant.character.escape.camel
+#                                ^^ string.quoted.single.camel constant.character.escape.camel
+#                                  ^^ string.quoted.single.camel constant.character.escape.camel
+#                                    ^^ string.quoted.single.camel constant.character.escape.camel
+#                                      ^ string.quoted.single.camel punctuation.definition.string.end.camel
+>let unknown_escape = 'kept \q as written'
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                   ^ keyword.operator.assignment.camel
+#                     ^ string.quoted.single.camel punctuation.definition.string.begin.camel
+#                      ^^^^^^^^^^^^^^^^^^ string.quoted.single.camel
+#                                        ^ string.quoted.single.camel punctuation.definition.string.end.camel
+>let placeholders = 'Fibonacci({}) = {} (computed in {:.4f} seconds)'
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                 ^ keyword.operator.assignment.camel
+#                   ^ string.quoted.single.camel punctuation.definition.string.begin.camel
+#                    ^^^^^^^^^^ string.quoted.single.camel
+#                              ^^ string.quoted.single.camel constant.other.placeholder.camel
+#                                ^^^^ string.quoted.single.camel
+#                                    ^^ string.quoted.single.camel constant.other.placeholder.camel
+#                                      ^^^^^^^^^^^^^^ string.quoted.single.camel
+#                                                    ^^^^^^ string.quoted.single.camel constant.other.placeholder.camel
+#                                                          ^^^^^^^^^ string.quoted.single.camel
+#                                                                   ^ string.quoted.single.camel punctuation.definition.string.end.camel
+>let spans_lines = "first
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                ^ keyword.operator.assignment.camel
+#                  ^ string.quoted.double.camel punctuation.definition.string.begin.camel
+#                   ^^^^^^ string.quoted.double.camel
+>second"
+#^^^^^^ string.quoted.double.camel
+#      ^ string.quoted.double.camel punctuation.definition.string.end.camel
+>
+>// MULTI_STR
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^ comment.line.double-slash.camel
+>let multi_single = '''one 'quoted' word
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                 ^ keyword.operator.assignment.camel
+#                   ^^^ string.quoted.triple.single.camel punctuation.definition.string.begin.camel
+#                      ^^^^^^^^^^^^^^^^^^ string.quoted.triple.single.camel
+>two {} lines\n'''
+#^^^^ string.quoted.triple.single.camel
+#    ^^ string.quoted.triple.single.camel constant.other.placeholder.camel
+#      ^^^^^^ string.quoted.triple.single.camel
+#            ^^ string.quoted.triple.single.camel constant.character.escape.camel
+#              ^^^ string.quoted.triple.single.camel punctuation.definition.string.end.camel
+>let multi_double = """a "quoted" word
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                 ^ keyword.operator.assignment.camel
+#                   ^^^ string.quoted.triple.double.camel punctuation.definition.string.begin.camel
+#                      ^^^^^^^^^^^^^^^^ string.quoted.triple.double.camel
+>and a second line"""
+#^^^^^^^^^^^^^^^^^ string.quoted.triple.double.camel
+#                 ^^^ string.quoted.triple.double.camel punctuation.definition.string.end.camel
+>
+>// FSTRING (a token; the compiler rejects it)
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let formatted = `value {x} \` done`
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#              ^ keyword.operator.assignment.camel
+#                ^ string.interpolated.backtick.camel punctuation.definition.string.begin.camel
+#                 ^^^^^^^^^^ string.interpolated.backtick.camel
+#                           ^^ string.interpolated.backtick.camel
+#                             ^^^^^ string.interpolated.backtick.camel
+#                                  ^ string.interpolated.backtick.camel punctuation.definition.string.end.camel
+>
+>// TRUE, FALSE, NULL
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let yes = true
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^^^^ constant.language.boolean.camel
+>let no = false
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^ meta.declaration.let.camel variable.other.constant.camel
+#       ^ keyword.operator.assignment.camel
+#         ^^^^^ constant.language.boolean.camel
+>let nothing: int? = null
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#           ^ punctuation.separator.colon.camel
+#             ^^^ support.type.primitive.camel
+#                ^ keyword.operator.type.camel
+#                  ^ keyword.operator.assignment.camel
+#                    ^^^^ constant.language.null.camel
+>
+>// tuple elements: '.' INTEGER
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let pair = (1, 2.0)
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^ meta.declaration.let.camel variable.other.constant.camel
+#         ^ keyword.operator.assignment.camel
+#           ^ meta.parens.camel punctuation.section.parens.begin.camel
+#            ^ meta.parens.camel constant.numeric.integer.decimal.camel
+#             ^ meta.parens.camel punctuation.separator.comma.camel
+#               ^^^ meta.parens.camel constant.numeric.float.camel
+#                  ^ meta.parens.camel punctuation.section.parens.end.camel
+>let first = pair.0
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#          ^ keyword.operator.assignment.camel
+#                ^ punctuation.accessor.camel
+#                 ^ constant.numeric.integer.index.camel
+>let second = pair.1
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#           ^ keyword.operator.assignment.camel
+#                 ^ punctuation.accessor.camel
+#                  ^ constant.numeric.integer.index.camel

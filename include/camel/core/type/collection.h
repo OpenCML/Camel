@@ -42,7 +42,7 @@ namespace camel::core::type {
 
 /**
  * Why `type` cannot be the key of a map or the element of a set; empty when it can.
- * DESIGN-QUESTION(map-key-types): allowed are int, i32, bool, string and tuples of allowed
+ * Design principles 2.10 (key types): allowed are int, i32, bool, string and tuples of allowed
  * types. A type variable is allowed: the check is made again when it has been replaced.
  */
 std::string collectionKeyProblem(Type *type);

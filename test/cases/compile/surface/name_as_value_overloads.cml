@@ -1,0 +1,6 @@
+import { abs } from math
+
+func main(): int sync {
+    println([1, -2]->map<abs>)
+    return 0
+}

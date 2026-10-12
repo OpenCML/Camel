@@ -1,0 +1,7 @@
+42     -> 504 months
+7      -> 84 months
+forty  -> error ParseError
+-3     -> error OutOfRange
+999    -> error OutOfRange
+ages, 0 for bad input: [42, 7, 0, 0, 0]
+age must be between 0 and 150, got 200

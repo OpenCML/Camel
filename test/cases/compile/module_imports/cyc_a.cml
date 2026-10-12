@@ -1,0 +1,6 @@
+module cyc_a
+import { odd } from cyc_b
+
+export func even(n: int): bool {
+    return if n == 0 then true else odd(n - 1)
+}

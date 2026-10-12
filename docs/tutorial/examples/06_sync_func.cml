@@ -1,0 +1,18 @@
+// `sync func` (prefix) declares a function with side effects; it does not make the body a sync block.
+// Run: camel docs/tutorial/examples/06_sync_func.cml
+module sync_func
+
+sync func f(): int {
+    println('f')        // still not executed
+    return 1
+}
+
+sync func g(): int sync {
+    println('g')        // executed: the body is a sync block
+    return 2
+}
+
+func main(): int sync {
+    println(f() + g())
+    return 0
+}

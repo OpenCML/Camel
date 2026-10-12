@@ -191,7 +191,17 @@ class Diagnostics {
     void clear();
 
     const std::string &moduleName() const { return moduleName_; }
-    void setModuleName(std::string name) { moduleName_ = std::move(name); }
+    /// Also renames the diagnostics recorded under the old name: a file is named by the
+    /// module it declares, and its syntax errors are recorded before that name is known.
+    void setModuleName(std::string name) {
+        std::lock_guard<std::mutex> lock(mtx_);
+        for (Diagnostic &d : storage_) {
+            if (d.moduleName == moduleName_) {
+                d.moduleName = name;
+            }
+        }
+        moduleName_ = std::move(name);
+    }
     const std::string &modulePath() const { return modulePath_; }
     camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
     void setSourceContext(camel::source::source_context_ptr_t sourceContext) {

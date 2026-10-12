@@ -1,0 +1,43 @@
+// Generic helper functions: `typeas T` names a type where it first appears, and the
+// function then works for every element type. The functions of the `array` module are
+// written this way, and the helpers here build on them.
+// Run: camel examples/functions/generic_helpers.cml
+module generic_helpers
+
+import { take, drop, count } from array
+
+type Pair<A, B> = (A, B)
+
+func last(xs: (typeas T)[]): T {
+    return xs[len(xs) - 1]
+}
+
+// The elements moved `n` places to the left, the first ones going to the end.
+func rotate(xs: (typeas T)[], n: int): T[] {
+    return concat(xs->drop<n>, xs->take<n>)
+}
+
+// The share of the elements for which `pred` holds.
+func share(xs: (typeas T)[], pred: (x: T) => bool): float {
+    return float(xs->count<pred>) / float(len(xs))
+}
+
+func first_or(xs: (typeas T)[], fallback: T): T {
+    return if len(xs) == 0 then fallback else xs[0]
+}
+
+func swap(p: Pair<typeas A, typeas B>): Pair<B, A> {
+    return (p.1, p.0)
+}
+
+func main(): int sync {
+    println(last([1, 2, 3]), last(['a', 'b']), last([1.5, 2.5]))
+    println(rotate([1, 2, 3, 4], 1), rotate(['x', 'y', 'z'], 2))
+    println(share([1, 2, 3, 4, 5], (x: int): bool => x % 2 == 1))
+    println(share(['ant', 'bee', 'cat', 'dog'], (s: string): bool => s < 'c'))
+
+    let no_ints: int[] = []
+    println(first_or(no_ints, -1), first_or(['only'], 'none'))
+    println(swap((1, 'one')), swap((true, 2.5)))
+    return 0
+}

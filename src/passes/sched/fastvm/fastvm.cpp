@@ -18,6 +18,7 @@
  */
 
 #include "fastvm.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/core/module/module.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
@@ -491,6 +492,9 @@ void FastVMSchedPass::evalMarkedOperator(
     case MarkOpCode::ForeachArr:
         evalMarkedOperator_foreach_arr(self, nargs, wargs, currFrame);
         break;
+    case MarkOpCode::Isolate:
+        evalMarkedOperator_isolate(self, nargs, wargs, currFrame);
+        break;
     default:
         ASSERT(false, "Unsupported marked operator in FastVM.");
     }
@@ -614,6 +618,65 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
 
     // foreach has no aggregate return value.
     currFrame.set(self, NullSlot);
+}
+
+// The fault-isolation node (docs/technical/33_fault_isolation.md): a call of the function value
+// given first, in which a fault of the program becomes the failed form of the node's `T!`.
+//
+// The callee runs in a nested activation of call() (or in compiled code entered through
+// invokeOwnedJitFrame), so the boundary is one activation: its handlers release every frame it
+// pushed and its own frame, and bring stackDepth_ back to its base, before the fault arrives
+// here. Compiled code never has a C++ exception cross it: it returns to its wrapper with the
+// fault recorded, and the wrapper's caller throws.
+void FastVMSchedPass::evalMarkedOperator_isolate(
+    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
+    (void)wargs;
+    Function *func = currFrame.get<Function *>(nargs[0]);
+    ASSERT(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
+    const HigherOrderCallSite site = higherOrderCallSite(func);
+
+    std::array<slot_t, 8> inlineArgs;
+    std::vector<slot_t> heapArgs;
+    const size_t argCount = nargs.size() - 1;
+    slot_t *args          = inlineArgs.data();
+    if (argCount > inlineArgs.size()) {
+        heapArgs.resize(argCount);
+        args = heapArgs.data();
+    }
+    for (size_t i = 0; i < argCount; ++i) {
+        args[i] = currFrame.get<slot_t>(nargs[i + 1]);
+    }
+
+    // The room for the call is the caller's: a recursion limit reached here is a fault of the
+    // enclosing graph, outside the boundary.
+    requireNestedCallRoom(&currFrame);
+    const size_t stackDepthBefore  = stackDepth_;
+    const size_t nestedCallsBefore = nestedCalls_;
+    Frame *frame                   = framePool_.acquire(site.runtimeGraph);
+    populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, argCount));
+
+    slot_t value = NullSlot;
+    try {
+        camel::core::error::FaultIsolationScope boundary;
+        value = callElement(site, frame);
+    } catch (const Diagnostic &fault) {
+        if (!camel::core::error::isIsolatedFault(fault)) {
+            throw;
+        }
+        ASSERT(
+            stackDepth_ == stackDepthBefore,
+            "A fault left the call stack changed at its isolation boundary.");
+        (void)stackDepthBefore;
+        // callElement counts its nested activation without a guard.
+        nestedCalls_ = nestedCallsBefore;
+        currFrame.set(self, camel::execute::isolatedFaultToError(fault));
+        return;
+    }
+    const auto *calleeType   = site.runtimeGraph->funcType();
+    const Type *calleeResult = calleeType ? calleeType->exitType() : nullptr;
+    currFrame.set(
+        self,
+        camel::execute::wrapIsolatedResult(value, calleeResult, currFrame.typeAt<Type>(self)));
 }
 
 #if ENABLE_FASTVM_JIT

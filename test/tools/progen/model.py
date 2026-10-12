@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 import re
+import zlib
 from fractions import Fraction
 
 INT, FLOAT, BOOL, STR = ("int",), ("float",), ("bool",), ("string",)
@@ -127,6 +128,21 @@ def params_src(params) -> str:
     return ", ".join(("var " if isvar else "") + f"{name}: {type_src(t)}" for name, t, isvar in params)
 
 
+def variant(text: str, n: int) -> int:
+    """One of `n` spellings, chosen by the text itself: the random stream of the generator is
+    not touched, so a seed still names the same program (only its spelling differs)."""
+    return zlib.crc32(text.encode("utf-8")) % n
+
+
+def bin_src(a: str, op: str, b: str) -> str:
+    """`a op b`. `+`, `-` and `*` are also written without one or both spaces (`a-b`, `a -b`,
+    `a- b`): the lexer once took a sign into the number that follows, so that `a-1` was `a`
+    followed by the literal -1 (a subtraction that silently did not happen)."""
+    if op in ("+", "-", "*"):
+        return (f"{a} {op} {b}", f"{a}{op}{b}", f"{a} {op}{b}", f"{a}{op} {b}")[variant(a + op + b, 4)]
+    return f"{a} {op} {b}"
+
+
 ATOMS = {"lit", "ref", "call", "conv", "arr", "tup", "rec", "idx", "fld", "range", "zip", "concat",
          "println", "env"}
 
@@ -162,7 +178,7 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         s = f"get_env({str_lit(n.a['name'])})"
         return f"int({s})" if n.t == INT else s
     if k == "bin":
-        return wrap(f"{sub(n.c[0])} {n.a['op']} {sub(n.c[1])}")
+        return wrap(bin_src(sub(n.c[0]), n.a["op"], sub(n.c[1])))
     if k == "un":
         return wrap(n.a["op"] + sub(n.c[0]))
     if k == "conv":
@@ -181,7 +197,12 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         return f"{post(n.c[0])}[{arg(n.c[1])}]"
     if k == "fld":
         return f"{post(n.c[0])}.{n.a['name']}"
-    if k == "tix":                     # `t.0.1` would be read as `t` . `0.1`
+    if k == "tix":
+        # `t.0.1` reaches the parser as `t` . `0.1` (one REAL), which it has to split: half of
+        # the nested accesses are written that way, the others as `(t.0).1`.
+        inner = n.c[0]
+        if inner.k == "tix" and variant(ex(inner, ind, True), 2) == 0:
+            return f"{ex(inner, ind, True)}.{n.a['i']}"
         return f"{post(n.c[0])}.{n.a['i']}"
     if k == "if":
         cond = sub(n.c[0]) if n.c[0].k in LOW else arg(n.c[0])
@@ -377,7 +398,10 @@ def show_in(v) -> str:
 
 
 def show_float(v: float) -> str:
-    return "%g" % v
+    # The one text of a float (design principles 2.10): the shortest that reads back as the
+    # same number, with a fraction or an exponent. Python's repr follows the same layout
+    # (an exponent below -4 or from 16 up, `1e+16`, `1e-05`, `-0.0`, `inf`); a NaN has no sign.
+    return "nan" if v != v else repr(float(v))
 
 
 class Evaluator:

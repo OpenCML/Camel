@@ -1,0 +1,9 @@
+/**
+ * A `main` that declares `int`: the value is the exit code and is not printed.
+ */
+module declared_int
+
+func main(): int sync {
+    println('a')
+    return 3
+}

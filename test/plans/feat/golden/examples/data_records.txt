@@ -1,0 +1,10 @@
+engineers: [ann, cy]
+ann  eng    5720
+bob  ops    4100
+cy   eng    6710
+dee  sales  3900
+two highest paid: [cy, ann]
+payroll: 20430
+before: {eng: 11300, ops: 4100, sales: 3900}
+after:  {eng: 12430, ops: 4100, sales: 3900}
+the first record is unchanged: { name: ann, dept: eng, salary: 5200 }

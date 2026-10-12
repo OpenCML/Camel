@@ -1,0 +1,7 @@
+module lib
+
+let k = 10
+
+export func add_k(x: int): int {
+    return x + k
+}

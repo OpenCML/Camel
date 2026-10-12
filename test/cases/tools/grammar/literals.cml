@@ -1,0 +1,59 @@
+// Literals: every form the lexer accepts (antlr/OpenCMLLex.g4).
+module literals
+
+// INTEGER: DEC, OCT, HEX, BIN, each with an optional exponent
+let dec = 0
+let big = 100000
+let oct = 0755
+let hex = 0xFF
+let hex_low = 0x1e5
+let bin = 0b1010
+let exp_int = 1e6
+let exp_neg = 2E-3
+let hex_exp = 0xFFe-3
+let bin_exp = 0b11e2
+
+// REAL
+let real = 3.14
+let real_exp = 6.02e23
+let real_neg_exp = 1.5E-10
+let leading_zero = 00.5
+
+// a number carries no sign: '-' and '+' are operator tokens (the parser reads a sign before a
+// number, where an operand is expected, as the sign of the literal)
+let neg = -1
+let pos = +2.5
+let diff = dec - 1
+// after a name the sign is the binary operator, whatever the spacing
+let tight = dec -1
+// '.0.1' is a REAL to the lexer; the parser splits it into the two tuple indices
+let nested = (pair.0).1 + deep.0.1
+
+// STRING
+let single = 'Hello, Camel!'
+let double = "O"
+let escapes = "tab\t newline\n quote\" backslash\\ hex\x1B oct\033 nul\0"
+let single_escapes = 'it\'s \a\b\f\r\v'
+let unknown_escape = 'kept \q as written'
+let placeholders = 'Fibonacci({}) = {} (computed in {:.4f} seconds)'
+let spans_lines = "first
+second"
+
+// MULTI_STR
+let multi_single = '''one 'quoted' word
+two {} lines\n'''
+let multi_double = """a "quoted" word
+and a second line"""
+
+// FSTRING (a token; the compiler rejects it)
+let formatted = `value {x} \` done`
+
+// TRUE, FALSE, NULL
+let yes = true
+let no = false
+let nothing: int? = null
+
+// tuple elements: '.' INTEGER
+let pair = (1, 2.0)
+let first = pair.0
+let second = pair.1

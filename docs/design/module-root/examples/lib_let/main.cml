@@ -1,0 +1,6 @@
+import { add_k } from lib
+
+func main(): int sync {
+    println(add_k(1))
+    return 0
+}

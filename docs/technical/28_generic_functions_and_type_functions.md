@@ -2,8 +2,8 @@
 
 This note describes how generic functions (`typeas`) and type functions (type declarations
 with parameters) are compiled. The normative text is `docs/design-principles.cn.md` section
-2.9, "类型、泛型与类型函数"; the user-facing description is in `docs/language/` (3.2.3, 7.2.5,
-7.2.6). Everything here happens while a module is compiled: no pass, backend or runtime
+2.9, "类型、泛型与类型函数"; the user-facing description is in `docs/language/` (3.1, 7.5,
+7.7). Everything here happens while a module is compiled: no pass, backend or runtime
 structure knows about either construct.
 
 ## 1. What they are on the graph
@@ -160,8 +160,9 @@ modules use the same types; the declaring module's graph then changes after it w
     under the scope they are entered from, which here belongs to the declaring module.
 - The body may call private functions, other generic functions and imports of its module.
   It may not use a top-level *value* of its module: that node lies in a graph that does not
-  enclose the instance, so it cannot be captured (`GenericFunctionUnsupported`, located at
-  the function). A constant a library needs is written as a function.
+  enclose the instance, so it cannot be captured (`ImportedFunctionUsesModuleValue`, located
+  at the function; the same diagnostic an ordinary imported function gets). A constant a
+  library needs is written as a function.
 - An error in the body is reported in the declaring module's file
   (`Diagnostics::locateByOriginFrom`), with the call that asked for the instance.
 

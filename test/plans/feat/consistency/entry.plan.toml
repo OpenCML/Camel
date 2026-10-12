@@ -1,0 +1,173 @@
+id = "consistency.entry"
+order = 356
+tier = "feat"
+tags = ["feat", "consistency", "runtime", "entry"]
+desc = "What main returns on the four back ends: the result of the program only under a declared return type; an unhandled error value at the exit of main"
+
+# Design principles 2.10 ("效应、错误与并行"):
+#   - only a `main` that declares its return type has a result (the exit code, what -o writes);
+#   - `println(x)` still returns `x`;
+#   - an error value that reaches the exit of `main` unhandled is reported on standard error
+#     and the exit code is not zero.
+# Every case runs on std::nvm, std::fvm, std::jit and std::prl, which must agree.
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized", "diagnostics"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+# --- the result of the program ---------------------------------------------------------------
+
+[[tests]]
+name = "entry.undeclared_println"
+desc = "main without a declared return type whose body ends with println('a'): 'a' is printed once, by the call. (It was printed twice: the value println returns was taken for the result.)"
+case = "../../../cases/consistency/entry/undeclared_println.cml"
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', JSON.stringify(input.normalized.stderr))
+"""
+
+[[tests]]
+name = "entry.undeclared_int"
+desc = "main without a declared return type whose body ends with 3: the exit code is 0, not 3."
+case = "../../../cases/consistency/entry/undeclared_int.cml"
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.undeclared_output_file"
+desc = "-o with a main that declares no return type: there is no result to write, EntryResultNotWritten at main, after the program has run."
+case = "../../../cases/consistency/entry/undeclared_println.cml"
+backends = false
+args = ["-o", "tmp/entry_undeclared.out", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryResultNotWritten"
+expect_stdout_starts_with = "a\n"
+expect_output_contains = ["'main' declares no return type"]
+
+[[tests]]
+name = "entry.declared_string"
+desc = "main declared string whose body ends with println('a'): println returns 'a', which is the result; it is printed by the call and then as the result."
+case = "../../../cases/consistency/entry/declared_string.cml"
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'a\na\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.declared_int"
+desc = "main declared int: the value is the exit code and is not printed."
+case = "../../../cases/consistency/entry/declared_int.cml"
+expect_exit = 3
+verify_script = """
+assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout))
+"""
+
+# --- an error value at the exit of main ------------------------------------------------------
+
+[[tests]]
+name = "entry.error_thrown"
+desc = "An error made by throw reaches the exit of main: UnhandledError on standard error, located at the error(...) call; exit code 1; standard output holds only the program's output."
+case = "../../../cases/consistency/entry/error_thrown.cml"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 15
+expect_stderr_contains = ["An error value reached the exit of 'main' without being handled: Negative: the argument is negative."]
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.error_from_attempt"
+desc = "main returns the result of attempt as it is: the isolated fault is reported as an unhandled error at the place of the fault."
+case = "../../../cases/consistency/entry/error_from_attempt.cml"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 37
+expect_stderr_contains = ["DivisionByZero: Attempted division by zero. A value of type T!"]
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.error_from_operator"
+desc = "An error made by an operator has no position: the report is located at main and says which operator made it (rich text format)."
+case = "../../../cases/consistency/entry/error_from_operator.cml"
+args = ["--error-format", "text", "--color", "never", "${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]
+expect_exit = 1
+expect_stderr_contains = ["error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: ParseError: '12abc' is not an integer.", "error_from_operator.cml:7:1", "note: the error was made by <parse_int>, which records no position"]
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.error_json"
+desc = "--error-format json: the unhandled error is one JSON array on standard error, with the 0-based position of the error."
+case = "../../../cases/consistency/entry/error_thrown.cml"
+args = ["--error-format", "json", "${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]
+expect_exit = 1
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+const diags = JSON.parse(input.stderr)
+assert(diags.length === 1, input.stderr)
+const d = diags[0]
+assert(d.data.name === 'RuntimeDiag::UnhandledError' && d.code === '0x04000051', input.stderr)
+assert(d.severity === 'Error' && d.data.stage === 'run', input.stderr)
+assert(d.range.start.line === 8 && d.range.start.character === 14, JSON.stringify(d.range))
+assert(d.data.modulePath.endsWith('error_thrown.cml'), d.data.modulePath)
+"""
+
+[[tests]]
+name = "entry.fallible_ok"
+desc = "main declared int! that returns a value: the value is the exit code; nothing on standard error."
+case = "../../../cases/consistency/entry/fallible_ok.cml"
+expect_exit = 7
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', JSON.stringify(input.normalized.stderr))
+"""
+
+[[tests]]
+name = "entry.fallible_ok_string"
+desc = "main declared string! that returns a value: the value is printed as the result."
+case = "../../../cases/consistency/entry/fallible_ok_string.cml"
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === 'hello camel\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "entry.fallible_ok_output_file"
+desc = "-o with main declared int! and a value: the value is written to the file. (It crashed: the T! box was written as if it were the int.)"
+case = "../../../cases/consistency/entry/fallible_ok.cml"
+backends = false
+args = ["-o", "tmp/entry_fallible_ok.out", "${case}"]
+expect_exit = 7
+verify_script = """
+const file = input.repo_root + '/tmp/entry_fallible_ok.out'
+const text = fs.readFileSync(file, 'utf8')
+assert(text === '7\n', JSON.stringify(text))
+fs.rmSync(file)
+"""
+
+[[tests]]
+name = "entry.error_handled"
+desc = "An error value handled with !! before main returns is not reported."
+case = "../../../cases/consistency/entry/error_handled.cml"
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '-1\n', JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', JSON.stringify(input.normalized.stderr))
+"""

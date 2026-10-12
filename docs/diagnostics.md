@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-113 diagnostics: 104 errors, 9 warnings.
+123 diagnostics: 112 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -36,6 +36,7 @@ prints one entry.
 | `0x02000009` | [SyntaxDiag::MissingToken](#missingtoken) | Error |
 | `0x0200000A` | [SyntaxDiag::UnexpectedToken](#unexpectedtoken) | Error |
 | `0x0200000B` | [SyntaxDiag::UnexpectedEndOfFile](#unexpectedendoffile) | Error |
+| `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
 | `0x03000000` | [SemanticDiag::UnknownSemanticError](#unknownsemanticerror) | Error |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
 | `0x03000002` | [SemanticDiag::ModuleNotFound](#modulenotfound) | Error |
@@ -71,6 +72,11 @@ prints one entry.
 | `0x03000020` | [SemanticDiag::InvalidTypeArgument](#invalidtypeargument) | Error |
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
+| `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
+| `0x03000024` | [SemanticDiag::IfArmValueWithoutElse](#ifarmvaluewithoutelse) | Error |
+| `0x03000025` | [SemanticDiag::ImportCycle](#importcycle) | Error |
+| `0x03000026` | [SemanticDiag::ImportedFunctionUsesModuleValue](#importedfunctionusesmodulevalue) | Error |
+| `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error |
@@ -97,6 +103,7 @@ prints one entry.
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
 | `0x03100091` | [SemanticDiag::MatchWithoutDefault](#matchwithoutdefault) | Warn |
+| `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -128,6 +135,9 @@ prints one entry.
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error |
 | `0x0400003B` | [RuntimeDiag::OperatorNotImplemented](#operatornotimplemented) | Error |
+| `0x04000050` | [RuntimeDiag::ConversionOutOfRange](#conversionoutofrange) | Error |
+| `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
+| `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
 | `0x04000090` | [RuntimeDiag::MatchNotExhaustive](#matchnotexhaustive) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
@@ -176,7 +186,14 @@ Illegal character '{0}'.
 No token starts with this character. Outside strings and comments a program consists of ASCII characters; a name is made of letters, digits and '_'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/check/lexical_error.cml`, run as `camel check --lexical-only -O short test/cases/compile/check/lexical_error.cml`)
+
+```camel
+func main(): int sync {
+    let x = 1 $ 2
+    return 0
+}
+```
 
 ### InvalidNumberFormat
 
@@ -452,14 +469,14 @@ Expected {0} before {1}.
 Unexpected {0}{1}.
 ```
 
-**Example** (`test/cases/compile/diag_render/syntax_unexpected_token.cml`, run as `camel --error-format text test/cases/compile/diag_render/syntax_unexpected_token.cml`)
+**Example** (`test/cases/compile/check/syntax_error.cml`, run as `camel check --syntax-only -O short test/cases/compile/check/syntax_error.cml`)
 
 ```camel
-module syntax_unexpected_token
+module my_module
 
 func main(): int sync {
-    let x = 1 else 2
-    return x
+    let x =
+    return 0
 }
 ```
 
@@ -480,6 +497,32 @@ Something opened earlier is not finished: check the last declaration of the file
 ```
 
 *No example: no test small enough to show raises it.*
+
+### ComparisonAcrossLines
+
+`0x02100001` · Warn · `SyntaxDiag::ComparisonAcrossLines`
+
+**Message**
+
+```text
+This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.
+```
+
+**Help**
+
+```text
+A newline does not end a statement, and a '>' followed by an expression is the comparison operator. If this '>' was meant to close '<...>' arguments and the next line to be a new statement, write ';' after the '>'.
+```
+
+**Example** (`test/cases/compile/surface/angle_then_string_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_string_line.cml`)
+
+```camel
+func main(): int sync {
+    let total = [1, 2]->reduce<(acc: int, x: int): int => acc + x, 0>
+    'total = {}'->format<total>->println
+    return 0
+}
+```
 
 ## Semantic (`SemanticDiag`)
 
@@ -613,7 +656,14 @@ Invalid {0} literal: '{1}'.
 Ensure the literal '{1}' is valid and supported by the language.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/literals/int_base_with_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_base_with_exponent.cml`)
+
+```camel
+func main(): int sync {
+    println(0b1e5)
+    return 0
+}
+```
 
 ### DuplicateDictKey
 
@@ -755,14 +805,11 @@ Unresolved reference: '{0}'.
 Make sure the name is declared and in scope.
 ```
 
-**Example** (`test/cases/compile/semantic/unresolved_reference.cml`, run as `camel test/cases/compile/semantic/unresolved_reference.cml`)
+**Example** (`test/cases/compile/check/semantic_error.cml`, run as `camel check -O short test/cases/compile/check/semantic_error.cml`)
 
 ```camel
-module semantic_unresolved_reference
-
 func main(): int sync {
-    let value = missing_name + 1
-    println(value)
+    let x = undefined_name + 1
     return 0
 }
 ```
@@ -969,7 +1016,15 @@ Cannot insert data of type '{1}' into a(n) {0} with element type '{2}'.
 Ensure the data type matches the {0}'s element type, or convert the data to the appropriate type before inserting.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/surface/array_element_type.cml`, run as `camel -E short test/cases/compile/surface/array_element_type.cml`)
+
+```camel
+func main(): int sync {
+    println([1, 2,
+        3.0, 4])
+    return 0
+}
+```
 
 ### CallingIncompleteFunction
 
@@ -1390,6 +1445,143 @@ func main(): int sync {
 }
 ```
 
+### LiteralOutOfRange
+
+`0x03000023` · Error · `SemanticDiag::LiteralOutOfRange`
+
+**Message**
+
+```text
+The literal '{0}' is out of the range of type '{1}' ({2}).
+```
+
+**Help**
+
+```text
+A literal that its type cannot hold is not wrapped around or cut off. Write a value in the range, or give the literal a wider type.
+```
+
+**Example** (`test/cases/compile/literals/int_too_large.cml`, run as `camel -E short test/cases/compile/literals/int_too_large.cml`)
+
+```camel
+func main(): int sync {
+    println(9223372036854775808)
+    return 0
+}
+```
+
+### IfArmValueWithoutElse
+
+`0x03000024` · Error · `SemanticDiag::IfArmValueWithoutElse`
+
+**Message**
+
+```text
+This 'if' has no 'else' arm with a value, but its 'then' arm gives a value of type '{0}' (in function '{1}').
+```
+
+**Help**
+
+```text
+An 'if' without 'else' gives nothing when its condition is false, so its arm must give nothing either. A call such as 'println(...)' has a value. When the 'if' is a statement run for its effect, end the arm with 'return null': 'if c then sync { println(x); return null }'. When its value is wanted, add an 'else' arm of the same type.
+```
+
+**Example** (`test/cases/compile/surface/if_without_else.cml`, run as `camel -E short test/cases/compile/surface/if_without_else.cml`)
+
+```camel
+func main(): int sync {
+    let a = 1
+    if a < 2 then println('lt')
+    return 0
+}
+```
+
+### ImportCycle
+
+`0x03000025` · Error · `SemanticDiag::ImportCycle`
+
+**Message**
+
+```text
+The module '{0}' is imported while it is itself being loaded ({1}).
+```
+
+**Help**
+
+```text
+A module cannot import itself, directly or through the modules it imports. A file that imports a module of its own name imports itself. Move what the modules share into another module.
+```
+
+**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
+
+```camel
+import { even } from cyc_a
+
+func main(): int sync {
+    println(even(10))
+    return 0
+}
+```
+
+### ImportedFunctionUsesModuleValue
+
+`0x03000026` · Error · `SemanticDiag::ImportedFunctionUsesModuleValue`
+
+**Message**
+
+```text
+The function '{0}' is used from another module, but it uses '{1}' of the top level of its own module, directly or through a function it calls.
+```
+
+**Help**
+
+```text
+A function used from another module cannot yet read a 'let' or a 'var' of the top level of the module that declares it: the name would be looked up in the importing module. Pass the value as a parameter or a 'with' parameter, or write it as a function without parameters ('func base(): int { return 10 }').
+```
+
+**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
+
+```camel
+module err_export_capture
+
+import { biased } from export_lib
+
+func main(): int sync {
+    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
+    // cannot capture a top-level value of the module that declares it.
+    println(biased(1))
+    return 0
+}
+```
+
+### ImportNameConflict
+
+`0x03000027` · Error · `SemanticDiag::ImportNameConflict`
+
+**Message**
+
+```text
+The name '{0}' is imported from the modules '{1}' and '{2}' with the same signature {3}.
+```
+
+**Help**
+
+```text
+Two imports that bring the same name with the same parameter types conflict; neither is chosen silently. Import the name from one of the modules only, and reach the other through its module ('import m' and then 'm::name').
+```
+
+**Example** (`test/cases/compile/module_imports/d5_conflict.cml`, run as `camel -E short test/cases/compile/module_imports/d5_conflict.cml`)
+
+```camel
+import { f } from conf_b
+import { f } from conf_c
+
+func main(): int sync {
+    println(f(1))
+    return 0
+}
+```
+
 ### FeatureNotSupported
 
 `0x03000040` · Error · `SemanticDiag::FeatureNotSupported`
@@ -1658,17 +1850,22 @@ The generic function '{0}' cannot be {1}.
 This use of a generic function is not supported.
 ```
 
-**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
+**Example** (`test/cases/compile/generics/err_decorated.cml`, run as `camel test/cases/compile/generics/err_decorated.cml`)
 
 ```camel
-module err_export_capture
+module err_decorated
 
-import { biased } from export_lib
+func deco(f: (x: int) => int): (x: int) => int {
+    return f
+}
+
+@deco
+func id(x: typeas T): T {
+    return x
+}
 
 func main(): int sync {
-    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
-    // cannot capture a top-level value of the module that declares it.
-    println(biased(1))
+    println(id(1))
     return 0
 }
 ```
@@ -1949,7 +2146,16 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
+
+```camel
+import { even } from cyc_a
+
+func main(): int sync {
+    println(even(10))
+    return 0
+}
+```
 
 ### CollectionKeyNotAllowed
 
@@ -2202,6 +2408,31 @@ func main(): int sync {
 }
 ```
 
+### IntegerLiteralTruncated
+
+`0x031000A0` · Warn · `SemanticDiag::IntegerLiteralTruncated`
+
+**Message**
+
+```text
+The integer literal '{0}' is not a whole number: its value is {1}, the fraction is dropped.
+```
+
+**Help**
+
+```text
+A number written without a decimal point is an 'int', with an exponent too. For the floating-point number write the decimal point: '{2}'.
+```
+
+**Example** (`test/cases/compile/literals/int_negative_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_negative_exponent.cml`)
+
+```camel
+func main(): int sync {
+    println(1e-2, 15e-1, 1500e-2)
+    return 0
+}
+```
+
 ## Run time and passes (`RuntimeDiag`)
 
 ### RuntimeError
@@ -2233,12 +2464,12 @@ import { grad } from autodiff
 
 func through_map(x: float): float {
     let m = [(1, x)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func beside_map(x: float): float {
     let m = [(1, 2.0)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
@@ -2264,17 +2495,17 @@ Attempted division by zero.
 Ensure the denominator is not zero before performing division.
 ```
 
-**Example** (`test/cases/consistency/cleanup/unflushed_print_fault.cml`, run as `camel `)
+**Example** (`test/cases/consistency/attempt/fault_outside.cml`, run as `camel `)
 
 ```camel
-module unflushed_print_fault
+module fault_outside
+
+func risky(d: int): int { return 100 / d }
 
 func main(): int sync {
-    let z = 0
-    println('line')
-    print('pending')
-    print(' text')
-    println(8 / z)
+    println(attempt(risky, 0) !! -1)
+    println(attempt(risky, 4) !! -1)
+    println(risky(0))
     println('not reached')
     return 0
 }
@@ -2600,12 +2831,12 @@ import { grad } from autodiff
 
 func through_map(x: float): float {
     let m = [(1, x)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func beside_map(x: float): float {
     let m = [(1, 2.0)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {
@@ -2685,7 +2916,15 @@ Cannot write the result of 'main' to '{0}': {1}.
 --output <file> (-o) writes the value 'main' returns: a number, bool or text as a text file, a tensor as a .npy file, a struct or tuple as a directory with one file per member. Without it the value is printed on standard output.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/consistency/entry/undeclared_println.cml`, run as `camel -o tmp/entry_undeclared.out test/cases/consistency/entry/undeclared_println.cml`)
+
+```camel
+module undeclared_println
+
+func main() sync {
+    println('a')
+}
+```
 
 ### GraphTooLarge
 
@@ -2774,18 +3013,19 @@ Cannot convert the string '{0}' to {1}.
 **Help**
 
 ```text
-The string must hold {2} and nothing else that the conversion cannot skip. Check the value before converting it; a conversion that fails is a fault and ends the program.
+The whole string must be {2}: no blanks before or after it and nothing else. A conversion that fails is a fault and ends the program; parse_int and parse_float return an error value (T!) instead.
 ```
 
-**Example** (`test/cases/linear/operators/int_of_text.cml`, run as `camel test/cases/linear/operators/int_of_text.cml std::nvm`)
+**Example** (`test/cases/consistency/faults/int_text_trailing.cml`, run as `camel `)
 
 ```camel
-module int_of_text
+module int_text_trailing
+
+func conv(s: string): int { return int(s) }
 
 func main(): int sync {
-    println(int('12'))
-    let s = 'abc'
-    println(int(s))
+    println(conv('12'))
+    println(conv('12abc'))
     println('not reached')
     return 0
 }
@@ -2999,6 +3239,110 @@ The name exists so that programs using it are recognised; calling it is not poss
 ```
 
 *No example: no test small enough to show raises it.*
+
+### ConversionOutOfRange
+
+`0x04000050` · Error · `RuntimeDiag::ConversionOutOfRange`
+
+**Message**
+
+```text
+Cannot convert {0} to {1}: {2}.
+```
+
+**Help**
+
+```text
+A conversion whose value does not fit the target type is a fault (design principles 2.10): a float that is NaN, infinite or beyond the integer's range, or an integer beyond the range of a narrower integer type. Check the value before converting it, or clamp it (min, max) to the range of the target.
+```
+
+**Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel `)
+
+```camel
+module float_to_int_range
+
+func conv(x: float): int { return int(x) }
+func mul(a: float, b: float): float { return a * b }
+
+func main(): int sync {
+    let inf = mul(1.0e308, 10.0)
+    println('before')
+    println(conv(9.0e18))
+    println(conv(1.0e30))
+    println(conv(-1.0e30))
+    println(conv(inf))
+    println(conv(inf - inf))
+    println('not reached')
+    return 0
+}
+```
+
+### UnhandledError
+
+`0x04000051` · Error · `RuntimeDiag::UnhandledError`
+
+**Message**
+
+```text
+An error value reached the exit of 'main' without being handled: {0}: {1}.
+```
+
+**Help**
+
+```text
+A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+```
+
+**Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel `)
+
+```camel
+module error_thrown
+
+func check(x: int): int! {
+    if x < 0 then {
+        throw error('Negative', 'the argument is negative')
+    } else {
+        return x
+    }
+}
+
+func main(): int! sync {
+    println('before')
+    return check(-1)
+}
+```
+
+### SliceOutOfRange
+
+`0x04000052` · Error · `RuntimeDiag::SliceOutOfRange`
+
+**Message**
+
+```text
+The range {0} to {1} is out of range for {2} of length {3}.
+```
+
+**Help**
+
+```text
+A bound of 'slice' is a position from 0 to the length; the end is one past the last element taken. A range that leaves the sequence is a fault, as an index out of range is. To take or leave out at most n elements, use 'take' and 'drop' of the module 'array', which cut by definition.
+```
+
+**Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel `)
+
+```camel
+module slice_out_of_range
+
+func head(xs: int[], n: int): int[] { return xs->slice<0, n> }
+
+func main(): int sync {
+    let xs = [10, 20, 30]
+    println(head(xs, 2))
+    println(head(xs, 7))
+    println('not reached')
+    return 0
+}
+```
 
 ### MatchNotExhaustive
 

@@ -1,0 +1,19 @@
+// The elements of `map` have no agreed order of execution: do not put stateful calls in them.
+// Run: camel docs/tutorial/examples/05_map_order.cml            (sequential: the same output every run)
+//      camel docs/tutorial/examples/05_map_order.cml std::prl   (parallel: the order is not fixed)
+module map_order
+
+import { seed, randint } from random
+
+func main(): int sync {
+    seed(42)
+    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
+    let drawn = range(0, 8)->map<(i: int): int => randint(0, 99)>
+    println(drawn)
+
+    seed(42)
+    // reduce runs in element order on every back end.
+    let ordered = range(0, 8)->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    println(ordered)
+    return 0
+}

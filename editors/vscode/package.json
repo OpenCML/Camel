@@ -1,0 +1,228 @@
+{
+  "name": "camel-lang",
+  "displayName": "Camel",
+  "description": "Camel language support: syntax highlighting, the camel-ls language server, graph view and pass runner.",
+  "version": "0.1.0",
+  "publisher": "opencml",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenCML/Camel.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "camel",
+    "cml",
+    "opencml",
+    "language server"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:camel"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "camel",
+        "aliases": [
+          "Camel",
+          "camel",
+          "cml"
+        ],
+        "extensions": [
+          ".cml"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "camel",
+        "scopeName": "source.camel",
+        "path": "./syntaxes/camel.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "camel.restartServer",
+        "title": "Restart Language Server",
+        "category": "Camel"
+      },
+      {
+        "command": "camel.showGraph",
+        "title": "Show Graph of Current Function",
+        "category": "Camel"
+      },
+      {
+        "command": "camel.runWithPasses",
+        "title": "Run Current File with Passes…",
+        "category": "Camel"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "camel.showGraph",
+          "when": "editorLangId == camel"
+        },
+        {
+          "command": "camel.runWithPasses",
+          "when": "editorLangId == camel"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "camel.showGraph",
+          "when": "editorLangId == camel",
+          "group": "navigation@90"
+        }
+      ]
+    },
+    "taskDefinitions": [
+      {
+        "type": "camel",
+        "required": [
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "The .cml file to run."
+          },
+          "passes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Passes applied in order, for example std::inline std::fvm."
+          }
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Camel",
+      "properties": {
+        "camel.server.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Path of the `camel-ls` executable. When empty, `$CAMEL_HOME/bin/camel-ls` is used if it exists, then `camel-ls` on `PATH`."
+        },
+        "camel.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Path of the `camel` executable used by **Camel: Run Current File with Passes…**. When empty, `$CAMEL_HOME/bin/camel` is used if it exists, then `camel` on `PATH`."
+        },
+        "camel.graph.passes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "markdownDescription": "Passes applied before the graph of **Camel: Show Graph of Current Function** is printed, for example `[\"std::inline\"]`. Empty: the graph as compiled."
+        },
+        "camel.run.passes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "std::inline",
+            "std::fvm"
+          ],
+          "scope": "resource",
+          "markdownDescription": "Pass sequence proposed by **Camel: Run Current File with Passes…** until one has been entered in the workspace. `camel <file> <pass>...` applies the passes in order; `std::nvm` runs the program when no pass is given or none of them consumes the graph."
+        },
+        "camel.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "scope": "window",
+          "description": "Traces the communication between VS Code and camel-ls in the output channel \"Camel Language Server\"."
+        }
+      }
+    },
+    "semanticTokenModifiers": [
+      {
+        "id": "mutable",
+        "description": "A variable or parameter declared with `var`: it can be assigned again, unlike a `let` binding."
+      },
+      {
+        "id": "sync",
+        "description": "A function declared `sync func`: it has side effects and its calls are kept in order."
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "camel",
+        "scopes": {
+          "variable.mutable": [
+            "variable.other.readwrite.mutable.camel"
+          ],
+          "parameter.mutable": [
+            "variable.parameter.mutable.camel"
+          ],
+          "function.sync": [
+            "entity.name.function.sync.camel"
+          ],
+          "function.defaultLibrary": [
+            "support.function.camel"
+          ],
+          "type.defaultLibrary": [
+            "support.type.camel"
+          ],
+          "macro": [
+            "entity.name.function.macro.camel"
+          ]
+        }
+      }
+    ],
+    "configurationDefaults": {
+      "[camel]": {
+        "editor.semanticHighlighting.enabled": true
+      },
+      "editor.semanticTokenColorCustomizations": {
+        "rules": {
+          "*.mutable:camel": {
+            "underline": true
+          },
+          "function.sync:camel": {
+            "italic": true
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "check:grammar": "node scripts/check-grammar.mjs && node scripts/check-manifest.mjs",
+    "tokenize": "node scripts/tokenize.mjs",
+    "vscode:prepublish": "npm run compile",
+    "package": "node scripts/package.mjs"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "~1.82.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.4.0",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.1.0"
+  }
+}

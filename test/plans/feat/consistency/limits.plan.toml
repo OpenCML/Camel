@@ -94,7 +94,7 @@ expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "limit.raised.option"
-desc = "depth(4000) does not run with the default limit of std::nvm and std::fvm (256) and runs on all four with --max-recursion-depth 5000."
+desc = "depth(4000) does not run with the default limit (1000) and runs on all four with --max-recursion-depth 5000."
 args = ["--max-recursion-depth", "5000", "${case}", "${backend}"]
 envs = ["N=4000", "CAMEL_NATIVE_STACK_GUARD=0"]
 expect_exit = 0
@@ -117,24 +117,59 @@ expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_output_contains = ["Maximum recursion depth (100) exceeded"]
 
 [[tests]]
-name = "limit.default_unchanged"
-desc = "Without option and variable std::nvm and std::fvm keep their default of 256: depth(255) runs and depth(256) does not, on both alike. (std::tf has no count by default and is not part of this test; whether the schedulers should share a default is undecided.)"
+name = "limit.default"
+desc = "Without option and variable every scheduler stops at 1000 open calls (design principles 2.10): depth(999) runs and depth(1000) does not, on all four alike. std::prl counts like the others (it had no count by default)."
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
-envs = ["N=255"]
+envs = ["N=999"]
 expect_exit = 0
-expect_stdout_starts_with = "start\n255\ndone\n"
+expect_stdout_starts_with = "start\n999\ndone\n"
 
 [[tests]]
 name = "limit.default_exceeded"
 args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
-envs = ["N=256"]
+envs = ["N=1000"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 43
-expect_output_contains = ["Maximum recursion depth (256) exceeded"]
+expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
+
+[[tests]]
+name = "limit.default.value"
+desc = "The default limit through a function value (two calls a level, each nesting on the native stack on std::fvm): step(499) runs on all four, within the default thread stacks."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["${case}", "${backend}"]
+envs = ["N=499"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n499\ndone\n"
+
+[[tests]]
+name = "limit.default.value_exceeded"
+desc = "step(500) is one call too many under the default limit: the same diagnostic on all four."
+case = "../../../cases/consistency/limits/depth_value.cml"
+args = ["${case}", "${backend}"]
+envs = ["N=500"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
+
+[[tests]]
+name = "limit.default.map"
+desc = "The default limit inside a map element (one more call open; on std::prl the count follows the element onto the worker thread that runs it): depth(998) runs."
+case = "../../../cases/consistency/limits/depth_map.cml"
+args = ["${case}", "${backend}"]
+envs = ["N=998"]
+expect_exit = 0
+
+[[tests]]
+name = "limit.default.map_exceeded"
+desc = "depth(999) inside a map element stops with the diagnostic on all four, std::prl included."
+case = "../../../cases/consistency/limits/depth_map.cml"
+args = ["${case}", "${backend}"]
+envs = ["N=999"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 
 [[tests]]
 name = "limit.tail_calls_not_counted"

@@ -1,0 +1,6 @@
+import lib
+
+func main(): int sync {
+    println(lib::pi)
+    return 0
+}

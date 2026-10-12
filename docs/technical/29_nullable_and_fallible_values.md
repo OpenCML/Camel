@@ -3,7 +3,7 @@
 This note describes how the two built-in forms `T?` ("may be null") and `T!` ("may have
 failed"), the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` are
 compiled. The normative text is `docs/design-principles.cn.md` section 2.9, "空值、错误与故障";
-the user-facing description is in `docs/language/` (3.2.4, 6.6, 6.3.2, 7.5).
+the user-facing description is in `docs/language/` (3.4, 6.6, 6.8.2, 7.3).
 
 Choices the design principles do not make are collected in section 10 as questions for the
 language author. Each is implemented the way section 10 recommends and marked in the code with
@@ -236,7 +236,8 @@ untouched (undecided, design principles section 6).
 
 Only an operation declared `T!` yields an error value. Division by zero, an index out of
 range and deep recursion remain faults: nothing in this work turns a fault into an error
-value, and `!!` does not catch one. Fault isolation (`attempt`) is not part of this work.
+value, and `!!` does not catch one. Fault isolation (`attempt`) turns a fault
+into an error value at the boundary of one call; it is described in `33_fault_isolation.md`.
 
 ## 7. Passes, inlining, exporters
 

@@ -23,6 +23,7 @@
 #include <cerrno>
 #include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
@@ -139,6 +140,122 @@ template <typename T> T parseDecimalReal(const std::string &text, size_t begin) 
 }
 
 } // namespace camel_number_detail
+
+// An integer literal as the lexer accepts it: an optional sign, then decimal digits with an
+// optional exponent (`12`, `1e6`, `15e-1`), or `0x` / `0b` / a leading `0` (octal) and digits.
+// The arithmetic is exact. A negative exponent divides and drops the fraction (`15e-1` is 1),
+// which `inexact` records. `-9223372036854775808` is in range although its digits alone are not.
+enum class IntegerLiteralStatus { Ok, OutOfRange, Invalid };
+
+struct IntegerLiteral {
+    IntegerLiteralStatus status = IntegerLiteralStatus::Ok;
+    int64_t value               = 0;
+    bool inexact                = false;
+};
+
+inline IntegerLiteral parseIntegerLiteral(const std::string &input) {
+    IntegerLiteral out;
+    size_t i        = 0;
+    bool isNegative = false;
+    if (i < input.size() && (input[i] == '-' || input[i] == '+')) {
+        isNegative = input[i] == '-';
+        ++i;
+    }
+    unsigned base = 10;
+    if (input.compare(i, 2, "0x") == 0) {
+        base = 16;
+        i += 2;
+    } else if (input.compare(i, 2, "0b") == 0) {
+        base = 2;
+        i += 2;
+    } else if (i + 1 < input.size() && input[i] == '0' &&
+               std::isdigit(static_cast<unsigned char>(input[i + 1]))) {
+        base = 8;
+        ++i;
+    }
+    // The magnitude is at most 2^63 (the smallest int64 negated).
+    const uint64_t limit = isNegative ? (uint64_t{1} << 63) : (uint64_t{1} << 63) - 1;
+    uint64_t magnitude   = 0;
+    bool overflow        = false;
+    bool anyDigit        = false;
+    for (; i < input.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(input[i]);
+        unsigned digit        = 0;
+        if (std::isdigit(c)) {
+            digit = c - '0';
+        } else if (base == 16 && std::isxdigit(c)) {
+            digit = static_cast<unsigned>(std::tolower(c) - 'a') + 10;
+        } else {
+            break;
+        }
+        if (digit >= base) {
+            out.status = IntegerLiteralStatus::Invalid;
+            return out;
+        }
+        anyDigit = true;
+        if (overflow || magnitude > (limit - digit) / base) {
+            overflow = true;
+        } else {
+            magnitude = magnitude * base + digit;
+        }
+    }
+    if (!anyDigit) {
+        out.status = IntegerLiteralStatus::Invalid;
+        return out;
+    }
+    if (i < input.size()) {
+        if (base != 10 || (input[i] != 'e' && input[i] != 'E')) {
+            out.status = IntegerLiteralStatus::Invalid;
+            return out;
+        }
+        ++i;
+        bool negativeExponent = false;
+        if (i < input.size() && (input[i] == '+' || input[i] == '-')) {
+            negativeExponent = input[i] == '-';
+            ++i;
+        }
+        if (i == input.size()) {
+            out.status = IntegerLiteralStatus::Invalid;
+            return out;
+        }
+        unsigned long exponent = 0;
+        for (; i < input.size(); ++i) {
+            if (!std::isdigit(static_cast<unsigned char>(input[i]))) {
+                out.status = IntegerLiteralStatus::Invalid;
+                return out;
+            }
+            if (exponent < 100000) {
+                exponent = exponent * 10 + static_cast<unsigned long>(input[i] - '0');
+            }
+        }
+        if (negativeExponent) {
+            // The digits were too many for an int64 only before the division.
+            if (overflow) {
+                out.status = IntegerLiteralStatus::OutOfRange;
+                return out;
+            }
+            for (unsigned long k = 0; k < exponent && magnitude != 0; ++k) {
+                out.inexact = out.inexact || magnitude % 10 != 0;
+                magnitude /= 10;
+            }
+        } else {
+            for (unsigned long k = 0; k < exponent && magnitude != 0 && !overflow; ++k) {
+                if (magnitude > limit / 10) {
+                    overflow = true;
+                } else {
+                    magnitude *= 10;
+                }
+            }
+        }
+    }
+    if (overflow) {
+        out.status = IntegerLiteralStatus::OutOfRange;
+        return out;
+    }
+    // Negation in unsigned arithmetic: 2^63 becomes the smallest int64 without overflow.
+    out.value = static_cast<int64_t>(isNegative ? uint64_t{0} - magnitude : magnitude);
+    return out;
+}
 
 template <typename T> T parseNumber(const std::string &input) {
     static_assert(

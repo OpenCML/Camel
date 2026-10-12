@@ -1,0 +1,58 @@
+/**
+ * Content equality of arrays, tuples and structs that hold maps and sets: the comparison of a
+ * part that is a collection is the collection's own (`:coll/eq`), so two collections with the
+ * same entries are equal whatever the shape of their trees. The collections here are built in
+ * opposite orders and by removal, which gives trees of different shapes when the leaves are
+ * small (CAMEL_COLL_LEAF_CAPACITY=2 CAMEL_COLL_FANOUT=4).
+ */
+module content_equality_trees
+
+type Box = { name: string, table: Map<int, string>, seen: Set<int> }
+
+func up(m: Map<int, string>, i: int, n: int): Map<int, string> {
+    return if i >= n then m else up(m->put<i, 'v' + string(i)>, i + 1, n)
+}
+
+func down(m: Map<int, string>, i: int): Map<int, string> {
+    return if i < 0 then m else down(m->put<i, 'v' + string(i)>, i - 1)
+}
+
+func cut(m: Map<int, string>, i: int, n: int): Map<int, string> {
+    return if i >= n then m else cut(m->remove<i>, i + 1, n)
+}
+
+func set_up(s: Set<int>, i: int, n: int): Set<int> {
+    return if i >= n then s else set_up(s->add<i * 7 % 211>, i + 1, n)
+}
+
+func set_down(s: Set<int>, i: int): Set<int> {
+    return if i < 0 then s else set_down(s->add<i * 7 % 211>, i - 1)
+}
+
+func box(m: Map<int, string>, s: Set<int>): Box {
+    return { name: 'x', table: m, seen: s }
+}
+
+func main(): int sync {
+    let empty = [(0, 'v0')] as Map<int, string>
+    let none = [0] as Set<int>
+    let a = up(empty, 0, 200)
+    let b = down(empty, 199)
+    let c = cut(up(empty, 0, 260), 200, 260)
+    let d = a->put<77, 'other'>
+    let s = set_up(none, 0, 150)
+    let t = set_down(none, 149)
+    let u = s->add<206>
+    println(len(a), len(b), len(c), len(s), len(t))
+    // arrays of collections
+    println([a, b] == [b, c], [a, b] != [b, c], [a, d] == [b, c], [a] == [a, b])
+    println([s, t] == [t, s], [s, u] == [t, s], [s, u] != [t, s])
+    // tuples and nested arrays
+    println((a, s, 1) == (c, t, 1), (a, s, 1) == (d, t, 1), (a, s, 1) == (c, u, 1), [[a], [b, c]] == [[c], [a, b]])
+    // structs
+    let x = box(a, s)
+    let y = box(c, t)
+    let z = box(d, t)
+    println(x == y, x != y, x == z, [x, y]->contains<z>, [z, y]->contains<x>)
+    return 0
+}

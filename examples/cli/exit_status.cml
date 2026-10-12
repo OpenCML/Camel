@@ -1,0 +1,16 @@
+// A check for scripts: the int that `main` returns is the exit code of the process, and
+// `exit(n)` ends the program at once with that code.
+// Run: camel examples/cli/exit_status.cml --arg used=91 --arg limit=80     (exit code 1)
+//      camel examples/cli/exit_status.cml --arg used=40 --arg limit=80     (exit code 0)
+module exit_status
+
+func main(used: int, limit: int): int sync {
+    if limit <= 0 then sync {
+        println('limit must be positive')
+        exit(2)
+    }
+    println(format<used, limit>('usage {}%, limit {}%'))
+    let over = used > limit
+    println(if over then 'over the limit' else 'ok')
+    return if over then 1 else 0
+}

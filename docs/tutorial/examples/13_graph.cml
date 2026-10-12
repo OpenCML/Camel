@@ -1,0 +1,13 @@
+// A small program to look at as a graph.
+// Run: camel docs/tutorial/examples/13_graph.cml std::rgir
+module graph_demo
+
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    let x = add(1, 2)
+    println(x)
+    return 0
+}
