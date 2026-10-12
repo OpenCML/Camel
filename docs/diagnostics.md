@@ -1690,17 +1690,20 @@ func main(): int sync {
 Only a name that stands for exactly one function has a function value. Wrap the call in a function whose parameter types are written out, e.g. '(x: int) => {0}(x)'.
 ```
 
-**Example** (`test/cases/compile/function_values/return_operator_name.cml`, run as `camel test/cases/compile/function_values/return_operator_name.cml`)
+**Example** (`test/cases/compile/function_values/literal_operator_name.cml`, run as `camel test/cases/compile/function_values/literal_operator_name.cml`)
 
 ```camel
-module return_operator_name
+module literal_operator_name
 
-func pick() {
-    return println
-}
+func inc(x: int): int { return x + 1 }
+func over(x: int): int { return x }
+func over(x: float): float { return x }
 
 func main(): int sync {
-    pick()
+    let c = true
+    let fs = [println, inc]
+    let t = (over, 1)
+    let k = if c then println else inc
     println('never printed')
     return 0
 }

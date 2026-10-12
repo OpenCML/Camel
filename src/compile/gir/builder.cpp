@@ -1496,7 +1496,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             type_vec_t refTypes;
             std::vector<node_handle_t> refNodes;
             for (const auto &ref : composedData->refs()) {
-                const auto &refNode = valueOf(resolveNodeByRef(std::string(ref)));
+                const auto &refNode = elementNodeOf(std::string(ref), gct);
                 refTypes.push_back(nodeTypeOf(refNode));
                 refNodes.push_back(refNode);
             }
@@ -2245,6 +2245,28 @@ node_handle_t Builder::valueNodeOf(const std::any &res) {
     }
     ASSERT(res.type() == typeid(node_handle_t), "Expression did not produce a value node.");
     return any_cast<node_handle_t>(res);
+}
+
+node_handle_t Builder::elementNodeOf(const std::string &name, const GCT::node_ptr_t &literal) {
+    node_handle_t node{};
+    if (nodeAt(name).has_value()) {
+        node = valueOf(resolveNodeByRef(name));
+    } else {
+        // Not a value that was bound: the name of a function (`[inc, dec]`), looked up as
+        // the name is anywhere else. An unknown name is reported at the literal.
+        const auto dref =
+            std::make_shared<GCT::Node>(std::make_shared<GCT::DRefLoad>(Reference(name)));
+        dref->load()->setOrigin(literal->load()->origin());
+        node = visitDRefNode(dref);
+    }
+    return namedValueOf(node, name, literal);
+}
+
+node_handle_t Builder::namedValueOf(
+    node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin) {
+    node = functionValueOf(node, origin);
+    rejectNameWithoutValue(node, name, origin);
+    return node;
 }
 
 node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
@@ -4148,6 +4170,14 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     }
     if (failed) {
         throw BuildAbortException();
+    }
+    if (gct->size() > 0 && res != nullptr && nodeIsKind(res, runtime::GCNodeKind::Dref) &&
+        gct->at(gct->size() - 1)->type() == GCT::LoadType::DREF && sameGraph(res, currGraph_)) {
+        // A block that ends in the name of a function has that function's value: the value
+        // of a branch arm (`if c then inc else dec`), of a block, of a function body. Left a
+        // name, it gave the block the type void.
+        const auto &last = gct->at(gct->size() - 1);
+        res = namedValueOf(res, last->loadAs<GCT::DRefLoad>()->ref().toString(), last);
     }
     if (!operands) {
         // A sync block that is not part of an enclosing chain: whoever takes its value takes

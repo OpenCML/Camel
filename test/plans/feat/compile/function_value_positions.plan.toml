@@ -1,0 +1,78 @@
+id = "compile.function_value_positions"
+order = 326
+tier = "feat"
+tags = ["feat", "compile", "closures", "functions"]
+desc = "A function is a value in every position a value can stand in, alike on the four back ends."
+
+# The matrix: argument, return value, let, array / tuple / struct element, branch arm, match
+# arm, capture, with argument, var; each with a module-level function, a nested function that
+# captures a local, and a lambda. A generic function as a value stays an error
+# (GenericFunctionAsValue, plan compile.generics): undecided.
+
+[[tests]]
+name = "value_positions"
+desc = "Every position of the matrix prints the same line on std::nvm, std::fvm, std::jit and std::prl."
+kind = "behavior"
+case = "../../../cases/compile/function_values/value_positions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "arg 2 11 2",
+  "return 2 2 0 11",
+  "let 2 11",
+  "array 2 0 11 -9 8",
+  "array map [11, 9]",
+  "tuple 2 11",
+  "struct 2 11 2",
+  "nested 2 12 4 -5",
+  "arm block",
+  "if arm 2 11 8 2 6",
+  "if arm as argument 2 [11, 12]",
+  "match arm 2 -9",
+  "capture 13 2 13",
+  "with 2 11 2 [2, 3] [11, 12]",
+  "var 2",
+  "var 0",
+  "var 11",
+  "var 2",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "literal_unknown_name"
+desc = "An unknown name in an array literal is an unresolved reference located at the literal, not at the enclosing function."
+kind = "negative"
+case = "../../../cases/compile/function_values/literal_unknown_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["Unresolved reference: 'nosuch'"]
+expect_output_not_contains = ["never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_operator_name"
+desc = "An operator name or an overloaded name as a literal element or as the value of an arm is FunctionNameAsValue, each at its place; all three are reported."
+kind = "negative"
+case = "../../../cases/compile/function_values/literal_operator_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 14
+expect_output_contains = ["'println' is used as a value here, but it names an operator with several signatures", "'over' is used as a value here, but it names 2 functions of that name", "literal_operator_name.cml:14:13", "literal_operator_name.cml:15:23"]
+expect_output_not_contains = ["never printed", "cannot be called"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

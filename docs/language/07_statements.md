@@ -214,7 +214,7 @@ match dir {
 - `var` 形参是引用；把 `let` 对象传给 `var` 形参是编译期错误（见第 4 章 4.4.4）。
 - **parentParams**：**`'(' pairedParams? ','? ')'`**；**keyParamPair**：**`var? identDef ':' typeExpr ('=' dataExpr)?`**。
 - **重载**：同一个块里同名而形参类型不同的函数是重载，各有自己的子图；调用按书写顺序取第一个形参接受实参的。形参类型完全相同的第二个同名函数是编译期错误 `SemanticDiag::Redeclaration`（返回类型与形参名不参与区分）。泛型函数不能与其他函数同名。
-- **函数作为值**：只代表一个函数的名字可以当值用——作实参、`let g = f`、`return f`、被 lambda 捕获。代表运算符或一组重载的名字没有单一的函数值：返回它或在别的函数里捕获它是编译期错误 `SemanticDiag::FunctionNameAsValue`，可改写成参数类型写明的 lambda。
+- **函数作为值**：只代表一个函数的名字可以当值用，凡是能写值的位置都可以——作实参、`with` 实参、`let g = f`、`var v = f`、`return f`、数组／元组／结构体字面量的元素（`[inc, dec]`）、`if` 与 `match` 分支臂的值（`if c then inc else dec`）、被 lambda 捕获。代表运算符或一组重载的名字没有单一的函数值：在上述位置使用它是编译期错误 `SemanticDiag::FunctionNameAsValue`，可改写成参数类型写明的 lambda。泛型函数的名字不能当值用（`SemanticDiag::GenericFunctionAsValue`）。
 
 **无参、带返回类型与 sync**
 

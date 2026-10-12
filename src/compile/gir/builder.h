@@ -343,6 +343,12 @@ class Builder {
     // that function's value. A name that stands for an operator or for several overloads has
     // no single value and is returned as it is.
     node_handle_t functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin);
+    // The value of the element `name` of the composite literal `literal`: a bound value, or
+    // the value of the function of that name.
+    node_handle_t elementNodeOf(const std::string &name, const GCT::node_ptr_t &literal);
+    // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
+    node_handle_t
+    namedValueOf(node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
     // Reports FunctionNameAsValue at `origin` when `node` is still such a name (`name`) in
     // a place that needs a value.
     void rejectNameWithoutValue(
