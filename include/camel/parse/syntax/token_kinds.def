@@ -12,6 +12,8 @@ CAMEL_TOKEN(Eof, "<EOF>")
 CAMEL_TOKEN(Error, "<error>")            // text no token starts with, or an unclosed string
 CAMEL_TOKEN(Command, "<command>")        // `#` to the end of the line
 CAMEL_TOKEN(LineComment, "<comment>")    // `//` to the end of the line
+CAMEL_TOKEN(DocComment, "<comment>")     // `///` to the end of the line: documentation of the
+                                         // declaration right below (not `////`)
 CAMEL_TOKEN(BlockComment, "<comment>")   // `/* ... */`
 CAMEL_TOKEN(Identifier, "a name")
 CAMEL_TOKEN(Integer, "a number")

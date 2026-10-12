@@ -38,8 +38,18 @@ class StmtLoad : public Load {
     StmtType stmtType() const { return StmtType_; }
     const std::string geneCode() const override;
 
+    /// The documentation of a declaration: the text of the `///` lines right above it, without
+    /// the markers; empty if there is none.
+    const std::string &doc() const { return doc_; }
+    void setDoc(std::string doc) { doc_ = std::move(doc); }
+
+  protected:
+    /// ` /// first line (+n lines)` for the dump of a documented declaration, else nothing.
+    std::string docSuffix() const;
+
   private:
     StmtType StmtType_;
+    std::string doc_;
 };
 
 class DataDeclLoad : public StmtLoad {
@@ -65,7 +75,9 @@ class FuncDeclLoad : public StmtLoad {
 
     const Reference &ref() const { return ref_; }
 
-    const std::string toString() const override { return "FuncDecl: " + ref_.toString(); }
+    const std::string toString() const override {
+        return "FuncDecl: " + ref_.toString() + docSuffix();
+    }
     const std::string geneCode() const override;
 
   private:

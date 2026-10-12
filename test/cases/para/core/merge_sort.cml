@@ -14,7 +14,7 @@ func merge(lhs: int[], rhs: int[]): int[] sync {
 
 func mergesort(arr: int[]): int[] sync {
     let start = now()
-    let res = if len(arr) <= 1e6 then sorted(arr) else {
+    let res = if len(arr) <= 1000000 then sorted(arr) else {
         let mid = len(arr) / 2
         let lhs = arr->slice<0, mid>->mergesort
         let rhs = arr->slice<mid, len(arr)>->mergesort
@@ -26,7 +26,7 @@ func mergesort(arr: int[]): int[] sync {
 }
 
 func main(): int sync {
-    let n = 1e8
+    let n = 100000000
     let m = 100
     let s = 1
 

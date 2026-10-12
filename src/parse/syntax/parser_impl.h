@@ -177,6 +177,8 @@ class ParserImpl {
     void parseModuleName();
     void parseModuleDecl();
     void parseImportDecl();
+    void parseBracedImports();
+    void parseImportItem();
     void parseExportDecl();
     void parseUsingNamespaceDecl();
     void parseNamespaceDecl();
@@ -214,6 +216,7 @@ class ParserImpl {
     void parseRelational();
     void parseAdditive();
     void parseMultiplicative();
+    void parsePower();
     void parseNullable();
     void parseUnary();
     void parseLink();

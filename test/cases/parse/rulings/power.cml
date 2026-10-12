@@ -1,0 +1,9 @@
+// `^` binds one level tighter than `*` and `/` and associates from right to left; a prefix
+// operator applies to the whole power; a minus that touches a number is part of the literal.
+func main(): int sync {
+    let x = 3
+    println(2 * 3 ^ 2, 2 ^ 3 ^ 2, (2 ^ 3) ^ 2, 18 / 3 ^ 2)
+    println(-x ^ 2, (-x) ^ 2, -2 ^ 2, -(2 ^ 2), 2 ^ 2 * 3)
+    println(2.0 ^ -1.0, 10 - 2 ^ 3, x ^ 2 ^ 0)
+    return 0
+}

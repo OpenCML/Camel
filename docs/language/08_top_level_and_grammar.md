@@ -19,7 +19,7 @@ decl    : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceD
 | 声明 | 文法 | 章节 |
 |---|---|---|
 | 模块 | `module 名字` | [5.1](05_modules.md#51-模块声明) |
-| 导入 | `import (模块 \| (名字 \| { 名字, ... }) from 模块)` | [5.2](05_modules.md#52-导入) |
+| 导入 | `import (模块 \| (名字 \| { 名字 (as 新名)?, ... }) from 模块)` | [5.2](05_modules.md#52-导入) |
 | 导出 | `export (dataDecl \| typeDecl \| { 名字, ... })`；函数的 `export` 写在 `func` 前 | [5.3](05_modules.md#53-导出) |
 | 命名空间 | `namespace 限定名 { ... }` | [5.4](05_modules.md#54-命名空间) |
 | 展开命名空间 | `using namespace 限定名` | [5.2](05_modules.md#52-导入) |
@@ -51,7 +51,8 @@ logicalAnd : equality ('&&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
 relational : additive (('<' | '>' | '<=' | '>=') additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
-multiplicative : nullable (('*' | '/' | '^' | '@' | '%') nullable)*
+multiplicative : power (('*' | '/' | '@' | '%') power)*
+power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
 unary      : link (as 类型)? | ('!' | '-' | '~') link
 link       : comp (('->' | '?->') comp)*
@@ -97,7 +98,9 @@ stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
 moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
 moduleDecl         : 'module' identDef
-importDecl         : 'import' (moduleName | (identDef | bracedIdents) 'from' moduleName)
+importDecl         : 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
+bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
+importItem         : identDef ('as' identDef)?
 exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
@@ -137,10 +140,11 @@ logicalAndExpr     : equalityExpr ('&&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
-multiplicativeExpr : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
+multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
+powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-                     | ('!' | '-' | '~') linkExpr
+                     | ('!' | '-' | '~') linkExpr ('^' powerExpr)?
 linkExpr           : compExpr (('->' | '?->') compExpr)*
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*

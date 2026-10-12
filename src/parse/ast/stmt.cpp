@@ -20,6 +20,8 @@
 #include "camel/parse/ast/stmt.h"
 #include "camel/utils/str.h"
 
+#include <algorithm>
+
 namespace camel::parse::ast {
 
 const std::string StmtLoad::geneCode() const { return ""; }
@@ -30,9 +32,14 @@ const std::string ImportLoad::toString() const {
     }
     std::string result = "ImportDecl: ";
     if (!refs_.empty()) {
-        result += "{ " +
-                  strutil::join(refs_, ", ", [](const Reference &ref) { return ref.toString(); }) +
-                  " }";
+        result += "{ ";
+        for (size_t i = 0; i < refs_.size(); ++i) {
+            result += (i ? ", " : "") + refs_[i].toString();
+            if (!locals_.empty() && !(locals_[i] == refs_[i])) {
+                result += " as " + locals_[i].toString();
+            }
+        }
+        result += " }";
     } else {
         result += "*";
     }
@@ -51,6 +58,19 @@ const std::string ExportLoad::toString() const {
                              return ref.toString();
                          });
     return result;
+}
+
+std::string StmtLoad::docSuffix() const {
+    if (doc_.empty()) {
+        return "";
+    }
+    const size_t eol   = doc_.find('\n');
+    const size_t more  = static_cast<size_t>(std::count(doc_.begin(), doc_.end(), '\n'));
+    std::string suffix = " /// " + doc_.substr(0, eol);
+    if (more > 0) {
+        suffix += " (+" + std::to_string(more) + (more == 1 ? " line)" : " lines)");
+    }
+    return suffix;
 }
 
 const std::string DataDeclLoad::toString() const {
@@ -75,7 +95,7 @@ const std::string DataDeclLoad::toString() const {
                 "Unknown UnpackType in DataDeclLoad: " + std::to_string(static_cast<int>(type_)));
         }
     }
-    return result;
+    return result + docSuffix();
 }
 
 const std::string TypeDeclLoad::toString() const {
@@ -94,7 +114,7 @@ const std::string TypeDeclLoad::toString() const {
     if (!uri_.empty()) {
         result += " [" + uri_ + "]";
     }
-    return result;
+    return result + docSuffix();
 }
 
 const std::string ExitStmtLoad::toString() const {

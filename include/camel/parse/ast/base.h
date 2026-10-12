@@ -166,6 +166,14 @@ class ImportLoad : public Load {
     }
 
     void setRefs(const std::vector<Reference> &refs) { refs_ = refs; }
+    /// The names the imported entities have in this file, one per entry of refs():
+    /// `import { find as str_find }` has the ref `find` and the local name `str_find`.
+    /// Empty when no import of the declaration is renamed.
+    void setLocals(const std::vector<Reference> &locals) { locals_ = locals; }
+    const Reference &localOf(size_t index) const {
+        return locals_.empty() ? refs_[index] : locals_[index];
+    }
+    bool renames() const { return !locals_.empty(); }
     const std::vector<Reference> &refs() const { return refs_; }
     bool hasRefs() const { return !refs_.empty(); }
     std::vector<Reference> &getRefs() {
@@ -188,6 +196,7 @@ class ImportLoad : public Load {
   private:
     std::string path_;
     std::vector<Reference> refs_;
+    std::vector<Reference> locals_;
     Reference as_;
 };
 

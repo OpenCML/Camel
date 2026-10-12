@@ -144,8 +144,8 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
 
 **Two places where mistakes are easy:**
 
-- `^` has the same precedence as `*` and `/` and is left-associative: `2 * 3 ^ 2` is `36`, not `18`. Parenthesise powers: `2 * (3 ^ 2)`.
-- Unary `-` binds tighter than `^`: `-n ^ 2` is `(-n) ^ 2`.
+- `^` binds one level tighter than `*` and `/` and associates from right to left: `2 * 3 ^ 2` is `18`, and `2 ^ 3 ^ 2` is `2 ^ (3 ^ 2)`, that is `512`.
+- Unary `-`, `!` and `~` bind less tightly than `^`: `-n ^ 2` is `-(n ^ 2)`. A minus that touches a number is part of the literal ([2.5.1](02_lexical.md#251-integers)), so `-2 ^ 2` is `(-2) ^ 2`, that is `4`; for `-4` write `-(2 ^ 2)`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`.
 
 ### 6.7.2 Logic
 
@@ -406,9 +406,10 @@ From lowest to highest:
 | 5 | `==` `!=` (`===` `!==` not supported for now) | |
 | 6 | `<` `>` `<=` `>=` | |
 | 7 | `+` `-` | Left-associative |
-| 8 | `*` `/` `%` `^` `@` | Left-associative; `^` is at the same level as `*` |
+| 8 | `*` `/` `%` `@` | Left-associative |
+| 8a | `^` | Right-associative, one level above the multiplicative operators |
 | 9 | `??` `!!` | The right side is a complete expression |
-| 10 | Unary `!` `-` `~`; `as` | `-a->f` is `-(a->f)`; a signed number literal is one operand, `-2->f` is `(-2)->f` |
+| 10 | Unary `!` `-` `~`; `as` | A unary operator applies to the whole power after it: `-a ^ 2` is `-(a ^ 2)`; `-a->f` is `-(a->f)`; a signed number literal is one operand, `-2->f` is `(-2)->f` |
 | 11 | `->` `?->` | Left-associative |
 | 12 | `..` `?..` | |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |

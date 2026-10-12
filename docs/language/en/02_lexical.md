@@ -28,6 +28,7 @@ let c = a + b
 ## 2.2 Comments
 
 - `//` to the end of the line is a line comment.
+- **A line that starts with `///` is a documentation comment**: the consecutive `///` lines right above a declaration (`func`, `let`/`var`, `type`, with the annotations, `with` and `export` before it), without an empty line in between, are the documentation of that declaration. An editor shows it on hover, `camel inspect --ast` lists it on the declaration, and the formatter keeps it in place. A line that starts with `////` is an ordinary comment.
 - `/* ... */` is a block comment; it may span lines and cannot be nested.
 - `#` to the end of the line is also ignored, so the first line of a script can be `#!/usr/bin/env camel`.
 
@@ -63,11 +64,10 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 | Hexadecimal | `0xff` | 255 |
 | Binary | `0b1010` | 10 |
 | Octal (`0` followed by octal digits) | `077` | 63 |
-| With exponent | `1e6`, `1e3` | 1000000, 1000 |
 
 - The type of an integer literal is `int` (64-bit signed), with range -9223372036854775808 to 9223372036854775807.
 - **A literal out of range is a compile-time error** (`SemanticDiag::LiteralOutOfRange`): `9223372036854775808`, `1e400` and `0x8000000000000000` all are. `-9223372036854775808` is in range. A declaration with a type that puts a literal into a narrower type is checked in the same way: `let b: i32 = 3000000000` and `let c: f32 = 1.0e39` are errors. A floating-point literal larger than the largest `float` (`1.0e400`) is this error too.
-- **An integer with an exponent is still an integer**: `1e6` is an `int`, not a `float`; a negative exponent truncates towards zero, so `1e-2` is `0` and `15e-1` is `1`, with the warning `SemanticDiag::IntegerLiteralTruncated` (none when the result is exact, as for `1500e-2`). For a floating-point number write a decimal point: `1.0e-2`. Whether a literal with a negative exponent should be a float or an error has not been decided.
+- **A literal with an exponent or a decimal point is a floating-point number** ([2.5.2](#252-floating-point-numbers)): `1e6` is a `float` with the value `1000000.0`; `1e-2` is `0.01`. An integer literal has only the four forms of the table above.
 - An exponent is for decimal numbers only: `0b1e5` and `07e2` are `SemanticDiag::InvalidLiteral` (in a hexadecimal number `e` is a digit).
 - There are no digit separators (`1_000` is a syntax error) and no `0o` prefix.
 - **A number token carries no sign.** Between two operands `+` and `-` are always the binary operators, whatever the spacing: `n - 1`, `n-1` and `n -1` are all subtractions. Where an operand is expected (no value precedes), a `-` that **touches** a number is part of that number: `-1`, `-2.5`, `[-1, 2]`, `f(-1)`, `case -1 =>`, `-9223372036854775808`. A signed literal is one operand, so `-2->f` passes `-2` to `f` and `-2 ^ 2` is `(-2) ^ 2`; `-a->f` is `-(a->f)`, and so is `- 2->f` (white space after the minus) ([6.12](06_expressions.md#612-operator-precedence)). A `+` before a number is read as its sign too (`+2.5`). The sign of an exponent belongs to the number token itself: `1.0e-2`.
@@ -75,7 +75,7 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 
 ### 2.5.2 Floating-point numbers
 
-- The form is "digits `.` digits", optionally with an exponent: `1.0`, `0.5`, `2.5e+3`, `1.0e-2`. There must be digits on both sides of the decimal point (`.5` and `5.` are syntax errors).
+- The form is "digits `.` digits", optionally with an exponent (`1.0`, `0.5`, `2.5e+3`, `1.0e-2`), or decimal digits directly followed by an exponent (`1e6`, `1E5`, `1e-2`). There must be digits on both sides of a decimal point (`.5` and `5.` are syntax errors).
 - The type is `float` (64-bit double precision). The value of a literal is the double-precision number nearest to the decimal number written (round to even), the same value that `float('...')` gives for the same text.
 - **A float has one text: the shortest that reads back as the same number.** `println`, `print`, `string(x)`, a `{}` of `format`, and a float element of an array, tuple, struct or `Map` all write the same text:
 

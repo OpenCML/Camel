@@ -230,6 +230,19 @@ inline void setNodeTokenRangeBetween(node_ptr_t node, syn::Node first, syn::Node
         static_cast<size_t>(last->lastToken()->end()));
 }
 
+/// The documentation of a declaration: the `///` lines right above its first token, or above
+/// the `export` in front of it.
+inline std::string docOf(syn::Node decl) {
+    if (!decl || decl.empty()) {
+        return {};
+    }
+    syn::Node outer = decl;
+    if (decl.parent() && decl.parent().is(NK::ExportDecl)) {
+        outer = decl.parent();
+    }
+    return decl.tree()->tokens().docAbove(outer.firstToken().index());
+}
+
 inline node_ptr_t any2node(const std::any &a) { return std::any_cast<node_ptr_t>(a); }
 
 Reference Builder::qualifyRef(const Reference &ref) const {
@@ -414,12 +427,26 @@ any Builder::visitImportDecl(cst::ImportDecl context) {
     }
     if (context->get<cst::IdentDef>()) {
         import_->setAs(Reference(context->get<cst::IdentDef>()->text()));
-    } else if (context->get<cst::BracedIdents>()) {
+    } else if (context->get<cst::BracedImports>()) {
+        // importItem : identDef ('as' identDef)? -- the name in the module, then the name
+        // it has here.
         std::vector<Reference> refs;
-        for (const auto ident : context->get<cst::BracedIdents>()->get<cst::IdentList>()->all<cst::IdentDef>()) {
-            refs.emplace_back(ident->text());
+        std::vector<Reference> locals;
+        bool renamed = false;
+        for (const auto item : context->get<cst::BracedImports>()->all<cst::ImportItem>()) {
+            const auto name  = item->get<cst::IdentDef>(0);
+            const auto local = item->get<cst::IdentDef>(1);
+            if (!name) {
+                continue;
+            }
+            refs.emplace_back(name->text());
+            locals.emplace_back(local ? local->text() : name->text());
+            renamed = renamed || static_cast<bool>(local);
         }
         import_->setRefs(refs);
+        if (renamed) {
+            import_->setLocals(locals);
+        }
     }
     imports_.push_back(import_);
     LEAVE("ImportDecl");
@@ -742,6 +769,7 @@ any Builder::visitFuncDecl(cst::FuncDecl context) {
     *funcNode << blockNode;
 
     node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
+    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
     if (annoListNode) {
         *funcDeclNode << annoListNode;
     }
@@ -850,6 +878,7 @@ any Builder::visitDataDecl(cst::DataDecl context) {
     }
     node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(isVar, type, refs);
     setNodeTokenRangeByContext(dataDeclNode, context);
+    unwrapNodeAs<DataDeclLoad>(dataDeclNode)->setDoc(docOf(context));
     if (context->get<cst::TypeList>()) {
         *dataDeclNode << any2node(visitTypeList(context->get<cst::TypeList>()));
     } else {
@@ -917,6 +946,7 @@ any Builder::visitTypeDecl(cst::TypeDecl context) {
 
     node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, implMark, uri);
     setNodeTokenRangeByContext(typeDeclNode, context);
+    unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setDoc(docOf(context));
     if (!context->all<cst::IdentDef>().empty()) {
         // `type Pair<T> = (T, T)`: a type function, its parameters are type names in the
         // right-hand side.
@@ -2908,6 +2938,8 @@ any Builder::visitExpr(syn::Node context) {
     case NK::AdditiveExpr:
         return visitAdditiveExpr(cst::AdditiveExpr(context));
     case NK::MultiplicativeExpr:
+    case NK::PowerExpr:
+        // operand '^' operand: built as the multiplicative operators are.
         return visitMultiplicativeExpr(cst::MultiplicativeExpr(context));
     case NK::NullableExpr:
         return visitNullableExpr(cst::NullableExpr(context));

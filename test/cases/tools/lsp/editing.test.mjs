@@ -89,7 +89,7 @@ await withServer(async (ls) => {
         'with their signatures', items.find((i) => i.label === 'sqrt'))
 
     // ---- completion: nothing in comments and strings ----
-    m = edit(MAIN.replace('// Returns its argument.', '// Returns its/*c*/ argument.'))
+    m = edit(MAIN.replace('/// Returns its argument.', '/// Returns its/*c*/ argument.'))
     checkEq(await complete(m, 'c'), [], 'no completion inside a comment')
     m = edit(MAIN.replace("identity('text')", "identity('te/*c*/xt')"))
     checkEq(await complete(m, 'c'), [], 'no completion inside a string')

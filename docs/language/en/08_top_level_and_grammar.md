@@ -51,7 +51,8 @@ logicalAnd : equality ('&&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
 relational : additive (('<' | '>' | '<=' | '>=') additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
-multiplicative : nullable (('*' | '/' | '^' | '@' | '%') nullable)*
+multiplicative : power (('*' | '/' | '@' | '%') power)*
+power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
 unary      : link (as type)? | ('!' | '-' | '~') link
 link       : comp (('->' | '?->') comp)*
@@ -97,7 +98,9 @@ stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
 moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
 moduleDecl         : 'module' identDef
-importDecl         : 'import' (moduleName | (identDef | bracedIdents) 'from' moduleName)
+importDecl         : 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
+bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
+importItem         : identDef ('as' identDef)?
 exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
@@ -137,10 +140,11 @@ logicalAndExpr     : equalityExpr ('&&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
-multiplicativeExpr : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
+multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
+powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-                     | ('!' | '-' | '~') linkExpr
+                     | ('!' | '-' | '~') linkExpr ('^' powerExpr)?
 linkExpr           : compExpr (('->' | '?->') compExpr)*
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*

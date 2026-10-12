@@ -29,7 +29,8 @@
  *   equalityExpr    ===  !==  ==  !=                            left
  *   relationalExpr  <  >  <=  >=                                left
  *   additiveExpr    +  -                                        left
- *   multiplicative  *  /  ^  @  %                               left
+ *   multiplicative  *  /  @  %                                  left
+ *   powerExpr       ^                                           right
  *   nullableExpr    ??  !!           right operand: a whole dataExpr
  *   unaryExpr       prefix !  -  ~   (operand: linkExpr);  postfix `as T`, `is T`
  *   linkExpr        ->  ?->                                     left
@@ -230,27 +231,39 @@ void ParserImpl::parseAdditive() {
     }
 }
 
-/// multiplicativeExpr : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
+/// multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 /// Rule 2: an `@` that starts a line starts an annotated function declaration.
 void ParserImpl::parseMultiplicative() {
     const size_t m = mark();
-    parseNullable();
+    parsePower();
     bool any = false;
     while (!panic_) {
         if (cur_ == TK::At) {
             if (lineBreak()) {
                 break;
             }
-        } else if (cur_ != TK::Star && cur_ != TK::Slash && cur_ != TK::Caret &&
-                   cur_ != TK::Percent) {
+        } else if (cur_ != TK::Star && cur_ != TK::Slash && cur_ != TK::Percent) {
             break;
         }
         bump();
-        parseNullable();
+        parsePower();
         any = true;
     }
     if (any) {
         close(m, NK::MultiplicativeExpr);
+    }
+}
+
+/// powerExpr : nullableExpr ('^' powerExpr)?
+/// One level above the multiplicative operators and right-associative: `2 * 3 ^ 2` is 18,
+/// `2 ^ 3 ^ 2` is `2 ^ (3 ^ 2)`.
+void ParserImpl::parsePower() {
+    const size_t m = mark();
+    parseNullable();
+    if (cur_ == TK::Caret && !panic_) {
+        bump();
+        parsePower();
+        close(m, NK::PowerExpr);
     }
 }
 
@@ -266,7 +279,7 @@ void ParserImpl::parseNullable() {
 }
 
 /// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
-///           | ('!' | '-' | '~') linkExpr
+///           | ('!' | '-' | '~') linkExpr ('^' powerExpr)?
 /// The second alternative does not apply to a `-` that is the sign of a number: a `-` that
 /// touches a number (and a `+` before one) belongs to the literal, so `-2->f` passes the
 /// literal -2 to `f`, while `-a->f` and `- 2->f` negate the call.
@@ -274,7 +287,14 @@ void ParserImpl::parseUnary() {
     const size_t m = mark();
     if ((cur_ == TK::Bang || cur_ == TK::Minus || cur_ == TK::Tilde) && !literalSignAhead()) {
         bump();
+        const size_t operand = mark();
         parseLink();
+        // A prefix operator binds less tightly than `^`: `-x ^ 2` is `-(x ^ 2)`.
+        if (cur_ == TK::Caret && !panic_) {
+            bump();
+            parsePower();
+            close(operand, NK::PowerExpr);
+        }
         return close(m, NK::UnaryExpr);
     }
     parseLink();

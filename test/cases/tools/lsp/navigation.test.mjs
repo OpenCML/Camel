@@ -48,7 +48,7 @@ await withServer(async (ls) => {
     h = await hover('norm2(p)')
     check(h.includes('export func norm2(p: Point): int'), 'an imported function: its header as written', h)
     check(h.includes('The squared length of p.\nSecond line of the comment.'),
-        'the comment above the declaration is the documentation', h)
+        'the `///` lines above the declaration are the documentation', h)
     check(h.includes('shapes.cml'), 'the file of the definition is named', h)
     h = await hover('identity(n)')
     check(h.includes('func identity(x: typeas T): T'), 'a generic function: its header', h)

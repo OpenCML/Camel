@@ -29,7 +29,7 @@
  *   - NewlineBefore: a line break lies between the previous token and this one. It ends a
  *     statement unless the line is visibly unfinished.
  *
- * Comments are tokens too (kinds Command, LineComment, BlockComment), kept in the same buffer
+ * Comments are tokens too (kinds Command, LineComment, DocComment, BlockComment), kept in the same buffer
  * and skipped by the parser; white space is the text between two tokens. Buffer plus source
  * text is therefore lossless: every byte belongs to a token or lies between two of them.
  */
@@ -134,6 +134,10 @@ class TokenBuffer {
 
     /// Index of the next / previous token that is not trivia; size() / SIZE_MAX if none.
     size_t nextSignificant(size_t index) const;
+    /// The documentation of the declaration whose first token is `index`: the `///` lines
+    /// right above it, one per line without a gap, without the marker and one space after
+    /// it. Empty if there is none.
+    std::string docAbove(size_t index) const;
     size_t previousSignificant(size_t index) const;
 
   private:

@@ -1,0 +1,89 @@
+id = "parse.rulings"
+order = 306
+tier = "feat"
+tags = ["feat", "parse", "syntax"]
+desc = "The syntax rulings of design principles 2.10: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block."
+
+[[tests]]
+name = "rulings.power"
+desc = "`^` binds one level tighter than `*` and `/` and associates from right to left; a prefix operator applies to the whole power (`-x ^ 2` is -(x ^ 2)); a minus that touches a number belongs to the literal (`-2 ^ 2` is 4)."
+kind = "behavior"
+case = "../../../cases/parse/rulings/power.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["18 512 64 2", "-9 9 4 -4 12", "0.5 2 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.exponent_is_float"
+desc = "A literal with an exponent or a decimal point is a floating-point number: `1e5` is 100000.0 and can be passed where a float is wanted."
+kind = "behavior"
+case = "../../../cases/parse/rulings/exponent.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["100000.0 100000.0 0.01 2500.0 1.0", "50.0 100.5 6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.import_rename"
+desc = "`import { find as str_find, trim } from str` next to `import { find } from array`: the two `find` no longer conflict, renamed and plain names mix in one import."
+kind = "behavior"
+case = "../../../cases/parse/rulings/import_rename.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["ImportNameConflict", "Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.import_rename_hides_original"
+desc = "After `find as str_find` the original name is not visible in the importing module."
+kind = "negative"
+case = "../../../cases/parse/rulings/import_rename_hides.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 5
+expect_output_contains = ["'find'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.doc_comment_in_ast"
+desc = "The `///` lines right above a declaration are its documentation: `camel inspect --ast` lists it on a function, a `let` and an exported `let`; a `//` comment and a `////` line are not documentation."
+kind = "behavior"
+case = "../../../cases/parse/rulings/doc_comment.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["FuncDecl: square /// The square of a number. (+1 line)", "DataDecl: answer /// The answer.", "DataDecl: common /// Exported and documented."]
+expect_output_not_contains = ["FuncDecl: plain ///", "TypeDecl: Pair ///"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.doc_comment_formatting"
+desc = "The formatter keeps documentation comments where they are: formatting the file twice gives the same text, with each `///` block right above its declaration."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/parse/rulings/doc_comment.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["/// The square of a number.\n/// Negative numbers are fine.\nfunc square", "/// The answer.\nlet answer", "/// Exported and documented.\nexport let common"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.if_statement_without_block"
+desc = "`if c then stmt`, without a block and without `else`, is syntactically a statement (`camel check -s`); what such an `if` means is the business of the semantic rules."
+kind = "behavior"
+case = "../../../cases/parse/rulings/if_statement.cml"
+args = ["check", "-s", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

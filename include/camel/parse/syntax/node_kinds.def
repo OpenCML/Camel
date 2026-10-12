@@ -22,7 +22,9 @@ CAMEL_NODE(Program, Other)             // SEP? (decl SEP?)* EOF
 CAMEL_NODE(StmtList, Other)            // stmt (SEP? stmt)* SEP?
 CAMEL_NODE(ModuleName, Other)          // ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
 CAMEL_NODE(ModuleDecl, Other)          // 'module' identDef
-CAMEL_NODE(ImportDecl, Other)          // 'import' (moduleName | (identDef | bracedIdents) 'from' moduleName)
+CAMEL_NODE(ImportDecl, Other)          // 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
+CAMEL_NODE(BracedImports, Other)       // '{' (importItem (',' importItem)*)? ','? '}'
+CAMEL_NODE(ImportItem, Other)          // identDef ('as' identDef)?
 CAMEL_NODE(ExportDecl, Other)          // 'export' (dataDecl | typeDecl | bracedIdents)
 CAMEL_NODE(UsingNamespaceDecl, Other)  // 'using' 'namespace' identRef
 CAMEL_NODE(NamespaceDecl, Other)       // 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
@@ -72,7 +74,8 @@ CAMEL_NODE(LogicalAndExpr, Expr)       // equalityExpr ('&&' equalityExpr)*
 CAMEL_NODE(EqualityExpr, Expr)         // relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 CAMEL_NODE(RelationalExpr, Expr)       // additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 CAMEL_NODE(AdditiveExpr, Expr)         // multiplicativeExpr (('+' | '-') multiplicativeExpr)*
-CAMEL_NODE(MultiplicativeExpr, Expr)   // nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
+CAMEL_NODE(MultiplicativeExpr, Expr)   // powerExpr (('*' | '/' | '@' | '%') powerExpr)*
+CAMEL_NODE(PowerExpr, Expr)            // nullableExpr ('^' powerExpr)?; also the operand of a prefix operator
 CAMEL_NODE(NullableExpr, Expr)         // unaryExpr (('??' | '!!') dataExpr)?
 CAMEL_NODE(CastExpr, Expr)             // linkExpr ('as' | 'is') typeExpr
 CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '-' | '~') linkExpr

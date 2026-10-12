@@ -5,9 +5,9 @@ Program
 |     \- fib
 |-ImportDecl
 |  |- import
-|  |-BracedIdents
+|  |-BracedImports
 |  |  |- {
-|  |  |-IdentList
+|  |  |-ImportItem
 |  |  |  \-IdentDef
 |  |  |     \- now
 |  |  \- }

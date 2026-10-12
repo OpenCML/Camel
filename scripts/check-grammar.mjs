@@ -50,6 +50,7 @@ const FOLDED = {
     relationalExpr: 'parseRelational',
     additiveExpr: 'parseAdditive',
     multiplicativeExpr: 'parseMultiplicative',
+    powerExpr: 'parsePower',
     nullableExpr: 'parseNullable',
     unaryExpr: 'parseUnary',
     linkExpr: 'parseLink',

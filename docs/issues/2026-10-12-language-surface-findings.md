@@ -20,15 +20,7 @@ func main(): int sync { println(i32(3000000000)); return 0 }
 
 期望：`i32(x)` 对运行期的值是截断还是故障，需要裁定。（本条原先还包括超出范围的字面量静默回绕，那一部分已修复，见文末。）
 
-## 3. 带负指数的整数字面量是 0
-
-```cml
-func main(): int sync { println(1e-2); return 0 }
-```
-
-当前：`0`（`1e-2` 按词法是带指数的整数，向零截断），现在附带一条带位置的警告 `SemanticDiag::IntegerLiteralTruncated`，提示写 `1.0e-2`；值没有变。
-
-期望：由语言作者裁定带负指数的字面量是浮点数还是编译期错误；在此之前保持警告。
+## 3.（已解决，见文末）
 
 ## 4. `int('4x')` 接受数字前缀
 
@@ -44,15 +36,7 @@ func main(): int sync { println(int('4x')); println(float('abc')); return 0 }
 
 ## 6.（已修复，见文末）
 
-## 7. `^` 与 `*` 同优先级
-
-```cml
-func main(): int sync { println(2 * 3 ^ 2); let n = 2; println(-n ^ 2); return 0 }
-```
-
-当前：`36` 与 `4`。文法里 `^` 与 `*`、`/`、`%`、`@` 同属一级、左结合，一元 `-` 比它们都紧。
-
-期望：`^` 高于 `*` 且右结合（`18`），`-n ^ 2` 为 `-4`；需要语言作者确认。
+## 7.（已解决，见文末）
 
 ## 8. `===` 对字符串字面量为假
 
@@ -154,29 +138,7 @@ func main(): int sync { println(depth(100000)); return 0 }
 
 不属于缺陷，单列在这里，供排期参考。
 
-### 导入时不能给名字起别名
-
-```cml
-import { find as str_find } from str
-```
-
-当前：`[Error]: Expected '}' or ',' before 'as'. (name=SyntaxDiag::MissingComma)`。
-
-两个模块有同名函数时只能用到其中一个：
-
-```cml
-import { find } from str
-import { find } from array
-func main(): int sync {
-    println('hello'->find<'l'> ?? -1)
-    println([1, 2, 3]->find<(x: int): bool => x > 1> ?? -1)
-    return 0
-}
-```
-
-当前：第二个调用是 `NoMatchingFunction`，可用的重载只列出 `str:find`；把两条 `import` 换个顺序，则第一个调用失败。两条 `import` 本身不报错。可行的写法是只导入一个，另一个用限定名（`import array` 后写 `array::find`）。
-
-期望：支持 `import { a as b } from m`；同名的导入要么合并为重载，要么在第二条 `import` 处报告冲突。
+（“导入时不能给名字起别名”已解决，见文末。）
 
 ---
 
@@ -198,6 +160,9 @@ func main(): int sync {
 - 第 22 条 入口的两处细节：语法错误诊断里的模块名现在是文件声明的名字；未声明返回类型、以 `println(...)` 结尾的 `main` 返回被打印的值是现有规则的结果（函数体没有 `return` 时取最后一条语句的值，而 `println(x)` 的值是 `x`），已写进语言参考 7.4.1 与 4.1，行为未改，两条规则是否保留见下面“待裁定”。
 - 其他工作线记录的几条：`zip` 传三个数组时只用前两个（并且按三元组的类型读两元素的元组）——现在按数组个数构造元组；`head([])` 返回零值——现在是 `RuntimeDiag::IndexOutOfRange`；模块导入自身时段错误——现在是 `SemanticDiag::ImportCycle`。
 - 第 12 条 尖括号的歧义（四种表现）：由两条已裁定的排版规则解决（设计原则 2.10；`docs/technical/34_handwritten_parser.md`）。尖括号实参必须紧贴前一个记号，比较运算符 `<` 前要有空格；换行结束语句。(a)(b) 以 `>` 结尾的语句后面跟一行以字符串或名字开头的语句，现在是两条语句；(c) `println(scale<2>(1), scale<3>(1))`、(d) `zip_with<f>(a, b)->all<p>` 现在按写出来的样子读。`i<n` 这样紧贴的比较是 `SyntaxDiag::ComparisonNeedsSpace`。测试：`test/plans/feat/compile/surface.plan.toml` 的 `surface.angle_then_*`，探针 `test/tools/parsecheck/probes.py`。
+- 第 7 条 `^` 的优先级：按设计原则 2.10，`^` 比乘除高一级、从右到左结合（`2 * 3 ^ 2` 是 18，`2 ^ 3 ^ 2` 是 512），一元运算符比它松（`-n ^ 2` 是 `-(n ^ 2)`）。紧贴数字的负号是字面量的一部分，`-2 ^ 2` 仍是 4（待问语言负责人）。
+- 第 3 条 带指数的字面量：按 2.10，带指数或小数点的字面量一律是浮点数，`1e-2` 是 `0.01`。
+- 导入改名：`import { find as str_find } from str` 可用；`ImportNameConflict` 的建议里给出这个写法。整模块改名 `import m as n` 未裁定。
 
 ## 待裁定（修复这批缺陷时遇到的）
 

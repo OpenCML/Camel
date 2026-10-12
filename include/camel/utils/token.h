@@ -283,7 +283,10 @@ template <typename T> T parseNumber(const std::string &input) {
     } else if (input.substr(i, 2) == "0b") {
         base = 2;
         i += 2;
-    } else if (input[i] == '0' && input.find_first_of(".") == std::string::npos) {
+    } else if (
+        input[i] == '0' && input.find_first_of(".") == std::string::npos &&
+        (std::is_integral_v<T> || input.find_first_of("eE") == std::string::npos)) {
+        // A leading zero makes an octal integer; `0e5` is the floating-point zero.
         base = 8;
         i++;
     }

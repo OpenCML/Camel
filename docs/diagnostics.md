@@ -1609,7 +1609,7 @@ The name '{0}' is imported from the modules '{1}' and '{2}' with the same signat
 **Help**
 
 ```text
-Two imports that bring the same name with the same parameter types conflict; neither is chosen silently. Import the name from one of the modules only, and reach the other through its module ('import m' and then 'm::name').
+Two imports that bring the same name with the same parameter types conflict; neither is chosen silently. Give one of them another name where it is imported ('import { name as other_name } from m'), or import the name from one of the modules only and reach the other through its module ('import m', then 'm::name').
 ```
 
 **Example** (`test/cases/compile/module_imports/d5_conflict.cml`, run as `camel -E short test/cases/compile/module_imports/d5_conflict.cml`)

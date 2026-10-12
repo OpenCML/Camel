@@ -50,7 +50,7 @@ Formatter::Formatter(const syn::Tree &tree, Options options) : tree(tree) {
         int channel = 0;
         if (token.kind == TK::Command) {
             channel = 2;
-        } else if (token.kind == TK::LineComment) {
+        } else if (token.kind == TK::LineComment || token.kind == TK::DocComment) {
             channel = 3;
         } else if (token.kind == TK::BlockComment) {
             channel = 4;
@@ -288,12 +288,21 @@ any Formatter::visitImportDecl(cst::ImportDecl context) {
     string result            = "import ";
     const string path        = any_cast<string>(visitModuleName(context->get<cst::ModuleName>()));
     const auto &identDef     = context->get<cst::IdentDef>();
-    const auto &bracedIdents = context->get<cst::BracedIdents>();
+    const auto braced        = context->get<cst::BracedImports>();
     if (context->tok(TK::KwFrom)) {
         if (identDef) {
             result += any_cast<string>(visitIdentDef(identDef));
+        } else if (braced->all<cst::ImportItem>().empty()) {
+            result += "{}";
         } else {
-            result += any_cast<string>(visitBracedIdents(bracedIdents));
+            result += "{" +
+                      formatList(
+                          vec(braced->all<cst::ImportItem>()),
+                          braced,
+                          ", ",
+                          ",",
+                          PaddingSP | PaddingNL | PushScope) +
+                      "}";
         }
         result += " from " + path;
     } else {
@@ -1357,6 +1366,16 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(RelationalExpr)
         CAMEL_FORMAT(AdditiveExpr)
         CAMEL_FORMAT(MultiplicativeExpr)
+    case NK::ImportItem: {
+        // name, or name as local
+        string item = any_cast<string>(visitIdentDef(context.get<cst::IdentDef>(0)));
+        if (context.get<cst::IdentDef>(1)) {
+            item += " as " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>(1)));
+        }
+        return item;
+    }
+    case NK::PowerExpr:
+        return formatBiOpsList(context, true);
         CAMEL_FORMAT(NullableExpr)
         CAMEL_FORMAT(LinkExpr)
         CAMEL_FORMAT(CompExpr)

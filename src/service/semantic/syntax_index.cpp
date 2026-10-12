@@ -207,6 +207,7 @@ class Walker {
             info.type    = static_cast<uint16_t>(token.kind);
             info.channel = token.kind == TK::Command        ? 2
                            : token.kind == TK::LineComment  ? 3
+                           : token.kind == TK::DocComment   ? 3
                            : token.kind == TK::BlockComment ? 4
                                                             : 0;
             info.line    = static_cast<uint32_t>(buffer_.lineOf(token.begin));
@@ -214,78 +215,10 @@ class Walker {
         }
     }
 
-    /// The comment block right above a declaration: consecutive `//` lines ending on the line
-    /// before it, or one `/* */` block. Without the comment markers.
+    /// The documentation of a declaration: the `///` lines right above it (design principles
+    /// 2.10).
     std::string docAbove(syn::TokenRef first) const {
-        if (!first) {
-            return {};
-        }
-        std::vector<std::string> lines;
-        size_t expectLine = first.line();
-        for (size_t i = first.index(); i-- > 0;) {
-            const syn::Token &token = buffer_[i];
-            const size_t line       = buffer_.lineOf(token.begin);
-            if (token.kind == TK::LineComment) {
-                if (line + 1 != expectLine) {
-                    break;
-                }
-                std::string text(buffer_.text(token));
-                size_t from = text.find_first_not_of('/');
-                text        = from == std::string::npos ? "" : text.substr(from);
-                if (!text.empty() && text.front() == ' ') {
-                    text.erase(0, 1);
-                }
-                while (!text.empty() && (text.back() == '\r' || text.back() == ' ')) {
-                    text.pop_back();
-                }
-                lines.push_back(text);
-                expectLine = line;
-                continue;
-            }
-            if (token.kind == TK::BlockComment && lines.empty()) {
-                std::string body(buffer_.text(token));
-                const size_t newlines =
-                    static_cast<size_t>(std::count(body.begin(), body.end(), '\n'));
-                if (line + newlines + 1 != expectLine) {
-                    break;
-                }
-                if (body.size() >= 4) {
-                    body = body.substr(2, body.size() - 4);
-                }
-                std::string cleaned;
-                size_t pos = 0;
-                while (pos <= body.size()) {
-                    size_t eol       = body.find('\n', pos);
-                    std::string text = body.substr(pos, eol == std::string::npos ? eol : eol - pos);
-                    size_t from      = text.find_first_not_of(" \t*");
-                    text             = from == std::string::npos ? "" : text.substr(from);
-                    while (!text.empty() && (text.back() == '\r' || text.back() == ' ')) {
-                        text.pop_back();
-                    }
-                    if (!cleaned.empty() || !text.empty()) {
-                        cleaned += text;
-                        cleaned += '\n';
-                    }
-                    if (eol == std::string::npos) {
-                        break;
-                    }
-                    pos = eol + 1;
-                }
-                while (!cleaned.empty() && cleaned.back() == '\n') {
-                    cleaned.pop_back();
-                }
-                return cleaned;
-            }
-            break;
-        }
-        std::string doc;
-        for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
-            if (!doc.empty()) {
-                doc += '\n';
-            }
-            doc += *it;
-        }
-        return doc;
+        return first ? buffer_.docAbove(first.index()) : std::string();
     }
 
     // ---- scopes and declarations ----
@@ -455,7 +388,7 @@ class Walker {
         const std::string from = moduleName ? textOf(rangeOf(moduleName)) : std::string();
         const Range whole      = rangeOf(ctx);
         const auto single      = ctx.get<cst::IdentDef>();
-        const auto braced      = ctx.get<cst::BracedIdents>();
+        const auto braced      = ctx.get<cst::BracedImports>();
         if (!ctx.has(TK::KwFrom) && !single && !braced) {
             // `import a.b`: the module is known by its last name.
             if (const syn::TokenRef last = lastNameOf(moduleName)) {
@@ -468,8 +401,10 @@ class Walker {
         if (single) {
             names.push_back(single);
         }
-        for (const auto ident : braced.get<cst::IdentList>().all<cst::IdentDef>()) {
-            names.push_back(ident);
+        // `{ find as str_find }` declares str_find; the name in the module is not visible.
+        for (const auto item : braced.all<cst::ImportItem>()) {
+            const auto local = item.get<cst::IdentDef>(1);
+            names.push_back(local ? local : item.get<cst::IdentDef>(0));
         }
         for (const auto ident : names) {
             if (nameOf(ident)) {

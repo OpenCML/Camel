@@ -461,15 +461,19 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     } else {
         module_->importDefaultRefsFromMod(mod);
         // Import specific references
-        for (const Reference &ref : refs) {
-            module_->markImportedRefFromMod(ref, mod);
+        for (size_t i = 0; i < refs.size(); ++i) {
+            // `import { find as str_find }`: the entity `find` of the module under the
+            // local name `str_find`; without `as` the two are the same.
+            const Reference &ref   = refs[i];
+            const Reference &local = load->localOf(i);
+            module_->markImportedRefFromMod(local, ref, mod);
             module_->noteNamedImport(
-                ref,
+                local,
                 mod,
                 ast->load()->origin(),
                 load->tokenRange().start,
                 load->tokenRange().end);
-            module_->markImportedNamespaceFromMod(ref, ref, mod);
+            module_->markImportedNamespaceFromMod(local, ref, mod);
         }
     }
 

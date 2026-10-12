@@ -1,0 +1,7 @@
+// `if c then stmt` without a block and without `else` parses as a statement.
+func main(): int sync {
+    let debug = true
+    if debug then println('checking')
+    if !debug then println('skipped')
+    return 0
+}

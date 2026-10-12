@@ -576,13 +576,13 @@ void ParserImpl::parseModuleDecl() {
     close(m, NK::ModuleDecl);
 }
 
-/// importDecl : 'import' (moduleName | (identDef | bracedIdents) 'from' moduleName)
+/// importDecl : 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
 /// A name followed by `from` is the imported name, otherwise the start of the module name.
 void ParserImpl::parseImportDecl() {
     const size_t m = mark();
     bump();
     if (cur_ == TK::LBrace) {
-        parseBracketedIdents(TK::RBrace, NK::BracedIdents);
+        parseBracedImports();
         expect(TK::KwFrom);
         parseModuleName();
     } else if (cur_ == TK::Identifier && peek(1) == TK::KwFrom) {
@@ -593,6 +593,39 @@ void ParserImpl::parseImportDecl() {
         parseModuleName();
     }
     close(m, NK::ImportDecl);
+}
+
+/// bracedImports : '{' (importItem (',' importItem)*)? ','? '}'
+void ParserImpl::parseBracedImports() {
+    const size_t m = mark();
+    bump();
+    {
+        Scope scope(*this, false);
+        if (cur_ != TK::RBrace && cur_ != TK::Comma) {
+            parseImportItem();
+            while (cur_ == TK::Comma && peek(1) != TK::RBrace && !panic_) {
+                bump();
+                parseImportItem();
+            }
+        }
+        eat(TK::Comma);
+    }
+    if (!panic_) {
+        expectListEnd(TK::RBrace);
+    }
+    close(m, NK::BracedImports);
+}
+
+/// importItem : identDef ('as' identDef)?
+/// `find as str_find`: the name in the module, then the name it has in this file.
+void ParserImpl::parseImportItem() {
+    const size_t m = mark();
+    parseIdentDef();
+    if (cur_ == TK::KwAs && !panic_) {
+        bump();
+        parseIdentDef();
+    }
+    close(m, NK::ImportItem);
 }
 
 /// exportDecl : 'export' (dataDecl | typeDecl | bracedIdents)
