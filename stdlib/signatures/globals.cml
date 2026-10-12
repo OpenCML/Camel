@@ -276,6 +276,24 @@ inner func apply(var xs: T[]): T[] {
     return ':mark/apply_arr'
 }
 
+// ---- fault isolation ----
+//
+// A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
+// the program with a located diagnostic. `attempt` isolates it at the boundary of one call
+// (design principles 2.9; docs/technical/32_fault_isolation.md). The name is provisional.
+
+/// Calls f with the arguments. A fault raised inside the call becomes an error value whose kind
+/// is the name of the fault (`DivisionByZero`, ...), with the fault's message and position;
+/// otherwise the result of f. When f itself returns `U!`, so does attempt. What the call did
+/// before the fault is not undone; exit() and the failures of the compiler itself are not
+/// isolated.
+/// @effect what f does
+/// @example attempt(risky, 0) !! -1
+/// @example attempt(() => xs->map<risky>) !! []
+inner func attempt(f: (...args: A) => T, ...args: A): T! {
+    return ':mark/isolate'
+}
+
 // ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
 // Built-in collection types (docs/technical/31_map_and_set.md). Every operator returns a new
 // value. Each also takes its with-parameters as ordinary arguments: put(m, k, v) is m->put<k, v>.

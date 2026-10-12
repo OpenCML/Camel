@@ -31,7 +31,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 46 |
+| [built-in](#built-in-functions) | none | C++ | 47 |
 | [str](#str) | `import { ... } from str` | C++ | 20 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 45 |
@@ -438,6 +438,28 @@ Replaces every element of the variable xs by f of it, in place.
 
 - With effects: changes its argument.
 - Example: `apply<(x: int) => x * 2>(xs)`
+
+### Fault isolation
+
+A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
+the program with a located diagnostic. `attempt` isolates it at the boundary of one call
+(design principles 2.9; docs/technical/32_fault_isolation.md). The name is provisional.
+
+#### `attempt`
+
+```camel
+attempt: (f: (...args: A) => T, ...args: A) => T!
+```
+
+Calls f with the arguments. A fault raised inside the call becomes an error value whose kind
+is the name of the fault (`DivisionByZero`, ...), with the fault's message and position;
+otherwise the result of f. When f itself returns `U!`, so does attempt. What the call did
+before the fault is not undone; exit() and the failures of the compiler itself are not
+isolated.
+
+- With effects: what f does.
+- Example: `attempt(risky, 0) !! -1`
+- Example: `attempt(() => xs->map<risky>) !! []`
 
 #### `len`
 

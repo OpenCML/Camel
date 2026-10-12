@@ -18,6 +18,7 @@
  */
 
 #include "builtin.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/core/context/frame.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/utils/log.h"
@@ -333,6 +334,9 @@ void registerBuiltinOperatorTraits() {
          {"mark/filter_arr", false},
          {"mark/reduce_arr", false},
          {"mark/foreach_arr", false}});
+    // The fault-isolation node calls the function it is given, and its result depends on
+    // whether that call faults: never folded, merged or dropped as a pure call would be.
+    registry.set(std::string(camel::execute::kFaultIsolationUri), {.pure = false});
     registry.declare("os", {{"exit", false}, {"sleep", false}});
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
