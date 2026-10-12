@@ -13,7 +13,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 ## 2. 当前基线
 
-- 开发分支 `fsh-dev`；默认测试集（`smoke` 加全部 `feat` 计划）按计划文件统计为 2143 条，另有示例计划 `test/plans/feat/examples.plan.toml`（每个示例在四种后端上各算一条，共一百余条）；计划中没有标为已知失败的用例。
+- 开发分支 `fsh-dev`；默认测试集（`smoke` 加全部 `feat` 计划）2255 条，全部通过，没有遗留失败。
 - 核心（`src/` 与 `include/`）约 9.8 万行，库（`modules/` 与 `stdlib/`）约 3.8 万行，工具（`tools/`）另有约 1.6 万行；42 个内建遍（另有 35 个别名）加 2 个由模块提供的遍（`tensor::fuse`、`onnx::export`）；四种执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）以及到 C++ 的转译。
 - 持续集成在推送（`main`、`develop`、`fsh-dev`）与合并请求时构建并运行默认测试集：Linux x64 与 Windows x64 必须通过，macOS arm64 是试验项，失败不阻断；打标签时另外构建发布包。
 
