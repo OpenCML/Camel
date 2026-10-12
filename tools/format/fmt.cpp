@@ -99,6 +99,11 @@ string Formatter::formatStringLiteral(const string &input, bool multiLine = fals
     bool hasSingleQuote = (slicedStr.find('\'') != string::npos);
     bool hasDoubleQuote = (slicedStr.find('"') != string::npos);
 
+    if (hasSingleQuote && hasDoubleQuote && !multiLine) {
+        // Both kinds of quotes: whichever delimits the string, the other is escaped in it
+        // already. Kept as written (escaping again changed the text of the string).
+        return input;
+    }
     if (hasSingleQuote && !hasDoubleQuote) {
         quoteChar = '"';
     } else if (!hasSingleQuote && hasDoubleQuote) {
@@ -192,7 +197,14 @@ any Formatter::visitProgram(cst::Program context) {
     if (!headWithIndex.empty()) {
         for (const auto &pair : headWithIndex) {
             head.push_back(pair.first);
-            headTokenRanges.push_back(declTokenRanges[pair.second + 1]);
+            // The comments after an import. Those between the last import and the first
+            // other declaration belong to that declaration (its documentation) and are
+            // written with it; they used to be written twice.
+            auto after = declTokenRanges[pair.second + 1];
+            if (!tailWithIndex.empty() && pair.second + 1 == tailWithIndex[0].second) {
+                after.first = after.second;
+            }
+            headTokenRanges.push_back(after);
         }
         headTokenRanges.push_back(declTokenRanges[headWithIndex[0].second]);
     }
@@ -206,7 +218,14 @@ any Formatter::visitProgram(cst::Program context) {
 
     string headStr, tailStr;
     if (moduleDecl) {
-        headStr = any_cast<string>(visit(moduleDecl));
+        // The comments above `module` (the description of the file) stay above it; they used
+        // to be dropped.
+        for (size_t i = 0; i < moduleDecl.firstToken().index(); i++) {
+            if (tokens[i].channel > 1) {
+                headStr += tokens[i].text() + lineEnd();
+            }
+        }
+        headStr += any_cast<string>(visit(moduleDecl));
         if (this->preferSemis) {
             headStr += ";";
         }

@@ -22,7 +22,6 @@
 #include "camel/utils/windows_parser_guard.h"
 
 #include "camel/core/error/diagnostics.h"
-#include "camel/core/error/listener.h"
 #include "camel/init.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/log.h"
@@ -124,7 +123,6 @@ int main(int argc, char *argv[]) {
 
     auto diagnostics = std::make_shared<Diagnostics>("camel-format", inputPath);
     auto parser      = std::make_shared<CamelParser>(diagnostics);
-    parser->setBackend(CamelParser::Backend::Hand);
     std::ifstream file(inputPath);
     if (!file) {
         std::cerr << "camel-format: cannot open: " << inputPath << "\n";
