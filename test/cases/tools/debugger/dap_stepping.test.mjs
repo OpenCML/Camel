@@ -91,6 +91,20 @@ await runTest(async (t) => {
             await dap.stop()
         }
 
+        // ---- "stepBy": "node": the ordinary step requests walk the nodes of a line -----------
+        {
+            const dap = await t.dap()
+            const L = (mark) => lineOf(ORDER, `mark:${mark}`)
+            await dap.launch(ORDER, { passes: [backend], stepBy: 'node' }, { [ORDER]: [L('a')] })
+            let stop = await dap.waitStop()
+            checkEq(at(stop), `work:${L('a')}`, on('stepBy node: stopped in work'))
+            stop = await step(dap, 'stepIn')
+            checkEq(at(stop), `double:${lineOf(ORDER, 'return x * 2')}`, on('stepBy node: stepIn stops at the next node, inside the callee'))
+            stop = await step(dap, 'next')
+            checkEq(at(stop), `work:${L('b')}`, on('stepBy node: next stops at the next node of the caller'))
+            await dap.stop()
+        }
+
         // ---- recursion: a frame per call; a tail recursion: one frame ----------------------
         {
             const dap = await t.dap()

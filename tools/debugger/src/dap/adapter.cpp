@@ -553,9 +553,13 @@ class Adapter {
         }
         if (command == "next" || command == "stepIn" || command == "stepOut") {
             // Granularity "instruction" is a step by graph node; a statement or a line is a
-            // step by source line (docs/technical/34_debugger.md, section 4).
+            // step by source line (docs/technical/34_debugger.md, section 4). A session
+            // launched with "stepBy": "node" steps by node whatever the client asks: editors
+            // send the instruction granularity only from a disassembly view.
+            const bool byNode =
+                stepByNode_ || args.value("granularity", "statement") == "instruction";
             json step{
-                {"unit", args.value("granularity", "statement") == "instruction" ? "node" : "line"},
+                {"unit", byNode ? "node" : "line"},
                 {"mode", command == "next" ? "over" : command == "stepIn" ? "in" : "out"}};
             if (ask("step", step)) {
                 ok();
@@ -788,6 +792,13 @@ class Adapter {
             }
         }
 
+        const std::string stepBy = args.value("stepBy", "line");
+        if (stepBy != "line" && stepBy != "node") {
+            fail("launch: \"stepBy\" is \"line\" or \"node\".");
+            return;
+        }
+        stepByNode_ = stepBy == "node";
+
         ProcessSpec spec;
         spec.exe  = exePath_;
         spec.args = {"--run-worker", program.string()};
@@ -896,6 +907,7 @@ class Adapter {
     int64_t nextSeq_ = 1;
     int lineOffset_   = 0; // added to a client line to get a 1-based line
     int columnOffset_ = 0;
+    bool stepByNode_  = false; // launch "stepBy": "node"
 
     std::mutex stateMutex_;
     std::shared_ptr<ChildProcess> worker_;

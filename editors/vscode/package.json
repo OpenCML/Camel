@@ -111,6 +111,15 @@
                 "type": "boolean",
                 "description": "Stop at the first node of the program that has a source position.",
                 "default": false
+              },
+              "stepBy": {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "node"
+                ],
+                "default": "line",
+                "markdownDescription": "What Step Over, Step Into and Step Out step by: `line` (the next source line that executes) or `node` (the next graph node, several of which may be on one line)."
               }
             }
           }

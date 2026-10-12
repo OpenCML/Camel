@@ -126,7 +126,7 @@ if (manifest && grammar && languageConfig) {
                     check(adapterText.includes(`"${name}"`), `package.json: launch attribute ${name} is not read by the debug adapter`)
                 }
             }
-            for (const name of ['program', 'passes', 'args', 'cwd', 'env', 'stopOnEntry']) {
+            for (const name of ['program', 'passes', 'args', 'cwd', 'env', 'stopOnEntry', 'stepBy']) {
                 check((launch.properties || {})[name], `package.json: launch attribute ${name} is not contributed`)
             }
         }
