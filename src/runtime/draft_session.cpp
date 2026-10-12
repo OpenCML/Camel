@@ -33,6 +33,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -181,6 +182,15 @@ void visitGraphsInStaticSlot(
         break;
     }
     default:
+        // A Map or a Set is a container of typed slots too.
+        if (const auto *coll = camel::core::type::asCollectionType(type)) {
+            camel::core::rtdata::table::forEachSlot(
+                fromSlot<camel::core::rtdata::Table *>(slot),
+                coll,
+                [&](slot_t inner, Type *innerType) {
+                    visitGraphsInStaticSlot(context, inner, innerType, visitor, visited);
+                });
+        }
         break;
     }
 }
@@ -289,6 +299,22 @@ slot_t cloneStaticSlot(
         return toSlot<Object *>(clonedStruct);
     }
     default:
+        // A Map or a Set may hold function values, which name graphs: its slots are rewritten
+        // like the elements of an array. It is copied only when a slot changed.
+        if (const auto *coll = camel::core::type::asCollectionType(type)) {
+            namespace rtdata = camel::core::rtdata;
+            Object *cloned   = rtdata::table::withSlots(
+                fromSlot<rtdata::Table *>(slot),
+                coll,
+                mm::autoSpace(),
+                [&](slot_t inner, Type *innerType) {
+                    return shouldTraverseStaticSlotType(innerType)
+                               ? cloneStaticSlot(context, inner, innerType, rewritten, objectCache)
+                               : inner;
+                });
+            objectCache.emplace(object, cloned);
+            return toSlot<Object *>(cloned);
+        }
         // Other objects (strings, tensors, ...) refer to no graph: the rewritten graph shares
         // them. Copying would duplicate every weight a program captures on every rewrite.
         return slot;

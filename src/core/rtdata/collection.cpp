@@ -552,6 +552,43 @@ Array *items(const Table *t, const type::MapType *type) {
     return result;
 }
 
+void forEachSlot(
+    const Table *t, const type::CollectionType *type,
+    const std::function<void(slot_t, type::Type *)> &visit) {
+    for (size_t i = 0; i < t->size(); ++i) {
+        visit(t->keys()[i], type->keyType());
+    }
+    if (type->isMap()) {
+        for (size_t i = 0; i < t->size(); ++i) {
+            visit(t->values()[i], type->valueType());
+        }
+    }
+}
+
+Table *withSlots(
+    const Table *t, const type::CollectionType *type, mm::IAllocator &allocator,
+    const std::function<slot_t(slot_t, type::Type *)> &rewrite) {
+    const size_t n         = t->size();
+    const size_t slotCount = type->isMap() ? 2 * n : n;
+    std::vector<slot_t> slots(slotCount);
+    bool changed = false;
+    for (size_t i = 0; i < n; ++i) {
+        slots[i] = rewrite(t->keys()[i], type->keyType());
+        changed |= slots[i] != t->keys()[i];
+    }
+    for (size_t i = n; i < slotCount; ++i) {
+        slots[i] = rewrite(t->values()[i - n], type->valueType());
+        changed |= slots[i] != t->values()[i - n];
+    }
+    if (!changed) {
+        return const_cast<Table *>(t);
+    }
+    Table *result = Table::create(n, slotCount, allocator);
+    std::copy(slots.begin(), slots.end(), result->keys());
+    barrierAll(result, type);
+    return result;
+}
+
 } // namespace table
 
 } // namespace camel::core::rtdata

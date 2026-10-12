@@ -47,6 +47,8 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/collection.h"
 
+#include <functional>
+
 namespace camel::core::rtdata {
 
 class Table final : public Object {
@@ -113,6 +115,20 @@ bool isSubset(const Table *a, const Table *b, const type::SetType *type);
 Array *keys(const Table *t, const type::CollectionType *type);
 Array *values(const Table *t, const type::MapType *type);
 Array *items(const Table *t, const type::MapType *type);
+
+// For code that walks constant data by its static type (the static area of a graph: note 22),
+// which meets a collection as a container of typed slots like an array or a tuple.
+
+/// Calls `visit(slot, slotType)` for every key slot and, for a map, every value slot.
+void forEachSlot(
+    const Table *t, const type::CollectionType *type,
+    const std::function<void(slot_t, type::Type *)> &visit);
+/// The table with every slot replaced by `rewrite(slot, slotType)`: `t` itself when no slot
+/// changed, a new table in `allocator` otherwise. A rewrite must keep the content of a key
+/// (it may move or copy the object), so the order of the entries stands.
+Table *withSlots(
+    const Table *t, const type::CollectionType *type, camel::core::mm::IAllocator &allocator,
+    const std::function<slot_t(slot_t, type::Type *)> &rewrite);
 
 } // namespace table
 

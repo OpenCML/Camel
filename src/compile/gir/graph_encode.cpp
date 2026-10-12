@@ -36,6 +36,7 @@
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/conv.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -212,6 +213,15 @@ void collectCompileStaticGraphRefsRecursive(
         }
     } break;
     default:
+        // A Map or a Set is a container of typed slots too.
+        if (const auto *coll = camel::core::type::asCollectionType(type)) {
+            camel::core::rtdata::table::forEachSlot(
+                fromSlot<camel::core::rtdata::Table *>(slot),
+                coll,
+                [&](slot_t inner, Type *innerType) {
+                    collectCompileStaticGraphRefsRecursive(refs, inner, innerType, visited);
+                });
+        }
         break;
     }
 }
@@ -747,6 +757,24 @@ class EncodeSession {
             return toSlot<Object *>(cloned);
         }
         default: {
+            // A Map or a Set: its keys and values are canonicalized like the elements of an
+            // array, so that nothing in the runtime copy points into the compile-time data.
+            if (const auto *coll = camel::core::type::asCollectionType(type)) {
+                namespace rtdata = camel::core::rtdata;
+                auto *table      = fromSlot<rtdata::Table *>(slot);
+                Object *cloned   = rtdata::table::withSlots(
+                    table,
+                    coll,
+                    camel::core::mm::autoSpace(),
+                    [&](slot_t inner, Type *innerType) {
+                        return canonicalizeStaticSlot(inner, innerType, sourceGraph, objectCache);
+                    });
+                if (cloned == object) {
+                    cloned = object->clone(camel::core::mm::autoSpace(), type, false);
+                }
+                objectCache.emplace(object, cloned);
+                return toSlot<Object *>(cloned);
+            }
             Object *cloned = object->clone(camel::core::mm::autoSpace(), type, false);
             objectCache.emplace(object, cloned);
             return toSlot<Object *>(cloned);

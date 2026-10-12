@@ -36,6 +36,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -1725,6 +1726,15 @@ void collectStaticGraphRefsRecursive(
         }
     } break;
     default:
+        // A Map or a Set is a container of typed slots too.
+        if (const auto *coll = camel::core::type::asCollectionType(type)) {
+            camel::core::rtdata::table::forEachSlot(
+                fromSlot<camel::core::rtdata::Table *>(slot),
+                coll,
+                [&](slot_t inner, Type *innerType) {
+                    collectStaticGraphRefsRecursive(refs, inner, innerType, visited);
+                });
+        }
         break;
     }
 }
