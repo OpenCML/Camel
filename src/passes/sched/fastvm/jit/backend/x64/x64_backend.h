@@ -41,6 +41,13 @@ class X64Backend : public IJitBackend {
     bool compileBytecode(
         const CompilationUnit &unit, std::vector<uint8_t> &code,
         std::string *failureReason = nullptr);
+    enum class LowerResult { Ok, Failed, OutOfRegisters };
+    /// One lowering of the unit. With `keepValuesInRegisters`, a slot that was loaded or stored
+    /// stays in its register for the rest of the basic block; without, no value outlives the
+    /// bytecode that computes it, which always fits the registers.
+    LowerResult compileBytecodeWith(
+        const CompilationUnit &unit, std::vector<uint8_t> &code, std::string *failureReason,
+        bool keepValuesInRegisters);
     int slotDisp(int idx) const;
 
     std::unordered_map<std::string, void *> trampolines_;

@@ -1,0 +1,8 @@
+error[SyntaxDiag::AssignmentInCondition]: '=' assigns; it cannot be used in the condition of an 'if'.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_assign_in_condition.cml:5:18
+   |
+ 5 |     let y = if x = 1 then 2 else 3
+   |                  ^
+help: To compare, write '==': if x == 1 then ...
+
+camel: 1 error

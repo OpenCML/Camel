@@ -1,0 +1,6 @@
+module err_typeas_let
+
+func main(): int sync {
+    let f = (x: typeas T) => x
+    return 0
+}

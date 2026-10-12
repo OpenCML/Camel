@@ -1,0 +1,7 @@
+module runtime_format
+
+func main(): int sync {
+    let a = 1
+    println(format<a>('{} and {}'))
+    return 0
+}

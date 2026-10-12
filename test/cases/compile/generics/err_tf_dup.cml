@@ -1,0 +1,7 @@
+module err_tf_dup
+
+type Two<T, T> = (T, T)
+
+func main(): int sync {
+    return 0
+}

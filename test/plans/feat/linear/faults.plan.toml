@@ -466,3 +466,213 @@ expect_output_contains = ["Index -1 is out of range for an array of length 3."]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "float_divide_by_zero_hot.nvm"
+desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (nvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 29
+expect_output_contains = ["0.5", "Attempted division by zero."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "float_divide_by_zero_hot.fvm"
+desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 29
+expect_output_contains = ["0.5", "Attempted division by zero."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "float_divide_by_zero_hot.prl"
+desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (prl)."
+kind = "negative"
+case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 29
+expect_output_contains = ["0.5", "Attempted division by zero."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "float_divide_by_zero_hot.inline_fvm"
+desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (inline_fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
+args = ["${case}", "${run_inline_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 29
+expect_output_contains = ["0.5", "Attempted division by zero."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "float_divide_by_zero_hot.inline_jit"
+desc = "Float division by zero in a function the JIT compiles after std::inline, already run once: the located DivisionByZero at the division on every back end, not inf (inline_jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/float_divide_by_zero_hot.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_code = "0x04000001"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 29
+expect_output_contains = ["0.5", "Attempted division by zero."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_min_by_minus_one.nvm"
+desc = "The smallest integer divided by -1 is itself (wraparound) and its remainder 0 on every back end; the machine division traps on it (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/faults/divide_min_by_minus_one.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_contains = ["quotient -9223372036854775808 -9223372036854775808", "remainder 0", "after"]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_min_by_minus_one.fvm"
+desc = "The smallest integer divided by -1 is itself (wraparound) and its remainder 0 on every back end; the machine division traps on it (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/faults/divide_min_by_minus_one.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_output_contains = ["quotient -9223372036854775808 -9223372036854775808", "remainder 0", "after"]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_min_by_minus_one.prl"
+desc = "The smallest integer divided by -1 is itself (wraparound) and its remainder 0 on every back end; the machine division traps on it (prl)."
+kind = "behavior"
+case = "../../../cases/linear/faults/divide_min_by_minus_one.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+expect_output_contains = ["quotient -9223372036854775808 -9223372036854775808", "remainder 0", "after"]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_min_by_minus_one.inline_fvm"
+desc = "The smallest integer divided by -1 is itself (wraparound) and its remainder 0 on every back end; the machine division traps on it (inline_fvm)."
+kind = "behavior"
+case = "../../../cases/linear/faults/divide_min_by_minus_one.cml"
+args = ["${case}", "${run_inline_fvm}"]
+expect_exit = 0
+expect_output_contains = ["quotient -9223372036854775808 -9223372036854775808", "remainder 0", "after"]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_min_by_minus_one.inline_jit"
+desc = "The smallest integer divided by -1 is itself (wraparound) and its remainder 0 on every back end; the machine division traps on it (inline_jit)."
+kind = "behavior"
+case = "../../../cases/linear/faults/divide_min_by_minus_one.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 0
+expect_output_contains = ["quotient -9223372036854775808 -9223372036854775808", "remainder 0", "after"]
+expect_output_not_contains = ["Floating point exception"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "recursion_depth_hot.fvm"
+desc = "A recursion one call deeper than the limit of 256, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/recursion_depth_hot.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 19
+expect_diagnostic_column = 38
+expect_output_contains = ["loop 500000500000", "down 255", "tree 256", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached", "Segmentation fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "recursion_depth_hot.inline_fvm"
+desc = "A recursion one call deeper than the limit of 256, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_fvm)."
+kind = "negative"
+case = "../../../cases/linear/faults/recursion_depth_hot.cml"
+args = ["${case}", "${run_inline_fvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 19
+expect_diagnostic_column = 38
+expect_output_contains = ["loop 500000500000", "down 255", "tree 256", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached", "Segmentation fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "recursion_depth_hot.inline_jit"
+desc = "A recursion one call deeper than the limit of 256, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_jit)."
+kind = "negative"
+case = "../../../cases/linear/faults/recursion_depth_hot.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_code = "0x04000004"
+expect_diagnostic_line = 19
+expect_diagnostic_column = 38
+expect_output_contains = ["loop 500000500000", "down 255", "tree 256", "Maximum recursion depth (256) exceeded"]
+expect_output_not_contains = ["not reached", "Segmentation fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "divide_by_zero_hot.inline_jit.compiled"
+desc = "The function with the variable divisor is compiled by the JIT after std::inline (the -vv log names it) for its run with a nonzero divisor."
+kind = "behavior"
+case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
+args = ["-vv", "${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_output_contains = ["compiled & cached graph 'f'", "145"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "recursion_depth_hot.inline_jit.compiled"
+desc = "The three recursive functions are compiled by the JIT after std::inline (the -vv log names them)."
+kind = "behavior"
+case = "../../../cases/linear/faults/recursion_depth_hot.cml"
+args = ["-vv", "${case}", "${run_inline_jit}"]
+expect_exit = 1
+expect_output_contains = ["compiled & cached graph 'loop'", "compiled & cached graph 'down'", "compiled & cached graph 'tree'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

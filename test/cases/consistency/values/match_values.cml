@@ -1,0 +1,26 @@
+/**
+ * match on ints and strings, with a default.
+ */
+module match_values
+
+func name(n: int): string {
+    return match n {
+        case 0 => 'zero'
+        case 1 | 2 => 'small'
+        case _ => 'many'
+    }
+}
+
+func code(s: string): int {
+    return match s {
+        case 'zero' => 0
+        case 'small' => 1
+        case _ => 9
+    }
+}
+
+func main(): int sync {
+    println(range(0, 5)->map<name>)
+    println(range(0, 5)->map<(n: int): int => code(name(n))>)
+    return 0
+}

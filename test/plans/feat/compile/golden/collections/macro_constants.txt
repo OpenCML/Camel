@@ -1,0 +1,5 @@
+{1: one, 2: two, 4: more} two 3
+{alpha, beta, gamma} true false
+{1: one, 2: two, 4: more, 9: nine} {1: one, 2: two, 4: more}
+{outer: {xs: [1, 2, 3]}} 3
+42 -21 21 [double, negate]

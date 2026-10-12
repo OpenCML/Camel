@@ -1,0 +1,192 @@
+id = "compile.overloads"
+order = 326
+tier = "feat"
+tags = ["feat", "compile", "functions", "overloads"]
+desc = "User functions overloaded on their parameter types."
+
+[[tests]]
+name = "overloads.nvm"
+desc = "Functions of one name with different parameter types are overloads, chosen by the argument types; the second used to be built into the graph of the first (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/overloads/overloads.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "int",
+  "string a",
+  "two ints",
+  "float",
+  "42 abab",
+  "3 5",
+  "[2, 4]",
+  "local int local bool",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "overloads.fvm"
+desc = "Functions of one name with different parameter types are overloads, chosen by the argument types; the second used to be built into the graph of the first (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/overloads/overloads.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "int",
+  "string a",
+  "two ints",
+  "float",
+  "42 abab",
+  "3 5",
+  "[2, 4]",
+  "local int local bool",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "overloads.jit"
+desc = "Functions of one name with different parameter types are overloads, chosen by the argument types; the second used to be built into the graph of the first (jit)"
+kind = "behavior"
+case = "../../../cases/compile/overloads/overloads.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "int",
+  "string a",
+  "two ints",
+  "float",
+  "42 abab",
+  "3 5",
+  "[2, 4]",
+  "local int local bool",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "overloads.prl"
+desc = "Functions of one name with different parameter types are overloads, chosen by the argument types; the second used to be built into the graph of the first (prl)"
+kind = "behavior"
+case = "../../../cases/compile/overloads/overloads.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "int",
+  "string a",
+  "two ints",
+  "float",
+  "42 abab",
+  "3 5",
+  "[2, 4]",
+  "local int local bool",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "same_signature"
+desc = "A second function of one name with the same parameter types is a redeclaration, reported where it is declared"
+kind = "negative"
+case = "../../../cases/compile/overloads/same_signature.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::Redeclaration"
+expect_diagnostic_code = "0x03000001"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 1
+expect_output_contains = ["Redeclaration of reference: 'f'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "no_match"
+desc = "A call none of the overloads takes is rejected at the call, with the overloads listed"
+kind = "negative"
+case = "../../../cases/compile/overloads/no_match.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "no_match.cml:16:14:", "(bool)", "f: (x: i64) => string", "f: (x: string) => string"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "overloaded_name_as_value"
+desc = "A name with several overloads has no single function value; returning it is rejected at the return"
+kind = "negative"
+case = "../../../cases/compile/overloads/overloaded_name_as_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_code = "0x03000060"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 5
+expect_output_contains = ["'f' is used as a value here, but it names 2 functions of that name"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "decorated_overloads"
+desc = "Overloads of which some are decorated are chosen by the parameters of what the decorators return, in declaration order; only the decorated function declared last used to be seen. The same on the four back ends."
+kind = "behavior"
+case = "../../../cases/compile/overloads/decorated_overloads.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3 2.5",
+  "18 3",
+  "3 4.5",
+  "21 21 21 21",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "decorated_call_mismatch"
+desc = "A call of a decorated function with an argument its decorated form does not take is rejected at the call; the float used to be read as an int."
+kind = "negative"
+case = "../../../cases/compile/overloads/decorated_call_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 18
+expect_output_contains = ["Function of type '(x: i64) => i64' cannot be called with argument types: <> (f64)."]
+expect_output_not_contains = ["never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

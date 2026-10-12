@@ -1,0 +1,43 @@
+/**
+ * progen finding F19 (unbounded growth). After `std::opt::simplify` a mutual recursion that is
+ *   three calls deep does not end: `RuntimeDiag::MaxRecursionDepthExceeded` in graph `__g_10__`.
+ * Pipeline: std::opt::simplify std::nvm
+ * Environment: PROGEN_I0=2
+ * Expected output: (nothing)
+ * Actual: RUN_ERROR RuntimeDiag::MaxRecursionDepthExceeded: Maximum recursion depth (256) exceeded
+ *   when evaluating graph '__g_10__'.
+ * Reduced by test/tools/progen from seed 1833 (generator version 1, all features).
+ */
+module simplify_recursion_never_ends
+
+import { get_env } from sys
+
+type P = { x: int, y: int }
+
+func r6(a7: int, a8: int, a9: int): int {
+    return if (a7 <= 0) then 0 else r10(0 - 1, ['']->reduce<(p11: int, p12: string): int => {
+        return -1;
+    }, 0>, a9);
+}
+
+func r10(a7: int, a8: int, a9: int): int {
+    return if false then 1 else r6(a7, match a9 {
+        case 3 => 0
+        case 5 => 0
+        case _ => 0
+    }, a9);
+}
+
+sync func w28(a29: int, var c30: int, a31: int): int sync {
+    return if (a29 <= 0) then r6(1, 31, -2) else sync {
+        let n32 = w28(a29 - 1, c30, 0);
+        return 1;
+    };
+}
+
+func main(): int sync {
+    let n33 = int(get_env('PROGEN_I0'));
+    var v49 = 1;
+    let n50 = w28(n33, v49, r10(4, 0, 4));
+    return 0;
+}

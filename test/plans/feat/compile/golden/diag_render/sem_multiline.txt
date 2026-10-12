@@ -1,0 +1,13 @@
+error[SemanticDiag::BranchReturnTypeMismatch]: Return type mismatch between branches (in function 'main: () => i64'): expected 'i64', found 'string'.
+   --> <ROOT>/test/cases/compile/diag_render/sem_multiline.cml:5:13
+    |
+  5 |     let y = if x > 1 then {
+    |             ^^^^^^^^^^^^^^^
+  6 |         1
+    |         ^
+   ...
+ 11 |     }
+    |     ^
+help: Ensure all branches of if-else or match-case expressions return the same type.
+
+camel: 1 error

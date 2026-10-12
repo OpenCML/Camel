@@ -1,0 +1,202 @@
+id = "linear.jit_native"
+order = 352
+tier = "feat"
+tags = ["feat", "linear", "jit", "codegen"]
+
+[[tests]]
+name = "native_registers.nvm"
+desc = "Arithmetic and comparisons with more live values in one block than the JIT has registers, in every operand position of every register: the same values on every back end (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_registers.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_contains = ["mix 78 29 267 28", "cmp 101011 100111 1011 10110", "fmix 12.625 -2.125 23", "fcmp 101011 100111 1011 10110"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_registers.fvm"
+desc = "Arithmetic and comparisons with more live values in one block than the JIT has registers, in every operand position of every register: the same values on every back end (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_registers.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_output_contains = ["mix 78 29 267 28", "cmp 101011 100111 1011 10110", "fmix 12.625 -2.125 23", "fcmp 101011 100111 1011 10110"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_registers.prl"
+desc = "Arithmetic and comparisons with more live values in one block than the JIT has registers, in every operand position of every register: the same values on every back end (prl)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_registers.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+expect_output_contains = ["mix 78 29 267 28", "cmp 101011 100111 1011 10110", "fmix 12.625 -2.125 23", "fcmp 101011 100111 1011 10110"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_registers.inline_fvm"
+desc = "Arithmetic and comparisons with more live values in one block than the JIT has registers, in every operand position of every register: the same values on every back end (inline_fvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_registers.cml"
+args = ["${case}", "${run_inline_fvm}"]
+expect_exit = 0
+expect_output_contains = ["mix 78 29 267 28", "cmp 101011 100111 1011 10110", "fmix 12.625 -2.125 23", "fcmp 101011 100111 1011 10110"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_registers.inline_jit"
+desc = "Arithmetic and comparisons with more live values in one block than the JIT has registers, in every operand position of every register: the same values on every back end (inline_jit)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_registers.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 0
+expect_output_contains = ["mix 78 29 267 28", "cmp 101011 100111 1011 10110", "fmix 12.625 -2.125 23", "fcmp 101011 100111 1011 10110"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_registers.inline_jit.compiled"
+desc = "Arithmetic and comparisons with more live values in one block than the JIT has registers, in every operand position of every register: the functions are compiled by the JIT, not left to the interpreter (the -vv log names them), and the values are the same."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_registers.cml"
+args = ["-vv", "${case}", "${run_inline_jit}"]
+expect_exit = 0
+expect_output_contains = ["mix 78 29 267 28", "cmp 101011 100111 1011 10110", "fmix 12.625 -2.125 23", "fcmp 101011 100111 1011 10110", "compiled & cached graph 'mix'", "compiled & cached graph 'cmp'", "compiled & cached graph 'fmix'", "compiled & cached graph 'fcmp'", "graph 'mix' is lowered again without values kept in registers"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_calls.nvm"
+desc = "Self calls with six arguments and a constant argument, self tail calls that exchange and rotate their parameters, tail calls inside natively called activations: the same values on every back end (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_calls.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_contains = ["wide 55 280 6308", "swap 12 21 12", "rot 654321 216543 321654", "nested 9 30 50"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_calls.fvm"
+desc = "Self calls with six arguments and a constant argument, self tail calls that exchange and rotate their parameters, tail calls inside natively called activations: the same values on every back end (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_calls.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_output_contains = ["wide 55 280 6308", "swap 12 21 12", "rot 654321 216543 321654", "nested 9 30 50"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_calls.prl"
+desc = "Self calls with six arguments and a constant argument, self tail calls that exchange and rotate their parameters, tail calls inside natively called activations: the same values on every back end (prl)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_calls.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+expect_output_contains = ["wide 55 280 6308", "swap 12 21 12", "rot 654321 216543 321654", "nested 9 30 50"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_calls.inline_fvm"
+desc = "Self calls with six arguments and a constant argument, self tail calls that exchange and rotate their parameters, tail calls inside natively called activations: the same values on every back end (inline_fvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_calls.cml"
+args = ["${case}", "${run_inline_fvm}"]
+expect_exit = 0
+expect_output_contains = ["wide 55 280 6308", "swap 12 21 12", "rot 654321 216543 321654", "nested 9 30 50"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_calls.inline_jit"
+desc = "Self calls with six arguments and a constant argument, self tail calls that exchange and rotate their parameters, tail calls inside natively called activations: the same values on every back end (inline_jit)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_calls.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 0
+expect_output_contains = ["wide 55 280 6308", "swap 12 21 12", "rot 654321 216543 321654", "nested 9 30 50"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_calls.inline_jit.compiled"
+desc = "Self calls with six arguments and a constant argument, self tail calls that exchange and rotate their parameters, tail calls inside natively called activations: the functions are compiled by the JIT, not left to the interpreter (the -vv log names them), and the values are the same."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_calls.cml"
+args = ["-vv", "${case}", "${run_inline_jit}"]
+expect_exit = 0
+expect_output_contains = ["wide 55 280 6308", "swap 12 21 12", "rot 654321 216543 321654", "nested 9 30 50", "compiled & cached graph 'wide'", "compiled & cached graph 'swap'", "compiled & cached graph 'rot'", "compiled & cached graph 'nested'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_division.nvm"
+desc = "Integer and float divisions by values that are not constants, operands and quotient in every register, a divisor of -1: the same values on every back end (nvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_division.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_contains = ["q 92 111 -18 45", "fq 3.0416666666666665 2.408333333333333"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_division.fvm"
+desc = "Integer and float divisions by values that are not constants, operands and quotient in every register, a divisor of -1: the same values on every back end (fvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_division.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_output_contains = ["q 92 111 -18 45", "fq 3.0416666666666665 2.408333333333333"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_division.prl"
+desc = "Integer and float divisions by values that are not constants, operands and quotient in every register, a divisor of -1: the same values on every back end (prl)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_division.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+expect_output_contains = ["q 92 111 -18 45", "fq 3.0416666666666665 2.408333333333333"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_division.inline_fvm"
+desc = "Integer and float divisions by values that are not constants, operands and quotient in every register, a divisor of -1: the same values on every back end (inline_fvm)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_division.cml"
+args = ["${case}", "${run_inline_fvm}"]
+expect_exit = 0
+expect_output_contains = ["q 92 111 -18 45", "fq 3.0416666666666665 2.408333333333333"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_division.inline_jit"
+desc = "Integer and float divisions by values that are not constants, operands and quotient in every register, a divisor of -1: the same values on every back end (inline_jit)."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_division.cml"
+args = ["${case}", "${run_inline_jit}"]
+expect_exit = 0
+expect_output_contains = ["q 92 111 -18 45", "fq 3.0416666666666665 2.408333333333333"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "native_division.inline_jit.compiled"
+desc = "Integer and float divisions by values that are not constants, operands and quotient in every register, a divisor of -1: the functions are compiled by the JIT, not left to the interpreter (the -vv log names them), and the values are the same."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_division.cml"
+args = ["-vv", "${case}", "${run_inline_jit}"]
+expect_exit = 0
+expect_output_contains = ["q 92 111 -18 45", "fq 3.0416666666666665 2.408333333333333", "compiled & cached graph 'q'", "compiled & cached graph 'fq'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

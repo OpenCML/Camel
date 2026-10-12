@@ -1,0 +1,6 @@
+module werror_no_position
+
+func main(): int sync {
+    println('not run')
+    return 0
+}

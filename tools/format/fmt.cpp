@@ -553,7 +553,10 @@ any Formatter::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
 }
 
 /*
-typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
+typeDecl
+    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+      (typeExpr | STRING)
+    ;
 */
 any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     const auto &implMark = context->implMark();
@@ -561,7 +564,15 @@ any Formatter::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
     if (implMark) {
         result += any_cast<string>(visitImplMark(implMark)) + " ";
     }
-    result += "type " + any_cast<string>(visitIdentRef(context->identRef())) + " = ";
+    result += "type " + any_cast<string>(visitIdentRef(context->identRef()));
+    if (const auto params = context->identDef(); !params.empty()) {
+        result += "<";
+        for (size_t i = 0; i < params.size(); ++i) {
+            result += (i > 0 ? ", " : "") + any_cast<string>(visitIdentDef(params[i]));
+        }
+        result += ">";
+    }
+    result += " = ";
     if (context->typeExpr()) {
         result += any_cast<string>(visitTypeExpr(context->typeExpr()));
     } else {

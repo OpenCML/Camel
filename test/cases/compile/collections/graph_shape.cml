@@ -1,0 +1,17 @@
+module main
+
+// What the constructs are on the graph: `as` is a CAST node, each operation one OPER node,
+// and `??` on the result of `m[k]` the usual branch on the tag of a `V?`.
+
+func lookup(m: Map<string, int>, s: Set<int>, xs: int[], k: string): int {
+    let found = m[k] ?? 0
+    let grown = put(m, k, found + xs[0])
+    return if contains(s, found) then len(grown) else found
+}
+
+func main(): int sync {
+    let m = [('a', 1), ('b', 2)] as Map<string, int>
+    let s = [1, 2, 3] as Set<int>
+    println(lookup(m, s, [10], 'a'), lookup(m, s, [10], 'z'))
+    return 0
+}

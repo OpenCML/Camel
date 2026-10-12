@@ -1,0 +1,13 @@
+module type_params
+
+type Pair<T>=(T,T)
+type Entry< K ,V > = {key:K,value:V}
+type Nested<T> = Pair<Pair<T>>
+
+func swap(p:Pair<typeas T>):Pair<T>{
+    return (p.1,p.0)
+}
+
+func first(xs:(typeas T)[]):T{
+    return xs[0]
+}

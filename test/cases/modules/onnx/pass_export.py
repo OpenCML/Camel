@@ -48,6 +48,7 @@ PROGRAMS = [
     "export_train_step_branch_scalar.cml",
     "export_train_step_branch_tensor.cml",
     "export_gated_gru_forward.cml",
+    "export_gated_gru_step.cml",
     "export_train_step_dynamic_mean.cml",
     "export_var_local.cml",
     "export_float_array.cml",

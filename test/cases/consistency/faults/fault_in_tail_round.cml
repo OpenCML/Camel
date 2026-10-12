@@ -1,0 +1,16 @@
+/**
+ * A fault in round 501 of a tail-recursive loop: DivisionByZero at the division, whatever the
+ * back end does to run the loop.
+ */
+module fault_in_tail_round
+
+func loop(i: int, n: int, acc: int): int {
+    return if i > n then acc else loop(i + 1, n, acc + 1000 / (500 - i))
+}
+
+func main(): int sync {
+    println(loop(0, 400, 0))
+    println(loop(0, 1000, 0))
+    println('not reached')
+    return 0
+}

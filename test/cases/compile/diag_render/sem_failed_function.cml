@@ -1,0 +1,9 @@
+module sem_failed_function
+
+func f(a: int) { return a + nope }
+
+func main(): int sync {
+    let v = f(1)
+    println(v + 1)
+    return 0
+}

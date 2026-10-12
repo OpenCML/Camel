@@ -51,7 +51,11 @@ slot_t __stoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int32 v = std::stoi(s->toString());
         return toSlot(v);
     } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stoi__ invalid integer string");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidNumberText,
+            s->toString(),
+            "i32",
+            "an integer");
     }
 }
 
@@ -78,7 +82,11 @@ slot_t __stol__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int64 v = std::stoll(s->toString());
         return toSlot(v);
     } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stol__ invalid integer string");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidNumberText,
+            s->toString(),
+            "i64",
+            "an integer");
     }
 }
 
@@ -105,7 +113,11 @@ slot_t __stof__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Float32 v = std::stof(s->toString());
         return toSlot(v);
     } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stof__ invalid float string");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidNumberText,
+            s->toString(),
+            "f32",
+            "a number");
     }
 }
 
@@ -132,7 +144,11 @@ slot_t __stod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Float64 v = std::stod(s->toString());
         return toSlot(v);
     } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stod__ invalid double string");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidNumberText,
+            s->toString(),
+            "f64",
+            "a number");
     }
 }
 
@@ -162,10 +178,12 @@ slot_t __dtos__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __stos__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
 
+// `string(x)` for a value of any type the overloads above do not take (bool, array, tuple,
+// struct, function, ...): the text `println` writes for it. The slot used to be read as a
+// string whatever its type, so `string(true)` dereferenced the bool.
 slot_t __atos__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    String *s = norm.get<String *>(0);
     std::ostringstream oss;
-    oss << s->toString();
+    printSlot(oss, norm.slot(0), norm.type(0));
     String *res = String::from(oss.str(), mm::autoSpace());
     return toSlot(res);
 }

@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace camel::core::error {
 
@@ -71,6 +72,20 @@ struct DiagInfo {
 DiagInfo getDiagInfo(DiagType type, uint32_t specific);
 
 DiagInfo getDiagInfo(uint32_t diagCode);
+
+/// One entry of the diagnostics catalog: a code with its name, message template and suggestion.
+struct DiagCatalogEntry {
+    DiagType type{};
+    uint32_t code{}; // the full 32-bit code
+    Severity severity{};
+    std::string name; // without the type prefix
+    std::string message;
+    std::string suggestion;
+};
+
+/// Every diagnostic the compiler and the runtime can report, ordered by code. This is what
+/// `camel --explain` and the command-line warning names are checked against.
+const std::vector<DiagCatalogEntry> &diagnosticCatalog();
 
 template <typename ErrorEnum> DiagInfo getDiagInfo(ErrorEnum err) {
     DiagType type     = diagTypeOf(err);

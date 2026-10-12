@@ -78,6 +78,10 @@ string typeCodeToString(TypeCode code) {
         return "any";
     case TypeCode::Union:
         return "union";
+    case TypeCode::TypeVar:
+        return "typevar";
+    case TypeCode::TypeFunc:
+        return "typefunc";
     default:
         return isOtherType(code) ? OtherTypeRegistry::getTypeName(code) : "unknown";
     }
@@ -405,6 +409,10 @@ bool Type::assignableFrom(Type *from) const {
     ASSERT(
         to->code_ != TypeCode::Ref && from->code_ != TypeCode::Ref,
         "Ref type cannot be assigned");
+
+    // A type variable stands for a type that is not known yet: it only matches itself.
+    if (to->code_ == TypeCode::TypeVar || from->code_ == TypeCode::TypeVar)
+        return to->equals(from);
 
     // Void can accept assignment from any type, but cannot be assigned to other types.
     if (to->code_ == TypeCode::Void)

@@ -1,0 +1,14 @@
+/**
+ * The body of a generic function is checked when it is instantiated. One that is never
+ * called is never instantiated, so what is wrong in its body for every type is not reported.
+ */
+module unused_body
+
+func never_called(x: typeas T): T {
+    return x + no_such_name
+}
+
+func main(): int sync {
+    println('ok')
+    return 0
+}

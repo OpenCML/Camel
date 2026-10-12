@@ -1,0 +1,24 @@
+/**
+ * The conversion functions on every argument type they take. `string` of a value that is
+ * neither a number nor a string (bool, array, tuple, struct) is the text `println` writes for
+ * it; `string(true)` used to crash (progen finding F26).
+ * `string` of a float is left out: its format is an open question (progen J3).
+ */
+module conversions
+
+func main(): int sync {
+    println(int(3), int(i32(4)), int(2.9), int(-2.9), int(f32(2.5)), int('42'), int('-7'))
+    println(i64(3), i64(i32(4)), i64(2.9), i64(f32(2.5)), i64('42'))
+    println(i32(3), i32(i32(4)), i32(2.9), i32(f32(2.5)), i32('42'))
+    println(float(3), float(i32(4)), float(1.5), float(f32(0.5)), float('2.5'), float('1e3'))
+    println(f64(3), f64(i32(4)), f64(1.5), f64(f32(0.5)), f64('2.5'))
+    println(f32(3), f32(i32(4)), f32(1.5), f32(f32(0.5)), f32('0.25'))
+    println(string(42), string(i32(7)), string('s'), string(-1))
+    println(string(true), string(false))
+    println(string(true) + '!', len(string(false)))
+    println(string([1, 2, 3]))
+    println(string((1, 'a', true)))
+    println(string({ x: 1, y: 'b' }))
+    println(string(['a', 'b']) == '{}'->format<['a', 'b']>)
+    return 0
+}

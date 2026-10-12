@@ -10,7 +10,7 @@ digraph GraphIR {
         N01 [label="2", type="DATA", shape=circle, style=solid, tooltip="2\nmain::node#-2"];
         N02 [label=":op/\nadd_l", type="OPER", shape=diamond, style=solid, tooltip=":op/add_l\nmain::node#1"];
         N03 [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, tooltip=":io/println\nmain::node#2"];
-        N04 [label="GATE", type="GATE", shape=diamond, style=dashed, tooltip="GATE\nmain::node#3"];
+        N04 [label="GATE", type="GATE", shape=diamond, style=dashed, tooltip="GATE\nmain::node#1"];
         N04 -> O01 [label="0", type="EXIT", style=solid];
         N00 -> N02 [label="0|0", type="NORM"];
         N01 -> N02 [label="0|1", type="NORM"];

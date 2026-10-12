@@ -1,0 +1,10 @@
+module err_count
+
+func first(xs: (typeas T)[]): T {
+    return xs[0]
+}
+
+func main(): int sync {
+    println(first([1], 2))
+    return 0
+}

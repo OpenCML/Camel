@@ -1,0 +1,15 @@
+/**
+ * A fault in a map nested in a map, in one inner element only.
+ */
+module fault_in_nested_map
+
+func row(i: int): int[] {
+    return range(0, 4)->map<(j: int): int => 100 / (i * 4 + j - 9)>
+}
+
+func main(): int sync {
+    println('before')
+    println(range(0, 4)->map<row>)
+    println('not reached')
+    return 0
+}

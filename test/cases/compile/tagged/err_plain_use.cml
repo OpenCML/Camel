@@ -1,0 +1,10 @@
+/**
+ * A `T!` is not a `T`: no operator accepts it until it is opened.
+ */
+module err_plain_use
+
+func main(): int sync {
+    println('never printed')
+    println(parse_int('1') + 1)
+    return 0
+}

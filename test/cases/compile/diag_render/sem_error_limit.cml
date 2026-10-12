@@ -1,0 +1,11 @@
+module sem_error_limit
+
+func main(): int sync {
+    println(u0)
+    println(u1)
+    println(u2)
+    println(u3)
+    println(u4)
+    println(u5)
+    return 0
+}

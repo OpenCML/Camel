@@ -1,0 +1,14 @@
+/**
+ * One element function of a filter faults (element 5 of 8).
+ */
+module fault_in_filter
+
+func keep(x: int): bool { return 60 % (x - 5) == 0 }
+
+func main(): int sync {
+    println('before')
+    let ys = range(0, 8)->filter<keep>
+    println(ys)
+    println('not reached')
+    return 0
+}

@@ -1,0 +1,25 @@
+{a: 1, b: 2}
+1 2 [a, b]
+[3, 1, 2]
+{1, 3}
+{a: [1, 2], b: []}
+{k: {x: 1, y: 2}}
+{a: null, b: 3}
+{ x: 1, y: 2 }
+(1, one)
+[1.5, 2]
+s true {}
+error JsonTypeError: at $.b: expected an integer, found a string
+error JsonParseError: parse error at line 1, column 8: syntax error while parsing object - unexpected end of input; expected '}'
+error JsonTypeError: at $: expected an object, found an array
+error JsonTypeError: at $.k.x: expected an integer, found a number
+error JsonTypeError: at $: the member 'y' is missing
+error JsonTypeError: at $: the member 'z' is not a field of { x: i64, y: i64 }
+error JsonTypeError: at $: expected an array of 2 element(s), found an array
+error JsonTypeError: at $: expected an integer, found null
+JsonTypeError: at $[1]: expected an integer, found a string ok
+<json::decode_as>
+1
+{"a":1,"b":2} [1,2]
+{"k":{"x":1.5}}
+true

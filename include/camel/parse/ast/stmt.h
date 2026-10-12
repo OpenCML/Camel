@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "base.h"
 
 namespace camel::parse::ast {
@@ -76,6 +78,10 @@ class TypeDeclLoad : public StmtLoad {
         : StmtLoad(StmtType::Type), ref_(ref), implMark_(impl), uri_(uri) {}
 
     const Reference &ref() const { return ref_; }
+    /// The parameters of a type function, `T` and `U` in `type Pair<T, U> = ...`; empty for
+    /// an ordinary type declaration.
+    const std::vector<std::string> &params() const { return params_; }
+    void setParams(std::vector<std::string> params) { params_ = std::move(params); }
     ImplMark implMark() const { return implMark_; }
     const std::string &uri() const { return uri_; }
 
@@ -86,6 +92,7 @@ class TypeDeclLoad : public StmtLoad {
     Reference ref_;
     ImplMark implMark_;
     std::string uri_;
+    std::vector<std::string> params_;
 };
 
 class NameDeclLoad : public StmtLoad {
@@ -126,6 +133,7 @@ class ExprStmtLoad : public StmtLoad {
 class ExitStmtLoad : public StmtLoad {
   public:
     ExitStmtLoad(ExitType type) : StmtLoad(StmtType::Exit), type_(type) {}
+    ExitType exitType() const { return type_; }
     const std::string toString() const override;
     const std::string geneCode() const override;
 

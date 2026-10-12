@@ -1,0 +1,34 @@
+/**
+ * progen finding F15 (branch arm). After `std::inline` the value of a `match` whose taken arm
+ *   returns the result of a call is `null` instead of the struct.
+ * Pipeline: std::inline std::nvm
+ * Expected output: L6 { n: 5, tag:  }
+ * Actual: L6 null
+ * Reduced by test/tools/progen from seed 468 (generator version 1, all features).
+ */
+module inline_match_value_null
+
+type Q = { n: int, tag: string }
+
+func f11(a12: (a0: int, a1: string) => bool): Q {
+    return { n: if false then 12 else 5, tag: ['']->join<''> };
+}
+
+func main(): int sync {
+    let n21 = 0;
+    let n27 = 'x';
+    let n49 = match n21 {
+        case 10 => sync {
+            return { n: 0, tag: '' };
+        }
+        case 3 => sync {
+            return { n: 0, tag: '' };
+        }
+        case _ => sync {
+            let n46 = n27;
+            return f11((p47: int, p48: string): bool => false);
+        }
+    };
+    println('L6 {}'->format<n49>);
+    return 0;
+}

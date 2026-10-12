@@ -1,0 +1,9 @@
+error[LexicalDiag::IllegalCharacter]: Illegal character '名'.
+  --> <ROOT>/test/cases/compile/diag_render/lexical_wide_run.cml:4:9
+   |
+ 4 |     let 名字 = 1
+   |         ^^
+help: No token starts with this character. Outside strings and comments a program consists of ASCII
+      characters; a name is made of letters, digits and '_'.
+
+camel: 1 error

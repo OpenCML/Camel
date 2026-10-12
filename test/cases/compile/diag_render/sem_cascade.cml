@@ -1,0 +1,12 @@
+module sem_cascade
+
+func add(a: int, b: int): int { return a + b }
+
+func main(): int sync {
+    let r = add(nope, 2)
+    let s = add(r, r)
+    let t = s + 1
+    println(t)
+    println(another_missing_name)
+    return 0
+}

@@ -6,7 +6,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 12, 2026
  */
 
 #include "camel/core/mm.h"
@@ -15,8 +15,10 @@
 #include "nlohmann/json.hpp"
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <sstream>
+#include <string>
 
 namespace camel::core::mm {
 namespace profiler {
@@ -104,10 +106,26 @@ static const BumpPointerAllocator *getBumpRegionByName(const char *name) {
         return &autoSp.havenSpace();
     if (strcmp(name, "cacheSpace") == 0)
         return &autoSp.cacheSpace();
-    BumpPointerAllocator &permSp = permSpace();
-    if (strcmp(name, "permSpace") == 0)
-        return &permSp;
+    // The permanent space is a list of segments: "permSpace" is the first, "permSpace#<k>"
+    // the k-th further one (the names snapshotToJson gives them).
+    static constexpr const char kPermName[] = "permSpace";
+    const size_t prefix                     = sizeof(kPermName) - 1;
+    if (strncmp(name, kPermName, prefix) == 0) {
+        size_t index = 0;
+        if (name[prefix] == '#') {
+            index = static_cast<size_t>(std::strtoull(name + prefix + 1, nullptr, 10));
+        } else if (name[prefix] != '\0') {
+            return nullptr;
+        }
+        const GrowableBumpAllocator &permSp = permSpace();
+        return index < permSp.segmentCount() ? &permSp.segment(index) : nullptr;
+    }
     return nullptr;
+}
+
+// Name of a segment of a growable space as a snapshot region.
+static std::string segmentRegionName(const char *space, size_t index) {
+    return index == 0 ? std::string(space) : std::string(space) + "#" + std::to_string(index);
 }
 
 // LargeObject region: no contiguous blocks, only an object list.
@@ -187,10 +205,16 @@ std::string snapshotToJson() {
     regions.push_back(largeObjRegionToJson(autoSp.largeObjSpace()));
 
     // Meta Space.
-    regions.push_back(freeListRegionToJson("metaSpace", metaSp));
+    for (size_t i = 0; i < metaSp.segmentCount(); ++i) {
+        const std::string name = segmentRegionName("metaSpace", i);
+        regions.push_back(freeListRegionToJson(name.c_str(), metaSp.segment(i)));
+    }
 
     // Perm Space.
-    regions.push_back(bumpRegionToJson("permSpace", permSp));
+    for (size_t i = 0; i < permSp.segmentCount(); ++i) {
+        const std::string name = segmentRegionName("permSpace", i);
+        regions.push_back(bumpRegionToJson(name.c_str(), permSp.segment(i)));
+    }
 
     size_t totalObjectCount = 0;
     size_t totalObjectBytes = 0;

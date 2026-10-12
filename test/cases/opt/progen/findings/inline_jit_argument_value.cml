@@ -1,0 +1,33 @@
+/**
+ * progen finding F17 ((other) wrong value after inlining). After `std::inline`, the JIT passes 0
+ *   instead of 24 as the argument `r1(4, 0)` of a nested function (the node VM, the bytecode VM
+ *   and the parallel scheduler print 24).
+ * Pipeline: std::inline std::jit
+ * Environment: PROGEN_I1=2
+ * Expected output: L8 0 0 24
+ * Actual: L8 0 0 0
+ * Reduced by test/tools/progen from seed 1892 (generator version 1, all features).
+ */
+module inline_jit_argument_value
+
+import { get_env } from sys
+
+type P = { x: int, y: int }
+
+func r1(a2: int, a3: int): int {
+    return if (a2 <= 0) then 12 * 2 else r1(a2 - 1, 31);
+}
+
+func main(): int sync {
+    let n20 = int(get_env('PROGEN_I1'));
+    func g34(a35: int): int sync {
+        println('L8 {} {} {}'->format<0, 0, a35>);
+        return 31;
+    };
+    let n52 = if 'm' != '' then sync {
+        let n51 = r1(n20, 4);
+        return '';
+    } else 'a';
+    let n53 = g34(r1(4, 0));
+    return 0;
+}

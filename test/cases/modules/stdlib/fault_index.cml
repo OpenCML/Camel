@@ -1,0 +1,11 @@
+module fault_index
+
+import { trim } from str
+
+func main(): int sync {
+    println('before')
+    let s = trim(' hello ')
+    println(s[5])
+    println('not reached')
+    return 0
+}

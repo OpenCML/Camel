@@ -1,0 +1,24 @@
+/**
+ * progen finding F14 (branch arm). After `std::inline` the value of an `if` / `else if` / `else`
+ *   chain is `null` instead of the tuple of the taken arm.
+ * Pipeline: std::inline std::nvm
+ * Expected output: L4 (0, [0]) 0
+ * Actual: L4 null 0
+ * Reduced by test/tools/progen from seed 728 (generator version 1, all features).
+ */
+module inline_branch_value_null
+
+func f1(a2: int, a3: float): bool {
+    return ([0]->filter<(p5: int): bool => false>)->contains<0 % 5>;
+}
+
+func main(): int sync {
+    let n19 = 0;
+    let n23 = if false then {
+        return (0, [0]);
+    } else if f1(1, 2.0) then {
+        return (0, [0, n19]);
+    } else (0, [0]);
+    println('L4 {} {}'->format<n23, n19>);
+    return 0;
+}

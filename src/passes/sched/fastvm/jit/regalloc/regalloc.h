@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace camel::jit {
@@ -34,6 +35,9 @@ inline constexpr int kNumAllocatableRegs = 8;
 inline constexpr int kSpilled            = -1;
 // rbx (index 3) is reserved for &FramePool::top_ caching in JIT internal convention
 inline constexpr int kReservedRegRbx = 3;
+// r11 (index 7) is never given to a virtual register: the MIR encoder uses it as scratch (the
+// divisor of idiv, the second flag of a float comparison, frame set-up of a call).
+inline constexpr int kReservedRegScratch = 7;
 
 /**
  * Allocation result: slot index -> physical register (0..7) or kSpilled.
@@ -72,24 +76,8 @@ makeAllSpilledAlloc(std::span<const Bytecode> bytecodes, size_t entryPc, size_t 
 // redundant moves such as rax staging.
 
 /**
- * Constraint (reserved): at a given instruction, a vreg must reside in a specific physical
- *
- * register, for idiv(rax), cmov, etc. Later linearScanVReg can honor it by inserting moves or
- *
- * preferring that assignment.
- */
-struct VRegConstraint {
-    size_t instrIndex;
-    x64::VRegId vreg;
-    uint8_t requiredPreg;
-};
-
-struct VRegAllocOptions {
-    std::vector<VRegConstraint> fixedAssignments; // Reserved; not used yet.
-};
-
-/**
- * Virtual register allocation result: vregToPreg[v] = physical register 0..7 or kSpilled.
+ * Virtual register allocation result: vregToPreg[v] = physical register 0..7, or kSpilled for
+ * a virtual register that is defined and never used (the encoder skips its definition).
  */
 struct VRegAllocation {
     std::vector<int> vregToPreg;
@@ -103,12 +91,18 @@ struct VRegAllocation {
 
 /**
  * Perform linear-scan register allocation for V* instructions in a MIR buffer.
+ *
+ * The encoder has no spill code: every value that is used must be in a register for its whole
+ * live range. The allocation therefore fails (returns false, with the reason) rather than leave
+ * a used value without one: when more values are live at once than there are registers, when a
+ * value would have to survive a call (calls clobber every allocatable register), or when a
+ * value is used without a definition. The caller lowers again with shorter live ranges.
+ *
  * @param buf MIR containing VLoadFromFrame, VCopy, VTest, VMove, etc.
  * @param out output allocation result
- * @param opts optional constraints (reserved)
- * @return whether allocation succeeded (currently always true)
+ * @param failureReason set when the allocation fails
  */
 bool linearScanVReg(
-    const x64::MirBuffer &buf, VRegAllocation *out, const VRegAllocOptions *opts = nullptr);
+    const x64::MirBuffer &buf, VRegAllocation *out, std::string *failureReason = nullptr);
 
 } // namespace camel::jit

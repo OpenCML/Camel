@@ -1,0 +1,69 @@
+/**
+ * Signatures of the `os` module (C++ operators, modules/os).
+ *
+ * Every function touches the process, the terminal or the machine and is declared with effects.
+ * `sleep` and `exit` are also built in: they need no import.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+/// Suspends the program for the given number of milliseconds.
+/// @effect waits
+/// @fails fault `InvalidArgument` when the duration is negative
+/// @example sleep(100)
+inner func sleep(milliseconds: int): void {
+    return 'os:sleep'
+}
+
+/// The name of the user the process runs as.
+/// @effect reads the environment
+/// @fails fault `RuntimeError` when the name cannot be found
+/// @example whoami()    // 'alice'
+inner func whoami(): string {
+    return 'os:whoami'
+}
+
+/// The number of hardware threads, at least 1.
+/// @effect reads the machine
+/// @example cpu_count()    // 8
+inner func cpu_count(): int {
+    return 'os:cpu_count'
+}
+
+/// Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
+/// @effect changes the terminal
+/// @fails fault `RuntimeError` when the terminal refuses
+/// @example set_terminal_raw_mode(true)
+inner func set_terminal_raw_mode(enabled: bool): void {
+    return 'os:set_terminal_raw_mode'
+}
+
+/// Whether a key press is waiting to be read.
+/// @effect reads the terminal
+/// @example has_input()    // true or false
+inner func has_input(): bool {
+    return 'os:has_input'
+}
+
+/// One character of pending terminal input.
+/// @effect reads the terminal
+/// @example get_char()    // 'w'
+inner func get_char(): string {
+    return 'os:get_char'
+}
+
+/// Up to max characters of pending terminal input.
+/// @effect reads the terminal
+/// @example get_chars(3)    // at most three characters
+inner func get_chars(max: int): string {
+    return 'os:get_chars'
+}
+
+/// Discards the terminal input that is waiting.
+/// @effect reads the terminal
+/// @example clear_input_buffer()
+inner func clear_input_buffer(): void {
+    return 'os:clear_input_buffer'
+}

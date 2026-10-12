@@ -33,6 +33,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/typevar.h"
 
 namespace camel::compile::gir {
 
@@ -81,6 +82,19 @@ class Builder {
     // Inside a `var` declaration: the names it binds are variables.
     bool declaresVariable_ = false;
 
+    // ---- Reporting several errors without their consequences ----
+    // A statement that fails is skipped and the next one is checked (visitExecNode). What the
+    // failed statement would have declared is then missing, and every use of it would be
+    // reported as an unresolved reference: one mistake, many errors. So the names a failed
+    // declaration would have bound are remembered here, by the scope of the declaration, and
+    // a reference to one of them fails without a report of its own: the statement using it
+    // is skipped (and what *it* declares is poisoned in turn).
+    std::map<node_scope_ptr_t, std::unordered_set<std::string>> poisonedNames_;
+    bool isPoisonedName(const std::string &name) const;
+    // Functions whose body is in error. One declared without a return type then never gets
+    // one, and a call of it would be reported as a call of an incomplete function.
+    std::unordered_set<const void *> failedBodies_;
+
     // An argument of a call: its value node and the expression it was written as.
     struct Argument {
         node_handle_t node;
@@ -92,6 +106,8 @@ class Builder {
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
 
     std::unordered_set<DraftGraphBuilder *> usedGraphs_;
+    // The decorated form of each function declared with decorators, by its own graph.
+    std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> decoratedOf_;
     std::unordered_map<DraftGraphBuilder *, node_modifier_map_t> nodeModifierMaps_;
     // With-arguments bound to a callee by `f<a, b>`, consumed when the callee is invoked. Kept
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
@@ -181,6 +197,100 @@ class Builder {
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
+    // ---- Generic functions (design principles 2.9) ----
+    //
+    // A function whose signature binds type variables (`typeas T`) is a subgraph template:
+    // no graph is built for its declaration. Each direct call binds the variables from the
+    // argument types and asks for the instance of those types, which is built once from the
+    // function's GCT with the variables replaced (typeBindings_) wherever the body names a
+    // type, and then called like any other function. So the body is typed and its overloads
+    // are chosen at instantiation, and only concrete types reach a graph.
+    struct GenericInstance {
+        camel::core::type::type_bindings_t bindings;
+        compile_graph_ptr_t graph;
+        // An error was found in the body: later calls with the same types fail quietly.
+        bool failed = false;
+        // The root graph of the module the instance was built in. A module that imports a
+        // generic function builds its own instances (DESIGN-QUESTION(generic-export)).
+        DraftGraphBuilder *owner = nullptr;
+    };
+    struct GenericTemplate {
+        std::string name;
+        GCT::node_ptr_t func;
+        // The declared type with the variables of enclosing instances replaced; the function's
+        // own variables remain.
+        FunctionType *funcType = nullptr;
+        // The bindings in force where the template was declared (a generic function declared
+        // inside an instance of another one).
+        camel::core::type::type_bindings_t outerBindings;
+        // Where the function was declared: instances are built there, not at the call.
+        compile_graph_ptr_t ownerGraph;
+        // The module that declares the function and the root graph of its builder. A builder
+        // with another root graph is an importing module: it builds the instance under its
+        // own root graph, and resolves the names of the body in the declaring module.
+        camel::core::module::module_ptr_t module;
+        DraftGraphBuilder *homeRoot = nullptr;
+        node_scope_ptr_t nodeScope;
+        graph_scope_ptr_t graphScope;
+        decorated_scope_ptr_t decoratedScope;
+        std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
+        std::vector<GenericInstance> instances;
+        // Instances whose bodies are being built right now, one inside another.
+        size_t openInstances = 0;
+    };
+    using template_ptr_t       = std::shared_ptr<GenericTemplate>;
+    using template_scope_t     = Scope<std::string, template_ptr_t>;
+    using template_scope_ptr_t = std::shared_ptr<template_scope_t>;
+    // Bounds on instantiation. A generic function that calls itself with ever larger types
+    // (`f(x) = f([x])`) would never stop building instances, so the instances of ONE function
+    // being built inside one another are limited; the number is small because such types
+    // may double at every step (`f((x, x))`). A chain of different generic functions calling
+    // each other is ordinary code and only meets the far larger overall bound.
+    static constexpr size_t kMaxOpenInstancesOfOne = 8;
+    static constexpr size_t kMaxInstantiationDepth = 128;
+
+    template_scope_ptr_t templateScope_;
+    // The type variables of the instance being built and their types; empty outside one.
+    camel::core::type::type_bindings_t typeBindings_;
+    size_t instantiationDepth_ = 0;
+    // Set while the callee of a call is visited: the one place the name of a generic function
+    // may stand. The DREF nodes that name one, and the template each names.
+    bool genericCalleeAllowed_ = false;
+    // Set while an instance of a generic function imported from another module is built: the
+    // name of that function. Such a body cannot capture a module-level value of its module.
+    std::string foreignInstanceOf_;
+    std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
+
+    // A type read from the GCT, with the type variables of the current instance replaced.
+    Type *boundType(Type *type) const {
+        return camel::core::type::substituteTypeVars(type, typeBindings_);
+    }
+    // Whether a declared function type is still generic under the current bindings.
+    bool isGenericHere(Type *type) const {
+        return camel::core::type::containsTypeVar(type) &&
+               camel::core::type::containsTypeVar(boundType(type));
+    }
+    // Registers the generic functions declared directly in the block `exec`, before anything
+    // in the block is built: a call may precede the declaration.
+    void registerGenericTemplates(const GCT::node_ptr_t &exec);
+    // The instance of `tmpl` that the arguments of `call` ask for: binds the type variables,
+    // checks every argument against its parameter, and builds the instance unless it exists.
+    /// An error at `at` when `type` holds a Map or a Set whose key type is not allowed, which
+    /// replacing a type variable can produce.
+    void rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at);
+    compile_graph_ptr_t resolveGenericCall(
+        const template_ptr_t &tmpl, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    compile_graph_ptr_t instantiateGeneric(
+        const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
+        const GCT::node_ptr_t &call);
+    // Enters the scope of `graph`, an existing graph, as enterScope does for one it finds.
+    void enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name);
+    // Builds the body of the function `gct` into `graph`, whose scope has been entered.
+    void buildFuncBody(
+        const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
+        const std::string &name);
+
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
             std::stringstream ss;
@@ -225,7 +335,17 @@ class Builder {
     bool insertGraph(const std::string &name, const compile_graph_ptr_t &graph);
     bool insertDecoratedGraph(const std::string &name, const compile_graph_ptr_t &graph);
 
+    // Enters the scope of the function `name` whose declared type is the object `funcType`,
+    // creating its graph the first time. Functions of one name in one block are overloads;
+    // the declared type object identifies which one is meant.
     compile_graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
+    // A second function of this name with the same parameter types in the same block:
+    // reports Redeclaration at `gct` and abandons the declaration.
+    void rejectRedeclaredFunction(
+        const std::string &name, FunctionType *funcType, const GCT::node_ptr_t &gct);
+    // The declared types of the functions rejected so (the forward declaration reports, the
+    // definition that follows is skipped quietly).
+    std::unordered_set<FunctionType *> redeclaredFuncTypes_;
     void leaveScope();
 
     node_handle_t createFuncDataNode(
@@ -235,6 +355,28 @@ class Builder {
     node_handle_t valueNodeOf(const std::any &res);
     // The value node of a call or with-argument: also lowers functions named as values.
     node_handle_t argumentNodeOf(const std::any &res, const GCT::node_ptr_t &origin);
+    // `node` when it is a value; when it is the name of exactly one function (a DREF node),
+    // that function's value. A name that stands for an operator or for several overloads has
+    // no single value and is returned as it is.
+    node_handle_t functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin);
+    // The value of the element `name` of the composite literal `literal`: a bound value, or
+    // the value of the function of that name.
+    node_handle_t elementNodeOf(const std::string &name, const GCT::node_ptr_t &literal);
+    // functionValueOf, and FunctionNameAsValue when `name` has no single function value.
+    node_handle_t
+    namedValueOf(node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
+    // Reports FunctionNameAsValue at `origin` when `node` is still such a name (`name`) in
+    // a place that needs a value.
+    void rejectNameWithoutValue(
+        node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
+    // A function with the declared parameters of `target` that captures the names `target`
+    // captured and calls it with them: what a function value of `target` refers to once the
+    // captures of `target` have become with-parameters (createFuncDataNode).
+    compile_graph_ptr_t forwardingGraphOf(const compile_graph_ptr_t &target);
+    // The functions named `name` when `decorated` is one of several of that name (the set a
+    // call chooses from); null when the decorated function is the only one.
+    graph_set_ptr_t
+    overloadsOfDecorated(const std::string &name, const compile_graph_ptr_t &decorated);
     // The function a decorated graph produces when its decorators run.
     node_handle_t lowerDecoratedGraphValue(
         const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);
@@ -317,6 +459,48 @@ class Builder {
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
+    /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
+    /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
+    /// With `faultArm`, one more arm follows them, taken when no case value equals the
+    /// scrutinee: it stops the program (RuntimeDiag::MatchNotExhaustive).
+    node_handle_t buildBranch(
+        const GCT::node_ptr_t &gct, node_handle_t condNode,
+        const std::vector<compile_graph_ptr_t> *arms = nullptr, bool faultArm = false);
+    /// Whether the `match` `gct` can meet a value none of its cases matches (it has no
+    /// `case _` and does not list both values of a bool); reports MatchWithoutDefault then.
+    bool matchNeedsFaultArm(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
+    /// The subgraph of one branch arm. Its body is the block `exec`, or what `body` builds
+    /// (called inside the arm's scope) when given; `exec` then only locates the arm.
+    compile_graph_ptr_t buildArmGraph(
+        const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
+
+    // ---- The tagged forms `T?` and `T!` (design principles 2.9;
+    // docs/technical/29_nullable_and_fallible_values.md). Each construct below is a branch on
+    // the one-bit tag of a value; nothing here adds a node kind. ----
+    /// `a ?? b`, `a !! b`, `x ?-> f`.
+    node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
+    /// `match x { case null => ..  case v => .. }` and `case error e` over a tagged `x`.
+    node_handle_t visitTaggedMatch(
+        const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::TupleType *type);
+    /// Binds `node` to a fresh name no program can write, so that arms can capture it.
+    std::string bindTemporary(node_handle_t node);
+    /// The call `op(<name>)` of one of the built-in operators over tagged values.
+    node_handle_t
+    applyTagOperator(const char *op, const std::string &name, const GCT::node_ptr_t &origin);
+    /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
+    node_handle_t castNodeTo(
+        node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The return type the function around the current position declares (looking out of
+    /// branch arms), or nullptr when it declares none.
+    camel::core::type::Type *declaredExitTypeHere() const;
+    /// What `return value` / `throw value` hands back: the value put into the declared
+    /// `T?` / `T!`, or the failed form of the declared `T!`.
+    node_handle_t adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value);
+    /// `file:line:column` of an origin, for the `location` of an error; empty when unknown.
+    std::string sourceLocationOf(uint64_t origin) const;
+    /// Branch arms whose body is being built.
+    std::unordered_set<DraftGraphBuilder *> openArmGraphs_;
+    size_t tagTemporaries_ = 0;
     node_handle_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExitNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExecNode(const GCT::node_ptr_t &gct);

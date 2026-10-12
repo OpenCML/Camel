@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 06, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,8 +46,6 @@
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <pthread.h>
-#elif defined(_WIN32)
-#include <windows.h>
 #endif
 
 using namespace camel::core::context;
@@ -159,27 +157,7 @@ TaskflowExecSchedPass::buildRuntimeBuildInfo(GCGraph *graph) {
 namespace {
 
 void nativeStackBounds(uintptr_t &low, uintptr_t &high) {
-    low  = 0;
-    high = 0;
-#if defined(__linux__) && defined(__GLIBC__)
-    pthread_attr_t attr;
-    if (pthread_getattr_np(pthread_self(), &attr) != 0) {
-        return;
-    }
-    void *addr  = nullptr;
-    size_t size = 0;
-    if (pthread_attr_getstack(&attr, &addr, &size) == 0 && addr != nullptr && size != 0) {
-        low  = reinterpret_cast<uintptr_t>(addr);
-        high = low + size;
-    }
-    pthread_attr_destroy(&attr);
-#elif defined(_WIN32)
-    ULONG_PTR stackLow  = 0;
-    ULONG_PTR stackHigh = 0;
-    GetCurrentThreadStackLimits(&stackLow, &stackHigh);
-    low  = static_cast<uintptr_t>(stackLow);
-    high = static_cast<uintptr_t>(stackHigh);
-#endif
+    camel::execute::nativeStackBounds(low, high);
 }
 
 // True once the calling thread has used a quarter of its native stack. A scope that would run
@@ -188,9 +166,8 @@ void nativeStackBounds(uintptr_t &low, uintptr_t &high) {
 // waiting worker picks up meanwhile), and deep non-tail recursion must not end in a stack
 // overflow that the node-by-node evaluator would not have had.
 bool nativeStackUsedBeyond(const TaskflowGcGate::ThreadState &ts, unsigned num, unsigned den) {
-#if (defined(__linux__) && defined(__GLIBC__)) || defined(_WIN32)
     if (ts.stackLow == 0) {
-        return false;
+        return false; // stack bounds are not read on this platform: no guard
     }
     volatile char marker = 0;
     const uintptr_t here = reinterpret_cast<uintptr_t>(&marker);
@@ -198,33 +175,40 @@ bool nativeStackUsedBeyond(const TaskflowGcGate::ThreadState &ts, unsigned num, 
         return false;
     }
     return (ts.stackHigh - here) > (ts.stackHigh - ts.stackLow) / den * num;
-#else
-    (void)ts; // stack bounds are not read on this platform: no guard
-    (void)num;
-    (void)den;
-    return false;
-#endif
 }
 
 bool nativeStackIsTight(const TaskflowGcGate::ThreadState &ts) {
     return nativeStackUsedBeyond(ts, 1, 4);
 }
 
-// Refuse a call before the native stack is exhausted, keeping room for the diagnostic and
-// fault unwinding (a sixteenth on Unix; Windows SEH needs a larger reserve). The
-// scheduler has no fixed limit of its own (NodeVM stops at 256 frames); what a thread can nest
+// Native stack limits supplement the configured recursion limit. The shared guard keeps
+// enough space for reporting and fault unwinding on each platform; what a thread can nest
 // depends on its stack and on what else the worker picked up while waiting. The depth the
 // diagnostic reports is the number of calls open on that thread (a recursion that started on
 // another worker is deeper than that).
-bool nativeStackIsExhausted(const TaskflowGcGate::ThreadState &ts) {
-#if defined(_WIN32)
-    // Windows SEH keeps extra handler frames during recursive C++ rethrows. Reserve the
-    // rest of the native stack for reporting and unwinding a fault through those calls.
-    return nativeStackUsedBeyond(ts, 1, 16);
-#else
-    return nativeStackUsedBeyond(ts, 15, 16);
-#endif
+bool nativeStackIsExhausted(const TaskflowGcGate::ThreadState &) {
+    return camel::execute::nativeStackNearlyExhausted();
 }
+
+// One more call open on a thread, for as long as the object lives.
+struct OpenCall {
+    explicit OpenCall(uint32_t &depth) : depth_(depth) { ++depth_; }
+    ~OpenCall() { --depth_; }
+    uint32_t &depth_;
+};
+
+// A task continues from the calls open on the thread that started it: while the object lives,
+// the running thread counts from `depth`; afterwards from what it had (a worker that picked
+// the task up while waiting inside another call).
+struct InheritedDepth {
+    InheritedDepth(TaskflowGcGate::ThreadState &thread, uint32_t depth)
+        : depth_(thread.callDepth), saved_(thread.callDepth) {
+        depth_ = depth;
+    }
+    ~InheritedDepth() { depth_ = saved_; }
+    uint32_t &depth_;
+    uint32_t saved_;
+};
 
 int64_t steadyNowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -979,6 +963,10 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     }
     aborting_.store(false, std::memory_order_relaxed);
     {
+        std::lock_guard lock(faultMutex_);
+        firstFault_ = nullptr;
+    }
+    {
         std::unique_lock lock(plansMutex_);
         plans_.clear();
     }
@@ -1105,6 +1093,7 @@ void TaskflowExecSchedPass::runScope(
                         // started is skipped.
                         try {
                             TaskflowGcRegion taskRegion;
+                            InheritedDepth inherited(taskRegion.thread(), self->parentDepth);
                             runItems(
                                 *planPtr,
                                 scopePtr->chains[chain],
@@ -1127,8 +1116,9 @@ void TaskflowExecSchedPass::runScope(
     }
 
     taskGraphsRun_.fetch_add(1, std::memory_order_relaxed);
-    instance->frame    = frame;
-    instance->tailNode = &tailNode;
+    instance->frame       = frame;
+    instance->tailNode    = &tailNode;
+    instance->parentDepth = region.thread().callDepth;
     region.leave(); // the calling thread waits for (and helps with) the tasks from here on
     runOnExecutor(instance->flow);
     std::exception_ptr error = std::exchange(instance->error, nullptr);
@@ -1297,22 +1287,52 @@ void TaskflowExecSchedPass::runLinearBody(
     }
 }
 
-namespace {
-
-// Out of line: the fault and its site are large temporaries, and executeCallNode's frame is
-// what every level of a recursion pays for.
-[[noreturn, gnu::noinline]] void
-throwRecursionTooDeep(Context &context, GCGraph *graph, uint32_t depth) {
-    throw reportRuntimeFault(
-        context,
-        RuntimeFault::make(
-            RuntimeDiag::MaxRecursionDepthExceeded,
-            std::string(graph->name()),
-            depth),
-        makeGraphExecutionSite(context.sourceContext(), graph, 0, "taskflow"));
+void TaskflowExecSchedPass::raiseFault(
+    const RuntimeFault &fault, GCGraph *graph, gc_node_ref_t nodeRef) {
+    std::lock_guard lock(faultMutex_);
+    if (!firstFault_) {
+        auto site = makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow");
+        if (nodeRef != kInvalidNodeRef) {
+            if (const uint64_t origin = graph->nodeOrigin(nodeRef)) {
+                site.cachedOrigin = origin;
+            }
+        }
+        // Reporting records the diagnostic and gives it back to be thrown, or throws itself
+        // when the diagnostics sink stops at the first error (as the command line sets it).
+        try {
+            throw reportRuntimeFault(*context_, fault, site);
+        } catch (...) {
+            firstFault_ = std::current_exception();
+        }
+    }
+    std::rethrow_exception(firstFault_);
 }
 
-} // namespace
+// Out of line: the fault is a large temporary, and the frame of the caller is what every level
+// of a recursion pays for.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+void TaskflowExecSchedPass::requireCallRoom(
+    TaskflowGcGate::ThreadState &thread, GCGraph *callerGraph, gc_node_ref_t callNode) {
+    // callDepth includes the entry graph's call of main, which is not counted (kEntryCalls).
+    const bool overLimit = maxRecursionDepth_ != 0 &&
+                           thread.callDepth >= maxRecursionDepth_ + camel::execute::kEntryCalls;
+    // With no limit given, the scheduler nests as deep as the native stack of the thread
+    // allows; what a thread can nest depends on its stack and on what else the worker picked
+    // up while waiting.
+    if (!overLimit && !nativeStackIsExhausted(thread)) [[likely]] {
+        return;
+    }
+    try {
+        if (overLimit) {
+            camel::execute::throwRecursionLimitReached(callerGraph->name(), maxRecursionDepth_);
+        }
+        camel::execute::throwNativeStackExhausted(callerGraph->name(), thread.callDepth);
+    } catch (const RuntimeFault &fault) {
+        raiseFault(fault, callerGraph, callNode);
+    }
+}
 
 void TaskflowExecSchedPass::executeCallNode(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, TaskflowGcRegion &region) {
@@ -1331,14 +1351,8 @@ void TaskflowExecSchedPass::executeCallNode(
     }
     ASSERT(targetGraph != nullptr, "Taskflow call target graph is null.");
     auto &thread = region.thread();
-    if (nativeStackIsExhausted(thread)) [[unlikely]] {
-        throwRecursionTooDeep(*context_, graph, thread.callDepth);
-    }
-    struct OpenCall {
-        explicit OpenCall(uint32_t &depth) : depth_(depth) { ++depth_; }
-        ~OpenCall() { --depth_; }
-        uint32_t &depth_;
-    } openCall(thread.callDepth);
+    requireCallRoom(thread, graph, nodeRef);
+    OpenCall openCall(thread.callDepth);
     Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
     slot_t result      = NullSlot;
     try {
@@ -1353,11 +1367,14 @@ void TaskflowExecSchedPass::executeCallNode(
 
 template <typename FillArgs, typename Sink>
 void TaskflowExecSchedPass::callClosure(
-    GCGraph *targetGraph, Frame *funcFrame, camel::runtime::gc_data_idx_t funcIdx,
-    size_t argCount, FillArgs &&fillArgs, Sink &&sink) {
+    const ElementCallSite &site, GCGraph *targetGraph, Frame *funcFrame,
+    camel::runtime::gc_data_idx_t funcIdx, size_t argCount, FillArgs &&fillArgs, Sink &&sink) {
     std::array<slot_t, 2> args{NullSlot, NullSlot};
     ASSERT(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
     TaskflowGcRegion region;
+    InheritedDepth inherited(region.thread(), site.depth);
+    requireCallRoom(region.thread(), site.graph, site.node);
+    OpenCall openCall(region.thread().callDepth);
     region.enter();
     fillArgs(std::span<slot_t>(args.data(), argCount));
     Frame *callee = acquirePreparedClosureCallFrame(
@@ -1409,7 +1426,9 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
 slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     tf::Taskflow flow;
-    flow.emplace([this, graph, nodeRef, frame](tf::Subflow &sf) {
+    const uint32_t depth = TaskflowGcGate::instance().self().callDepth;
+    flow.emplace([this, graph, nodeRef, frame, depth](tf::Subflow &sf) {
+        InheritedDepth inherited(TaskflowGcGate::instance().self(), depth);
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
         const std::string uri(body->uri());
         if (uri == ":mark/map_arr") {
@@ -1502,11 +1521,7 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         } catch (const RuntimeFault &fault) {
             // A checked conversion (`x as T` into a module type) that fails is an error of the
             // program, reported at the conversion like the fault of an operator.
-            auto site = makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow");
-            if (const uint64_t origin = graph->nodeOrigin(nodeRef)) {
-                site.cachedOrigin = origin;
-            }
-            throw reportRuntimeFault(*context_, fault, site);
+            raiseFault(fault, graph, nodeRef);
         }
         frame->set(node->dataIndex, result);
         return result;
@@ -1655,10 +1670,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     const std::string uri(body->uri());
     auto opFunc = context_->execMgr().find(uri);
     if (!opFunc) {
-        throw reportRuntimeFault(
-            *context_,
-            RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri),
-            makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow"));
+        raiseFault(RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri), graph, nodeRef);
     }
 
     std::vector<runtime_data_idx_t> withIndices;
@@ -1685,11 +1697,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     } catch (const RuntimeFault &fault) {
         // Reported at the operator, as on the other back ends (it used to be the start of
         // the enclosing graph).
-        auto site = makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow");
-        if (const uint64_t origin = graph->nodeOrigin(nodeRef)) {
-            site.cachedOrigin = origin;
-        }
-        throw reportRuntimeFault(*context_, fault, site);
+        raiseFault(fault, graph, nodeRef);
     }
 }
 
@@ -1786,11 +1794,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         } catch (const RuntimeFault &fault) {
             // A checked conversion (`x as T` into a module type) that fails is an error of the
             // program, reported at the conversion like the fault of an operator.
-            auto site = makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow");
-            if (const uint64_t origin = graph->nodeOrigin(nodeRef)) {
-                site.cachedOrigin = origin;
-            }
-            throw reportRuntimeFault(*context_, fault, site);
+            raiseFault(fault, graph, nodeRef);
         }
         frame->set(node->dataIndex, result);
         return result;
@@ -2199,6 +2203,7 @@ gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
 void TaskflowExecSchedPass::mark_map_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
+    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2218,8 +2223,9 @@ void TaskflowExecSchedPass::mark_map_arr(
     region.leave();
 
     for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, i, frame, arrIdx, funcIdx, resIdx, resultType, target]() {
+        sf.emplace([this, site, i, frame, arrIdx, funcIdx, resIdx, resultType, target]() {
               callClosure(
+                  site,
                   target,
                   frame,
                   funcIdx,
@@ -2236,6 +2242,7 @@ void TaskflowExecSchedPass::mark_map_arr(
 void TaskflowExecSchedPass::mark_apply_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
+    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2255,8 +2262,9 @@ void TaskflowExecSchedPass::mark_apply_arr(
     region.leave();
 
     for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, i, frame, arrIdx, funcIdx, arrType, target, &resultsRoot]() {
+        sf.emplace([this, site, i, frame, arrIdx, funcIdx, arrType, target, &resultsRoot]() {
               callClosure(
+                  site,
                   target,
                   frame,
                   funcIdx,
@@ -2281,6 +2289,7 @@ void TaskflowExecSchedPass::mark_apply_arr(
 void TaskflowExecSchedPass::mark_filter_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
+    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2292,8 +2301,9 @@ void TaskflowExecSchedPass::mark_filter_arr(
     // std::vector<bool> share words.
     std::vector<uint8_t> keep(n, 0);
     for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, i, frame, arrIdx, funcIdx, target, &keep]() {
+        sf.emplace([this, site, i, frame, arrIdx, funcIdx, target, &keep]() {
               callClosure(
+                  site,
                   target,
                   frame,
                   funcIdx,
@@ -2321,6 +2331,7 @@ void TaskflowExecSchedPass::mark_filter_arr(
 void TaskflowExecSchedPass::mark_reduce_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
+    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
     region.enter();
     const auto arrIdx     = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto withInputs = graph->withInputsOf(nodeRef);
@@ -2338,8 +2349,9 @@ void TaskflowExecSchedPass::mark_reduce_arr(
     tf::Task prev;
     bool hasPrev = false;
     for (size_t i = 0; i < n; ++i) {
-        tf::Task step = sf.emplace([this, i, arrIdx, funcIdx, frame, accIdx, target]() {
+        tf::Task step = sf.emplace([this, site, i, arrIdx, funcIdx, frame, accIdx, target]() {
                               callClosure(
+                                  site,
                                   target,
                                   frame,
                                   funcIdx,
@@ -2363,6 +2375,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     (void)sf;
     TaskflowGcRegion region;
+    const uint32_t depth = region.thread().callDepth;
     region.enter();
     const auto arrIdx     = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto withInputs = graph->withInputsOf(nodeRef);
@@ -2397,10 +2410,12 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
 
     // Folds `count` values into `acc` inside the caller's region: between two calls the
     // accumulator is in no frame, so the region is not left in between.
-    const auto fold = [this, target, frame, funcIdx](
+    const auto fold = [this, graph, nodeRef, target, frame, funcIdx](
                           TaskflowGcRegion &foldRegion, slot_t acc, size_t count,
                           const std::function<slot_t(size_t)> &valueAt) {
         for (size_t i = 0; i < count; ++i) {
+            requireCallRoom(foldRegion.thread(), graph, nodeRef);
+            OpenCall openCall(foldRegion.thread().callDepth);
             foldRegion.enter();
             std::array<slot_t, 2> args{acc, valueAt(i)};
             Frame *callee =
@@ -2424,9 +2439,10 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
             continue;
         }
         level
-            .emplace([frame, arrIdx, begin, end, chunk, arrType, &partialsRoot, &hasPartial,
-                      &fold]() {
+            .emplace([frame, arrIdx, begin, end, chunk, arrType, depth, &partialsRoot,
+                      &hasPartial, &fold]() {
                 TaskflowGcRegion chunkRegion;
+                InheritedDepth inherited(chunkRegion.thread(), depth);
                 chunkRegion.enter();
                 const slot_t acc = fold(
                     chunkRegion,
@@ -2464,6 +2480,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
 void TaskflowExecSchedPass::mark_foreach_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
+    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2474,8 +2491,9 @@ void TaskflowExecSchedPass::mark_foreach_arr(
     tf::Task prev;
     bool hasPrev = false;
     for (size_t i = 0; i < n; ++i) {
-        tf::Task step = sf.emplace([this, i, frame, arrIdx, funcIdx, target]() {
+        tf::Task step = sf.emplace([this, site, i, frame, arrIdx, funcIdx, target]() {
                               callClosure(
+                                  site,
                                   target,
                                   frame,
                                   funcIdx,
@@ -2498,6 +2516,7 @@ void TaskflowExecSchedPass::mark_foreach_arr(
 void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
+    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2506,8 +2525,9 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     region.leave();
 
     for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, i, frame, arrIdx, funcIdx, target]() {
+        sf.emplace([this, site, i, frame, arrIdx, funcIdx, target]() {
               callClosure(
+                  site,
                   target,
                   frame,
                   funcIdx,

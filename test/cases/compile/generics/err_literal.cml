@@ -1,0 +1,12 @@
+module err_literal
+
+func zero_of(x: typeas T): T {
+    let z: T = 0
+    return z
+}
+
+func main(): int sync {
+    println(zero_of(5))
+    println(zero_of(2.5))
+    return 0
+}

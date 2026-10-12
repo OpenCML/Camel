@@ -49,10 +49,11 @@ kind = "negative"
 case = "../../../cases/parse/syntax/missing_then.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SyntaxDiag::UnknownSyntaxError"
-expect_diagnostic_code = "0x02000000"
+expect_diagnostic_name = "SyntaxDiag::MissingThen"
+expect_diagnostic_code = "0x02000003"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 21
+expect_output_contains = ["Expected 'then' after the condition of the 'if', before '{'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

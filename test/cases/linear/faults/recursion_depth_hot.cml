@@ -1,0 +1,29 @@
+/**
+ * A recursion one call deeper than the limit, in functions the JIT compiles after std::inline
+ * (first run within the limit): MaxRecursionDepthExceeded at the recursive call that goes too
+ * deep (line 19, column 38: the first call of `tree`), as the bytecode VM reports it, not a
+ * stack overflow. A tail recursion of a million calls is no recursion in depth.
+ */
+module recursion_depth_hot
+
+func loop(n: int, acc: int): int {
+    return if n <= 0 then acc else loop(n - 1, acc + n)
+}
+
+func down(n: int): int {
+    return if n <= 0 then 0 else 1 + down(n - 1)
+}
+
+func tree(n: int): int {
+    // The second call ends at once for n < 300, so the depth is that of the first.
+    return if n <= 0 then 1 else tree(n - 1) + tree(n - 300)
+}
+
+func main(): int sync {
+    println('loop {}'->format<loop(1000000, 0)>)
+    println('down {}'->format<down(255)>)
+    println('tree {}'->format<tree(255)>)
+    println('tree {}'->format<tree(256)>)
+    println('not reached')
+    return 0
+}

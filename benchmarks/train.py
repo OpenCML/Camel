@@ -162,6 +162,7 @@ def run_camel(model: str, passes: Tuple[str, ...], env: Dict[str, str], timeout:
 
 
 def camel_gradients(model: str, config: str = "camel_nvm") -> Dict[str, np.ndarray]:
+    load(model)  # the Camel program reads the benchmark artifacts; generate them on first use
     with tempfile.TemporaryDirectory() as tmp:
         run_camel(model, CAMEL_CONFIGS[config], {"CAMEL_BENCH_GRADS": tmp})
         return {p.stem: np.load(p) for p in Path(tmp).glob("*.npy")}
@@ -853,6 +854,13 @@ def main() -> int:
     if args.check or not (args.time or args.check_onnx or args.check_ksteps):
         gok = check(models, args.rtol, [c for c in args.check_configs.split(",") if c])
         print("gradient check:", "PASS" if gok else "FAIL")
+        if not gok:
+            # This check compares two float32 evaluations. Where a relu input lies within
+            # float32 rounding of zero the two may take different sides of the kink, and the
+            # gradient is discontinuous there, so a mismatch is not yet a verdict on Camel's
+            # rules: tools/grad_referee.py compares both with a float64 reference and names
+            # the relu units involved (README, "Gradient agreement").
+            print("  a MISMATCH on a model with relu may be a relu decision, not a rule: run tools/grad_referee.py --model <model> --kinks")
         ok &= gok
     if args.time:
         if args.stateless:

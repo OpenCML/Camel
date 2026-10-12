@@ -1,0 +1,41 @@
+module main
+
+// Collections as constants of the graph: under std::macro a macro function is evaluated
+// ahead of time and its result, here a map or a set, is stored in the static area of the
+// graph that called it. The keys and values (strings, arrays, function values, other maps)
+// must be carried over with the table.
+
+macro func table(n: int): Map<int, string> {
+    return put([(1, 'one'), (2, 'two')] as Map<int, string>, n, 'more')
+}
+
+macro func names(): Set<string> {
+    return add(['beta', 'alpha'] as Set<string>, 'gamma')
+}
+
+macro func nested(): Map<string, Map<string, int[]>> {
+    return [('outer', [('xs', [1, 2, 3])] as Map<string, int[]>)] as Map<string, Map<string, int[]>>
+}
+
+macro func operations(): Map<string, (x: int) => int> {
+    let double = (x: int): int => x * 2
+    let negate = (x: int): int => 0 - x
+    return [('double', double), ('negate', negate)] as Map<string, (x: int) => int>
+}
+
+func apply(ops: Map<string, (x: int) => int>, name: string, x: int): int {
+    let f = ops[name] ?? ((y: int): int => y)
+    return f(x)
+}
+
+func main(): int sync {
+    let t = table(4)
+    println(t, t[2] ?? '?', len(t))
+    println(names(), contains(names(), 'alpha'), contains(names(), 'delta'))
+    println(put(t, 9, 'nine'), t)
+    let n = nested()
+    println(n, len((n['outer'] ?? ([] as Map<string, int[]>))['xs'] ?? [0]))
+    let ops = operations()
+    println(apply(ops, 'double', 21), apply(ops, 'negate', 21), apply(ops, 'none', 21), keys(ops))
+    return 0
+}

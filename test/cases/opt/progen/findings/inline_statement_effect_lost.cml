@@ -1,0 +1,28 @@
+/**
+ * progen finding F04 (effect order lost). `std::inline` drops a `println` statement of `main`'s
+ *   sync body that is followed by a branch whose test calls a function.
+ * Pipeline: std::inline std::nvm
+ * Expected output: pq
+ * Actual: (nothing)
+ * Reduced by test/tools/progen from seed 85 (generator version 1, all features).
+ */
+module inline_statement_effect_lost
+
+func f1(a2: bool, a3: float): bool {
+    return ((['']->reduce<(p4: int, p5: string): int => 0, -3>) > int(1.0));
+}
+
+func main(): int sync {
+    let n27 = 0;
+    println('pq');
+    if true then sync {
+        let n33 = if f1(false, 1.5) then sync {
+            let n32 = [(false, 0), (true, n27), (false, 0), (false, 0)];
+            return 2.5;
+        } else 3.0;
+        return null;
+    } else sync {
+        return null;
+    };
+    return 0;
+}

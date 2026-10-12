@@ -106,7 +106,7 @@ bool UserDefinedModule::compile(CompileStage till) {
             }
         }
         if (diagnostics_->hasErrors()) {
-            CAMEL_LOG_FATAL_S("Module", "Module '{}' failed to parse", name_);
+            CAMEL_LOG_INFO_S("Module", "Module '{}' failed to parse", name_);
             return false;
         }
         if (till == CompileStage::AST) {
@@ -123,7 +123,7 @@ bool UserDefinedModule::compile(CompileStage till) {
             gct_            = gctBuilder.build(ast, diagnostics_);
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GCT", gct_.get()); });
             if (diagnostics_->hasErrors()) {
-                CAMEL_LOG_FATAL_S("Module", "Module '{}' failed to build GCT", name_);
+                CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GCT", name_);
                 return false;
             }
         }
@@ -139,7 +139,7 @@ bool UserDefinedModule::compile(CompileStage till) {
             auto girBuilder = camel::compile::gir::Builder(context_, shared_from_this());
             compileGraph_   = girBuilder.build(gct_, diagnostics_);
             if (diagnostics_->hasErrors()) {
-                CAMEL_LOG_FATAL_S("Module", "Module '{}' failed to build GIR", name_);
+                CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GIR", name_);
                 return false;
             }
         }

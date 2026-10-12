@@ -1,0 +1,482 @@
+[
+ {
+  "id": "F01",
+  "file": "findings/inline_untaken_arm_effect.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F02",
+  "file": "findings/inline_wrong_arm_runs.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F03",
+  "file": "findings/opt_untaken_arm_effect.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F04",
+  "file": "findings/inline_statement_effect_lost.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "pq"
+  ],
+  "class": "effect order lost",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F05",
+  "file": "findings/opt_statement_effect_lost.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   ""
+  ],
+  "class": "effect order lost",
+  "fixed": "inline: a body stays inside the branch arm its call was in"
+ },
+ {
+  "id": "F06",
+  "file": "findings/opt_lambda_effect_lost.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "false"
+  ],
+  "class": "effect order lost",
+  "fixed": "inline: a body stays inside the branch arm its call was in"
+ },
+ {
+  "id": "F07",
+  "file": "findings/simplify_nested_function_effect_lost.cml",
+  "pipeline": [
+   "std::opt::simplify",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   ""
+  ],
+  "class": "effect order lost"
+ },
+ {
+  "id": "F08",
+  "file": "findings/inline_dce_arm_effect_lost.cml",
+  "pipeline": [
+   "std::inline",
+   "std::opt::dce",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   ""
+  ],
+  "class": "branch arm",
+  "fixed": "rewrite: the head of a branch arm is an ordered source"
+ },
+ {
+  "id": "F09",
+  "file": "findings/inline_fvm_arm_effect_lost.cml",
+  "pipeline": [
+   "std::inline",
+   "std::fvm"
+  ],
+  "env": {},
+  "expected": [
+   ""
+  ],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F10",
+  "file": "findings/inline_unused_branch_effect_lost.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   ""
+  ],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F11",
+  "file": "findings/simplify_arm_write_lost.cml",
+  "pipeline": [
+   "std::opt::simplify",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "a"
+  ],
+  "class": "written variable taken for one value"
+ },
+ {
+  "id": "F12",
+  "file": "findings/simplify_effect_order.cml",
+  "pipeline": [
+   "std::opt::simplify",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "",
+   "L1 0 0"
+  ],
+  "class": "effect order lost",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F13",
+  "file": "findings/inline_dce_arm_value.cml",
+  "pipeline": [
+   "std::inline",
+   "std::opt::dce",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "1"
+  ],
+  "class": "branch arm",
+  "fixed": "rewrite: the head of a branch arm is an ordered source"
+ },
+ {
+  "id": "F14",
+  "file": "findings/inline_branch_value_null.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "L4 (0, [0]) 0"
+  ],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F15",
+  "file": "findings/inline_match_value_null.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "L6 { n: 5, tag:  }"
+  ],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F16",
+  "file": "findings/fold_inline_env_value.cml",
+  "pipeline": [
+   "std::opt::fold",
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {
+   "PROGEN_I0": "4"
+  },
+  "expected": [
+   "L11 false 4"
+  ],
+  "class": "(other) wrong value after inlining",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F17",
+  "file": "findings/inline_jit_argument_value.cml",
+  "pipeline": [
+   "std::inline",
+   "std::jit"
+  ],
+  "env": {
+   "PROGEN_I1": "2"
+  },
+  "expected": [
+   "L8 0 0 24"
+  ],
+  "class": "(other) wrong value after inlining",
+  "fixed": "jit: the JOIN of a fused compare-branch takes the arm that reached it"
+ },
+ {
+  "id": "F18",
+  "file": "findings/inline_untaken_arm_fault.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F19",
+  "file": "findings/simplify_recursion_never_ends.cml",
+  "pipeline": [
+   "std::opt::simplify",
+   "std::nvm"
+  ],
+  "env": {
+   "PROGEN_I0": "2"
+  },
+  "expected": [],
+  "class": "unbounded growth",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F20",
+  "file": "findings/inline_crash_function_argument.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "(other) crash after a rewrite",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F21",
+  "file": "findings/inline_crash_capturing_lambda.cml",
+  "pipeline": [
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "(other) crash after a rewrite",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F22",
+  "file": "findings/specialize_inline_crash.cml",
+  "pipeline": [
+   "std::specialize",
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   ""
+  ],
+  "class": "(other) crash after a rewrite",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F23",
+  "file": "findings/simplify_crash.cml",
+  "pipeline": [
+   "std::opt::simplify",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "(other) crash after a rewrite"
+ },
+ {
+  "id": "F24",
+  "file": "findings/const_graph_capacity.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "a"
+  ],
+  "class": "unbounded growth"
+ },
+ {
+  "id": "F25",
+  "file": "findings/nested_function_value_crash.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "[1]"
+  ],
+  "class": "(other) crash without passes"
+ },
+ {
+  "id": "F26",
+  "file": "findings/string_of_bool_crash.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "true"
+  ],
+  "class": "(other) crash without passes"
+ },
+ {
+  "id": "F27",
+  "file": "findings/string_ordering.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "true",
+   "true",
+   "true",
+   "true"
+  ],
+  "class": "(other) operator not implemented"
+ },
+ {
+  "id": "F28",
+  "file": "findings/string_plus_assign.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "ab"
+  ],
+  "class": "(other) operator not implemented"
+ },
+ {
+  "id": "F29",
+  "file": "findings/mod_assign.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "2"
+  ],
+  "class": "(other) operator not implemented"
+ },
+ {
+  "id": "F30",
+  "file": "findings/tuple_comparison_parse.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "(true, x1)"
+  ],
+  "class": "(other) parser"
+ },
+ {
+  "id": "F31",
+  "file": "findings/return_named_function.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "true"
+  ],
+  "class": "(other) internal error without passes"
+ },
+ {
+  "id": "F32",
+  "file": "findings/fold_inline_match_arm_value.cml",
+  "pipeline": [
+   "std::opt::fold",
+   "std::inline",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "L4 0 3 a"
+  ],
+  "class": "branch arm",
+  "fixed": "inline: the entry roots of a body include SYNC and GATE"
+ },
+ {
+  "id": "F33",
+  "file": "findings/let_named_function_captured.cml",
+  "pipeline": [],
+  "env": {},
+  "expected": [
+   "[2]"
+  ],
+  "class": "(other) front end"
+ },
+ {
+  "id": "F34",
+  "file": "findings/opt_permanent_space.cml",
+  "pipeline": [
+   "std::specialize",
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "unbounded growth (a query that allocates in the permanent space)"
+ },
+ {
+  "id": "F35",
+  "file": "findings/opt_cast_argument_value.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "7.5",
+   "17.25",
+   "10.75"
+  ],
+  "class": "(other) wrong value after a rewrite",
+  "fixed": "specialize: a constant under a converting CAST is not a static value"
+ },
+ {
+  "id": "F36",
+  "file": "findings/inline_jit_second_call.cml",
+  "pipeline": [
+   "std::inline",
+   "std::jit"
+  ],
+  "env": {},
+  "expected": [
+   "1",
+   "1",
+   "11"
+  ],
+  "class": "(other) wrong value after inlining",
+  "fixed": "jit: two-operand instructions are encoded for any register assignment"
+ },
+ {
+  "id": "F37",
+  "file": "findings/inline_jit_arm_value_float.cml",
+  "pipeline": [
+   "std::inline",
+   "std::jit"
+  ],
+  "env": {},
+  "expected": [
+   "L8 3.5"
+  ],
+  "class": "(other) wrong value after inlining",
+  "fixed": "jit: the JOIN of a fused compare-branch takes the arm that reached it"
+ }
+]

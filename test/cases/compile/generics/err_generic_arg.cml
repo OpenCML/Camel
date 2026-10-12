@@ -1,0 +1,14 @@
+module err_generic_arg
+
+func id(x: typeas T): T {
+    return x
+}
+
+func apply(f: (x: typeas T) => typeas U, x: T): U {
+    return f(x)
+}
+
+func main(): int sync {
+    println(apply(id, 3))
+    return 0
+}

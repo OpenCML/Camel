@@ -1,0 +1,452 @@
+// The standard library reference, read from the signature files and the library sources.
+//
+//   node scripts/stdlib-reference.mjs --write       regenerate docs/stdlib-reference.md
+//   node scripts/stdlib-reference.mjs --verify-doc  docs/stdlib-reference.md is what --write would produce
+//   node scripts/stdlib-reference.mjs --verify-ops  the signature files list exactly the operators the
+//                                                   modules register (needs a built compiler)
+//
+// stdlib/signatures/<module>.cml declares the operators a C++ module exports (globals.cml: the
+// built-in ones), one `inner func` each, with a doc comment:
+//
+//   /// What it does, in one or more lines.
+//   /// @pure                      or  @effect <what the effect is>
+//   /// @fails <fault or error and when>          (optional; several conditions separated by `;`)
+//   /// @example <code>    // <result>
+//   with <a: A>                                    (optional: the with-parameters)
+//   inner func name(x: X): R {
+//       return 'protocol:operator'                 (the URI; `*` stands for any text, for a
+//   }                                               group of overloads that differ by type)
+//
+// A library module written in Camel (stdlib/<module>.cml) is its own signature file: its
+// `export func` declarations and their `///` comments are read the same way.
+//
+// --verify-ops runs `camel inspect --ops` on a program that imports every module and compares,
+// per module: every registered operator (name, parameter counts) has a declaration whose URI
+// pattern matches it, every declaration matches a registered operator, and @pure / @effect is
+// what the module declared in the operator traits registry. So a signature file cannot list an
+// operator that does not exist, miss one that does, or disagree on the number of parameters
+// or on purity.
+
+import fs from 'fs'
+import path from 'path'
+import { spawnSync } from 'child_process'
+import { fileURLToPath } from 'url'
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const SIGNATURE_DIR = path.join(REPO_ROOT, 'stdlib', 'signatures')
+const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
+const DOC_PATH = path.join(REPO_ROOT, 'docs', 'stdlib-reference.md')
+const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
+
+// The modules of the reference, in the order of the document. `source` is the file read:
+// a signature file for a C++ module, the library itself for a module written in Camel.
+const MODULES = [
+    { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp' },
+    { name: 'str', title: '`str`: strings', kind: 'cpp' },
+    { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
+    { name: 'math', title: '`math`: numbers and bits', kind: 'cpp' },
+    { name: 'statistics', title: '`statistics`', kind: 'cpp' },
+    { name: 'algo', title: '`algo`: sorting and array primitives', kind: 'cpp' },
+    { name: 'random', title: '`random`', kind: 'cpp' },
+    { name: 'time', title: '`time`', kind: 'cpp' },
+    { name: 'fs', title: '`fs`: files', kind: 'cpp' },
+    { name: 'os', title: '`os`: process and terminal', kind: 'cpp' },
+    { name: 'sys', title: '`sys`: environment', kind: 'cpp' },
+    { name: 'json', title: '`json`', kind: 'cpp' },
+    { name: 're', title: '`re`: regular expressions', kind: 'cpp' },
+    { name: 'crypto', title: '`crypto`', kind: 'cpp' },
+    { name: 'para', title: '`para`: unordered iteration', kind: 'cpp' },
+    { name: 'this', title: '`this`', kind: 'cpp' },
+]
+
+function sourceOf(module) {
+    return module.kind === 'camel'
+        ? path.join(STDLIB_DIR, `${module.name}.cml`)
+        : path.join(SIGNATURE_DIR, `${module.name}.cml`)
+}
+
+// ---- reading declarations ------------------------------------------------------------------
+
+// The parameters of a list written between brackets, split at the commas that are not nested.
+function splitParams(text) {
+    const parts = []
+    let depth = 0
+    let current = ''
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i]
+        if (c === '=' && text[i + 1] === '>') {
+            current += '=>'
+            i++
+            continue
+        }
+        if ('([{<'.includes(c)) depth++
+        if (')]}>'.includes(c)) depth--
+        if (c === ',' && depth === 0) {
+            parts.push(current.trim())
+            current = ''
+        } else {
+            current += c
+        }
+    }
+    if (current.trim()) parts.push(current.trim())
+    return parts
+}
+
+// -1 for a list with a variadic parameter, as `camel inspect --ops` reports it.
+function countParams(params) {
+    return params.some((p) => p.startsWith('...')) ? -1 : params.length
+}
+
+// The text between the bracket at `open` and its partner.
+function bracketed(text, open) {
+    const pairs = { '(': ')', '<': '>' }
+    const close = pairs[text[open]]
+    let depth = 0
+    for (let i = open; i < text.length; i++) {
+        if (text[i] === '=' && text[i + 1] === '>') {
+            i++
+            continue
+        }
+        if (text[i] === text[open]) depth++
+        if (text[i] === close) depth--
+        if (depth === 0) return { inner: text.slice(open + 1, i), end: i }
+    }
+    throw new Error(`unbalanced brackets in: ${text}`)
+}
+
+function parseDeclarations(module) {
+    const file = sourceOf(module)
+    const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
+    const keyword = module.kind === 'camel' ? 'export func' : 'inner func'
+    const entries = []
+    const sectionNotes = new Map()
+    entries.sectionNotes = sectionNotes
+    let section = ''
+    let doc = []
+    let withText = ''
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        const trimmed = line.trim()
+        const sectionMatch = trimmed.match(/^\/\/ ---- (.+?) ----$/)
+        if (sectionMatch) {
+            section = sectionMatch[1]
+            // The plain comment lines right under a section line are its introduction.
+            const notes = []
+            while (i + 1 < lines.length && /^\/\/(?!\/)/.test(lines[i + 1].trim())) {
+                notes.push(lines[++i].trim().replace(/^\/\/ ?/, ''))
+            }
+            while (notes.length && notes[0] === '') notes.shift()
+            sectionNotes.set(section, notes)
+            continue
+        }
+        if (trimmed.startsWith('///')) {
+            doc.push(trimmed.slice(3).replace(/^ /, ''))
+            continue
+        }
+        if (trimmed.startsWith('with <')) {
+            withText = bracketed(trimmed, trimmed.indexOf('<')).inner
+            continue
+        }
+        if (trimmed.startsWith(keyword + ' ')) {
+            const rest = trimmed.slice(keyword.length + 1)
+            const name = rest.slice(0, rest.indexOf('('))
+            const args = bracketed(rest, rest.indexOf('('))
+            const after = rest.slice(args.end + 1)
+            const result = after.replace(/^\s*:\s*/, '').replace(/\s*(sync\s*)?\{\s*$/, '').trim()
+            const entry = {
+                module: module.name,
+                name,
+                section,
+                line: i + 1,
+                with: splitParams(withText),
+                norm: splitParams(args.inner),
+                result,
+                doc: [],
+                purity: null,
+                effect: '',
+                fails: [],
+                examples: [],
+                uri: null,
+            }
+            for (const text of doc) {
+                if (text.startsWith('@pure')) entry.purity = 'pure'
+                else if (text.startsWith('@effect')) {
+                    entry.purity = 'effect'
+                    entry.effect = text.slice('@effect'.length).trim()
+                } else if (text.startsWith('@fails')) entry.fails.push(text.slice('@fails'.length).trim())
+                else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
+                else entry.doc.push(text)
+            }
+            if (module.kind === 'cpp') {
+                const body = (lines[i + 1] || '').trim().match(/^return '([^']+)'$/)
+                if (!body) throw new Error(`${path.basename(file)}:${i + 2}: expected return '<uri>'`)
+                entry.uri = body[1]
+            }
+            entries.push(entry)
+            doc = []
+            withText = ''
+            continue
+        }
+        if (trimmed !== '' && !trimmed.startsWith('//')) {
+            // Anything else ends a pending comment (a private function of a Camel library).
+            doc = []
+            withText = ''
+        }
+    }
+    return entries
+}
+
+// The comment at the top of the file, without the note that it is not compiled.
+function parseHeader(module) {
+    const text = fs.readFileSync(sourceOf(module), 'utf8').replace(/\r\n/g, '\n')
+    const match = text.match(/^\/\*\*\n([\s\S]*?)\n \*\//)
+    if (!match) return []
+    const lines = match[1].split('\n').map((l) => l.replace(/^ \* ?/, ''))
+    const stop = lines.findIndex((l) => l.startsWith('For reference only'))
+    const kept = stop >= 0 ? lines.slice(0, stop) : lines
+    while (kept.length && kept[kept.length - 1].trim() === '') kept.pop()
+    // The first line of a signature file says what the file is; the reference has its own title.
+    if (kept.length && kept[0].startsWith('Signatures of')) {
+        kept.shift()
+        while (kept.length && kept[0].trim() === '') kept.shift()
+    }
+    return kept
+}
+
+// ---- the document -------------------------------------------------------------------------
+
+function signatureText(entry) {
+    const withPart = entry.with.length ? `<${entry.with.join(', ')}> ` : ''
+    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || 'void'}`
+}
+
+function renderDoc() {
+    const out = []
+    out.push('# Standard Library Reference')
+    out.push('')
+    out.push('<!-- Generated by scripts/stdlib-reference.mjs --write. Do not edit: change the signature files')
+    out.push('     (stdlib/signatures/*.cml) or the comments of the library (stdlib/*.cml) and regenerate. -->')
+    out.push('')
+    out.push('The functions of the core standard library, by module. The boundary is the one the design')
+    out.push('principles draw (section 2.9): a primitive that touches the system or is sensitive to')
+    out.push('performance is an operator written in C++, an opaque node of the graph; logic composed from')
+    out.push('primitives is written in Camel, a subgraph that passes can see into.')
+    out.push('')
+    out.push('How to read an entry:')
+    out.push('')
+    out.push('- **Signature**: `name: <with-parameters> (parameters) => result`. The value a function works')
+    out.push("  on is its ordinary parameter and what configures it is a with-parameter, so calls chain:")
+    out.push("  `s->trim->split<','>`, `xs->filter<p>->sort_by<key>`. `int` is the 64-bit integer and `float`")
+    out.push('  the 64-bit float; `i32` and `f32` are the 32-bit ones. `A | B` in a parameter means one')
+    out.push('  overload per type; numeric types are never converted implicitly.')
+    out.push('- **Pure** operators depend on their arguments only: a pass may evaluate a call ahead of time,')
+    out.push('  merge two equal calls or drop an unused one. An operator **with effects** is left alone, and')
+    out.push('  its call runs only when it is reachable from a `sync` block or its result is used (design')
+    out.push('  principles 2.1). Every operator of these modules declares which it is.')
+    out.push('- **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an')
+    out.push('  argument outside what the operator defines). An *error* is a value: the function returns')
+    out.push('  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is')
+    out.push('  `T?`, handled with `??`. An entry without a failure line does not fail.')
+    out.push('- Write one call that has with-arguments per statement when several appear in one argument')
+    out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
+    out.push('')
+    out.push('Not in this reference: the tensor stack (`tensor`, `nn`, `autodiff`, `onnx`, `sim`), the Python')
+    out.push('bridge (`python`, `pyplot`) and the profiler (`perf`).')
+    out.push('')
+    out.push('| Module | Import | Written in | Functions |')
+    out.push('|---|---|---|---|')
+    const parsed = MODULES.map((module) => ({ module, entries: parseDeclarations(module) }))
+    for (const { module, entries } of parsed) {
+        const names = [...new Set(entries.map((e) => e.name))]
+        const anchor = module.name === 'globals' ? 'built-in-functions' : module.name
+        out.push(
+            `| [${module.name === 'globals' ? 'built-in' : module.name}](#${anchor}) | ` +
+                `${module.name === 'globals' ? 'none' : '`import { ... } from ' + module.name + '`'} | ` +
+                `${module.kind === 'camel' ? 'Camel' : 'C++'} | ${names.length} |`,
+        )
+    }
+    out.push('')
+    for (const { module, entries } of parsed) {
+        out.push(`<a id="${module.name === 'globals' ? 'built-in-functions' : module.name}"></a>`)
+        out.push('')
+        out.push(`## ${module.title}`)
+        out.push('')
+        const header = parseHeader(module)
+        if (header.length) {
+            out.push(...header)
+            out.push('')
+        }
+        // Overloads written one after another under one comment are one entry.
+        const groups = []
+        for (const entry of entries) {
+            const last = groups[groups.length - 1]
+            if (last && last[0].name === entry.name && entry.doc.length === 0) last.push(entry)
+            else groups.push([entry])
+        }
+        let section = null
+        for (const group of groups) {
+            const entry = group[0]
+            if (entry.section !== section && entry.section) {
+                out.push(`### ${entry.section[0].toUpperCase()}${entry.section.slice(1)}`)
+                out.push('')
+                const notes = entries.sectionNotes.get(entry.section) || []
+                if (notes.length) {
+                    out.push(...notes)
+                    out.push('')
+                }
+            }
+            section = entry.section
+            out.push(`#### \`${entry.name}\``)
+            out.push('')
+            out.push('```camel')
+            for (const overload of group) out.push(signatureText(overload))
+            out.push('```')
+            out.push('')
+            out.push(entry.doc.join('\n'))
+            out.push('')
+            if (module.kind === 'camel') {
+                out.push('- Written in Camel: a subgraph, pure when the functions passed to it are.')
+            } else if (entry.purity === 'pure') {
+                out.push('- Pure.')
+            } else {
+                out.push(`- With effects: ${entry.effect || 'not pure'}.`)
+            }
+            for (const fails of entry.fails) {
+                out.push(`- Failure: ${fails}.`)
+            }
+            for (const example of entry.examples) {
+                const [code, result] = example.split(/\s{2,}\/\/\s*/)
+                out.push(result ? `- Example: \`${code}\` gives \`${result}\`` : `- Example: \`${code}\``)
+            }
+            out.push('')
+        }
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
+}
+
+// ---- checking against the registered operators --------------------------------------------
+
+function camelExe() {
+    if (process.env.CAMEL_EXE) return process.env.CAMEL_EXE
+    return path.join(REPO_ROOT, 'out', 'latest', 'bin', process.platform === 'win32' ? 'camel.exe' : 'camel')
+}
+
+function registeredOperators() {
+    const run = spawnSync(camelExe(), ['inspect', '--ops', PROBE], { encoding: 'utf8', maxBuffer: 1 << 26 })
+    if (run.status !== 0) {
+        throw new Error(`camel inspect --ops failed (exit ${run.status}): ${run.stderr || run.stdout}`)
+    }
+    return run.stdout
+        .split('\n')
+        .filter((line) => line.startsWith('OPERATOR '))
+        .map((line) => JSON.parse(line.slice('OPERATOR '.length)))
+}
+
+function uriMatches(pattern, uri) {
+    const source = pattern.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')
+    return new RegExp(`^${source}$`).test(uri)
+}
+
+function countsAgree(declared, registered) {
+    // -1: any number, -2: the resolver does not tell.
+    return declared === registered || declared < 0 || registered < 0
+}
+
+function verifyOps() {
+    const registered = registeredOperators()
+    const problems = []
+    let checked = 0
+    for (const module of MODULES.filter((m) => m.kind === 'cpp')) {
+        const registeredName = module.registered || module.name
+        const file = `stdlib/signatures/${module.name}.cml`
+        // The operators behind the language's own operators are registered under reserved names.
+        const ops = registered.filter((op) => op.module === registeredName && !op.name.startsWith('__'))
+        if (ops.length === 0) {
+            problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
+            continue
+        }
+        const entries = parseDeclarations(module)
+        for (const op of ops) {
+            const sameName = entries.filter((e) => e.name === op.name)
+            if (sameName.length === 0) {
+                problems.push(`${file}: '${op.name}' (${op.uri}) is registered but not declared`)
+                continue
+            }
+            const matching = sameName.filter(
+                (e) => uriMatches(e.uri, op.uri) && countsAgree(e.with.length ? countParams(e.with) : 0, op.with) && countsAgree(countParams(e.norm), op.norm),
+            )
+            if (matching.length === 0) {
+                problems.push(
+                    `${file}: no declaration of '${op.name}' matches the registered ${op.uri} with ${op.with} with-parameter(s) and ${op.norm} parameter(s): ${op.signature}`,
+                )
+                continue
+            }
+            checked++
+            for (const entry of matching) {
+                const declaredPure = entry.purity === 'pure'
+                if (entry.purity === null) {
+                    problems.push(`${file}:${entry.line}: '${entry.name}' says neither @pure nor @effect`)
+                } else if (declaredPure !== (op.purity === 'pure')) {
+                    problems.push(
+                        `${file}:${entry.line}: '${entry.name}' is ${declaredPure ? '@pure' : '@effect'} but ${op.uri} is registered ${op.purity}`,
+                    )
+                }
+            }
+        }
+        for (const entry of entries) {
+            const hit = ops.some((op) => op.name === entry.name && uriMatches(entry.uri, op.uri))
+            if (!hit) {
+                problems.push(`${file}:${entry.line}: '${entry.name}' (${entry.uri}) is declared but no such operator is registered`)
+            }
+            if (entry.doc.length === 0) problems.push(`${file}:${entry.line}: '${entry.name}' has no description`)
+            if (entry.examples.length === 0) problems.push(`${file}:${entry.line}: '${entry.name}' has no @example`)
+        }
+    }
+    // A signature file without a module of the reference would never be checked.
+    for (const file of fs.readdirSync(SIGNATURE_DIR)) {
+        const name = file.replace(/\.cml$/, '')
+        if (!MODULES.some((m) => m.kind === 'cpp' && m.name === name)) {
+            problems.push(`stdlib/signatures/${file}: not a module of the reference (see MODULES in scripts/stdlib-reference.mjs)`)
+        }
+    }
+    for (const module of MODULES.filter((m) => m.kind === 'camel')) {
+        let previous = null
+        for (const entry of parseDeclarations(module)) {
+            // An overload written right after another one shares its comment.
+            if (entry.doc.length === 0 && previous !== entry.name) {
+                problems.push(`stdlib/${module.name}.cml:${entry.line}: '${entry.name}' has no description`)
+            }
+            previous = entry.name
+        }
+    }
+    return { problems, checked }
+}
+
+// ---- main -----------------------------------------------------------------------------------
+
+const mode = process.argv[2] || '--verify-doc'
+if (mode === '--write' || mode === '--verify-doc') {
+    const text = renderDoc()
+    if (mode === '--write') {
+        fs.writeFileSync(DOC_PATH, text)
+        console.log(`wrote docs/stdlib-reference.md (${(text.match(/^#### /gm) || []).length} entries)`)
+    } else {
+        const current = fs.existsSync(DOC_PATH) ? fs.readFileSync(DOC_PATH, 'utf8').replace(/\r\n/g, '\n') : ''
+        if (current !== text) {
+            console.log('docs/stdlib-reference.md is out of date: run `node scripts/stdlib-reference.mjs --write`')
+            process.exit(1)
+        }
+        console.log('docs/stdlib-reference.md is up to date')
+    }
+} else if (mode === '--verify-ops') {
+    const { problems, checked } = verifyOps()
+    for (const problem of problems) console.log(problem)
+    if (problems.length > 0) {
+        console.log(`${problems.length} difference(s) between the signature files and the registered operators`)
+        process.exit(1)
+    }
+    console.log(`the signature files agree with the ${checked} registered operator overloads`)
+} else {
+    console.log('usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops')
+    process.exit(2)
+}

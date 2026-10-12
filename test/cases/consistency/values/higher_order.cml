@@ -1,0 +1,17 @@
+/**
+ * map, filter, reduce and foreach with pure element functions: results are in element order on
+ * every back end; foreach and reduce run in element order.
+ */
+module higher_order
+
+func main(): int sync {
+    let xs = range(0, 40)
+    let squares = xs->map<(x: int): int => x * x>
+    let evens = squares->filter<(x: int): bool => x % 2 == 0>
+    println(squares)
+    println(evens)
+    println(xs->reduce<(acc: int, x: int): int => acc * 3 + x, 0>)
+    xs->filter<(x: int): bool => x % 13 == 0>->foreach<(x: int) => sync { println(x) }>
+    println(len(evens))
+    return 0
+}

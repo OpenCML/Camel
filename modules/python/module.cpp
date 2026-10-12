@@ -31,6 +31,8 @@
 #include "operators.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <initializer_list>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -610,6 +612,41 @@ namespace {
 // scheduler, several at once), so each takes the GIL for its duration, and the loading thread
 // gives it up once the module is loaded. A thread that never held the GIL has no Python thread
 // state at all: calling into the interpreter from it crashes.
+// Python buffers its standard output when that is not a terminal, and this interpreter is never
+// finalized (objects of the program may still refer to it when the process ends), so what a
+// Python `print` wrote to a pipe or a file never arrived. Two measures: standard output is put
+// in line mode, so that a line is written when it is printed and stays in order with the
+// program's own output; and whatever is still buffered is flushed when the process exits,
+// whether the program returned, called exit() or was stopped by a fault.
+void flushPythonStandardStreams() {
+    if (!Py_IsInitialized()) {
+        return;
+    }
+    const PyGILState_STATE state = PyGILState_Ensure();
+    for (const char *name : {"stdout", "stderr"}) {
+        PyObject *stream = PySys_GetObject(name); // borrowed
+        if (stream == nullptr || stream == Py_None) {
+            continue;
+        }
+        if (PyObject *result = PyObject_CallMethod(stream, "flush", nullptr)) {
+            Py_DECREF(result);
+        } else {
+            PyErr_Clear();
+        }
+    }
+    PyGILState_Release(state);
+}
+
+void keepPythonOutputInOrder() {
+    try {
+        py::module_::import("sys").attr("stdout").attr("reconfigure")(
+            py::arg("line_buffering") = true);
+    } catch (...) {
+        // A replaced sys.stdout without reconfigure: the flush at exit still applies.
+    }
+    std::atexit(flushPythonStandardStreams);
+}
+
 struct ReleaseGilAfterLoad {
     bool armed = false;
     ~ReleaseGilAfterLoad() {
@@ -653,6 +690,7 @@ bool PythonModule::load() {
             set_python_home_from_venv();
             py::initialize_interpreter();
             releaseGil.armed = true;
+            keepPythonOutputInOrder();
             ensure_site_packages_in_path();
             ensure_extra_python_paths_in_path();
         } else {

@@ -1,0 +1,24 @@
+/**
+ * `(e)` is a parenthesized expression and `(e, ...)` a tuple, whatever stands inside. A tuple
+ * whose first element has a `<` and that has a `>` further on used to be a syntax error
+ * ("missing ')' at ','", progen finding F30): the parser took `a < 2, ...>` for angled
+ * arguments while choosing between the two forms.
+ */
+module tuple_and_parenthesis
+
+func main(): int sync {
+    let a = 1
+    let u = (a < 2, 'x{}'->format<a>)
+    println(u)
+    println((a < 2, a > 0))
+    println((a < 2, a > (0)))
+    println((a < 2, a > -1, a >= (1)))
+    println((a))
+    println(((a + 1)) * 2)
+    println((a < 2) && (a > 0))
+    let single = (a,)
+    println(single.0)
+    println((a, a + 1).1)
+    println([(a < 2, 1 > a)])
+    return 0
+}

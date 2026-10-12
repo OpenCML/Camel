@@ -1,0 +1,48 @@
+/**
+ * The tagged forms in other positions: a struct field, array elements, the two marks combined
+ * (`int?!`), `void!`, a lambda that returns a `T!`, a `var`, an annotated `let`.
+ */
+module combined
+type Rec = { name: string?, n: int }
+
+func total(xs: (int?)[]): int {
+    return (xs[0] ?? 0) + (xs[1] ?? 0)
+}
+
+func lookup(k: int): int?! {
+    if k < 0 then {
+        throw error('KeyError', 'negative key')
+    } else {
+        return if k == 0 then null as int? else k as int?
+    }
+}
+
+func save(ok: bool): void! {
+    if ok then { return null } else { throw error('IOError', 'disk') }
+}
+
+func show(r: int?!): string {
+    return match r {
+        case error e => e.kind
+        case v => format<v ?? -1>('{}')
+    }
+}
+
+func main(): int sync {
+    let r = { name: null as string?, n: 1 }
+    println(r.name ?? 'anonymous')
+    println(total([1 as int?, null as int?]))
+    println(show(lookup(-1)))
+    println(show(lookup(0)))
+    println(show(lookup(5)))
+    println(save(true))
+    println(save(false))
+    let f = (x: int): int! => { return x + 1 }
+    println(f(1) !! 0)
+    var v = 3 as int?
+    v = null as int?
+    println(v ?? 9)
+    let w: int! = 4
+    println(w !! 0)
+    return 0
+}

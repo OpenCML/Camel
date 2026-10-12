@@ -1,0 +1,48 @@
+module main
+
+// Map and Set with `typeas`: the variables are bound from the arguments of the collection
+// type, and each set of types gets its own instance. `map_values` and `filter_keys` are the
+// compositions the library cannot ship yet (a generic function cannot be exported).
+
+func get_or_else(m: Map<typeas K, typeas V>, k: K, d: V): V {
+    return m[k] ?? d
+}
+
+func map_values(m: Map<typeas K, typeas V>, f: (v: V) => typeas U): Map<K, U> {
+    return items(m)->map<(kv: (K, V)): (K, U) => (kv.0, f(kv.1))> as Map<K, U>
+}
+
+func filter_keys(m: Map<typeas K, typeas V>, f: (k: K) => bool): Map<K, V> {
+    return items(m)->filter<(kv: (K, V)): bool => f(kv.0)> as Map<K, V>
+}
+
+func to_set(xs: (typeas T)[]): Set<T> {
+    return xs as Set<T>
+}
+
+func key_set(m: Map<typeas K, typeas V>): Set<K> {
+    return keys(m) as Set<K>
+}
+
+func singleton(k: typeas K, v: typeas V): Map<K, V> {
+    return put([] as Map<K, V>, k, v)
+}
+
+func count_words(words: string[]): Map<string, int> {
+    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+}
+
+func main(): int sync {
+    let m = [('a', 2), ('b', 3)] as Map<string, int>
+    println(get_or_else(m, 'b', 0), get_or_else(m, 'x', 7))
+    let names = [(1, 'one'), (2, 'two')] as Map<int, string>
+    println(get_or_else(names, 2, '?'), get_or_else(names, 3, '?'))
+    let scaled = map_values(m, (v: int): float => float(v) * 1.5)
+    println(scaled)
+    println(filter_keys(scaled, (k: string): bool => k == 'b'))
+    println(to_set([3, 3, 1]), to_set(['y', 'x', 'y']))
+    println(key_set(m), key_set(names))
+    println(singleton('k', 1.5), singleton((1, 2), 'pair'))
+    println(count_words(['x', 'y', 'x', 'z', 'x', 'y']))
+    return 0
+}

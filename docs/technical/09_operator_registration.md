@@ -121,10 +121,52 @@ OperatorGroup::create(
 | **Executor 加载时机** | Executor 按需懒加载，首次调用该 protocol 的算子时才实例化。 |
 | **模块导出顺序** | 先 `load()` 再使用；`load()` 中应完成 executor 注册和所需初始化（如 Python 解释器）。 |
 
-## 6. 参考
+## 6. 纯度声明
+
+设计原则 2.9：算子的纯度必须声明；没有声明的算子按有副作用对待（少优化，不会算错）。
+
+- 模块在 `load()` 里为**每一个**算子声明，有副作用的也要写出来：
+
+  ```cpp
+  camel::core::OperatorTraitsRegistry::instance().declare(
+      "fs",
+      {
+          // 读取的结果取决于当时文件系统里有什么
+          {"read_text", false},
+          {"exists", false},
+          {"write_text", false},
+      });
+  ```
+
+  `declare(protocol, {{name, pure}, ...})` 逐个登记 `protocol:name`；需要 `elementwise` 等其他性质时用
+  `set(uri, traits)`。
+- **纯**的含义：结果只取决于实参。读时钟、随机数发生器、环境变量、文件的算子都不纯；原地修改实参
+  （形参声明为 `var`）的算子不纯。登记为纯之后，`std::opt` 会提前求值、合并相同的调用、删除无人使用的
+  调用，并行调度器会并发执行它。
+- `camel inspect --ops <文件>` 列出内建模块与该程序导入的每个模块的全部算子：每个重载一行
+  `OPERATOR {json}`，含模块、名字、URI、`with`/普通参数个数（`-1` 表示不限，`-2` 表示解析器没有给出）、
+  声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名。
+- 从文件加载的模块如有未声明的算子，加载时给出一条 warn 级日志（`camel -v ...` 可见），列出这些算子；
+  它们仍按有副作用对待。
+- 仓库内的模块由测试约束（`test/plans/feat/modules/stdlib_registry.plan.toml`）：不得有未声明的算子。
+
+## 7. 签名文件与标准库参考
+
+- `stdlib/signatures/<模块>.cml` 逐个声明模块导出的算子（`globals.cml` 是内建函数）：`///` 注释写说明，
+  `@pure` 或 `@effect <原因>`、`@fails <失败时的行为>`、`@example <代码>    // <结果>`，函数体里
+  `return '<URI>'`（`*` 通配一组只在类型上不同的重载）。这些文件不参与编译。
+- 用 Camel 写的库（`stdlib/<模块>.cml`）本身就是签名文件：读它的 `export func` 与 `///` 注释。
+- `node scripts/stdlib-reference.mjs --write` 由它们生成 `docs/stdlib-reference.md`；`--verify-doc` 检查
+  文档是最新的；`--verify-ops` 用 `camel inspect --ops` 的结果核对签名文件：每个已注册的算子都有声明、
+  每条声明都对应一个已注册的算子、参数个数一致、`@pure`/`@effect` 与登记的纯度一致。三者都在默认测试
+  集里（同一个测试计划）。新增或修改算子后：改签名文件，运行 `--write`，提交生成的文档。
+
+## 8. 参考
 
 - `include/camel/core/operator.h`：OperatorGroup、OperatorIndex。
 - `include/camel/core/type/resolver.h`：StaticFuncTypeResolver、DynamicFuncTypeResolver。
 - `include/camel/execute/executor.h`：Executor、ExecutorManager。
 - `src/execute/executor.cpp`：URI 解析与 Executor 分派逻辑。
-- `libs/python/`：外源模块示例（python.cmo）。
+- `include/camel/core/operator_traits.h`：纯度等算子性质的登记。
+- `include/camel/core/module/introspect.h`：列出模块的算子（`camel inspect --ops`）。
+- `modules/str/`：一个只有纯算子的小模块，可作新模块的样板；`modules/python/`：带外部运行时的模块。

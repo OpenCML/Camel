@@ -94,7 +94,12 @@ bracketIdents : '[' identList? ','? ']' ;    // for array unpacking
 carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
 
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
-typeDecl   : implMark? TYPE identRef '=' (typeExpr | STRING) ;
+// With parameters a type function: `type Pair<T> = (T, T)`. `>=` is one token, so `Pair<T>=`
+// is accepted as well.
+typeDecl
+    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+      (typeExpr | STRING)
+    ;
 useDecl    : USE (identDef '=')? identRef ;
 retStmt    : (RETURN | RAISE | THROW) dataList ;
 
@@ -121,8 +126,9 @@ parentArgues : '(' argumentList? ','? ')' ; // for functor arguments
 angledParams : '<' pairedParams? ','? '>' ; // for functor super parameters definition
 angledValues : '<' argumentList? ','? '>' ; // for functor super arguments
 
+// `identRef identDef` is the fixed pattern `error e` (a failed `T!`, its error bound to `e`).
 pattern
-    : identRef
+    : identRef identDef?
     | literal
     | '(' (dataList | identList)? ','? ')'
     | '{' (pairedValues | identList)? ','? '}'
@@ -219,6 +225,11 @@ arrayData
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 
+// Also the parenthesized expression: `(e)`, one element and no comma, is `e`; `(e,)` is the
+// one-element tuple. The two are one rule so that the parser does not have to choose between
+// them by looking ahead. It used to, across the whole bracket, and prediction looks ahead
+// without evaluating isAdjacent(): in `(a < 2, f<b>)` it took `a<2, f<b>` for a call with
+// angled arguments, chose the parenthesized expression and then failed at the comma.
 tupleData
     : '(' dataList? ','? ')'
     ;
@@ -228,7 +239,6 @@ primaryData
     | literal
     | arrayData
     | structData
-    | '(' dataExpr ')'
     | tupleData
     | funcData
     ;
@@ -244,8 +254,10 @@ literal
     | NULL
     ;
 
+// `T?` may be null, `T!` may have failed (design principles 2.9); the marks combine (`T?!`).
+// `T ? U` is an earlier reserved form (undecided, not implemented).
 typeExpr
-    : unionType ('?' unionType?)?
+    : unionType (('?' | '!')+ | '?' unionType)?
     ;
 
 unionType

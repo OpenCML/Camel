@@ -1,0 +1,33 @@
+id = "parse.tuples"
+order = 301
+tier = "feat"
+tags = ["feat", "parse", "tuples"]
+desc = "Tuples and parenthesized expressions."
+
+[[tests]]
+name = "tuple_and_parenthesis.nvm"
+desc = "(e) is a parenthesized expression and (e, ...) a tuple whatever stands inside; a tuple with < in its first element and > further on used to be a syntax error (progen F30) (nvm)"
+kind = "behavior"
+case = "../../../cases/parse/syntax/tuple_and_parenthesis.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "(true, x1)",
+  "(true, true)",
+  "(true, true)",
+  "(true, true, true)",
+  "1",
+  "4",
+  "true",
+  "1",
+  "2",
+  "[(true, false)]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

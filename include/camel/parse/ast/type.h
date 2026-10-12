@@ -54,11 +54,18 @@ class TypeLoad : public Load {
     TypeType typeType_;
 };
 
+/// A type with one postfix mark: `T?` (may be null) or, when `fallible`, `T!` (may have failed).
 class NullableTypeLoad : public TypeLoad {
   public:
-    NullableTypeLoad() : TypeLoad(TypeType::Null) {}
-    const std::string toString() const override { return "NullableType"; }
+    NullableTypeLoad(bool fallible = false) : TypeLoad(TypeType::Null), fallible_(fallible) {}
+    bool fallible() const { return fallible_; }
+    const std::string toString() const override {
+        return fallible_ ? "FallibleType" : "NullableType";
+    }
     const std::string geneCode() const override;
+
+  private:
+    bool fallible_;
 };
 
 class TypeExprLoad : public TypeLoad {

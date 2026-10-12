@@ -35,6 +35,7 @@
 #include "camel/core/type/composite/array.h"
 
 #include "camel/core/context/context.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
@@ -168,6 +169,11 @@ bool OnnxModule::load() {
     context_->registerExecutorFactory("onnx", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<OnnxExecutor>(ctx);
     });
+    // The purity of every operator (design principles 2.9). export_model writes a file;
+    // supported_operators is declared with effects until someone has checked that it is not.
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "onnx",
+        {{"export_model", false}, {"supported_operators", false}});
     // Where an export would stop: an operator the ONNX backend has no lowering for.
     camel::runtime::NodeRoleRegistry::instance().add(
         {"export-capability", "export capability (no ONNX lowering)", "#cfe2f3"},

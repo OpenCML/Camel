@@ -1,0 +1,10 @@
+module fault_substr_negative
+
+import { substr } from str
+
+func main(): int sync {
+    println('before')
+    println('hello'->substr<1, -1>)
+    println('not reached')
+    return 0
+}

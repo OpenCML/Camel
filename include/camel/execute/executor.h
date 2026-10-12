@@ -56,8 +56,9 @@ class ExecutorManager {
     std::unordered_map<std::string, executor_factory_t> executorFactories;
     mutable std::unordered_map<std::string, executor_ptr_t> loadedExecutors;
     // find() loads an executor on the first use of its protocol, and parallel schedulers call
-    // it from several workers at once.
+    // it from several workers at once. The mutex guards both maps.
     mutable std::shared_mutex loadedExecutorsMutex;
+    bool factoryRegistered(const std::string &protocol) const;
 
   public:
     ExecutorManager(camel::core::context::context_ptr_t ctx) : context_(ctx) {};

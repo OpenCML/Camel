@@ -113,12 +113,18 @@ appendUniqueRefs(std::span<const gc_node_ref_t> lhs, std::span<const gc_node_ref
     return merged;
 }
 
+/// Kinds an entry root of an inlined body may have: every node that is not a value carrier.
+/// SYNC and GATE count. A callee that was itself inlined into (earlier in the same session, or
+/// by an earlier pass) starts with the entry SYNC of that splice, and its first operators wait
+/// on that SYNC: they have a non-constant input, so they are not roots themselves. Leaving the
+/// SYNC out made such a body have no root at all. The control predecessors of the call (the
+/// BRCH whose arm the call is, the statement before it) were then attached to the callee's
+/// recorded entry node only, and everything behind the SYNC ran whether the arm was taken or
+/// not, and before the statements it was written after.
 bool isExecutableEntryKind(GCNodeKind kind) {
     switch (kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
-    case GCNodeKind::Sync:
-    case GCNodeKind::Gate:
     case GCNodeKind::Dref:
         return false;
     default:
@@ -377,8 +383,22 @@ DraftStaticValue tryResolveStaticValue(const GraphDraft &draft, gc_node_ref_t no
             canonicalId           = withInputs.empty() ? kInvalidNodeRef : withInputs.back();
             continue;
         }
-        if (header->kind == GCNodeKind::Copy || header->kind == GCNodeKind::Cast ||
-            header->kind == GCNodeKind::Dref) {
+        if (header->kind == GCNodeKind::Cast) {
+            // A CAST computes a value: `7 as float` is 7.0, not the bits of the integer 7.
+            // Looking through it bound the unconverted constant to the parameter (f(i as
+            // float) computed with 0.0...035 instead of 7.0). Only a CAST between equal
+            // types forwards its input; a constant under any other CAST becomes a static
+            // value when std::opt::fold has evaluated the conversion.
+            const auto normInputs = draft.normInputsOf(canonicalId);
+            const DraftNodeHeader *source =
+                normInputs.empty() ? nullptr : draft.header(normInputs.front());
+            if (!source || !source->dataType || source->dataType != header->dataType) {
+                return resolved;
+            }
+            canonicalId = normInputs.front();
+            continue;
+        }
+        if (header->kind == GCNodeKind::Copy || header->kind == GCNodeKind::Dref) {
             const auto normInputs = draft.normInputsOf(canonicalId);
             canonicalId           = normInputs.empty() ? kInvalidNodeRef : normInputs.front();
             continue;
@@ -1703,6 +1723,92 @@ bool devirtualizeBranchedCallInDraft(
     return true;
 }
 
+namespace {
+
+/// `id` and everything it runs after (its transitive inputs of every kind).
+std::vector<bool> draftUpstream(const GraphDraft &draft, gc_node_ref_t id) {
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    std::vector<gc_node_ref_t> work{id};
+    while (!work.empty()) {
+        const gc_node_ref_t n = work.back();
+        work.pop_back();
+        if (n >= seen.size() || seen[n] || !draft.header(n)) {
+            continue;
+        }
+        seen[n] = true;
+        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+            work.insert(work.end(), inputs.begin(), inputs.end());
+        }
+    }
+    return seen;
+}
+
+/**
+ * The arguments of call `callId` that alone keep it inside a branch arm.
+ *
+ * The schedulers run, when an arm is taken, the nodes that run after the arm's head and not
+ * after the JOIN, and everything else of the graph unconditionally, before the BRCH. A call is
+ * placed by its inputs: it is inside an arm when one of its control predecessors or one of its
+ * arguments is. The nodes of the callee's body are placed by their own inputs, and a node of
+ * the body that reads no parameter (a branch on a constant, a call without arguments, an
+ * effect) has none in the caller. The control predecessors of the call are handed to the
+ * body's entry roots; an argument is not. So where the call was inside an arm through an
+ * argument only, such a node left the arm. It then ran when the arm was not taken (a fault
+ * there ended a program that never reached that code), or did not run when it was (an effect
+ * that waits on the BRCH but not on the arm's head is not part of what the arm runs), and a
+ * BRCH could leave while its JOIN stayed inside, which no scheduler can lay out.
+ *
+ * Returned are the arguments needed to cover every arm the call is in and that its control
+ * predecessors do not already place it in. The splice makes the body wait on them, as the call
+ * itself did.
+ */
+std::vector<gc_node_ref_t> armPlacingArguments(const GraphDraft &draft, gc_node_ref_t callId) {
+    const std::vector<bool> before = draftUpstream(draft, callId);
+    std::vector<gc_node_ref_t> open; // the heads of the arms the call is in
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        const DraftNodeHeader *h = draft.header(id);
+        if (!before[id] || !h || h->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        const gc_node_ref_t join =
+            reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(id).data())->join;
+        if (join != kInvalidNodeRef && join < before.size() && before[join]) {
+            continue; // the call runs after the whole branch
+        }
+        for (const GCBranchArm &arm : draft.branchArmsOf(id)) {
+            // The call that is itself the head stays the head: the splice moves the anchor.
+            if (arm.head != kInvalidNodeRef && arm.head != callId && arm.head < before.size() &&
+                before[arm.head]) {
+                open.push_back(arm.head);
+            }
+        }
+    }
+    std::vector<gc_node_ref_t> placing;
+    if (open.empty()) {
+        return placing;
+    }
+    const auto cover = [&](gc_node_ref_t input) {
+        const std::vector<bool> reached = draftUpstream(draft, input);
+        return std::erase_if(open, [&](gc_node_ref_t head) { return reached[head]; }) > 0;
+    };
+    for (gc_node_ref_t pred : draft.ctrlInputsOf(callId)) {
+        (void)cover(pred);
+    }
+    for (auto inputs : {draft.normInputsOf(callId), draft.withInputsOf(callId)}) {
+        for (gc_node_ref_t input : inputs) {
+            if (open.empty()) {
+                return placing;
+            }
+            if (cover(input) && std::ranges::find(placing, input) == placing.end()) {
+                placing.push_back(input);
+            }
+        }
+    }
+    return placing;
+}
+
+} // namespace
+
 DraftInlineResult inlineCallableInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId) {
     DraftInlineResult result{.callNode = funcNodeId};
@@ -1767,9 +1873,16 @@ DraftInlineResult inlineCallableInDraft(
         funcNodeId,
         static_cast<void *>(funcBody->calleeGraph));
 
-    const std::vector<gc_node_ref_t> ctrlPreds(
+    // What the body has to wait on: the control predecessors of the call, and the arguments
+    // that place the call inside a branch arm (see armPlacingArguments).
+    std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(funcNodeId).begin(),
         draft.ctrlInputsOf(funcNodeId).end());
+    for (gc_node_ref_t argument : armPlacingArguments(draft, funcNodeId)) {
+        if (std::find(ctrlPreds.begin(), ctrlPreds.end(), argument) == ctrlPreds.end()) {
+            ctrlPreds.push_back(argument);
+        }
+    }
     const bool hasExternalCtrl    = !ctrlPreds.empty();
     const bool needControlBridge  = hasExternalCtrl || !draft.ctrlUsersOf(funcNodeId).empty() ||
                                     draft.isBranchArmAnchor(funcNodeId) ||

@@ -1,0 +1,17 @@
+module main
+
+// A program that declares its own `Set`, `Map`, `keys` or `put` keeps its meaning: its
+// declarations come before the built-in names.
+
+type Set = int[]
+type Map<K, V> = (K, V)
+
+func keys(x: int): int { return x + 1 }
+func put(a: int, b: int): int { return a * b }
+
+func main(): int sync {
+    let s: Set = [1, 2]
+    let p: Map<int, string> = (1, "a")
+    println(s, p, keys(1), put(2, 3))
+    return 0
+}

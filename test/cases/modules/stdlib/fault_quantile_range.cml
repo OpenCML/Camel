@@ -1,0 +1,10 @@
+module fault_quantile_range
+
+import { quantile } from statistics
+
+func main(): int sync {
+    println('before')
+    println([1.0, 2.0]->quantile<1.5>)
+    println('not reached')
+    return 0
+}

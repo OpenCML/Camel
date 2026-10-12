@@ -1,0 +1,30 @@
+/**
+ * A function named after `return` is returned as its function value. It used to end in an
+ * internal error without a position ("still contains a live DREF node", progen finding F31).
+ * Also a nested function that captures a parameter, returned by its name.
+ */
+module return_named_function
+
+func positive(a: int): bool {
+    return a > 0
+}
+
+func pick(): (a0: int) => bool {
+    return positive
+}
+
+func adder(k: int): (x: int) => int {
+    func add(x: int): int {
+        return x + k
+    }
+    return add
+}
+
+func main(): int sync {
+    let g = pick()
+    println(g(1), g(-1))
+    let add5 = adder(5)
+    println(add5(1))
+    println([1, 2, 3]->map<add5>)
+    return 0
+}

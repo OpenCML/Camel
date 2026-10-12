@@ -1,0 +1,21 @@
+/**
+ * Divisions by values that are not constants, in functions the JIT compiles after std::inline:
+ * dividend, divisor and quotient in every register (idiv needs rax and rdx for itself), a
+ * divisor of -1, and float divisions. None of them faults.
+ */
+module native_division
+
+func q(a: int, b: int, c: int, d: int, n: int): int {
+    return if n <= 0 then a / b + c / d + (a + c) / (b + d) + a / d - d / b + (a * b) / (c + 1)
+           else q(a + n, b, c + 2 * n, d, n - 1)
+}
+
+func fq(a: float, b: float, n: int): float {
+    return if n <= 0 then a / b + b / a else fq(a + 1.0, b, n - 1)
+}
+
+func main(): int sync {
+    println('q {} {} {} {}'->format<q(100, 7, 55, 3, 0), q(100, 7, 55, 3, 5), q(0 - 100, 7, 55, 0 - 3, 6), q(100, 0 - 1, 55, 3, 4)>)
+    println('fq {} {}'->format<fq(1.5, 4.0, 0), fq(1.5, 4.0, 6)>)
+    return 0
+}

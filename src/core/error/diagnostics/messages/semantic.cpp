@@ -337,6 +337,92 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Declare it with 'var', or bind the new value to a new name.",
             },
         },
+        {
+            SemanticDiag::TypeVariableNotAllowed,
+            {
+                "TypeVariableNotAllowed",
+                "'typeas {0}' cannot bind a type variable here: {1}.",
+                "A type variable is bound where its type first appears among the parameters of "
+                "a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is "
+                "written as plain '{0}' everywhere after that.",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableRedeclared,
+            {
+                "TypeVariableRedeclared",
+                "'typeas {0}' cannot bind '{0}': the name already denotes a type here.",
+                "Write 'typeas' only at the first occurrence of a type variable and plain "
+                "'{0}' afterwards, or choose a name that is not a type in scope.",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableNotBindable,
+            {
+                "TypeVariableNotBindable",
+                "The type variable '{0}' of '{1}' can never be bound: {2}.",
+                "A type variable takes the type found at the position of 'typeas {0}' in the "
+                "type of an argument. That position must be reachable through arrays, tuples, "
+                "structs and function types.",
+            },
+        },
+        {
+            SemanticDiag::GenericArgumentsMismatch,
+            {
+                "GenericArgumentsMismatch",
+                "The generic function '{0}' cannot be called with argument types {1}: {2}.",
+                "A type variable is bound once, at its 'typeas' position, from the type of the "
+                "argument found there; every other parameter is then checked against its type "
+                "with the variables replaced. Nothing is converted implicitly. Signature: {3}",
+            },
+        },
+        {
+            SemanticDiag::GenericFunctionAsValue,
+            {
+                "GenericFunctionAsValue",
+                "The generic function '{0}' is used as a value, but it is only a template until "
+                "it is called with arguments that fix its type variables.",
+                "Call it directly, or wrap the call in a function whose parameter types are "
+                "written out, e.g. '(x: int) => {0}(x)'.",
+            },
+        },
+        {
+            SemanticDiag::GenericInstantiationTooDeep,
+            {
+                "GenericInstantiationTooDeep",
+                "Instantiating the generic function '{0}' with {1} is refused: {2}.",
+                "Each call of a generic function with a new set of types builds a new "
+                "subgraph. A generic function that calls itself with ever larger types never "
+                "stops doing so.",
+            },
+        },
+        {
+            SemanticDiag::TypeFunctionArguments,
+            {
+                "TypeFunctionArguments",
+                "The type function '{0}' cannot be used this way: {1}.",
+                "A type declared with parameters, e.g. 'type Pair<T> = (T, T)', is used with "
+                "one type argument per parameter between '<' and '>', e.g. 'Pair<int>'.",
+            },
+        },
+        {
+            SemanticDiag::GenericFunctionUnsupported,
+            {
+                "GenericFunctionUnsupported",
+                "The generic function '{0}' cannot be {1}.",
+                "This use of a generic function is not supported.",
+            },
+        },
+        {
+            SemanticDiag::FunctionNameAsValue,
+            {
+                "FunctionNameAsValue",
+                "'{0}' is used as a value here, but it names {1}, not one function.",
+                "Only a name that stands for exactly one function has a function value. Wrap "
+                "the call in a function whose parameter types are written out, e.g. "
+                "'(x: int) => {0}(x)'.",
+            },
+        },
 
         {
             SemanticDiag::FeatureNotSupported,
@@ -368,6 +454,96 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ThrowOutsideFallible,
+            {
+                "ThrowOutsideFallible",
+                "'throw' needs a function declared to return 'T!': {0}.",
+                "'throw e' returns an error value, as 'return' returns a value, so the "
+                "function it stands in must declare a fallible return type, for example "
+                "'func f(): int! {{ ... }}'. It does not unwind to a caller.",
+            },
+        },
+        {
+            SemanticDiag::ThrowNotAnError,
+            {
+                "ThrowNotAnError",
+                "'throw' takes an error value, not a value of type '{0}'.",
+                "Make one with 'error(kind, message)', for example "
+                "'throw error(\"ParseError\", \"not a number\")', or hand on the one a "
+                "'case error e' bound.",
+            },
+        },
+        {
+            SemanticDiag::TaggedTypeNesting,
+            {
+                "TaggedTypeNesting",
+                "The type '{0}' marks '{1}' twice.",
+                "'T?' may be null and 'T!' may have failed; a second mark of the same kind "
+                "adds nothing a program could tell apart. 'T?!' and 'T!?' are allowed.",
+            },
+        },
+        {
+            SemanticDiag::TaggedValueNotOpened,
+            {
+                "TaggedValueNotOpened",
+                "A value of type '{0}' cannot be used here: {1}.",
+                "A value that may be null ('T?') or may have failed ('T!') is opened only by "
+                "'?" "?', '!!', '?->' and by 'match' with 'case null' / 'case error e'.",
+            },
+        },
+        {
+            SemanticDiag::TryCatchNotInLanguage,
+            {
+                "TryCatchNotInLanguage",
+                "'try'/'catch' is not part of Camel.",
+                "An operation that can fail returns a value of type 'T!'. Give a fallback "
+                "with 'a !! b', hand an error on with 'x ?-> f', or inspect it with 'match r "
+                "{{ case error e => ... case v => ... }}'. Faults (division by zero, an index "
+                "out of range) are not errors and end the program; isolating them is the "
+                "job of the fault-isolation operator.",
+            },
+        },
+        {
+            SemanticDiag::TaggedOperandMismatch,
+            {
+                "TaggedOperandMismatch",
+                "'{0}' cannot be applied here: {1}.",
+                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T'. 'a !! b' needs 'a' of "
+                "type 'T!' and 'b' of type 'T'. 'x ?-> f' needs 'x' of type 'T!' and a "
+                "function 'f' that takes a 'T'.",
+            },
+        },
+        {
+            SemanticDiag::TaggedMatchCases,
+            {
+                "TaggedMatchCases",
+                "This 'match' on a value of type '{0}' is not well formed: {1}.",
+                "A 'match' on a 'T?' has exactly the cases 'case null' and one other "
+                "('case v' binds the value, 'case _' ignores it). A 'match' on a 'T!' has "
+                "exactly 'case error e' and one other.",
+            },
+        },
+        {
+            SemanticDiag::CollectionKeyNotAllowed,
+            {
+                "CollectionKeyNotAllowed",
+                "The type '{0}' cannot be a key of '{1}': {2}.",
+                "A key of a Map and an element of a Set must have an order and an equality "
+                "that cannot change: 'int', 'i32', 'bool', 'string', and tuples of those. The "
+                "value type of a Map is not restricted.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateCollectionKey,
+            {
+                "DuplicateCollectionKey",
+                "The key '{0}' is written twice in this literal converted to '{1}'.",
+                "A map holds one value per key. In an array computed when the program runs "
+                "the later entry replaces the earlier one; in a literal a repeated key is "
+                "taken for a mistake. Remove one of the two entries.",
+            },
+        },
+        {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",
@@ -380,6 +556,32 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ExitInUnusedBranch,
+            {
+                "ExitInUnusedBranch",
+                "This '{0}' gives the value of the '{1}' it is in, and nothing uses that "
+                "value: it does not leave the function.",
+                "An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the "
+                "arm and gives the value of the branch, as it does in any block. Here the "
+                "branch is a statement whose value nothing takes, so the '{0}' has no effect "
+                "and the function goes on with the next statement. To return from the function "
+                "through a branch, make the '{1}' the last expression of the function body, or "
+                "write 'return' in front of it ('return if ... then ... else ...').",
+            },
+        },
+        {
+            SemanticDiag::MatchWithoutDefault,
+            {
+                "MatchWithoutDefault",
+                "This 'match' on a value of type '{0}' has no 'case _': a value that none of "
+                "its cases matches stops the program.",
+                "Add 'case _ => ...' for the values the cases do not list. Without it, meeting "
+                "such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A "
+                "'match' on a bool that has both 'case true' and 'case false' is complete and "
+                "is not reported.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
@@ -387,6 +589,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "Write 'wait' before the expression or put it in a sync block: only then is the "
                 "write ordered after the earlier uses of the variable. Without either, the "
                 "write runs only if the variable is read afterwards.",
+            },
+        },
+        {
+            SemanticDiag::ImportedModuleHasErrors,
+            {
+                "ImportedModuleHasErrors",
+                "Cannot import module '{0}': it has errors ({1}).",
+                "The errors are reported for that module. This one follows from them and goes "
+                "away when they are fixed.",
             },
         },
     };

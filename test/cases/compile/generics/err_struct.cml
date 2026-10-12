@@ -1,0 +1,11 @@
+module err_struct
+
+func name_of(s: { name: typeas T }): T {
+    return s.name
+}
+
+func main(): int sync {
+    println(name_of({ name: 'n', extra: 1 }))
+    println(name_of({ title: 'n' }))
+    return 0
+}

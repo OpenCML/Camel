@@ -46,7 +46,6 @@ constexpr uint8_t kRegRdi = 8, kRegRsi = 9;
 // register allocation stage.
 using VRegId                  = uint16_t;
 constexpr VRegId kInvalidVReg = 0xFFFFu;
-constexpr VRegId kMaxVRegs    = 512;
 
 inline const char *mirRegName(uint8_t r) {
     static const char *n[] = {"rax", "rcx", "rdx", "rbx", "r8", "r9", "r10", "r11", "rdi", "rsi"};
@@ -157,18 +156,45 @@ enum class MirOp : uint8_t {
     VXmm32CmpSetNZ,
     DebugTrace, // Debug use: call jitDebugTrace(ctx) and print GPR + pc; inserted only in Debug
                 // builds
-    NativeJitFuncCall, // FUNC inline frame management + call rel32/rax; imm64 =
+    NativeJitFuncCall, // Native self call on a stack-allocated frame; imm64 =
                        // NativeJitCallParams*
+    // Arguments of a self tail call that do not fit in registers are staged on the machine
+    // stack: every source is pushed, then every destination popped, so a destination that is
+    // also a later source is read before it is overwritten.
+    PushFrameSlot, // push qword [rdi + disp]
+    PushImm64,     // push imm64 (through the scratch register)
+    PopFrameSlot,  // pop qword [rdi + disp]
     // SysV AMD64 keeps jitCtx in r13 across helper calls because rsi is caller-saved there.
     // Win64 can encode this as a nop because rsi is already callee-saved.
     MovRsiR13,
     Nop,
 };
 
+// Faults compiled code can leave with. Compiled code calls no C++ and has no unwind
+// information, so it cannot throw: a fault site stores the kind and its bytecode pc in the
+// JitContext, restores the stack pointer its entry wrapper saved and returns to the wrapper's
+// C++ caller, which raises the located diagnostic (FastVMSchedPass::invokeOwnedJitFrame).
+enum class JitFaultKind : uint32_t {
+    None                      = 0,
+    DivisionByZero            = 1,
+    MaxRecursionDepthExceeded = 2,
+};
+
+// Where compiled code finds the fields of JitContext (runtime/trampoline.h asserts them).
+constexpr int32_t kJitCtxFaultKindOffset   = 16;
+constexpr int32_t kJitCtxFaultPcOffset     = 20;
+constexpr int32_t kJitCtxDepthBudgetOffset = 24;
+
+// A native self call puts a frame of the graph on the machine stack, up to the interpreter's
+// recursion limit deep. A graph whose frame is larger than this is left to the interpreter, so
+// that a recursion at the limit stays within about half a megabyte of stack.
+constexpr uint32_t kMaxNativeFrameBytes = 2048;
+
 struct Mir {
     MirOp op{MirOp::Nop};
-    uint8_t r0{0};
-    uint8_t r1{0};
+    // Physical register ids for the fixed-register ops, virtual register ids for V* ops.
+    uint16_t r0{0};
+    uint16_t r1{0};
     int32_t disp{0};
     uint32_t imm32{0};
     uint64_t imm64{0};
@@ -180,23 +206,23 @@ struct Mir {
     void clearPc() { pc = kMirInvalidPc; }
 };
 
+// A call of the graph being compiled to itself. The callee's frame is allocated on the machine
+// stack (no frame pool), the arguments are written to its parameter slots and the body is
+// entered at its JIT-internal entry.
 struct NativeJitCallParams {
-    uint64_t poolTopAddr;            // &FramePool::top_
-    uint64_t targetRuntimeGraphAddr; // Target runtime graph pointer used by frame reuse checks.
-    uint64_t slowPathFnAddr; // Same graph: &directSelfFuncInvoke; cross graph: trampolineFunc
-    uint64_t slowPathBcAddr; // &bc (for same-graph slow path)
-    uint32_t slowPathPc;     // Bytecode pc (for cross-graph slow path)
-    int32_t resultDisp;      // [rdi + resultDisp]
-    uint8_t argsCnt;
-    int32_t argSrcDisps[8];
-    int32_t argDstDisps[8];
-    uint8_t argVRegs[8]; // VReg IDs for pre-loaded args (frameless path); 0xFF = not pre-loaded
-    uint8_t resultVReg = 0xFF; // VReg for call result (frameless); 0xFF = store inside call
-    bool isSameGraph;          // true = call rel32, false = load fn from jitFnAddr and call rax
-    uint64_t jitFnAddr;        // &bc->extra3() (load JIT entry pointer at runtime for cross graph)
-    bool frameless; // true = stack allocation (no Frame pool), suitable for pure self-recursive
-                    // same-graph calls
-    uint32_t calleeSlotBytes; // Callee stack-frame size when frameless (16-byte aligned)
+    // One entry per argument, in the order of the bytecode's direct-call layout.
+    struct Arg {
+        int32_t dstDisp = 0;            // [callee base + dstDisp]: the parameter's slot
+        VRegId vreg     = kInvalidVReg; // loaded before the call; else copied inside it from:
+        int32_t srcDisp = 0;            //   [rdi + srcDisp] in the caller, or
+        bool isImm      = false;        //   a constant of the static area,
+        uint64_t imm    = 0;            //   with this value
+    };
+    std::vector<Arg> args;
+    int32_t resultDisp = 0;            // [rdi + resultDisp]
+    VRegId resultVReg  = kInvalidVReg; // Call result; kInvalidVReg = stored to resultDisp inside
+    uint32_t calleeSlotBytes = 0;      // Size of the callee's frame (16-byte aligned)
+    uint32_t pc              = 0;      // Bytecode pc of the call
 };
 
 using MirBuffer = std::vector<Mir>;

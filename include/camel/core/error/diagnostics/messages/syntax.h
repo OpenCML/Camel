@@ -27,7 +27,18 @@
 namespace camel::core::error {
 
 enum class SyntaxDiag : uint32_t {
-    UnknownSyntaxError = 0x000000,
+    UnknownSyntaxError        = 0x000000,
+    MissingClosingDelimiter   = 0x000001,
+    UnmatchedClosingDelimiter = 0x000002,
+    MissingThen               = 0x000003,
+    ExtraSemicolon            = 0x000004,
+    AssignmentInCondition     = 0x000005,
+    KeywordAsIdentifier       = 0x000006,
+    MissingComma              = 0x000007,
+    MissingInitializer        = 0x000008,
+    MissingToken              = 0x000009,
+    UnexpectedToken           = 0x00000A,
+    UnexpectedEndOfFile       = 0x00000B,
 };
 
 constexpr DiagType diagTypeOf(SyntaxDiag) { return DiagType::SyntaxDiag; }

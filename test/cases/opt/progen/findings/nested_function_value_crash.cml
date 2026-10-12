@@ -1,0 +1,19 @@
+/**
+ * progen finding F25 ((other) crash without passes). Segmentation fault without any pass (and
+ * under every scheduler): a nested function `g` that captures a local, a second nested function
+ * that calls `g`, and `g` passed as a value to `map`. Without `h` the program prints [1].
+ * Expected output: [1]
+ */
+module nested_function_value_crash
+
+func main(): int sync {
+    let b = 1
+    func g(a: int): int {
+        return a + b
+    }
+    func h(a: int): int {
+        return g(a)
+    }
+    println([0]->map<g>)
+    return 0
+}

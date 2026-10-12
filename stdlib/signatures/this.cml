@@ -1,0 +1,14 @@
+/**
+ * Signatures of the `this` module (C++ operators, modules/this).
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+/// The Zen of Camel, the text of the file ZEN.
+/// @pure
+/// @example println(zen())
+inner func zen(): string {
+    return 'this:zen'
+}

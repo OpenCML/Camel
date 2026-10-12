@@ -883,19 +883,21 @@ timeout_ms = 8000
 
 [[tests]]
 name = "perm_space_exhausted.diagnostic"
-desc = "Exhausting the 32 MB permanent space inside a pass is a PassInternalError naming the pass, raised before anything executes (it used to be a write through null: the guard was an ASSERT, compiled out in release builds). The budget is lifted by CAMEL_OPT_GROWTH_BUDGET to reach the limit."
+desc = "Exhausting the permanent space inside a pass is RuntimeDiag::MemoryExhausted with the stage of the pass, raised before anything executes, naming the space, the limit and the variable that raises it (it used to be a write through null: the guard was an ASSERT, compiled out in release builds; then a PassInternalError). The budget is lifted by CAMEL_OPT_GROWTH_BUDGET to reach the limit, and the space is limited to 32 MB (its size when it could not grow) so that the limit is reached in a few seconds."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_growing_shape.cml"
 args = ["--output-format", "json", "${case}", "std::opt::simplify", "std::nvm"]
-envs = ["CAMEL_OPT_GROWTH_BUDGET=100000000"]
+envs = ["CAMEL_OPT_GROWTH_BUDGET=100000000", "CAMEL_PERM_SPACE_LIMIT_MB=32"]
 expect_exit = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout + input.normalized.stderr
 assert(out.includes('"stage":"pass:std::opt::simplify"'), `stage missing: ${out}`)
-assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
-assert(out.includes('Permanent space exhausted (32 MB'), `reason missing: ${out}`)
+assert(out.includes('"name":"RuntimeDiag::MemoryExhausted"'), `name missing: ${out}`)
+assert(out.includes('The permanent space (types and layouts) is exhausted'), `reason missing: ${out}`)
+assert(out.includes('of the limit of 32.0 MB are in use'), `limit missing: ${out}`)
+assert(out.includes('set CAMEL_PERM_SPACE_LIMIT_MB=<megabytes> to raise the limit (it is 32 now)'), `advice missing: ${out}`)
 assert(!out.includes('[12, 2]'), `the program ran: ${out}`)
 }
 """

@@ -1,0 +1,22 @@
+/**
+ * Non-tail recursion 200 deep, inside the default limit of every back end, through a direct
+ * call, through a function value and through a higher-order operator.
+ */
+module non_tail_deep
+
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
+
+func via(f: (n: int, d: int) => int, n: int, d: int): int {
+    return if n == 0 then d else 1 + f(n - 1, d)
+}
+
+func step(n: int, d: int): int { return via(step, n, d) }
+
+func main(): int sync {
+    println(depth(200))
+    println(step(100, 5))
+    println(range(0, 4)->map<(x: int): int => depth(x * 50)>)
+    return 0
+}

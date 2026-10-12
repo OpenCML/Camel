@@ -30,6 +30,9 @@
 | [21_gcgraph_runtime_bridge.md](21_gcgraph_runtime_bridge.md) | `GCGraph` 运行时桥接层：compile/runtime graph 分层、materialization 入口与过渡形态 |
 | [25_tensor_stack_and_onnx_export.md](25_tensor_stack_and_onnx_export.md) | Tensor stack design: typed kernels, single operator registry (OpDef), refined TensorType, graph optimization, ONNX export, benchmark harness |
 | [26_autodiff_as_graph_rewrite.md](26_autodiff_as_graph_rewrite.md) | Automatic differentiation as graph rewriting: pullback transform, derivative registry, tree models and optimizers |
+| [28_generic_functions_and_type_functions.md](28_generic_functions_and_type_functions.md) | Generic functions (`typeas`) as subgraph templates instantiated per set of argument types; type declarations with parameters as type functions |
+| [29_nullable_and_fallible_values.md](29_nullable_and_fallible_values.md) | `T?` and `T!`: where the one-bit tag lives, `??` / `!!` / `?->` / `match` patterns as branches, `throw` as an exit, and the questions left to the language author |
+| [31_map_and_set.md](31_map_and_set.md) | The built-in `Map<K, V>` and `Set<T>`: the two implementation routes and the one taken, key types, key order, the run-time table and how the collector traces it, the operators, typed JSON decoding, measurements, and the questions left to the language author |
 
 ## 鐩稿叧鏂囨。锛坉ocs 鐩綍锛?
 

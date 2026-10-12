@@ -17,11 +17,13 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <format>
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+#include "camel/core/process_exit.h"
 #include "camel/core/rtdata/string.h"
 
 #include <memory>
@@ -146,7 +148,10 @@ std::unordered_map<std::string, operator_t> getOSOpsMap() {
 slot_t __os_sleep__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 ms = norm.get<Int64>(0);
     if (ms < 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<sleep> requires a non-negative integer");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "os.sleep",
+            std::format("the duration is {} ms; it must not be negative", ms));
     }
     try {
         std::this_thread::sleep_for(std::chrono::milliseconds(ms));
@@ -185,10 +190,11 @@ slot_t __os_cpu_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(static_cast<Int64>(count));
 }
 
+// Ends the program with the given exit code: see camel/core/process_exit.h for how the run is
+// unwound. The process leaves through main, not through std::exit, so that buffered output is
+// written and what the run holds is released as after a normal return.
 slot_t __os_exit__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "<exit> operator invoked");
-    exit(1);
-    return NullSlot;
+    throw camel::core::ProcessExit{static_cast<int>(norm.get<Int64>(0))};
 }
 
 slot_t __os_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx) {

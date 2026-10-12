@@ -1,0 +1,7 @@
+module syntax_missing_token
+
+func f(a int): int { return a }
+
+func main(): int sync {
+    return f(1)
+}

@@ -26,10 +26,13 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/base.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -48,12 +51,12 @@ using json = nlohmann::json;
 // 递归：将 Camel 值转为 JSON。失败时返回 nullopt 并报告诊断。
 static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
     if (!t) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<json.encode> null type");
+        throwRuntimeFault(RuntimeDiag::JsonEncodeUnsupported, "<unknown>");
     }
     if (t->code() == TypeCode::Any) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<json.encode> cannot encode value of type Any");
+            RuntimeDiag::JsonEncodeUnsupported,
+            "any");
     }
     switch (t->code()) {
     case TypeCode::Int32:
@@ -126,10 +129,257 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         return jobj;
     }
     default:
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<json.encode> unsupported type: " + t->toString());
+        break;
     }
+    // A set is an array; a map with string keys is an object (other key types have no JSON
+    // form). Both come out in key order.
+    if (const CollectionType *coll = asCollectionType(t)) {
+        const Table *table = fromSlot<Table *>(s);
+        if (!coll->isMap()) {
+            json jarr = json::array();
+            for (size_t i = 0; table && i < table->size(); ++i) {
+                auto elem = camelToJson(coll->keyType(), table->keys()[i], ctx);
+                if (!elem)
+                    return std::nullopt;
+                jarr.push_back(std::move(*elem));
+            }
+            return jarr;
+        }
+        if (coll->keyType()->code() == TypeCode::String) {
+            json jobj = json::object();
+            for (size_t i = 0; table && i < table->size(); ++i) {
+                auto val = camelToJson(coll->valueType(), table->values()[i], ctx);
+                if (!val)
+                    return std::nullopt;
+                jobj[fromSlot<String *>(table->keys()[i])->toString()] = std::move(*val);
+            }
+            return jobj;
+        }
+    }
+    throwRuntimeFault(RuntimeDiag::JsonEncodeUnsupported, t->toString());
+}
+
+const char *jsonKindName(const json &j) {
+    if (j.is_null())
+        return "null";
+    if (j.is_boolean())
+        return "a boolean";
+    if (j.is_number_integer())
+        return "an integer";
+    if (j.is_number())
+        return "a number";
+    if (j.is_string())
+        return "a string";
+    if (j.is_array())
+        return "an array";
+    return "an object";
+}
+
+/**
+ * Decoding to a given type (DESIGN-QUESTION(json-typed-decode)). The JSON value `j`, found at
+ * `path` of the document, as a value of `type`; false with `error` set when it does not have
+ * the shape the type asks for. Nothing is converted: an integer is not a float's JSON form
+ * unless it is written as a number without a fraction (JSON has one number type, so `1` is
+ * accepted for a float), and a number is never a string.
+ *
+ *   bool, int, i32, float, string   the JSON scalar of that kind
+ *   T[]                             an array of T
+ *   Set<T>                          an array of T (duplicates are dropped)
+ *   Map<string, T>                  an object whose values are T
+ *   (A, B, ...)                     an array of exactly that length
+ *   { f: A, g: B }                  an object with exactly those members
+ *   T?                              null, or a T
+ */
+bool jsonToTyped(const json &j, Type *type, const std::string &path, slot_t &out, std::string &error) {
+    const auto mismatch = [&](const std::string &wanted) {
+        error = "at " + path + ": expected " + wanted + ", found " + jsonKindName(j);
+        return false;
+    };
+    switch (type->code()) {
+    case TypeCode::Bool:
+        if (!j.is_boolean())
+            return mismatch("a boolean");
+        out = toSlot<Bool>(j.get<bool>());
+        return true;
+    case TypeCode::Int64:
+        if (!j.is_number_integer() || (j.is_number_unsigned() && j.get<uint64_t>() > INT64_MAX))
+            return mismatch("an integer");
+        out = toSlot<Int64>(j.get<Int64>());
+        return true;
+    case TypeCode::Int32: {
+        if (!j.is_number_integer() || j.is_number_unsigned() && j.get<uint64_t>() > INT32_MAX)
+            return mismatch("a 32-bit integer");
+        const Int64 value = j.get<Int64>();
+        if (value < INT32_MIN || value > INT32_MAX)
+            return mismatch("a 32-bit integer");
+        out = toSlot<Int32>(static_cast<Int32>(value));
+        return true;
+    }
+    case TypeCode::Float64:
+        if (!j.is_number())
+            return mismatch("a number");
+        out = toSlot<Float64>(j.get<Float64>());
+        return true;
+    case TypeCode::Float32:
+        if (!j.is_number())
+            return mismatch("a number");
+        out = toSlot<Float32>(j.get<Float32>());
+        return true;
+    case TypeCode::String:
+        if (!j.is_string())
+            return mismatch("a string");
+        out = toSlot(String::from(j.get<std::string>(), mm::autoSpace()));
+        return true;
+    case TypeCode::Array: {
+        if (!j.is_array())
+            return mismatch("an array");
+        auto *arrayType = static_cast<ArrayType *>(type);
+        Array *arr      = Array::create(mm::autoSpace(), j.size());
+        for (size_t i = 0; i < j.size(); ++i) {
+            slot_t elem = NullSlot;
+            if (!jsonToTyped(j[i], arrayType->elemType(), path + "[" + std::to_string(i) + "]", elem, error))
+                return false;
+            arr->set<slot_t>(i, elem, arrayType);
+        }
+        out = toSlot(arr);
+        return true;
+    }
+    case TypeCode::Tuple: {
+        auto *tupleType = static_cast<TupleType *>(type);
+        if (tupleType->isNullable()) {
+            if (j.is_null()) {
+                out = NullSlot;
+                return true;
+            }
+            slot_t payload = NullSlot;
+            if (!jsonToTyped(j, tupleType->payloadType(), path, payload, error))
+                return false;
+            out = makeSome(payload, tupleType);
+            return true;
+        }
+        if (tupleType->isTagged() || tupleType->isCell())
+            break;
+        if (!j.is_array() || j.size() != tupleType->size())
+            return mismatch("an array of " + std::to_string(tupleType->size()) + " element(s)");
+        Tuple *tuple = Tuple::create(tupleType->size(), mm::autoSpace());
+        for (size_t i = 0; i < tupleType->size(); ++i) {
+            slot_t elem = NullSlot;
+            if (!jsonToTyped(j[i], tupleType->typeAt(i), path + "[" + std::to_string(i) + "]", elem, error))
+                return false;
+            tuple->set<slot_t>(i, elem, tupleType);
+        }
+        out = toSlot(tuple);
+        return true;
+    }
+    case TypeCode::Struct: {
+        auto *structType = static_cast<StructType *>(type);
+        if (!j.is_object())
+            return mismatch("an object");
+        Struct *st = Struct::create(structType->size(), mm::autoSpace());
+        for (size_t i = 0; i < structType->size(); ++i) {
+            const std::string name(structType->fieldName(i));
+            const auto member = j.find(name);
+            if (member == j.end()) {
+                error = "at " + path + ": the member '" + name + "' is missing";
+                return false;
+            }
+            slot_t field = NullSlot;
+            if (!jsonToTyped(*member, structType->typeAt(i), path + "." + name, field, error))
+                return false;
+            st->set<slot_t>(i, field, structType);
+        }
+        if (j.size() != structType->size()) {
+            for (auto &[name, value] : j.items()) {
+                if (!structType->findField(name).has_value()) {
+                    error = "at " + path + ": the member '" + name + "' is not a field of " +
+                            structType->toString();
+                    return false;
+                }
+            }
+        }
+        out = toSlot(st);
+        return true;
+    }
+    default:
+        break;
+    }
+    if (const CollectionType *coll = asCollectionType(type)) {
+        // Entries are gathered in an array of the type `as` takes, then converted the way
+        // `as` converts: one sort, the later of two equal keys kept.
+        ArrayType *sourceType = coll->sourceArrayType();
+        if (!coll->isMap()) {
+            if (!j.is_array())
+                return mismatch("an array");
+            slot_t elements = NullSlot;
+            if (!jsonToTyped(j, sourceType, path, elements, error))
+                return false;
+            out = toSlot(table::fromArray(fromSlot<Array *>(elements), coll));
+            return true;
+        }
+        if (coll->keyType()->code() == TypeCode::String) {
+            if (!j.is_object())
+                return mismatch("an object");
+            const auto *mapType  = static_cast<const MapType *>(coll);
+            TupleType *itemType  = mapType->itemType();
+            Array *entries       = Array::create(mm::autoSpace(), j.size());
+            size_t index         = 0;
+            for (auto &[name, value] : j.items()) {
+                slot_t decoded = NullSlot;
+                if (!jsonToTyped(value, mapType->valueType(), path + "." + name, decoded, error))
+                    return false;
+                Tuple *entry = Tuple::create(2, mm::autoSpace());
+                entry->set<Object *>(0, String::from(name, mm::autoSpace()), itemType);
+                entry->set<slot_t>(1, decoded, itemType);
+                entries->set<Object *>(index++, entry, sourceType);
+            }
+            out = toSlot(table::fromArray(entries, coll));
+            return true;
+        }
+    }
+    error = "at " + path + ": a value of type '" + type->toString() + "' has no JSON form";
+    return false;
+}
+
+/// Whether jsonToTyped can produce a value of `type` at all, so that a call asking for a
+/// type without a JSON form is rejected when it is compiled.
+bool hasJsonForm(Type *type) {
+    switch (type->code()) {
+    case TypeCode::Bool:
+    case TypeCode::Int64:
+    case TypeCode::Int32:
+    case TypeCode::Float64:
+    case TypeCode::Float32:
+    case TypeCode::String:
+        return true;
+    case TypeCode::Array:
+        return hasJsonForm(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Tuple: {
+        auto *tupleType = static_cast<TupleType *>(type);
+        if (tupleType->isNullable())
+            return hasJsonForm(tupleType->payloadType());
+        if (tupleType->isTagged() || tupleType->isCell())
+            return false;
+        for (Type *member : tupleType->types()) {
+            if (!hasJsonForm(member))
+                return false;
+        }
+        return true;
+    }
+    case TypeCode::Struct:
+        for (Type *member : static_cast<StructType *>(type)->types()) {
+            if (!hasJsonForm(member))
+                return false;
+        }
+        return true;
+    default:
+        break;
+    }
+    if (const CollectionType *coll = asCollectionType(type)) {
+        if (!coll->isMap())
+            return hasJsonForm(coll->keyType());
+        return coll->keyType()->code() == TypeCode::String && hasJsonForm(coll->valueType());
+    }
+    return false;
 }
 
 // 递归：将 JSON 转为 Camel slot（参考 pyToCamel）
@@ -199,10 +449,57 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
         json j = json::parse(str->c_str());
         return jsonToCamel(j, ctx);
     } catch (const json::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("<json.decode> ") + e.what());
+        // nlohmann's text is "[json.exception.parse_error.101] parse error at line 1, column
+        // 2: ...": the bracketed id is the library's, the rest says where and what.
+        std::string what = e.what();
+        if (auto close = what.find("] "); what.starts_with("[") && close != std::string::npos) {
+            what = what.substr(close + 2);
+        }
+        // The start of the text, on one line, so that the message shows what was decoded.
+        std::string head(str->c_str());
+        const bool cut = head.size() > 40;
+        head           = head.substr(0, 40);
+        for (char &c : head) {
+            if (c == '\n' || c == '\r' || c == '\t') {
+                c = ' ';
+            }
+        }
+        throwRuntimeFault(RuntimeDiag::JsonDecodeFailed, what, head + (cut ? "..." : ""));
     }
 }
 
+bool jsonTypeHasForm(Type *type) { return type != nullptr && hasJsonForm(type); }
+
+// decode_as<shape>(text), decode_as(text, shape): the type of `shape` is the type decoded to;
+// its value is not read (DESIGN-QUESTION(json-typed-decode)). The result is a `T!`: text that
+// is not JSON, and JSON that does not have the shape of `T`, are error values, not faults.
+slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    static const char *kWhere = "<json::decode_as>";
+    Type *target              = with.size() > 0 ? with.type(0) : norm.type(1);
+    const TupleType *result   = TupleType::fallible(target);
+    String *str               = norm.get<String *>(0);
+    json document;
+    try {
+        document = json::parse(str ? str->view() : std::string_view());
+    } catch (const json::exception &e) {
+        std::string what = e.what();
+        if (auto close = what.find("] "); what.starts_with("[") && close != std::string::npos) {
+            what = what.substr(close + 2);
+        }
+        return makeError("JsonParseError", what, kWhere);
+    }
+    slot_t value = NullSlot;
+    std::string error;
+    if (!jsonToTyped(document, target, "$", value, error)) {
+        return makeError("JsonTypeError", error, kWhere);
+    }
+    return makeOk(value, result);
+}
+
 std::unordered_map<std::string, operator_t> getJsonOpsMap() {
-    return {{"encode", __json_encode__}, {"decode", __json_decode__}};
+    return {
+        {"encode", __json_encode__},
+        {"decode", __json_decode__},
+        {"decode_as", __json_decode_as__},
+    };
 }

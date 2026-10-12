@@ -1,0 +1,222 @@
+id = "modules.stdlib_values"
+order = 369
+tier = "feat"
+tags = ["feat", "modules", "stdlib", "consistency"]
+desc = "The core standard library (str, math, statistics, array): values on the four back ends and through the optimizing pipelines, checked against golden files"
+
+# Every case prints what the library functions return, including the boundaries (empty string
+# or array, non-ASCII text, invalid UTF-8, NaN, the largest and smallest integers). Each runs
+# on std::nvm, std::fvm, std::jit and std::prl; the four agree and the output is the golden
+# file's. The same golden file is then required of std::inline std::opt and std::macro
+# std::opt: every operator used here is declared pure, so these pipelines fold, merge and
+# drop calls.
+
+[defaults]
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Floating point exception", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stdlib.str_bytes"
+desc = "The str module by byte: split, trim, case, replace, find, substr, starts_with/ends_with, repeat, bytes/from_bytes and indexing, with empty strings and non-ASCII text."
+case = "../../../cases/modules/stdlib/str_bytes.cml"
+golden = "golden/stdlib/str_bytes.txt"
+
+[[tests]]
+name = "stdlib.str_bytes.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/str_bytes.cml"
+golden = "golden/stdlib/str_bytes.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.str_bytes.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/str_bytes.cml"
+golden = "golden/stdlib/str_bytes.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.str_chars"
+desc = "The str module by code point: codepoints, from_codepoints, char_count, char_at, char_substr, is_valid_utf8; invalid UTF-8 is an error value."
+case = "../../../cases/modules/stdlib/str_chars.cml"
+golden = "golden/stdlib/str_chars.txt"
+
+[[tests]]
+name = "stdlib.str_chars.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/str_chars.cml"
+golden = "golden/stdlib/str_chars.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.str_chars.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/str_chars.cml"
+golden = "golden/stdlib/str_chars.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.math_functions"
+desc = "The elementary functions and constants of the math module, with arguments outside the domain, infinities and NaN, on float and f32."
+case = "../../../cases/modules/stdlib/math_functions.cml"
+golden = "golden/stdlib/math_functions.txt"
+
+[[tests]]
+name = "stdlib.math_functions.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/math_functions.cml"
+golden = "golden/stdlib/math_functions.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.math_functions.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/math_functions.cml"
+golden = "golden/stdlib/math_functions.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.math_numbers"
+desc = "min, max, clamp, sign over the numeric types (NaN, the largest and smallest integers), gcd and lcm."
+case = "../../../cases/modules/stdlib/math_numbers.cml"
+golden = "golden/stdlib/math_numbers.txt"
+
+[[tests]]
+name = "stdlib.math_numbers.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/math_numbers.cml"
+golden = "golden/stdlib/math_numbers.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.math_numbers.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/math_numbers.cml"
+golden = "golden/stdlib/math_numbers.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.math_bits"
+desc = "bit_and, bit_or, bit_xor, bit_not, shl, shr on int and i32, including shifts into and out of the sign bit."
+case = "../../../cases/modules/stdlib/math_bits.cml"
+golden = "golden/stdlib/math_bits.txt"
+
+[[tests]]
+name = "stdlib.math_bits.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/math_bits.cml"
+golden = "golden/stdlib/math_bits.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.math_bits.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/math_bits.cml"
+golden = "golden/stdlib/math_bits.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.stats_quantiles"
+desc = "variance, median and quantile of the statistics module: empty arrays, one element, NaN, values near the limits."
+case = "../../../cases/modules/stdlib/stats_quantiles.cml"
+golden = "golden/stdlib/stats_quantiles.txt"
+
+[[tests]]
+name = "stdlib.stats_quantiles.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/stats_quantiles.cml"
+golden = "golden/stdlib/stats_quantiles.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.stats_quantiles.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/stats_quantiles.cml"
+golden = "golden/stdlib/stats_quantiles.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.array_basic"
+desc = "The array module (written in Camel): reverse, take, drop, enumerate, flatten, unique, index_of, sum, min, max, with empty arrays and the integer limits."
+case = "../../../cases/modules/stdlib/array_basic.cml"
+golden = "golden/stdlib/array_basic.txt"
+
+[[tests]]
+name = "stdlib.array_basic.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/array_basic.cml"
+golden = "golden/stdlib/array_basic.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.array_basic.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/array_basic.cml"
+golden = "golden/stdlib/array_basic.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.array_hof"
+desc = "The array module: find, any, all, count, flat_map, sort_by (stable, by number, string and bool keys), zip_with, with empty arrays."
+case = "../../../cases/modules/stdlib/array_hof.cml"
+golden = "golden/stdlib/array_hof.txt"
+
+[[tests]]
+name = "stdlib.array_hof.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/array_hof.cml"
+golden = "golden/stdlib/array_hof.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.array_hof.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/array_hof.cml"
+golden = "golden/stdlib/array_hof.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]
+
+[[tests]]
+name = "stdlib.array_large"
+desc = "The array module on 2000 elements with a function that does real work: the functions passed in are applied without an order among their calls, and the results agree on the four back ends."
+case = "../../../cases/modules/stdlib/array_large.cml"
+golden = "golden/stdlib/array_large.txt"
+
+[[tests]]
+name = "stdlib.array_large.inline_opt"
+desc = "The same through std::inline std::opt."
+case = "../../../cases/modules/stdlib/array_large.cml"
+golden = "golden/stdlib/array_large.txt"
+backends = false
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+
+[[tests]]
+name = "stdlib.array_large.macro_opt"
+desc = "The same through std::macro std::opt."
+case = "../../../cases/modules/stdlib/array_large.cml"
+golden = "golden/stdlib/array_large.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt", "std::nvm"]

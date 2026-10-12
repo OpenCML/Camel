@@ -1,0 +1,9 @@
+error[SyntaxDiag::MissingThen]: Expected 'then' after the condition of the 'if', before '1'.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_missing_then.cml:5:22
+   |
+ 5 |     let y = if x > 0 1 else 0
+   |                      ^
+help: A conditional is written: if <condition> then <value> else <value>. Each branch may be a
+      block: if c then { ... } else { ... }.
+
+camel: 1 error

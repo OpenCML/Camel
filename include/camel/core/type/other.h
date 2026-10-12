@@ -104,6 +104,12 @@ class OtherType : public Type {
     virtual OtherType *
     cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const;
 
+    /// Whether the arguments of this type are plain types and nothing else (`Map<K, V>`), as
+    /// opposed to arguments the type gives a meaning of its own (`Tensor<f32, const [3]>`).
+    /// When true, a type variable may be written among them, and the type-variable algebra
+    /// (typevar.h) substitutes and binds through params() with cloneWithParams.
+    virtual bool typeArguments() const { return false; }
+
     /// The type as a program writes it, for diagnostics that suggest source text (`x as T`).
     /// toString() is the default; a type whose printed form is not its source form overrides.
     virtual std::string spelling() const { return toString(); }

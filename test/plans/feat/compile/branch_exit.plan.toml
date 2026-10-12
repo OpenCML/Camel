@@ -1,0 +1,90 @@
+id = "compile.branch_exit"
+order = 327
+tier = "feat"
+tags = ["feat", "compile", "warnings", "branches"]
+desc = "The warning for a return or throw in an arm of an if / match whose value nothing uses."
+
+# An arm is a graph of its own: `return` in an arm ends the arm and gives the value of the
+# branch (design principles 2.1, 2.4). When the branch is a statement that value goes nowhere
+# and the exit has no effect. The warning (SemanticDiag::ExitInUnusedBranch) changes nothing
+# about what the program does.
+
+[[tests]]
+name = "unused_arm_exit"
+desc = "Every return and throw in an arm of an unused if / match is warned about at the statement, with the branch as the second location; return null is not. The program runs as before, alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/compile/branch_exit/unused_arm_exit.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stderr_contains = ["[Warn]: This 'throw' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function. [the value of this 'if' is not used at 12:5]", "This 'return' gives the value of the 'match' it is in", "[the value of this 'match' is not used at 24:5]", "name=SemanticDiag::ExitInUnusedBranch, code=0x03100090"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "0 0",
+  "100 100",
+  "unknown unknown unknown",
+  "7 7",
+  "2 500",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+const at = [...input.stderr.matchAll(/unused_arm_exit[.]cml:([0-9]+):([0-9]+): .Warn/g)].map(m => m[1] + ':' + m[2])
+const expected = '12:27 12:89 18:21 18:39 25:21 26:25 27:21 36:25 36:43 39:9 48:11'
+assert(at.join(' ') === expected, `warned at: ${at.join(' ')}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "used_arm_exit"
+desc = "No warning where the value of the branch is used: the last expression of a body, the operand of return, a let, an argument, an element, an operand; a lambda or a used branch inside an unused arm."
+kind = "behavior"
+case = "../../../cases/compile/branch_exit/used_arm_exit.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "2 -1",
+  "-1 0 1",
+  "2423 1212",
+  "one two three many",
+  "8",
+  "10 2",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+assert(input.stderr === '', 'no warning: ' + input.stderr)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "unused_arm_exit.wno"
+desc = "-Wno-exit-in-unused-branch switches the warning off."
+kind = "behavior"
+case = "../../../cases/compile/branch_exit/unused_arm_exit.cml"
+args = ["-Wno-exit-in-unused-branch", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.stderr === '', 'no warning: ' + input.stderr)
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "unused_arm_exit.werror"
+desc = "-Werror=ExitInUnusedBranch makes it an error and the program does not run."
+kind = "behavior"
+case = "../../../cases/compile/branch_exit/unused_arm_exit.cml"
+args = ["-Werror=ExitInUnusedBranch", "${case}"]
+expect_exit = 1
+expect_stdout_contains = ["[Error]:", "name=SemanticDiag::ExitInUnusedBranch"]
+expect_output_not_contains = ["unknown unknown unknown"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

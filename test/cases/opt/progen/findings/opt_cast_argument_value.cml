@@ -1,0 +1,23 @@
+/**
+ * finding F35 ((other) wrong value after a rewrite), found by hand, not by progen. Specialization
+ *   bound the constant under an `as` conversion to the parameter without converting it: the
+ *   integer 7 passed as `i as float` reached the callee as the float with the bits of 7.
+ * Pipeline: std::opt std::nvm (also std::opt::simplify and std::specialize)
+ * Expected output: 7.5, 17.25, 10.75 (three lines)
+ * Actual: 0.5, -1.75, 7.75 (node VM; the second line differs between schedulers)
+ */
+module opt_cast_argument_value
+
+func f(x: float): float { return x + 0.5 }
+
+func h(x: float, y: float): float { return x * 2.0 + y + 0.25 }
+
+func main(): int sync {
+    let i = 7
+    let j = 3
+    let d = 3.5
+    println(f(i as float))
+    println(h(i as float, j as float))
+    println(h(d, j as float) + f(0.0))
+    return 0
+}

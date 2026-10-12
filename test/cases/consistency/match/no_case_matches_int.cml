@@ -1,0 +1,21 @@
+/**
+ * The same over an int, with cases of several patterns and block arms, in a `match` written as
+ * a statement of a sync body.
+ */
+module no_case_matches_int
+
+func describe(k: int): string sync {
+    var text = 'none'
+    match k {
+        case 1 | 2 => sync { text = 'small' }
+        case 3 => sync { text = 'three' }
+    }
+    return text
+}
+
+func main(): int sync {
+    println(describe(1), describe(2), describe(3))
+    println(describe(40 + 2))
+    println('not reached')
+    return 0
+}

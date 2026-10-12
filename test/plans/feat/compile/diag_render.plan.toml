@@ -1,0 +1,472 @@
+id = "compile.diag_render"
+order = 328
+tier = "feat"
+tags = ["feat", "compile", "diagnostics"]
+
+[[tests]]
+name = "render.syntax_missing_paren"
+desc = "An unclosed '(' is MissingClosingDelimiter at the token where the parser gave up, with the '(' as a secondary location."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_missing_paren.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_missing_paren.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_missing_then"
+desc = "A conditional without 'then'."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_missing_then.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_missing_then.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_extra_semicolon"
+desc = "Two ';' in a row."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_extra_semicolon.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_extra_semicolon.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_assign_in_condition"
+desc = "'=' where '==' was meant."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_assign_in_condition.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_assign_in_condition.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_keyword_as_name"
+desc = "A keyword used as the name of a declaration."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_keyword_as_name.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_keyword_as_name.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_missing_comma"
+desc = "Two parameters without a ',' between them."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_missing_comma.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_missing_comma.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_missing_initializer"
+desc = "A declaration without a value; reported at the name, not at the next line where the parser stopped."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_missing_initializer.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_missing_initializer.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_stray_closer"
+desc = "A ')' that closes nothing, with the innermost open bracket as a secondary location."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_stray_closer.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_stray_closer.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_unexpected_token"
+desc = "A token that fits nowhere is UnexpectedToken, with what the parser expected in words and a note for 'else'."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_unexpected_token.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_unexpected_token.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_end_of_file"
+desc = "A block still open at the end of a file that does not end in a newline: the caret stands after the last character."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_end_of_file.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_end_of_file.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_first_only"
+desc = "Only the first syntax error of a file is reported: what the parser says after it has resynchronised is a consequence (here it would report three more)."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_first_only.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_first_only.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.lexical_illegal_character"
+desc = "A character that starts no token; the file gets no syntax error on top."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/lexical_illegal_character.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/lexical_illegal_character.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.lexical_unclosed_string"
+desc = "A string without its closing quote is reported at the opening quote (the lexer consumed the rest of the file)."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/lexical_unclosed_string.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/lexical_unclosed_string.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.lexical_wide_run"
+desc = "A run of characters that start no token (a name in another script) is one error; the underline is two columns per wide character."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/lexical_wide_run.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/lexical_wide_run.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_cascade"
+desc = "An undefined name is one error: the declarations that depend on it (r, s, t) are not reported, an independent error after them is."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_cascade.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_cascade.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_independent"
+desc = "Independent errors in different functions and statements are all reported in one run."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_independent.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_independent.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_generic_instance"
+desc = "An error in the body of a generic function is reported once per instance in which it differs, each with the call that asked for the instance as a secondary location; an error that does not depend on the type is reported once."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_generic_instance.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_generic_instance.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_multiline"
+desc = "A range over several lines: the first two lines and the last are shown."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_multiline.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_multiline.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_tab_wide"
+desc = "Tabs and wide characters before the range: the underline is placed by display columns (a tab stop every 4, two columns per CJK character); the column reported counts characters."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_tab_wide.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_tab_wide.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_long_line"
+desc = "A line longer than the excerpt width is cut around the range, with '...' on the cut sides."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_long_line.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_long_line.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_failed_function"
+desc = "A function without a declared return type whose body is in error: the call of it is not reported as a call of an incomplete function."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_failed_function.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_failed_function.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_failed_type"
+desc = "A type declaration in error: the uses of the type are not reported as unresolved types."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_failed_type.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_failed_type.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_import_errors"
+desc = "An imported module with an error: its error is shown first, then the import that cannot be done; the uses of the imported name are not reported."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_import_errors.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_import_errors.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.sem_error_limit"
+desc = "--max-errors 3 stops after three errors and says so."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/sem_error_limit.cml"
+args = ["--error-format", "text", "--max-errors", "3", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/sem_error_limit.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.warning_dropped_effect"
+desc = "A warning (to stderr, the program still runs): a call with an effect that nothing depends on."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/warning_dropped_effect.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 0
+snapshot_stream = "stderr"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/warning_dropped_effect.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.runtime_index"
+desc = "A run-time fault with the index and the length."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/runtime_index.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/runtime_index.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.runtime_division"
+desc = "Division by zero at the operator."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/runtime_division.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/runtime_division.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.runtime_number_text"
+desc = "A string that is not a number, with the string and the target type."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/runtime_number_text.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/runtime_number_text.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.runtime_file_open"
+desc = "A file that cannot be opened, with the path and the reason."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/runtime_file_open.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/runtime_file_open.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_platform_error_messages"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.runtime_json"
+desc = "Text that is not JSON, with the position in the text and its beginning."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/runtime_json.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/runtime_json.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.runtime_format"
+desc = "A format string with more fields than arguments."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/runtime_format.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/runtime_format.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_missing_token"
+desc = "The parser knows the one token that is missing: a parameter without ':' before its type."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_missing_token.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_missing_token.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.syntax_unexpected_end"
+desc = "The file ends where a function body was expected."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/syntax_unexpected_end.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/syntax_unexpected_end.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.runtime_regex"
+desc = "A pattern that is not a regular expression, with the pattern and the reason."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/runtime_regex.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/runtime_regex.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_platform_error_messages"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.runtime_time_format"
+desc = "Text that does not match the time format, with both."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/runtime_time_format.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/runtime_time_format.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "render.werror_no_position"
+desc = "-Werror makes the command-line warning about passes that never run an error; it has no source position, so no excerpt is drawn, and the program is not run."
+kind = "snapshot"
+case = "../../../cases/compile/diag_render/werror_no_position.cml"
+args = ["--error-format", "text", "-Werror", "${case}", "std::nvm", "std::inline"]
+expect_exit = 1
+snapshot_stream = "stderr"
+snapshot_compare = "text_exact"
+golden = "golden/diag_render/werror_no_position.txt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -1,0 +1,1022 @@
+"""Random Camel programs with a reference output, from a seed.
+
+`generate(seed, features)` returns a program tree (model.N) whose reference evaluation
+succeeded, together with the lines it must print. Everything is drawn from one
+`random.Random` seeded with the seed and the feature set, so a (seed, features) pair always
+gives the same program.
+
+Features switch constructs on and off (see FEATURES); `--features` of progen.py takes a
+comma-separated list, with `-name` to remove one from the default set.
+
+Every construct here was first run by hand on the node VM without passes and compared with
+what model.py computes for it; constructs that turned out not to work as documented are not
+generated (README.md lists them).
+"""
+
+from __future__ import annotations
+
+import random
+from typing import List, Optional
+
+from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, REC, STR, TUP, Reject, effect_violations,
+                   evaluate, heavy_graphs, static_faults, walk)
+
+FEATURES = {
+    "float": "float arithmetic (exact values only), float(int), int(float), precision placeholders",
+    "string": "string literals, concatenation, len, string(int), string(bool), format, comparisons, +=, join",
+    "array": "array literals, index, len, concat, slice, contains",
+    "tuple": "tuple literals and .N access",
+    "struct": "struct types, literals and field access",
+    "var": "var declarations and assignments in sync blocks",
+    "varparam": "functions with var parameters (sync func), writes through them",
+    "capture": "lambdas and nested functions that read or write captured variables",
+    "if": "if expressions, block arms, if statements with effects in the arms",
+    "match": "match on an int, string or bool name, with literal cases",
+    "func": "user functions and calls",
+    "rec": "bounded recursion: tail, non-tail, tree, mutual, and recursion that writes a var",
+    "closure": "function values: lambdas, named functions as values, functions returning lambdas",
+    "hof": "user functions that take function parameters",
+    "builtin": "map, filter, reduce, foreach, zip, range",
+    "effects": "println in functions with sync bodies, effects in branch and match arms",
+    "wait": "wait before writes and calls that write",
+    "env": "values read from the environment (unknown to every pass)",
+    "macro": "pure functions declared macro",
+}
+DEFAULT_FEATURES = frozenset(FEATURES)
+
+# Part of the random stream: a change of the generator that changes the programs of existing
+# seeds gets a new number, so that "seed N" of an old report is not silently another program.
+VERSION = 2
+
+
+def parse_features(text: Optional[str]) -> frozenset:
+    if not text:
+        return DEFAULT_FEATURES
+    names = [x.strip() for x in text.split(",") if x.strip()]
+    base = set(DEFAULT_FEATURES) if all(x.startswith("-") for x in names) else set()
+    for x in names:
+        name = x.lstrip("-+")
+        if name == "all":
+            base |= DEFAULT_FEATURES
+            continue
+        if name not in FEATURES:
+            raise SystemExit(f"unknown feature {name!r}; known: {', '.join(sorted(FEATURES))}")
+        if x.startswith("-"):
+            base.discard(name)
+        else:
+            base.add(name)
+    return frozenset(base)
+
+
+class Sym:
+    """A name in scope. kind: 'let' (immutable: let, parameter), 'var', 'fn' (a declared
+    function). `eff`: calling it has effects. For a function: `params` [(name, type, isvar)],
+    `ret`, `rec` (index of the depth parameter, largest depth) and `ret_eff` (the function it
+    returns has effects)."""
+
+    __slots__ = ("name", "t", "kind", "eff", "params", "ret", "rec", "ret_eff", "value", "shown")
+
+    def __init__(self, name, t, kind, eff=False, params=None, ret=None, rec=None, ret_eff=False, value=None):
+        self.name, self.t, self.kind, self.eff = name, t, kind, eff
+        self.params, self.ret, self.rec, self.ret_eff, self.value = params, ret, rec, ret_eff, value
+        self.shown = False
+
+
+def lit(t, v):
+    return N("lit", t=t, v=v)
+
+
+def ref(s: Sym):
+    return N("ref", t=s.t, name=s.name)
+
+
+def bin_(op, a, b, t):
+    return N("bin", [a, b], t=t, op=op)
+
+
+WORDS = ["a", "b", "ab", "cd", "x", "yz", "", "k9", "pq", "m"]
+FLOATS = [0.5, 1.5, 2.0, 0.25, -1.5, 3.0, 4.75, -0.5, 1.0, 10.0, 0.0, 2.5]
+INTS = [0, 1, 2, 3, 4, 5, 7, 10, -1, -2, -3, -7, 12, 100, 31]
+SCALARS = (INT, FLOAT, BOOL, STR)
+
+
+class Gen:
+    def __init__(self, rng: random.Random, features: frozenset, size: int = 1):
+        self.r = rng
+        self.f = features
+        self.size = size            # multiplies the number of functions and of statements of `main`
+        self.scope: List[Sym] = []
+        self.counter = 0
+        self.types = {}
+        self.env = {}
+        self.funcs: List[N] = []
+        self.label = 0
+        if "struct" in features:
+            self.types["P"] = [("x", INT), ("y", INT)]
+            second = [("n", INT)]
+            second.append(("tag", STR) if "string" in features else ("on", BOOL))
+            if "float" in features and self.r.random() < 0.5:
+                second.append(("w", FLOAT))
+            self.types["Q"] = second
+
+    # -- helpers ----------------------------------------------------------------------------
+    def on(self, name: str) -> bool:
+        return name in self.f
+
+    def fresh(self, prefix: str) -> str:
+        self.counter += 1
+        return f"{prefix}{self.counter}"
+
+    def chance(self, p: float) -> bool:
+        return self.r.random() < p
+
+    def pick(self, options):
+        """options: [(weight, thunk)]"""
+        total = sum(w for w, _ in options)
+        x = self.r.random() * total
+        for w, thunk in options:
+            x -= w
+            if x <= 0:
+                return thunk()
+        return options[-1][1]()
+
+    def scalars(self):
+        out = [INT, INT, BOOL]
+        if self.on("float"):
+            out.append(FLOAT)
+        if self.on("string"):
+            out += [STR, STR]
+        return out
+
+    def scalar(self):
+        return self.r.choice(self.scalars())
+
+    def rand_type(self, composite: float = 0.4):
+        if not self.chance(composite):
+            return self.scalar()
+        opts = []
+        if self.on("array"):
+            opts += [lambda: ARR(self.scalar())] * 3
+            if self.on("tuple"):
+                opts += [lambda: ARR(TUP(self.scalar(), self.scalar()))] * 2
+            if self.on("struct"):
+                opts.append(lambda: ARR(REC("P")))
+        if self.on("tuple"):
+            opts += [lambda: TUP(*[self.scalar() for _ in range(self.r.choice([2, 2, 3]))])] * 2
+            if self.on("array"):
+                opts.append(lambda: TUP(self.scalar(), ARR(self.scalar())))
+        if self.on("struct"):
+            opts += [lambda: REC("P"), lambda: REC("Q")]
+        return self.r.choice(opts)() if opts else self.scalar()
+
+    def fn_type(self):
+        return FN([self.scalar() for _ in range(self.r.choice([1, 1, 2]))], self.scalar())
+
+    def fields(self, t):
+        return self.types[t[1]]
+
+    def values(self, t=None, kinds=("let", "var")):
+        return [s for s in self.scope if s.kind in kinds and not s.eff and (t is None or s.t == t)]
+
+    # -- leaves -----------------------------------------------------------------------------
+    def leaf(self, t):
+        k = t[0]
+        if k == "fn":
+            return self.fn_expr(t, 0)
+        cands = self.values(t)
+        if cands and self.chance(0.6 if t in SCALARS else 0.8):
+            return ref(self.r.choice(cands[-8:]) if self.chance(0.7) else self.r.choice(cands))
+        if t == INT:
+            return lit(INT, self.r.choice(INTS))
+        if t == FLOAT:
+            return lit(FLOAT, self.r.choice(FLOATS))
+        if t == BOOL:
+            return lit(BOOL, self.chance(0.5))
+        if t == STR:
+            return lit(STR, self.r.choice(WORDS))
+        if k == "arr":
+            return N("arr", [self.leaf(t[1]) for _ in range(self.r.choice([1, 2, 2, 3, 4]))], t=t)
+        if k == "tup":
+            return N("tup", [self.leaf(x) for x in t[1]], t=t)
+        if k == "rec":
+            fs = self.fields(t)
+            return N("rec", [self.leaf(ft) for _, ft in fs], t=t, fields=[f for f, _ in fs])
+        raise ValueError(t)
+
+    def small(self, most: int):
+        """An int expression whose value is at most `most` (a recursion depth)."""
+        known = [s for s in self.values(INT, ("let",)) if s.value is not None and 0 <= s.value <= most]
+        if known and self.chance(0.35):
+            return ref(self.r.choice(known))
+        if self.chance(0.2):
+            return bin_("%", self.expr(INT, 1), lit(INT, most + 1), INT)
+        return lit(INT, self.r.randint(0, most))
+
+    # -- pure expressions -------------------------------------------------------------------
+    def expr(self, t, d: int):
+        if t[0] == "fn":
+            return self.fn_expr(t, d)
+        if d <= 0 or self.chance(0.1):
+            return self.leaf(t)
+        k = t[0]
+        o = [(1.0, lambda: self.leaf(t))]
+        if self.on("if"):
+            o.append((1.6, lambda: self.if_expr(t, d)))
+        if self.on("match") and self.scrutinees():
+            o.append((1.0, lambda: self.match_expr(t, d)))
+        acc = self.accesses(t)
+        if acc:
+            o.append((2.0, lambda: self.r.choice(acc)()))
+        calls = self.callables(t)
+        if calls:
+            o.append((3.0, lambda: self.call(self.r.choice(calls), d)))
+        if self.on("builtin") and self.on("array") and t in SCALARS:
+            o.append((0.9, lambda: self.reduce_expr(t, d)))
+        if t == INT:
+            o.append((4.0, lambda: self.int_arith(d)))
+            if self.on("array") or self.on("string"):
+                o.append((1.2, lambda: N("conv", [self.expr(self.len_type(), d - 1)], t=INT, fn="len")))
+            if self.on("float"):
+                o.append((0.6, lambda: N("conv", [self.expr(FLOAT, d - 1)], t=INT, fn="int")))
+        elif t == FLOAT:
+            o.append((4.0, lambda: self.float_arith(d)))
+            o.append((1.0, lambda: N("conv", [self.expr(INT, d - 1)], t=FLOAT, fn="float")))
+        elif t == BOOL:
+            o.append((4.0, lambda: self.compare(d)))
+            o.append((2.0, lambda: bin_(self.r.choice(["&&", "||"]), self.expr(BOOL, d - 1), self.expr(BOOL, d - 1), BOOL)))
+            o.append((0.8, lambda: N("un", [self.expr(BOOL, d - 1)], t=BOOL, op="!")))
+            if self.on("array"):
+                o.append((0.8, lambda: self.contains(d)))
+        elif t == STR:
+            o.append((3.0, lambda: bin_("+", self.expr(STR, d - 1), self.expr(STR, d - 1), STR)))
+            o.append((1.5, lambda: N("conv", [self.expr(INT, d - 1)], t=STR, fn="string")))
+            o.append((0.5, lambda: N("conv", [self.expr(BOOL, d - 1)], t=STR, fn="string")))
+            o.append((2.0, lambda: self.fmt(d)))
+            if self.on("array"):
+                o.append((0.6, lambda: N("join", [self.expr(ARR(STR), d - 1)], t=STR, sep=self.r.choice([",", "", "-"]))))
+        elif k == "arr":
+            o += self.array_options(t, d)
+        elif k == "tup":
+            o.append((3.0, lambda: N("tup", [self.expr(x, d - 1) for x in t[1]], t=t)))
+        elif k == "rec":
+            fs = self.fields(t)
+            o.append((3.0, lambda: N("rec", [self.expr(ft, d - 1) for _, ft in fs], t=t, fields=[f for f, _ in fs])))
+        return self.pick(o)
+
+    def len_type(self):
+        opts = []
+        if self.on("array"):
+            opts += [ARR(self.scalar()), ARR(INT)]
+        if self.on("string"):
+            opts.append(STR)
+        return self.r.choice(opts)
+
+    def int_arith(self, d):
+        r = self.r.random()
+        a = self.expr(INT, d - 1)
+        if r < 0.5:
+            e = bin_(self.r.choice(["+", "-"]), a, self.expr(INT, d - 1), INT)
+        elif r < 0.7:
+            e = bin_("*", a, lit(INT, self.r.choice([2, 3, -1, -2, 5, 10, 0, 1])), INT)
+            if self.chance(0.3):
+                e = bin_("*", a, self.expr(INT, d - 1), INT)
+        elif r < 0.8:
+            e = bin_("/", a, lit(INT, self.r.choice([1, 2, 3, -2, 4, 7, -1])), INT)
+        elif r < 0.93:
+            e = bin_("%", a, lit(INT, self.r.choice([2, 3, 5, 7, 10, 97, -3])), INT)
+        else:
+            return N("un", [a], t=INT, op="-")
+        if self.chance(0.25):
+            e = bin_("%", e, lit(INT, self.r.choice([7, 11, 100, 997])), INT)
+        return e
+
+    def float_arith(self, d):
+        r = self.r.random()
+        a = self.expr(FLOAT, d - 1)
+        if r < 0.55:
+            return bin_(self.r.choice(["+", "-"]), a, self.expr(FLOAT, d - 1), FLOAT)
+        if r < 0.75:
+            return bin_("*", a, lit(FLOAT, self.r.choice([2.0, 0.5, -1.0, 4.0, 1.5, 0.25])), FLOAT)
+        if r < 0.9:
+            return bin_("/", a, lit(FLOAT, self.r.choice([2.0, 4.0, 0.5, -2.0, 0.25])), FLOAT)
+        return N("un", [a], t=FLOAT, op="-")
+
+    def compare(self, d):
+        ts = [INT, INT, INT]
+        if self.on("float"):
+            ts.append(FLOAT)
+        if self.on("string"):
+            ts.append(STR)
+        t = self.r.choice(ts)
+        ops = ["==", "!=", "<", "<=", ">", ">="]
+        return bin_(self.r.choice(ops), self.expr(t, d - 1), self.expr(t, d - 1), BOOL)
+
+    def contains(self, d):
+        t = self.r.choice([INT, STR] if self.on("string") else [INT])
+        return N("contains", [self.expr(ARR(t), d - 1), self.expr(t, d - 1)], t=BOOL)
+
+    def fmt(self, d):
+        n = self.r.choice([1, 2, 2, 3])
+        parts, args = [self.r.choice(["", "v=", "<", "r:"])], []
+        for i in range(n):
+            t = self.r.choice(self.scalars())
+            e = self.expr(t, d - 1)
+            spec = "{}"
+            if t == FLOAT and self.chance(0.5):
+                spec = "{:.%df}" % self.r.choice([1, 2, 3])
+            args.append(e)
+            parts.append(spec + self.r.choice([" ", ",", "|", ">", ""]))
+        return N("fmt", args, t=STR, s="".join(parts))
+
+    def array_options(self, t, d):
+        e = t[1]
+        o = [(3.0, lambda: N("arr", [self.expr(e, d - 1) for _ in range(self.r.choice([1, 2, 3, 3, 4]))], t=t)),
+             (1.5, lambda: N("concat", [self.expr(t, d - 1), self.expr(t, d - 1)], t=t))]
+        named = self.values(t)
+        if named:
+            def slice_():
+                a = self.r.choice(named)
+                lo = lit(INT, self.r.choice([0, 0, 1]))
+                hi = N("conv", [ref(a)], t=INT, fn="len") if self.chance(0.6) else lit(INT, self.r.choice([1, 2]))
+                return N("slice", [ref(a), lo, hi], t=t)
+            o.append((1.6, slice_))
+        if self.on("builtin"):
+            def map_():
+                src = self.scalar() if self.chance(0.7) else e
+                return N("map", [self.expr(ARR(src), d - 1), self.fn_expr(FN([src], e), d - 1)], t=t)
+            o.append((2.5, map_))
+            o.append((1.8, lambda: N("filter", [self.expr(t, d - 1), self.fn_expr(FN([e], BOOL), d - 1)], t=t)))
+            if e == INT:
+                def range_():
+                    lo = self.r.choice([0, 0, 1, 2, -2])
+                    if named and self.chance(0.3):
+                        return N("range", [lit(INT, 0), N("conv", [ref(self.r.choice(named))], t=INT, fn="len")], t=t)
+                    return N("range", [lit(INT, lo), lit(INT, lo + self.r.choice([0, 1, 2, 3, 4, 5]))], t=t)
+                o.append((2.2, range_))
+            if e[0] == "tup" and len(e[1]) == 2:
+                def zip_():
+                    left = self.expr(ARR(e[1][0]), d - 1)
+                    right = N("map", [left.clone(), self.fn_expr(FN([e[1][0]], e[1][1]), d - 1)], t=ARR(e[1][1]))
+                    return N("zip", [left, right], t=t)
+                o.append((2.5, zip_))
+        return o
+
+    def if_expr(self, t, d):
+        return N("if", [self.expr(BOOL, d - 1), self.pure_arm(t, d - 1), self.pure_arm(t, d - 1)], t=t)
+
+    def pure_arm(self, t, d):
+        if d > 0 and self.chance(0.25):
+            return self.pure_block(t, d)
+        return self.expr(t, d)
+
+    def pure_block(self, t, d):
+        mark = len(self.scope)
+        stmts = [self.let(self.rand_type(0.3), d) for _ in range(self.r.choice([1, 1, 2]))]
+        result = self.expr(t, d)
+        del self.scope[mark:]
+        return N("blk", [stmts, result], t=t)
+
+    def let(self, t, d):
+        e = self.expr(t, d)
+        s = Sym(self.fresh("n"), t, "let")
+        self.scope.append(s)
+        return N("let", [e], name=s.name)
+
+    def scrutinees(self):
+        ts = [INT, BOOL] + ([STR] if self.on("string") else [])
+        return [s for s in self.scope if s.kind == "let" and s.t in ts and not s.eff]
+
+    def match_expr(self, t, d, arm=None):
+        s = self.r.choice(self.scrutinees())
+        arm = arm or (lambda: self.pure_arm(t, d - 1))
+        cases = []
+        if s.t == BOOL:
+            first = self.chance(0.5)
+            cases.append(N("case", [arm()], pat=first, pt=BOOL))
+            cases.append(N("case", [arm()], pat=None, pt=BOOL) if self.chance(0.5)
+                         else N("case", [arm()], pat=not first, pt=BOOL))
+        else:
+            pool = [0, 1, 2, 3, 5, -1, 7, 10] if s.t == INT else WORDS
+            for p in self.r.sample(pool, self.r.choice([1, 2, 3])):
+                cases.append(N("case", [arm()], pat=p, pt=s.t))
+            cases.append(N("case", [arm()], pat=None, pt=s.t))
+        return N("match", cases, t=t, var=s.name)
+
+    def accesses(self, t):
+        """Thunks for expressions of type t that read a part of a value in scope."""
+        out = []
+
+        def paths(make, ty, depth):
+            if ty == t and depth < 2:
+                out.append(make)
+            if depth == 0:
+                return
+            if ty[0] == "tup":
+                for i, ct in enumerate(ty[1]):
+                    paths(lambda make=make, i=i, ct=ct: N("tix", [make()], t=ct, i=i), ct, depth - 1)
+            elif ty[0] == "rec":
+                for f, ft in self.fields(ty):
+                    paths(lambda make=make, f=f, ft=ft: N("fld", [make()], t=ft, name=f), ft, depth - 1)
+            elif ty[0] == "arr":
+                def at(make=make, et=ty[1]):
+                    a = make()
+                    i = self.r.choice([0, 0, 1, 2])
+                    read = N("idx", [a, lit(INT, i)], t=et)
+                    if et != t or self.chance(0.3):
+                        return read
+                    cond = bin_(">", N("conv", [a.clone()], t=INT, fn="len"), lit(INT, i), BOOL)
+                    return N("if", [cond, read, self.leaf(et)], t=et)
+                paths(at, ty[1], depth - 1)
+
+        for s in self.values():
+            if s.t[0] in ("tup", "rec", "arr"):
+                paths(lambda s=s: ref(s), s.t, 2)
+        return out
+
+    def callables(self, t, eff=False):
+        out = []
+        for s in self.scope:
+            if s.eff != eff:
+                continue
+            if s.kind == "fn" and s.ret == t:
+                out.append(s)
+            elif s.kind == "let" and s.t[0] == "fn" and s.t[2] == t:
+                out.append(s)
+        return out
+
+    def call(self, s: Sym, d, eff=False):
+        params = s.params if s.kind == "fn" else [(None, pt, False) for pt in s.t[1]]
+        args, vargs = [], []
+        used = set()
+        for i, (_n, pt, isvar) in enumerate(params):
+            if isvar:
+                cands = [v for v in self.scope if v.kind == "var" and v.t == pt and v.name not in used]
+                v = self.r.choice(cands)
+                used.add(v.name)
+                args.append(ref(v))
+                vargs.append(i)
+            elif s.rec and s.rec[0] == i:
+                args.append(self.small(s.rec[1]))
+            else:
+                args.append(self.expr(pt, min(d - 1, 2)))
+        ret = s.ret if s.kind == "fn" else s.t[2]
+        return N("call", [ref(s)] + args, t=ret, eff=eff or s.eff, vargs=vargs)
+
+    def can_call(self, s: Sym) -> bool:
+        """Is there a distinct variable in scope for every var parameter?"""
+        if s.kind != "fn":
+            return True
+        need = {}
+        for _n, pt, isvar in s.params:
+            if isvar:
+                need[pt] = need.get(pt, 0) + 1
+        return all(len([v for v in self.scope if v.kind == "var" and v.t == pt]) >= k for pt, k in need.items())
+
+    def reduce_expr(self, t, d):
+        et = self.scalar()
+        fn = self.lam(FN([t, et], t), d - 1)
+        return N("reduce", [self.expr(ARR(et), d - 1), fn, self.expr(t, d - 1)], t=t)
+
+    # -- function values --------------------------------------------------------------------
+    def fn_expr(self, t, d):
+        named = [s for s in self.scope if not s.eff and s.t == t and
+                 (s.kind == "let" or (s.kind == "fn" and not s.rec and not any(p[2] for p in s.params)))]
+        makers = self.callables(t) if d > 0 else []
+        o = [(2.0, lambda: self.lam(t, d))]
+        if named and self.on("closure"):
+            o.append((2.0, lambda: ref(self.r.choice(named))))
+        if makers and self.on("closure"):
+            o.append((1.5, lambda: self.call(self.r.choice(makers), d)))
+        return self.pick(o)
+
+    def lam(self, t, d):
+        mark = len(self.scope)
+        params = []
+        for pt in t[1]:
+            s = Sym(self.fresh("p"), pt, "let")
+            params.append((s.name, pt, False))
+            self.scope.append(s)
+        body = self.pure_block(t[2], d) if d > 0 and self.chance(0.25) else self.expr(t[2], max(d, 1) if self.chance(0.7) else 0)
+        del self.scope[mark:]
+        return N("lam", [body], t=t, params=params, ret=t[2])
+
+    # -- pure functions ---------------------------------------------------------------------
+    def add_func(self, name, params, ret, body, sym: Sym, **attrs):
+        self.funcs.append(N("func", [body], name=name, params=params, ret=ret, **attrs))
+        self.scope.append(sym)
+
+    def fn_sym(self, name, params, ret, **kw) -> Sym:
+        plain = not any(p[2] for p in params)
+        return Sym(name, FN([p[1] for p in params], ret) if plain else ("fnvar",), "fn", params=params, ret=ret, **kw)
+
+    def with_params(self, params, make):
+        """Runs make() with only the declared functions and the parameters in scope."""
+        saved = self.scope
+        self.scope = [s for s in saved if s.kind == "fn"]
+        for name, t, isvar in params:
+            self.scope.append(Sym(name, t, "var" if isvar else "let"))
+        try:
+            return make()
+        finally:
+            self.scope = saved
+
+    def param_types(self, n, fn_chance=0.0):
+        out = []
+        for _ in range(n):
+            if self.on("hof") and self.on("closure") and self.chance(fn_chance):
+                out.append(self.fn_type())
+            else:
+                out.append(self.rand_type(0.35))
+        return out
+
+    def pure_function(self):
+        name = self.fresh("f")
+        params = [(self.fresh("a"), t, False) for t in self.param_types(self.r.choice([1, 2, 2, 3]), 0.25)]
+        ret = self.fn_type() if self.on("closure") and self.chance(0.15) else self.rand_type(0.3)
+
+        def make():
+            stmts = [self.let(self.rand_type(0.3), 2) for _ in range(self.r.choice([0, 0, 1, 2]))]
+            return N("blk", [stmts, self.expr(ret, 3)], t=ret)
+        body = self.with_params(params, make)
+        macro = self.on("macro") and self.chance(0.35) and macro_safe(body)
+        self.add_func(name, params, ret, body, self.fn_sym(name, params, ret), macro=macro)
+
+    def recursive_function(self):
+        """f(n, x): tail, non-tail, tree or mutual recursion on a depth parameter."""
+        shape = self.r.choice(["tail", "tail", "nontail", "nontail", "tree", "mutual"])
+        t = self.r.choice([INT, INT, INT] + ([STR] if self.on("string") else []) +
+                          ([ARR(INT)] if self.on("array") else []) + ([FLOAT] if self.on("float") else []) +
+                          ([TUP(INT, INT)] if self.on("tuple") else []))
+        name, n, x = self.fresh("r"), self.fresh("a"), self.fresh("a")
+        params = [(n, INT, False), (x, t, False)]
+        extra = self.chance(0.4)
+        if extra:
+            params.append((self.fresh("a"), self.scalar(), False))
+        most = 5 if shape == "tree" else 9
+        sym = self.fn_sym(name, params, t, rec=(0, most))
+        nref = lambda: N("ref", t=INT, name=n)
+        down = lambda k=1: bin_("-", nref(), lit(INT, k), INT)
+        rest = lambda: [N("ref", t=p[1], name=p[0]) for p in params[2:]]
+
+        def bounded(e):
+            return bin_("%", e, lit(INT, self.r.choice([97, 997, 1000])), INT) if t == INT and self.chance(0.7) else e
+
+        def self_call(fname, k=1):
+            return N("call", [N("ref", t=sym.t, name=fname), down(k), bounded(self.expr(t, 2))] + rest(), t=t, eff=False, vargs=[])
+
+        def body_of(fname_next):
+            def make():
+                base = self.expr(t, 2)
+                if shape in ("tail", "mutual"):
+                    step = self_call(fname_next)
+                else:
+                    mark = len(self.scope)
+                    stmts = []
+                    for k in ([1, 2] if shape == "tree" else [1]):
+                        s = Sym(self.fresh("n"), t, "let")
+                        stmts.append(N("let", [self_call(fname_next, k)], name=s.name))
+                        self.scope.append(s)
+                    result = bounded(self.expr(t, 2))
+                    if not any(x.k == "ref" and x.a["name"] == stmts[0].a["name"] for x in walk(result)):
+                        result = self.combine(t, result, N("ref", t=t, name=stmts[0].a["name"]))
+                    del self.scope[mark:]
+                    step = N("blk", [stmts, result], t=t)
+                cond = bin_("<=", nref(), lit(INT, 1 if shape == "tree" else 0), BOOL)
+                return N("blk", [[], N("if", [cond, base, step], t=t)], t=t)
+            return self.with_params(params, make)
+
+        if shape == "mutual":
+            other = self.fresh("r")
+            self.funcs.append(N("func", [body_of(other)], name=name, params=params, ret=t))
+            self.funcs.append(N("func", [body_of(name)], name=other, params=params, ret=t))
+            self.scope.append(sym)
+            self.scope.append(self.fn_sym(other, params, t, rec=(0, most)))
+        else:
+            body = body_of(name)
+            self.add_func(name, params, t, body, sym, macro=self.on("macro") and self.chance(0.25) and macro_safe(body))
+
+    def combine(self, t, a, b):
+        if t == INT:
+            return bin_("%", bin_(self.r.choice(["+", "-"]), a, b, INT), lit(INT, 997), INT)
+        if t == FLOAT:
+            return bin_("+", bin_("*", a, lit(FLOAT, 0.5), FLOAT), b, FLOAT) if self.chance(0.5) else bin_("-", b, a, FLOAT)
+        if t == STR:
+            return bin_("+", a, b, STR)
+        if t[0] == "arr":
+            return N("concat", [a, b], t=t)
+        if t[0] == "tup":
+            return N("tup", [bin_("+", N("tix", [a], t=INT, i=0), N("tix", [b.clone()], t=INT, i=1), INT),
+                             N("tix", [b], t=INT, i=0)], t=t)
+        raise ValueError(t)
+
+    # -- functions with effects -------------------------------------------------------------
+    def var_types(self):
+        out = [INT, INT, INT]
+        if self.on("string"):
+            out.append(STR)
+        if self.on("float"):
+            out.append(FLOAT)
+        if self.on("array"):
+            out.append(ARR(INT))
+        out.append(BOOL)
+        if self.on("tuple") and self.chance(0.3):
+            out.append(TUP(INT, self.scalar()))
+        return out
+
+    def effect_function(self):
+        name = self.fresh("e")
+        params = []
+        if self.on("varparam") and self.on("var"):
+            for _ in range(self.r.choice([0, 1, 1, 2])):
+                params.append((self.fresh("c"), self.r.choice(self.var_types()), True))
+        for t in self.param_types(self.r.choice([0, 1, 1, 2])):
+            params.append((self.fresh("a"), t, False))
+        eff_param = None
+        if self.on("hof") and self.on("closure") and self.chance(0.25):
+            eff_param = (self.fresh("g"), FN([INT], INT), False)
+            params.append(eff_param)
+        self.r.shuffle(params)
+        ret = self.rand_type(0.25)
+
+        def make():
+            if eff_param:
+                for s in self.scope:
+                    if s.name == eff_param[0]:
+                        s.eff = True
+            stmts = self.stmts(self.r.randint(2, 5), 2)
+            return N("blk", [stmts, self.expr(ret, 2)], t=ret, sync=True)
+        body = self.with_params(params, make)
+        sym = self.fn_sym(name, params, ret, eff=True)
+        sym.t = ("fneff",)
+        self.add_func(name, params, ret, body, sym, syncfn=any(p[2] for p in params))
+
+    def effect_recursion(self):
+        """Writes a var parameter on the way down and / or up, prints, tail or non-tail."""
+        name, n, c = self.fresh("w"), self.fresh("a"), self.fresh("c")
+        ct = self.r.choice([INT, INT] + ([STR] if self.on("string") else []) + ([ARR(INT)] if self.on("array") else []))
+        params = [(n, INT, False), (c, ct, True)]
+        if self.chance(0.5):
+            params.append((self.fresh("a"), INT, False))
+        sym = self.fn_sym(name, params, INT, eff=True, rec=(0, 7))
+        sym.t = ("fneff",)
+        tail = self.chance(0.35)
+
+        def make():
+            cs = [s for s in self.scope if s.name == c][0]
+            nref = N("ref", t=INT, name=n)
+            base_stmts = [self.write(cs, 1)] if self.chance(0.4) else []
+            if self.chance(0.4):
+                base_stmts.append(self.println(1))
+            base_val = self.expr(INT, 1)
+            base = N("blk", [base_stmts, base_val], t=INT, sync=True) if base_stmts or self.chance(0.3) else base_val
+            pre = [self.write(cs, 1)] if self.chance(0.7) else []
+            if self.chance(0.3):
+                pre.append(self.println(1))
+            call = N("call", [N("ref", t=sym.t, name=name), bin_("-", nref.clone(), lit(INT, 1), INT), ref(cs)] +
+                     [N("ref", t=p[1], name=p[0]) for p in params[2:]], t=INT, eff=True, vargs=[1])
+            call = self.maybe_wait(call, 0.7)
+            if tail:
+                step = N("blk", [pre, call], t=INT, sync=True)
+            else:
+                r = Sym(self.fresh("n"), INT, "let")
+                stmts = pre + [N("let", [call], name=r.name)]
+                self.scope.append(r)
+                if self.chance(0.7) or not pre:
+                    stmts.append(self.write(cs, 1))
+                if self.chance(0.3):
+                    stmts.append(self.println(1))
+                step = N("blk", [stmts, bin_("+", ref(r), lit(INT, self.r.choice([0, 1, 1, 3])), INT)], t=INT, sync=True)
+            cond = bin_("<=", nref, lit(INT, 0), BOOL)
+            return N("blk", [[], N("if", [cond, base, step], t=INT)], t=INT, sync=True)
+        body = self.with_params(params, make)
+        self.add_func(name, params, INT, body, sym, syncfn=True)
+
+    def counter_factory(self):
+        """A function that returns a lambda writing a variable of its own."""
+        name, start = self.fresh("k"), self.fresh("a")
+        params = [(start, INT, False)]
+        ft = FN([INT], INT)
+
+        def make():
+            v = Sym(self.fresh("v"), INT, "var")
+            decl = N("var", [self.expr(INT, 1)], name=v.name)
+            self.scope.append(v)
+            x = Sym(self.fresh("p"), INT, "let")
+            self.scope.append(x)
+            stmts = [self.write(v, 1)]
+            inner = N("blk", [stmts, self.expr(INT, 1)], t=INT, sync=True)
+            lam = N("lam", [inner], t=ft, params=[(x.name, INT, False)], ret=INT, syncfn=True)
+            return N("blk", [[decl], lam], t=ft, sync=True)
+        body = self.with_params(params, make)
+        sym = self.fn_sym(name, params, ft, eff=True, ret_eff=True)
+        sym.t = ("fneff",)
+        self.add_func(name, params, ft, body, sym)
+
+    # -- statements of a sync block ---------------------------------------------------------
+    def maybe_wait(self, e, p=0.4):
+        return N("wait", [e], t=e.t) if self.on("wait") and self.chance(p) else e
+
+    def write(self, v: Sym, d):
+        t = v.t
+        if t == INT:
+            op = self.r.choice(["+=", "+=", "-=", "=", "*=", "/=", "%="])
+            if op == "*=":
+                rhs = lit(INT, self.r.choice([2, 3, -1]))
+            elif op == "/=":
+                rhs = lit(INT, self.r.choice([2, 3, -2]))
+            elif op == "%=":
+                rhs = lit(INT, self.r.choice([2, 3, 7, 10, 97, -3]))
+            elif op == "=":
+                rhs = bin_("%", self.expr(INT, d), lit(INT, 1000), INT) if self.chance(0.5) else self.expr(INT, d)
+            else:
+                rhs = self.expr(INT, d)
+        elif t == FLOAT:
+            op = self.r.choice(["+=", "-=", "=", "*="])
+            rhs = lit(FLOAT, self.r.choice([2.0, 0.5, -1.0])) if op == "*=" else self.expr(FLOAT, d)
+        elif t == STR:
+            if self.chance(0.4):
+                op, rhs = "+=", self.expr(STR, d)
+            else:
+                op, rhs = "=", (bin_("+", ref(v), self.expr(STR, d), STR) if self.chance(0.5) else self.expr(STR, d))
+        elif t[0] == "arr":
+            op = "="
+            rhs = N("concat", [ref(v), N("arr", [self.expr(t[1], d)], t=t)], t=t) if self.chance(0.7) else self.expr(t, d)
+        elif t == BOOL:
+            op, rhs = "=", (N("un", [ref(v)], t=BOOL, op="!") if self.chance(0.5) else self.expr(BOOL, d))
+        else:
+            op, rhs = "=", self.expr(t, d)
+        return N("expr", [self.maybe_wait(N("assign", [rhs], t=t, name=v.name, op=op))])
+
+    def println(self, d):
+        self.label += 1
+        shown = [s for s in self.values() if s.t[0] != "fn"]
+        fresh_ = [s for s in shown if not s.shown]
+        picks = []
+        for _ in range(self.r.choice([1, 2, 2, 3])):
+            pool = fresh_ if fresh_ and self.chance(0.7) else shown
+            if pool:
+                s = self.r.choice(pool)
+                s.shown = True
+                picks.append(ref(s))
+        if not picks or self.chance(0.2):
+            picks.append(self.expr(self.rand_type(0.2), d))
+        if len(picks) == 1 and self.chance(0.3):
+            return N("expr", [N("println", [picks[0]])])
+        text = f"L{self.label}" + "".join(" {}" for _ in picks)
+        return N("expr", [N("println", [N("fmt", picks, t=STR, s=text)])])
+
+    def effect_call(self, d):
+        cands = [s for s in self.scope if s.eff and (s.kind == "fn" or s.t[0] == "fn") and self.can_call(s)]
+        if not cands:
+            return self.println(d)
+        s = self.r.choice(cands)
+        call = self.call(s, d, eff=True)
+        for i, (_n, pt, _v) in enumerate(s.params if s.kind == "fn" else []):
+            if pt[0] == "fn" and pt == FN([INT], INT) and self.chance(0.7):       # an effectful function argument
+                call.c[1 + i] = self.effect_lambda(d)
+        call = self.maybe_wait(call, 0.5 if call.a["vargs"] else 0.15)
+        if self.chance(0.2):
+            return N("expr", [call])
+        r = Sym(self.fresh("n"), call.t, "let", eff=bool(s.ret_eff))
+        self.scope.append(r)
+        return N("let", [call], name=r.name)
+
+    def effect_lambda(self, d):
+        """sync (x: int): int => sync { ...; return e }"""
+        mark = len(self.scope)
+        x = Sym(self.fresh("p"), INT, "let")
+        self.scope.append(x)
+        stmts = self.stmts(self.r.choice([1, 1, 2]), d - 1, simple=True)
+        result = self.expr(INT, 1)
+        del self.scope[mark:]
+        body = N("blk", [stmts, result], t=INT, sync=True)
+        return N("lam", [body], t=FN([INT], INT), params=[(x.name, INT, False)], ret=INT, syncfn=writes_captured(body))
+
+    def effect_block(self, t, d, n=None):
+        mark = len(self.scope)
+        stmts = self.stmts(n or self.r.choice([1, 2, 2, 3]), d - 1, simple=d <= 1)
+        result = None if t is None else self.expr(t, 1)
+        del self.scope[mark:]
+        return N("blk", [stmts, result], t=t, sync=True, null=t is None)
+
+    def stmts(self, count, d, simple=False):
+        out = []
+        for _ in range(count):
+            out.append(self.stmt(d, simple))
+        return out
+
+    def stmt(self, d, simple=False):
+        variables = [s for s in self.scope if s.kind == "var"]
+        o = [(3.0, lambda: self.let(self.rand_type(0.4), 3 if not simple else 2)),
+             (2.2, lambda: self.println(1))]
+        if self.on("var"):
+            o.append((1.6, self.var_decl))
+            if variables:
+                o.append((3.2, lambda: self.write(self.r.choice(variables), 2)))
+        if self.on("effects") or self.on("varparam"):
+            o.append((3.6, lambda: self.effect_call(2)))
+        if self.on("closure") and self.chance(0.3):
+            o.append((1.0, lambda: self.let(self.fn_type(), 2)))
+        if d > 0 and not simple:
+            if self.on("if") and self.on("effects"):
+                o.append((1.4, lambda: self.if_statement(d)))
+                o.append((1.2, lambda: self.if_value(d)))
+            if self.on("match") and self.on("effects") and self.scrutinees():
+                o.append((0.9, lambda: self.match_value(d)))
+            if self.on("builtin") and self.on("array"):
+                o.append((1.3, lambda: self.foreach(d)))
+                o.append((0.7, lambda: self.effect_reduce(d)))
+            if self.on("capture") and self.on("closure") and self.on("var"):
+                o.append((1.0, lambda: self.writer_closure(d)))
+            if self.on("capture") and self.on("func"):
+                o.append((0.7, lambda: self.nested_function(d)))
+        return self.pick(o)
+
+    def var_decl(self):
+        t = self.r.choice(self.var_types())
+        e = self.expr(t, 2)
+        s = Sym(self.fresh("v"), t, "var")
+        self.scope.append(s)
+        return N("var", [e], name=s.name)
+
+    def if_statement(self, d):
+        cond = self.expr(BOOL, 2)
+        then = self.effect_block(None, d)
+        other = self.effect_block(None, d) if self.chance(0.6) else None
+        return N("ifs", [cond, then, other])
+
+    def if_value(self, d):
+        t = self.rand_type(0.2)
+        cond = self.expr(BOOL, 2)
+        then = self.effect_block(t, d)
+        other = self.effect_block(t, d) if self.chance(0.5) else self.expr(t, 2)
+        if self.chance(0.5):
+            then, other = other, then
+        s = Sym(self.fresh("n"), t, "let")
+        self.scope.append(s)
+        return N("let", [N("if", [cond, then, other], t=t)], name=s.name)
+
+    def match_value(self, d):
+        t = self.rand_type(0.2)
+        e = self.match_expr(t, 2, arm=lambda: self.effect_block(t, d, 1) if self.chance(0.6) else self.expr(t, 1))
+        s = Sym(self.fresh("n"), t, "let")
+        self.scope.append(s)
+        return N("let", [e], name=s.name)
+
+    def foreach(self, d):
+        et = self.scalar()
+        arr = self.expr(ARR(et), 2)
+        mark = len(self.scope)
+        x = Sym(self.fresh("p"), et, "let")
+        self.scope.append(x)
+        variables = [s for s in self.scope if s.kind == "var"]
+        stmts = []
+        if self.chance(0.4):
+            stmts.append(self.let(self.rand_type(0.2), 2))
+        if variables and self.chance(0.8):
+            stmts.append(self.write(self.r.choice(variables), 1))
+        if not stmts or stmts[-1].k == "let" or self.chance(0.5):
+            stmts.append(self.println(1))
+        del self.scope[mark:]
+        body = N("blk", [stmts, None], sync=True)
+        lam = N("lam", [body], params=[(x.name, et, False)], ret=None, syncfn=writes_captured(body))
+        return N("expr", [N("foreach", [arr, lam])])
+
+    def effect_reduce(self, d):
+        t, et = self.r.choice([INT, INT] + ([STR] if self.on("string") else [])), self.scalar()
+        arr, init = self.expr(ARR(et), 2), self.expr(t, 1)
+        mark = len(self.scope)
+        acc, x = Sym(self.fresh("p"), t, "let"), Sym(self.fresh("p"), et, "let")
+        self.scope += [acc, x]
+        variables = [s for s in self.scope if s.kind == "var"]
+        stmts = [self.println(1)]
+        if variables and self.chance(0.5):
+            stmts.append(self.write(self.r.choice(variables), 1))
+        result = self.expr(t, 2)
+        if t == INT:
+            result = bin_("%", result, lit(INT, 997), INT)
+        del self.scope[mark:]
+        body = N("blk", [stmts, result], t=t, sync=True)
+        lam = N("lam", [body], t=FN([t, et], t), params=[(acc.name, t, False), (x.name, et, False)], ret=t,
+                syncfn=writes_captured(body))
+        s = Sym(self.fresh("n"), t, "let")
+        self.scope.append(s)
+        return N("let", [N("reduce", [arr, lam, init], t=t, eff=True)], name=s.name)
+
+    def writer_closure(self, d):
+        """let f = sync (x: int): int => sync { c += ...; return ... }, called later."""
+        lam = self.effect_lambda(max(d, 1))
+        s = Sym(self.fresh("h"), FN([INT], INT), "let", eff=True)
+        self.scope.append(s)
+        return N("let", [lam], name=s.name)
+
+    def nested_function(self, d):
+        name = self.fresh("g")
+        params = [(self.fresh("a"), self.scalar(), False) for _ in range(self.r.choice([1, 1, 2]))]
+        ret = self.scalar()
+        mark = len(self.scope)
+        for pn, pt, _ in params:
+            self.scope.append(Sym(pn, pt, "let"))
+        effectful = self.on("effects") and self.chance(0.5)
+        if effectful:
+            stmts = self.stmts(self.r.choice([1, 2]), 0, simple=True)
+            body = N("blk", [stmts, self.expr(ret, 2)], t=ret, sync=True)
+        else:
+            body = N("blk", [[], self.expr(ret, 3)], t=ret)
+        del self.scope[mark:]
+        sym = self.fn_sym(name, params, ret, eff=effectful)
+        if effectful:
+            sym.t = ("fneff",)
+        self.scope.append(sym)
+        return N("func", [body], name=name, params=params, ret=ret, syncfn=effectful and writes_captured(body))
+
+    # -- the program ------------------------------------------------------------------------
+    def program(self, module: str) -> N:
+        if self.on("func"):
+            for _ in range(self.r.choice([1, 2, 3, 3, 4]) * self.size):
+                if self.on("rec") and self.chance(0.3):
+                    self.recursive_function()
+                else:
+                    self.pure_function()
+            if self.on("effects") or self.on("varparam"):
+                for _ in range(self.r.choice([1, 2, 2, 3]) * self.size):
+                    r = self.r.random()
+                    if self.on("rec") and self.on("varparam") and self.on("var") and r < 0.25:
+                        self.effect_recursion()
+                    elif self.on("capture") and self.on("closure") and self.on("var") and r < 0.4:
+                        self.counter_factory()
+                    else:
+                        self.effect_function()
+        declared = [s for s in self.scope if s.kind == "fn"]
+        self.scope = list(declared)
+        stmts = []
+        if self.on("env"):
+            for i in range(self.r.choice([1, 2, 2, 3])):
+                is_int = not self.on("string") or self.chance(0.7)
+                key = f"PROGEN_{'I' if is_int else 'S'}{i}"
+                value = self.r.choice([0, 1, 2, 3, 3, 4, 5, 8]) if is_int else self.r.choice(WORDS[:-4])
+                self.env[key] = str(value)
+                s = Sym(self.fresh("n"), INT if is_int else STR, "let", value=value if is_int else None)
+                stmts.append(N("let", [N("env", t=s.t, name=key)], name=s.name))
+                self.scope.append(s)
+        stmts += self.stmts(self.r.randint(6, 14) * self.size, 2)
+        for s in self.values():
+            if s.t[0] != "fn" and not s.shown and self.chance(0.75):
+                self.label += 1
+                s.shown = True
+                stmts.append(N("expr", [N("println", [N("fmt", [ref(s)], t=STR, s=f"L{self.label} {{}}")])]))
+        body = N("blk", [stmts, lit(INT, 0)], t=INT, sync=True)
+        main = N("func", [body], name="main", params=[], ret=INT)
+        return N("prog", [self.funcs + [main]], module=module, types=dict(self.types), env=dict(self.env))
+
+
+def macro_safe(body: N) -> bool:
+    """std::macro refuses (with a located diagnostic, which is legal) a macro function whose
+    body uses map, filter or reduce; such a function is not declared macro, so that the
+    pipelines with std::macro run more programs to the end."""
+    return not any(x.k in ("map", "filter", "reduce", "foreach") for x in walk(body))
+
+
+def writes_captured(body: N) -> bool:
+    """Does the body assign, or pass a variable to a var parameter? (Then the lambda or nested
+    function is declared `sync`, as the compiler asks.)"""
+    return any(x.k == "assign" or (x.k == "call" and x.a.get("vargs")) for x in walk(body))
+
+
+MAX_ATTEMPTS = 200
+
+
+def generate(seed: int, features: frozenset = DEFAULT_FEATURES, module: Optional[str] = None,
+             size: int = 1):
+    """Returns (program, expected lines, attempts). Attempts beyond the first are programs the
+    reference rejected (see model.Reject); they are replaced, deterministically.
+
+    `size` multiplies the number of functions and of statements of `main`: 1 gives the programs
+    of about 115 lines all recorded seeds refer to, n gives programs about n times as long. At
+    size 1 a program with more than MAX_HEAVY graphs that own a constant is still replaced:
+    that was the compiler's limit when the seeds were recorded (finding F24, fixed since), and
+    dropping the filter would change which program a seed names. Larger sizes have no such
+    filter and their own random streams."""
+    key = ",".join(sorted(features))
+    for attempt in range(MAX_ATTEMPTS):
+        stream = f"progen|{VERSION}|{seed}|{key}|{attempt}" + (f"|size{size}" if size != 1 else "")
+        rng = random.Random(stream)
+        gen = Gen(rng, features, size)
+        try:
+            prog = gen.program(module or f"progen_{seed}")
+        except IndexError:
+            continue                                   # a production found nothing to choose from
+        if size == 1 and heavy_graphs(prog) > MAX_HEAVY:
+            continue
+        if effect_violations(prog):
+            raise AssertionError(f"seed {seed}: generated an effect outside an effect position")
+        if static_faults(prog):
+            continue
+        try:
+            expected = evaluate(prog)
+        except Reject:
+            continue
+        if not expected:
+            continue
+        return prog, expected, attempt + 1
+    raise RuntimeError(f"seed {seed}: no usable program in {MAX_ATTEMPTS} attempts")

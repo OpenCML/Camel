@@ -1,0 +1,18 @@
+module export_use
+
+import { inc, rev, plus_helper, root_len } from export_lib
+import { rev_ints } from export_mid
+import export_lib
+
+func main(): int sync {
+    println(inc(1))
+    println(rev([1, 2, 3]))
+    println(rev(['a', 'b']))
+    // The same types as the instance export_mid built for itself.
+    println(rev_ints([4, 5]))
+    println(plus_helper([1.5]))
+    println(root_len([1, 2, 3, 4]))
+    println(export_lib::rev([true, false]))
+    println(export_lib::Tools::twice(3))
+    return 0
+}

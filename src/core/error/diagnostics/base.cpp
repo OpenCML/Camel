@@ -25,6 +25,8 @@
 #include "camel/core/error/diagnostics/messages/syntax.h"
 #include "camel/utils/assert.h"
 
+#include <algorithm>
+
 namespace camel::core::error {
 
 std::string to_string(DiagType type) {
@@ -120,6 +122,35 @@ DiagInfo getDiagInfo(DiagType type, uint32_t specific) {
         ASSERT(false, "Unsupported DiagType");
     }
     return DiagInfo{"Unknown", "Unknown diagnostic", ""};
+}
+
+const std::vector<DiagCatalogEntry> &diagnosticCatalog() {
+    static const std::vector<DiagCatalogEntry> catalog = [] {
+        std::vector<DiagCatalogEntry> entries;
+        auto collect = [&](DiagType type, const auto &map) {
+            for (const auto &[key, info] : map) {
+                const uint32_t specific = static_cast<uint32_t>(key);
+                entries.push_back(
+                    DiagCatalogEntry{
+                        type,
+                        makeDiagCode(type, specific),
+                        extractSeverity(specific),
+                        info.name,
+                        info.message,
+                        info.suggestion});
+            }
+        };
+        collect(DiagType::InternalDiag, getInternalDiagInfoMap());
+        collect(DiagType::LexicalDiag, getLexicalDiagInfoMap());
+        collect(DiagType::SyntaxDiag, getSyntaxDiagInfoMap());
+        collect(DiagType::SemanticDiag, getSemanticDiagInfoMap());
+        collect(DiagType::RuntimeDiag, getRuntimeDiagInfoMap());
+        std::sort(entries.begin(), entries.end(), [](const auto &a, const auto &b) {
+            return a.code < b.code;
+        });
+        return entries;
+    }();
+    return catalog;
 }
 
 DiagInfo getDiagInfo(uint32_t diagCode) {

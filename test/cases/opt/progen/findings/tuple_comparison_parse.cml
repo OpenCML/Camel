@@ -1,0 +1,15 @@
+/**
+ * progen finding F30 ((other) parser). A tuple whose first element is an ordering comparison and
+ * whose second element ends in a generic argument list does not parse: "missing ')' at ','" (the
+ * `<` of the comparison and the `>` that closes `format<a>` are taken for one pair). `((a < 2),
+ * ...)` parses.
+ * Expected output: (true, x1)
+ */
+module tuple_comparison_parse
+
+func main(): int sync {
+    let a = 1
+    let u = (a < 2, 'x{}'->format<a>)
+    println(u)
+    return 0
+}

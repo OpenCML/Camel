@@ -26,6 +26,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
+#include "camel/execute/limits.h"
 #include "camel/execute/pass/runtime_sched.h"
 #include "camel/runtime/graph.h"
 
@@ -55,19 +56,23 @@ struct NodeVMCallLayoutCache {
 };
 
 class NodeVMSchedPass : public RuntimeGraphSchedulePass {
-    inline static const size_t maxRecursionDepth_ = 256;
+    // Calls that may be open at once without being tail calls (camel/execute/limits.h).
+    size_t maxRecursionDepth_;
 
+    // Activations of call() on the native stack, the entry graph's included.
     size_t currRecursionDepth_ = 0;
-    ctx::FramePool framePool_{1 * camel::core::mm::MB};
+    ctx::FramePool framePool_;
     std::vector<std::unique_ptr<NodeVMGraphCache>> graphCaches_;
     std::vector<std::unique_ptr<NodeVMCallLayoutCache>> callLayoutCaches_;
     std::vector<runtime_data_idx_t> operIndices_;
     std::vector<slot_t> callArgScratch_;
 
     slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);
-    // Raises MaxRecursionDepthExceeded when one more non-tail call would exceed the limit. It is
-    // checked in the caller, before the call, so the diagnostic points at the call expression
-    // (as FastVM's does) and not at the callee's definition.
+    // Raises MaxRecursionDepthExceeded when one more non-tail call would exceed the limit, or
+    // would not fit the native stack (every call() nests on it). It is checked in the caller,
+    // before the call, so the diagnostic points at the call expression (as FastVM's does) and
+    // not at the callee's definition. The activation of the entry graph is not a call of the
+    // program and is not counted.
     void requireRecursionRoom(const camel::runtime::GCGraph *caller) const;
     // Tail-call frame management (see the comment above call() in nodevm.cpp).
     ctx::Frame *tailCallFrame(
@@ -79,9 +84,7 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     std::span<const camel::runtime::gc_node_ref_t> topoNodesFor(camel::runtime::GCGraph *graph);
 
   public:
-    NodeVMSchedPass(const ctx::context_ptr_t &ctx) : RuntimeGraphSchedulePass(ctx) {
-        framePool_.registerGcTracer();
-    }
+    NodeVMSchedPass(const ctx::context_ptr_t &ctx);
     ~NodeVMSchedPass() override;
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;

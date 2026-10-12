@@ -1,0 +1,22 @@
+/**
+ * Minimal reproduction of a wrong result (README.cn.md, defect D1).
+ * Expected output: 1, 1, 11. Observed:
+ *   camel defect_jit_second_call.cml std::fvm               -> 1 1 11
+ *   camel defect_jit_second_call.cml std::jit               -> 1 1 11
+ *   camel defect_jit_second_call.cml std::inline std::fvm   -> 1 1 11
+ *   camel defect_jit_second_call.cml std::inline std::jit   -> 1 2 17
+ * After std::inline the function only calls itself, so std::jit compiles it to native code;
+ * the first call is right, later calls are not.
+ */
+module defect_jit_second_call
+
+func walk(i: int, j: int, m: int, acc: int): int {
+    return if j >= m then acc else walk(i, j + 1, m, acc + i * j)
+}
+
+func main(): int sync {
+    println(walk(1, 0, 2, 0))
+    println(walk(1, 0, 2, 0))
+    println(walk(2, 0, 3, 5))
+    return 0
+}

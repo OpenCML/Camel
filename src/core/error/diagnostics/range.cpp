@@ -19,6 +19,8 @@
 
 #include "camel/core/error/diagnostics/range.h"
 
+#include <algorithm>
+
 namespace camel::core::error {
 
 CharRange CharRange::fromTokens(antlr4::Token *start, antlr4::Token *end) {
@@ -50,10 +52,11 @@ CharRange RangeConverter::conv(const TokenRange &tr) const {
     if (startIdx >= endIdx)
         return {{0, 0}, {0, 0}};
 
+    // The range is half-open: its last token is the one before `end`. (Taking tokens_[end]
+    // made every range run on into the token after it, usually onto the next line.)
     if (startIdx >= tokens_.size())
         startIdx = tokens_.size() - 1;
-    if (endIdx >= tokens_.size())
-        endIdx = tokens_.size() - 1;
+    endIdx = std::max(std::min(endIdx, tokens_.size()) - 1, startIdx);
 
     return CharRange::fromTokens(tokens_[startIdx], tokens_[endIdx]);
 }

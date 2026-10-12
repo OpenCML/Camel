@@ -1,0 +1,34 @@
+/**
+ * progen finding F23 ((other) crash after a rewrite). Segmentation fault after
+ *   `std::opt::simplify`: a branch with sync arms (one declares an unused variable) whose value a
+ *   later `reduce` element function reads.
+ * Pipeline: std::opt::simplify std::nvm
+ * Expected output: (nothing)
+ * Actual: CRASH
+ * Reduced by test/tools/progen from seed 34 (generator version 1, all features).
+ */
+module simplify_crash
+
+func main(): int sync {
+    let n46 = '';
+    let n47 = '';
+    let n50 = [12, 4];
+    let n66 = if (match n47 {
+        case 'k9' => true
+        case _ => !false
+    }) then sync {
+        var v64 = n50[1];
+        return match n46 {
+            case 'x' => 'k9'
+            case 'yz' => ''
+            case '' => 'yz'
+            case _ => 'pq'
+        };
+    } else sync {
+        return '';
+    };
+    let n71 = ['']->reduce<(p69: int, p70: string): int => sync {
+        return len(n66);
+    }, -2>;
+    return 0;
+}

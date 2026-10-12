@@ -1,0 +1,47 @@
+/**
+ * Instances are ordinary subgraphs: a sync body, a write of a captured module-level variable,
+ * a capture of a local of the enclosing function, a struct parameter, the macro modifier.
+ */
+module effects
+
+var total = 0
+
+func show(x: typeas T): T sync {
+    println(x)
+    return x
+}
+
+sync func tally(x: typeas T, n: int): T sync {
+    total = total + n
+    return x
+}
+
+func enclosing(k: int): (int, string) {
+    func tag(x: typeas T): (T, int) {
+        return (x, k)
+    }
+    let a = tag(1)
+    let b = tag('s')
+    return (a.0 + a.1, b.0)
+}
+
+func name_of(s: { name: typeas T }): T {
+    return s.name
+}
+
+macro func twice(x: typeas T): (T, T) {
+    return (x, x)
+}
+
+sync func main(): int sync {
+    let a = show(1)
+    let b = show('two')
+    wait tally(a, 2)
+    wait tally(b, 3)
+    println(total)
+    println(enclosing(10))
+    println(name_of({ name: 'n' }))
+    println(name_of({ name: 5 }))
+    println(twice(3))
+    return 0
+}

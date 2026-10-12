@@ -1,0 +1,70 @@
+# Fixture of test/tools/selftest/run.mjs. It is not under test/plans: several of its tests fail on
+# purpose. What each must give is asserted in run.mjs.
+id = "selftest.matrix"
+order = 1
+tier = "selftest"
+
+[defaults]
+tool = "node"
+kind = "behavior"
+case = "backend_echo.mjs"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "agree"
+args = ["${case}", "same", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["42"]
+
+[[tests]]
+name = "stdout_differs"
+args = ["${case}", "stdout_differs_on_jit", "${backend}"]
+
+[[tests]]
+name = "stdout_differs_known"
+args = ["${case}", "stdout_differs_on_jit", "${backend}"]
+known_fail = ["jit"]
+known_fail_note = "the fixture's jit prints 41"
+
+[[tests]]
+name = "known_but_passes"
+args = ["${case}", "same", "${backend}"]
+known_fail = ["prl"]
+
+[[tests]]
+name = "column_differs"
+args = ["${case}", "column_differs_on_fvm", "${backend}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+
+[[tests]]
+name = "exit_differs"
+args = ["${case}", "exit_differs_on_prl", "${backend}"]
+
+[[tests]]
+name = "fields_not_listed"
+desc = "Only the listed fields are compared."
+args = ["${case}", "stdout_differs_on_jit", "${backend}"]
+backends_agree = ["exit_code"]
+
+[[tests]]
+name = "starts_with"
+desc = "expect_stdout_starts_with: the text must come first, not merely appear."
+backends = false
+args = ["${case}", "same", "std::nvm"]
+expect_stdout_starts_with = "42\n"
+
+[[tests]]
+name = "starts_with_fails"
+backends = false
+args = ["${case}", "same", "std::nvm"]
+expect_stdout_starts_with = "2\n"
+
+[[tests]]
+name = "plain"
+desc = "An entry without backends is one test, as before; the defaults table still applies."
+backends = false
+args = ["${case}", "same", "std::nvm"]
+expect_exit = 0

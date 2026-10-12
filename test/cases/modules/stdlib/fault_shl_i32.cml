@@ -1,0 +1,10 @@
+module fault_shl_i32
+
+import { shl } from math
+
+func main(): int sync {
+    println('before')
+    println(shl(i32(1), 32))
+    println('not reached')
+    return 0
+}

@@ -1,6 +1,6 @@
 /**
- * An identifier pattern is in the grammar but binding in a `case` is not implemented: a
- * compile-time error at the pattern (line 9), not an internal error without a position.
+ * An identifier pattern binds the value taken out of a `T?` / `T!`; over any other type it is
+ * not decided: a compile-time error at the case (line 9), not an internal error.
  */
 module pattern_identifier
 

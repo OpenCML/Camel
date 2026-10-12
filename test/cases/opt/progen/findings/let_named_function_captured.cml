@@ -1,0 +1,18 @@
+/**
+ * progen finding F33 ((other) front end). A declared function bound to a `let` can be called
+ * directly (`g(1)` prints 2), but a lambda that captures the `let` and calls it is rejected:
+ * SemanticDiag::ArgumentsMismatch at the call, "Function of type 'void' cannot be called with
+ * argument types: <> (i64)". Without any pass; a located compile-time error for a valid program.
+ * Expected output: [2]
+ */
+module let_named_function_captured
+
+func f1(a: int): int {
+    return a + 1
+}
+
+func main(): int sync {
+    let g = f1
+    println([1]->map<(x: int): int => g(x)>)
+    return 0
+}

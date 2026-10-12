@@ -1,0 +1,25 @@
+/**
+ * progen finding F01 (branch arm). `std::inline` makes a call written in the arm of `if false`
+ *   run: the callee's `println` prints although the arm is never taken.
+ * Pipeline: std::inline std::nvm
+ * Expected output: (nothing)
+ * Actual: a
+ * Reduced by test/tools/progen from seed 75 (generator version 1, all features).
+ */
+module inline_untaken_arm_effect
+
+func e9(): (string, int) sync {
+    println('a');
+    var v10 = int(10.0);
+    return ('', 0);
+}
+
+func main(): int sync {
+    if false then sync {
+        let n23 = e9();
+        return null;
+    } else sync {
+        return null;
+    };
+    return 0;
+}

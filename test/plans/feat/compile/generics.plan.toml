@@ -1,0 +1,1079 @@
+id = "compile.generics"
+order = 323
+tier = "feat"
+tags = ["feat", "compile", "generics", "types"]
+desc = "Generic functions bound with `typeas` (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 2.9."
+
+[[tests]]
+name = "basic"
+desc = "One and several type variables; a second call with the same types uses the instance of the first."
+kind = "behavior"
+case = "../../../cases/compile/generics/basic.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "1.5",
+  "4",
+  "1",
+  "y",
+  "(7, seven)",
+  "(seven, 7)",
+  "(true, 1.5)",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "nested"
+desc = "Variables bound at nested positions: element of an array of arrays, tuple elements, a struct field, the parameter and the result of a function type."
+kind = "behavior"
+case = "../../../cases/compile/generics/nested.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "1",
+  "two",
+  "sx",
+  "2.5",
+  "42",
+  "n=7",
+  "hey!",
+  "2",
+  "[2, 3, 4]",
+  "[n=1, n=2, n=3]",
+  "[aa, bb]",
+  "n=10",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "recursive"
+desc = "Recursive and mutually recursive generic functions: a recursive call with the same types is a call of the instance being built."
+kind = "behavior"
+case = "../../../cases/compile/generics/recursive.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3",
+  "2",
+  "4",
+  "3",
+  "y",
+  "true",
+  "false",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "type_function"
+desc = "Type functions: `Pair<int>` is the right-hand side with the parameter replaced, also with several parameters, inside another type function and combined with `typeas`."
+kind = "behavior"
+case = "../../../cases/compile/generics/type_func.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "(2, 1)",
+  "(b, a)",
+  "42",
+  "k",
+  "3.5",
+  "42",
+  "7",
+  "p",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "type_function_import"
+desc = "A type function exported by one module is applied in another."
+kind = "behavior"
+case = "../../../cases/compile/generics/type_import.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "(2, 1)",
+  "(y, x)",
+  "2",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "higher_order"
+desc = "A generic function called from a lambda with written-out parameter types, taking a function argument, returning a closure, with `with` parameters that bind and use variables, and in method-call syntax."
+kind = "behavior"
+case = "../../../cases/compile/generics/hof.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[2, 4, 6]",
+  "[a!, b!]",
+  "7",
+  "abababab",
+  "[1, 4, 9]",
+  "[n4, n5]",
+  "[2, 4]",
+  "3",
+  "6",
+  "hi!",
+  "7",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "features"
+desc = "Use before declaration, calls between generic functions, a captured module-level value, lambdas typed with a variable, conversions to a variable's type, a generic function declared inside a function, `var` parameters."
+kind = "behavior"
+case = "../../../cases/compile/generics/features.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "101",
+  "(3, [3])",
+  "(s, [s])",
+  "42",
+  "63",
+  "(w, 1.5)",
+  "[5, 5]",
+  "[q, q]",
+  "3",
+  "(8, zz)",
+  "6",
+  "ab",
+  "10",
+  "8",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "effects"
+desc = "Instances are ordinary subgraphs: a sync body runs in order, a write of a captured variable is tracked through the instance, a local generic function captures a local, the macro modifier is kept."
+kind = "behavior"
+case = "../../../cases/compile/generics/effects.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "two",
+  "5",
+  "(11, s)",
+  "n",
+  "5",
+  "(3, 3)",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "literals"
+desc = "A literal converted to a type written with a variable (`let z: T = 0`, `let e: T[] = []`, `1 as T`) is converted when the function is instantiated, by the rule for the same literal and a concrete type."
+kind = "behavior"
+case = "../../../cases/compile/generics/lit.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "0",
+  "[]",
+  "0",
+  "1",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "namespace"
+desc = "Generic functions and type functions declared in a namespace are named with the namespace, like every other declaration there."
+kind = "behavior"
+case = "../../../cases/compile/generics/ns.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3",
+  "(s, s)",
+  "(1, 2)",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "std_like"
+desc = "head, tail, a two-array zip, map and reduce written in Camel with the signatures the built-in operators implement in C++ type rules."
+kind = "behavior"
+case = "../../../cases/compile/generics/stdlike.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "3",
+  "h",
+  "[4, 5]",
+  "[t]",
+  "[(1, a), (2, b), (3, c)]",
+  "[(1.5, true)]",
+  "[v1, v2]",
+  "6",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "unused_body_unchecked"
+desc = "The body of a generic function is checked when it is instantiated: one that is never called is never checked."
+kind = "behavior"
+case = "../../../cases/compile/generics/unused_body.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "ok",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "pipeline.nvm"
+desc = "The same generic program gives the same result through `std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.fvm"
+desc = "The same generic program gives the same result through `std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.jit"
+desc = "The same generic program gives the same result through `std::jit`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.prl"
+desc = "The same generic program gives the same result through `std::prl`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.opt_nvm"
+desc = "The same generic program gives the same result through `std::opt std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.inline_nvm"
+desc = "The same generic program gives the same result through `std::inline std::nvm`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::inline", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.inline_fvm"
+desc = "The same generic program gives the same result through `std::inline std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.inline_jit"
+desc = "The same generic program gives the same result through `std::inline std::jit`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.opt_inline_fvm"
+desc = "The same generic program gives the same result through `std::opt std::inline std::fvm`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::opt", "std::inline", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "pipeline.macro_opt_jit"
+desc = "The same generic program gives the same result through `std::macro std::opt std::jit`."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "1",
+  "a",
+  "[1.5]",
+  "(2, 1)",
+  "(r, l)",
+  "(1, one)",
+  "3",
+  "1",
+  "10",
+  "0.75",
+  "abc",
+  "[10, 20, 30]",
+  "[1]",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 12000
+
+[[tests]]
+name = "instances_are_concrete"
+desc = "The graph holds one subgraph per set of types (`first<i64>` once for two calls) and every instance has a concrete signature; no template and no type variable reaches the graph."
+kind = "behavior"
+case = "../../../cases/compile/generics/basic.cml"
+args = ["inspect", "--gir", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const graphs = [...out.matchAll(/label="([^"]+)";\s*tooltip="([^"]+)";/g)].map((m) => `${m[1]} :: ${m[2]}`)
+const want = [
+  'first<i64> :: (xs: i64[]) => i64',
+  'first<string> :: (xs: string[]) => string',
+  'first<f64> :: (xs: f64[]) => f64',
+  'pick<i64> :: (c: bool, a: i64, b: i64) => i64',
+  'pick<string> :: (c: bool, a: string, b: string) => string',
+  'pair_of<i64, string> :: (a: i64, b: string) => (i64, string)',
+  'swap<i64, string> :: (p: (i64, string)) => (string, i64)',
+  'swap<f64, bool> :: (p: (f64, bool)) => (bool, f64)',
+]
+for (const graph of want) {
+  assert(graphs.filter((g) => g === graph).length === 1, `expected exactly one graph '${graph}' in: ${graphs.join(' | ')}`)
+}
+assert(!/typeas|: T\b|=> T\b/.test(graphs.join(' ')), `a type variable reached a graph: ${graphs.join(' | ')}`)
+assert(!graphs.some((g) => /^(first|pick|pair_of|swap) ::/.test(g)), 'a template was built as a graph')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "mismatch"
+desc = "One variable, two arguments of different types: the variable is bound at its `typeas` position and the other argument is then held to it; the diagnostic names the argument, the parameter and the binding."
+kind = "negative"
+case = "../../../cases/compile/generics/err_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 17
+expect_output_contains = ["argument 3 has type 'f64', but its parameter 'b: T' is 'i64' here (T = i64)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "argument_form"
+desc = "An argument that does not have the form of its parameter (an int where an array binds its element type)."
+kind = "negative"
+case = "../../../cases/compile/generics/err_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 18
+expect_output_contains = ["argument 1 has type 'i64'", "needs a type of that form to bind its type variables"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "argument_count"
+desc = "A wrong number of arguments."
+kind = "negative"
+case = "../../../cases/compile/generics/err_count.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 18
+expect_output_contains = ["it takes 1 argument(s) and 2 were given"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "struct_form"
+desc = "A struct argument is held to the struct type of the parameter exactly, as for an ordinary function."
+kind = "negative"
+case = "../../../cases/compile/generics/err_struct.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 20
+expect_output_contains = ["is '{ name: string }' here (T = string)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "body_error"
+desc = "An error in the body is found at instantiation and reported at its position in the body, with the instance and the call that asked for it. The instances for int and string are fine."
+kind = "negative"
+case = "../../../cases/compile/generics/err_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_body.cml:4:16:", "in the instance 'double<i64[]>' of the generic function 'double' with T = i64[]", "instantiated by the call at 10:19"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "body_literal"
+desc = "A literal that does not convert to the variable's type in one instance (no implicit numeric conversion) is reported for that instance."
+kind = "negative"
+case = "../../../cases/compile/generics/err_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralStaticCastFailed"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 5
+expect_output_contains = ["to type 'f64'", "in the instance 'zero_of<f64>'", "instantiated by the call at 10:20"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "growing_recursion"
+desc = "A generic function that calls itself with an ever larger type is refused after a bounded number of nested instances instead of never terminating."
+kind = "negative"
+case = "../../../cases/compile/generics/err_deep.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericInstantiationTooDeep"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 34
+expect_output_contains = ["8 instances of it are already being built inside one another"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "recursion_needs_return_type"
+desc = "A recursive generic function without a declared return type, as for an ordinary function."
+kind = "negative"
+case = "../../../cases/compile/generics/err_recursive_untyped.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CallingIncompleteFunction"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 49
+expect_output_contains = ["in the instance 'count<i64>'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "typeas_in_return_type"
+desc = "`typeas` in the return type of a declaration: there is no argument to take the type from."
+kind = "negative"
+case = "../../../cases/compile/generics/err_typeas_return.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableNotAllowed"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 27
+expect_output_contains = ["a return type has no argument to take the type from"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "typeas_in_lambda"
+desc = "`typeas` in a lambda: a type variable is bound only among the parameters of a function declaration."
+kind = "negative"
+case = "../../../cases/compile/generics/err_typeas_let.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableNotAllowed"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 24
+expect_output_contains = ["this is not a parameter of a function declaration"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "typeas_twice"
+desc = "`typeas T` written twice for one variable."
+kind = "negative"
+case = "../../../cases/compile/generics/err_typeas_twice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 34
+expect_output_contains = ["'typeas T' cannot bind 'T'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "typeas_existing_type"
+desc = "`typeas int`: the name already denotes a type."
+kind = "negative"
+case = "../../../cases/compile/generics/err_typeas_shadow.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 19
+expect_output_contains = ["'typeas int' cannot bind 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "use_before_typeas"
+desc = "A variable used before the position that binds it."
+kind = "negative"
+case = "../../../cases/compile/generics/err_unbound_use.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 12
+expect_output_contains = ["Unresolved type reference: 'T'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "typeas_in_union"
+desc = "`typeas` inside a union cannot be bound from an argument type."
+kind = "negative"
+case = "../../../cases/compile/generics/err_union.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableNotBindable"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 1
+expect_output_contains = ["The type variable 'T' of 'f' can never be bound"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_as_value"
+desc = "A generic function named as a value (bound to a name, handed to `map`): it is a template without a graph. Whether this should be allowed is an open question."
+kind = "negative"
+case = "../../../cases/compile/generics/err_as_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericFunctionAsValue"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_output_contains = ["The generic function 'id' is used as a value"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_as_argument"
+desc = "A generic function handed to another generic function."
+kind = "negative"
+case = "../../../cases/compile/generics/err_generic_arg.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericFunctionAsValue"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 19
+expect_output_contains = ["The generic function 'id' is used as a value"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_and_plain_same_name"
+desc = "A generic function and an ordinary one with the same name."
+kind = "negative"
+case = "../../../cases/compile/generics/err_redecl.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::Redeclaration"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 1
+expect_output_contains = ["'id'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+# DESIGN-QUESTION(generic-export): the template is exported by the module that declares it and
+# each importing module builds the instances it calls.
+
+[[tests]]
+name = "generic_exported"
+desc = "Generic functions exported by a module written in Camel: called from another module by name, by qualified name and from a namespace; their bodies use private functions, a private generic function and an import of their own module; two modules each instantiate the same types. The four back ends and the optimizing pipelines agree."
+kind = "behavior"
+case = "../../../cases/compile/generics/export_use.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["101", "[3, 2, 1]", "[b, a]", "[5, 4]", "101", "2", "[false, true]", "(3, 3)"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "generic_exported_opt"
+desc = "The same program through std::opt and std::macro std::opt."
+kind = "behavior"
+case = "../../../cases/compile/generics/export_use.cml"
+args = ["${case}", "std::macro", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["101", "[3, 2, 1]", "[b, a]", "[5, 4]", "101", "2", "[false, true]", "(3, 3)"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "generic_exported_instances"
+desc = "Each importing module holds its own instance: the graph shows rev<i64> twice, once under the module that re-exports a use of it."
+kind = "behavior"
+case = "../../../cases/compile/generics/export_use.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (s) => out.split(`label="${s}";`).length - 1
+assert(count('rev<i64>') === 2, `rev<i64> clusters: ${count('rev<i64>')}`)
+assert(count('rev<string>') === 1, `rev<string> clusters: ${count('rev<string>')}`)
+assert(count('rev<bool>') === 1, `rev<bool> clusters: ${count('rev<bool>')}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "generic_exported_body_error"
+desc = "An error in the body of an imported generic function is reported in the file that declares it, with the call that asked for the instance."
+kind = "negative"
+case = "../../../cases/compile/generics/err_export_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["export_lib.cml:41:16: [Error]: No matching function found", "in the instance 'bad<string>'", "err_export_body.cml:7:16", "name=SemanticDiag::NoMatchingFunction"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_exported_capture"
+desc = "The body of an imported generic function cannot use a top-level value of its own module: the instance is not built inside that module."
+kind = "negative"
+case = "../../../cases/compile/generics/err_export_capture.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericFunctionUnsupported"
+expect_diagnostic_line = 36
+expect_output_contains = ["export_lib.cml:36:1", "The generic function 'biased' cannot be instantiated in another module while its body uses 'bias'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_exported_as_value"
+desc = "An imported generic function has no function value either."
+kind = "negative"
+case = "../../../cases/compile/generics/err_export_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericFunctionAsValue"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 13
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_decorated"
+desc = "Decorating a generic function is not supported and says so."
+kind = "negative"
+case = "../../../cases/compile/generics/err_decorated.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericFunctionUnsupported"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 1
+expect_output_contains = ["The generic function 'id' cannot be decorated"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "type_function_count"
+desc = "A type function applied to the wrong number of arguments."
+kind = "negative"
+case = "../../../cases/compile/generics/err_tf_count.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionArguments"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 11
+expect_output_contains = ["it takes 1 type argument(s) and 2 were given"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "type_function_bare"
+desc = "A type function used without arguments."
+kind = "negative"
+case = "../../../cases/compile/generics/err_tf_bare.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionArguments"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 11
+expect_output_contains = ["it takes 1 type argument(s) and is used without any"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "type_function_const"
+desc = "A constant argument: the parameters of a type function are types."
+kind = "negative"
+case = "../../../cases/compile/generics/err_tf_const.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionArguments"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 11
+expect_output_contains = ["its parameters are types, and a constant ('const ...') was given"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "type_function_duplicate_param"
+desc = "Two parameters with one name."
+kind = "negative"
+case = "../../../cases/compile/generics/err_tf_dup.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DuplicateParameter"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 1
+expect_output_contains = ["'T'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "type_function_unused_param"
+desc = "`typeas` as the argument of a type function that does not use the parameter: nothing binds the variable."
+kind = "negative"
+case = "../../../cases/compile/generics/err_tf_unused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableNotBindable"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 1
+expect_output_contains = ["The type variable 'T' of 'f' can never be bound"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "plain_type_with_arguments"
+desc = "Unchanged: a type declared without parameters takes no arguments."
+kind = "negative"
+case = "../../../cases/compile/generics/err_tf_plain.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 11
+expect_output_contains = ["this type takes no arguments"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

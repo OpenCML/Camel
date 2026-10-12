@@ -1,0 +1,15 @@
+/**
+ * Substitution cannot write the same mark twice either: `T?` with `T = int?`.
+ */
+module err_generic_nesting
+
+func some(x: typeas T): T? {
+    return x
+}
+
+func main(): int sync {
+    println('never printed')
+    let a = some(1)
+    let b = some(a)
+    return 0
+}

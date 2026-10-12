@@ -1,0 +1,14 @@
+/**
+ * A negative array index computed at run time.
+ */
+module negative_index
+
+func at(xs: int[], i: int): int { return xs[i] }
+
+func main(): int sync {
+    let xs = [10, 20, 30]
+    println(at(xs, 0))
+    println(at(xs, 0 - 1))
+    println('not reached')
+    return 0
+}

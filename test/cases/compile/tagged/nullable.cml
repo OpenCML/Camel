@@ -1,0 +1,54 @@
+/**
+ * `T?` (design principles 2.9): a value that may be null. It is opened by `a ?? b` and by
+ * `match` with `case null`; the right-hand side of `??` is evaluated only when it is taken.
+ */
+module nullable
+
+func positive(x: int): int? {
+    if x > 0 then { return x } else { return null }
+}
+
+func describe(x: int?): string {
+    return match x {
+        case null => 'none'
+        case v => format<v>('some {}')
+    }
+}
+
+func is_set(x: string?): bool {
+    return match x {
+        case v => true
+        case null => false
+    }
+}
+
+func fallback(): int sync {
+    println('fallback evaluated')
+    return -1
+}
+
+func main(): int sync {
+    let a = positive(5)
+    let b = positive(-5)
+    println(a)
+    println(b)
+    println(a ?? 0)
+    println(b ?? 0)
+    println(describe(a))
+    println(describe(b))
+    let c: int? = 7
+    let d: int? = null
+    println(c ?? 1)
+    println(d ?? 1)
+    let e = 9 as int?
+    println(e ?? 2)
+    let f: float? = 1.5
+    println(f ?? 0.5)
+    println(is_set('x' as string?))
+    println(is_set(null as string?))
+    println(a ?? fallback())
+    println(b ?? fallback())
+    let xs = [a, b, c]
+    println(xs)
+    return 0
+}
