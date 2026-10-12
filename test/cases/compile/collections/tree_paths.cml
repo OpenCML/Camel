@@ -1,0 +1,95 @@
+module main
+
+// Collections large enough to be trees, built and taken apart entry by entry so that every
+// structural step of the persistent tree happens: a leaf splits, a branch splits, the root
+// grows; a leaf is merged with its neighbour or shares entries with it, a branch likewise,
+// and the root shrinks back to a branch of fewer levels and finally to a single leaf
+// (docs/technical/31_map_and_set.md, section 5.4). The plan runs the program under the flat
+// table, the default tree and trees of tiny nodes; all must print the same.
+//
+// Keys are (i * a) % b: with a = 1 they come in ascending order, otherwise scattered.
+
+func fill(m: Map<int, int>, i: int, n: int, a: int, b: int): Map<int, int> {
+    if i >= n then {
+        return m
+    } else {
+        return fill(m->put<(i * a) % b, i>, i + 1, n, a, b)
+    }
+}
+
+func drain(m: Map<int, int>, i: int, n: int, a: int, b: int): Map<int, int> {
+    if i >= n then {
+        return m
+    } else {
+        return drain(m->remove<(i * a) % b>, i + 1, n, a, b)
+    }
+}
+
+func fill_set(s: Set<string>, i: int, n: int, a: int, b: int): Set<string> {
+    if i >= n then {
+        return s
+    } else {
+        return fill_set(s->add<'k' + string((i * a) % b)>, i + 1, n, a, b)
+    }
+}
+
+func drain_set(s: Set<string>, i: int, n: int, a: int, b: int): Set<string> {
+    if i >= n then {
+        return s
+    } else {
+        return drain_set(s->remove<'k' + string((i * a) % b)>, i + 1, n, a, b)
+    }
+}
+
+// A number that depends on every entry and on their order.
+func digest(m: Map<int, int>): int {
+    return items(m)->reduce<(acc: int, kv: (int, int)): int => (acc * 31 + kv.0 * 7 + kv.1) % 1000003, len(m)>
+}
+
+func digest_set(s: Set<string>): int {
+    return items(s)->reduce<(acc: int, k: string): int => (acc * 31 + len(k) * 7 + (if s->has<k> then 1 else 0)) % 1000003, len(s)>
+}
+
+func main(): int sync {
+    let e = [] as Map<int, int>
+    // Scattered and ascending growth.
+    let m1 = fill(e, 0, 700, 7, 1009)
+    let m2 = fill(e, 0, 700, 1, 1009)
+    let m3 = fill(m1, 300, 900, 1, 1009)
+    println(len(m1), digest(m1), len(m2), digest(m2), len(m3), digest(m3))
+    println(m1 == fill(e, 0, 700, 7, 1009), m1 == m2, m3 == merge(m1, m3), m3 == merge(m3, m1))
+
+    // A window taken out in ascending order, then scattered removal, then down to a few entries.
+    let d1 = drain(m3, 100, 500, 1, 1009)
+    let d2 = drain(d1, 0, 400, 13, 1009)
+    let d3 = drain(d2, 0, 880, 1, 1009)
+    println(len(d1), digest(d1), len(d2), digest(d2), len(d3), d3)
+    // The same, the other way round: scattered first.
+    let r1 = drain(m3, 0, 600, 29, 1009)
+    let r2 = drain(r1, 0, 1009, 1, 1009)
+    println(len(r1), digest(r1), len(r2), r2, r2 == e)
+    // Every intermediate value is still what it was.
+    println(len(m1), digest(m1), len(m3), digest(m3), m3[899] ?? -1, d1[899] ?? -1, d1[100] ?? -1, has(d3, 899))
+
+    // Growth again from a value that has shrunk, and a tree met by a small map.
+    let g1 = fill(d2, 2000, 2300, 3, 5003)
+    let g2 = merge(g1, [(1, -1), (5002, -2)] as Map<int, int>)
+    let g3 = merge([(1, -1), (5002, -2)] as Map<int, int>, g1)
+    println(len(g1), digest(g1), len(g2), digest(g2), len(g3), digest(g3), g2[1] ?? 0, g3[1] ?? 0)
+    println(drain(g2, 5002, 5003, 1, 9999) == put(g1, 1, -1), len(keys(g1)), len(values(g1)), len(items(g1)))
+
+    let es = [] as Set<string>
+    let s1 = fill_set(es, 0, 900, 11, 1201)
+    let s2 = fill_set(es, 200, 1100, 1, 1201)
+    let u = union(s1, s2)
+    let i = intersect(s1, s2)
+    let x = difference(s1, s2)
+    println(len(s1), digest_set(s1), len(s2), digest_set(s2), len(u), len(i), len(x))
+    println(len(u) == len(i) + len(x) + len(difference(s2, s1)), is_subset(i, s1), is_subset(s1, i), union(i, x) == s1)
+    let t1 = drain_set(u, 0, 700, 1, 1201)
+    let t2 = drain_set(t1, 0, 1201, 7, 1201)
+    let small = ['k5', 'k700', 'zz'] as Set<string>
+    println(len(t1), digest_set(t1), len(t2), t2, union(u, small) == union(small, u), len(union(u, small)))
+    println(intersect(u, small), intersect(small, u), difference(small, u), len(difference(u, small)), is_subset(small, u))
+    return 0
+}

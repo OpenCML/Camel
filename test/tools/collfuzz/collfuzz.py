@@ -1,0 +1,801 @@
+"""Random and differential tests of the built-in collections `Map<K, V>` and `Set<T>`.
+
+A generated program is a sequence of operations on maps and sets: construction with `as`
+(from a literal and from an array computed at run time, with repeated keys), `put`, `remove`,
+lookups, `merge`, the set operations, traversal, equality, calls of generic functions, maps
+as values of maps, the nested type `Map<string, Map<int, Set<int>>>`, tuple keys, and loops
+that build and take apart a collection entry by entry. The generator executes the same
+operations on Python dicts and sets and writes down what the program must print: the
+reference answer does not come from Camel.
+
+Every program is then run under several representations of the collections (the default
+tree, the flat sorted array, and trees of tiny nodes, where a few dozen entries already make
+a tree several levels high; docs/technical/31_map_and_set.md, section 5.7), on several back
+ends and collector settings. Each run must print exactly the reference answer, so the runs
+also agree with each other byte for byte. Every table an operation returns is checked
+against the invariants of the tree (CAMEL_COLL_VALIDATE).
+
+Commands:
+
+  gen <seed> [--ops N] [--size N]     print the program of a seed
+  expect <seed> [--ops N] [--size N]  print what it must print
+  check [--seeds A:B] [--ops N] [--size N] [--matrix quick|gc|full] [--jobs N] [--keep DIR]
+                                      generate and run; exit 0 when every run agrees
+
+Matrices:
+
+  quick   4 back ends x {tree, flat, tiny 2x4, tiny 5x4}
+  gc      nvm, fvm, prl x {tree, flat, tiny 2x4} x {non-moving, moving} collector, with a
+          collection requested every third allocation and at every safepoint and the heap
+          verified before and after each (docs/technical/24_gc_verification_guide.md)
+  full    both
+"""
+
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import os
+import random
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+HERE = Path(__file__).resolve().parent
+REPO_ROOT = HERE.parents[2]
+
+
+# ---- Types: how a value is written in Camel and how Camel prints it ----
+
+
+class T:
+    """A Camel type, with the Python values that model it."""
+
+    name = ""
+
+    def lit(self, v) -> str:
+        raise NotImplementedError
+
+    def fmt(self, v) -> str:
+        raise NotImplementedError
+
+
+class TInt(T):
+    name = "int"
+
+    def lit(self, v):
+        return str(v) if v >= 0 else f"({v})"
+
+    def fmt(self, v):
+        return str(v)
+
+
+class TBool(T):
+    name = "bool"
+
+    def lit(self, v):
+        return "true" if v else "false"
+
+    def fmt(self, v):
+        return "true" if v else "false"
+
+
+class TStr(T):
+    name = "string"
+
+    def lit(self, v):
+        return "'" + v + "'"
+
+    def fmt(self, v):
+        return v
+
+
+class TTup(T):
+    def __init__(self, *parts: T):
+        self.parts = parts
+        self.name = "(" + ", ".join(p.name for p in parts) + ")"
+
+    def lit(self, v):
+        return "(" + ", ".join(p.lit(x) for p, x in zip(self.parts, v)) + ")"
+
+    def fmt(self, v):
+        return "(" + ", ".join(p.fmt(x) for p, x in zip(self.parts, v)) + ")"
+
+
+class TArr(T):
+    def __init__(self, elem: T):
+        self.elem = elem
+        self.name = elem.name + "[]"
+
+    def lit(self, v):
+        return "[" + ", ".join(self.elem.lit(x) for x in v) + "]"
+
+    def fmt(self, v):
+        return "[" + ", ".join(self.elem.fmt(x) for x in v) + "]"
+
+
+class TMap(T):
+    """Modelled by a dict. Camel orders a map by its keys, so does `fmt`."""
+
+    def __init__(self, key: T, value: T):
+        self.key = key
+        self.value = value
+        self.name = f"Map<{key.name}, {value.name}>"
+
+    def lit(self, v):
+        items = ", ".join(f"({self.key.lit(k)}, {self.value.lit(v[k])})" for k in v)
+        return f"([{items}] as {self.name})"
+
+    def fmt(self, v):
+        return "{" + ", ".join(f"{self.key.fmt(k)}: {self.value.fmt(v[k])}" for k in sorted(v)) + "}"
+
+
+class TSet(T):
+    """Modelled by a frozenset."""
+
+    def __init__(self, key: T):
+        self.key = key
+        self.name = f"Set<{key.name}>"
+
+    def lit(self, v):
+        return "([" + ", ".join(self.key.lit(k) for k in v) + f"] as {self.name})"
+
+    def fmt(self, v):
+        return "{" + ", ".join(self.key.fmt(k) for k in sorted(v)) + "}"
+
+
+INT, BOOL, STR = TInt(), TBool(), TStr()
+PAIR = TTup(INT, STR)
+SET_INT = TSet(INT)
+SET_STR = TSet(STR)
+SET_PAIR = TSet(PAIR)
+MAP_II = TMap(INT, INT)
+MAP_SI = TMap(STR, INT)
+MAP_IS = TMap(INT, STR)
+MAP_PS = TMap(PAIR, STR)
+MAP_BI = TMap(BOOL, INT)
+MAP_IA = TMap(INT, TArr(INT))
+MAP_S_SET = TMap(STR, SET_INT)
+MAP_I_SET = TMap(INT, SET_INT)
+MAP_NEST = TMap(STR, MAP_I_SET)
+
+MAP_TYPES = [MAP_II, MAP_SI, MAP_IS, MAP_PS, MAP_BI, MAP_IA, MAP_S_SET, MAP_I_SET, MAP_NEST]
+SET_TYPES = [SET_INT, SET_STR, SET_PAIR]
+
+PRELUDE = """module main
+
+// Generated by test/tools/collfuzz/collfuzz.py; seed {seed}, {ops} operations, size {size}.
+
+func size_of(m: Map<typeas K, typeas V>): int {{
+    return len(m)
+}}
+
+func get_or_else(m: Map<typeas K, typeas V>, k: K, d: V): V {{
+    return m[k] ?? d
+}}
+
+func key_set(m: Map<typeas K, typeas V>): Set<K> {{
+    return keys(m) as Set<K>
+}}
+
+func to_set(xs: (typeas T)[]): Set<T> {{
+    return xs as Set<T>
+}}
+
+func rebuilt(m: Map<typeas K, typeas V>): Map<K, V> {{
+    return items(m) as Map<K, V>
+}}
+
+func both(a: Set<typeas T>, b: Set<T>): Set<T> {{
+    return union(intersect(a, b), difference(a, b))
+}}
+
+func fill_ii(m: Map<int, int>, i: int, n: int, a: int, b: int): Map<int, int> {{
+    if i >= n then {{
+        return m
+    }} else {{
+        return fill_ii(m->put<(i * a) % b, i>, i + 1, n, a, b)
+    }}
+}}
+
+func drain_ii(m: Map<int, int>, i: int, n: int, a: int, b: int): Map<int, int> {{
+    if i >= n then {{
+        return m
+    }} else {{
+        return drain_ii(m->remove<(i * a) % b>, i + 1, n, a, b)
+    }}
+}}
+
+func fill_si(m: Map<string, int>, i: int, n: int, a: int, b: int): Map<string, int> {{
+    if i >= n then {{
+        return m
+    }} else {{
+        return fill_si(put(m, 'k' + string((i * a) % b), i), i + 1, n, a, b)
+    }}
+}}
+
+func fill_set(s: Set<int>, i: int, n: int, a: int, b: int): Set<int> {{
+    if i >= n then {{
+        return s
+    }} else {{
+        return fill_set(s->add<(i * a) % b>, i + 1, n, a, b)
+    }}
+}}
+
+func drain_set(s: Set<int>, i: int, n: int, a: int, b: int): Set<int> {{
+    if i >= n then {{
+        return s
+    }} else {{
+        return drain_set(remove(s, (i * a) % b), i + 1, n, a, b)
+    }}
+}}
+
+func fill_pairs(m: Map<(int, string), string>, i: int, n: int, a: int, b: int): Map<(int, string), string> {{
+    if i >= n then {{
+        return m
+    }} else {{
+        return fill_pairs(m->put<((i * a) % b, 's' + string(i % 3)), 'v' + string(i)>, i + 1, n, a, b)
+    }}
+}}
+
+func count_words(words: string[]): Map<string, int> {{
+    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+}}
+
+func main(): int sync {{
+"""
+
+WORDS = ["", "a", "ab", "abc", "b", "B", "ba", "k1", "k10", "k2", "x", "xy", "z", "zz", "Z"]
+
+
+class Program:
+    """A program under construction and the model of every variable it has declared."""
+
+    def __init__(self, seed: int, ops: int, size: int):
+        self.rng = random.Random(seed)
+        self.seed, self.ops, self.size = seed, ops, size
+        self.lines: List[str] = []
+        self.expect: List[str] = []
+        self.vars: Dict[T, List[Tuple[str, object]]] = {}
+        self.count = 0
+
+    # -- helpers --
+
+    def declare(self, typ: T, expr: str, value) -> str:
+        name = f"v{self.count}"
+        self.count += 1
+        self.lines.append(f"    let {name} = {expr}")
+        self.vars.setdefault(typ, []).append((name, value))
+        return name
+
+    def show(self, parts: List[Tuple[str, T, object]]):
+        # Each expression is bound first: two calls with `<...>` arguments in one argument
+        # list are read as comparisons by the grammar (note 31, section 6.2).
+        names = []
+        for expr, _, _ in parts:
+            names.append(f"t{self.count}")
+            self.count += 1
+            self.lines.append(f"    let {names[-1]} = {expr}")
+        self.lines.append("    println(" + ", ".join(names) + ")")
+        self.expect.append(" ".join(p[1].fmt(p[2]) for p in parts))
+
+    def pick(self, typ: T) -> Tuple[str, object]:
+        """A variable of the type; one is made when none exists yet."""
+        if typ not in self.vars:
+            self.construct(typ)
+        pool = self.vars[typ]
+        # Recent values are the ones the earlier operations built up.
+        if self.rng.random() < 0.6:
+            return pool[-1 - self.rng.randrange(min(3, len(pool)))]
+        return self.rng.choice(pool)
+
+    def scalar(self, typ: T):
+        r = self.rng
+        if typ is INT:
+            return r.randrange(-self.size, 3 * self.size)
+        if typ is BOOL:
+            return r.random() < 0.5
+        if typ is STR:
+            return r.choice(WORDS) if r.random() < 0.5 else "k" + str(r.randrange(2 * self.size))
+        if isinstance(typ, TTup):
+            return (r.randrange(-3, self.size), "s" + str(r.randrange(3)))
+        if isinstance(typ, TArr):
+            return [r.randrange(100) for _ in range(r.randrange(1, 4))]
+        raise AssertionError(typ.name)
+
+    def key_for(self, typ: T, coll) -> object:
+        """A key that is in the collection, more often than not, or a fresh one."""
+        if coll and self.rng.random() < 0.6:
+            return self.rng.choice(sorted(coll))
+        return self.scalar(typ)
+
+    def value_expr(self, typ: T) -> Tuple[str, object]:
+        """An expression of the type and its value: a literal, or a variable for a collection."""
+        if isinstance(typ, (TMap, TSet)):
+            return self.pick(typ)
+        v = self.scalar(typ)
+        return typ.lit(v), v
+
+    def empty(self, typ: T) -> str:
+        return f"([] as {typ.name})"
+
+    def default_for(self, typ: T) -> Tuple[str, object]:
+        if isinstance(typ, TMap):
+            return self.empty(typ), {}
+        if isinstance(typ, TSet):
+            return self.empty(typ), frozenset()
+        if isinstance(typ, TArr):
+            return "[0]", [0]
+        v = {INT: -1, STR: "?", BOOL: False}[typ]
+        return typ.lit(v), v
+
+    # -- construction --
+
+    def construct(self, typ: T):
+        r = self.rng
+        n = r.choice([0, 1, 2, 3, r.randrange(self.size + 1), r.randrange(2 * self.size + 1)])
+        if typ is MAP_II and r.random() < 0.5:
+            a, b, c = r.choice([1, 7, 13, 31]), r.choice([5, 17, 64, 4 * self.size + 1]), r.randrange(9)
+            expr = f"(range(0, {n})->map<(i: int): (int, int) => ((i * {a} + {c}) % {b}, i * 3)> as {typ.name})"
+            value = {}
+            for i in range(n):
+                value[(i * a + c) % b] = i * 3
+            return self.declare(typ, expr, value)
+        if typ is MAP_SI and r.random() < 0.5:
+            a, b = r.choice([1, 7, 13]), r.choice([3, 17, 4 * self.size + 1])
+            expr = f"(range(0, {n})->map<(i: int): (string, int) => ('k' + string((i * {a}) % {b}), i)> as {typ.name})"
+            value = {}
+            for i in range(n):
+                value["k" + str((i * a) % b)] = i
+            return self.declare(typ, expr, value)
+        if typ is MAP_PS and r.random() < 0.5:
+            a, b = r.choice([1, 5, 11]), r.choice([4, 9, 2 * self.size + 1])
+            expr = (
+                f"(range(0, {n})->map<(i: int): ((int, string), string) => "
+                f"(((i * {a}) % {b}, 's' + string(i % 2)), 'v' + string(i))> as {typ.name})"
+            )
+            value = {}
+            for i in range(n):
+                value[((i * a) % b, "s" + str(i % 2))] = "v" + str(i)
+            return self.declare(typ, expr, value)
+        if typ is SET_INT and r.random() < 0.5:
+            a, b = r.choice([1, 7, 13, 31]), r.choice([5, 17, 64, 4 * self.size + 1])
+            expr = f"to_set(range(0, {n})->map<(i: int): int => (i * {a}) % {b}>)"
+            return self.declare(typ, expr, frozenset((i * a) % b for i in range(n)))
+        if isinstance(typ, TSet):
+            # A set literal may repeat an element; the set has it once.
+            elems = [self.scalar(typ.key) for _ in range(n)]
+            return self.declare(typ, typ.lit(elems), frozenset(elems))
+        assert isinstance(typ, TMap)
+        if typ.key is BOOL:
+            n = min(n, 2)
+        # A map literal must not repeat a constant key (it is a compile-time error), and the
+        # values of a nested map are variables declared before.
+        value = {}
+        exprs = []
+        for _ in range(n):
+            k = self.scalar(typ.key)
+            if k in value:
+                continue
+            e, v = self.value_expr(typ.value)
+            value[k] = v
+            exprs.append(f"({typ.key.lit(k)}, {e})")
+        return self.declare(typ, f"([{', '.join(exprs)}] as {typ.name})", value)
+
+    # -- operations on a map --
+
+    def op_put(self):
+        typ = self.rng.choice(MAP_TYPES)
+        name, m = self.pick(typ)
+        k = self.key_for(typ.key, m)
+        e, v = self.value_expr(typ.value)
+        form = self.rng.choice(["{m}->put<{k}, {v}>", "put({m}, {k}, {v})", "put<{k}, {v}>({m})"])
+        out = dict(m)
+        out[k] = v
+        self.declare(typ, form.format(m=name, k=typ.key.lit(k), v=e), out)
+
+    def op_remove(self):
+        typ = self.rng.choice(MAP_TYPES)
+        name, m = self.pick(typ)
+        k = self.key_for(typ.key, m)
+        form = self.rng.choice(["{m}->remove<{k}>", "remove({m}, {k})"])
+        out = dict(m)
+        out.pop(k, None)
+        self.declare(typ, form.format(m=name, k=typ.key.lit(k)), out)
+
+    def op_lookup(self):
+        typ = self.rng.choice(MAP_TYPES)
+        name, m = self.pick(typ)
+        k = self.key_for(typ.key, m)
+        kl = typ.key.lit(k)
+        d, dv = self.default_for(typ.value)
+        got = m.get(k, dv)
+        self.show(
+            [
+                (f"{name}[{kl}] ?? {d}", typ.value, got),
+                (f"{name}->get_or<{kl}, {d}>", typ.value, got),
+                (f"get<{kl}>({name}) ?? {d}", typ.value, got),
+                (f"get_or_else({name}, {kl}, {d})", typ.value, got),
+                (f"has({name}, {kl})", BOOL, k in m),
+                (f"len({name})", INT, len(m)),
+                (f"size_of({name})", INT, len(m)),
+            ]
+        )
+
+    def op_show_map(self):
+        typ = self.rng.choice(MAP_TYPES)
+        name, m = self.pick(typ)
+        ks = sorted(m)
+        which = self.rng.randrange(4)
+        if which == 0:
+            self.show([(name, typ, m)])
+        elif which == 1:
+            self.show([(f"keys({name})", TArr(typ.key), ks), (f"values({name})", TArr(typ.value), [m[k] for k in ks])])
+        elif which == 2:
+            self.show([(f"items({name})", TArr(TTup(typ.key, typ.value)), [(k, m[k]) for k in ks])])
+        else:
+            self.show([(f"string({name})", STR, typ.fmt(m)), (f"len(keys({name}))", INT, len(m))])
+
+    def op_merge(self):
+        typ = self.rng.choice(MAP_TYPES)
+        a, ma = self.pick(typ)
+        b, mb = self.pick(typ)
+        out = dict(ma)
+        out.update(mb)
+        self.declare(typ, f"merge({a}, {b})", out)
+
+    def op_eq_map(self):
+        typ = self.rng.choice(MAP_TYPES)
+        a, ma = self.pick(typ)
+        b, mb = self.pick(typ)
+        # The same entries reached another way: a tree of another shape must compare equal.
+        k = self.key_for(typ.key, ma)
+        e, v = self.value_expr(typ.value)
+        if k in ma:
+            again = f"rebuilt({a})"
+        else:
+            again = f"remove(put({a}, {typ.key.lit(k)}, {e}), {typ.key.lit(k)})"
+        parts = [
+            (f"{a} == {b}", BOOL, ma == mb),
+            (f"{a} == {again}", BOOL, True),
+            (f"merge({a}, {a}) == {a}", BOOL, True),
+        ]
+        # `!=` on two maps resolves to the generic `:op/ne`, which compares values that are
+        # objects by identity, so it is the negation of `==` for scalar values only
+        # (docs/issues/2026-10-12-language-surface-findings.md).
+        if typ.value is INT:
+            parts.append((f"{a} != {b}", BOOL, ma != mb))
+        self.show(parts)
+
+    def op_key_set(self):
+        typ = self.rng.choice([MAP_II, MAP_SI, MAP_PS, MAP_IS, MAP_I_SET])
+        name, m = self.pick(typ)
+        set_type = {INT: SET_INT, STR: SET_STR, PAIR: SET_PAIR}[typ.key]
+        self.declare(set_type, f"key_set({name})", frozenset(m))
+
+    def op_fill(self):
+        """Entry by entry, in a loop: `put` or `remove` the keys (i * a) % b for i in a range.
+        With a = 1 the keys of a window go in or out in ascending order, which fills and
+        empties neighbouring leaves one after the other; other multipliers scatter them."""
+        r = self.rng
+        lo = r.choice([0, 0, r.randrange(2 * self.size + 1)])
+        hi = lo + r.randrange(1, 3 * self.size + 2)
+        a = r.choice([1, 1, 1, 3, 7, 11, 29])
+        b = r.choice([7, 31, 2 * self.size + 1, 5 * self.size + 3, 20 * self.size + 7])
+        span = range(lo, hi)
+        which = r.randrange(6)
+        if which == 0:
+            name, m = self.pick(MAP_II)
+            out = dict(m)
+            for i in span:
+                out[(i * a) % b] = i
+            self.declare(MAP_II, f"fill_ii({name}, {lo}, {hi}, {a}, {b})", out)
+        elif which in (1, 2):
+            name, m = self.pick(MAP_II)
+            out = dict(m)
+            for i in span:
+                out.pop((i * a) % b, None)
+            self.declare(MAP_II, f"drain_ii({name}, {lo}, {hi}, {a}, {b})", out)
+        elif which == 3:
+            name, m = self.pick(MAP_SI)
+            out = dict(m)
+            for i in span:
+                out["k" + str((i * a) % b)] = i
+            self.declare(MAP_SI, f"fill_si({name}, {lo}, {hi}, {a}, {b})", out)
+        elif which == 4:
+            name, s = self.pick(SET_INT)
+            if r.random() < 0.5:
+                self.declare(SET_INT, f"fill_set({name}, {lo}, {hi}, {a}, {b})", s | {(i * a) % b for i in span})
+            else:
+                self.declare(SET_INT, f"drain_set({name}, {lo}, {hi}, {a}, {b})", s - {(i * a) % b for i in span})
+        else:
+            name, m = self.pick(MAP_PS)
+            out = dict(m)
+            for i in span:
+                out[((i * a) % b, "s" + str(i % 3))] = "v" + str(i)
+            self.declare(MAP_PS, f"fill_pairs({name}, {lo}, {hi}, {a}, {b})", out)
+
+    def op_reduce(self):
+        r = self.rng
+        which = r.randrange(3)
+        if which == 0:
+            name, m = self.pick(MAP_II)
+            self.show(
+                [
+                    (f"keys({name})->reduce<(acc: int, k: int): int => acc + k, 0>", INT, sum(m)),
+                    (f"values({name})->reduce<(acc: int, v: int): int => acc + v, 0>", INT, sum(m.values())),
+                    (
+                        f"items({name})->map<(kv: (int, int)): int => kv.0 * 2 + kv.1>->reduce<(acc: int, x: int): int => acc + x, 0>",
+                        INT,
+                        sum(2 * k + v for k, v in m.items()),
+                    ),
+                ]
+            )
+        elif which == 1:
+            words = [r.choice(WORDS[1:8]) for _ in range(r.randrange(0, 2 * self.size + 1))]
+            counts: Dict[str, int] = {}
+            for w in words:
+                counts[w] = counts.get(w, 0) + 1
+            if words:
+                self.declare(MAP_SI, f"count_words({TArr(STR).lit(words)})", counts)
+        else:
+            name, s = self.pick(SET_INT)
+            self.show([(f"items({name})->reduce<(acc: int, k: int): int => acc + k, 0>", INT, sum(s)), (f"len({name})", INT, len(s))])
+
+    def op_nested(self):
+        """Read a map out of a map, change it, and put it back."""
+        r = self.rng
+        outer, mo = self.pick(MAP_NEST)
+        ks = self.key_for(STR, mo)
+        ki = r.randrange(-2, self.size)
+        elem = r.randrange(self.size)
+        inner = dict(mo.get(ks, {}))
+        inner[ki] = inner.get(ki, frozenset()) | {elem}
+        out = dict(mo)
+        out[ks] = inner
+        ksl = STR.lit(ks)
+        inner_expr = f"({outer}[{ksl}] ?? {self.empty(MAP_I_SET)})"
+        self.declare(
+            MAP_NEST,
+            f"{outer}->put<{ksl}, {inner_expr}->put<{ki}, ({inner_expr}[{ki}] ?? {self.empty(SET_INT)})->add<{elem}>>>",
+            out,
+        )
+        if r.random() < 0.5:
+            self.declare(MAP_I_SET, inner_expr, mo.get(ks, {}))
+
+    # -- operations on a set --
+
+    def op_add(self):
+        typ = self.rng.choice(SET_TYPES)
+        name, s = self.pick(typ)
+        k = self.key_for(typ.key, s)
+        if self.rng.random() < 0.6:
+            form = self.rng.choice(["{s}->add<{k}>", "add({s}, {k})"])
+            self.declare(typ, form.format(s=name, k=typ.key.lit(k)), s | {k})
+        else:
+            form = self.rng.choice(["{s}->remove<{k}>", "remove({s}, {k})"])
+            self.declare(typ, form.format(s=name, k=typ.key.lit(k)), s - {k})
+
+    def op_set_algebra(self):
+        typ = self.rng.choice(SET_TYPES)
+        a, sa = self.pick(typ)
+        b, sb = self.pick(typ)
+        which = self.rng.randrange(4)
+        if which == 0:
+            self.declare(typ, f"union({a}, {b})", sa | sb)
+        elif which == 1:
+            self.declare(typ, f"intersect({a}, {b})", sa & sb)
+        elif which == 2:
+            self.declare(typ, f"difference({a}, {b})", sa - sb)
+        else:
+            self.declare(typ, f"both({a}, {b})", sa)
+
+    def op_show_set(self):
+        typ = self.rng.choice(SET_TYPES)
+        a, sa = self.pick(typ)
+        b, sb = self.pick(typ)
+        k = self.key_for(typ.key, sa)
+        kl = typ.key.lit(k)
+        if self.rng.random() < 0.5:
+            self.show([(a, typ, sa), (f"items({a})", TArr(typ.key), sorted(sa)), (f"len({a})", INT, len(sa))])
+        else:
+            self.show(
+                [
+                    (f"contains({a}, {kl})", BOOL, k in sa),
+                    (f"{a}->has<{kl}>", BOOL, k in sa),
+                    (f"is_subset({a}, {b})", BOOL, sa <= sb),
+                    (f"is_subset(intersect({a}, {b}), {a})", BOOL, True),
+                    (f"{a} == {b}", BOOL, sa == sb),
+                    (f"{a} != {b}", BOOL, sa != sb),
+                    (f"union({a}, {b}) == union({b}, {a})", BOOL, True),
+                    (f"len(difference({a}, {b}))", INT, len(sa - sb)),
+                ]
+            )
+
+    def op_set_value(self):
+        """A set stored as a value of a map, and read back."""
+        s, sv = self.pick(SET_INT)
+        typ = self.rng.choice([MAP_S_SET, MAP_I_SET])
+        name, m = self.pick(typ)
+        k = self.key_for(typ.key, m)
+        out = dict(m)
+        out[k] = sv
+        new = self.declare(typ, f"{name}->put<{typ.key.lit(k)}, {s}>", out)
+        self.show([(f"{new}[{typ.key.lit(k)}] ?? {self.empty(SET_INT)}", SET_INT, sv), (f"len({new})", INT, len(out))])
+
+    # -- the whole program --
+
+    def generate(self):
+        weighted = [
+            (self.op_put, 10),
+            (self.op_remove, 7),
+            (self.op_lookup, 7),
+            (self.op_show_map, 5),
+            (self.op_merge, 5),
+            (self.op_eq_map, 4),
+            (self.op_key_set, 2),
+            (self.op_fill, 8),
+            (self.op_reduce, 3),
+            (self.op_nested, 4),
+            (self.op_add, 6),
+            (self.op_set_algebra, 7),
+            (self.op_show_set, 5),
+            (self.op_set_value, 3),
+            (lambda: self.construct(self.rng.choice(MAP_TYPES + SET_TYPES)), 5),
+        ]
+        ops = [op for op, weight in weighted for _ in range(weight)]
+        for _ in range(self.ops):
+            self.rng.choice(ops)()
+        # Everything still at hand is printed at the end: a wrong table that no operation
+        # happened to print in passing shows here.
+        for typ in MAP_TYPES + SET_TYPES:
+            for name, value in self.vars.get(typ, [])[-4:]:
+                self.show([(name, typ, value), (f"len({name})", INT, len(value))])
+
+    def source(self) -> str:
+        head = PRELUDE.format(seed=self.seed, ops=self.ops, size=self.size)
+        return head + "\n".join(self.lines) + "\n    return 0\n}\n"
+
+    def expected(self) -> str:
+        return "\n".join(self.expect) + "\n"
+
+
+def make(seed: int, ops: int, size: int) -> Program:
+    program = Program(seed, ops, size)
+    program.generate()
+    return program
+
+
+# ---- Running ----
+
+SHAPES = {
+    "tree": {},
+    "flat": {"CAMEL_COLL_LEAF_CAPACITY": "0"},
+    "tiny2x4": {"CAMEL_COLL_LEAF_CAPACITY": "2", "CAMEL_COLL_FANOUT": "4"},
+    "tiny5x4": {"CAMEL_COLL_LEAF_CAPACITY": "5", "CAMEL_COLL_FANOUT": "4"},
+}
+STRESS = {
+    "CAMEL_GC_VERIFY": "both",
+    "CAMEL_GC_STRESS_ALLOC": "3",
+    "CAMEL_GC_STRESS_SAFEPOINT": "1",
+    "CAMEL_GC_STRESS_MODE": "both",
+}
+MOVING = {"CAMEL_GC_ENABLE_YOUNG_COPYING": "1"}
+
+
+def matrix(name: str) -> List[Tuple[str, List[str], Dict[str, str]]]:
+    """(label, passes, environment) of every run of a program."""
+    runs = []
+    if name in ("quick", "full"):
+        for backend in ("nvm", "fvm", "jit", "prl"):
+            for shape in ("tree", "flat", "tiny2x4", "tiny5x4"):
+                runs.append((f"{backend}/{shape}", [f"std::{backend}"], dict(SHAPES[shape])))
+    if name in ("gc", "full"):
+        # The JIT is outside the contract of the moving collector (note 23).
+        for backend in ("nvm", "fvm", "prl"):
+            for shape in ("tree", "flat", "tiny2x4"):
+                for label, moving in (("stable", {}), ("moving", MOVING)):
+                    env = {**SHAPES[shape], **STRESS, **moving}
+                    runs.append((f"{backend}/{shape}/stress-{label}", ["std::gc::verify", f"std::{backend}"], env))
+    return runs
+
+
+def camel_exe() -> str:
+    home = os.environ.get("CAMEL_HOME") or str(REPO_ROOT / "out" / "latest")
+    return str(Path(home) / "bin" / ("camel.exe" if os.name == "nt" else "camel"))
+
+
+def run_one(path: Path, passes: List[str], env_extra: Dict[str, str], timeout: int) -> Tuple[int, str, str]:
+    exe = camel_exe()
+    env = dict(os.environ)
+    env.setdefault("CAMEL_HOME", str(Path(exe).resolve().parents[1]))
+    env.update(env_extra)
+    env["CAMEL_COLL_VALIDATE"] = "1"
+    try:
+        proc = subprocess.run([exe, str(path), *passes], capture_output=True, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return -1, "", "timeout"
+    out = proc.stdout.decode("utf-8", errors="replace").replace("\r\n", "\n")
+    return proc.returncode, out, proc.stderr.decode("utf-8", errors="replace")
+
+
+def check_seed(seed: int, ops: int, size: int, which: str, directory: Path, timeout: int) -> List[str]:
+    """Runs the program of a seed through the matrix; the failures, as text."""
+    program = make(seed, ops, size)
+    path = directory / f"collfuzz_{seed}.cml"
+    path.write_text(program.source(), encoding="utf-8", newline="\n")
+    expected = program.expected()
+    failures = []
+    for label, passes, env in matrix(which):
+        code, out, err = run_one(path, passes, env, timeout)
+        # The verification pass prints its verdict before the program runs.
+        lines = [line for line in out.split("\n") if not line.startswith('{"ok":')]
+        got = "\n".join(lines)
+        problem = None
+        if code != 0:
+            problem = f"exit code {code}: {err.strip()[-400:]}"
+        elif '"ok":false' in out:
+            problem = "heap verification failed"
+        elif got != expected:
+            want = expected.split("\n")
+            at = next((i for i in range(min(len(lines), len(want))) if lines[i] != want[i]), min(len(lines), len(want)))
+            problem = (
+                f"output differs at line {at + 1}:\n    expected: {want[at] if at < len(want) else '<end>'}"
+                f"\n    printed:  {lines[at] if at < len(lines) else '<end>'}"
+            )
+        if problem:
+            failures.append(f"FAIL seed {seed} ops {ops} size {size} [{label}]: {problem}")
+    return failures
+
+
+def cmd_check(args) -> int:
+    lo, hi = (int(x) for x in args.seeds.split(":"))
+    seeds = list(range(lo, hi))
+    runs = len(matrix(args.matrix))
+    keep = Path(args.keep) if args.keep else None
+    with tempfile.TemporaryDirectory(prefix="camel_collfuzz_") as tmp:
+        directory = keep or Path(tmp)
+        directory.mkdir(parents=True, exist_ok=True)
+        failures: List[str] = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(args.jobs, 4))) as pool:
+            futures = [pool.submit(check_seed, s, args.ops, args.size, args.matrix, directory, args.timeout) for s in seeds]
+            for future in futures:
+                failures.extend(future.result())
+    for failure in failures[:40]:
+        print(failure)
+    total = len(seeds) * runs
+    print(f"{total - len(failures)} of {total} runs agree with the reference ({len(seeds)} programs x {runs} configurations)")
+    print("PASS" if not failures else "FAIL")
+    return 0 if not failures else 1
+
+
+def main(argv: List[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("gen", "expect"):
+        p = sub.add_parser(name)
+        p.add_argument("seed", type=int)
+        p.add_argument("--ops", type=int, default=60)
+        p.add_argument("--size", type=int, default=24)
+    p = sub.add_parser("check")
+    p.add_argument("--seeds", default="0:8")
+    p.add_argument("--ops", type=int, default=60)
+    p.add_argument("--size", type=int, default=24)
+    p.add_argument("--matrix", choices=["quick", "gc", "full"], default="quick")
+    p.add_argument("--jobs", type=int, default=4)
+    p.add_argument("--timeout", type=int, default=600)
+    p.add_argument("--keep", default=None)
+    args = parser.parse_args(argv)
+    if args.command == "gen":
+        sys.stdout.write(make(args.seed, args.ops, args.size).source())
+        return 0
+    if args.command == "expect":
+        sys.stdout.write(make(args.seed, args.ops, args.size).expected())
+        return 0
+    return cmd_check(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,72 @@
+module main
+
+// Collection constants large enough to be trees: under std::macro the result of a macro
+// function is stored in the static area of the calling graph, and a map of several hundred
+// entries is carried there as a whole tree, its branches and leaves with it. An operation at
+// run time on such a constant builds new tables that share the unchanged ones of the
+// constant (docs/technical/31_map_and_set.md, section 5.5).
+
+// The macro evaluator has a depth limit and no loop, so the collections are put together by
+// halving: the depth is the logarithm of the size.
+
+func span_labels(lo: int, hi: int): Map<int, string> {
+    if hi - lo <= 1 then {
+        return [((lo * 7) % 1009, 'v' + string(lo))] as Map<int, string>
+    } else {
+        return merge(span_labels(lo, (lo + hi) / 2), span_labels((lo + hi) / 2, hi))
+    }
+}
+
+func span_words(lo: int, hi: int): Set<string> {
+    if hi - lo <= 1 then {
+        return ['w' + string((lo * 13) % 997)] as Set<string>
+    } else {
+        return union(span_words(lo, (lo + hi) / 2), span_words((lo + hi) / 2, hi))
+    }
+}
+
+func span_operations(lo: int, hi: int, inc: (x: int) => int, double: (x: int) => int): Map<int, (x: int) => int> {
+    if hi - lo <= 1 then {
+        return [(lo, if lo % 3 == 0 then double else inc)] as Map<int, (x: int) => int>
+    } else {
+        return merge(span_operations(lo, (lo + hi) / 2, inc, double), span_operations((lo + hi) / 2, hi, inc, double))
+    }
+}
+
+macro func labels(n: int): Map<int, string> {
+    return span_labels(0, n)
+}
+
+macro func words(n: int): Set<string> {
+    return span_words(0, n)
+}
+
+macro func operations(n: int): Map<int, (x: int) => int> {
+    let inc = (x: int): int => x + 1
+    let double = (x: int): int => x * 2
+    return span_operations(0, n, inc, double)
+}
+
+func apply(ops: Map<int, (x: int) => int>, k: int, x: int): int {
+    let f = ops[k] ?? ((y: int): int => 0 - y)
+    return f(x)
+}
+
+func digest(m: Map<int, string>): int {
+    return items(m)->reduce<(acc: int, kv: (int, string)): int => (acc * 31 + kv.0 * 7 + len(kv.1)) % 1000003, len(m)>
+}
+
+func main(): int sync {
+    let t = labels(400)
+    println(len(t), digest(t), t[7] ?? '?', t[(399 * 7) % 1009] ?? '?', t[1008] ?? '?')
+    let grown = t->put<1008, 'last'>->remove<0>->put<-5, 'first'>
+    println(len(grown), digest(grown), grown[1008] ?? '?', grown[0] ?? '?', len(t), digest(t), t[0] ?? '?')
+    println(t == labels(400), grown == t, merge(t, grown) == put(grown, 0, 'v0'))
+    let w = words(600)
+    let more = w->add<'zzz'>->remove<'w0'>
+    println(len(w), contains(w, 'w13'), contains(w, 'zzz'), len(more), contains(more, 'w0'), len(intersect(w, more)), len(difference(w, more)), difference(w, more))
+    let ops = operations(300)
+    println(len(ops), apply(ops, 0, 21), apply(ops, 1, 21), apply(ops, 299, 21), apply(ops, 300, 21))
+    println(len(put(ops, 300, (x: int): int => x * x)), apply(put(ops, 300, (x: int): int => x * x), 300, 21))
+    return 0
+}

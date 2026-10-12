@@ -1,0 +1,61 @@
+module main
+
+// Maps and sets that have outgrown a single table and are trees of tables
+// (docs/technical/31_map_and_set.md, section 5.3): the collector reaches the leaves, their
+// keys and their values through the branches, with nothing but the static type of the
+// collection to tell it what a table holds, and when it moves a table every reference to it
+// from a branch, and from an older tree that shares it, has to follow. Each `put` and
+// `remove` copies one path of the tree and leaves the previous path as garbage, while the
+// rest is shared by all the versions that are kept here on purpose.
+
+func key_of(i: int): string {
+    return 'key-' + string(i)
+}
+
+func fill(i: int, n: int, a: int, b: int, acc: Map<string, int[]>): Map<string, int[]> {
+    if i >= n then {
+        return acc
+    } else {
+        return fill(i + 1, n, a, b, acc->put<key_of((i * a) % b), [i, i * i]>)
+    }
+}
+
+func drain(i: int, n: int, a: int, b: int, acc: Map<string, int[]>): Map<string, int[]> {
+    if i >= n then {
+        return acc
+    } else {
+        return drain(i + 1, n, a, b, acc->remove<key_of((i * a) % b)>)
+    }
+}
+
+func total(m: Map<string, int[]>): int {
+    return values(m)->reduce<(acc: int, xs: int[]): int => acc + xs[0] + xs[1], 0>
+}
+
+func names(i: int, n: int, acc: Set<string>): Set<string> {
+    if i >= n then {
+        return acc
+    } else {
+        return names(i + 1, n, acc->add<key_of((i * 7) % 331)>)
+    }
+}
+
+func grid(n: int): Map<(int, string), string?> {
+    return range(0, n)->map<(i: int): ((int, string), string?) => ((i % 9, key_of(i)), (key_of(i * 2)) as string?)> as Map<(int, string), string?>
+}
+
+func main(): int sync {
+    let e = [] as Map<string, int[]>
+    let m = fill(0, 150, 7, 211, e)
+    let grown = fill(150, 190, 1, 1000, m)
+    let cut = drain(40, 120, 1, 1000, drain(0, 60, 7, 211, grown))
+    println(format<len(m), total(m), len(grown), total(grown), len(cut), total(cut)>('m={}/{} grown={}/{} cut={}/{}'))
+    println(format<m['key-7'] ?? [0], grown['key-189'] ?? [0], cut['key-189'] ?? [0], has(cut, 'key-7'), has(m, 'key-189')>('{} {} {} {} {}'))
+    let s = names(0, 260, [] as Set<string>)
+    let k = keys(grown) as Set<string>
+    println(format<len(s), len(k), len(intersect(s, k)), len(union(s, k)), len(difference(k, s)), is_subset(intersect(s, k), k)>('s={} k={} both={} either={} only={} subset={}'))
+    let g = grid(170)
+    println(format<len(g), g[(3, 'key-12')] ?? '?', g[(3, 'key-13')] ?? '?', len(items(g))>('grid={} hit={} miss={} items={}'))
+    println(format<merge(m, grown) == grown, merge(cut, m) == m, drain(0, 1000, 1, 1000, cut) == e, len(m), total(m)>('{} {} {} {} {}'))
+    return 0
+}
