@@ -40,7 +40,33 @@ std::vector<size_t> buildLineStarts(const std::string &content) {
     return lineStarts;
 }
 
-// Convert a token half-open interval into a source byte interval.
+// The byte offset of each code point of `content`, plus one entry for the end of the text.
+// Empty when the text is pure ASCII, where a code point index is its byte offset.
+std::vector<uint32_t> buildCodePointOffsets(const std::string &content) {
+    bool ascii = true;
+    for (unsigned char c : content) {
+        if (c >= 0x80) {
+            ascii = false;
+            break;
+        }
+    }
+    if (ascii) {
+        return {};
+    }
+    std::vector<uint32_t> offsets;
+    offsets.reserve(content.size() + 1);
+    for (size_t i = 0; i < content.size(); ++i) {
+        // A continuation byte (10xxxxxx) belongs to the code point before it.
+        if ((static_cast<unsigned char>(content[i]) & 0xC0) != 0x80) {
+            offsets.push_back(static_cast<uint32_t>(i));
+        }
+    }
+    offsets.push_back(static_cast<uint32_t>(content.size()));
+    return offsets;
+}
+
+// Convert a token half-open interval into a half-open interval of character indices (ANTLR
+// counts code points). SourceContext turns them into byte offsets when it creates the span.
 // GCT/GIR no longer depend on tokens directly, so tokens are consumed only once at the frontend
 // boundary.
 std::pair<size_t, size_t>
@@ -158,19 +184,21 @@ std::string to_string(SemanticRole role) {
 source_file_id_t SourceManager::registerFile(const std::string &path, const std::string &content) {
     auto it = pathToId_.find(path);
     if (it != pathToId_.end()) {
-        SourceFile &file = files_.at(it->second);
-        file.content     = content;
-        file.lineStarts  = buildLineStarts(content);
+        SourceFile &file      = files_.at(it->second);
+        file.content          = content;
+        file.lineStarts       = buildLineStarts(content);
+        file.codePointOffsets = buildCodePointOffsets(content);
         return file.id;
     }
 
     source_file_id_t id = static_cast<source_file_id_t>(files_.size());
     files_.push_back(
         SourceFile{
-            .id         = id,
-            .path       = path,
-            .content    = content,
-            .lineStarts = buildLineStarts(content)});
+            .id               = id,
+            .path             = path,
+            .content          = content,
+            .lineStarts       = buildLineStarts(content),
+            .codePointOffsets = buildCodePointOffsets(content)});
     pathToId_[path] = id;
     return id;
 }
@@ -199,8 +227,38 @@ CharPos SourceManager::offsetToPos(source_file_id_t fileId, size_t offset) const
     auto it       = std::upper_bound(src->lineStarts.begin(), src->lineStarts.end(), capped);
     size_t line =
         it == src->lineStarts.begin() ? 0 : static_cast<size_t>(it - src->lineStarts.begin() - 1);
-    size_t col = capped - src->lineStarts[line];
+    // The column counts characters (code points), as the positions ANTLR gives for tokens do,
+    // so a diagnostic placed by a span and one placed by a token agree on a line with
+    // non-ASCII text.
+    size_t col = 0;
+    for (size_t i = src->lineStarts[line]; i < capped; ++i) {
+        if ((static_cast<unsigned char>(src->content[i]) & 0xC0) != 0x80) {
+            ++col;
+        }
+    }
     return {line, col};
+}
+
+size_t SourceManager::codePointToByteOffset(source_file_id_t fileId, size_t index) const {
+    const SourceFile *src = file(fileId);
+    if (!src || src->codePointOffsets.empty()) {
+        return index;
+    }
+    return src->codePointOffsets[std::min(index, src->codePointOffsets.size() - 1)];
+}
+
+std::string_view SourceManager::lineText(source_file_id_t fileId, size_t line) const {
+    const SourceFile *src = file(fileId);
+    if (!src || line >= src->lineStarts.size()) {
+        return {};
+    }
+    size_t begin = src->lineStarts[line];
+    size_t end =
+        line + 1 < src->lineStarts.size() ? src->lineStarts[line + 1] - 1 : src->content.size();
+    if (end > begin && src->content[end - 1] == '\r') {
+        --end;
+    }
+    return std::string_view(src->content).substr(begin, end - begin);
 }
 
 span_id_t SpanArena::create(source_file_id_t fileId, size_t startOffset, size_t endOffset) {
@@ -215,23 +273,6 @@ span_id_t SpanArena::create(source_file_id_t fileId, size_t startOffset, size_t 
             .startOffset = startOffset,
             .endOffset   = std::max(startOffset, endOffset)});
     return id;
-}
-
-span_id_t SpanArena::fromTokenRange(
-    source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens, const TokenRange &range) {
-    auto [start, end] = tokenOffsets(tokens, range);
-    return create(fileId, start, end);
-}
-
-span_id_t SpanArena::fromToken(
-    source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens, antlr4::Token *token) {
-    if (!token) {
-        return kInvalidSpanId;
-    }
-    TokenRange range{
-        static_cast<size_t>(token->getTokenIndex()),
-        static_cast<size_t>(token->getTokenIndex() + 1)};
-    return fromTokenRange(fileId, tokens, range);
 }
 
 const SourceSpan *SpanArena::span(span_id_t id) const {
@@ -360,18 +401,30 @@ std::optional<source_file_id_t> SourceContext::findFileId(const std::string &pat
     return manager_.findFileId(path);
 }
 
-span_id_t SourceContext::createSpan(source_file_id_t fileId, size_t startOffset, size_t endOffset) {
-    return spans_.create(fileId, startOffset, endOffset);
+span_id_t SourceContext::createSpan(source_file_id_t fileId, size_t startIndex, size_t endIndex) {
+    // Callers pass the character indices ANTLR reports (code points); a span stores byte
+    // offsets into the file's text, which is what everything that reads the text needs.
+    return spans_.create(
+        fileId,
+        manager_.codePointToByteOffset(fileId, startIndex),
+        manager_.codePointToByteOffset(fileId, endIndex));
 }
 
 span_id_t SourceContext::spanFromTokenRange(
     source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens, const TokenRange &range) {
-    return spans_.fromTokenRange(fileId, tokens, range);
+    auto [start, end] = tokenOffsets(tokens, range);
+    return createSpan(fileId, start, end);
 }
 
 span_id_t SourceContext::spanFromToken(
     source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens, antlr4::Token *token) {
-    return spans_.fromToken(fileId, tokens, token);
+    if (!token) {
+        return kInvalidSpanId;
+    }
+    TokenRange range{
+        static_cast<size_t>(token->getTokenIndex()),
+        static_cast<size_t>(token->getTokenIndex() + 1)};
+    return spanFromTokenRange(fileId, tokens, range);
 }
 
 origin_id_t SourceContext::createOrigin(
