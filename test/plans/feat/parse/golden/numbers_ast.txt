@@ -1,0 +1,58 @@
+Module:
+|-Import*
+|-Export?
+\-Stmts*
+   \-FuncDecl: main
+      \-FuncData: main
+         |-FuncType:
+         |  |-NamedPair*
+         |  |-NamedPair*
+         |  \-Type?
+         |     \-RefType: int
+         \-StmtBlock: sync
+            \-Stmt*
+               |-DataDecl: a
+               |  |-Type*
+               |  \-Data*
+               |     \-3
+               |-ExprStmt
+               |  \-ReservedExpr: ()
+               |     |-RefData: println
+               |     |-Data*
+               |     |  |-BinaryExpr: -
+               |     |  |  |-RefData: a
+               |     |  |  \-1
+               |     |  |-BinaryExpr: -
+               |     |  |  |-RefData: a
+               |     |  |  \-1
+               |     |  |--1
+               |     |  |-+1.5
+               |     |  |-1e-2
+               |     |  |-2.5e+3
+               |     |  \-BinaryExpr: +
+               |     |     |-RefData: a
+               |     |     \--1
+               |     \-NamedData*
+               |-DataDecl: t
+               |  |-Type*
+               |  \-Data*
+               |     \-TupleData
+               |        \-Data*
+               |           |-TupleData
+               |           |  \-Data*
+               |           |     |-1
+               |           |     \-2
+               |           \-3
+               |-ExprStmt
+               |  \-ReservedExpr: ()
+               |     |-RefData: println
+               |     |-Data*
+               |     |  \-ReservedExpr: .
+               |     |     |-ReservedExpr: .
+               |     |     |  |-RefData: t
+               |     |     |  \-RefData: 0
+               |     |     \-RefData: 1
+               |     \-NamedData*
+               \-ExitStmt: return
+                  \-Data*
+                     \-0

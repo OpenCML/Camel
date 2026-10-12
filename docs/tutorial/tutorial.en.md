@@ -110,7 +110,7 @@ Key points:
 - `let` is an immutable name, and `var` is a mutable variable. Camel favours immutability: most programs hardly ever need `var`.
 - **Fields and elements cannot be assigned to** (`p.x = 5` and `xs[0] = 5` are errors). To "modify" something, build a new value: `{ x: 5, y: p.y }`, `concat(xs, [4])`.
 - Strings can use either single or double quotes. Strings are measured in bytes: `len('中文')` is 6. Functions for splitting, trimming, searching and so on are in the `str` module (section 12).
-- Two details of how code is written: the parenthesis of a call must directly follow the function name (`f(1)`, not `f (1)`); put spaces on both sides of a minus sign (`n - 1`; `n-1` is read as `n` followed by the literal `-1`).
+- A detail of how code is written: the parenthesis of a call must directly follow the function name (`f(1)`, not `f (1)`).
 
 ## 3. Functions
 

@@ -84,15 +84,7 @@ func main(): int sync { println(println); return 0 }
 
 期望：前者得 4；后者是 `SemanticDiag::FunctionNameAsValue`。两者都不应露出内部文本。
 
-## 6. `n-1` 是语法错误
-
-```cml
-func main(): int sync { let n = 5; println(n-1); return 0 }
-```
-
-当前：`[Error]: Unexpected '-1'. (name=SyntaxDiag::UnexpectedToken)`；`n -1`、`3-1` 相同。原因：词法把正负号并入数字字面量。
-
-期望：`n-1` 是减法。至少诊断应提示“在 `-` 两边加空格”。
+## 6.（已修复，见文末）
 
 ## 7. `^` 与 `*` 同优先级
 
@@ -383,3 +375,4 @@ func main(): int sync {
 
 - 字符串下标 `s[i]` 运行时故障：现在按字节取出单字节字符串（结果是字符串还是数值，尚待裁定）。
 - `stdlib/signatures/globals.cml` 列出不存在的函数：签名文件现已与实现对齐，并由 `scripts/stdlib-reference.mjs --verify-ops` 约束。
+- 第 6 条 `n-1` 是语法错误（更严重的表现是 `let b = a-1` 把 `b` 绑定为 `a`、静默丢掉 `-1`）：词法的数字记号不再带正负号，两个操作数之间的 `-`、`+` 总是二元运算符；在需要操作数的位置上紧跟着数字的符号由语法规则 `literal` 读作字面量的符号（`-1`、`case -1 =>`、`-9223372036854775808` 不变）。同一根源的 `t.0.1`（`0.1` 被读成一个浮点数）也已可用。测试：`test/plans/feat/consistency/surface.plan.toml`、`test/plans/feat/parse/numbers.plan.toml`。

@@ -30,6 +30,15 @@ bool isAdjacent() {
         return false;
     return true;
 }
+// `-` or `+` directly before a number: the sign of a literal (rule `literal`), not the unary
+// operator. Keeps `-1` one reading, and `-2->f` the literal -2 passed to `f` as it always was.
+bool isLiteralSign() {
+    const antlr4::Token *sign = _input->LT(1);
+    if (sign == nullptr || (sign->getText() != "-" && sign->getText() != "+"))
+        return false;
+    const size_t next = _input->LA(2);
+    return next == INTEGER || next == REAL;
+}
 }
 
 program : SEP? (decl SEP?)* EOF;
@@ -193,7 +202,7 @@ nullableExpr
 
 unaryExpr
     : linkExpr ((AS | IS) typeExpr)?
-    | ('!' | '-' | '~') linkExpr
+    | {!isLiteralSign()}? ('!' | '-' | '~') linkExpr
     ;
 
 linkExpr
@@ -208,13 +217,15 @@ annoExpr
     : accessExpr (({isAdjacent()}? (indices | parentArgues | angledValues | '!')) | memberAccess)*
     ;
 
+// `t.0.1` reaches the parser as `t`, `.`, and the REAL `0.1`: the builder splits such a token
+// into the two indices it stands for.
 accessExpr
-    : primaryData ('.' (IDENTIFIER | INTEGER))*
+    : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
     ;
 
 // A member of the value a call, binding or index produced: f<m>(x).0, xs[i].name.
 memberAccess
-    : '.' (IDENTIFIER | INTEGER)
+    : '.' (IDENTIFIER | INTEGER | REAL)
     ;
 
 structData
@@ -243,9 +254,11 @@ primaryData
     | funcData
     ;
 
+// The lexer's numbers are unsigned; a literal may carry a sign. After an operand `-` and `+`
+// are the binary operators (`a -1` is a subtraction).
 literal
-    : INTEGER
-    | REAL
+    : ('+' | '-')? INTEGER
+    | ('+' | '-')? REAL
     | STRING
     | MULTI_STR
     | FSTRING

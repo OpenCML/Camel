@@ -60,7 +60,8 @@ For the status of each word in the last row see [8.6](08_top_level_and_grammar.m
 - **A literal out of range is not an error**; the result is -9223372036854775808 (this holds for both `9223372036854775808` and `1e400`). This is the behaviour of the current implementation.
 - **An integer with an exponent is still an integer**: `1e6` is an `int`, not a `float`; a negative exponent truncates towards zero, so `1e-2` is `0`. For a floating-point number write a decimal point: `1.0e-2`.
 - There are no digit separators (`1_000` is a syntax error) and no `0o` prefix.
-- **The sign is part of the literal.** Therefore leave spaces on both sides of binary `+` and `-`: `n - 1` is a subtraction, while `n -1` and `n-1` are syntax errors (read as `n` followed by the literal `-1`).
+- **A number token carries no sign.** Between two operands `+` and `-` are always the binary operators, whatever the spacing: `n - 1`, `n-1` and `n -1` are all subtractions. Where an operand is expected, a `-` or `+` directly before a number is the sign of the literal: `-1`, `+2.5`, `[-1, 2]`, `f(-1)`, `case -1 =>`, `-9223372036854775808`. A signed literal is one operand, so `-2->f` passes `-2` to `f`, while `-a->f` is `-(a->f)` ([6.12](06_expressions.md#612-operator-precedence)). The sign of an exponent belongs to the number token: `1.0e-2`.
+- A newline does not end a statement, so a line that starts with `-` or `+` joins the expression of the line before as a subtraction or an addition (as a line starting with `-x` does); write `;` to keep them apart.
 
 ### 2.5.2 Floating-point numbers
 

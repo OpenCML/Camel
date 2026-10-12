@@ -1,0 +1,7 @@
+func main(): int sync {
+    let a = 3
+    println(a-1, a -1, -1, +1.5, 1e-2, 2.5e+3, a+-1)
+    let t = ((1, 2), 3)
+    println(t.0.1)
+    return 0
+}

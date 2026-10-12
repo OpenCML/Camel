@@ -102,7 +102,7 @@ println(pair.0, pair.1, n, s)
 1 one 1 one
 ```
 
-成员下标是字面量，超出长度是编译期错误（`SemanticDiag::InvalidAccessIndex`）。单元素元组写作 `(x,)`，空元组 `()`。
+成员下标是字面量，超出长度是编译期错误（`SemanticDiag::InvalidAccessIndex`）。嵌套的元组可以连写：`t.0.1` 是 `(t.0).1`。单元素元组写作 `(x,)`，空元组 `()`。
 
 ### 3.3.3 结构体
 

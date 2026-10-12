@@ -409,7 +409,7 @@ From lowest to highest:
 | 7 | `+` `-` | Left-associative |
 | 8 | `*` `/` `%` `^` `@` | Left-associative; `^` is at the same level as `*` |
 | 9 | `??` `!!` | The right side is a complete expression |
-| 10 | Unary `!` `-` `~`; `as` | `-a->f` is `-(a->f)` |
+| 10 | Unary `!` `-` `~`; `as` | `-a->f` is `-(a->f)`; a signed number literal is one operand, `-2->f` is `(-2)->f` |
 | 11 | `->` `?->` | Left-associative |
 | 12 | `..` `?..` | |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |

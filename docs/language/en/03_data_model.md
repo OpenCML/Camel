@@ -102,7 +102,7 @@ println(pair.0, pair.1, n, s)
 1 one 1 one
 ```
 
-A member index is a literal; one beyond the length is a compile-time error (`SemanticDiag::InvalidAccessIndex`). A one-element tuple is written `(x,)`, the empty tuple `()`.
+A member index is a literal; one beyond the length is a compile-time error (`SemanticDiag::InvalidAccessIndex`). Indices of nested tuples chain: `t.0.1` is `(t.0).1`. A one-element tuple is written `(x,)`, the empty tuple `()`.
 
 ### 3.3.3 Structs
 

@@ -2313,20 +2313,69 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
 node_ptr_t Builder::makeMemberAccess(
     node_ptr_t lhs, antlr4::tree::ParseTree *dot, antlr4::tree::ParseTree *member,
     antlr4::ParserRuleContext *range) {
+    antlr4::Token *memberToken = tokenFromTree(member);
+    std::string memberText     = member->getText();
+    size_t memberBegin         = memberToken ? memberToken->getStartIndex() : 0;
+    size_t memberEnd           = memberToken ? memberToken->getStopIndex() + 1 : 0;
+    if (memberToken && memberToken->getType() == OpenCMLLexer::REAL) {
+        // `t.0.1`: the lexer reads `0.1` as one REAL. It stands for two indices, the first
+        // applied here and the second to its result.
+        const size_t split = memberText.find('.');
+        const bool plain   = split != std::string::npos &&
+                             memberText.find_first_not_of("0123456789.") == std::string::npos;
+        if (!plain) {
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(memberToken)
+                .commit("member index", memberText);
+        } else {
+            node_ptr_t first = createNodeAs<ReservedExprLoad>(ReservedDataOp::Access);
+            setNodeTokenRangeByContext(first, range);
+            Reference firstRef(memberText.substr(0, split));
+            node_ptr_t firstMember = createNodeAs<RefDataLoad>(firstRef);
+            setNodeTokenRange(
+                firstMember,
+                static_cast<size_t>(memberToken->getTokenIndex()),
+                static_cast<size_t>(memberToken->getTokenIndex() + 1));
+            setNodeOriginByOffsets(
+                firstMember,
+                memberBegin,
+                memberBegin + split,
+                "ast.access.member");
+            *first << lhs << firstMember;
+            registerAstSemanticBundle(
+                first,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Operator,
+                        deriveAstAnchorOrigin(first, tokenFromTree(dot), "ast.access.dot"),
+                        -1,
+                        "."),
+                    semanticPart(
+                        camel::source::SemanticRole::Receiver,
+                        nodeOrigin(lhs),
+                        -1,
+                        "target"),
+                    semanticPart(
+                        camel::source::SemanticRole::MemberName,
+                        nodeOrigin(firstMember),
+                        -1,
+                        firstRef.ident()),
+                });
+            lhs         = first;
+            memberBegin = memberBegin + split + 1;
+            memberText  = memberText.substr(split + 1);
+        }
+    }
     node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Access);
     setNodeTokenRangeByContext(dataNode, range);
-    Reference ref(member->getText());
+    Reference ref(memberText);
     node_ptr_t rhsNode = createNodeAs<RefDataLoad>(ref);
-    if (auto *memberToken = tokenFromTree(member)) {
+    if (memberToken) {
         setNodeTokenRange(
             rhsNode,
             static_cast<size_t>(memberToken->getTokenIndex()),
             static_cast<size_t>(memberToken->getTokenIndex() + 1));
-        setNodeOriginByOffsets(
-            rhsNode,
-            static_cast<size_t>(memberToken->getStartIndex()),
-            static_cast<size_t>(memberToken->getStopIndex() + 1),
-            "ast.access.member");
+        setNodeOriginByOffsets(rhsNode, memberBegin, memberEnd, "ast.access.member");
     }
     *dataNode << lhs << rhsNode;
     registerAstSemanticBundle(
@@ -2360,7 +2409,7 @@ any Builder::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
 
 /*
 accessExpr
-    : primaryData ('.' (IDENTIFIER | INTEGER))*
+    : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
     ;
 */
 any Builder::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
@@ -2481,8 +2530,8 @@ any Builder::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
 
 /*
 literal
-    : INTEGER
-    | REAL
+    : ('+' | '-')? INTEGER
+    | ('+' | '-')? REAL
     | STRING
     | MULTI_STR
     | FSTRING

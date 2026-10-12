@@ -73,6 +73,13 @@ Each switch is a feature (`progen.py features`); all are on by default and they 
 | `env` | one to three values read with `get_env`, which no pass can know |
 | `macro` | pure functions declared `macro` (ordinary functions without `std::macro`, evaluated ahead of time with it) |
 
+The spelling of a program varies without touching the random stream (a seed still names the
+same program): `+`, `-` and `*` are written with both spaces, with none, or with one (`a - b`,
+`a-b`, `a -b`, `a- b`), and an index into a nested tuple as `t.0.1` or `(t.0).1`. The choice is
+a checksum of the operands' text. The lexer once took a sign into the number after it, so that
+`let b = a-1` bound `b` to `a` and dropped the -1 silently; with only `a - b` generated, no
+batch could see that.
+
 A program ends up at about 115 source lines: one to four pure functions, one to three
 functions with effects, and a `main` of 6 to 14 statements that prints most of what it
 computed. `--size N` (on `show`, `selfcheck`, `diff`, `reduce`) multiplies the number of
