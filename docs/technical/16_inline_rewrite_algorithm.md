@@ -1,9 +1,9 @@
 # `std::inline` 重写算法与 GIR API 协作详解
 
-本文针对当前实现（`src/passes/opt/inline/inline.cpp` + `src/compile/gir/graph.cpp`）进行工程化拆解，重点说明：
+本文针对当前实现（`src/passes/opt/inline/inline.cpp`、`src/passes/opt/inline/engine.cpp` + `src/runtime/draft_inline.cpp`）进行工程化拆解，重点说明：
 
 - `InlineRewritePass` 的真实执行顺序；
-- 它依赖的 GIR Graph API 如何分层协作；
+- 它依赖的运行时图重写 API 如何分层协作；
 - 正确性不变量（invariant）如何被维持；
 - 预算保护、裁剪策略与已知语义边界。
 
@@ -23,8 +23,8 @@
 
 | 层次 | 含义 |
 |------|------|
-| **`GraphBuilder::inlineCallable`** | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其 `bodyGraph` 克隆进调用方并返回 `InlineResult`。 |
-| **`InlineRewritePass`（`std::inline*`）** | **策略层**：先枚举 SCC 内 `FUNC` 候选，再按策略过滤并调用 `inlineCallable`。支持 `small` / `arm` / `hybrid` 三种策略。 |
+| **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GCFuncBody::calleeGraph`）克隆进调用方并返回 `DraftInlineResult`。 |
+| **`InlineRewritePass`（`std::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）调用上述原语。支持 `small` / `arm` / `hybrid` 三种策略（`InlineTargetStrategy`）。 |
 
 当前 pass 入口命名与含义：
 
@@ -39,22 +39,28 @@
 - 若需要运行聚合优化流水线（如 **specialization / devirtualization / inlining**），
   入口应使用 `std::opt`，而不是再把这些 phase 混回 `std::inline`。
 
-其中「小子图」当前定义为：目标 `bodyGraph` 中，除 `DATA/PORT` 外节点数 `<= 8`。
+其中「小子图」当前定义为：被调图中，除 `DATA/PORT` 外节点数 `<= 8`（`InlineRewriteConfig::smallSubgraphMaxNonDataPortNodes`）。
 
 ---
 
 ## 2. Pass 入口与事务边界
 
-`InlineRewritePass::apply` 的入口动作：
+`InlineRewritePass::apply` 以“仅开启内联”的 `OptimizeRewriteConfig` 调用 `applyOptimizeRewritePass`
+（`src/passes/opt/inline/engine.cpp`）；`std::opt` 走同一入口，只是另外开启去虚化与特化。
+每一轮重写会话的动作：
 
-1. 用 `GraphRewriteSession session(graph)` 开启重写事务；
-2. `session.root()` 作为可编辑根图（draft root）；
-3. 后续所有编辑通过 `session` 方法完成（而非直接改原图）；
-4. 结束时 `session.finish()`：
-   - 若无改动，返回 source root；
-   - 若有改动，触发 `GraphDraft::seal()`，导出新的 sealed graph。
+1. 用 `RuntimeGraphDraftSession session(context, runtimeRoot)` 开启重写事务；
+2. 通过 `session.edit(graph)` 取得某张运行时图的可编辑 `GraphDraft`（按需从 `GCGraph` 解码），
+   根图的 draft 为 `session.rootDraft()`；
+3. 后续所有编辑都落在 draft 上（而非直接改 `GCGraph`）；
+4. 结束时：
+   - 若无改动，不提交，沿用原图；
+   - 若有改动，调用 `session.commit()`，重新编码可达闭包并替换运行时根图。
 
-这意味着 `inline` pass 在架构上遵守“**draft 内改写，seal 时一次性收口**”原则。
+一次会话只内联会话开始时已存在的调用；由内联新暴露出的调用留给下一次会话。
+`applyOptimizeRewritePass` 重复开启会话直到不再有改动。
+
+这意味着 `inline` pass 在架构上遵守“**draft 内改写，commit 时一次性收口**”原则。
 
 ---
 
@@ -193,15 +199,16 @@ pass 层保留 `assertNoLegacyGraphRefs(...)` 作为硬断言，确保会话出�
 
 ### 6.2 单目标改写步骤
 
-对每个目标：
+对每个目标，pass 调用 `inlineCallInOrder(session, draft, funcNodeId)`：
 
-1. 调 `session.inlineCallable(path, inlineOptions)`，且本 pass 固定：
-   - 使用默认 `syncPolicy = InlineSyncPolicy::Auto`
-2. `inlineCallable` 内部完成值-控门控（必要时自动插入 `GATE`），并统一返回门控后的
-   `valueExit` 与控制入口 `ctrlEntry`；
-3. pass 侧在 `eraseNode(path)` 前，会把所有 `path->ctrlInputs()` 前驱的 ctrl 输出重连到
-   `inlined.ctrlEntry`（通用控制前驱接线，不再限定 BRCH 特判）；
-4. `session.eraseNode(path)` 删除原 FUNC 节点。
+1. 在拼接前把调用原本隐含的先后次序显式化：被调图可能有副作用时，让调用等待其全部实参的
+   有序来源；记录调用的使用者中哪些只经由该调用才晚于这些来源；
+2. 调 `inlineCallableInDraft(session, draft, funcNodeId)` 完成拼接：克隆被调图、绑定端口、
+   完成值-控门控（必要时自动插入 `GATE`），把调用结果的值使用者重定向到 `valueExit`、
+   控制使用者重定向到 `ctrlExit`，并删除原 `FUNC` 节点；
+3. 拼接后为第 1 步记录的使用者补上到这些来源的控制边。
+
+克隆、端口绑定、使用者重定向与删除原节点的顺序集中在 `inlineCallableInDraft` 内，pass 不自行编排。
 
 ### 6.3 GATE 门控的语义价值
 
@@ -214,17 +221,20 @@ pass 层保留 `assertNoLegacyGraphRefs(...)` 作为硬断言，确保会话出�
 
 ---
 
-## 7. `inlineCallable` 的关键语义（底层 API）
+## 7. `inlineCallableInDraft` 的关键语义（底层 API）
 
-`GraphBuilder::inlineCallable` 是唯一内联原语，返回 `InlineResult`：
+`inlineCallableInDraft` 是唯一内联原语，返回 `DraftInlineResult`：
 
+- `callNode`：被内联的 `FUNC` 节点；
 - `valueExit`：值出口；
 - `ctrlEntry`：控制入口；
-- `insertedEntrySync`：是否自动插入入口同步节点。
+- `ctrlExit`：控制出口（没有独立的控制完成点时等于 `valueExit`）。
+
+结果可按布尔值判断：`valueExit` 有效即表示内联成功。
 
 ### 7.1 入口 SYNC（按目标数自适应）
 
-`inlineCallable` 先构造“入口目标集合”：
+`inlineCallableInDraft` 先构造“入口目标集合”：
 
 1. 优先使用**参数门控目标**（参数/闭包/free-input 映射产生的 `GATE`）；
 2. 仅当没有参数门控目标时，才从 `exitNode`（值出口锚点）反向可达子图中提取入口根节点。
@@ -248,18 +258,20 @@ pass 层保留 `assertNoLegacyGraphRefs(...)` 作为硬断言，确保会话出�
 
 ## 8. 第五阶段：预算哨兵与后处理
 
-### 8.1 三类预算
+### 8.1 增长与次数上限
 
-每个 SCC 内有三道保护：
+内联受以下上限约束（`include/camel/passes/opt/config.h`、`src/passes/opt/inline/engine.cpp`）：
 
-- `kInlineTargetBudgetPerScc`：初始目标数上限；
-- `kInlineApplyBudgetPerScc`：实际应用次数上限；
-- `kNodeDeltaBudgetPerScc`：节点净增长上限。
+- `OptimizeRewriteConfig::growthBudgetNodes`（默认 `kDefaultGrowthBudgetNodes`，可由环境变量
+  `CAMEL_OPT_GROWTH_BUDGET` 覆盖）：特化与内联在整个程序上可复制的节点总数；
+- `InlineRewriteConfig::maxOwnerNodes`（默认 `kMaxInlineOwnerNodes`）：内联后调用方图的节点数上限；
+- `InlineRewriteConfig::duplicationBudgetNodes`：非小子图的无环被调图有多个调用点时，
+  全部内联所重复的代码量上限；
+- `kRuntimeRewriteApplyBudget`：单次会话内实际应用内联的次数上限。
 
-策略是：
-
-- Debug：触发即 `ASSERT`；
-- Release：记录告警并跳过/停止当前 SCC。
+触及上限时不报错：相应调用保持为调用，程序语义不变，只是展开得更少。未被内联的直接调用及其原因
+（`InlineDecline`）记录在 `InlineReport` 中，作为 pass fact `kInlineReportFactKey` 挂在 `Context` 上，
+供后续遍解释某个调用为何仍是调用。
 
 ### 8.2 slot-safe 不可达裁剪
 
@@ -273,14 +285,13 @@ pass 层保留 `assertNoLegacyGraphRefs(...)` 作为硬断言，确保会话出�
 
 ### 8.3 图结构自检
 
-每个改动图经 `GraphBuilder::validateGraph` 校验；会话尾部再做邻接归属断言：
-
-- `assertAdjacencyPointersBelongToGraph` 检查节点邻接指针均属于当前图活跃节点集合；
-- 防止出现悬挂邻接或跨图脏指针。
+结构检查在 `session.commit()` 时对重新编码出的每张运行时图执行（`validateRuntimeGraphPayload` 与
+`validateRuntimeGraphCalls`），包括节点引用有效性与邻接表双向一致性；检查项见
+[`17_graph_rewrite_api_contracts.md`](17_graph_rewrite_api_contracts.md) §4。
 
 ### 8.4 use-site 驱动 registry 清理
 
-在 `session.finish()` 前，inline pass 会执行一轮图级 sweep：
+在会话提交前，inline pass 会执行一轮图级 sweep：
 
 - mark：基于 `FUNC.bodyGraph` + `DATA(Function).graph` 的真实 use-site；
 - sweep：删除 owner 上未被引用的 `dependencies` / `subGraphs`。
@@ -295,16 +306,17 @@ pass 层保留 `assertNoLegacyGraphRefs(...)` 作为硬断言，确保会话出�
 
 - 只表达“要做什么”：
   - 收集目标（**仅限** §6.1 所述 `BRCH` 臂首 `FUNC`，见 §1.1）
-  - 调 `session.inlineCallable`
+  - 调 `inlineCallInOrder`
   - 替换/删除节点
   - 修补 BRCH/JOIN 连接
 
-### 9.2 Session 层（`GraphRewriteSession`）
+### 9.2 Session 层（`RuntimeGraphDraftSession`）
 
-- 事务包装：
-  - `eraseNode / replaceInput / replaceOutput / inlineCallable`
-  - `importSubGraph / importDependency / eraseDependency / eraseSubGraph`
-  - `finish` 决定是否 seal 输出
+- 事务包装（`include/camel/runtime/draft_session.h`）：
+  - `edit / rootDraft / tryDraft`：按需取得某张运行时图的 draft
+  - `collectReachableRuntimeGraphs`：枚举从根图可达的运行时图
+  - `findSpecialization / rememberSpecialization`：会话内的特化缓存
+  - `commit`：重新编码可达闭包并替换运行时根图
 
 ### 9.3 Draft 层（`GraphDraft`）
 
@@ -331,11 +343,11 @@ pass 层保留 `assertNoLegacyGraphRefs(...)` 作为硬断言，确保会话出�
 3. **跨图改写先 import/clone**  
    不允许直接改 non-owned graph。
 
-4. **InlineResult 合法性**  
+4. **DraftInlineResult 合法性**  
    `valueExit` 必须始终可用（必要时为内部门控后的 `GATE`）；并且 `GATE` 结构必须满足 `Norm>=1 && Ctrl>=1`。
 
 5. **会话收口一致**  
-   仅在 `changed=true` 时 seal；否则返回 source root，避免伪改写产物。
+   仅在有改动时 `commit()`；否则沿用原图，避免伪改写产物。
 
 ---
 
@@ -353,5 +365,5 @@ pass 层保留 `assertNoLegacyGraphRefs(...)` 作为硬断言，确保会话出�
 1. 细化 `InlineSyncPolicy` 的行为边界（尤其是 `Never` 在多入口目标下的容错策略）。
 2. 引入“目标收益估计”（调用频次/节点增长率）驱动 selective inline，替代纯节点数阈值。
 3. 将 slot-safe prune 的 pin 规则抽象为可复用 API，供其他 rewrite pass 共享。
-4. 对 `InlineResult` 增加结构化统计（克隆节点数、导入依赖数、叶数）以提升可观测性。
+4. 对 `DraftInlineResult` 增加结构化统计（克隆节点数、导入依赖数、叶数）以提升可观测性。
 

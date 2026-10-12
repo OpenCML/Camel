@@ -4,20 +4,21 @@
 
 覆盖对象：
 
-- `GraphRewriteSession`
+- `RuntimeGraphDraftSession`
 - `GraphDraft`
-- `GraphBuilder`（含 `inlineCallable`）
+- `inlineCallableInDraft` / `inlineCallInOrder`
+- `GraphBuilder`
 - `detail::NodeMutation`（内部桥接）/ `Node::link|replace|unlink`
 
 ---
 
 ## 1. 分层职责与边界
 
-### 1.1 `GraphRewriteSession`（pass 视角）
+### 1.1 `RuntimeGraphDraftSession`（pass 视角）
 
-- 负责事务入口与统一收口；
-- `finish()` 在 `changed=false` 时返回 source root，不导出伪改写图；
-- pass 不应绕过 session 直接改 source graph。
+- 负责事务入口与统一收口（`include/camel/runtime/draft_session.h`）；
+- `commit()` 重新编码可达闭包并替换运行时根图；没有改动时 pass 不调用 `commit()`，沿用原图，不导出伪改写图；
+- pass 不应绕过 session 直接改运行时图（`GCGraph`）。
 
 ### 1.2 `GraphDraft`（可写域与所有权）
 
@@ -91,30 +92,33 @@
 
 ---
 
-## 3. `inlineCallable` 契约（当前实现）
+## 3. `inlineCallableInDraft` 契约（当前实现）
 
 **与 `std::inline` pass 的区分**（阅读本节时请先建立预期）：
 
-- **`inlineCallable`**：GraphBuilder 提供的**通用**内联原语；只要调用方传入合法的 `FUNC` 节点，即可展开其 `bodyGraph`。
-- **`std::inline`（`InlineRewritePass`）**：按策略选择目标并调用 `inlineCallable`：
+- **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`）：**通用**内联原语；只要调用方传入合法的 `FUNC` 节点，即可展开其被调图（`GCFuncBody::calleeGraph`）。需要保持语句次序的调用方使用其包装 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）。
+- **`std::inline`（`InlineRewritePass`）**：按策略选择目标并经 `inlineCallInOrder` 调用该原语：
   - `std::inline::small`：小子图且非分支 arm；
   - `std::inline::arm`：分支 arm 小子图；
   - `std::inline::hybrid` / `std::inline`：综合策略；
   - 默认还启用“SCC 入口 callee 保护”：若调用目标是该 SCC 的入口 callee（被 SCC 外调用），则不内联；
   见 [`16_inline_rewrite_algorithm.md`](16_inline_rewrite_algorithm.md) §1.1 与 §6.1。
 
-因此：文档与本节描述的是 **`inlineCallable` 的契约**；**不要**把它自动等同于「整个编译管线会对所有 `FUNC` 调用做内联」。
+因此：文档与本节描述的是 **`inlineCallableInDraft` 的契约**；**不要**把它自动等同于「整个编译管线会对所有 `FUNC` 调用做内联」。
 
 ### 3.1 输入前提
 
-- 目标节点必须是当前图中的 `FUNC`；
-- `FUNC.bodyGraph` 非空且有值出口锚点（`exitNode`）。
+- 目标节点必须是当前 draft 中的 `FUNC`；
+- 其被调图（`GCFuncBody::calleeGraph`）非空且有值出口锚点（`exitNode`）。
 
-### 3.2 输出契约（`InlineResult`）
+### 3.2 输出契约（`DraftInlineResult`）
 
+- `callNode`：被内联的 `FUNC` 节点；
 - `valueExit`：内联后值出口（必要时为内部门控后的 `GATE`）；
 - `ctrlEntry`：内联后控制入口；
-- `insertedEntrySync`：是否创建入口 `SYNC`。
+- `ctrlExit`：内联后控制出口（没有独立的控制完成点时等于 `valueExit`）。
+
+前提不满足时返回的结果中 `valueExit` 无效（结果按布尔值判断为假）。
 
 ### 3.3 入口控制生成规则
 
@@ -168,7 +172,7 @@
 
 ## 5. 对 pass 作者的建议
 
-- 优先通过 `GraphRewriteSession` 完成改写，不直接调底层 mutation；
+- 优先通过 `RuntimeGraphDraftSession` 及其 `GraphDraft` 完成改写，不直接改运行时图；
 - 不要假设“值出口等于控制完成出口”，统一使用 API 返回值；
 - 涉及 BRCH/JOIN 时，谨慎处理 arm-slot 语义，配合 slot-safe 裁剪；
 - 对会生成一次性子图的优化（如 BRCH arm 内联），在 pass 尾部做 registry sweep，
