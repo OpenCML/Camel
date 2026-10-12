@@ -340,10 +340,23 @@ The elements of xs followed by those of ys, as a new array.
 contains: <value: T> (xs: T[]) => bool
 ```
 
-Whether an element of xs equals value.
+Whether an element of xs equals value, by the `==` of the element type (by content for
+arrays, tuples and structs).
 
 - Pure.
 - Example: `[1, 2, 3]->contains<2>` gives `true`
+
+#### `contains`
+
+```camel
+contains: <sub: string> (s: string) => bool
+```
+
+Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
+string.
+
+- Pure.
+- Example: `'hello'->contains<'ell'>` gives `true`
 
 #### `zip`
 

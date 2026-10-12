@@ -250,6 +250,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"struct/extend_arr", __extend_arr__},
 
         {"struct/contains_arr", __contains_arr__},
+        {"struct/contains_str", __contains_str__},
 
         // profiler
         {"profiler/begin", __profiler_begin__},
@@ -313,6 +314,7 @@ void registerBuiltinOperatorTraits() {
         "struct/slice_arr",
         "struct/concat_arr",
         "struct/contains_arr",
+        "struct/contains_str",
     };
     auto &registry = camel::core::OperatorTraitsRegistry::instance();
     for (const auto &[name, op] : getOpsImplMap()) {

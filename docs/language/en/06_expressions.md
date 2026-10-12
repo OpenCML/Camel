@@ -146,7 +146,11 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
 
 ### 6.7.3 Comparison
 
-- `==`, `!=`: numbers, `bool`, `string`, `Map`, `Set`, with the same type on both sides. Arrays, tuples and structs have no `==`.
+- `==`, `!=`: numbers, `bool`, `string`, `Map`, `Set`, and arrays, tuples and structs, with the same type on both sides (anything else is the compile-time error `SemanticDiag::NoMatchingFunction`; nothing is converted).
+  - **Arrays, tuples and structs compare by content**, element by element and recursively: `[1, 2] == [1, 2]`, `(1, 'a') == (1, 'a')` and two structs whose fields are equal are all `true`; arrays of different lengths are not equal.
+  - The element type must itself be comparable: numbers, `bool`, `string`, `Map`, `Set`, `T?`, `T!`, and arrays, tuples and structs of those. A value with a function in it (`[f] == [f]`) cannot be compared, which is a located compile-time error; tensors are not covered.
+  - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
+  - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
 - `<`, `>`, `<=`, `>=`: numbers and `string` (by byte). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
 - `===` and `!==` are identity comparison: for numbers and `bool` they compare values; for objects such as arrays, tuples, structs and strings they compare whether the two sides are **the same object**.
 

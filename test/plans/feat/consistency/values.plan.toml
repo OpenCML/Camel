@@ -28,6 +28,12 @@ case = "../../../cases/consistency/values/closure_var.cml"
 golden = "golden/closure_var.txt"
 
 [[tests]]
+name = "value.content_equality"
+desc = "== and != on arrays, tuples and structs compare by content, recursively, with strings, T?, T!, maps and sets as parts and float elements as floats (an array holding a NaN does not equal itself); contains on arrays uses the same equality; contains on strings. ([1, 2] == [1, 2] had no overload, and != compared references.)"
+case = "../../../cases/consistency/values/content_equality.cml"
+golden = "golden/content_equality.txt"
+
+[[tests]]
 name = "value.counter_closure"
 desc = "Closures returned by a function share the var of their own call."
 case = "../../../cases/consistency/values/counter_closure.cml"

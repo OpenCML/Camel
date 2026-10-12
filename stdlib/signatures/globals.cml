@@ -199,12 +199,22 @@ inner func concat(xs: T[], ys: T[]): T[] {
     return ':struct/concat_arr'
 }
 
-/// Whether an element of xs equals value.
+/// Whether an element of xs equals value, by the `==` of the element type (by content for
+/// arrays, tuples and structs).
 /// @pure
 /// @example [1, 2, 3]->contains<2>    // true
 with <value: T>
 inner func contains(xs: T[]): bool {
     return ':struct/contains_arr'
+}
+
+/// Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
+/// string.
+/// @pure
+/// @example 'hello'->contains<'ell'>    // true
+with <sub: string>
+inner func contains(s: string): bool {
+    return ':struct/contains_str'
 }
 
 /// Two arrays combined element by element into pairs. They must have the same length.

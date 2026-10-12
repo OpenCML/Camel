@@ -84,7 +84,7 @@ println(xs[0], len(xs), grid[0][1])
   | `range(a, b)` | `[a, a+1, ..., b-1]`；`a >= b` 时为空 |
   | `xs->slice<a, b>` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
   | `concat(xs, ys)` | 连接成新数组 |
-  | `xs->contains<v>` | 是否含有 `v` |
+  | `xs->contains<v>` | 是否含有等于 `v` 的元素；“等于”就是元素类型的 `==`（数组、元组、结构体按内容比较，见 [6.7.3](06_expressions.md)） |
   | `zip(xs, ys)` | `(x, y)` 元组的数组；三个或更多数组得到相应元数的元组（`zip(xs, ys, zs)`）；长度必须相同 |
   | `strs->join<sep>` | 把 `string[]` 连成一个字符串 |
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
@@ -129,6 +129,7 @@ println(p, q.x)
 | 写法 | 结果 |
 |---|---|
 | `len(s)` | 字节数 |
+| `s->contains<sub>` | `sub` 是否出现在 `s` 里（按字节比较）；空串总是出现：`'hello'->contains<'ell'>` 是 `true`。写法与数组的 `contains` 相同 |
 | `a + b` | 连接 |
 | `==`、`!=`、`<`、`>`、`<=`、`>=` | 按字节逐个比较，真前缀在前 |
 | `string(x)`、`int(s)`、`float(s)`、`parse_int(s)`、`parse_float(s)` | 转换，见 3.2 |
@@ -157,7 +158,7 @@ HéLLO 6 5 e
 
 ### 3.3.5 不能比较的值
 
-`==`、`!=` 用于数值、`bool`、`string`、`Map`、`Set`。数组、元组、结构体、函数、`T?`/`T!` 没有 `==`（编译期错误）；需要时比较它们的成员。`===` 见 [6.7.3](06_expressions.md#673-比较)。
+`==`、`!=` 用于数值、`bool`、`string`、`Map`、`Set`，以及数组、元组、结构体：后三者按内容逐个比较，元素类型本身要能比较（[6.7.3](06_expressions.md#673-比较)）。函数、含函数值的复合值、单独的 `T?`/`T!` 没有 `==`（编译期错误）。`===` 见 [6.7.3](06_expressions.md#673-比较)。
 
 ## 3.4 可能为空 `T?` 与可能出错 `T!`
 

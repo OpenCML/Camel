@@ -19,6 +19,7 @@
 
 #include <format>
 #include "struct.h"
+#include "ops.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
@@ -212,30 +213,24 @@ slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr            = norm.get<Array *>(0);
-    slot_t item           = with.get<slot_t>(0);
-    auto *arrType         = tt::as_ptr<ArrayType>(norm.type(0));
-    TypeCode elemTypeCode = arrType->elemTypeCode();
-
-    Bool found = false;
-    size_t n   = arr->size();
-
-    if (isGCTraced(elemTypeCode)) {
-        Type *elemType = arrType->elemType();
-        for (size_t i = 0; i < n; ++i) {
-            if (arr->get<Object *>(i)->equals(rtdata::fromSlot<Object *>(item), elemType, false)) {
-                found = true;
-                break;
-            }
-        }
-    } else {
-        for (size_t i = 0; i < n; ++i) {
-            if (arr->get<slot_t>(i) == item) {
-                found = true;
-                break;
-            }
+    // "Equals" is the `==` of the element type: by content for arrays, tuples and structs,
+    // as numbers for floats (design principles 2.10).
+    Array *arr           = norm.get<Array *>(0);
+    const slot_t item    = with.get<slot_t>(0);
+    const Type *elemType = tt::as_ptr<ArrayType>(norm.type(0))->elemType();
+    const size_t n       = arr->size();
+    for (size_t i = 0; i < n; ++i) {
+        if (valuesEqualByContent(arr->get<slot_t>(i), item, elemType)) {
+            return rtdata::toSlot<Bool>(true);
         }
     }
+    return rtdata::toSlot<Bool>(false);
+}
 
-    return rtdata::toSlot(found);
+// `'hello'->contains<'ell'>`: whether the bytes of `sub` occur in the string. The empty
+// string occurs in every string.
+slot_t __contains_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const String *text = norm.get<String *>(0);
+    const String *sub  = with.get<String *>(0);
+    return rtdata::toSlot<Bool>(text->view().find(sub->view()) != std::string_view::npos);
 }

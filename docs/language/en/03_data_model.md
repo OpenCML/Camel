@@ -84,7 +84,7 @@ println(xs[0], len(xs), grid[0][1])
   | `range(a, b)` | `[a, a+1, ..., b-1]`; empty when `a >= b` |
   | `xs->slice<a, b>` | A new array of subscripts `a` to `b-1`. `a` and `b` are positions from 0 to the length; a bound outside the array (a negative one included) is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault. With both bounds inside the array and `b < a` the result is empty. To take "at most n" use `take` and `drop` of the `array` module, which cut by definition |
   | `concat(xs, ys)` | Concatenation into a new array |
-  | `xs->contains<v>` | Whether it contains `v` |
+  | `xs->contains<v>` | Whether an element equals `v`, by the `==` of the element type (arrays, tuples and structs compare by content, see [6.7.3](06_expressions.md)) |
   | `zip(xs, ys)` | An array of `(x, y)` tuples; three or more arrays give tuples of that many elements (`zip(xs, ys, zs)`); the lengths must be equal |
   | `strs->join<sep>` | Joins a `string[]` into one string |
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
@@ -129,6 +129,7 @@ A string is an immutable sequence of bytes; both length and subscripts are by by
 | Form | Result |
 |---|---|
 | `len(s)` | Number of bytes |
+| `s->contains<sub>` | Whether `sub` occurs in `s` (bytes are compared); the empty string always does: `'hello'->contains<'ell'>` is `true`. Written like `contains` on an array |
 | `a + b` | Concatenation |
 | `==`, `!=`, `<`, `>`, `<=`, `>=` | Byte-by-byte comparison; a proper prefix comes first |
 | `string(x)`, `int(s)`, `float(s)`, `parse_int(s)`, `parse_float(s)` | Conversion, see 3.2 |
@@ -157,7 +158,7 @@ Whether the result of `s[i]` is a one-byte string or a number is behaviour of th
 
 ### 3.3.5 Values that cannot be compared
 
-`==` and `!=` apply to numbers, `bool`, `string`, `Map` and `Set`. Arrays, tuples, structs, functions and `T?`/`T!` have no `==` (compile-time error); compare their members where needed. For `===` see [6.7.3](06_expressions.md#673-comparison).
+`==` and `!=` apply to numbers, `bool`, `string`, `Map` and `Set`, and to arrays, tuples and structs: these three compare by content, element by element, and their element types must themselves be comparable ([6.7.3](06_expressions.md#673-comparison)). Functions, composite values with a function in them, and a `T?`/`T!` by itself have no `==` (compile-time error). For `===` see [6.7.3](06_expressions.md#673-comparison).
 
 ## 3.4 May be null `T?` and may fail `T!`
 
