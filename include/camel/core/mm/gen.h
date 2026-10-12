@@ -529,6 +529,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // layout is required because composite objects do not carry their own runtime type metadata.
     std::unordered_map<ObjectHeader *, RememberedSetEntry> rememberedSet_;
     std::unordered_map<ObjectHeader *, const type::Type *> objectTypes_;
+    bool recordLayouts_ = false; // objectTypes_ is being filled (see recordObjectTypeUnlocked)
     // Moving collector: objects that were born old (a large object, or a small one allocated
     // while the birth space was full) since the last minor collection. Their creator fills
     // them through plain stores, with no write barrier, so they may point at young objects
@@ -587,6 +588,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
     collectYoungReferenceEdges(rtdata::Object *object, const type::Type *objectType) const;
 
     void rememberOldObjectIfYoungRefsUnlocked(rtdata::Object *object, const type::Type *objectType);
+
+    // Whether `object` holds a reference a minor collection must follow (collectYoungReferenceEdges
+    // without the list).
+    bool hasYoungRefsUnlocked(rtdata::Object *object, const type::Type *objectType) const;
 
     // Runs the finalizers of the young objects this minor collection did not copy.
     void finalizeDeadYoungUnlocked();

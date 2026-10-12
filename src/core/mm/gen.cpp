@@ -829,7 +829,7 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
         // have promoted their targets), and remember the promoted and born-old objects that do.
         rememberedSet_.clear();
         for (const auto &[oldHeader, entry] : retainedRememberedSet) {
-            if (!collectYoungReferenceEdges(entry.object, entry.type).empty()) {
+            if (hasYoungRefsUnlocked(entry.object, entry.type)) {
                 rememberedSet_[oldHeader] = entry;
             }
         }
@@ -922,7 +922,10 @@ bool GenerationalAllocatorWithGC::isPreciseGCType(const type::Type *objectType) 
 
 void GenerationalAllocatorWithGC::recordObjectTypeUnlocked(
     rtdata::Object *object, const type::Type *objectType) {
-    if (!isPreciseGCType(objectType) || !object) {
+    // The table serves the heap verifier (and is a fallback for a remembered owner that came
+    // without a layout). Filling it costs a hash insertion per object marked or promoted, so
+    // it is filled only once verification has been asked for.
+    if (!recordLayouts_ || !isPreciseGCType(objectType) || !object) {
         return;
     }
     // Layouts are kept for old objects only (the remembered set and the verifier ask for
@@ -972,14 +975,37 @@ GenerationalAllocatorWithGC::collectYoungReferenceEdges(
     return edges;
 }
 
+bool GenerationalAllocatorWithGC::hasYoungRefsUnlocked(
+    rtdata::Object *object, const type::Type *objectType) const {
+    bool found = false;
+    object->updateRefs(
+        [&](rtdata::Object *ref, const type::Type *, const rtdata::RefTraceInfo &)
+            -> rtdata::Object * {
+            if (!found && ref) {
+                // Range checks first: the lookup of a large object takes that space's lock.
+                found = birthSpace_.contains(ref) || havenSpace_.contains(ref) ||
+                        cacheSpace_.contains(ref) ||
+                        (!freshOld_.empty() && freshOld_.contains(headerOf(ref)));
+            }
+            return ref;
+        },
+        objectType);
+    return found;
+}
+
 void GenerationalAllocatorWithGC::rememberOldObjectIfYoungRefsUnlocked(
     rtdata::Object *object, const type::Type *objectType) {
+    // Most of what a minor collection copies stays young: decided by three range checks.
+    if (!object || birthSpace_.contains(object) || havenSpace_.contains(object) ||
+        cacheSpace_.contains(object)) {
+        return;
+    }
     ObjectHeader *header = autoHeaderForPayload(object);
     if (!header || (!inElderGenSpace(header) && !inLargeObjSpace(header))) {
         return;
     }
     recordObjectTypeUnlocked(object, objectType);
-    if (!collectYoungReferenceEdges(object, objectType).empty()) {
+    if (hasYoungRefsUnlocked(object, objectType)) {
         rememberedSet_[header] = RememberedSetEntry{
             .object = object,
             .type   = objectType,

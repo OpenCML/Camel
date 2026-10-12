@@ -52,6 +52,7 @@ void GenerationalAllocatorWithGC::configureDebug(DebugConfig config) {
         promotionAgeThreshold_ = 16;
     }
     debugConfig_                = config;
+    recordLayouts_              = recordLayouts_ || config.verifyBeforeGC || config.verifyAfterGC;
     pendingSafepointCollection_ = CollectionKind::None;
     // GC stress deliberately turns normal safepoints into collection opportunities. Keep the
     // runtime-visible slow-path flag in sync so schedulers can stay cheap when diagnostics are off.
@@ -431,6 +432,9 @@ void GenerationalAllocatorWithGC::validateAllocatedHeaders(
 std::vector<GenerationalAllocatorWithGC::HeapVerificationIssue>
 GenerationalAllocatorWithGC::verifyHeapUnlocked() {
     std::vector<HeapVerificationIssue> issues;
+    // From the first verification on, layouts are recorded: the remembered-set check needs
+    // them for the old objects this walk and the later collections reach.
+    recordLayouts_ = true;
 
     if (!elderGenSpace_.validate()) {
         issues.push_back(
