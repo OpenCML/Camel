@@ -152,23 +152,7 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
   - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
   - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
 - `<`, `>`, `<=`, `>=`: numbers and `string` (by byte). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
-- `===` and `!==` are identity comparison: for numbers and `bool` they compare values; for objects such as arrays, tuples, structs and strings they compare whether the two sides are **the same object**.
-
-```cml
-func main(): int sync {
-    let a = [1, 2]
-    let b = [1, 2]
-    let c = a
-    println(a === c, a === b, 1 === 1)
-    return 0
-}
-```
-
-```text
-true false true
-```
-
-For strings too, `===` compares objects rather than contents (`'a' === 'a'` is `false`); to compare contents use `==`.
+- `===` and `!==` are not supported for now: the lexer knows the two tokens, and writing one is a located compile-time error, `SemanticDiag::ConstructNotSupported`. Compare values with `==` and `!=`.
 
 ### 6.7.4 Type conversion `as`
 
@@ -409,7 +393,7 @@ From lowest to highest:
 | 2 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Cannot be chained |
 | 3 | `\|\|` | Left-associative |
 | 4 | `&&` | Left-associative |
-| 5 | `==` `!=` `===` `!==` | |
+| 5 | `==` `!=` (`===` `!==` not supported for now) | |
 | 6 | `<` `>` `<=` `>=` | |
 | 7 | `+` `-` | Left-associative |
 | 8 | `*` `/` `%` `^` `@` | Left-associative; `^` is at the same level as `*` |

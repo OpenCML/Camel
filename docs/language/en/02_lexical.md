@@ -117,7 +117,7 @@ pi is about 3.14
 |---|---|
 | `+` `-` `*` `/` `%` `^` `@` | Arithmetic: addition, subtraction, multiplication, division, remainder, power, matrix multiplication |
 | `==` `!=` `<` `>` `<=` `>=` | Comparison |
-| `===` `!==` | Identity comparison |
+| `===` `!==` | Reserved, not supported for now (compile-time error) |
 | `&&` `\|\|` `!` | Logical and, or, not |
 | `~` | Bitwise not |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Assignment and compound assignment |

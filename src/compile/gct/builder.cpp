@@ -1322,12 +1322,21 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     case AST::BinaryDataOp::Neq: {
         opNode = createNodeAs<DRefLoad>("__neq__");
     } break;
-    case AST::BinaryDataOp::StrictEq: {
-        opNode = createNodeAs<DRefLoad>("__strict_eq__");
-    } break;
+    case AST::BinaryDataOp::StrictEq:
     case AST::BinaryDataOp::StrictNeq: {
-        opNode = createNodeAs<DRefLoad>("__strict_neq__");
-    } break;
+        // Design principles 2.10: `===` is not supported for now (and `!==` with it). It
+        // used to compile and compared objects, so two equal string literals were unequal.
+        // Located at the whole comparison (the range of the node itself is its right side).
+        auto range  = ast->load()->tokenRange();
+        range.start = lhsASTNode->load()->tokenRange().start;
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(range)
+            .commit(
+                binaryExpr->op() == AST::BinaryDataOp::StrictEq ? "===" : "!==",
+                "identity comparison is not part of the language for now; compare values "
+                "with '==' and '!='");
+        throw BuildAbortException();
+    }
     case AST::BinaryDataOp::Less: {
         opNode = createNodeAs<DRefLoad>("__lt__");
     } break;
