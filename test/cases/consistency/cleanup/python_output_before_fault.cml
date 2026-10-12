@@ -1,0 +1,19 @@
+/**
+ * Output printed by Python through the bridge before a fault of the program: Python buffers
+ * its standard output, and the interpreter must be shut down (and flush it) on the way out.
+ */
+module python_output_before_fault
+
+import { py_call, py_wrap, py_eval, py_unwrap, PyObject } from python
+
+func main(): int sync {
+    println('camel 1')
+    py_call('print', py_wrap('python 1'))
+    let held = py_eval('[1, 2, 3]')
+    println('camel 2')
+    py_call('print', py_wrap('python 2'))
+    let z = 0
+    println(1 / z)
+    println('not reached')
+    return 0
+}

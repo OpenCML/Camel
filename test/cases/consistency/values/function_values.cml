@@ -1,0 +1,26 @@
+/**
+ * Functions that return functions, and functions applied to functions.
+ */
+module function_values
+
+func adder(a: int): (x: int) => int {
+    return (x: int): int => x + a
+}
+
+func compose(f: (x: int) => int, g: (x: int) => int): (x: int) => int {
+    return (x: int): int => g(f(x))
+}
+
+func twice(f: (x: int) => int): (x: int) => int {
+    return compose(f, f)
+}
+
+func main(): int sync {
+    let add3 = adder(3)
+    let add10 = adder(10)
+    println(add3(1))
+    println(compose(add3, add10)(1))
+    println(twice(twice(add3))(0))
+    println(range(0, 5)->map<twice(add10)>)
+    return 0
+}

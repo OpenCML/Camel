@@ -1,0 +1,15 @@
+/**
+ * Tail recursion of a hundred thousand and of a million rounds: no back end may run out of
+ * stack or of frames.
+ */
+module tail_deep
+
+func loop(i: int, n: int, acc: int): int {
+    return if i > n then acc else loop(i + 1, n, acc + i)
+}
+
+func main(): int sync {
+    println(loop(0, 100000, 0))
+    println(loop(0, 1000000, 0))
+    return 0
+}

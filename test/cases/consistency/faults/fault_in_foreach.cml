@@ -1,0 +1,16 @@
+/**
+ * The function of a foreach faults at element 2, after printing for elements 0 and 1. foreach
+ * runs in element order on every back end, so the two lines are there and no third.
+ */
+module fault_in_foreach
+
+func show(x: int): void sync {
+    println(60 / (x - 2))
+}
+
+func main(): int sync {
+    println('before')
+    range(0, 6)->foreach<show>
+    println('not reached')
+    return 0
+}

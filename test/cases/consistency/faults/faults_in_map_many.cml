@@ -1,0 +1,20 @@
+/**
+ * Every element function of a map faults, the even elements at one line and the odd ones at
+ * another. Which one is reported is not laid down for a scheduler that runs them concurrently;
+ * the run stops with one located DivisionByZero and exit code 1.
+ */
+module faults_in_map_many
+
+func bad(x: int): int {
+    return if x % 2 == 0
+        then 10 / (x - x)
+        else 20 % (x - x)
+}
+
+func main(): int sync {
+    println('before')
+    let ys = range(0, 64)->map<bad>
+    println(ys)
+    println('not reached')
+    return 0
+}

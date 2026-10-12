@@ -1,0 +1,18 @@
+/**
+ * Conversion to int of a float outside the range of int, of an infinity and of NaN.
+ */
+module float_to_int_range
+
+func conv(x: float): int { return int(x) }
+func mul(a: float, b: float): float { return a * b }
+
+func main(): int sync {
+    let inf = mul(1.0e308, 10.0)
+    println('before')
+    println(conv(1.0e30))
+    println(conv(-1.0e30))
+    println(conv(inf))
+    println(conv(inf - inf))
+    println('after')
+    return 0
+}

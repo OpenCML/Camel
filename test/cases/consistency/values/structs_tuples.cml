@@ -1,0 +1,20 @@
+/**
+ * Struct fields and tuple elements, nested, passed through functions.
+ */
+module structs_tuples
+
+type Point = { x: int, y: int }
+
+func swap(p: Point): Point { return { x: p.y, y: p.x } }
+func pair(a: int, b: int): (int, int) { return (b, a) }
+
+func main(): int sync {
+    let p = { x: 1, y: 2 }
+    let q = swap(p)
+    println(q.x * 10 + q.y)
+    let t = pair(3, 4)
+    println(t.0 * 10 + t.1)
+    let ps = [p, q, swap(q)]
+    println(ps->map<(p: Point): int => p.x - p.y>)
+    return 0
+}

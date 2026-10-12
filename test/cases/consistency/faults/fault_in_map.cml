@@ -1,0 +1,15 @@
+/**
+ * One element function of a map faults (element 3 of 8 divides by zero). The program stops with
+ * DivisionByZero at the division; what main printed before the map is there.
+ */
+module fault_in_map
+
+func inv(x: int): int { return 60 / (x - 3) }
+
+func main(): int sync {
+    println('before')
+    let ys = range(0, 8)->map<inv>
+    println(ys)
+    println('not reached')
+    return 0
+}

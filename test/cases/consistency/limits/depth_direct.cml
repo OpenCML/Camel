@@ -1,0 +1,21 @@
+/**
+ * Non-tail recursion to the depth given by the environment variable N, called from main.
+ * With a limit of L open calls, depth(L - 1) is the deepest that runs: main's call of depth and
+ * L - 1 recursive calls are open at the bottom. (The arms of the branch are tail calls and
+ * take no frame.)
+ */
+module depth_direct
+
+import { get_env } from sys
+
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
+
+func main(): int sync {
+    let n = int(get_env('N'))
+    println('start')
+    println(depth(n))
+    println('done')
+    return 0
+}

@@ -1,0 +1,21 @@
+/**
+ * A fault in a sync function that has printed, called from a sync main that has printed: all
+ * four lines before the fault are on standard output, in order, then the diagnostic.
+ */
+module fault_after_output
+
+func work(z: int): int sync {
+    println('work 1')
+    println('work 2')
+    let r = 5 / z
+    println('not reached in work')
+    return r
+}
+
+func main(): int sync {
+    println('main 1')
+    println('main 2')
+    println(work(0))
+    println('not reached')
+    return 0
+}

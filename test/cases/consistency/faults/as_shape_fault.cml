@@ -1,0 +1,20 @@
+/**
+ * `as` on a tensor whose shape is only known at run time and is not the one asserted.
+ */
+module as_shape_fault
+
+import { Tensor, reshape, zeros } from tensor
+
+func shaped(rows: int, cols: int): Tensor {
+    return zeros([rows, cols])
+}
+
+func main(): int sync {
+    println('before')
+    let a = shaped(2, 3) as Tensor<f32, const [2, 3]>
+    println(a)
+    let b = shaped(3, 2) as Tensor<f32, const [2, 3]>
+    println(b)
+    println('not reached')
+    return 0
+}

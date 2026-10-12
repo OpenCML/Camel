@@ -1,0 +1,14 @@
+/**
+ * A macro recursion of depth D evaluated ahead of time by std::macro. D is 40: more than the
+ * default limit of the evaluator allows, fine with --max-macro-depth 200.
+ */
+module macro_depth
+
+macro func count(n: int): int {
+    return if n == 0 then 0 else 1 + count(n - 1)
+}
+
+func main(): int sync {
+    println(count(40))
+    return 0
+}
