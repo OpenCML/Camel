@@ -29,11 +29,10 @@
 
 #include "camel/service/semantic/syntax_index.h"
 
-#include "antlr4-runtime/antlr4-runtime.h"
-#include "camel/parse/antlr/OpenCMLLexer.h"
-#include "camel/parse/antlr/OpenCMLParser.h"
+#include "camel/parse/syntax/cst.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace camel::service::semantic {
 
@@ -71,19 +70,18 @@ const char *to_string(DeclKind kind) {
 
 namespace {
 
-using antlr4::ParserRuleContext;
-using antlr4::Token;
-using antlr4::tree::ParseTree;
-using antlr4::tree::TerminalNode;
-using P = OpenCMLParser;
+namespace syn = camel::parse::syntax;
+namespace cst = camel::parse::syntax::cst;
+using TK      = camel::parse::syntax::TokenKind;
+using NK      = camel::parse::syntax::NodeKind;
 
 bool isTypeKind(DeclKind kind) {
     return kind == DeclKind::Type || kind == DeclKind::TypeParameter ||
            kind == DeclKind::TypeVariable;
 }
 
-// A declaration a type name may resolve to / a value name may resolve to. An imported name
-// can be either, a module or namespace starts a path of either kind.
+/// Whether a declaration of `kind` can be what a name in a type position (or a value
+/// position) refers to. Imports and modules can be either.
 bool admits(DeclKind kind, bool types) {
     switch (kind) {
     case DeclKind::Import:
@@ -96,29 +94,15 @@ bool admits(DeclKind kind, bool types) {
     }
 }
 
+/// Walks the concrete syntax tree of one file. The tree may be that of a text with errors:
+/// a node may lack any of its children, and Error nodes hold what the parser skipped. Every
+/// access therefore goes through handles that may be empty.
 class Walker {
   public:
-    Walker(SyntaxIndex &index, const std::vector<Token *> &tokens, std::string_view text)
-        : index_(index), tokens_(tokens), text_(text) {
-        // ANTLR indexes the text by code point; ranges are byte offsets.
-        bool ascii = true;
-        for (unsigned char c : text) {
-            if (c >= 0x80) {
-                ascii = false;
-                break;
-            }
-        }
-        if (!ascii) {
-            for (size_t i = 0; i < text.size(); ++i) {
-                if ((static_cast<unsigned char>(text[i]) & 0xC0) != 0x80) {
-                    cpToByte_.push_back(static_cast<uint32_t>(i));
-                }
-            }
-            cpToByte_.push_back(static_cast<uint32_t>(text.size()));
-        }
-    }
+    Walker(SyntaxIndex &index, const syn::Tree &tree)
+        : index_(index), tree_(tree), buffer_(tree.tokens()), text_(tree.source()) {}
 
-    void run(ParseTree *tree) {
+    void run() {
         collectTokens();
         Scope module;
         module.id    = 0;
@@ -126,10 +110,9 @@ class Walker {
         module.range = Range{0, static_cast<uint32_t>(text_.size())};
         index_.scopes.push_back(module);
         scope_ = 0;
-        if (tree != nullptr) {
-            walk(tree);
+        if (tree_.root()) {
+            walk(tree_.root());
         }
-        // Source order, whatever order the walk visited the parts of a construct in.
         std::stable_sort(index_.refs.begin(), index_.refs.end(), [](const Ref &a, const Ref &b) {
             return a.range.start < b.range.start;
         });
@@ -142,48 +125,29 @@ class Walker {
 
   private:
     SyntaxIndex &index_;
-    const std::vector<Token *> &tokens_;
+    const syn::Tree &tree_;
+    const syn::TokenBuffer &buffer_;
     std::string_view text_;
-    std::vector<uint32_t> cpToByte_;
-    uint32_t scope_     = 0;
-    int32_t container_  = -1;
-    bool inFuncType_    = false;
-    bool exportNext_    = false;
-    // The function whose signature is being walked: `typeas` marks it generic.
+    uint32_t scope_      = 0;
+    int32_t container_   = -1;
+    bool inFuncType_     = false;
+    bool exportNext_     = false;
+    // The declaration whose signature is being walked: a `typeas` in it makes it generic.
     int32_t signatureOf_ = -1;
 
-    // ---- positions ----
+    // ---- ranges and text ----
 
-    uint32_t byteOf(size_t codePoint) const {
-        if (cpToByte_.empty()) {
-            return static_cast<uint32_t>(std::min(codePoint, text_.size()));
-        }
-        return cpToByte_[std::min(codePoint, cpToByte_.size() - 1)];
+    Range rangeOf(syn::TokenRef token) const {
+        return token ? Range{token.begin(), token.end()} : Range{};
     }
-    Range rangeOf(const Token *token) const {
-        if (token == nullptr || token->getStartIndex() == INVALID_INDEX) {
+    Range rangeOf(syn::Node node) const {
+        if (!node || node.childCount() == 0) {
             return {};
         }
-        const uint32_t start = byteOf(token->getStartIndex());
-        const uint32_t end =
-            token->getStopIndex() == INVALID_INDEX || token->getStopIndex() < token->getStartIndex()
-                ? start
-                : byteOf(token->getStopIndex() + 1);
-        return {start, end};
-    }
-    Range rangeOf(TerminalNode *node) const {
-        return node ? rangeOf(node->getSymbol()) : Range{};
-    }
-    Range rangeOf(ParserRuleContext *ctx) const {
-        if (ctx == nullptr || ctx->getStart() == nullptr) {
-            return {};
-        }
-        Range r = rangeOf(ctx->getStart());
-        if (ctx->getStop() != nullptr) {
-            Range stop = rangeOf(ctx->getStop());
-            if (stop.end > r.end) {
-                r.end = stop.end;
-            }
+        Range r           = rangeOf(node.firstToken());
+        const Range stop  = rangeOf(node.lastToken());
+        if (stop.end > r.end) {
+            r.end = stop.end;
         }
         return r;
     }
@@ -193,7 +157,7 @@ class Walker {
         }
         return std::string(text_.substr(r.start, r.end - r.start));
     }
-    // The text of a range on one line: runs of white space become one space.
+    /// The text of a range on one line, runs of white space as one space.
     std::string flatTextOf(Range r) const {
         std::string out;
         bool space = false;
@@ -210,81 +174,96 @@ class Walker {
         }
         return out;
     }
-    static bool valid(TerminalNode *node) {
-        // An identifier that error recovery conjured has no text position.
-        return node != nullptr && node->getSymbol() != nullptr &&
-               node->getSymbol()->getStartIndex() != INVALID_INDEX &&
-               node->getSymbol()->getTokenIndex() != INVALID_INDEX &&
-               dynamic_cast<antlr4::tree::ErrorNode *>(node) == nullptr;
+    /// The name token of an identDef.
+    static syn::TokenRef nameOf(cst::IdentDef ident) { return ident.tok(TK::Identifier); }
+    /// The last name of a qualified name (`a::b::c`: `c`).
+    static syn::TokenRef lastNameOf(syn::Node ref) {
+        const size_t n = ref ? ref.tokCount(TK::Identifier) : 0;
+        return n == 0 ? syn::TokenRef() : ref.tok(TK::Identifier, n - 1);
+    }
+    /// The child nodes of a block's statement list.
+    void walkBlockBody(cst::StmtBlock block) {
+        if (block) {
+            walk(block.get<cst::StmtList>());
+        }
+    }
+    /// A branch arm or a lambda body: a block (its statements) or an expression.
+    void walkBody(syn::Node body) {
+        if (body.is(NK::StmtBlock)) {
+            walkBlockBody(cst::StmtBlock(body));
+        } else {
+            walk(body);
+        }
     }
 
-    // ---- tokens ----
-
     void collectTokens() {
-        index_.tokens.reserve(tokens_.size());
-        for (const Token *token : tokens_) {
-            if (token == nullptr || token->getType() == Token::EOF) {
+        index_.tokens.reserve(buffer_.size());
+        for (const syn::Token &token : buffer_.tokens()) {
+            if (token.kind == TK::Eof || token.kind == TK::Error) {
                 continue;
             }
             TokenInfo info;
-            info.range   = rangeOf(token);
-            info.type    = static_cast<uint16_t>(token->getType());
-            info.channel = static_cast<uint8_t>(token->getChannel());
-            info.line    = static_cast<uint32_t>(token->getLine() > 0 ? token->getLine() - 1 : 0);
+            info.range   = Range{token.begin, token.end};
+            info.type    = static_cast<uint16_t>(token.kind);
+            info.channel = token.kind == TK::Command        ? 2
+                           : token.kind == TK::LineComment  ? 3
+                           : token.kind == TK::BlockComment ? 4
+                                                            : 0;
+            info.line    = static_cast<uint32_t>(buffer_.lineOf(token.begin));
             index_.tokens.push_back(info);
         }
     }
 
-    // The comment lines directly above the line of `first`: `//` lines without a blank line
-    // between them and the declaration, or one block comment ending on the line above.
-    std::string docAbove(const Token *first) const {
-        if (first == nullptr || first->getTokenIndex() == INVALID_INDEX) {
+    /// The comment block right above a declaration: consecutive `//` lines ending on the line
+    /// before it, or one `/* */` block. Without the comment markers.
+    std::string docAbove(syn::TokenRef first) const {
+        if (!first) {
             return {};
         }
         std::vector<std::string> lines;
-        size_t expectLine = first->getLine();
-        for (size_t i = first->getTokenIndex(); i-- > 0;) {
-            const Token *token = tokens_[i];
-            if (token->getChannel() == 3) {
-                if (token->getLine() + 1 != expectLine) {
+        size_t expectLine = first.line();
+        for (size_t i = first.index(); i-- > 0;) {
+            const syn::Token &token = buffer_[i];
+            const size_t line       = buffer_.lineOf(token.begin);
+            if (token.kind == TK::LineComment) {
+                if (line + 1 != expectLine) {
                     break;
                 }
-                std::string line = token->getText();
-                size_t from      = line.find_first_not_of('/');
-                line             = from == std::string::npos ? "" : line.substr(from);
-                if (!line.empty() && line.front() == ' ') {
-                    line.erase(0, 1);
+                std::string text(buffer_.text(token));
+                size_t from = text.find_first_not_of('/');
+                text        = from == std::string::npos ? "" : text.substr(from);
+                if (!text.empty() && text.front() == ' ') {
+                    text.erase(0, 1);
                 }
-                while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
-                    line.pop_back();
+                while (!text.empty() && (text.back() == '\r' || text.back() == ' ')) {
+                    text.pop_back();
                 }
-                lines.push_back(line);
-                expectLine = token->getLine();
+                lines.push_back(text);
+                expectLine = line;
                 continue;
             }
-            if (token->getChannel() == 4 && lines.empty()) {
-                std::string body = token->getText();
+            if (token.kind == TK::BlockComment && lines.empty()) {
+                std::string body(buffer_.text(token));
                 const size_t newlines =
                     static_cast<size_t>(std::count(body.begin(), body.end(), '\n'));
-                if (token->getLine() + newlines + 1 != expectLine) {
+                if (line + newlines + 1 != expectLine) {
                     break;
                 }
                 if (body.size() >= 4) {
                     body = body.substr(2, body.size() - 4);
                 }
-                // Drop the leading ` * ` of each line.
                 std::string cleaned;
                 size_t pos = 0;
                 while (pos <= body.size()) {
                     size_t eol       = body.find('\n', pos);
-                    std::string line = body.substr(pos, eol == std::string::npos ? eol : eol - pos);
-                    size_t from      = line.find_first_not_of(" \t*");
-                    line             = from == std::string::npos ? "" : line.substr(from);
-                    while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) {
-                        line.pop_back();
+                    std::string text = body.substr(pos, eol == std::string::npos ? eol : eol - pos);
+                    size_t from      = text.find_first_not_of(" \t*");
+                    text             = from == std::string::npos ? "" : text.substr(from);
+                    while (!text.empty() && (text.back() == '\r' || text.back() == ' ')) {
+                        text.pop_back();
                     }
-                    if (!cleaned.empty() || !line.empty()) {
-                        cleaned += line;
+                    if (!cleaned.empty() || !text.empty()) {
+                        cleaned += text;
                         cleaned += '\n';
                     }
                     if (eol == std::string::npos) {
@@ -327,11 +306,11 @@ class Walker {
         scope_               = parent < 0 ? 0 : static_cast<uint32_t>(parent);
     }
 
-    Decl &declare(DeclKind kind, TerminalNode *name, Range owner, Range full) {
+    Decl &declare(DeclKind kind, syn::TokenRef name, Range owner, Range full) {
         Decl decl;
         decl.id         = static_cast<uint32_t>(index_.decls.size());
         decl.kind       = kind;
-        decl.name       = name->getText();
+        decl.name       = name.text();
         decl.nameRange  = rangeOf(name);
         decl.ownerRange = owner;
         decl.fullRange  = full.empty() ? decl.nameRange : full;
@@ -342,18 +321,19 @@ class Walker {
         return index_.decls.back();
     }
 
-    void addRef(P::IdentRefContext *ctx, RefKind kind, bool callee = false) {
-        if (ctx == nullptr) {
+    /// A qualified name (IdentRef, RefData or RefType) used at this place.
+    void addRef(syn::Node name, RefKind kind, bool callee = false) {
+        if (!name) {
             return;
         }
         Ref ref;
         ref.kind   = kind;
         ref.scope  = scope_;
         ref.callee = callee;
-        for (TerminalNode *id : ctx->IDENTIFIER()) {
-            if (valid(id)) {
-                ref.path.push_back({id->getText(), rangeOf(id)});
-            }
+        const size_t n = name.tokCount(TK::Identifier);
+        for (size_t i = 0; i < n; ++i) {
+            const syn::TokenRef id = name.tok(TK::Identifier, i);
+            ref.path.push_back({id.text(), rangeOf(id)});
         }
         if (ref.path.empty()) {
             return;
@@ -364,222 +344,203 @@ class Walker {
 
     // ---- the walk ----
 
-    void walkChildren(ParseTree *tree) {
-        for (ParseTree *child : tree->children) {
+    void walkChildren(syn::Node node) {
+        for (const syn::Node child : node.nodes()) {
             walk(child);
         }
     }
 
-    void walk(ParseTree *tree) {
-        if (tree == nullptr) {
+    void walk(syn::Node node) {
+        if (!node) {
             return;
         }
-        auto *ctx = dynamic_cast<ParserRuleContext *>(tree);
-        if (ctx == nullptr) {
-            return;
-        }
-        switch (ctx->getRuleIndex()) {
-        case P::RuleModuleDecl:
-            return moduleDecl(static_cast<P::ModuleDeclContext *>(ctx));
-        case P::RuleImportDecl:
-            return importDecl(static_cast<P::ImportDeclContext *>(ctx));
-        case P::RuleExportDecl:
-            return exportDecl(static_cast<P::ExportDeclContext *>(ctx));
-        case P::RuleUsingNamespaceDecl:
-            return addRef(
-                static_cast<P::UsingNamespaceDeclContext *>(ctx)->identRef(),
-                RefKind::Namespace);
-        case P::RuleStmtBlock:
-            return stmtBlock(static_cast<P::StmtBlockContext *>(ctx), ScopeKind::Block);
-        case P::RuleFuncData:
-            return funcData(static_cast<P::FuncDataContext *>(ctx));
-        case P::RuleFuncAnno: {
-            auto *anno = static_cast<P::FuncAnnoContext *>(ctx);
-            addRef(anno->identRef(), RefKind::Value, true);
-            return walk(anno->angledValues());
-        }
-        case P::RuleFuncDecl:
-            return funcDecl(static_cast<P::FuncDeclContext *>(ctx));
-        case P::RuleNamespaceDecl:
-            return namespaceDecl(static_cast<P::NamespaceDeclContext *>(ctx));
-        case P::RuleDataDecl:
-            return dataDecl(static_cast<P::DataDeclContext *>(ctx));
-        case P::RuleTypeDecl:
-            return typeDecl(static_cast<P::TypeDeclContext *>(ctx));
-        case P::RuleUseDecl:
-            return useDecl(static_cast<P::UseDeclContext *>(ctx));
-        case P::RuleKeyTypePair: {
-            auto *pair = static_cast<P::KeyTypePairContext *>(ctx);
-            addKey(pair->identDef(), true);
-            return walk(pair->typeExpr());
-        }
-        case P::RuleKeyValuePair: {
-            auto *pair = static_cast<P::KeyValuePairContext *>(ctx);
-            addKey(pair->identDef(), false);
-            return walk(pair->dataExpr());
-        }
-        case P::RuleKeyParamPair: {
+        switch (node.kind()) {
+        case NK::ModuleDecl:
+            return moduleDecl(cst::ModuleDecl(node));
+        case NK::ImportDecl:
+            return importDecl(cst::ImportDecl(node));
+        case NK::ExportDecl:
+            return exportDecl(cst::ExportDecl(node));
+        case NK::UsingNamespaceDecl:
+            return addRef(node.get<cst::IdentRef>(), RefKind::Namespace);
+        case NK::StmtBlock:
+            pushScope(ScopeKind::Block, rangeOf(node));
+            walkBlockBody(cst::StmtBlock(node));
+            return popScope();
+        case NK::FuncData:
+            return funcData(cst::FuncData(node));
+        case NK::FuncAnno:
+            addRef(node.get<cst::IdentRef>(), RefKind::Value, true);
+            return walk(node.get<cst::AngledValues>());
+        case NK::FuncDecl:
+            return funcDecl(cst::FuncDecl(node));
+        case NK::NamespaceDecl:
+            return namespaceDecl(cst::NamespaceDecl(node));
+        case NK::DataDecl:
+            return dataDecl(cst::DataDecl(node));
+        case NK::TypeDecl:
+            return typeDecl(cst::TypeDecl(node));
+        case NK::UseDecl:
+            return useDecl(cst::UseDecl(node));
+        case NK::KeyTypePair:
+            addKey(node.get<cst::IdentDef>(), true);
+            return walk(node.type());
+        case NK::KeyValuePair:
+            addKey(node.get<cst::IdentDef>(), false);
+            return walk(node.expr());
+        case NK::KeyParamPair:
             // Reached only inside a function *type*: the parameters of a declaration are
             // handled by the declaration.
-            auto *pair = static_cast<P::KeyParamPairContext *>(ctx);
-            addKey(pair->identDef(), true);
-            walk(pair->typeExpr());
-            return walk(pair->dataExpr());
-        }
-        case P::RuleMatchCase:
-            return matchCase(static_cast<P::MatchCaseContext *>(ctx));
-        case P::RuleCatchClause:
-            return catchClause(static_cast<P::CatchClauseContext *>(ctx));
-        case P::RuleCtrlExpr:
-            return ctrlExpr(static_cast<P::CtrlExprContext *>(ctx));
-        case P::RuleAnnoExpr:
-            return annoExpr(static_cast<P::AnnoExprContext *>(ctx));
-        case P::RuleAccessExpr:
-            return accessExpr(static_cast<P::AccessExprContext *>(ctx), false);
-        case P::RuleArrayData:
-            return arrayData(static_cast<P::ArrayDataContext *>(ctx));
-        case P::RulePrimaryData: {
-            auto *primary = static_cast<P::PrimaryDataContext *>(ctx);
-            if (primary->identRef()) {
-                return addRef(primary->identRef(), RefKind::Value);
+            addKey(node.get<cst::IdentDef>(), true);
+            walk(node.type());
+            return walk(node.expr());
+        case NK::MatchCase:
+            return matchCase(cst::MatchCase(node));
+        case NK::CatchClause:
+            return catchClause(cst::CatchClause(node));
+        case NK::MatchExpr:
+            addRef(node.get<cst::IdentRef>(), RefKind::Value);
+            for (const auto arm : node.all<cst::MatchCase>()) {
+                walk(arm);
             }
-            return walkChildren(ctx);
-        }
-        case P::RulePrimaryType:
-            return primaryType(static_cast<P::PrimaryTypeContext *>(ctx));
-        case P::RuleFuncType: {
+            return;
+        case NK::IfExpr:
+            return ifExpr(cst::IfExpr(node));
+        case NK::AnnoExpr:
+            return annoExpr(cst::AnnoExpr(node));
+        case NK::AccessExpr:
+            return accessExpr(cst::AccessExpr(node), false);
+        case NK::ArrayData:
+            return arrayData(cst::ArrayData(node));
+        case NK::RefData:
+            return addRef(node, RefKind::Value);
+        case NK::RefType:
+            return addRef(node, RefKind::Type);
+        case NK::TypeAsType:
+            // `typeas T` declares the type variable T for the rest of the signature.
+            if (auto ident = node.get<cst::IdentDef>(); ident && nameOf(ident)) {
+                const Range whole = rangeOf(node);
+                declare(DeclKind::TypeVariable, nameOf(ident), whole, whole);
+                if (signatureOf_ >= 0) {
+                    index_.decls[signatureOf_].generic = true;
+                }
+            }
+            return;
+        case NK::FuncType: {
             const bool saved = std::exchange(inFuncType_, true);
-            walkChildren(ctx);
+            walkChildren(node);
             inFuncType_ = saved;
             return;
         }
         default:
-            return walkChildren(ctx);
+            return walkChildren(node);
         }
     }
 
-    void addKey(P::IdentDefContext *ident, bool inType) {
-        if (ident && valid(ident->IDENTIFIER())) {
-            index_.keys.push_back(
-                {ident->IDENTIFIER()->getText(), rangeOf(ident->IDENTIFIER()), inType});
+    void addKey(cst::IdentDef ident, bool inType) {
+        if (ident && nameOf(ident)) {
+            index_.keys.push_back({nameOf(ident).text(), rangeOf(nameOf(ident)), inType});
         }
     }
 
-    void moduleDecl(P::ModuleDeclContext *ctx) {
-        if (ctx->identDef() && valid(ctx->identDef()->IDENTIFIER())) {
-            index_.moduleName      = ctx->identDef()->IDENTIFIER()->getText();
-            index_.moduleNameRange = rangeOf(ctx->identDef()->IDENTIFIER());
+    void moduleDecl(cst::ModuleDecl ctx) {
+        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            index_.moduleName      = nameOf(ident).text();
+            index_.moduleNameRange = rangeOf(nameOf(ident));
         }
     }
 
-    void importDecl(P::ImportDeclContext *ctx) {
-        auto *moduleName = ctx->moduleName();
+    void importDecl(cst::ImportDecl ctx) {
+        const auto moduleName  = ctx.get<cst::ModuleName>();
         const std::string from = moduleName ? textOf(rangeOf(moduleName)) : std::string();
         const Range whole      = rangeOf(ctx);
-        if (ctx->FROM() == nullptr && ctx->identDef() == nullptr && ctx->bracedIdents() == nullptr) {
-            // `import a.b`: the namespace `b`.
-            if (moduleName && !moduleName->IDENTIFIER().empty() &&
-                valid(moduleName->IDENTIFIER().back())) {
-                Decl &decl        = declare(DeclKind::Module, moduleName->IDENTIFIER().back(), whole, whole);
+        const auto single      = ctx.get<cst::IdentDef>();
+        const auto braced      = ctx.get<cst::BracedIdents>();
+        if (!ctx.has(TK::KwFrom) && !single && !braced) {
+            // `import a.b`: the module is known by its last name.
+            if (const syn::TokenRef last = lastNameOf(moduleName)) {
+                Decl &decl        = declare(DeclKind::Module, last, whole, whole);
                 decl.importedFrom = from;
             }
             return;
         }
-        std::vector<P::IdentDefContext *> names;
-        if (ctx->identDef()) {
-            names.push_back(ctx->identDef());
+        std::vector<cst::IdentDef> names;
+        if (single) {
+            names.push_back(single);
         }
-        if (ctx->bracedIdents() && ctx->bracedIdents()->identList()) {
-            for (auto *ident : ctx->bracedIdents()->identList()->identDef()) {
-                names.push_back(ident);
-            }
+        for (const auto ident : braced.get<cst::IdentList>().all<cst::IdentDef>()) {
+            names.push_back(ident);
         }
-        for (auto *ident : names) {
-            if (ident && valid(ident->IDENTIFIER())) {
-                Decl &decl        = declare(DeclKind::Import, ident->IDENTIFIER(), whole, whole);
+        for (const auto ident : names) {
+            if (nameOf(ident)) {
+                Decl &decl        = declare(DeclKind::Import, nameOf(ident), whole, whole);
                 decl.importedFrom = from;
             }
         }
     }
 
-    void exportDecl(P::ExportDeclContext *ctx) {
-        if (ctx->bracedIdents() && ctx->bracedIdents()->identList()) {
-            // `export { a, b }`: references to what is exported.
-            for (auto *ident : ctx->bracedIdents()->identList()->identDef()) {
-                if (ident && valid(ident->IDENTIFIER())) {
+    void exportDecl(cst::ExportDecl ctx) {
+        if (auto list = ctx.get<cst::BracedIdents>().get<cst::IdentList>()) {
+            // `export { a, b }`: uses of the names, which become exported.
+            for (const auto ident : list.all<cst::IdentDef>()) {
+                if (nameOf(ident)) {
                     Ref ref;
                     ref.kind  = RefKind::Value;
                     ref.scope = scope_;
-                    ref.path.push_back({ident->IDENTIFIER()->getText(), rangeOf(ident->IDENTIFIER())});
+                    ref.path.push_back({nameOf(ident).text(), rangeOf(nameOf(ident))});
                     ref.range = ref.path.back().range;
                     index_.refs.push_back(std::move(ref));
-                    exportedNames_.push_back(ident->IDENTIFIER()->getText());
+                    exportedNames_.push_back(nameOf(ident).text());
                 }
             }
             return;
         }
         exportNext_ = true;
-        walk(ctx->dataDecl());
-        walk(ctx->typeDecl());
+        walk(ctx.get<cst::DataDecl>());
+        walk(ctx.get<cst::TypeDecl>());
         exportNext_ = false;
     }
 
-    void stmtBlock(P::StmtBlockContext *ctx, ScopeKind kind) {
-        pushScope(kind, rangeOf(ctx));
-        walk(ctx->stmtList());
-        popScope();
-    }
-
-    // Declares the parameters of `params` in the current scope.
-    void declareParams(
-        P::PairedParamsContext *params, DeclKind kind, Range owner, bool lambda) {
-        if (params == nullptr) {
-            return;
-        }
-        for (auto *pair : params->keyParamPair()) {
-            if (pair == nullptr) {
-                continue;
-            }
-            walk(pair->typeExpr());
-            walk(pair->dataExpr());
-            if (pair->identDef() && valid(pair->identDef()->IDENTIFIER())) {
-                Decl &decl      = declare(kind, pair->identDef()->IDENTIFIER(), owner, rangeOf(pair));
-                decl.varParam   = pair->VAR() != nullptr;
+    void declareParams(cst::PairedParams params, DeclKind kind, Range owner, bool lambda) {
+        for (const auto pair : params.all<cst::KeyParamPair>()) {
+            walk(pair.type());
+            walk(pair.expr());
+            if (auto ident = pair.get<cst::IdentDef>(); ident && nameOf(ident)) {
+                Decl &decl      = declare(kind, nameOf(ident), owner, rangeOf(pair));
+                decl.varParam   = pair.has(TK::KwVar);
                 decl.lambda     = lambda;
-                decl.annotation = flatTextOf(rangeOf(pair->typeExpr()));
+                decl.annotation = flatTextOf(rangeOf(pair.type()));
                 decl.header     = flatTextOf(rangeOf(pair));
             }
         }
     }
 
-    void funcDecl(P::FuncDeclContext *ctx) {
-        for (auto *anno : ctx->funcAnno()) {
+    void funcDecl(cst::FuncDecl ctx) {
+        const auto annos = ctx.all<cst::FuncAnno>();
+        for (const auto anno : annos) {
             walk(anno);
         }
-        const Range whole = rangeOf(ctx);
-        int32_t self      = -1;
-        TerminalNode *name =
-            ctx->identRef() && !ctx->identRef()->IDENTIFIER().empty()
-                ? ctx->identRef()->IDENTIFIER().back()
-                : nullptr;
-        if (valid(name)) {
+        const Range whole        = rangeOf(ctx);
+        int32_t self             = -1;
+        const auto block         = ctx.get<cst::StmtBlock>();
+        if (const syn::TokenRef name = lastNameOf(ctx.get<cst::IdentRef>())) {
             Decl &decl    = declare(DeclKind::Function, name, whole, whole);
-            decl.exported = ctx->EXPORT() != nullptr;
-            if (ctx->modifiers()) {
-                decl.sync  = !ctx->modifiers()->SYNC().empty();
-                decl.macro = !ctx->modifiers()->MACRO().empty();
+            decl.exported = ctx.has(TK::KwExport);
+            if (auto modifiers = ctx.get<cst::Modifiers>()) {
+                decl.sync  = modifiers.has(TK::KwSync);
+                decl.macro = modifiers.has(TK::KwMacro);
             }
-            // The header: from the first token after the decorators to the body.
+            // The header: from after the annotations to the body.
             Range header = whole;
-            if (!ctx->funcAnno().empty()) {
-                header.start = rangeOf(ctx->funcAnno().back()).end;
+            if (!annos.empty()) {
+                header.start = rangeOf(annos.back()).end;
             }
-            if (ctx->stmtBlock() && rangeOf(ctx->stmtBlock()).start > header.start) {
-                header.end = rangeOf(ctx->stmtBlock()).start;
+            if (block && rangeOf(block).start > header.start) {
+                header.end = rangeOf(block).start;
             }
             decl.header     = flatTextOf(header);
-            decl.annotation = flatTextOf(rangeOf(ctx->typeExpr()));
-            decl.doc        = docAbove(ctx->getStart());
+            decl.annotation = flatTextOf(rangeOf(ctx.type()));
+            decl.doc        = docAbove(ctx.firstToken());
             self            = static_cast<int32_t>(decl.id);
         }
         const int32_t savedContainer = container_;
@@ -592,52 +553,53 @@ class Walker {
         if (self >= 0) {
             index_.decls[self].bodyScope = static_cast<int32_t>(scopeId);
         }
-        if (ctx->angledParams()) {
-            declareParams(ctx->angledParams()->pairedParams(), DeclKind::WithParameter, whole, false);
-        }
-        if (ctx->parentParams()) {
-            declareParams(ctx->parentParams()->pairedParams(), DeclKind::Parameter, whole, false);
-        }
-        walk(ctx->typeExpr());
+        declareParams(
+            ctx.get<cst::AngledParams>().get<cst::PairedParams>(),
+            DeclKind::WithParameter,
+            whole,
+            false);
+        declareParams(
+            ctx.get<cst::ParentParams>().get<cst::PairedParams>(),
+            DeclKind::Parameter,
+            whole,
+            false);
+        walk(ctx.type());
         signatureOf_ = savedSignature;
-        // The body shares the scope of the parameters.
-        if (ctx->stmtBlock()) {
-            walk(ctx->stmtBlock()->stmtList());
-        }
+        walkBlockBody(block);
         popScope();
         container_ = savedContainer;
     }
 
-    void funcData(P::FuncDataContext *ctx) {
+    void funcData(cst::FuncData ctx) {
         const Range whole = rangeOf(ctx);
         pushScope(ScopeKind::Lambda, whole);
         const int32_t savedSignature = std::exchange(signatureOf_, -1);
-        if (ctx->angledParams()) {
-            declareParams(ctx->angledParams()->pairedParams(), DeclKind::WithParameter, whole, true);
-        }
-        if (ctx->parentParams()) {
-            declareParams(ctx->parentParams()->pairedParams(), DeclKind::Parameter, whole, true);
-        }
-        walk(ctx->typeExpr());
+        declareParams(
+            ctx.get<cst::AngledParams>().get<cst::PairedParams>(),
+            DeclKind::WithParameter,
+            whole,
+            true);
+        declareParams(
+            ctx.get<cst::ParentParams>().get<cst::PairedParams>(),
+            DeclKind::Parameter,
+            whole,
+            true);
+        walk(ctx.type());
         signatureOf_ = savedSignature;
-        if (auto *body = ctx->blockExpr()) {
-            if (body->stmtBlock()) {
-                walk(body->stmtBlock()->stmtList());
-            } else {
-                walk(body->dataExpr());
+        // The body follows the `=>`.
+        if (ctx.has(TK::FatArrow)) {
+            const syn::Child last = ctx.lastChild();
+            if (last.isNode()) {
+                walkBody(last.node());
             }
         }
         popScope();
     }
 
-    void namespaceDecl(P::NamespaceDeclContext *ctx) {
+    void namespaceDecl(cst::NamespaceDecl ctx) {
         const Range whole = rangeOf(ctx);
         int32_t self      = -1;
-        TerminalNode *name =
-            ctx->identRef() && !ctx->identRef()->IDENTIFIER().empty()
-                ? ctx->identRef()->IDENTIFIER().back()
-                : nullptr;
-        if (valid(name)) {
+        if (const syn::TokenRef name = lastNameOf(ctx.get<cst::IdentRef>())) {
             self = static_cast<int32_t>(declare(DeclKind::Namespace, name, whole, whole).id);
         }
         const int32_t savedContainer = container_;
@@ -648,214 +610,199 @@ class Walker {
         if (self >= 0) {
             index_.decls[self].bodyScope = static_cast<int32_t>(scopeId);
         }
-        for (auto *item : ctx->namespaceItem()) {
-            walk(item);
+        for (const syn::Node item : ctx.nodes()) {
+            if (!item.is(NK::IdentRef)) {
+                walk(item);
+            }
         }
         popScope();
         container_ = savedContainer;
     }
 
-    void dataDecl(P::DataDeclContext *ctx) {
+    void dataDecl(cst::DataDecl ctx) {
         const bool exported = std::exchange(exportNext_, false);
         const Range whole   = rangeOf(ctx);
-        // The initializer does not see the names being declared.
-        walk(ctx->typeList());
-        walk(ctx->dataList());
-        std::vector<P::IdentDefContext *> names;
-        if (auto *carrier = ctx->carrier()) {
-            P::IdentListContext *list = carrier->identList();
-            if (!list && carrier->parentIdents()) {
-                list = carrier->parentIdents()->identList();
-            }
-            if (!list && carrier->bracedIdents()) {
-                list = carrier->bracedIdents()->identList();
-            }
-            if (!list && carrier->bracketIdents()) {
-                list = carrier->bracketIdents()->identList();
-            }
-            if (list) {
-                names = list->identDef();
-            }
+        walk(ctx.get<cst::TypeList>());
+        walk(ctx.get<cst::DataList>());
+        // carrier : identList | parentIdents | bracedIdents | bracketIdents
+        cst::IdentList list = ctx.get<cst::IdentList>();
+        const bool plain    = static_cast<bool>(list);
+        if (!list) {
+            list = ctx.get<cst::ParentIdents>().get<cst::IdentList>();
         }
-        const bool plain = ctx->carrier() && ctx->carrier()->identList() && names.size() == 1;
-        for (auto *ident : names) {
-            if (!ident || !valid(ident->IDENTIFIER())) {
+        if (!list) {
+            list = ctx.get<cst::BracedIdents>().get<cst::IdentList>();
+        }
+        if (!list) {
+            list = ctx.get<cst::BracketIdents>().get<cst::IdentList>();
+        }
+        const auto names = list.all<cst::IdentDef>();
+        const bool one   = plain && names.size() == 1;
+        for (const auto ident : names) {
+            if (!nameOf(ident)) {
                 continue;
             }
             Decl &decl = declare(
-                ctx->VAR() ? DeclKind::Variable : DeclKind::Local,
-                ident->IDENTIFIER(),
+                ctx.has(TK::KwVar) ? DeclKind::Variable : DeclKind::Local,
+                nameOf(ident),
                 whole,
                 whole);
-            decl.exported    = exported;
+            decl.exported = exported;
+            // A binding is visible after its declaration, not inside its own initializer.
             decl.visibleFrom = whole.end;
-            decl.doc         = docAbove(ctx->getStart());
-            if (plain && ctx->typeList()) {
-                decl.annotation = flatTextOf(rangeOf(ctx->typeList()));
+            decl.doc         = docAbove(ctx.firstToken());
+            if (one && ctx.get<cst::TypeList>()) {
+                decl.annotation = flatTextOf(rangeOf(ctx.get<cst::TypeList>()));
             }
         }
     }
 
-    void typeDecl(P::TypeDeclContext *ctx) {
+    void typeDecl(cst::TypeDecl ctx) {
         const bool exported = std::exchange(exportNext_, false);
         const Range whole   = rangeOf(ctx);
-        TerminalNode *name =
-            ctx->identRef() && !ctx->identRef()->IDENTIFIER().empty()
-                ? ctx->identRef()->IDENTIFIER().back()
-                : nullptr;
-        if (valid(name)) {
+        if (const syn::TokenRef name = lastNameOf(ctx.get<cst::IdentRef>())) {
             Decl &decl    = declare(DeclKind::Type, name, whole, whole);
             decl.exported = exported;
             decl.header   = flatTextOf(whole);
-            decl.doc      = docAbove(ctx->getStart());
+            decl.doc      = docAbove(ctx.firstToken());
         }
+        // `type Pair<T> = (T, T)`: the parameters are type names inside the declaration.
         pushScope(ScopeKind::Type, whole);
-        for (auto *ident : ctx->identDef()) {
-            if (ident && valid(ident->IDENTIFIER())) {
-                declare(DeclKind::TypeParameter, ident->IDENTIFIER(), whole, rangeOf(ident));
+        for (const auto ident : ctx.all<cst::IdentDef>()) {
+            if (nameOf(ident)) {
+                declare(DeclKind::TypeParameter, nameOf(ident), whole, rangeOf(ident));
             }
         }
-        walk(ctx->typeExpr());
+        walk(ctx.type());
         popScope();
     }
 
-    void useDecl(P::UseDeclContext *ctx) {
-        addRef(ctx->identRef(), RefKind::Namespace);
+    void useDecl(cst::UseDecl ctx) {
+        addRef(ctx.get<cst::IdentRef>(), RefKind::Namespace);
         const Range whole = rangeOf(ctx);
-        if (ctx->identDef() && valid(ctx->identDef()->IDENTIFIER())) {
-            declare(DeclKind::Alias, ctx->identDef()->IDENTIFIER(), whole, whole);
+        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            declare(DeclKind::Alias, nameOf(ident), whole, whole);
         }
     }
 
-    void matchCase(P::MatchCaseContext *ctx) {
+    void matchCase(cst::MatchCase ctx) {
         pushScope(ScopeKind::Arm, rangeOf(ctx));
-        for (auto *pattern : ctx->pattern()) {
-            if (pattern == nullptr) {
-                continue;
-            }
+        for (const auto pattern : ctx.all<cst::Pattern>()) {
             const Range whole = rangeOf(pattern);
-            if (pattern->identRef()) {
-                addRef(pattern->identRef(), RefKind::Value);
-                if (pattern->identDef() && valid(pattern->identDef()->IDENTIFIER())) {
-                    declare(DeclKind::Binding, pattern->identDef()->IDENTIFIER(), whole, whole);
+            if (auto ref = pattern.get<cst::IdentRef>()) {
+                // `error e` binds e; a lone identifier is a reference (a constant or a tag).
+                addRef(ref, RefKind::Value);
+                if (auto bound = pattern.get<cst::IdentDef>(); bound && nameOf(bound)) {
+                    declare(DeclKind::Binding, nameOf(bound), whole, whole);
                 }
-            } else if (pattern->identList()) {
-                for (auto *ident : pattern->identList()->identDef()) {
-                    if (ident && valid(ident->IDENTIFIER())) {
-                        declare(DeclKind::Binding, ident->IDENTIFIER(), whole, whole);
+            } else if (auto list = pattern.get<cst::IdentList>()) {
+                for (const auto ident : list.all<cst::IdentDef>()) {
+                    if (nameOf(ident)) {
+                        declare(DeclKind::Binding, nameOf(ident), whole, whole);
                     }
                 }
             } else {
                 walkChildren(pattern);
             }
         }
-        if (auto *body = ctx->blockExpr()) {
-            if (body->stmtBlock()) {
-                walk(body->stmtBlock()->stmtList());
-            } else {
-                walk(body->dataExpr());
+        if (ctx.has(TK::FatArrow)) {
+            const syn::Child last = ctx.lastChild();
+            if (last.isNode()) {
+                walkBody(last.node());
             }
         }
         popScope();
     }
 
-    void catchClause(P::CatchClauseContext *ctx) {
+    void catchClause(cst::CatchClause ctx) {
         pushScope(ScopeKind::Arm, rangeOf(ctx));
-        walk(ctx->typeExpr());
-        if (ctx->identDef() && valid(ctx->identDef()->IDENTIFIER())) {
-            declare(DeclKind::Binding, ctx->identDef()->IDENTIFIER(), rangeOf(ctx), rangeOf(ctx));
+        walk(ctx.type());
+        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            declare(DeclKind::Binding, nameOf(ident), rangeOf(ctx), rangeOf(ctx));
         }
-        if (ctx->stmtBlock()) {
-            walk(ctx->stmtBlock()->stmtList());
-        }
+        walkBlockBody(ctx.get<cst::StmtBlock>());
         popScope();
     }
 
-    void ctrlExpr(P::CtrlExprContext *ctx) {
-        if (ctx->MATCH()) {
-            addRef(ctx->identRef(), RefKind::Value);
-            for (auto *matchCase : ctx->matchCase()) {
-                walk(matchCase);
+    /// if c then a else b: the condition, then each arm in a scope of its own.
+    void ifExpr(cst::IfExpr ctx) {
+        bool arms = false;
+        for (size_t i = 0; i < ctx.childCount(); ++i) {
+            const syn::Child child = ctx.child(i);
+            if (child.isToken()) {
+                arms = arms || child.token().is(TK::KwThen);
+                continue;
             }
-            return;
-        }
-        if (ctx->IF()) {
-            walk(ctx->logicalOrExpr());
-            // Each arm is a graph of its own, and so a scope of its own.
-            for (auto *arm : ctx->blockExpr()) {
-                if (arm == nullptr) {
-                    continue;
-                }
-                pushScope(ScopeKind::Arm, rangeOf(arm));
-                if (arm->stmtBlock()) {
-                    walk(arm->stmtBlock()->stmtList());
-                } else {
-                    walk(arm->dataExpr());
-                }
-                popScope();
+            if (!arms) {
+                walk(child.node());
+                continue;
             }
-            return;
+            pushScope(ScopeKind::Arm, rangeOf(child.node()));
+            walkBody(child.node());
+            popScope();
         }
-        walkChildren(ctx);
     }
 
-    void accessExpr(P::AccessExprContext *ctx, bool callee) {
-        auto *primary = ctx->primaryData();
-        if (primary && primary->identRef()) {
-            // `f(x)`: a callee only when nothing stands between the name and the arguments.
-            addRef(primary->identRef(), RefKind::Value, callee && ctx->DOT().empty());
-        } else {
-            walk(primary);
+    void accessExpr(cst::AccessExpr ctx, bool callee) {
+        const syn::Child first = ctx.child(0);
+        if (first.isNode() && first.node().is(NK::RefData)) {
+            addRef(first.node(), RefKind::Value, callee && !ctx.has(TK::Dot));
+        } else if (first.isNode()) {
+            walk(first.node());
         }
-        // The members after the dots, in order; the receiver of each is all before its dot.
         const Range whole = rangeOf(ctx);
-        for (size_t i = 0; i < ctx->children.size(); ++i) {
-            auto *node = dynamic_cast<TerminalNode *>(ctx->children[i]);
-            if (!valid(node) || i == 0) {
+        for (size_t i = 1; i < ctx.childCount(); ++i) {
+            const syn::TokenRef token = ctx.child(i).token();
+            if (!token || (!token.is(TK::Identifier) && !token.is(TK::Integer))) {
                 continue;
             }
-            const size_t type = node->getSymbol()->getType();
-            if (type != OpenCMLLexer::IDENTIFIER && type != OpenCMLLexer::INTEGER) {
-                continue;
-            }
-            auto *dot = dynamic_cast<TerminalNode *>(ctx->children[i - 1]);
-            if (dot == nullptr) {
+            const syn::TokenRef dot = ctx.child(i - 1).token();
+            if (!dot) {
                 continue;
             }
             Member member;
-            member.name      = node->getText();
-            member.nameRange = rangeOf(node);
+            member.name      = token.text();
+            member.nameRange = rangeOf(token);
             member.receiver  = Range{whole.start, rangeOf(dot).start};
-            member.numeric   = type == OpenCMLLexer::INTEGER;
+            member.numeric   = token.is(TK::Integer);
             index_.members.push_back(std::move(member));
         }
     }
 
-    void annoExpr(P::AnnoExprContext *ctx) {
-        // Children: accessExpr, then indices / arguments / with-arguments / `!` / members.
+    void annoExpr(cst::AnnoExpr ctx) {
         bool callee = false;
-        if (ctx->children.size() >= 2) {
-            auto *next = dynamic_cast<ParserRuleContext *>(ctx->children[1]);
-            callee     = next != nullptr && (next->getRuleIndex() == P::RuleParentArgues ||
-                                         next->getRuleIndex() == P::RuleAngledValues);
+        if (ctx.childCount() >= 2) {
+            const syn::Node next = ctx.child(1).node();
+            callee = next && (next.is(NK::ParentArgues) || next.is(NK::AngledValues));
         }
         const Range whole = rangeOf(ctx);
-        for (ParseTree *child : ctx->children) {
-            auto *sub = dynamic_cast<ParserRuleContext *>(child);
-            if (sub == nullptr) {
+        bool first        = true;
+        for (const syn::Node sub : ctx.nodes()) {
+            if (first) {
+                // The expression the postfixes apply to: a name used as a callee, a member
+                // chain, or anything else.
+                first = false;
+                if (sub.is(NK::AccessExpr)) {
+                    accessExpr(cst::AccessExpr(sub), callee);
+                } else if (sub.is(NK::RefData)) {
+                    addRef(sub, RefKind::Value, callee);
+                } else {
+                    walk(sub);
+                }
                 continue;
             }
-            if (sub->getRuleIndex() == P::RuleAccessExpr) {
-                accessExpr(static_cast<P::AccessExprContext *>(sub), callee);
-            } else if (sub->getRuleIndex() == P::RuleMemberAccess) {
-                auto *access       = static_cast<P::MemberAccessContext *>(sub);
-                TerminalNode *name = access->IDENTIFIER() ? access->IDENTIFIER() : access->INTEGER();
-                if (valid(name) && access->DOT()) {
+            if (sub.is(NK::MemberAccess)) {
+                syn::TokenRef name = sub.tok(TK::Identifier);
+                if (!name) {
+                    name = sub.tok(TK::Integer);
+                }
+                const syn::TokenRef dot = sub.tok(TK::Dot);
+                if (name && dot) {
                     Member member;
-                    member.name      = name->getText();
+                    member.name      = name.text();
                     member.nameRange = rangeOf(name);
-                    member.receiver  = Range{whole.start, rangeOf(access->DOT()).start};
-                    member.numeric   = access->INTEGER() != nullptr;
+                    member.receiver  = Range{whole.start, rangeOf(dot).start};
+                    member.numeric   = name.is(TK::Integer);
                     index_.members.push_back(std::move(member));
                 }
             } else {
@@ -864,52 +811,29 @@ class Walker {
         }
     }
 
-    void arrayData(P::ArrayDataContext *ctx) {
-        if (ctx->FOR() == nullptr) {
+    void arrayData(cst::ArrayData ctx) {
+        if (!ctx.has(TK::KwFor)) {
             return walkChildren(ctx);
         }
-        // `[e for x in xs if c]`: x is bound in e and c, not in xs.
-        const auto exprs = ctx->dataExpr();
-        if (exprs.size() >= 2) {
+        // [e for x in xs if c]: xs is outside the scope of x, e and c are inside.
+        const auto exprs = ctx.exprs();
+        const size_t n   = exprs.size();
+        if (n >= 2) {
             walk(exprs[1]);
         }
         pushScope(ScopeKind::Arm, rangeOf(ctx));
-        if (ctx->identRef() && !ctx->identRef()->IDENTIFIER().empty() &&
-            valid(ctx->identRef()->IDENTIFIER().back())) {
-            declare(
-                DeclKind::Binding,
-                ctx->identRef()->IDENTIFIER().back(),
-                rangeOf(ctx),
-                rangeOf(ctx->identRef()));
+        const auto binder = ctx.get<cst::IdentRef>();
+        if (const syn::TokenRef name = lastNameOf(binder)) {
+            declare(DeclKind::Binding, name, rangeOf(ctx), rangeOf(binder));
         }
-        if (!exprs.empty()) {
+        if (n >= 1) {
             walk(exprs[0]);
         }
-        if (exprs.size() >= 3) {
+        if (n >= 3) {
             walk(exprs[2]);
         }
         popScope();
     }
-
-    void primaryType(P::PrimaryTypeContext *ctx) {
-        if (ctx->identRef()) {
-            return addRef(ctx->identRef(), RefKind::Type);
-        }
-        if (ctx->TYPEAS()) {
-            // `typeas T` binds T for the whole function whose signature it stands in.
-            if (ctx->identDef() && valid(ctx->identDef()->IDENTIFIER())) {
-                const Range whole = rangeOf(ctx);
-                declare(DeclKind::TypeVariable, ctx->identDef()->IDENTIFIER(), whole, whole);
-                if (signatureOf_ >= 0) {
-                    index_.decls[signatureOf_].generic = true;
-                }
-            }
-            return;
-        }
-        walkChildren(ctx);
-    }
-
-    // ---- resolution ----
 
     std::vector<std::string> exportedNames_;
 
@@ -932,7 +856,7 @@ class Walker {
                 continue;
             }
             ref.decl = static_cast<int32_t>(found.front());
-            // A path through namespaces declared in this file.
+            // The rest of a qualified name walks into namespaces of this file.
             int32_t current = ref.decl;
             for (size_t i = 1; i < ref.path.size() && current >= 0; ++i) {
                 const Decl &decl = index_.decls[current];
@@ -1053,12 +977,16 @@ int32_t SyntaxIndex::tokenAt(uint32_t offset) const {
     return found;
 }
 
-SyntaxIndex buildSyntaxIndex(
-    antlr4::tree::ParseTree *tree, const std::vector<antlr4::Token *> &tokens,
-    std::string_view text, bool complete) {
+SyntaxIndex buildSyntaxIndex(const camel::parse::syntax::Tree *tree, bool complete) {
     SyntaxIndex index;
     index.complete = complete;
-    Walker(index, tokens, text).run(tree);
+    if (tree != nullptr) {
+        Walker(index, *tree).run();
+    } else {
+        Scope module;
+        module.kind = ScopeKind::Module;
+        index.scopes.push_back(module);
+    }
     return index;
 }
 

@@ -232,7 +232,7 @@ class ModelBuilder {
         }
         if (model_->files_.empty()) {
             // Nothing could be set up: the model still has the text and its tokens.
-            addFile(normalPath(options_.path), options_.text, nullptr, {}, false, 0);
+            addFile(normalPath(options_.path), options_.text, nullptr, false, 0);
         }
         if (options_.previous) {
             inherit(*options_.previous);
@@ -258,15 +258,15 @@ class ModelBuilder {
     }
 
     uint32_t addFile(
-        const std::string &path, const std::string &text, antlr4::tree::ParseTree *tree,
-        const std::vector<antlr4::Token *> &tokens, bool parsed, uint32_t sourceFileId) {
+        const std::string &path, const std::string &text,
+        const camel::parse::syntax::Tree *tree, bool parsed, uint32_t sourceFileId) {
         const uint32_t index = static_cast<uint32_t>(model_->files_.size());
         model_->files_.emplace_back();
         FileModel &file = model_->files_.back();
         file.path       = path;
         file.text       = text;
         file.parsed     = parsed;
-        file.syntax     = buildSyntaxIndex(tree, tokens, file.text, parsed);
+        file.syntax     = buildSyntaxIndex(tree, parsed);
         file.declFacts.resize(file.syntax.decls.size());
         file.refFacts.resize(file.syntax.refs.size());
         for (const Decl &decl : file.syntax.decls) {
@@ -519,13 +519,11 @@ class ModelBuilder {
         ctx->setSemanticRecorder(nullptr);
 
         // Files: the entry first, then every module compiled from source.
-        const auto mainTokens = parser->getTokens();
         addFile(
             path,
             options_.text,
-            parser->syntaxTree(),
-            mainTokens,
-            parser->cst() != nullptr,
+            parser->tree(),
+            parser->parsed(),
             parser->sourceFileId());
         std::vector<std::shared_ptr<UserDefinedModule>> modules;
         for (const auto &mod : ctx->allUserModules()) {
@@ -538,13 +536,11 @@ class ModelBuilder {
             if (source == nullptr) {
                 continue;
             }
-            const auto tokens = ud->parser()->getTokens();
             const uint32_t index = addFile(
                 normalPath(ud->path()),
                 source->content,
-                ud->parser()->syntaxTree(),
-                tokens,
-                ud->parser()->cst() != nullptr,
+                ud->parser()->tree(),
+                ud->parser()->parsed(),
                 fileId);
             model_->files_[index].compiled = ud->diagnostics() && !ud->diagnostics()->hasErrors();
             modules.push_back(ud);
@@ -587,9 +583,8 @@ class ModelBuilder {
         addFile(
             path,
             options_.text,
-            parser->syntaxTree(),
-            parser->getTokens(),
-            parser->cst() != nullptr,
+            parser->tree(),
+            parser->parsed(),
             0);
     }
 
