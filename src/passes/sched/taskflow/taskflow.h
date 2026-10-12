@@ -112,15 +112,11 @@ namespace ctx = camel::core::context;
 // allocation that finds the heap full; it does not go through a poll.
 // The part of a run that one fault ends (docs/technical/32_fault_isolation.md, 3.6). The run has
 // a root domain; every fault-isolation node opens one for the call it makes. A domain holds the
-// first fault raised in it and whether work in it that has not started may still start. Tasks
-// belong to the domain of the thread that started them (ThreadState::faultDomain).
+// first fault raised in it. Tasks belong to the domain of the thread that started them
+// (ThreadState::faultDomain).
 struct TaskflowFaultDomain {
-    TaskflowFaultDomain *parent = nullptr;
     // Fault-isolation boundaries open around the domain (0: the root domain).
     uint32_t isolationDepth = 0;
-    // Set by the first failure in the domain: items, calls and elements of the domain (and of
-    // the domains inside it) that have not started do not start.
-    std::atomic<bool> aborting{false};
     std::mutex mutex;
     // The first fault of the domain, the only one reported for it.
     std::exception_ptr firstFault;
@@ -326,6 +322,9 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         std::atomic<uint32_t> *tailNode = nullptr;
         std::mutex errorMutex;
         std::exception_ptr error;
+        // A task of the flow has failed: its tasks that have not started do not start (they
+        // may depend on what the failed one did not produce).
+        std::atomic<bool> failed{false};
         // Calls open on the thread that runs the scope; its tasks continue from there.
         uint32_t parentDepth = 0;
         // The fault domain of the thread that runs the scope.
@@ -376,31 +375,17 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // The fault domain of everything outside a fault-isolation boundary. A failure in it ends
     // the run.
     TaskflowFaultDomain rootDomain_;
-    // Number of domains that are aborting: while it is zero no thread has to look at its domain.
-    std::atomic<uint32_t> abortingDomains_{0};
     TaskflowFaultDomain &domainOf(const TaskflowGcGate::ThreadState &thread) {
         return thread.faultDomain ? *thread.faultDomain : rootDomain_;
     }
-    // Whether work of `thread` that has not started must not start: its domain, or one that
-    // encloses it, is aborting.
-    // DESIGN-QUESTION(attempt-parallel-siblings): what has started runs to its end, what has
-    // not started does not start, and whoever waits for the work waits for all that started.
-    bool aborting(const TaskflowGcGate::ThreadState &thread) const {
-        if (abortingDomains_.load(std::memory_order_relaxed) == 0) [[likely]] {
-            return false;
-        }
-        const TaskflowFaultDomain *domain = thread.faultDomain ? thread.faultDomain : &rootDomain_;
-        for (; domain != nullptr; domain = domain->parent) {
-            if (domain->aborting.load(std::memory_order_acquire)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    void abortDomain(TaskflowFaultDomain &domain);
-    // A task of `domain` ended with the exception being handled: a fault that will be isolated
-    // aborts the domain, anything else (a recorded fault, exit(), a defect) the whole run.
-    void noteTaskFailure(TaskflowFaultDomain *domain);
+    // What a failure stops, for a fault that is isolated and for one that ends the run alike:
+    // DESIGN-QUESTION(attempt-parallel-siblings): tasks that have started run to their end
+    // (with everything they start), tasks of the same flow that have not started do not
+    // start, and whoever started the flow waits for all that started before the failure goes
+    // on. There is no preemption and no flag polled by running code: the executor skips the
+    // tasks of a flow one of whose tasks threw, and a scope skips its remaining chains
+    // (FlowInstance::failed).
+
     // The limit on calls open at once that are not tail calls, when one was given by the
     // option or the environment; 0 when not: the native stack alone then bounds a recursion
     // (camel/execute/limits.h). The count follows a call across threads: a task continues

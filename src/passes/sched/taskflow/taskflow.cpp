@@ -972,10 +972,8 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
         std::lock_guard lock(heavyMutex_);
         heavyGraphs_.clear();
     }
-    abortingDomains_.store(0, std::memory_order_relaxed);
     {
         std::lock_guard lock(rootDomain_.mutex);
-        rootDomain_.aborting.store(false, std::memory_order_relaxed);
         rootDomain_.firstFault = nullptr;
     }
     {
@@ -1101,8 +1099,11 @@ void TaskflowExecSchedPass::runScope(
                 instance->flow
                     .emplace([this, self, planPtr = &plan, scopePtr = &scope, chain]() {
                         // Nothing may escape into the executor: the first failure is kept
-                        // for the thread that runs this scope, and everything not yet
-                        // started is skipped.
+                        // for the thread that runs this scope, and the chains of the scope
+                        // that have not started are skipped.
+                        if (self->failed.load(std::memory_order_acquire)) [[unlikely]] {
+                            return;
+                        }
                         try {
                             TaskflowGcRegion taskRegion;
                             InheritedDepth inherited(
@@ -1116,7 +1117,7 @@ void TaskflowExecSchedPass::runScope(
                                 *self->tailNode,
                                 taskRegion);
                         } catch (...) {
-                            noteTaskFailure(self->parentDomain);
+                            self->failed.store(true, std::memory_order_release);
                             std::lock_guard lock(self->errorMutex);
                             if (!self->error) {
                                 self->error = std::current_exception();
@@ -1138,6 +1139,7 @@ void TaskflowExecSchedPass::runScope(
     region.leave(); // the calling thread waits for (and helps with) the tasks from here on
     runOnExecutor(instance->flow);
     std::exception_ptr error = std::exchange(instance->error, nullptr);
+    instance->failed.store(false, std::memory_order_relaxed);
     {
         std::lock_guard lock(scope.poolMutex);
         scope.idle.push_back(std::move(instance));
@@ -1152,9 +1154,6 @@ void TaskflowExecSchedPass::runItems(
     std::atomic<uint32_t> &tailNode, TaskflowGcRegion &region) {
     GCGraph *graph = plan.graph;
     for (const PlanItem &item : items) {
-        if (aborting(region.thread())) [[unlikely]] {
-            return;
-        }
         switch (item.kind) {
         case ItemKind::Leaf: {
             if (item.afterTail && tailNode.load(std::memory_order_acquire) != kInvalidNodeRef) {
@@ -1198,9 +1197,6 @@ void TaskflowExecSchedPass::runItems(
                     tailNode,
                     region);
             }
-            if (aborting(region.thread())) [[unlikely]] {
-                return;
-            }
             if (item.afterTail && tailNode.load(std::memory_order_acquire) != kInvalidNodeRef) {
                 break; // the arm ended in a tail call: there is no value to join
             }
@@ -1224,9 +1220,6 @@ void TaskflowExecSchedPass::runLinearBody(
     std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
 
     for (size_t i = 0; i < nodes.size(); ++i) {
-        if (aborting(region.thread())) [[unlikely]] {
-            return;
-        }
         const gc_node_ref_t nodeRef = nodes[i];
         const auto *node            = requireNode(graph, nodeRef);
 
@@ -1303,22 +1296,6 @@ void TaskflowExecSchedPass::runLinearBody(
     }
 }
 
-void TaskflowExecSchedPass::abortDomain(TaskflowFaultDomain &domain) {
-    if (!domain.aborting.exchange(true, std::memory_order_acq_rel)) {
-        abortingDomains_.fetch_add(1, std::memory_order_release);
-    }
-}
-
-void TaskflowExecSchedPass::noteTaskFailure(TaskflowFaultDomain *domain) {
-    try {
-        throw;
-    } catch (const Diagnostic &failure) {
-        abortDomain(domain != nullptr && isIsolatedFault(failure) ? *domain : rootDomain_);
-    } catch (...) {
-        abortDomain(rootDomain_);
-    }
-}
-
 void TaskflowExecSchedPass::raiseFault(
     const RuntimeFault &fault, GCGraph *graph, gc_node_ref_t nodeRef) {
     // A fault that no boundary isolates ends the run, wherever it was raised.
@@ -1341,7 +1318,6 @@ void TaskflowExecSchedPass::raiseFault(
         } catch (...) {
             domain.firstFault = std::current_exception();
         }
-        abortDomain(domain);
     }
     std::rethrow_exception(domain.firstFault);
 }
@@ -1411,10 +1387,6 @@ void TaskflowExecSchedPass::callClosure(
     ASSERT(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
     TaskflowGcRegion region;
     InheritedDepth inherited(region.thread(), site.depth, site.domain);
-    // An element that has not started when its domain is aborting does not start.
-    if (aborting(region.thread())) [[unlikely]] {
-        return;
-    }
     requireCallRoom(region.thread(), site.graph, site.node);
     OpenCall openCall(region.thread().callDepth);
     region.enter();
@@ -1428,14 +1400,7 @@ void TaskflowExecSchedPass::callClosure(
         result = evalGraph(targetGraph, callee, region);
     } catch (...) {
         framePool_.release(callee);
-        // What is not a fault (exit(), a defect) stops the other elements as a fault does.
-        noteTaskFailure(site.domain);
         throw;
-    }
-    // The element was cut short by an abort raised elsewhere: it has no result.
-    if (aborting(region.thread())) [[unlikely]] {
-        framePool_.release(callee);
-        return;
     }
     sink(result);
     framePool_.release(callee);
@@ -2651,13 +2616,6 @@ slot_t TaskflowExecSchedPass::executeIsolateNode(
     Frame *callee = acquirePreparedClosureCallFrame(target, func->tuple(), args);
 
     TaskflowFaultDomain domain;
-    domain.parent = thread.faultDomain ? thread.faultDomain : &rootDomain_;
-    // Leaves the domain: nothing of it is running any more.
-    const auto closeDomain = [&] {
-        if (domain.aborting.load(std::memory_order_acquire)) {
-            abortingDomains_.fetch_sub(1, std::memory_order_release);
-        }
-    };
 
     slot_t value = NullSlot;
     try {
@@ -2675,7 +2633,6 @@ slot_t TaskflowExecSchedPass::executeIsolateNode(
         value = evalGraph(target, callee, region);
     } catch (const Diagnostic &fault) {
         framePool_.release(callee);
-        closeDomain();
         if (!isIsolatedFault(fault)) {
             throw;
         }
@@ -2685,10 +2642,8 @@ slot_t TaskflowExecSchedPass::executeIsolateNode(
         return failed;
     } catch (...) {
         framePool_.release(callee);
-        closeDomain();
         throw;
     }
-    closeDomain();
     region.enter();
     const auto *calleeType   = target->funcType();
     const Type *calleeResult = calleeType ? calleeType->exitType() : nullptr;
