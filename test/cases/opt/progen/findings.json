@@ -492,5 +492,19 @@
   ],
   "class": "(other) wrong value after inlining",
   "fixed": "sched: a self tail call reads all its arguments before it writes a parameter"
+ },
+ {
+  "id": "F39",
+  "file": "findings/opt_dead_branch_laid_out.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   ""
+  ],
+  "class": "branch arm",
+  "fixed": "execute: the execution order and the arm lookup leave out nodes the exit does not depend on"
  }
 ]
