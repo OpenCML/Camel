@@ -141,21 +141,16 @@ prints one entry.
 An error has occurred: {0}.
 ```
 
-**Example** (`test/cases/compile/semantic/throw_outside_fallible.cml`, run as `camel test/cases/compile/semantic/throw_outside_fallible.cml`)
+**Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
 
 ```camel
-module throw_outside_fallible
+module main
 
-func check(x: int): int {
-    return if x > 0 then x else {
-        println('never printed')
-        throw x
-    }
-}
+// A floating-point number is not a key type (NaN, and 0.0 == -0.0).
 
 func main(): int sync {
-    println('never printed either')
-    println(check(1))
+    let m = [(1.5, 1)] as Map<float, int>
+    println("never printed")
     return 0
 }
 ```
@@ -874,19 +869,17 @@ No matching function found for argument types: {0}.
 Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads: {1}
 ```
 
-**Example** (`test/cases/compile/generics/err_body.cml`, run as `camel test/cases/compile/generics/err_body.cml`)
+**Example** (`test/cases/compile/collections/err_subscript_key.cml`, run as `camel test/cases/compile/collections/err_subscript_key.cml`)
 
 ```camel
-module err_body
+module main
 
-func double(x: typeas T): T {
-    return x + x
-}
+// The subscript of a map takes a key of the key type.
 
 func main(): int sync {
-    println(double(21))
-    println(double('ab'))
-    println(double([1]))
+    let m = [("a", 1)] as Map<string, int>
+    println(m[1] ?? 0)
+    println("never printed")
     return 0
 }
 ```
@@ -1091,16 +1084,16 @@ Dynamic cast from '{0}' to '{1}' is not allowed.
 Use types that allow safe conversion, or ensure the conversion is valid.
 ```
 
-**Example** (`test/cases/modules/tensor/shape_types/as_static_mismatch.cml`, run as `camel test/cases/modules/tensor/shape_types/as_static_mismatch.cml`)
+**Example** (`test/cases/compile/collections/err_value_type.cml`, run as `camel test/cases/compile/collections/err_value_type.cml`)
 
 ```camel
-module shape_as_static_mismatch
-import { Tensor, ones, sum, load_npy } from tensor
+module main
+
+// Nothing is converted implicitly: an int is not the float the map holds.
+
 func main(): int sync {
-    println('ran')
-    let t = ones([3])
-    let u = t as Tensor<const [4]>
-    println(sum(u))
+    let m = [("a", 1)] as Map<string, float>
+    println("never printed")
     return 0
 }
 ```
@@ -1312,18 +1305,19 @@ The arguments of the type '{0}<...>' are not accepted: {1}.
 What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.
 ```
 
-**Example** (`test/cases/compile/generics/err_tf_plain.cml`, run as `camel test/cases/compile/generics/err_tf_plain.cml`)
+**Example** (`test/cases/compile/collections/err_bare_name.cml`, run as `camel test/cases/compile/collections/err_bare_name.cml`)
 
 ```camel
-module err_tf_plain
+module main
 
-type Point = (int, int)
+// `Map` is always written with its key and value types.
 
-func f(p: Point<int>): int {
-    return 1
+func size(m: Map): int {
+    return 0
 }
 
 func main(): int sync {
+    println("never printed")
     return 0
 }
 ```
@@ -1967,7 +1961,19 @@ The type '{0}' cannot be a key of '{1}': {2}.
 A key of a Map and an element of a Set must have an order and an equality that cannot change: 'int', 'i32', 'bool', 'string', and tuples of those. The value type of a Map is not restricted.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
+
+```camel
+module main
+
+// A floating-point number is not a key type (NaN, and 0.0 == -0.0).
+
+func main(): int sync {
+    let m = [(1.5, 1)] as Map<float, int>
+    println("never printed")
+    return 0
+}
+```
 
 ### DuplicateCollectionKey
 
@@ -1985,7 +1991,19 @@ The key '{0}' is written twice in this literal converted to '{1}'.
 A map holds one value per key. In an array computed when the program runs the later entry replaces the earlier one; in a literal a repeated key is taken for a mistake. Remove one of the two entries.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/collections/err_duplicate_key.cml`, run as `camel test/cases/compile/collections/err_duplicate_key.cml`)
+
+```camel
+module main
+
+// Two equal constant keys in a literal converted to a map are taken for a mistake.
+
+func main(): int sync {
+    let m = [("a", 1), ("b", 2), ("a", 3)] as Map<string, int>
+    println("never printed")
+    return 0
+}
+```
 
 ### VarParamInAsyncFunction
 
@@ -2142,22 +2160,30 @@ An error has occurred: {0}.
 Check the runtime environment and input data for unexpected issues.
 ```
 
-**Example** (`test/cases/modules/onnx/refusals/as_unproven.cml`, run as `camel test/cases/modules/onnx/refusals/as_unproven.cml`)
+**Example** (`test/cases/compile/collections/refuse_grad.cml`, run as `camel test/cases/compile/collections/refuse_grad.cml`)
 
 ```camel
-module as_unproven
+module main
 
-import { Tensor, reshape, tanh } from tensor
-import { export_model } from onnx
+import { grad } from autodiff
 
-func f(x: Tensor): Tensor {
-    let y = tanh(x) as Tensor<f32, const [2, 3]>
-    return y * 2.0
+// The value to differentiate flows through a map (x is stored in it and read back), and
+// there is no derivative rule for an operator over a collection: `grad` refuses and names
+// the operator. A map that does not depend on x is a constant to `grad` and is no obstacle.
+
+func through_map(x: float): float {
+    let m = [(1, x)] as Map<int, float>
+    return get_or(m, 1, 0.0) * x
+}
+
+func beside_map(x: float): float {
+    let m = [(1, 2.0)] as Map<int, float>
+    return get_or(m, 1, 0.0) * x
 }
 
 func main(): int sync {
-    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3])
-    export_model(f, ex, 'tmp/test/onnx/refusal_as_unproven.onnx', [0])
+    println(grad(beside_map)(3.0))
+    println(grad(through_map)(3.0))
     return 0
 }
 ```
@@ -2436,14 +2462,17 @@ Translation pass '{0}' refused the graph: {1}.
 A translation pass only translates the graph the preceding passes left. Run the passes named in the message before it, or remove the construct it cannot express.
 ```
 
-**Example** (`test/cases/compile/entry_args/scalars.cml`, run as `camel test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=0.5 --arg name=hi --arg loud=true std::cpp`)
+**Example** (`test/cases/compile/collections/refuse_export.cml`, run as `camel test/cases/compile/collections/refuse_export.cml std::cpp`)
 
 ```camel
-module scalars
+module main
 
-func main(n: int, rate: float, name: string, loud: bool): int sync {
-    println(name, n, rate, loud)
-    return n + 1
+// A pure `main` that goes through a set: what the translation passes (std::cpp,
+// onnx::export) are asked to translate and must refuse with a position.
+
+func main(): int {
+    let s = [3, 1, 2, 3] as Set<int>
+    return len(s)
 }
 ```
 
@@ -2498,17 +2527,30 @@ func main(): int sync {
 Every argument of this macro call is a constant, so std::macro evaluates it ahead of time, and a failed evaluation is a compile-time error. The program is rejected even if the call would never be reached at run time. Without std::macro in the pipeline the call runs with the program.
 ```
 
-**Example** (`test/cases/consistency/limits/macro_depth.cml`, run as `camel test/cases/consistency/limits/macro_depth.cml std::macro std::nvm`)
+**Example** (`test/cases/compile/collections/refuse_grad.cml`, run as `camel test/cases/compile/collections/refuse_grad.cml std::macro`)
 
 ```camel
-module macro_depth
+module main
 
-macro func count(n: int): int {
-    return if n == 0 then 0 else 1 + count(n - 1)
+import { grad } from autodiff
+
+// The value to differentiate flows through a map (x is stored in it and read back), and
+// there is no derivative rule for an operator over a collection: `grad` refuses and names
+// the operator. A map that does not depend on x is a constant to `grad` and is no obstacle.
+
+func through_map(x: float): float {
+    let m = [(1, x)] as Map<int, float>
+    return get_or(m, 1, 0.0) * x
+}
+
+func beside_map(x: float): float {
+    let m = [(1, 2.0)] as Map<int, float>
+    return get_or(m, 1, 0.0) * x
 }
 
 func main(): int sync {
-    println(count(40))
+    println(grad(beside_map)(3.0))
+    println(grad(through_map)(3.0))
     return 0
 }
 ```
@@ -2753,7 +2795,24 @@ A struct is indexed by the name of one of its fields.
 Invalid argument of '{0}': {1}.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/collections/fault_untyped_array.cml`, run as `camel test/cases/compile/collections/fault_untyped_array.cml ${backend}`)
+
+```camel
+module main
+
+// An array without an element type (`[]`) converts only while it is empty: this one was
+// appended to, so the conversion is a fault with its position, on every back end.
+
+func main(): int sync {
+    var xs = []
+    xs->append<1>
+    println("before")
+    let s = xs as Set<int>
+    println(s)
+    println("never printed")
+    return 0
+}
+```
 
 ### FileOpenFailed
 

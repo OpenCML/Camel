@@ -61,13 +61,25 @@ C++ classes with a `collections` module across `.cmo` boundaries loaded with `RT
 itself and named in the built-in type scope beside `int` and `string`, so:
 
 - the names are global: no `import`;
-- backends, collector, passes and exporters needed no change (verified, section 8);
+- backends, collector, optimisation passes and exporters needed no change (verified,
+  section 8);
 - the classes are in `libcamel`, so any module can produce and consume the values (JSON does);
 - the missing capability is added once and for every such type: an `OtherType` may declare
   that its arguments are plain types (`OtherType::typeArguments()` is true), and then type
   variables are accepted among them and the type-variable algebra (`containsTypeVar`,
   `substituteTypeVars`, `bindTypeVars`, `collectBindableTypeVars`, `findRepeatedMark`)
   descends through `params()`. `Tensor` does not declare it and keeps its rule.
+
+What did need to learn the types, under either route, is the code that walks **constant
+data** by its static type: a collection can be a constant of a graph (the result of a macro
+function under `std::macro`), and a constant is copied, searched for function values and
+validated by six `switch`es over `Array`/`Tuple`/`Struct`/`Function` (two in
+`compile/gir/graph_encode.cpp`, two in `runtime/draft_session.cpp`, one each in
+`runtime/graph.cpp` and `compile/gir/validate.cpp`). Their `default` treated a module object
+as a leaf, which is right for a tensor and wrong for a container of Camel values: the copy
+kept pointing into the compile-time data. Each now handles a collection through
+`rtdata::table::forEachSlot` / `withSlots`. A module type that holds Camel references has no
+general hook there; these two types are handled by name.
 
 What route 1 would add over this: a fixed `TypeCode::Map` constant instead of a code
 registered at start-up (nothing in the tree needs it; the code is obtained from
@@ -373,6 +385,12 @@ Alternatives, for the author:
   any pure operator. The test programs print the same through `std::opt`, `std::inline`,
   `std::macro std::opt`, `std::inline std::opt`, `std::opt::fold std::opt::cse std::opt::dce`
   and `std::opt::simplify`.
+- **Constants.** `std::macro` evaluates a macro function ahead of time and stores its result
+  in the static area of the calling graph; a `Map` or `Set` result is then a `DATA` node.
+  Its keys and values (strings, arrays, other maps, function values) are carried over with
+  it (section 2). Verified with and without `std::macro`, through `std::opt` and
+  `std::inline`, on the four backends, and under heap verification with a collection at
+  every allocation.
 - **`std::cpp`, `onnx::export`.** Each refuses the graph with `TranslationRefused` and a
   position (at the array the collection is built from, which they do not translate either).
   `onnx::export` evaluates what does not depend on the model's input, so a program whose
@@ -451,16 +469,34 @@ Each is implemented as recommended here; the tag is in the code.
 
 ## 11. Not done
 
-- **No compile-time construction.** `[...] as Map<...>` of a literal is checked at compile
-  time (key type, duplicate keys) but built by the `CAST` each time it is executed. Building
-  it once needs a compile-time form of a table (`core/data`) and its encoding into a graph's
-  static area, or folding of a `CAST` to a module type in `std::opt::fold`; neither exists.
+- **No compile-time construction outside `std::macro`.** `[...] as Map<...>` of a literal is
+  checked at compile time (key type, duplicate keys) but built by the `CAST` each time it is
+  executed. `std::opt::fold` does not fold a `CAST` to a module type, nor an operator over a
+  collection (none has a folder registered). A program that wants the table built once puts
+  it in a `macro func` and runs `std::macro`, which works (section 8).
 - **`map_values`, `filter` and friends are not in the library** (section 6.2): generic
   functions cannot be exported from a module.
 - **No persistent tree** (sections 5.2 and 9).
-- **`main` cannot take or return a collection on the command line** (no entry-argument
-  loader or result saver is registered for the two types).
+- **`main` cannot take a collection as a parameter** (no entry-argument loader is registered
+  for the two types). A collection that `main` returns is printed.
 - **`std::cpp`, ONNX:** collections are refused, not translated. The Python bridge was not
   tried with a collection.
+- **A defect met, not caused and not fixed:** with the experimental moving collector
+  (`CAMEL_GC_ENABLE_YOUNG_COPYING=1`, off by default) a program whose graph holds *any*
+  object constant produced by `std::macro` fails heap verification under collection stress
+  ("GC-traced slot points outside managed object regions"), and a larger program crashes or
+  prints another constant. It reproduces with arrays alone:
+
+  ```camel
+  macro func table(n: int): (int, string)[] { return concat([(1, 'one')], [(n, 'more')]) }
+  macro func names(): string[] { return concat(['beta'], ['gamma']) }
+  func main(): int sync {
+      println(table(4), names())      // CAMEL_GC_ENABLE_YOUNG_COPYING=1 CAMEL_GC_VERIFY=both
+      return 0                        // CAMEL_GC_STRESS_ALLOC=1 CAMEL_GC_STRESS_SAFEPOINT=1
+  }                                   // camel x.cml std::macro std::gc::verify std::nvm
+  ```
+
+  So collection constants are verified with the non-moving collector only; collections built
+  when the program runs are verified with both.
 - **Not verified:** the Windows and macOS builds (the work was built and tested on Linux
   only); programs that hold more than 2^32 entries (the size field is 32 bits, as in `Tuple`).
