@@ -43,15 +43,31 @@ camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph,
         const auto candidates = camel::execute::macro_runtime::collectMacroCandidates(
             std::span<camel::runtime::GCGraph *const>(runtimeGraphs.data(), runtimeGraphs.size()));
 
+        // Evaluate first, rewrite afterwards. Evaluation reaches safepoints, where the
+        // collector may move the values of this round. The evaluator keeps each of them in a
+        // root that is updated in place and that a MacroEvalResult reads through; a draft, on
+        // the other hand, holds plain copies of slots (the static slots of the graph it was
+        // decoded from, and every value materialized into it) that no root covers. So no
+        // draft may exist while a candidate is still being evaluated: all rewrites are applied
+        // after the last evaluation, and nothing between them and the commit reaches a
+        // safepoint. Candidates are calls of the installed graphs, which the rewrites of the
+        // same round do not change, so the order does not affect what is evaluated.
+        std::vector<
+            std::pair<
+                const camel::execute::macro_runtime::MacroCandidate *,
+                camel::execute::macro_runtime::MacroEvalResult>>
+            evaluated;
         for (const auto &candidate : candidates) {
             auto result = evaluator.tryEvaluate(candidate, os);
-            if (!result.has_value()) {
-                continue;
+            if (result.has_value()) {
+                evaluated.emplace_back(&candidate, *result);
             }
+        }
+        for (const auto &[candidate, result] : evaluated) {
             roundChanged |= camel::execute::macro_runtime::applyMacroRewrite(
                 runtimeSession,
-                candidate,
-                *result,
+                *candidate,
+                result,
                 os);
         }
 

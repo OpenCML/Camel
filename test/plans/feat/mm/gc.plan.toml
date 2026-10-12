@@ -148,3 +148,99 @@ expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.poison\"", "Fibonacci(10) = 55"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
 timeout_ms = 4000
+
+[[tests]]
+name = "gc.macro_constants.poison.nvm"
+desc = "Object constants produced by std::macro survive the moving collector (poison, nvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gc.macro_constants.moving_stress.nvm"
+desc = "Object constants produced by std::macro survive the moving collector (moving stress, nvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gc.macro_constants.poison.fvm"
+desc = "Object constants produced by std::macro survive the moving collector (poison, fvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gc.macro_constants.moving_stress.fvm"
+desc = "Object constants produced by std::macro survive the moving collector (moving stress, fvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gc.macro_constants.poison.prl"
+desc = "Object constants produced by std::macro survive the moving collector (poison, prl)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
+args = ["${case}", "std::macro", "${run_prl}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gc.macro_constants.moving_stress.prl"
+desc = "Object constants produced by std::macro survive the moving collector (moving stress, prl)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
+args = ["${case}", "std::macro", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gc.macro_constants.poison.jit"
+desc = "Object constants produced by std::macro survive the moving collector (poison, jit)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "gc.macro_constants.moving_stress.jit"
+desc = "Object constants produced by std::macro survive the moving collector (moving stress, jit)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_macro_constants.cml"
+args = ["${case}", "std::macro", "${run_jit}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["[(1, one), (4, more)] [beta, gamma]", "[[beta, gamma], [beta, gamma, delta]]", "(7, more) 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
