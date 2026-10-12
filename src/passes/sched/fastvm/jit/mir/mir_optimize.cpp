@@ -105,7 +105,7 @@ static bool writesFrameSlot(MirOp op) {
     }
 }
 
-void optimizePeephole(MirBuffer &buf) {
+void optimizePeephole(MirBuffer &buf, bool forwardStores) {
     const size_t n = buf.size();
     if (n == 0)
         return;
@@ -162,7 +162,7 @@ void optimizePeephole(MirBuffer &buf) {
             int32_t d = m.disp;
             auto it   = pendingStore.find(d);
             if (it != pendingStore.end()) {
-                if (m.op == MirOp::VLoadFromFrame) {
+                if (m.op == MirOp::VLoadFromFrame && forwardStores) {
                     // The stored value already exists in a vreg, so turn the
                     // reload into a pure copy and let register allocation decide
                     // whether it stays in-place or becomes a move.

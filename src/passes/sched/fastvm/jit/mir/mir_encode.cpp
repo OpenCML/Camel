@@ -49,49 +49,8 @@ void encodeMirBuffer(
     const VRegAllocation *vregAlloc,
     std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries,
     void *debugTraceFn) {
-    struct SpillState {
-        // The encoder does not materialize full spill code for every MIR op.
-        // Instead it remembers a few common linear patterns so later ops can
-        // recover frame-backed values without reloading blindly.
-        int loadVReg        = -1;
-        int loadDisp        = 0;
-        int copyVReg        = -1;
-        int copyDisp        = 0;
-        int destVReg        = -1;
-        int destDefaultVReg = -1;
-
-        void clearTransientForVReg(int vreg) {
-            if (loadVReg == vreg)
-                loadVReg = -1;
-            if (copyVReg == vreg)
-                copyVReg = -1;
-        }
-
-        void rememberLoad(int vreg, int disp) {
-            if (loadVReg >= 0 && loadVReg != vreg && copyVReg < 0) {
-                copyVReg = loadVReg;
-                copyDisp = loadDisp;
-            }
-            loadVReg = vreg;
-            loadDisp = disp;
-        }
-
-        bool hasCopiedValue(int vreg) const { return copyVReg == vreg; }
-
-        void clearCopiedValue() { copyVReg = -1; }
-
-        void clearDeferredLoad() { loadVReg = -1; }
-
-        void clearSpilledDest() { destVReg = -1; }
-
-        void rememberSpilledDest(int vreg, int defaultVreg) {
-            destVReg        = vreg;
-            destDefaultVReg = defaultVreg;
-        }
-
-        bool matchesSpilledDest(int vreg) const { return destVReg == vreg; }
-    };
-
+    // Every operand that is used has a register: linearScanVReg fails otherwise. A register of
+    // kSpilled here means a value that is defined and never used; its definition is skipped.
     const bool recordAsm = asmOut != nullptr || instructionBoundaries != nullptr;
     Encoder enc(code, asmOut, baseOffset, recordAsm);
     auto pregFor = [vregAlloc](VRegId v) -> int {
@@ -110,7 +69,6 @@ void encodeMirBuffer(
             pcToMirIndex[static_cast<size_t>(buf[i].pc)] = i;
 
     std::vector<JumpPatch> patches;
-    SpillState spillState;
 
     // Two-operand lowering of dst = left <op> right. The allocator frees a register at the
     // last use of its value, so dst may be the register of either operand, and both operands
@@ -229,26 +187,14 @@ void encodeMirBuffer(
         switch (m.op) {
         case MirOp::VLoadFromFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
+            if (r >= 0)
                 enc.movRegFromFrame(static_cast<uint8_t>(r), m.disp);
-                spillState.clearTransientForVReg(static_cast<int>(m.r0));
-            } else {
-                spillState.rememberLoad(static_cast<int>(m.r0), m.disp);
-            }
             break;
         }
         case MirOp::VStoreToFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
+            if (r >= 0)
                 enc.movToFrame(m.disp, static_cast<uint8_t>(r));
-                spillState.clearSpilledDest();
-            } else if (spillState.matchesSpilledDest(static_cast<int>(m.r0))) {
-                // BRCH vRes is spilled: VCmovnz has materialized 0/1 into rbx; write it back to the
-                // frame and restore rbx here.
-                enc.movToFrame(m.disp, kRegRbx);
-                enc.popRbx();
-                spillState.clearSpilledDest();
-            }
             break;
         }
         case MirOp::VLoadFromMemAt: {
@@ -260,51 +206,14 @@ void encodeMirBuffer(
         case MirOp::VCopy: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int sr = pregFor(static_cast<VRegId>(m.r1));
-            if (dr >= 0 && sr >= 0 && dr == sr)
-                break;
-            if (dr >= 0 && sr >= 0) {
+            if (dr >= 0 && sr >= 0)
                 enc.emitMovRegReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
-                spillState.clearSpilledDest();
-            } else if (dr >= 0 && sr < 0) {
-                // Source is spilled: load into the target reg from the frame (JOIN's w0
-                // materialized to v3) to avoid reusing a stale v3 value.
-                if (spillState.hasCopiedValue(static_cast<int>(m.r1))) {
-                    enc.movRegFromFrame(static_cast<uint8_t>(dr), spillState.copyDisp);
-                    spillState.clearCopiedValue();
-                }
-                spillState.clearSpilledDest();
-            } else if (dr < 0) {
-                spillState.rememberSpilledDest(static_cast<int>(m.r0), static_cast<int>(m.r1));
-            }
             break;
         }
         case MirOp::VTest: {
-            // VTest is used both for ordinary boolean values and JOIN's
-            // synthetic branch index. Passing an optional frame displacement lets
-            // us recover the tested value even when the source vreg never got a
-            // physical register.
-            // When JOIN receives m.disp (dIdx), load from the frame and test it; do not depend on
-            // v2's reg, to avoid VCopy(v3, v0) overwriting idx when v2 shares the same reg.
-            int disp = -1;
-            if (m.disp != 0) {
-                disp = m.disp;
-            } else {
-                int r = pregFor(static_cast<VRegId>(m.r0));
-                if (r >= 0) {
-                    enc.testRegReg(static_cast<uint8_t>(r));
-                    spillState.clearDeferredLoad();
-                    break;
-                }
-                if (spillState.loadVReg == static_cast<int>(m.r0))
-                    disp = spillState.loadDisp;
-            }
-            if (disp >= 0) {
-                enc.pushRbx();
-                enc.movRegFromFrame(kRegRbx, disp);
-                enc.testRegReg(kRegRbx);
-                enc.popRbx();
-            }
-            spillState.clearDeferredLoad();
+            int r = pregFor(static_cast<VRegId>(m.r0));
+            if (r >= 0)
+                enc.testRegReg(static_cast<uint8_t>(r));
             break;
         }
         case MirOp::VCmove: {
@@ -317,20 +226,8 @@ void encodeMirBuffer(
         case MirOp::VCmovnz: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int sr = pregFor(static_cast<VRegId>(m.r1));
-            if (dr >= 0 && sr >= 0) {
+            if (dr >= 0 && sr >= 0)
                 enc.cmovnzRegFromReg(static_cast<uint8_t>(dr), static_cast<uint8_t>(sr));
-                spillState.clearSpilledDest();
-            } else if (dr < 0 && spillState.matchesSpilledDest(static_cast<int>(m.r0))) {
-                int defReg = pregFor(static_cast<VRegId>(spillState.destDefaultVReg));
-                if (defReg >= 0 && sr >= 0) {
-                    enc.pushRbx();
-                    enc.emitMovRegReg(kRegRbx, static_cast<uint8_t>(defReg));
-                    enc.cmovnzRegFromReg(kRegRbx, static_cast<uint8_t>(sr));
-                } else {
-                    spillState.clearSpilledDest(); // Cannot materialize; avoid VStoreToFrame
-                                                   // accidentally using rbx.
-                }
-            }
             break;
         }
         case MirOp::VMovFromRax:

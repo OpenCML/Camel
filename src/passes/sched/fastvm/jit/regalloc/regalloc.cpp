@@ -20,6 +20,7 @@
 #include "regalloc.h"
 
 #include <algorithm>
+#include <format>
 #include <utility>
 
 namespace camel::jit {
@@ -113,7 +114,7 @@ void collectVRegDefUse(
             size_t s = static_cast<size_t>(v) + 1;
             if (firstDef.size() < s) {
                 firstDef.resize(s, static_cast<size_t>(-1));
-                lastUse.resize(s, 0);
+                lastUse.resize(s, static_cast<size_t>(-1));
             }
         }
     };
@@ -530,19 +531,49 @@ struct VLiveInterval {
 };
 
 bool linearScanVReg(
-    const x64::MirBuffer &buf, VRegAllocation *out, const VRegAllocOptions * /*opts*/) {
+    const x64::MirBuffer &buf, VRegAllocation *out, std::string *failureReason) {
+    auto fail = [&](std::string reason) {
+        if (failureReason)
+            *failureReason = std::move(reason);
+        return false;
+    };
+
     std::vector<size_t> firstDef, lastUse;
     collectVRegDefUse(buf, firstDef, lastUse);
+    out->vregToPreg.clear();
     if (firstDef.empty()) {
-        out->vregToPreg.clear();
         return true;
+    }
+
+    // Every call clobbers the allocatable registers (all of them are caller-saved, and a
+    // native self call runs the same code on a new frame).
+    std::vector<size_t> calls;
+    for (size_t i = 0; i < buf.size(); ++i) {
+        const x64::MirOp op = buf[i].op;
+        if (op == x64::MirOp::CallRax || op == x64::MirOp::CallRel32 ||
+            op == x64::MirOp::NativeJitFuncCall)
+            calls.push_back(i);
     }
 
     std::vector<VLiveInterval> intervals;
     for (size_t v = 0; v < firstDef.size(); ++v) {
-        if (firstDef[v] != static_cast<size_t>(-1) && lastUse[v] >= firstDef[v]) {
-            intervals.push_back({static_cast<x64::VRegId>(v), firstDef[v], lastUse[v]});
-        }
+        const bool defined = firstDef[v] != static_cast<size_t>(-1);
+        const bool used    = lastUse[v] != static_cast<size_t>(-1);
+        if (!used)
+            continue; // defined and never read, or an id that does not occur
+        if (!defined || lastUse[v] < firstDef[v])
+            return fail(
+                std::format("v{} is used at MIR instruction {} before it is defined", v, lastUse[v]));
+        intervals.push_back({static_cast<x64::VRegId>(v), firstDef[v], lastUse[v]});
+        auto call = std::upper_bound(calls.begin(), calls.end(), firstDef[v]);
+        if (call != calls.end() && *call < lastUse[v])
+            return fail(
+                std::format(
+                    "v{} (MIR instructions {} to {}) is live across the call at {}",
+                    v,
+                    firstDef[v],
+                    lastUse[v],
+                    *call));
     }
     std::sort(
         intervals.begin(),
@@ -550,9 +581,10 @@ bool linearScanVReg(
         [](const VLiveInterval &a, const VLiveInterval &b) { return a.start < b.start; });
 
     out->vregToPreg.resize(firstDef.size(), kSpilled);
-    // MIR allocation is intentionally simple: it ignores calling-convention
-    // classes and lets later lowering spill where needed. That keeps the pass
-    // fast and predictable while the MIR optimizer is still mostly linear.
+    // Live ranges are intervals of the linear MIR, so taking them in order of their start and
+    // giving each any free register uses as few registers as possible. A register is free
+    // again at the instruction of its value's last use: the value defined there may take it
+    // (the encoder lowers every instruction for dst == operand).
     std::vector<std::pair<VLiveInterval, int>> active;
     int freeRegs[kNumAllocatableRegs];
     for (int i = 0; i < kNumAllocatableRegs; ++i)
@@ -577,21 +609,13 @@ bool linearScanVReg(
                 break;
             }
         }
-        if (reg < 0) {
-            auto spill =
-                std::max_element(active.begin(), active.end(), [](const auto &a, const auto &b) {
-                    return a.first.end < b.first.end;
-                });
-            if (spill != active.end() && spill->first.end > cur.end) {
-                out->vregToPreg[static_cast<size_t>(spill->first.vreg)] = kSpilled;
-                reg                                                     = spill->second;
-                active.erase(spill);
-            }
-        }
-        if (reg >= 0) {
-            out->vregToPreg[static_cast<size_t>(cur.vreg)] = reg;
-            active.emplace_back(cur, reg);
-        }
+        if (reg < 0)
+            return fail(std::format(
+                "more than {} values are live at MIR instruction {}",
+                active.size(),
+                cur.start));
+        out->vregToPreg[static_cast<size_t>(cur.vreg)] = reg;
+        active.emplace_back(cur, reg);
     }
     return true;
 }

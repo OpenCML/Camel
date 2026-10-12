@@ -201,6 +201,28 @@ X64Backend::compile(const CompilationUnit &unit, std::string *failureReason) {
 
 bool X64Backend::compileBytecode(
     const CompilationUnit &unit, std::vector<uint8_t> &code, std::string *failureReason) {
+    // The encoder has no spill code, so the allocation must give every value a register. Values
+    // kept in registers across bytecodes (the slot cache, store-to-load forwarding) make the
+    // fast code; when a block holds more of them than there are registers, the unit is lowered
+    // again without them: every value then lives within the lowering of one bytecode.
+    for (const bool keepValuesInRegisters : {true, false}) {
+        code.clear();
+        const LowerResult result =
+            compileBytecodeWith(unit, code, failureReason, keepValuesInRegisters);
+        if (result != LowerResult::OutOfRegisters)
+            return result == LowerResult::Ok;
+        CAMEL_LOG_INFO_S(
+            "JIT",
+            "graph '{}' is lowered again without values kept in registers: {}",
+            unit.runtimeGraph ? unit.runtimeGraph->name() : "<null>",
+            failureReason ? *failureReason : std::string());
+    }
+    return false;
+}
+
+X64Backend::LowerResult X64Backend::compileBytecodeWith(
+    const CompilationUnit &unit, std::vector<uint8_t> &code, std::string *failureReason,
+    bool keepValuesInRegisters) {
     using namespace x64;
     const CompilationDebugOptions *debug = unit.debug;
 
@@ -209,7 +231,7 @@ bool X64Backend::compileBytecode(
     auto fail = [&](const std::string &msg) {
         if (failureReason)
             *failureReason = msg;
-        return false;
+        return LowerResult::Failed;
     };
 
     if (!unit.runtimeGraph)
@@ -337,7 +359,7 @@ bool X64Backend::compileBytecode(
                 return;
             }
             build.emitVLoadFromFrame(v, disp);
-            if (cacheable && !writtenSlots.count(slotIdx))
+            if (cacheable && keepValuesInRegisters && !writtenSlots.count(slotIdx))
                 slotCache[disp] = v;
         } else {
             emitLoadStaticConst(staticBase, slotIdx, v, build);
@@ -879,7 +901,7 @@ bool X64Backend::compileBytecode(
                 loadSlot(w1, d1, v1);
                 loadSlot(idxSlot, dIdx, v2);
                 build.emitVCopy(v3, v0);
-                build.emitVTest(v2, dIdx);
+                build.emitVTest(v2);
                 build.emitVCmovnz(v3, v1);
                 build.emitVStoreToFrame(dr, v3);
             }
@@ -1156,13 +1178,13 @@ bool X64Backend::compileBytecode(
         opts.slotNames   = debug->mirSlotNames;
         opts.vregAlloc   = nullptr;
         x64::mirPrint(mirBuf, *debug->mirOut, opts);
-        return true;
+        return LowerResult::Ok;
     }
 
     // Run MIR cleanup before allocation. These passes still operate on virtual
     // registers, so they can rewrite loads/stores without worrying about
     // physical register side effects.
-    x64::runMirOptimizationPasses(mirBuf);
+    x64::runMirOptimizationPasses(mirBuf, keepValuesInRegisters);
 
     // mir: optimized vreg MIR; print and return (do not allocate or encode).
     if (debug && debug->mirOut) {
@@ -1179,11 +1201,16 @@ bool X64Backend::compileBytecode(
         opts.slotNames   = debug->mirSlotNames;
         opts.vregAlloc   = nullptr;
         x64::mirPrint(mirBuf, *debug->mirOut, opts);
-        return true;
+        return LowerResult::Ok;
     }
 
     VRegAllocation vregAlloc;
-    linearScanVReg(mirBuf, &vregAlloc);
+    std::string allocFailure;
+    if (!linearScanVReg(mirBuf, &vregAlloc, &allocFailure)) {
+        if (failureReason)
+            *failureReason = "register allocation failed: " + allocFailure;
+        return keepValuesInRegisters ? LowerResult::OutOfRegisters : LowerResult::Failed;
+    }
     void *debugTraceFn =
 #ifndef NDEBUG
         ((debug && debug->enableDebugTrace) ? reinterpret_cast<void *>(&jitDebugTraceWrapper)
@@ -1285,7 +1312,7 @@ bool X64Backend::compileBytecode(
         &vregAlloc,
         debug ? debug->instructionBoundaries : nullptr,
         debugTraceFn);
-    return true;
+    return LowerResult::Ok;
 }
 
 JitEntryFn X64Backend::load(std::unique_ptr<CompiledCode> code) {
