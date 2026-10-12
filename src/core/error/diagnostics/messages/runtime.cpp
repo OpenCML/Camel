@@ -231,6 +231,114 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
 
+        {
+            RuntimeDiag::InvalidNumberText,
+            {
+                "InvalidNumberText",
+                "Cannot convert the string '{0}' to {1}.",
+                "The string must hold {2} and nothing else that the conversion cannot skip. "
+                "Check the value before converting it; a conversion that fails is a fault and "
+                "ends the program.",
+            },
+        },
+        {
+            RuntimeDiag::FormatFailed,
+            {
+                "FormatFailed",
+                "Cannot format with the format string '{0}': {1}.",
+                "A replacement field is a pair of braces, optionally holding a format "
+                "specification after a colon. There must be one argument per field, and a "
+                "literal brace is written twice.",
+            },
+        },
+        {
+            RuntimeDiag::OperandTypeUnsupported,
+            {
+                "OperandTypeUnsupported",
+                "'{0}' does not support a value of type '{1}'; it takes {2}.",
+                "Convert the value to a supported type before the call.",
+            },
+        },
+        {
+            RuntimeDiag::FieldNotFound,
+            {
+                "FieldNotFound",
+                "The struct has no field '{0}'.",
+                "A struct is indexed by the name of one of its fields.",
+            },
+        },
+        {
+            RuntimeDiag::InvalidArgument,
+            {
+                "InvalidArgument",
+                "Invalid argument of '{0}': {1}.",
+                "",
+            },
+        },
+        {
+            RuntimeDiag::FileOpenFailed,
+            {
+                "FileOpenFailed",
+                "'{0}' cannot open the file '{1}': {2}.",
+                "Check that the path exists and that the program may access it; a relative path "
+                "is taken from the directory the program is run in. Where a missing file is "
+                "expected, fs.try_read_text returns an error value instead of ending the "
+                "program.",
+            },
+        },
+        {
+            RuntimeDiag::FileSystemError,
+            {
+                "FileSystemError",
+                "'{0}' failed for '{1}': {2}.",
+                "Check the path and the permissions of the directories on it.",
+            },
+        },
+        {
+            RuntimeDiag::JsonDecodeFailed,
+            {
+                "JsonDecodeFailed",
+                "json.decode: the text is not valid JSON ({0}). The text begins: '{1}'.",
+                "The line and column in the message are positions in the decoded text, not in "
+                "the program.",
+            },
+        },
+        {
+            RuntimeDiag::JsonEncodeUnsupported,
+            {
+                "JsonEncodeUnsupported",
+                "json.encode cannot encode a value of type '{0}'.",
+                "JSON has null, booleans, numbers, strings, arrays and objects: encode values "
+                "made of bool, int, float, string, arrays, tuples and structs.",
+            },
+        },
+        {
+            RuntimeDiag::RegexInvalid,
+            {
+                "RegexInvalid",
+                "'{0}': '{1}' is not a valid regular expression: {2}.",
+                "Patterns use the ECMAScript syntax. A character with a special meaning is "
+                "matched literally when it is written with a backslash.",
+            },
+        },
+        {
+            RuntimeDiag::TimeFormatFailed,
+            {
+                "TimeFormatFailed",
+                "'{0}' failed: {1}.",
+                "Check the format string against the strftime conversion specifiers (%Y, %m, "
+                "%d, %H, %M, %S, ...).",
+            },
+        },
+        {
+            RuntimeDiag::OperatorNotImplemented,
+            {
+                "OperatorNotImplemented",
+                "The operator '{0}' is declared but not implemented.",
+                "The name exists so that programs using it are recognised; calling it is not "
+                "possible yet.",
+            },
+        },
     };
 
     return infoMap;

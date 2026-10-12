@@ -159,8 +159,10 @@ static Array *__doSortWithTypeCode__(
         break;
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string(fname) + " not supported for element type " + typeCodeToString(code));
+            RuntimeDiag::OperandTypeUnsupported,
+            std::string(fname),
+            typeCodeToString(code) + "[]",
+            "an array of numbers");
     }
     return result;
 }
@@ -221,8 +223,10 @@ slot_t __algo_merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx
         break;
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<merge_sorted_arrays> not supported for element type " + typeCodeToString(code));
+            RuntimeDiag::OperandTypeUnsupported,
+            "algo.merge_sorted_arrays",
+            typeCodeToString(code) + "[]",
+            "two arrays of numbers");
     }
     return toSlot(merged);
 }

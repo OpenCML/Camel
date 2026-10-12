@@ -48,12 +48,12 @@ using json = nlohmann::json;
 // 递归：将 Camel 值转为 JSON。失败时返回 nullopt 并报告诊断。
 static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
     if (!t) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<json.encode> null type");
+        throwRuntimeFault(RuntimeDiag::JsonEncodeUnsupported, "<unknown>");
     }
     if (t->code() == TypeCode::Any) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<json.encode> cannot encode value of type Any");
+            RuntimeDiag::JsonEncodeUnsupported,
+            "any");
     }
     switch (t->code()) {
     case TypeCode::Int32:
@@ -127,8 +127,8 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
     }
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<json.encode> unsupported type: " + t->toString());
+            RuntimeDiag::JsonEncodeUnsupported,
+            t->toString());
     }
 }
 
@@ -199,7 +199,22 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
         json j = json::parse(str->c_str());
         return jsonToCamel(j, ctx);
     } catch (const json::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("<json.decode> ") + e.what());
+        // nlohmann's text is "[json.exception.parse_error.101] parse error at line 1, column
+        // 2: ...": the bracketed id is the library's, the rest says where and what.
+        std::string what = e.what();
+        if (auto close = what.find("] "); what.starts_with("[") && close != std::string::npos) {
+            what = what.substr(close + 2);
+        }
+        // The start of the text, on one line, so that the message shows what was decoded.
+        std::string head(str->c_str());
+        const bool cut = head.size() > 40;
+        head           = head.substr(0, 40);
+        for (char &c : head) {
+            if (c == '\n' || c == '\r' || c == '\t') {
+                c = ' ';
+            }
+        }
+        throwRuntimeFault(RuntimeDiag::JsonDecodeFailed, what, head + (cut ? "..." : ""));
     }
 }
 

@@ -31,7 +31,10 @@ namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
+#include <cerrno>
+#include <format>
 #include <fstream>
+#include <system_error>
 #include <sstream>
 
 namespace fs_impl = std::filesystem;
@@ -41,8 +44,10 @@ slot_t __fs_read_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::ifstream f(path->c_str());
     if (!f.is_open()) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<read_text> failed to open: " + std::string(path->c_str()));
+            RuntimeDiag::FileOpenFailed,
+            "fs.read_text",
+            std::string(path->c_str()),
+            std::generic_category().message(errno));
     }
     std::ostringstream oss;
     oss << f.rdbuf();
@@ -79,15 +84,19 @@ slot_t __fs_write_text__(ArgsView &with, ArgsView &norm, Context &ctx) {
         std::error_code ec;
         if (!fs_impl::create_directories(parent, ec)) {
             throwRuntimeFault(
-                RuntimeDiag::RuntimeError,
-                "<write_text> failed to create parent dir: " + parent.string());
+                RuntimeDiag::FileSystemError,
+                "fs.write_text",
+                std::string(path->c_str()),
+                "cannot create the directory '" + parent.string() + "': " + ec.message());
         }
     }
     std::ofstream f(path->c_str());
     if (!f.is_open()) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<write_text> failed to open: " + std::string(path->c_str()));
+            RuntimeDiag::FileOpenFailed,
+            "fs.write_text",
+            std::string(path->c_str()),
+            std::generic_category().message(errno));
     }
     f << content->c_str();
     return NullSlot;
@@ -113,7 +122,11 @@ slot_t __fs_file_size__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::error_code ec;
     auto size = fs_impl::file_size(p->c_str(), ec);
     if (ec) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<file_size> failed: " + ec.message());
+        throwRuntimeFault(
+            RuntimeDiag::FileSystemError,
+            "fs.file_size",
+            std::string(p->c_str()),
+            ec.message());
     }
     return toSlot(static_cast<int64_t>(size));
 }
@@ -123,20 +136,32 @@ slot_t __fs_read_chunk__(ArgsView &with, ArgsView &norm, Context &ctx) {
     int64_t offset = norm.get<int64_t>(1);
     int64_t size   = norm.get<int64_t>(2);
     if (offset < 0 || size < 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<read_chunk> offset and size must be >= 0");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "fs.read_chunk",
+            std::format(
+                "the offset is {} and the size is {}; neither may be negative",
+                offset,
+                size));
     }
 
     std::ifstream f(path->c_str(), std::ios::binary);
     if (!f.is_open()) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<read_chunk> failed to open: " + std::string(path->c_str()));
+            RuntimeDiag::FileOpenFailed,
+            "fs.read_chunk",
+            std::string(path->c_str()),
+            std::generic_category().message(errno));
     }
 
     f.seekg(0, std::ios::end);
     std::streamoff fileSize = f.tellg();
     if (fileSize < 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<read_chunk> failed to determine file size");
+        throwRuntimeFault(
+            RuntimeDiag::FileSystemError,
+            "fs.read_chunk",
+            std::string(path->c_str()),
+            "the size of the file cannot be determined");
     }
     if (offset >= fileSize || size == 0) {
         return toSlot(String::from("", mm::autoSpace()));
@@ -158,7 +183,11 @@ slot_t __fs_mkdir__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::error_code ec;
     bool ok = fs_impl::create_directory(p->c_str(), ec);
     if (!ok && ec) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<mkdir> failed: " + ec.message());
+        throwRuntimeFault(
+            RuntimeDiag::FileSystemError,
+            "fs.mkdir",
+            std::string(p->c_str()),
+            ec.message());
     }
     return toSlot(ok);
 }
@@ -168,7 +197,11 @@ slot_t __fs_mkdirs__(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::error_code ec;
     bool ok = fs_impl::create_directories(p->c_str(), ec);
     if (!ok && ec) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<mkdirs> failed: " + ec.message());
+        throwRuntimeFault(
+            RuntimeDiag::FileSystemError,
+            "fs.mkdirs",
+            std::string(p->c_str()),
+            ec.message());
     }
     return toSlot(ok);
 }

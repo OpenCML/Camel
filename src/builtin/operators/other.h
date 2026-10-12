@@ -29,6 +29,6 @@
 [[noreturn]] slot_t
 __not_implemented__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     camel::core::error::throwRuntimeFault(
-        camel::core::error::RuntimeDiag::RuntimeError,
-        "this operator is declared but not implemented");
+        camel::core::error::RuntimeDiag::OperatorNotImplemented,
+        "this operator");
 }

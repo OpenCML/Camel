@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <format>
 #include "struct.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -53,8 +54,12 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
     size_t n = lhs->size();
     if (rhs->size() != n) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<zip> requires both sequences to have the same length");
+            RuntimeDiag::InvalidArgument,
+            "zip",
+            std::format(
+                "the two sequences have {} and {} elements, and they must have the same number",
+                n,
+                rhs->size()));
     }
 
     Array *result = Array::create(mm::autoSpace(), n);
@@ -98,7 +103,10 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 step  = (norm.size() == 3) ? norm.get<Int64>(2) : 1;
 
     if (step == 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<range> step cannot be zero");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "range",
+            std::format("the step is 0 (from {} to {}); a range needs a step that moves", start, stop));
     }
 
     size_t count = 0;

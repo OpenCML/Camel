@@ -12,6 +12,7 @@
  * See the the MIT license for more details.
  */
 
+#include <format>
 #include "operators.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -133,7 +134,10 @@ slot_t __crypto_sha256_rounds__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *input  = norm.get<String *>(0);
     int64_t rounds = norm.get<int64_t>(1);
     if (rounds < 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<sha256_rounds> requires rounds >= 0");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "crypto.sha256_rounds",
+            std::format("the number of rounds is {}; it must not be negative", rounds));
     }
 
     std::string value(input->view());

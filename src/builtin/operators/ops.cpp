@@ -184,7 +184,7 @@ slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int32 rhs = norm.get<Int32>(1);
 
     if (rhs == 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
     lhs /= rhs;
@@ -198,7 +198,7 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 rhs = norm.get<Int64>(1);
 
     if (rhs == 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
     lhs /= rhs;
@@ -212,7 +212,7 @@ slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 rhs = norm.get<Float32>(1);
 
     if (rhs == 0.0f) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
     lhs /= rhs;
@@ -226,7 +226,7 @@ slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 rhs = norm.get<Float64>(1);
 
     if (rhs == 0.0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "Division by zero");
+        throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
     lhs /= rhs;
@@ -473,8 +473,10 @@ slot_t __builtin__mul__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<mul> operator not supported for type " + typeCodeToString(lhsType));
+            RuntimeDiag::OperandTypeUnsupported,
+            "*",
+            typeCodeToString(lhsType),
+            "a number");
     }
 }
 
@@ -519,8 +521,10 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<div> operator not supported for type " + typeCodeToString(lhsType));
+            RuntimeDiag::OperandTypeUnsupported,
+            "/",
+            typeCodeToString(lhsType),
+            "a number");
     }
 }
 
@@ -546,7 +550,11 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 
     default:
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<mod> operator only supports integer types");
+        throwRuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            "%",
+            typeCodeToString(lhsType),
+            "an integer");
     }
 }
 
@@ -580,8 +588,10 @@ slot_t __builtin__pow__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<pow> operator not supported for type " + typeCodeToString(lhsType));
+            RuntimeDiag::OperandTypeUnsupported,
+            "**",
+            typeCodeToString(lhsType),
+            "a number");
     }
 }
 
@@ -623,8 +633,10 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
         default: {
             throwRuntimeFault(
-                RuntimeDiag::RuntimeError,
-                "<idx> operator not supported for type " + typeCodeToString(containerType));
+                RuntimeDiag::OperandTypeUnsupported,
+                "[]",
+                typeCodeToString(containerType),
+                "an array, a tuple, a struct or a string");
         }
         }
     }
@@ -637,15 +649,17 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         const Type *structType      = norm.type(0);
         if (!st->has(key, structType)) {
             throwRuntimeFault(
-                RuntimeDiag::RuntimeError,
-                "Struct does not have field: " + std::string(key));
+                RuntimeDiag::FieldNotFound,
+                std::string(key));
         }
         return st->get<slot_t>(key, structType);
     }
 
     throwRuntimeFault(
-        RuntimeDiag::RuntimeError,
-        "<idx> operator not supported for an index of type " + typeCodeToString(idxType));
+        RuntimeDiag::OperandTypeUnsupported,
+        "[]",
+        typeCodeToString(idxType),
+        "an integer index, or a field name for a struct");
 }
 
 slot_t __builtin__not__(ArgsView &with, ArgsView &norm, Context &) {
@@ -678,8 +692,10 @@ slot_t __builtin__neg__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<neg> operator not supported for type " + typeCodeToString(t));
+            RuntimeDiag::OperandTypeUnsupported,
+            "-",
+            typeCodeToString(t),
+            "a number");
     }
 }
 
@@ -698,8 +714,9 @@ slot_t __builtin__inv__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "<inv> operator only supported for integer types (Int / Long), got " +
-                typeCodeToString(t));
+            RuntimeDiag::OperandTypeUnsupported,
+            "~",
+            typeCodeToString(t),
+            "an integer");
     }
 }

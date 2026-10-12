@@ -73,15 +73,16 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return rtdata::toSlot(resultObj);
     } catch (const fmt::format_error &e) {
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string("<format>") + std::string(e.what()));
+            RuntimeDiag::FormatFailed,
+            std::string(fmtStr),
+            std::string(e.what()));
     }
 }
 
 slot_t __join__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *sepObj = with.get<String *>(0);
     if (!sepObj) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<join>", "invalid separator");
+        throwRuntimeFault(RuntimeDiag::InvalidArgument, "join", "the separator is null");
     }
     std::string separator = sepObj->toString();
 

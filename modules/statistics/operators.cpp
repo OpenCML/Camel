@@ -66,8 +66,10 @@ static double meanWithTypeCode(Array *arr, TypeCode code, Context &ctx, std::str
         return meanSlots<Float64>(arr);
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string(fname) + " not supported for type " + typeCodeToString(code));
+            RuntimeDiag::OperandTypeUnsupported,
+            std::string(fname),
+            typeCodeToString(code),
+            "a number");
     }
 }
 
@@ -83,8 +85,10 @@ static double stdevWithTypeCode(Array *arr, TypeCode code, Context &ctx, std::st
         return stdevSlots<Float64>(arr);
     default:
         throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string(fname) + " not supported for type " + typeCodeToString(code));
+            RuntimeDiag::OperandTypeUnsupported,
+            std::string(fname),
+            typeCodeToString(code),
+            "a number");
     }
 }
 

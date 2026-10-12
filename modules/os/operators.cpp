@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <format>
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
@@ -146,7 +147,10 @@ std::unordered_map<std::string, operator_t> getOSOpsMap() {
 slot_t __os_sleep__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 ms = norm.get<Int64>(0);
     if (ms < 0) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<sleep> requires a non-negative integer");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "os.sleep",
+            std::format("the duration is {} ms; it must not be negative", ms));
     }
     try {
         std::this_thread::sleep_for(std::chrono::milliseconds(ms));

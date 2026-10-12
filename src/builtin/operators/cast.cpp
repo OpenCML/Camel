@@ -51,7 +51,11 @@ slot_t __stoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int32 v = std::stoi(s->toString());
         return toSlot(v);
     } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stoi__ invalid integer string");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidNumberText,
+            s->toString(),
+            "i32",
+            "an integer");
     }
 }
 
@@ -78,7 +82,11 @@ slot_t __stol__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Int64 v = std::stoll(s->toString());
         return toSlot(v);
     } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stol__ invalid integer string");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidNumberText,
+            s->toString(),
+            "i64",
+            "an integer");
     }
 }
 
@@ -105,7 +113,11 @@ slot_t __stof__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Float32 v = std::stof(s->toString());
         return toSlot(v);
     } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stof__ invalid float string");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidNumberText,
+            s->toString(),
+            "f32",
+            "a number");
     }
 }
 
@@ -132,7 +144,11 @@ slot_t __stod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         Float64 v = std::stod(s->toString());
         return toSlot(v);
     } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "__stod__ invalid double string");
+        throwRuntimeFault(
+            RuntimeDiag::InvalidNumberText,
+            s->toString(),
+            "f64",
+            "a number");
     }
 }
 
