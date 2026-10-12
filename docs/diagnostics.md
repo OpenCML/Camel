@@ -814,12 +814,13 @@ Invalid access index: '{0}'.
 Ensure the index is within bounds for arrays or refers to a valid field in structs.
 ```
 
-**Example** (`test/cases/compile/bounds/tuple_index.cml`, run as `camel test/cases/compile/bounds/tuple_index.cml`)
+**Example** (`test/cases/consistency/faults/tuple_index_static.cml`, run as `camel `)
 
 ```camel
-module tuple_index
+module tuple_index_static
+
 func main(): int sync {
-    println('ran')
+    println('not reached')
     let t = (1, 2, 3)
     println(t.5)
     return 0
@@ -2139,19 +2140,17 @@ Attempted division by zero.
 Ensure the denominator is not zero before performing division.
 ```
 
-**Example** (`test/cases/linear/faults/divide_by_zero_hot.cml`, run as `camel test/cases/linear/faults/divide_by_zero_hot.cml std::nvm`)
+**Example** (`test/cases/consistency/cleanup/unflushed_print_fault.cml`, run as `camel `)
 
 ```camel
-module divide_by_zero_hot
-
-func f(a: int, b: int): int {
-    return if a < 2 then a / b else f(a - 1, b) + a / b
-}
+module unflushed_print_fault
 
 func main(): int sync {
-    println(f(30, 3))
     let z = 0
-    println(f(30, z))
+    println('line')
+    print('pending')
+    print(' text')
+    println(8 / z)
     println('not reached')
     return 0
 }
@@ -2173,17 +2172,17 @@ Index {0} is out of range for {1} of length {2}.
 Ensure the index is within the valid range of the collection.
 ```
 
-**Example** (`test/cases/linear/faults/array_index_out_of_range.cml`, run as `camel test/cases/linear/faults/array_index_out_of_range.cml std::nvm`)
+**Example** (`test/cases/consistency/faults/index_out_of_range.cml`, run as `camel `)
 
 ```camel
-module array_index_out_of_range
+module index_out_of_range
 
 func at(xs: int[], i: int): int { return xs[i] }
 
 func main(): int sync {
-    let xs = [1, 2, 3]
-    println(at(xs, 1))
-    println(at(xs, 5))
+    let xs = [10, 20, 30]
+    println(at(xs, 2))
+    println(at(xs, 3))
     println('not reached')
     return 0
 }
@@ -2220,24 +2219,27 @@ Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'.
 **Help**
 
 ```text
-Check for infinite recursion or excessively deep recursive calls.
+Check for infinite recursion. A call in tail position takes no frame, so write a deep recursion as a tail call; or raise the limit with --max-recursion-depth <n> or CAMEL_MAX_RECURSION_DEPTH=<n>.
 ```
 
-**Example** (`test/cases/linear/runtime/recursion_depth_limit.cml`, run as `camel test/cases/linear/runtime/recursion_depth_limit.cml std::nvm`)
+**Example** (`test/cases/consistency/limits/depth_value.cml`, run as `N=50 camel `)
 
 ```camel
-module recursion_depth_limit
+module depth_value
 
-// Non-tail recursion is limited to 256 frames on NodeVM, FastVM and the JIT. depth(200) fits;
-// depth(300) stops with MaxRecursionDepthExceeded at the recursive call, after what ran before it.
-func depth(n: int): int {
-    return if n == 0 then 0 else 1 + depth(n - 1)
+import { get_env } from sys
+
+func via(f: (n: int) => int, n: int): int {
+    return if n == 0 then 0 else 1 + f(n - 1)
 }
 
+func step(n: int): int { return 0 + via(step, n) }
+
 func main(): int sync {
-    println(depth(200))
-    println(depth(300))
-    println('not reached')
+    let n = int(get_env('N'))
+    println('start')
+    println(step(n))
+    println('done')
     return 0
 }
 ```
@@ -2458,29 +2460,17 @@ func main(): int sync {
 Every argument of this macro call is a constant, so std::macro evaluates it ahead of time, and a failed evaluation is a compile-time error. The program is rejected even if the call would never be reached at run time. Without std::macro in the pipeline the call runs with the program.
 ```
 
-**Example** (`test/cases/trans/macro/failed_evaluation.cml`, run as `camel test/cases/trans/macro/failed_evaluation.cml std::macro std::nvm`)
+**Example** (`test/cases/consistency/limits/macro_depth.cml`, run as `camel test/cases/consistency/limits/macro_depth.cml std::macro std::nvm`)
 
 ```camel
-module failed_evaluation
+module macro_depth
 
-// A macro call whose arguments are constants is evaluated by std::macro. Here the evaluation
-// fails (division by zero, after an effect). Provisional rule: that is a compile-time error at
-// the call (line 19), with the reason; the program does not run. Without std::macro the call
-// is an ordinary call and fails when it is reached, after `main start` and 42.
-macro func boom(x: int): int sync {
-    println('EFFECT boom')
-    return 10 / x
-}
-
-macro func fine(x: int): int {
-    return x + 1
+macro func count(n: int): int {
+    return if n == 0 then 0 else 1 + count(n - 1)
 }
 
 func main(): int sync {
-    println('main start')
-    println(fine(41))
-    let v = boom(0)
-    println(v)
+    println(count(40))
     return 0
 }
 ```
