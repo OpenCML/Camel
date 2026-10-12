@@ -86,17 +86,30 @@ string portLabel(
         return "PORT";
     }
 
+    // The names are those of the declared parameters: the `with` parameters, then the
+    // others. A function whose captures have become `with` ports has, after its declared
+    // `with` ports, one more for each capture; those are named by the captured names.
+    // (Counting them as declared parameters gave a capture the name of the first parameter,
+    // and that parameter no name.)
+    const auto captured    = graph->funcType()->closureRefs();
+    const size_t withPorts = graph->withPorts().size();
+    const size_t withCount =
+        graph->closureNodes().empty() && captured.size() <= withPorts ? withPorts - captured.size()
+                                                                      : withPorts;
+
     size_t argIndex = 0;
     bool found      = false;
-    for (size_t i = 0; i < graph->withPorts().size(); ++i) {
+    for (size_t i = 0; i < withPorts; ++i) {
         if (graph->withPorts()[i] == nodeRef) {
+            if (i >= withCount) {
+                return std::string(captured[i - withCount]);
+            }
             argIndex = i;
             found    = true;
             break;
         }
     }
     if (!found) {
-        const size_t withCount = graph->withPorts().size();
         for (size_t i = 0; i < graph->normPorts().size(); ++i) {
             if (graph->normPorts()[i] == nodeRef) {
                 argIndex = withCount + i;
