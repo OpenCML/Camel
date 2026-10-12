@@ -1,0 +1,35 @@
+/**
+ * progen finding F40 (branch arm). `f1` returns a constant and executes nothing. Inlined where
+ *   its call was the tail of a branch arm, its result waited on nothing: the tail became a
+ *   value outside the branch, and the code computing the arguments (here the inner call of
+ *   `r18`, a branch of its own) was left between the BRCH and the JOIN in no arm.
+ * Pipeline: std::opt std::nvm (also std::opt::simplify)
+ * Expected output: (nothing)
+ * Actual: PassInternalError of the branch-arm check ("GATE ... belongs to no arm") since that
+ *   check exists. Before it this reduced program happened to run; the unreduced one (seed 108
+ *   at size 4) never returned on the node VM and the parallel scheduler.
+ * Reduced by test/tools/progen from seed 108 at size 4 (generator version 2, all features).
+ */
+module opt_rootless_callee_arm_tail
+
+func f1(a2: (a0: int) => string, a3: (a0: bool) => string, a4: (a0: int, a1: float) => int): int {
+    return 2;
+}
+
+func r18(a19: int, a20: int, a21: bool): int {
+    return if false then f1((p22: int): string => 'yz', (p23: bool): string => '', (p24: int, p25: float): int => a19) else {
+        return 0;
+    };
+}
+
+sync func w210(a211: int, var c212: int, a213: int): int sync {
+    return if false then sync {
+        return r18(r18(0, 0, false), -1, true);
+    } else sync {
+        return 0;
+    };
+}
+
+func main(): int sync {
+    return 0;
+}

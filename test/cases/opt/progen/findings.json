@@ -506,5 +506,17 @@
   ],
   "class": "branch arm",
   "fixed": "execute: the execution order and the arm lookup leave out nodes the exit does not depend on"
+ },
+ {
+  "id": "F40",
+  "file": "findings/opt_rootless_callee_arm_tail.cml",
+  "pipeline": [
+   "std::opt",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [],
+  "class": "branch arm",
+  "fixed": "inline: the result of a body without entry roots waits on the call's predecessors"
  }
 ]
