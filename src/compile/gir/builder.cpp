@@ -1027,6 +1027,9 @@ node_handle_t Builder::resolveNodeByRef(const std::string &name) {
                 },
                 0);
         });
+        if (isPoisonedName(name)) {
+            throw BuildAbortException();
+        }
         auto sourceContext = context_ ? context_->sourceContext() : nullptr;
         auto origin        = (sourceContext && currGraph_)
                                  ? sourceContext->debugMap().graphOrigin(currGraph_->stableId())
@@ -1042,6 +1045,19 @@ node_handle_t Builder::resolveNodeByRef(const std::string &name) {
     }
 
     return node;
+}
+
+bool Builder::isPoisonedName(const std::string &name) const {
+    if (poisonedNames_.empty()) {
+        return false;
+    }
+    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
+        auto it = poisonedNames_.find(scope);
+        if (it != poisonedNames_.end() && it->second.contains(name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 any Builder::visit(const GCT::node_ptr_t &node) {
@@ -1186,6 +1202,7 @@ void Builder::buildFuncBody(
     } catch (...) {
         // The caller entered the scope of `graph`; an error leaves it on the way out.
         bodyStates_[graph.get()] = BodyState::Built;
+        failedBodies_.insert(graph.get());
         leaveScope();
         throw;
     }
@@ -1586,8 +1603,20 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // that the name can be captured and returned like any other value. A name without a
     // single function value (an operator, a set of overloads) stays bound to what it names
     // and can be called where it was bound.
-    node_handle_t node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
-    declaresVariable_  = isVar;
+    const node_scope_ptr_t declScope = nodeScope_;
+    node_handle_t node{};
+    try {
+        node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+    } catch (const BuildAbortException &) {
+        // The initializer is in error, so the name is not declared. Uses of it are
+        // consequences of that error, not errors of their own (see poisonedNames_).
+        declaresVariable_ = isVar;
+        if (!declScope->has(ident, false)) {
+            poisonedNames_[declScope].insert(ident);
+        }
+        throw;
+    }
+    declaresVariable_ = isVar;
     // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
     bool success = insertNode(ident, isVar ? newVariable(node) : node);
@@ -2073,6 +2102,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             LEAVE("DREF");
             return drefNode;
         }
+    }
+    if (isPoisonedName(name)) {
+        throw BuildAbortException();
     }
     diags_->of(SemanticDiag::UnresolvedReference).atOrigin(gct->load()->origin()).commit(name);
     throw BuildAbortException();
@@ -2797,6 +2829,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     continue;
                 }
                 if (!funcType->hasExitType()) {
+                    if (failedBodies_.contains(g.get())) {
+                        // Its body is in error, which was reported there.
+                        throw BuildAbortException();
+                    }
                     diags_->of(SemanticDiag::CallingIncompleteFunction)
                         .atOrigin(gct->load()->origin())
                         .commit(g->name(), funcType->toString());
@@ -4051,7 +4087,48 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     }
     registerGenericTemplates(gct);
     node_handle_t res{};
+    // A statement in error is skipped and the following ones are still checked, so that one
+    // compilation reports every independent error of the block. The builder is put back as
+    // it was before the statement (an error may leave from inside a nested scope), and when
+    // the block is done it fails as a whole: a block with a missing statement has no value
+    // an enclosing expression could use, and a function with a missing statement must not
+    // be analysed further (its dropped effects, its result).
+    struct StatementState {
+        Builder &self;
+        compile_graph_ptr_t graph;
+        node_scope_ptr_t nodeScope;
+        graph_scope_ptr_t graphScope;
+        decorated_scope_ptr_t decoratedScope;
+        template_scope_ptr_t templateScope;
+        type_bindings_t bindings;
+        size_t depth;
+        bool waited, synced, varied, declaresVariable, calleeAllowed;
+        node_handle_t lastSynced;
+        explicit StatementState(Builder &b)
+            : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
+              decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
+              bindings(b.typeBindings_), depth(b.instantiationDepth_), waited(b.waited_),
+              synced(b.synced_), varied(b.varied_), declaresVariable(b.declaresVariable_),
+              calleeAllowed(b.genericCalleeAllowed_), lastSynced(b.lastSyncedNode_) {}
+        void restore() {
+            self.currGraph_            = graph;
+            self.nodeScope_            = nodeScope;
+            self.graphScope_           = graphScope;
+            self.decoratedScope_       = decoratedScope;
+            self.templateScope_        = templateScope;
+            self.typeBindings_         = std::move(bindings);
+            self.instantiationDepth_   = depth;
+            self.waited_               = waited;
+            self.synced_               = synced;
+            self.varied_               = varied;
+            self.declaresVariable_     = declaresVariable;
+            self.genericCalleeAllowed_ = calleeAllowed;
+            self.lastSyncedNode_       = lastSynced;
+        }
+    };
+    bool failed = false;
     for (size_t i = 0; i < gct->size(); i++) {
+        StatementState before(*this);
         try {
             const auto &child = gct->at(i);
             any result        = visit(child);
@@ -4064,8 +4141,13 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
                 res = valueNodeOf(result);
             }
         } catch (const BuildAbortException &e) {
+            before.restore();
+            failed = true;
             continue;
         }
+    }
+    if (failed) {
+        throw BuildAbortException();
     }
     if (!operands) {
         // A sync block that is not part of an enclosing chain: whoever takes its value takes
@@ -4131,6 +4213,9 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
                     ref.toString(),
                     "exported: a module exports graphs, a generic function has one per set of "
                     "types it is called with, and an importing module cannot build them yet");
+            throw BuildAbortException();
+        }
+        if (isPoisonedName(ref.toString())) {
             throw BuildAbortException();
         }
         diags_->of(SemanticDiag::UnresolvedReference)

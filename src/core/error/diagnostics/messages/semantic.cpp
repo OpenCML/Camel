@@ -545,6 +545,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "write runs only if the variable is read afterwards.",
             },
         },
+        {
+            SemanticDiag::ImportedModuleHasErrors,
+            {
+                "ImportedModuleHasErrors",
+                "Cannot import module '{0}': it has errors ({1}).",
+                "The errors are reported for that module. This one follows from them and goes "
+                "away when they are fixed.",
+            },
+        },
     };
 
     return infoMap;

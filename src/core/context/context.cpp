@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <unordered_set>
@@ -212,6 +213,11 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
             modsErr.push_back(mod);
         }
     }
+    // An imported module's errors come before those of the entry module, which may follow
+    // from them (ImportedModuleHasErrors).
+    std::stable_partition(modsErr.begin(), modsErr.end(), [&](const module_ptr_t &mod) {
+        return mod != mainModule_;
+    });
     if (json) {
         if (modsErr.empty()) {
             os << "[]\n" << std::flush;
@@ -246,6 +252,9 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
                 }
             }
             ud->diagnostics()->dump(os, false);
+            if (camel::core::error::diagnosticFormat() == DiagFormat::Rich && mod != modsErr.back()) {
+                os << "\n";
+            }
         }
         if (modsErr.empty()) {
             os << "[camel] Compilation failed but no diagnostics were collected. Try `npm run "
@@ -319,6 +328,13 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             modules_[name] = module;
             if (!module->loaded()) {
                 if (!module->load()) {
+                    // A module that was found and is in error is not a module that was not
+                    // found: its own diagnostics say what is wrong with it.
+                    auto ud = std::dynamic_pointer_cast<UserDefinedModule>(module);
+                    if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+                        throw DiagnosticBuilder::of(SemanticDiag::ImportedModuleHasErrors)
+                            .commit(name, module->path());
+                    }
                     throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
                         .commit(name, "failed to compile or load module from " + module->path());
                 }

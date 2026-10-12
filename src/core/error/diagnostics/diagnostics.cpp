@@ -363,6 +363,41 @@ Diagnostic &Diagnostics::add(Diagnostic &&d) {
     }
     d.persisted = true;
     std::lock_guard<std::mutex> lk(mtx_);
+    // The same error at the same place with the same text is one error. It is found twice
+    // when one piece of source is checked more than once: the body of a generic function is
+    // checked per instance, and what does not depend on the type variables fails in each.
+    if (d.severity == Severity::Error) {
+        auto sameRange = [](const SourceRange &a, const SourceRange &b) {
+            if (a.index() != b.index()) {
+                return false;
+            }
+            if (std::holds_alternative<CharRange>(a)) {
+                const CharRange &x = std::get<CharRange>(a), &y = std::get<CharRange>(b);
+                return x.start.line == y.start.line && x.start.character == y.start.character &&
+                       x.end.line == y.end.line && x.end.character == y.end.character;
+            }
+            if (std::holds_alternative<TokenRange>(a)) {
+                return std::get<TokenRange>(a).start == std::get<TokenRange>(b).start &&
+                       std::get<TokenRange>(a).end == std::get<TokenRange>(b).end;
+            }
+            if (std::holds_alternative<camel::source::span_id_t>(a)) {
+                return std::get<camel::source::span_id_t>(a) ==
+                       std::get<camel::source::span_id_t>(b);
+            }
+            if (std::holds_alternative<camel::source::origin_id_t>(a)) {
+                return std::get<camel::source::origin_id_t>(a) ==
+                       std::get<camel::source::origin_id_t>(b);
+            }
+            return false; // no position: nothing says the two are one
+        };
+        for (Diagnostic &known : storage_) {
+            if (known.severity == Severity::Error && known.type == d.type &&
+                known.specific == d.specific && known.message == d.message &&
+                sameRange(known.range, d.range)) {
+                return known;
+            }
+        }
+    }
     storage_.push_back(std::move(d));
     // Limits apply to the element now at the back; do not read the moved-from `d` (UB).
     checkLimits();

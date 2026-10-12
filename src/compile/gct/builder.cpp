@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <exception>
 #include "builder.h"
 
 #include "camel/core/data/composite/array.h"
@@ -281,9 +282,14 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
     auto stmtNodes     = ast->atAs<AST::RepeatedLoad>(2);
 
-    // Process import declarations
+    // Process import declarations. One that fails is reported and the others are still
+    // processed.
     for (const auto &import : *importNodes) {
-        visitImport(import);
+        try {
+            visitImport(import);
+        } catch (const BuildAbortException &) {
+            continue;
+        }
     }
 
     vector<node_ptr_t> decls;
@@ -384,8 +390,25 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     const auto &path = load->getPath();
     const auto &refs = load->refs();
 
-    // Attempt to import the module (importModule throws ModuleNotFound with detail on failure)
-    const module_ptr_t &mod = context_->importModule(path, module_->name());
+    // Attempt to import the module (importModule throws ModuleNotFound with detail on failure).
+    // The failure is reported at the import, and what the import would have declared is
+    // remembered so that its uses are not reported as well.
+    module_ptr_t mod;
+    try {
+        mod = context_->importModule(path, module_->name());
+    } catch (Diagnostic &d) {
+        if (refs.empty()) {
+            wholeImportFailed_ = true;
+        }
+        for (const Reference &ref : refs) {
+            poisonedTypes_.insert(ref.toString());
+        }
+        if (ast->load()->origin() != camel::source::kInvalidOriginId) {
+            d.range = ast->load()->origin();
+        }
+        diags_->add(std::move(d));
+        throw BuildAbortException();
+    }
     if (!mod) {
         diags_->of(SemanticDiag::ModuleNotFound)
             .at(load->tokenRange())
@@ -765,6 +788,17 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     Type *type;
     ASSERT(typeNode, "TypeDecl must have a type");
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
+    // A declaration in error declares nothing; uses of the name follow from that error.
+    struct PoisonOnFailure {
+        Builder &self;
+        std::string name;
+        int exceptions = std::uncaught_exceptions();
+        ~PoisonOnFailure() {
+            if (std::uncaught_exceptions() > exceptions) {
+                self.poisonedTypes_.insert(name);
+            }
+        }
+    } poisonOnFailure{*this, typeLoad->ref().toString()};
     if (typeLoad->params().empty()) {
         type = visitType(typeNode);
     } else {
@@ -2618,6 +2652,9 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     const auto &importedType = module_->getImportedType(ref);
 
     if (!importedType.has_value()) {
+        if (wholeImportFailed_ || poisonedTypes_.contains(ref.toString())) {
+            throw BuildAbortException();
+        }
         // If the type cannot be resolved, log a diagnostic and throw an exception
         diags_->of(SemanticDiag::UnresolvedTypeReference)
             .at(ast->load()->tokenRange())

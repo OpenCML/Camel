@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <unordered_set>
 #include <iostream>
 #include <regex>
 #include <string>
@@ -63,6 +64,12 @@ class Builder {
     node_ptr_t root_;
     size_t idIndex_ = 0;
     scope_ptr_t<Reference, Type *> typeScope_;
+    // Type names whose declaration (or whose import) failed: a use of one is a consequence of
+    // that error and is not reported as an unresolved type of its own. When an import of a
+    // whole module failed, which names it would have brought is unknown, and no unresolved
+    // type is reported at all.
+    std::unordered_set<std::string> poisonedTypes_;
+    bool wholeImportFailed_ = false;
     std::unordered_map<void *, FunctionType *> funcDecls_;
 
     camel::core::context::context_ptr_t context_;

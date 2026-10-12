@@ -215,7 +215,7 @@ string logLevelArg;
 namespace Diag {
 string format               = "";
 string color                = "auto";
-int maxErrors               = 1;
+int maxErrors               = 20;
 int maxWarnings             = 1000;
 vector<string> warningSpecs = {};
 string explain              = "";

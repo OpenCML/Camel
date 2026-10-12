@@ -82,6 +82,19 @@ class Builder {
     // Inside a `var` declaration: the names it binds are variables.
     bool declaresVariable_ = false;
 
+    // ---- Reporting several errors without their consequences ----
+    // A statement that fails is skipped and the next one is checked (visitExecNode). What the
+    // failed statement would have declared is then missing, and every use of it would be
+    // reported as an unresolved reference: one mistake, many errors. So the names a failed
+    // declaration would have bound are remembered here, by the scope of the declaration, and
+    // a reference to one of them fails without a report of its own: the statement using it
+    // is skipped (and what *it* declares is poisoned in turn).
+    std::map<node_scope_ptr_t, std::unordered_set<std::string>> poisonedNames_;
+    bool isPoisonedName(const std::string &name) const;
+    // Functions whose body is in error. One declared without a return type then never gets
+    // one, and a call of it would be reported as a call of an incomplete function.
+    std::unordered_set<const void *> failedBodies_;
+
     // An argument of a call: its value node and the expression it was written as.
     struct Argument {
         node_handle_t node;

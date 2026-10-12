@@ -87,6 +87,8 @@ enum class SemanticDiag : uint32_t {
     TryCatchNotInLanguage        = 0x000074,
     TaggedOperandMismatch        = 0x000075,
     TaggedMatchCases             = 0x000076,
+    // Reporting several errors (0x80 and up, clear of the blocks above).
+    ImportedModuleHasErrors      = 0x000080,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,
