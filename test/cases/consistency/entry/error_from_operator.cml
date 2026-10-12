@@ -1,0 +1,10 @@
+/**
+ * An error made by an operator (`parse_int`) records no source position: the report is
+ * located at `main`.
+ */
+module error_from_operator
+
+func main(): int! sync {
+    println('before')
+    return parse_int('12abc')
+}

@@ -90,6 +90,8 @@ class Context : public std::enable_shared_from_this<Context> {
         loadedDllHandles_; // .cmo path -> handle; keep DLLs loaded.
     std::optional<int> processExitCode_;
     std::function<void(camel::runtime::GCGraph *, slot_t)> entryResultHandler_;
+    /// See setEntryResultDeclared.
+    bool entryResultDeclared_ = true;
     /** Most recent reason a ".cmo found but failed to load" case occurred, used by ModuleNotFound
      * diagnostics. */
     mutable std::string lastCmoLoadError_;
@@ -187,6 +189,15 @@ class Context : public std::enable_shared_from_this<Context> {
     void setEntryResultHandler(EntryResultHandler handler) {
         entryResultHandler_ = std::move(handler);
     }
+    /**
+     * Whether the entry function declares its return type. Only then is the value it returns
+     * the result of the program: the exit code, and what `-o` writes (design principles 2.10).
+     * A `main` without a declared return type still has a value (that of its body), which is
+     * nobody's result. The front end that knows the declaration says so here; without a word
+     * from it the value counts, as it did before the rule.
+     */
+    void setEntryResultDeclared(bool declared) { entryResultDeclared_ = declared; }
+    bool entryResultDeclared() const { return entryResultDeclared_; }
     std::optional<int> processExitCode() const { return processExitCode_; }
     int processExitCodeOr(int fallback = 0) const { return processExitCode_.value_or(fallback); }
 

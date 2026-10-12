@@ -57,7 +57,7 @@
 
 ### 诊断
 
-编译错误和运行期故障打印到标准输出，警告打印到标准错误。全部诊断见 [diagnostics.md](diagnostics.md)，单条诊断用 `camel --explain <name or code>` 查看。
+编译错误和运行期故障打印到标准输出，警告打印到标准错误；到达 `main` 出口而没有被处理的错误值（`UnhandledError`，见“`main` 带参数或有返回值的程序”）也打印到标准错误。全部诊断见 [diagnostics.md](diagnostics.md)，单条诊断用 `camel --explain <name or code>` 查看。
 
 - `-E`, `--error-format`, `--output-format <text|short|json>`：诊断的书写方式（默认：`text`；`--timeit` 的输出也沿用这个选项）。
   - `text`：消息、源码行及其下划线标出的范围、次要位置（例如实例化泛型函数的那次调用，各带自己的代码片段），然后是 `note:` 与 `help:` 行。
@@ -110,6 +110,8 @@
 - **运行需要每个参数都有值。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`，或默认运行）拒绝仍带参数的入口图，诊断为 `RuntimeDiag::EntryArgumentMissing`（`0x04000010`，阶段 `run`），定位在 `main` 的定义处，并列出没有值的参数。什么都不会运行；绝不假定默认值、零值或随机值。重写遍和翻译遍接受未绑定的参数。
 - **错误的实参**（名字不是参数、同一名字给了两次、文本不是该类型的字面量、文件不存在、张量形状不同、对没有参数的 `main` 使用 `--arg`）是 `RuntimeDiag::EntryArgumentInvalid`（`0x04000011`），定位在 `main`，在任何遍运行之前报告。
 - **`main` 的返回值写到输出**，即 `-o` / `--output <file>`，默认是标准输出，前提是有调度遍运行了程序。确切规则如下：
+  - **只有写明了返回类型的 `main`，它的返回值才算程序的结果**（设计原则 2.10）。没有写返回类型的 `main`（`func main() sync { println('a') }`）：函数体的值（这里是 `println` 返回的 `'a'`）不是结果，不打印、不写出，退出码是 0；此时使用 `-o` 是 `EntryResultNotWritten`。`println(x)` 仍然返回 `x`：`func main(): string sync { println('a') }` 的结果是 `'a'`，由 `println` 打印一次，再作为结果输出一次。
+  - `main` 的返回类型是 `T!`：返回成功值时按 `T` 处理（`int!` 的成功值是退出码）。返回的是**没有被处理的错误值**时，它作为诊断 `RuntimeDiag::UnhandledError`（`0x04000051`，阶段 `run`）打印到**标准错误**，退出码为 1，标准输出上只有程序自己的输出。诊断按 `--error-format` 的格式呈现（`json` 时是标准错误上的一个数组），位置是错误值里记录的产生处：`error(...)` 调用的位置，或被 `attempt` 隔离的故障的位置；由算子产生的错误（如 `parse_int`）不记录位置，这时定位在 `main`，并用一条 `note:` 指出是哪个算子。
   - `main` 不返回值（声明为 `: void`）：什么都不写。此时使用 `-o` 是 `RuntimeDiag::EntryResultNotWritten`（`0x04000012`），定位在 `main`，在程序运行之后报告，退出码为 1。
   - `main` 返回退出码（`int`、`bool`、`byte`：进程退出码由这些类型导出）：该值就是退出码，与任何 `main` 一样，并且 **不** 打印到标准输出，所以 `main` 返回自身状态的程序行为不变。只有 `-o` 指定了文件时才把它（作为文本）写出。
   - `main` 返回其他值（`float`、`string`、张量、元组、结构体……）：该值是程序的结果。不带 `-o` 时，它按 `println` 的方式打印到标准输出，在程序自身的输出之后单独占一行（元组或结构体用其文本形式，例如 `(tensor([...]), tensor([...]))`）。带 `-o path` 时，它按 `--arg` 读取的布局写出：标量写成存放字面量的文本文件，张量写成 `.npy` 文件（`path` 是别的扩展名或没有扩展名时追加 `.npy`），结构体或元组写成目录 `path`，每个叶子一个文件（张量叶子是 `0.npy`、`1.w.npy`，标量叶子是不带扩展名的文本文件 `0`、`1`）。

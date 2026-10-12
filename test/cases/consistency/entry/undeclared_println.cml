@@ -1,0 +1,9 @@
+/**
+ * A `main` that declares no return type has no result (design principles 2.10): the value its
+ * body ends with, here the 'a' that `println` hands on, is not printed a second time.
+ */
+module undeclared_println
+
+func main() sync {
+    println('a')
+}

@@ -245,6 +245,8 @@ bool isIsolatableFault(RuntimeDiag diag) {
     case RuntimeDiag::RuntimeError:
     case RuntimeDiag::DivisionByZero:
     case RuntimeDiag::IndexOutOfRange:
+    case RuntimeDiag::SliceOutOfRange:
+    case RuntimeDiag::ConversionOutOfRange:
     case RuntimeDiag::KeyNotFound:
     case RuntimeDiag::FieldNotFound:
     case RuntimeDiag::MatchNotExhaustive:

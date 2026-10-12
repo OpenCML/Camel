@@ -1,0 +1,9 @@
+/**
+ * An error value that is handled before `main` returns is not reported.
+ */
+module error_handled
+
+func main(): int sync {
+    println(parse_int('12abc') !! -1)
+    return 0
+}

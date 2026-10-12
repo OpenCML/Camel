@@ -54,6 +54,7 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 
 namespace mm = camel::core::mm;
@@ -115,6 +116,40 @@ void writePassDump(PassDumpState &state, const string &passName, camel::runtime:
 
 void passDumpHandler(const char *passName, size_t, camel::runtime::GCGraph *graph, void *userData) {
     writePassDump(*static_cast<PassDumpState *>(userData), passName ? passName : "", graph);
+}
+
+} // namespace
+
+namespace {
+
+/// Whether the function `main` declared at the top level of the entry module writes a return
+/// type (`func main(): int`). Only then is what it returns the result of the program (design
+/// principles 2.10). nullopt when the tree holds no such declaration (`main` bound some other
+/// way): the value then counts as it always did.
+std::optional<bool> entryDeclaresReturnType(const AST::node_ptr_t &node, int depth = 0) {
+    if (!node || depth > 3) {
+        return std::nullopt;
+    }
+    if (auto decl = std::dynamic_pointer_cast<AST::FuncDeclLoad>(node->load());
+        decl && decl->ref().plain() && decl->ref().ident() == "main") {
+        for (const auto &child : *node) {
+            if (!child || !std::dynamic_pointer_cast<AST::FuncDataLoad>(child->load())) {
+                continue;
+            }
+            // FuncData(FuncType(with params, params, optional return type), body)
+            if (child->size() == 0 || child->at(0)->size() < 3) {
+                return std::nullopt;
+            }
+            return !child->at(0)->at(2)->empty();
+        }
+        return std::nullopt;
+    }
+    for (const auto &child : *node) {
+        if (auto found = entryDeclaresReturnType(child, depth + 1)) {
+            return found;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -413,10 +448,14 @@ int main(int argc, char *argv[]) {
                     }
                     // What `main` returns goes to the output: the file given with -o, else
                     // standard output (where an exit code is not printed).
+                    // Only a `main` that declares its return type has a result.
+                    ctx->setEntryResultDeclared(
+                        entryDeclaresReturnType(parser->ast()).value_or(true));
                     camel::execute::writeEntryResultTo(
                         ctx,
                         Run::outputFile.empty() || Run::outputFile == "stdout" ? std::string()
-                                                                      : Run::outputFile);
+                                                                      : Run::outputFile,
+                        useJsonFormat);
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {
                         passDump.dir = Run::dumpAfterEachPassDir;

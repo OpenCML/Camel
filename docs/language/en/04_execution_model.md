@@ -25,9 +25,11 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 - The entry is the function named `main`. Like any other function it is a subgraph, and it can take parameters and return a value:
 
   - The parameters are the inputs of the program, given on the command line with `--arg name=value`; a missing one is the located error `RuntimeDiag::EntryArgumentMissing`, and is not replaced by zero or a default value.
+  - **Only a `main` that declares its return type has a result** (the exit code, and what `-o` writes).
   - When it returns `int` (or `bool`), the return value is the exit code of the process.
   - When it returns a value of another type (`float`, `string`, a tensor, a tuple, ...), this value is the result of the program: it is printed to standard output, or written to a file by `-o <file>`.
-  - When it returns `void`, the exit code is 0. A return type that is not written is inferred from the body: a `main` whose body ends in `println(...)` returns the printed value, which is then written once more as the result of the program; an entry should declare its return type.
+  - When it returns `void`, the exit code is 0. A `main` that does not write a return type has no result: its body still has a value ([7.4.1](07_statements.md#741-declaration); `'a'` when it ends in `println('a')`, since `println(x)` returns `x`), but that value is neither printed nor written, and it is not the exit code, which is 0.
+  - When the return type is `T!`: a value that has not failed is treated as its `T`; an **error value nobody handled** is printed on **standard error** as the diagnostic `RuntimeDiag::UnhandledError`, at the place recorded in the error value, and the exit code is 1 (see [4.6](#46-faults-exit-and-resource-limits)).
 
 ```cml
 // camel greet.cml --arg name=Camel --arg times=2

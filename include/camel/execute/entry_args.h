@@ -128,8 +128,17 @@ void registerEntryResultSaver(core::type::TypeCode code, EntryResultSaver saver)
  *
  * A value that cannot be written to the file is RuntimeDiag::EntryResultNotWritten, located at
  * `main`.
+ *
+ * All of this holds for a `main` that declares its return type (Context::entryResultDeclared;
+ * design principles 2.10). The value of a `main` that declares none is not a result: nothing
+ * is printed, and with a file that is EntryResultNotWritten.
+ *
+ * Under a declared `T!`: a value that has not failed is treated as its `T`. A failed one is an
+ * error nobody handled: RuntimeDiag::UnhandledError on standard error (as JSON when
+ * `jsonDiagnostics`), located where the error value was made, and a non-zero exit code.
  */
-void writeEntryResultTo(const core::context::context_ptr_t &context, std::string path);
+void writeEntryResultTo(
+    const core::context::context_ptr_t &context, std::string path, bool jsonDiagnostics = false);
 
 /// The names of the parameters of the entry graph that have no value, `with` ones first.
 std::vector<std::string> unboundEntryParameters(const runtime::GCGraph *root);

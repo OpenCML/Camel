@@ -28,6 +28,7 @@
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
@@ -45,11 +46,24 @@ namespace camel::core::context {
 
 namespace {
 
-int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
-    if (!graph || !graph->funcType() || !graph->funcType()->hasExitType())
+/// The exit code the value returned by the entry graph stands for. Only a declared return
+/// type makes the value the program's result (design principles 2.10). Under `T!` a value
+/// that has not failed counts as its `T`; a failed one is an error nobody handled, and the
+/// program ends with a non-zero code (who reports it: camel/execute/entry_args.h).
+int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool declared) {
+    if (!declared || !graph || !graph->funcType() || !graph->funcType()->hasExitType())
         return 0;
 
-    switch (graph->funcType()->exitType()->code()) {
+    Type *resultType = graph->funcType()->exitType();
+    if (TupleType *fallible = asFallible(resultType)) {
+        if (camel::core::rtdata::isErrorValue(result)) {
+            return 1;
+        }
+        result     = camel::core::rtdata::falliblePayload(result);
+        resultType = fallible->payloadType();
+    }
+
+    switch (resultType->code()) {
     case TypeCode::Int32:
         return static_cast<int>(static_cast<int32_t>(result));
     case TypeCode::Int64:
@@ -267,7 +281,7 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
 }
 
 void Context::captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
-    processExitCode_ = deriveProcessExitCode(graph, result);
+    processExitCode_ = deriveProcessExitCode(graph, result, entryResultDeclared_);
     if (entryResultHandler_) {
         entryResultHandler_(graph, result);
     }
