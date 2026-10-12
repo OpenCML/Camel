@@ -404,11 +404,25 @@ bool explainDiagnostic(const std::string &target) {
             cout << "\n";
         }
         found = true;
+        // The templates of every type but RuntimeDiag are std::format strings, in which a
+        // literal brace is written twice.
+        auto literal = [&](std::string text) {
+            if (entry.type == DiagType::RuntimeDiag) {
+                return text;
+            }
+            for (const char *doubled : {"{{", "}}"}) {
+                for (size_t at = text.find(doubled); at != std::string::npos;
+                     at        = text.find(doubled, at + 1)) {
+                    text.erase(at, 1);
+                }
+            }
+            return text;
+        };
         cout << to_string(entry.type) << "::" << entry.name << "  (0x"
              << Diagnostic::hex8(entry.code) << ", " << to_string(entry.severity) << ")\n\n"
-             << "  message: " << entry.message << "\n";
+             << "  message: " << literal(entry.message) << "\n";
         if (!entry.suggestion.empty()) {
-            cout << "  help:    " << entry.suggestion << "\n";
+            cout << "  help:    " << literal(entry.suggestion) << "\n";
         }
         cout << "\n  {0}, {1}, ... stand for the values a concrete report fills in. A triggering "
                 "example is in docs/diagnostics.md.\n";
