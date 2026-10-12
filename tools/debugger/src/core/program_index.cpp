@@ -70,6 +70,10 @@ const char *kindName(GCNodeKind kind) {
 
 namespace {
 
+/// Positions of ordinary ports in ProgramIndex::inheritedPortNames_ start here; `with` ports
+/// are below.
+constexpr size_t kNormPortBase = size_t{1} << 20;
+
 bool executesKind(GCNodeKind kind) {
     switch (kind) {
     case GCNodeKind::Data:
@@ -283,6 +287,20 @@ void ProgramIndex::collect(
         if (g->hasNodePayload()) {
             for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
                 const GCNode *n = *it;
+                if (n != nullptr && n->kind == GCNodeKind::Brch && graphs != nullptr) {
+                    // An arm that is a call of a subgraph: that graph is the arm.
+                    for (const GCBranchArm &arm : g->branchArmsOf(it.ref())) {
+                        for (gc_node_ref_t ref : {arm.head, arm.tail}) {
+                            const GCNode *armNode =
+                                ref != kInvalidNodeRef ? g->node(ref) : nullptr;
+                            if (armNode != nullptr && armNode->kind == GCNodeKind::Func) {
+                                if (GCGraph *callee = g->directCalleeGraphOf(ref)) {
+                                    armGraphs_.insert(callee);
+                                }
+                            }
+                        }
+                    }
+                }
                 const origin_t o = g->nodeOrigin(it.ref());
                 if (n == nullptr || o == 0) {
                     continue;
@@ -333,6 +351,8 @@ void ProgramIndex::compiled(GCGraph *root) {
 void ProgramIndex::running(GCGraph *root) {
     runningLines_.clear();
     runningGraphs_.clear();
+    armGraphs_.clear();
+    inheritedPortNames_.clear();
     graphs_.clear(); // graphs of an earlier run may be gone
     collect(root, runningLines_, &runningGraphs_);
     runningKnown_ = true;
@@ -441,6 +461,20 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
             portNames[closure[i]] = std::string(captured[i]);
         }
     }
+    // A graph the compiler made itself (the arm of a branch) takes the values it uses from the
+    // function around it as unnamed ports: they are named after what its caller passes there.
+    if (auto inherited = inheritedPortNames_.find(g); inherited != inheritedPortNames_.end()) {
+        const auto with = g->withPorts();
+        const auto norm = g->normPorts();
+        for (const auto &[position, name] : inherited->second) {
+            const bool isNorm  = position >= kNormPortBase;
+            const size_t index = isNorm ? position - kNormPortBase : position;
+            const auto ports   = isNorm ? norm : with;
+            if (index < ports.size()) {
+                portNames.emplace(ports[index], name);
+            }
+        }
+    }
 
     std::unordered_map<int, size_t> functionVotes;
     if (g->hasNodePayload()) {
@@ -465,6 +499,31 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
             case GCNodeKind::Func: {
                 GCGraph *callee = g->directCalleeGraphOf(node.ref);
                 node.label      = callee ? callee->name() : std::string("?");
+                if (callee != nullptr && callee->name().rfind("__g_", 0) == 0) {
+                    // What is passed to a compiler-made graph names its ports (see above).
+                    const auto nameOf = [&](gc_node_ref_t input) -> std::string {
+                        if (auto port = portNames.find(input); port != portNames.end()) {
+                            return port->second;
+                        }
+                        const auto bound = bindingsOfNode(g->nodeOrigin(input));
+                        return bound.empty() ? std::string() : bound.front()->name;
+                    };
+                    auto &names = inheritedPortNames_[callee];
+                    size_t i    = 0;
+                    for (gc_node_ref_t input : g->withInputsOf(node.ref)) {
+                        if (std::string name = nameOf(input); !name.empty()) {
+                            names.emplace(i, std::move(name));
+                        }
+                        ++i;
+                    }
+                    i = 0;
+                    for (gc_node_ref_t input : g->normInputsOf(node.ref)) {
+                        if (std::string name = nameOf(input); !name.empty()) {
+                            names.emplace(kNormPortBase + i, std::move(name));
+                        }
+                        ++i;
+                    }
+                }
             } break;
             case GCNodeKind::Accs: {
                 const auto *body = g->nodeBodyAs<GCAccsBody>(node.ref);
@@ -532,6 +591,30 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                 info->function = function;
             }
         }
+    }
+
+    // What the user calls the graph. A function is called by its name. A graph the compiler
+    // named itself (`__g_7__`) is a lambda or the arm of a branch: it is shown as that, in the
+    // named function it was written in, with the line it starts on.
+    info->display = info->name;
+    if (info->name.rfind("__g_", 0) == 0) {
+        std::string owner;
+        for (GCGraph *outer = g->outerGraph(); outer != nullptr; outer = outer->outerGraph()) {
+            if (outer->name().rfind("__", 0) != 0) {
+                owner = outer->name();
+                break;
+            }
+        }
+        int line = 0;
+        for (const NodeInfo &n : info->nodes) {
+            if (n.loc.valid() && (line == 0 || n.loc.line < line)) {
+                line = n.loc.line;
+            }
+        }
+        info->arm     = armGraphs_.count(g) != 0;
+        info->display = (owner.empty() ? std::string() : owner + " ") + "[" +
+                        (info->arm ? "arm" : "lambda") +
+                        (line > 0 ? " at line " + std::to_string(line) : std::string()) + "]";
     }
     return *graphs_.emplace(g, std::move(info)).first->second;
 }

@@ -98,6 +98,10 @@ struct NodeInfo {
 struct GraphInfo {
     camel::runtime::GCGraph *graph = nullptr;
     std::string name;
+    /// The name shown to the user: `name`, or for a graph the compiler named itself what it
+    /// is, e.g. `fact [arm at line 4]`, `main [lambda at line 14]`.
+    std::string display;
+    bool arm = false; // the graph is an arm of a branch
     std::string stableId;
     int function = -1; // the source function the graph was built from
     std::vector<NodeInfo> nodes; // in the order of the node blob
@@ -202,6 +206,10 @@ class ProgramIndex {
     std::map<LineKey, LineNodes> initialLines_;
     std::map<LineKey, LineNodes> runningLines_;
     std::vector<camel::runtime::GCGraph *> runningGraphs_;
+    std::unordered_set<camel::runtime::GCGraph *> armGraphs_; // of the running program
+    /// For a compiler-made graph: the names of what its callers pass, by port position.
+    std::unordered_map<camel::runtime::GCGraph *, std::unordered_map<size_t, std::string>>
+        inheritedPortNames_;
     bool compiledKnown_ = false;
     bool runningKnown_  = false;
 };

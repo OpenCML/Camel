@@ -50,8 +50,10 @@ async function req(command, args) {
     return r
 }
 let frameId = 0
+let ended = null // one wait for the end of the session, shared by every step
 async function waitStop() {
-    const done = dap.waitEvent('terminated').then(() => 'end')
+    ended = ended || dap.waitEvent('terminated', 3600000).then(() => 'end')
+    const done = ended
     const stop = dap.waitEvent('stopped').then((e) => e)
     const first = await Promise.race([done, stop])
     drain()

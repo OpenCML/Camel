@@ -347,15 +347,44 @@ DebugCore::ShadowFrame &DebugCore::pushFrame(GCGraph *graph, Frame *frame) {
     return stack_.back();
 }
 
+DebugCore::ShadowFrame &DebugCore::pushCallee(GCGraph *graph, Frame *frame) {
+    const bool called = !stack_.empty();
+    const int file    = called ? stack_.back().lastFile : -1;
+    const int line    = called ? stack_.back().lastLine : 0;
+    ShadowFrame &f    = pushFrame(graph, frame);
+    if (called && f.info->arm) {
+        // The arm of a branch is code of the function that branches: its frame goes on with
+        // the line that function is on, so a line the branch and its arm share is entered
+        // once (2.1), not once in each.
+        f.lastFile = file;
+        f.lastLine = line;
+    }
+    return f;
+}
+
+DebugCore::ShadowFrame &DebugCore::replaceTop(GCGraph *graph, Frame *frame) {
+    const ShadowFrame old = std::move(stack_.back());
+    stack_.pop_back();
+    ShadowFrame &f = pushFrame(graph, frame);
+    f.tailReplaced = old.tailReplaced + 1;
+    if (f.info->arm) {
+        // As in pushCallee; and a line step that started in the function goes on in its arm.
+        f.lastFile = old.lastFile;
+        f.lastLine = old.lastLine;
+        if (step_.frame == old.id) {
+            step_.frame = f.id;
+        }
+    }
+    return f;
+}
+
 void DebugCore::beforeNode(GCGraph *graph, Frame *frame, gc_node_ref_t node) {
     if (pending_ == Pending::Enter || stack_.empty()) {
-        pushFrame(graph, frame);
+        pushCallee(graph, frame);
     } else if (pending_ == Pending::Tail || stack_.back().frame != frame ||
                stack_.back().graph != graph) {
         // A tail call: the callee's frame takes the caller's place (5.2).
-        const uint32_t replaced = stack_.back().tailReplaced + 1;
-        stack_.pop_back();
-        pushFrame(graph, frame).tailReplaced = replaced;
+        replaceTop(graph, frame);
     }
     pending_       = Pending::None;
     ShadowFrame &f = stack_.back();
@@ -383,13 +412,13 @@ void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
         return;
     }
     if (pending_ == Pending::Enter || stack_.empty()) {
-        pushFrame(graph, site.frame);
+        pushCallee(graph, site.frame);
     } else {
         // What the instruction executed last in this activation did to the call stack.
         switch (stack_.back().lastEffect) {
         case InstructionEffect::Call:
             stack_.back().lastEffect = InstructionEffect::None;
-            pushFrame(graph, site.frame);
+            pushCallee(graph, site.frame);
             break;
         case InstructionEffect::Return:
             stack_.pop_back();
@@ -398,11 +427,9 @@ void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
             }
             stack_.back().lastEffect = InstructionEffect::None;
             break;
-        case InstructionEffect::TailCall: {
-            const uint32_t replaced = stack_.back().tailReplaced + 1;
-            stack_.pop_back();
-            pushFrame(graph, site.frame).tailReplaced = replaced;
-        } break;
+        case InstructionEffect::TailCall:
+            replaceTop(graph, site.frame);
+            break;
         default:
             break;
         }
@@ -595,7 +622,10 @@ void DebugCore::faultRaised(const camel::core::error::RuntimeFault &fault, bool 
 
 json DebugCore::frameJson(const ShadowFrame &f, bool top) {
     json j{{"id", f.id}, {"graph", f.info->name}, {"graphId", f.info->stableId}};
-    std::string name = f.info->name;
+    std::string name = f.info->display;
+    if (f.info->arm) {
+        j["arm"] = true;
+    }
     if (f.tailReplaced > 0) {
         // DESIGN-QUESTION(tail-call-stack): the callers a tail call replaced are gone; say so
         // instead of inventing them.
@@ -610,7 +640,7 @@ json DebugCore::frameJson(const ShadowFrame &f, bool top) {
             std::lock_guard<std::mutex> lock(indexMutex_);
             function = index_.functionOf(f.loc);
             path     = index_.filePath(f.loc.file);
-            if (function != f.info->function && function >= 0 && f.info->function >= 0) {
+            if (function != f.info->function && function >= 0) {
                 const std::string &from = index_.function(function)->name;
                 name += " [inlined code of " + from + "]";
                 j["inlinedFrom"] = from;

@@ -170,6 +170,10 @@ class DebugCore final : public camel::execute::ExecutionObserver {
 
     // program thread
     ShadowFrame &pushFrame(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
+    /// The frame of a call, above the caller's.
+    ShadowFrame &pushCallee(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
+    /// The frame of a tail call, in the place of the top frame.
+    ShadowFrame &replaceTop(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
     void firstNodeOfRun(camel::runtime::GCGraph *root);
     void arrive(ShadowFrame &frame, const Arrival &arrival);
     bool stepReached(const ShadowFrame &frame, const Arrival &arrival) const;

@@ -178,6 +178,9 @@ bool compileInto(const std::string &targetFile) {
             // to standard error before anything runs.
             st.ctx->dumpModuleWarnings(std::cerr, false);
         }
+    } catch (DiagnosticsLimitExceededBaseException &) {
+        // The compilation stopped at its error limit: the diagnostics are in the modules.
+        st.ctx->dumpAllModuleDiagnostics(std::cout, false);
     } catch (::Diagnostic &d) {
         std::cout << "Diagnostic error: " << d.toText() << std::endl;
     } catch (std::exception &e) {
@@ -338,6 +341,10 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     } catch (RestartRequestedException &) {
         outcome = "terminated";
         return RunOutcome::RestartRequested;
+    } catch (DiagnosticsLimitExceededBaseException &) {
+        // The sink stops at its first error (a fault that ends the program is one): the
+        // diagnostic is recorded there and shown as the command line shows it.
+        return failed();
     } catch (::Diagnostic &d) {
         if (!d.persisted && st.ctx) {
             st.ctx->runtimeDiagSink()->add(Diagnostic(d));

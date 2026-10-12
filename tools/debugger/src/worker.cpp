@@ -40,6 +40,7 @@
 #include "camel/utils/log.h"
 #include "command/commands.h"
 #include "command/dispatcher.h"
+#include "camel/core/error/diagnostics/render.h"
 #include "compile.h"
 #include "core/debug_core.h"
 #include "gir_json.h"
@@ -141,6 +142,13 @@ static void applyLaunchOptions(const nlohmann::json &j) {
     strings("passes", st.runPasses);
     strings("args", st.runArgs);
     st.quiet = j.value("quiet", false);
+    if (st.quiet) {
+        // The output goes to an editor's console: diagnostics as the command line shows them
+        // (with the source excerpt), without terminal colours.
+        camel::core::error::setDiagnosticRenderConfig(
+            camel::core::error::DiagFormat::Rich,
+            camel::core::error::ColorMode::Never);
+    }
     core::DebugCore::instance().command(
         "configure",
         nlohmann::json{{"stopOnEntry", j.value("stopOnEntry", false)}});
