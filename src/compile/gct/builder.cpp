@@ -256,6 +256,16 @@ Builder::extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &danglin
     return make_pair(refData, dang);
 }
 
+namespace {
+
+/// Whether `type` is what the built-in names `Map` and `Set` resolve to.
+bool isCollectionPrototype(Type *type) {
+    const CollectionType *coll = asCollectionTypeOrPrototype(type);
+    return coll != nullptr && !coll->complete();
+}
+
+} // namespace
+
 void Builder::initInnerTypes() {
     typeScope_->clear();
     typeScope_->insert(Reference("i32"), Type::Int32());
@@ -834,6 +844,12 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             typeScope_->insert(paramRef, TypeVarType::create(param, false));
         }
         type = TypeFunctionType::create(typeName, typeLoad->params(), visitType(typeNode));
+    }
+    // A program's own `Map` or `Set` takes the place of the built-in collection type of that
+    // name: programs written before those existed keep their meaning.
+    if (const auto builtin = typeScope_->get(typeLoad->ref(), false);
+        builtin.has_value() && isCollectionPrototype(builtin.value())) {
+        typeScope_->erase(typeLoad->ref(), false);
     }
     typeScope_->insert(typeLoad->ref(), type);
     node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref(), false);
@@ -2833,6 +2849,13 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     const auto &type = typeScope_->get(ref);
 
     if (type) {
+        // An imported type named `Map` or `Set` comes before the built-in of that name.
+        if (isCollectionPrototype(type.value())) {
+            if (const auto imported = module_->getImportedType(ref); imported.has_value()) {
+                LEAVE("RefType");
+                return imported.value();
+            }
+        }
         // If the type is found in the current scope, return it
         LEAVE("RefType");
         return type.value();
