@@ -2399,7 +2399,7 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
     Type *payload       = visitType(ast->atAs<AST::TypeLoad>(0));
     const bool fallible = ast->loadAs<AST::NullableTypeLoad>()->fallible();
     // The same mark twice (`T??`, `T!!`) adds nothing a program could tell apart; `T?!` and
-    // `T!?` are allowed (DESIGN-QUESTION(nullable-error) Q2).
+    // `T!?` are allowed (design principles 2.10).
     if (TupleType *inner = asTagged(payload); inner && inner->isFallible() == fallible) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
             .at(ast->load()->tokenRange())

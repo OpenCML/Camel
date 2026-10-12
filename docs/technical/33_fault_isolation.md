@@ -10,7 +10,7 @@ Choices the design principles do not make are collected in section 9 as question
 language author. Each is implemented the way section 9 recommends and marked in the code and
 in the tests with `DESIGN-QUESTION(<label>)`, so that a ruling can be applied in one place.
 
-The name `attempt` is provisional. In the C++ sources it is written in exactly one place,
+The name `attempt` is settled (design principles 2.10). In the C++ sources it is written in exactly one place,
 `camel::execute::kFaultIsolationName` (`include/camel/execute/fault_isolation.h`); everything
 else refers to the operator by its URI `:mark/isolate`, which does not contain the name.
 Outside C++ the name is in the signature entry (`stdlib/signatures/globals.cml`), the
@@ -436,8 +436,7 @@ the machine; times are minima of several runs and still noisy).
 
 Each is implemented as recommended.
 
-- **`attempt-name`.** The name. `attempt` is used; one constant to change, plus the
-  signature entry and the tests.
+- **`attempt-name`.** Ruled on (design principles 2.10): the name is `attempt`.
 - **`attempt-fallible-target`.** `attempt(f)` with `f: () => U!`.
   ```camel
   func checked(x: int): int! { ... throw error('Negative', ...) ... return 100 / x }

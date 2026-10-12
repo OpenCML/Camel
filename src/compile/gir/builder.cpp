@@ -1448,8 +1448,8 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         }
     }
     // `T?` with `T = int?` would be `int??`: the same mark twice is rejected where a type is
-    // written, and so it is where substitution writes it (design principles 2.9;
-    // DESIGN-QUESTION(nullable-error) Q2).
+    // written, and so it is where substitution writes it (design principles 2.10: `int?!`
+    // is allowed, `int??` and `int!!` are not).
     if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
             .atOrigin(call->load()->origin())
@@ -4165,7 +4165,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
                         : "the function around it returns '" + declared->toString() + "'");
             throw BuildAbortException();
         }
-        // DESIGN-QUESTION(nullable-error) Q3: `throw` takes an Error (made by `error(kind,
+        // Design principles 2.10: `throw` takes an error value (made by `error(kind,
         // message)` or bound by `case error e`), nothing else.
         if (!valueType->equals(errorType())) {
             diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
