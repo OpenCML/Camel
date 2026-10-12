@@ -447,9 +447,14 @@ class Builder {
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
+    /// With `faultArm`, one more arm follows them, taken when no case value equals the
+    /// scrutinee: it stops the program (RuntimeDiag::MatchNotExhaustive).
     node_handle_t buildBranch(
         const GCT::node_ptr_t &gct, node_handle_t condNode,
-        const std::vector<compile_graph_ptr_t> *arms = nullptr);
+        const std::vector<compile_graph_ptr_t> *arms = nullptr, bool faultArm = false);
+    /// Whether the `match` `gct` can meet a value none of its cases matches (it has no
+    /// `case _` and does not list both values of a bool); reports MatchWithoutDefault then.
+    bool matchNeedsFaultArm(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
     /// The subgraph of one branch arm. Its body is the block `exec`, or what `body` builds
     /// (called inside the arm's scope) when given; `exec` then only locates the arm.
     compile_graph_ptr_t buildArmGraph(

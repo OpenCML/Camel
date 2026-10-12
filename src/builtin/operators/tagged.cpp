@@ -32,8 +32,11 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 
+#include "camel/core/error/runtime.h"
+
 #include <charconv>
 #include <optional>
+#include <sstream>
 #include <string>
 
 namespace mm = camel::core::mm;
@@ -63,6 +66,24 @@ slot_t __error_info__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __throw__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return makeFailed(norm.slot(0));
+}
+
+slot_t __match_fail__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The value no case matched, as println would write it; a string in quotes.
+    std::ostringstream os;
+    Type *type = norm.size() > 0 ? norm.type(0) : nullptr;
+    if (type == nullptr) {
+        os << "<value>";
+    } else if (type->code() == TypeCode::String) {
+        os << '\'';
+        printSlot(os, norm.slot(0), type);
+        os << '\'';
+    } else {
+        printSlot(os, norm.slot(0), type);
+    }
+    camel::core::error::throwRuntimeFault(
+        camel::core::error::RuntimeDiag::MatchNotExhaustive,
+        os.str());
 }
 
 slot_t __error_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -178,6 +199,22 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
                   {},
                   {{errorType(), false}},
                   TupleType::fallible(Type::Void()))}}),
+        // The last arm of a `match` without `case _` (GIR builder, buildBranch). It takes the
+        // scrutinee, whatever its type, and does not return; the builder gives the call the
+        // type of the other arms.
+        OperatorGroup::create(
+            "__match_fail__",
+            {{":op/match_fail",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(value: T) => void",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> optional<Type *> {
+                      if (norm.size() != 1) {
+                          return nullopt;
+                      }
+                      return Type::Void();
+                  })}}),
         // ======= Library =======
         // error(kind, message): the compiler appends the position of the call as a third
         // argument (GIR builder, visitLinkNode).

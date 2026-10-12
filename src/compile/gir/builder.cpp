@@ -3681,15 +3681,53 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
         }
-        node = buildBranch(gct, condNode);
+        node = buildBranch(gct, condNode, nullptr, matchNeedsFaultArm(gct, condNode));
     }
     LEAVE("BRCH");
     return node;
 }
 
+bool Builder::matchNeedsFaultArm(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
+    using CaseType = GCT::CaseLoad::CaseType;
+    bool hasValueCase = false, hasTrue = false, hasFalse = false;
+    for (size_t i = 1; i < gct->size(); ++i) {
+        const auto &caseNode = gct->at(i);
+        const auto caseType  = caseNode->loadAs<GCT::CaseLoad>()->caseType();
+        if (caseType == CaseType::Else) {
+            return false;
+        }
+        if (caseType != CaseType::Value) {
+            continue;
+        }
+        hasValueCase = true;
+        if (caseNode->at(0)->type() == GCT::LoadType::DATA) {
+            const auto literal = std::dynamic_pointer_cast<BoolData>(
+                caseNode->at(0)->loadAs<GCT::DataLoad>()->data());
+            if (literal) {
+                (literal->data() ? hasTrue : hasFalse) = true;
+            }
+        }
+    }
+    if (!hasValueCase) {
+        return false; // an `if`
+    }
+    Type *type = valueTypeOf(nodeTypeOf(scrutinee));
+    if (type == Type::Bool() && hasTrue && hasFalse) {
+        return false; // every value of the type has a case
+    }
+    // DESIGN-QUESTION(match-default): must a `match` have `case _`? Not decided. Until it
+    // is, a `match` without one compiles with this warning and gets an arm that faults
+    // (buildBranch). Should the answer be "yes", make the warning an error here; the arm then
+    // goes away with it.
+    diags_->of(SemanticDiag::MatchWithoutDefault)
+        .atOrigin(gct->load()->origin())
+        .commit(type->toString());
+    return true;
+}
+
 node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode,
-    const std::vector<compile_graph_ptr_t> *arms) {
+    const std::vector<compile_graph_ptr_t> *arms, bool faultArm) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, {}, nullptr);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
@@ -3714,44 +3752,8 @@ node_handle_t Builder::buildBranch(
     std::vector<CapturedUse> captured;
     std::vector<DraftGraphBuilder *> armGraphs;
 
-    const size_t armEnd = arms != nullptr ? arms->size() + 1 : gct->size();
-    for (size_t i = 1; i < armEnd; i++) {
-        graph_ptr_t subGraph;
-        if (arms != nullptr) {
-            // Arms the caller built (the tagged forms): a boolean condition and two arms.
-            subGraph = (*arms)[i - 1];
-        } else {
-            const auto &caseNode         = gct->atAs<GCT::CaseLoad>(i);
-            const auto &caseLoad         = caseNode->loadAs<GCT::CaseLoad>();
-            GCT::node_ptr_t caseExecNode = nullptr;
-
-            switch (caseLoad->caseType()) {
-            case GCT::CaseLoad::CaseType::True:
-                ASSERT(caseNode->size() == 1, "True case should have only one child.");
-                caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
-                break;
-            case GCT::CaseLoad::CaseType::Else:
-                ASSERT(i == gct->size() - 1, "Else case should be the last case.");
-                ASSERT(caseNode->size() == 1, "Else case should have only one child.");
-                caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
-                break;
-            case GCT::CaseLoad::CaseType::Value: {
-                ASSERT(caseNode->size() == 2, "Value case should have two children.");
-                any res = visit(caseNode->at(0));
-                ASSERT(
-                    res.type() == typeid(node_handle_t),
-                    "Unexpected result type from visiting the case node.");
-                node_handle_t valueNode = any_cast<node_handle_t>(res);
-                linkNodes(LinkType::With, valueNode, brchNode);
-                caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
-                break;
-            }
-            default:
-                ASSERT(false, "Unknown case type in BRCH node.");
-            }
-
-            subGraph = buildArmGraph(caseExecNode);
-        }
+    // Makes `subGraph` the next arm of the branch.
+    const auto addArm = [&](const graph_ptr_t &subGraph) {
         armGraphs.push_back(subGraph.get());
         for (const CapturedUse &use : capturedUsesOf(subGraph)) {
             auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
@@ -3810,6 +3812,63 @@ node_handle_t Builder::buildBranch(
 
         linkNodes(LinkType::Ctrl, brchNode, funcNode);
         linkNodes(LinkType::With, funcNode, joinNode);
+    };
+
+    const size_t armEnd = arms != nullptr ? arms->size() + 1 : gct->size();
+    for (size_t i = 1; i < armEnd; i++) {
+        graph_ptr_t subGraph;
+        if (arms != nullptr) {
+            // Arms the caller built (the tagged forms): a boolean condition and two arms.
+            subGraph = (*arms)[i - 1];
+        } else {
+            const auto &caseNode         = gct->atAs<GCT::CaseLoad>(i);
+            const auto &caseLoad         = caseNode->loadAs<GCT::CaseLoad>();
+            GCT::node_ptr_t caseExecNode = nullptr;
+
+            switch (caseLoad->caseType()) {
+            case GCT::CaseLoad::CaseType::True:
+                ASSERT(caseNode->size() == 1, "True case should have only one child.");
+                caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                break;
+            case GCT::CaseLoad::CaseType::Else:
+                ASSERT(i == gct->size() - 1, "Else case should be the last case.");
+                ASSERT(caseNode->size() == 1, "Else case should have only one child.");
+                caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                break;
+            case GCT::CaseLoad::CaseType::Value: {
+                ASSERT(caseNode->size() == 2, "Value case should have two children.");
+                any res = visit(caseNode->at(0));
+                ASSERT(
+                    res.type() == typeid(node_handle_t),
+                    "Unexpected result type from visiting the case node.");
+                node_handle_t valueNode = any_cast<node_handle_t>(res);
+                linkNodes(LinkType::With, valueNode, brchNode);
+                caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
+                break;
+            }
+            default:
+                ASSERT(false, "Unknown case type in BRCH node.");
+            }
+
+            subGraph = buildArmGraph(caseExecNode);
+        }
+        addArm(subGraph);
+    }
+    if (faultArm) {
+        // DESIGN-QUESTION(match-default): a `match` without `case _`. A branch takes its
+        // last arm when no case value equals the scrutinee, and without `case _` that arm
+        // did not exist: the schedulers read past the arms and the match gave whatever was
+        // there (0, or a crash). The last arm is now one that stops the program with the
+        // value no case matched. It claims the type of the other arms; it never returns.
+        const std::string name = bindTemporary(condNode);
+        Type *resultType       = joinType;
+        addArm(buildArmGraph(gct, [&] {
+            node_handle_t fail = applyTagOperator("__match_fail__", name, gct);
+            if (resultType != nullptr) {
+                setNodeType(fail, resultType);
+            }
+            return fail;
+        }));
     }
 
     runtime::DraftBrchPayload payload{

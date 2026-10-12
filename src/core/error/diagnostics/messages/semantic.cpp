@@ -550,6 +550,18 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::MatchWithoutDefault,
+            {
+                "MatchWithoutDefault",
+                "This 'match' on a value of type '{0}' has no 'case _': a value that none of "
+                "its cases matches stops the program.",
+                "Add 'case _ => ...' for the values the cases do not list. Without it, meeting "
+                "such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A "
+                "'match' on a bool that has both 'case true' and 'case false' is complete and "
+                "is not reported.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

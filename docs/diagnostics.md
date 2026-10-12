@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-109 diagnostics: 101 errors, 8 warnings.
+111 diagnostics: 102 errors, 9 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -94,6 +94,7 @@ prints one entry.
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
+| `0x03100091` | [SemanticDiag::MatchWithoutDefault](#matchwithoutdefault) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -125,6 +126,7 @@ prints one entry.
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error |
 | `0x0400003B` | [RuntimeDiag::OperatorNotImplemented](#operatornotimplemented) | Error |
+| `0x04000090` | [RuntimeDiag::MatchNotExhaustive](#matchnotexhaustive) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 
@@ -2108,6 +2110,42 @@ An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the arm
 
 *No example: no test small enough to show raises it.*
 
+### MatchWithoutDefault
+
+`0x03100091` · Warn · `SemanticDiag::MatchWithoutDefault`
+
+**Message**
+
+```text
+This 'match' on a value of type '{0}' has no 'case _': a value that none of its cases matches stops the program.
+```
+
+**Help**
+
+```text
+Add 'case _ => ...' for the values the cases do not list. Without it, meeting such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A 'match' on a bool that has both 'case true' and 'case false' is complete and is not reported.
+```
+
+**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
+
+```camel
+module no_case_matches_string
+
+func f(s: string): int {
+    return match s {
+        case 'a' => 1
+        case 'b' => 2
+    }
+}
+
+func main(): int sync {
+    println(f('a'), f('b'))
+    println(f('zzz'))
+    println('not reached')
+    return 0
+}
+```
+
 ## Run time and passes (`RuntimeDiag`)
 
 ### RuntimeError
@@ -2864,6 +2902,42 @@ The name exists so that programs using it are recognised; calling it is not poss
 ```
 
 *No example: no test small enough to show raises it.*
+
+### MatchNotExhaustive
+
+`0x04000090` · Error · `RuntimeDiag::MatchNotExhaustive`
+
+**Message**
+
+```text
+No case of this 'match' matches the value {0}.
+```
+
+**Help**
+
+```text
+A 'match' takes the first case whose pattern equals the value, and this one has no 'case _' for the values it does not list. Add 'case _ => ...'.
+```
+
+**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
+
+```camel
+module no_case_matches_string
+
+func f(s: string): int {
+    return match s {
+        case 'a' => 1
+        case 'b' => 2
+    }
+}
+
+func main(): int sync {
+    println(f('a'), f('b'))
+    println(f('zzz'))
+    println('not reached')
+    return 0
+}
+```
 
 ### PassesNeverRun
 

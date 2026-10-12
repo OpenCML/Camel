@@ -442,6 +442,11 @@ return if snake->contains<p> then "O" else "."
 - **pattern**：**identRef**、字面量、**`( dataList | identList )`**、**`{ pairedValues | identList }`**、**`_`**（通配符）。
 - 对普通类型的值，已实现的模式只有字面量与 `_`。元组、结构体模式**未实现**，标识符模式只对 `T?`/`T!` 有定义（见下）：编译期错误 `SemanticDiag::ConstructNotSupported`。
 - `case a | b => body`：任一模式匹配即进入该分支。按书写顺序取第一个匹配的分支，`_` 之后的分支不可达。
+- **没有 `case _` 的 `match`**：是否必须写 `case _` 尚未裁定。目前：可以不写，编译期给出警告
+  `SemanticDiag::MatchWithoutDefault`（可用 `-Wno-match-without-default` 关闭）；运行时遇到没有任何
+  分支匹配的值是**故障** `RuntimeDiag::MatchNotExhaustive`，定位在这个 `match`，消息里带上那个值
+  （此前是静默算错：取了一条不存在的臂，结果为 0 或崩溃）。四个执行后端一致。对 `bool` 写全了
+  `case true` 与 `case false` 的 `match` 是完整的，不报警告。已匹配的情形行为不变。
 
 **对 `T?` 与 `T!` 的固定模式。** 被匹配的值是 `T?` 或 `T!` 时，`match` 是对它的标记位的一个分支，恰好两个分支（`case v` 写在前写在后都可以；`_` 仍然要写在最后）：
 

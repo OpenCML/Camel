@@ -97,6 +97,7 @@ enum class SemanticDiag : uint32_t {
     EffectNotExecuted            = 0x100004,
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
     ExitInUnusedBranch           = 0x100090,
+    MatchWithoutDefault          = 0x100091,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

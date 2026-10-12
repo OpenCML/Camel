@@ -61,6 +61,8 @@ enum class RuntimeDiag : uint32_t {
     RegexInvalid           = 0x000039,
     TimeFormatFailed       = 0x00003A,
     OperatorNotImplemented = 0x00003B,
+    // 0x90 and up, clear of what other work adds after OperatorNotImplemented.
+    MatchNotExhaustive     = 0x000090,
     // Warnings (severity bits = Warn).
     PassesNeverRun = 0x10000F,
     ConstantExpressionFaults = 0x100015,
