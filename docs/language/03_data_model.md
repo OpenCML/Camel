@@ -154,6 +154,69 @@ func or_else(x: (typeas T)?, d: T): T {
 
 - 类型运算：联合 **`|`**、交集 **`&`**、差 **`\`**、键联合等（见类型表达式规则）。
 
+### 3.2.6 映射与集合
+
+两种内建类型（设计原则 2.9），不需要 `import`：
+
+- **`Map<K, V>`**：键到值的映射。
+- **`Set<T>`**：不含重复元素的集合。
+
+没有专门的字面量，用数组字面量（或任何数组）加 `as` 构造：
+
+```cml
+let m = [('a', 1), ('b', 2)] as Map<string, int>     // (K, V)[] -> Map<K, V>
+let s = [3, 1, 2, 3] as Set<int>                     // T[] -> Set<T>，重复元素被去掉
+let e = [] as Map<string, int>                       // 空映射
+let r = pairs(n) as Map<int, string>                 // 运行期算出的数组
+```
+
+规则：
+
+- **值不可变。** 所有操作返回新值，原来的映射/集合不变；没有原地修改的操作。
+- **键的类型**只能是 `int`、`i32`、`bool`、`string`，以及由它们组成的元组。浮点数（`NaN` 不等于自身，`0.0` 等于 `-0.0`）、数组（可以被原地修改）、结构体、函数、`T?`/`T!` 等都不能作键：编译期错误 `SemanticDiag::CollectionKeyNotAllowed`。值的类型不限。
+- **顺序是确定的：按键排序。** 整数按数值，`false` 在 `true` 之前，字符串按字节，元组逐个元素比较。`keys`、`values`、`items`、打印与 `==` 都按这个顺序，与构造时的书写顺序、平台、执行后端无关。
+- **重复的键**：数组字面量里写了两个相同的常量键是编译期错误 `SemanticDiag::DuplicateCollectionKey`；运行期才知道的数组里，后面的条目覆盖前面的。集合对重复元素不报错。
+- **元素类型必须完全一致**，不做隐式转换：`[('a', 1)] as Map<string, float>` 是错误，写 `1.0`。带类型的声明（`let m: Map<string, int> = [...]`）不是转换，必须写 `as`。
+- `Map`、`Set` 必须带类型实参书写。与泛型配合：`Map<typeas K, typeas V>`、`Set<typeas T>` 从实参的类型绑定类型变量（7.2.5）。
+- 打印：映射 `{a: 1, b: 2}`，集合 `{1, 2, 3}`，空的都是 `{}`。
+
+操作（均为纯算子；`K`、`V`、`T` 必须与映射/集合的类型完全一致）：
+
+| 写法 | 结果 | 说明 |
+|---|---|---|
+| `m[k]`、`get<k>(m)` | `V?` | 查不到是 `null`，用 `??` 取出；见 [6.3.2](06_expressions.md) |
+| `get_or<k, d>(m)` | `V` | 查不到时为 `d` |
+| `put<k, v>(m)` | `Map<K, V>` | 键已存在则替换它的值 |
+| `remove<k>(m)`、`remove<x>(s)` | 同类型 | 不存在时得到同样的内容 |
+| `has<k>(m)`、`has<x>(s)`、`contains<x>(s)` | `bool` | |
+| `len(m)`、`len(s)` | `int` | |
+| `keys(m)`、`values(m)`、`items(m)` | `K[]`、`V[]`、`(K, V)[]` | 按键的顺序，每次是新数组 |
+| `merge(m1, m2)` | `Map<K, V>` | 两者的条目；键相同时取 `m2` 的 |
+| `add<x>(s)` | `Set<T>` | |
+| `union(a, b)`、`intersect(a, b)`、`difference(a, b)` | `Set<T>` | |
+| `is_subset(a, b)` | `bool` | `a` 的每个元素都在 `b` 中 |
+| `items(s)` | `T[]` | 升序 |
+| `a == b`、`a != b` | `bool` | 条目相同（与构造顺序无关） |
+
+带 `with` 参数的操作有三种等价的写法：`put<k, v>(m)`、`m->put<k, v>`（便于链式书写）、`put(m, k, v)`。
+
+```cml
+let m2 = m->put<'c', 3>->remove<'a'>
+let v = m2['c'] ?? 0
+let n = if s->contains<2> then len(s) else 0
+
+// 遍历：先取数组，再用 map / foreach / reduce
+let doubled = items(m)->map<(kv: (string, int)): (string, int) => (kv.0, kv.1 * 2)> as Map<string, int>
+
+func count_words(words: string[]): Map<string, int> {
+    return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
+}
+```
+
+值类型本身可空时（`Map<string, int?>`），`m[k]` 的类型就是 `int?`（不会出现 `int??`）：键不存在与值为 `null` 都得到 `null`，需要区分时用 `has`。
+
+`put` 每次复制整张表（代价与条目数成正比），逐条构造很大的映射时，先得到条目数组再一次 `as` 转换。程序自己声明的名为 `Map`、`Set` 的类型，以及与上述算子同名的函数，优先于内建的名字。实现与取舍见 `docs/technical/31_map_and_set.md`。
+
 ---
 
 ## 3.3 类型定义示例

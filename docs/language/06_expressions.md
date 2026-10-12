@@ -135,6 +135,7 @@ shape(X)[1]
 
 - **`expr [ dataExpr ]`** 或 **`[ start : end : step? ]`**（若实现支持切片）。
 - 数组下标在运行期检查：越界（包括负数）是带位置的故障 `RuntimeDiag::IndexOutOfRange`，消息带下标与长度，各执行后端一致。
+- **映射的下标 `m[k]`** 是查找：结果类型是 `V?`，键不存在时为 `null`，不是故障；用 `??` 取出（`m['a'] ?? 0`）。它与数组下标共用语法，由左操作数的类型决定是哪一个：`xs[i]` 的类型是 `T`，`m[k]` 的类型是 `V?`。把 `m[k]` 直接当作 `V` 使用是编译期错误。集合没有下标，成员判断用 `contains<x>(s)`。见 [3.2.6](03_data_model.md)。
 
 ```cml
 signals[0]
@@ -145,6 +146,7 @@ shape(X)[1]
 arr->slice<0, mid>
 arr->slice<mid, len(arr)>
 sorted->slice<0, m>
+m['a'] ?? 0
 ```
 
 ### 6.3.3 调用

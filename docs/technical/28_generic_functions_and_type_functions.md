@@ -41,7 +41,11 @@ and the operations over them:
 Binding and substitution descend through arrays, tuples, structs and function types.
 Substitution also rebuilds unions. Module types (`Tensor<...>`) are opaque: what their
 arguments mean is defined by the type's C++ code, which sees concrete types only, so a type
-variable among the arguments of a module type is rejected where it is written.
+variable among the arguments of a module type is rejected where it is written. The exception
+is a type that declares its arguments to be plain types (`OtherType::typeArguments()`, the
+built-in `Map<K, V>` and `Set<T>`): binding and substitution descend through its arguments
+as they do through an array's element type, and `Map<typeas K, typeas V>` binds both
+(`docs/technical/31_map_and_set.md`).
 
 That `substituteTypeVars` returns its argument unchanged when there is nothing to replace
 matters: the builders compare types by pointer in places, and code without type variables
