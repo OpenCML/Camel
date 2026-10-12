@@ -34,7 +34,7 @@
 
 #include <algorithm>
 #include <cstring>
-#include <iterator>
+#include <memory>
 #include <string>
 #include <unordered_set>
 
@@ -272,18 +272,18 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     // carriers, indirect CALL, or frame-dependent trampolines still execute
     // correctly through the interpreter, while pure callee graphs such as
     // recursive fib keep the hot-path JIT speedup.
+    //
+    // What passes this check never calls into C++: its calls are native self calls and its
+    // tail calls are jumps. The lowerings of OPER, CAST, COPY, FILL, CALL and ACCS further
+    // down are therefore not reached today.
     if (!canUseFramelessSelfFunc)
         return fail("graph requires interpreter fallback: " + framelessFailureReason);
 
-    auto fillDirectCallDstDisps = [&](const Bytecode &bc, int32_t *dstDisps) {
-        const auto dstSlots = bc.directCallDstSlots();
-        ASSERT(
-            dstSlots.size() == bc.directCallArgCnt(),
-            "JIT encoded direct-call layout is arity-mismatched.");
-        for (size_t argIndex = 0; argIndex < dstSlots.size(); ++argIndex) {
-            dstDisps[argIndex] = slotDisp(dstSlots[argIndex]);
-        }
-    };
+    // Arguments of a call that are kept in registers at once; a call with more copies them
+    // one by one through memory (see FUNC and TAIL).
+    constexpr size_t kMaxRegisterArgs = 4;
+    // Owns the parameter blocks the NativeJitFuncCall MIRs point to, until encoding is done.
+    std::vector<std::unique_ptr<NativeJitCallParams>> callParams;
 
     // Compare-Branch fusion state: when a comparison detects a following BRCH
     // using its result, it emits only VLoadFromFrame + VCmpRegImm (no setcc/store),
@@ -908,140 +908,88 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             break;
         }
         case OpCode::FUNC: {
-            bool handledByNativeJitCall = false;
-            if (unit.poolTopAddr && !unit.runtimeGraph->funcType()->modifiers().sync()) {
-                auto *targetRuntimeGraph = getFuncExtraRuntimeGraph(&bc);
-                bool sameGraph           = (targetRuntimeGraph == unit.runtimeGraph);
-#if defined(_WIN32) || defined(_WIN64)
-                const bool nativeCallEncodable = !(sameGraph && !canUseFramelessSelfFunc);
-#else
-                // Under SysV only the frameless self-call is encoded natively: it stays in
-                // the JIT's own convention (rdi = slots, rsi = ctx restored from r13). The
-                // frame-based path hands its slow-path helper the arguments in the Win64
-                // registers, so every other call keeps the trampoline below.
-                const bool nativeCallEncodable = sameGraph && canUseFramelessSelfFunc;
-#endif
-                if (nativeCallEncodable) {
-                    // NativeJitCallParams is the bridge between MIR lowering and the
-                    // encoder's call expander. Everything the encoder needs for fast
-                    // path / slow path selection is packed here once.
-                    auto *params                   = new NativeJitCallParams{};
-                    params->poolTopAddr            = reinterpret_cast<uint64_t>(unit.poolTopAddr);
-                    params->targetRuntimeGraphAddr = reinterpret_cast<uint64_t>(targetRuntimeGraph);
-                    params->resultDisp             = slotDisp(bc.result);
-                    params->argsCnt                = static_cast<uint8_t>(bc.directCallArgCnt());
-                    for (uint8_t ai = 0; ai < params->argsCnt; ++ai)
-                        params->argSrcDisps[ai] = slotDisp(bc.operands()[ai]);
-                    fillDirectCallDstDisps(bc, params->argDstDisps);
-                    std::fill(
-                        std::begin(params->argVRegs),
-                        std::end(params->argVRegs),
-                        x64::kInvalidVReg);
-                    params->isSameGraph = sameGraph;
-                    params->jitFnAddr   = reinterpret_cast<uint64_t>(bc.extra3());
-                    params->frameless   = sameGraph && canUseFramelessSelfFunc;
-                    if (params->frameless) {
-                        // Frameless is only valid for self-recursion today: the
-                        // callee layout matches the current graph exactly, so we can
-                        // allocate a stack-backed frame and jump straight to the JIT
-                        // entry without touching the frame pool.
-                        size_t slotCount        = unit.runtimeGraph->runtimeDataType()->size();
-                        size_t rawBytes         = slotCount * sizeof(slot_t);
-                        params->calleeSlotBytes = static_cast<uint32_t>((rawBytes + 15u) & ~15u);
-                    } else {
-                        params->calleeSlotBytes = 0;
+            // Every call in a graph that gets here is a call to the graph itself
+            // (describeFramelessSelfFuncFailure). It is encoded natively, in the JIT's own
+            // convention on every ABI: the callee's frame is allocated on the machine stack
+            // and the body is entered directly, with no frame pool and no C++ in between.
+            if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph)
+                return fail("pc=" + std::to_string(pc) + " FUNC targets another graph");
+            const data_arr_t srcArgs  = bc.directCallSrcArgs();
+            const data_arr_t dstSlots = bc.directCallDstSlots();
+            if (srcArgs.size() != dstSlots.size())
+                return fail("pc=" + std::to_string(pc) + " FUNC layout is arity-mismatched");
+
+            callParams.push_back(std::make_unique<NativeJitCallParams>());
+            NativeJitCallParams *params = callParams.back().get();
+            params->pc                  = static_cast<uint32_t>(pc);
+            params->resultDisp          = slotDisp(bc.result);
+            const size_t slotCount      = unit.runtimeGraph->runtimeDataType()->size();
+            params->calleeSlotBytes =
+                static_cast<uint32_t>((slotCount * sizeof(slot_t) + 15u) & ~size_t{15});
+            // Phase L: the arguments of a call with few of them are loaded by visible
+            // VLoadFromFrame, so that peephole can fuse a preceding store with the load.
+            const bool inRegisters = srcArgs.size() <= kMaxRegisterArgs;
+            for (size_t ai = 0; ai < srcArgs.size(); ++ai) {
+                NativeJitCallParams::Arg arg;
+                arg.dstDisp = slotDisp(dstSlots[ai]);
+                if (srcArgs[ai] <= 0) {
+                    arg.isImm = true;
+                    arg.imm   = staticBase[static_cast<size_t>(-srcArgs[ai])];
+                } else {
+                    arg.srcDisp = slotDisp(srcArgs[ai]);
+                    if (inRegisters) {
+                        arg.vreg = nextVReg++;
+                        loadSlot(srcArgs[ai], arg.srcDisp, arg.vreg);
                     }
-                    if (sameGraph) {
-                        params->slowPathFnAddr =
-                            reinterpret_cast<uint64_t>(unit.directSelfFuncInvokeAddr);
-                        params->slowPathBcAddr = reinterpret_cast<uint64_t>(&bc);
-                        params->slowPathPc     = 0;
-                    } else {
-                        params->slowPathFnAddr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
-                        params->slowPathBcAddr = 0;
-                        params->slowPathPc     = static_cast<uint32_t>(pc);
-                    }
-                    // Phase L: for frameless calls, emit visible VLoadFromFrame for
-                    // each arg so that peephole can fuse preceding store+load pairs.
-                    if (params->frameless) {
-                        uint8_t nArgs = params->argsCnt < 7 ? params->argsCnt : 7;
-                        for (uint8_t ai = 0; ai < nArgs; ++ai) {
-                            x64::VRegId vArg = nextVReg++;
-                            loadSlot(bc.operands()[ai], params->argSrcDisps[ai], vArg);
-                            params->argVRegs[ai] = vArg;
-                        }
-                        // Phase Q: externalize result store so peephole can fuse
-                        // the subsequent VLoadFromFrame into a VCopy.
-                        x64::VRegId vResult = nextVReg++;
-                        params->resultVReg  = vResult;
-                    }
-                    build.emitNativeJitFuncCall(params);
-                    if (params->frameless)
-                        build.emitVStoreToFrame(
-                            params->resultDisp,
-                            params->resultVReg);
-                    // Native calls are the main cache barrier: physical registers
-                    // may no longer hold the previously cached slot values.
-                    slotCache.clear();
-                    handledByNativeJitCall = true;
                 }
+                params->args.push_back(arg);
             }
-            if (handledByNativeJitCall)
-                break;
-            if (!unit.trampolineFunc)
-                return fail("pc=" + std::to_string(pc) + " no FUNC trampoline");
-            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineFunc);
-#if defined(_WIN32) || defined(_WIN64)
-            build.emitCallTrampolineWin64(static_cast<uint32_t>(pc), addr);
-#else
-            build.emitCallTrampolineSysV(static_cast<uint32_t>(pc), addr);
-#endif
-            int dr           = slotDisp(bc.result);
-            x64::VRegId vRet = nextVReg++;
-            build.emitVMovFromRax(vRet);
-            build.emitVStoreToFrame(dr, vRet);
+            // Phase Q: the result is a vreg with a visible store, so that peephole can fuse
+            // the subsequent VLoadFromFrame into a VCopy.
+            params->resultVReg = nextVReg++;
+            build.emitNativeJitFuncCall(params);
+            build.emitVStoreToFrame(params->resultDisp, params->resultVReg);
+            // Calls are the main cache barrier: no register holds a slot value after one.
             slotCache.clear();
             break;
         }
         case OpCode::TAIL: {
-#if defined(_WIN32) || defined(_WIN64)
-            if (getFuncExtraRuntimeGraph(&bc) == unit.runtimeGraph && canUseFramelessSelfFunc) {
-                // Self-tail-call is reduced to "rewrite argument slots + jump to
-                // entry". No call instruction is emitted, so no new frame is
-                // created and recursion stays in the current activation.
-                size_t argsCnt         = bc.directCallArgCnt();
-                const data_idx_t *args = bc.operands();
-                std::vector<x64::VRegId> argRegs;
-                argRegs.reserve(argsCnt);
-                for (size_t i = 0; i < argsCnt; ++i) {
-                    x64::VRegId v = nextVReg++;
-                    argRegs.push_back(v);
-                    loadSlot(args[i], slotDisp(args[i]), v);
-                }
-                int32_t argDstDisps[8]{};
-                fillDirectCallDstDisps(bc, argDstDisps);
-                for (size_t i = 0; i < argsCnt; ++i)
-                    build.emitVStoreToFrame(argDstDisps[i], argRegs[i]);
-                build.emitJmpRel32(static_cast<uint32_t>(entryPc));
-                break;
+            // A self tail call is "rewrite the parameter slots and jump to the entry", on
+            // every ABI: no call instruction, no new frame, the recursion stays in the current
+            // activation, whether its frame came from the pool or is on the machine stack.
+            if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph)
+                return fail("pc=" + std::to_string(pc) + " TAIL targets another graph");
+            const data_arr_t srcArgs  = bc.directCallSrcArgs();
+            const data_arr_t dstSlots = bc.directCallDstSlots();
+            if (srcArgs.size() != dstSlots.size())
+                return fail("pc=" + std::to_string(pc) + " TAIL layout is arity-mismatched");
+            // An argument that is the parameter itself stays where it is.
+            std::vector<size_t> moved;
+            for (size_t i = 0; i < srcArgs.size(); ++i) {
+                if (srcArgs[i] != dstSlots[i])
+                    moved.push_back(i);
             }
-            // Cross-graph direct tail-jump used to bypass trampolineTail once the
-            // target graph had a compiled entry. That path is currently too
-            // fragile for alternating mutual-tail recursion because frame
-            // ownership changes across graphs become harder to reason about.
-            // Prefer the trampoline path here: it is slightly less direct but
-            // preserves correctness and still keeps self-tail recursion on the
-            // zero-overhead local fast path above.
-#endif
-            if (!unit.trampolineTail)
-                return fail("pc=" + std::to_string(pc) + " no TAIL trampoline");
-            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineTail);
-#if defined(_WIN32) || defined(_WIN64)
-            build.emitCallTrampolineWin64(static_cast<uint32_t>(pc), addr);
-#else
-            build.emitCallTrampolineSysV(static_cast<uint32_t>(pc), addr);
-#endif
-            build.emitRet();
+            // All sources are read before any parameter slot is written: an argument may be
+            // another parameter (`f(b, a)`).
+            if (moved.size() <= kMaxRegisterArgs) {
+                std::vector<x64::VRegId> argRegs;
+                for (const size_t i : moved) {
+                    argRegs.push_back(nextVReg++);
+                    loadSlot(srcArgs[i], slotDisp(srcArgs[i]), argRegs.back());
+                }
+                for (size_t k = 0; k < moved.size(); ++k)
+                    build.emitVStoreToFrame(slotDisp(dstSlots[moved[k]]), argRegs[k]);
+            } else {
+                for (const size_t i : moved) {
+                    if (srcArgs[i] > 0)
+                        build.emitPushFrameSlot(slotDisp(srcArgs[i]));
+                    else
+                        build.emitPushImm64(staticBase[static_cast<size_t>(-srcArgs[i])]);
+                }
+                for (size_t k = moved.size(); k-- > 0;)
+                    build.emitPopFrameSlot(slotDisp(dstSlots[moved[k]]));
+            }
+            build.emitJmpRel32(static_cast<uint32_t>(entryPc));
             break;
         }
         case OpCode::JUMP: {

@@ -77,6 +77,9 @@ static bool isBarrierOp(MirOp op) {
     case MirOp::CallRel32:
     case MirOp::PushRdi:
     case MirOp::PopRdi:
+    case MirOp::PushFrameSlot:
+    case MirOp::PushImm64:
+    case MirOp::PopFrameSlot:
         return true;
     default:
         return isJumpOp(op);
@@ -225,28 +228,42 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
             continue;
         }
 
-        // Jump source: merge liveness from the target (already saved above).
+        // Jump source: merge liveness from the target (already saved above). A target not seen
+        // yet lies before the jump (the self tail call jumps back to the entry): what it reads
+        // is not known at this point of a single backward pass, so every slot stays live.
         if (isJumpOp(m.op)) {
             auto it = targetLiveness.find(m.imm32);
             if (it != targetLiveness.end())
                 liveSlots.insert(it->second.begin(), it->second.end());
+            else
+                liveSlots.insert(kAllSlotsLive);
             continue;
         }
 
-        // NativeJitFuncCall: reads arg disps (if not pre-loaded), writes result disp (if opaque).
+        // Stack-staged tail-call arguments: the push reads its slot; the pop writes one but is
+        // never removed (it balances the push).
+        if (m.op == MirOp::PushFrameSlot) {
+            liveSlots.insert(m.disp);
+            continue;
+        }
+        if (m.op == MirOp::PopFrameSlot) {
+            liveSlots.erase(m.disp);
+            continue;
+        }
+
+        // NativeJitFuncCall: reads the caller slots of the arguments it copies itself, writes
+        // the result slot unless the result is a vreg. The callee has a frame of its own.
         if (m.op == MirOp::NativeJitFuncCall) {
             auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
             if (p) {
-                uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
-                for (uint8_t ai = 0; ai < nArgs; ++ai) {
-                    if (p->argVRegs[ai] == kInvalidVReg)
-                        liveSlots.insert(p->argSrcDisps[ai]);
-                }
-                // Frameless calls can expose the result as a vreg def instead of
-                // an implicit frame write. Only the opaque path keeps resultDisp
-                // alive as a memory destination.
                 if (p->resultVReg == kInvalidVReg)
                     liveSlots.erase(p->resultDisp);
+                for (const auto &arg : p->args) {
+                    if (arg.vreg == kInvalidVReg && !arg.isImm)
+                        liveSlots.insert(arg.srcDisp);
+                }
+                // The call hands the caller's slot[0] (the Frame*) on to the callee.
+                liveSlots.insert(0);
             }
             continue;
         }

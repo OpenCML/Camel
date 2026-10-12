@@ -26,11 +26,6 @@
 
 namespace camel::jit::x64 {
 
-namespace ctx = camel::core::context;
-
-static_assert(ctx::Frame::runtimeGraphOffset() <= INT8_MAX);
-static_assert(ctx::Frame::nextOffset() <= INT8_MAX);
-static_assert(ctx::Frame::dynamicAreaOffset() <= INT8_MAX);
 
 using ::camel::jit::kSpilled;
 using ::camel::jit::VRegAllocation;
@@ -515,189 +510,62 @@ void encodeMirBuffer(
         case MirOp::NativeJitFuncCall: {
             auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
 
-            if (p->frameless) {
-                // ═══ FRAMELESS PATH: stack-based self-call (no Frame pool) ═══
-                // Phase L: args may already be in physical registers via pre-loaded VRegs.
-                static constexpr uint8_t argTmpRegs[] =
-                    {kRegRax, kRegRcx, kRegRdx, kRegR8, kRegR9, kRegR10, kRegR11};
-                uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
-                uint8_t actualArgRegs[7];
-                for (uint8_t ai = 0; ai < nArgs; ++ai) {
-                    int preloadedReg = -1;
-                    if (p->argVRegs[ai] != kInvalidVReg)
-                        preloadedReg = pregFor(p->argVRegs[ai]);
-                    if (preloadedReg >= 0) {
-                        actualArgRegs[ai] = static_cast<uint8_t>(preloadedReg);
-                    } else {
-                        enc.movRegFromFrame(argTmpRegs[ai], p->argSrcDisps[ai]);
-                        actualArgRegs[ai] = argTmpRegs[ai];
-                    }
-                }
-
-                enc.pushRdi();
-                enc.subRspImm(p->calleeSlotBytes);
-                enc.movRdiRsp();
-
-                // Recover the caller slot base from the stack slot above the
-                // stack-allocated callee frame, then forward caller slot[0]
-                // into callee slot[0] so runtime trampolines still see the
-                // active Frame* through the normal slot convention.
-                enc.movRegFromFrame(kRegR11, static_cast<int>(p->calleeSlotBytes));
-                enc.emitMovRegReg(kRegRdi, kRegR11);
-                enc.movRegFromFrame(kRegR11, 0);
-                enc.movRdiRsp();
-                enc.movToFrame(0, kRegR11);
-
-                // Direct-call arguments must land on the callee's formal port
-                // slots, not on sequential slot numbers.
-                for (uint8_t ai = 0; ai < nArgs; ++ai)
-                    enc.movToFrame(p->argDstDisps[ai], actualArgRegs[ai]);
-
-#if !defined(_WIN32) && !defined(_WIN64)
-                enc.emitBytes({0x4C, 0x89, 0xEE});
-                enc.asmLine("mov rsi, r13  ; jitCtx (frameless recursive entry)");
-#endif
-                // Recorded after the mov above: the patch rewrites the rel32 of the call at this
-                // offset.
-                patches.push_back({enc.here(), 0, 5, 0, 0});
-                enc.callRel32(0);
-                patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
-                patches.back().jumpEndPos   = enc.here();
-
-                enc.addRspImm(p->calleeSlotBytes);
-                enc.popRdi();
-                if (p->resultVReg != kInvalidVReg) {
-                    // Result-visible mode: keep the call result in a vreg so a
-                    // following VStore/VLoad pair can be optimized away upstream.
-                    int preg = pregFor(p->resultVReg);
-                    if (preg >= 0 && preg != static_cast<int>(kRegRax))
-                        enc.emitMovRegReg(static_cast<uint8_t>(preg), kRegRax);
-                } else {
-                    enc.movToFrame(p->resultDisp, kRegRax);
-                }
-                break;
-            }
-
-            // ═══ FRAME-BASED PATH (cross-graph or non-frameless) ═══
+            // The callee's frame is built below the saved slot base, with rdi still on the
+            // caller's frame; arguments already in registers are not disturbed (r11 is not
+            // allocatable).
             enc.pushRdi();
-
-            size_t jzNotCompiledRelPos = 0, jzNotCompiledEnd = 0;
-            if (!p->isSameGraph) {
-                enc.movRaxImm64(p->jitFnAddr);
-                enc.emitBytes({0x48, 0x8B, 0x00});
-                enc.asmLine("mov rax, [rax]  ; load cross-graph jit entry");
-                enc.testRaxRax();
-                jzNotCompiledRelPos = enc.jeRel32(0);
-                jzNotCompiledEnd    = enc.here();
-                enc.pushRax();
+            enc.subRspImm(p->calleeSlotBytes);
+            // slot[0] is the Frame* by convention; the callee inherits the caller's.
+            enc.movRegFromFrame(kRegR11, 0);
+            enc.movToStack(0, kRegR11);
+            // Direct-call arguments land on the callee's formal port slots, not on sequential
+            // slot numbers.
+            for (const auto &arg : p->args) {
+                int reg = arg.vreg != kInvalidVReg ? pregFor(arg.vreg) : -1;
+                if (reg < 0) {
+                    if (arg.isImm)
+                        enc.emitMovRegImm64(kRegR11, arg.imm);
+                    else
+                        enc.movRegFromFrame(kRegR11, arg.srcDisp);
+                    reg = kRegR11;
+                }
+                enc.movToStack(arg.dstDisp, static_cast<uint8_t>(reg));
             }
-
-            // ═══ Frame acquire check ═══
-            enc.movR10FromRbx();
-            enc.movR11FromR10Disp8(static_cast<int8_t>(ctx::Frame::runtimeGraphOffset()));
-            if (p->isSameGraph) {
-                enc.cmpR11R12();
-            } else {
-                enc.movRaxImm64(p->targetRuntimeGraphAddr);
-                enc.cmpR11Rax();
-            }
-            size_t jneRelPos = enc.jneRel32(0);
-            size_t jneEnd    = enc.here();
-
-            // ═══ FAST PATH: acquire frame from pool and enter compiled callee ═══
-            enc.movR11FromR10Disp8(static_cast<int8_t>(ctx::Frame::nextOffset()));
-            enc.movRbxFromR11();
-            // Match FramePool::acquire(): once the freelist head moves to the
-            // next slot, clear the new sentinel/free-head graph identity so
-            // later reuse checks never observe stale graph metadata.
-            enc.movR11Disp8Imm0(0);
-            enc.movR11Disp8Imm0(8);
-            enc.leaR11R10Disp8(static_cast<int8_t>(ctx::Frame::dynamicAreaOffset()));
-            enc.movR11FromR10Store();
-            for (uint8_t ai = 0; ai < p->argsCnt; ++ai) {
-                enc.movRaxFromFrame(p->argSrcDisps[ai]);
-                enc.movR11Disp8FromRax(static_cast<int8_t>(p->argDstDisps[ai]));
-            }
-            enc.movRdiR11();
-
-            if (p->isSameGraph) {
+            enc.movRdiRsp();
 #if !defined(_WIN32) && !defined(_WIN64)
-                enc.emitBytes({0x4C, 0x89, 0xEE});
-                enc.asmLine("mov rsi, r13  ; jitCtx (same-graph frame-based entry)");
+            enc.emitBytes({0x4C, 0x89, 0xEE});
+            enc.asmLine("mov rsi, r13  ; jitCtx");
 #endif
-                // Recorded after the mov above: the patch rewrites the rel32 of the call at this
-                // offset.
-                patches.push_back({enc.here(), 0, 5, 0, 0});
-                enc.callRel32(0);
-                patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
-                patches.back().jumpEndPos   = enc.here();
-            } else {
-                enc.popRax();
-#if !defined(_WIN32) && !defined(_WIN64)
-                enc.emitBytes({0x4C, 0x89, 0xEE});
-                enc.asmLine("mov rsi, r13  ; jitCtx (cross-graph entry)");
-#endif
-                enc.movRcxRdi();
-                enc.movRdxRsi();
-                enc.subRspShadow();
-                enc.emitBytes({0xff, 0xd0});
-                enc.asmLine("call rax  ; cross-graph C++ entry");
-                enc.addRspShadow();
-            }
+            // Recorded after the mov above: the patch rewrites the rel32 of the call at this
+            // offset. MIR index 0 is the body's entry.
+            patches.push_back({enc.here(), 0, 5, 0, 0});
+            enc.callRel32(0);
+            patches.back().asmLineIndex = enc.getAsmLineCount() - 1;
+            patches.back().jumpEndPos   = enc.here();
 
-            // ═══ Release frame + store result ═══
-            enc.movR10FromRdi();
+            enc.addRspImm(p->calleeSlotBytes);
             enc.popRdi();
-            enc.movR11FromRbx();
-            enc.movR10Disp8FromR11(16);
-            enc.movRbxFromR10();
-            enc.movToFrame(p->resultDisp, 0);
-            size_t jmpFastPos = enc.here();
-            enc.jmpRel32(0);
-            size_t jmpFastEnd = enc.here();
-
-            // ═══ SLOW PATH ═══
-            // Reuse the interpreter/trampoline helper when the frame pool cannot
-            // provide a compatible frame or the target graph is not compiled yet.
-            size_t slowStart = enc.here();
-            if (!p->isSameGraph) {
-                enc.popRax();
-                size_t slowCommon = enc.here();
-                enc.patchRel32At(
-                    jzNotCompiledRelPos,
-                    static_cast<int32_t>(slowCommon - jzNotCompiledEnd));
-                enc.patchRel32At(jneRelPos, static_cast<int32_t>(slowStart - jneEnd));
+            if (p->resultVReg != kInvalidVReg) {
+                // Result-visible mode: keep the call result in a vreg so a
+                // following VStore/VLoad pair can be optimized away upstream.
+                int preg = pregFor(p->resultVReg);
+                if (preg >= 0)
+                    enc.emitMovRegReg(static_cast<uint8_t>(preg), kRegRax);
             } else {
-                enc.patchRel32At(jneRelPos, static_cast<int32_t>(slowStart - jneEnd));
+                enc.movToFrame(p->resultDisp, kRegRax);
             }
-
-            if (p->isSameGraph) {
-#if !defined(_WIN32) && !defined(_WIN64)
-                enc.emitBytes({0x4C, 0x89, 0xEE});
-                enc.asmLine("mov rsi, r13  ; jitCtx (same-graph slow path)");
-#endif
-                enc.movRcxRdi();
-                enc.movRdxRsi();
-                enc.movR8Imm64(p->slowPathBcAddr);
-            } else {
-#if !defined(_WIN32) && !defined(_WIN64)
-                enc.emitBytes({0x4C, 0x89, 0xEE});
-                enc.asmLine("mov rsi, r13  ; jitCtx (cross-graph slow path)");
-#endif
-                enc.movRcxRdi();
-                enc.movRdxRsi();
-                enc.emitMovRegImm32(4, p->slowPathPc);
-            }
-            enc.movRaxImm64(p->slowPathFnAddr);
-            enc.callRax();
-            enc.popRdi();
-            enc.movToFrame(p->resultDisp, 0);
-
-            // ═══ DONE ═══
-            size_t donePos = enc.here();
-            enc.patchRel32At(jmpFastPos + 1, static_cast<int32_t>(donePos - jmpFastEnd));
             break;
         }
+        case MirOp::PushFrameSlot:
+            enc.pushFrameSlot(m.disp);
+            break;
+        case MirOp::PushImm64:
+            enc.emitMovRegImm64(kRegR11, m.imm64);
+            enc.pushReg(kRegR11);
+            break;
+        case MirOp::PopFrameSlot:
+            enc.popFrameSlot(m.disp);
+            break;
         case MirOp::Nop:
             enc.nop();
             break;

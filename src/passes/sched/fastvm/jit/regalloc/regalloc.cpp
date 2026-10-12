@@ -134,20 +134,15 @@ void collectVRegDefUse(
 
     for (size_t i = 0; i < buf.size(); ++i) {
         const Mir &m = buf[i];
-        // Frameless NativeJitFuncCall can consume already-loaded argument vregs
-        // and define its result directly into a new vreg. These data edges live
-        // outside the normal r0/r1/imm32 encoding, so they must be modeled here
-        // explicitly or the allocator will treat them as invisible.
+        // A native self call reads the argument vregs loaded for it and defines its result
+        // vreg. These data edges live outside the normal r0/r1/imm32 encoding, so they must be
+        // modeled here explicitly or the allocator will treat them as invisible.
         if (m.op == MirOp::NativeJitFuncCall) {
             auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
-            if (p && p->frameless) {
-                uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
-                for (uint8_t ai = 0; ai < nArgs; ++ai) {
-                    if (p->argVRegs[ai] != kInvalidVReg)
-                        useVReg(i, p->argVRegs[ai]);
-                }
-                if (p->resultVReg != kInvalidVReg)
-                    defVReg(i, p->resultVReg);
+            if (p) {
+                for (const auto &arg : p->args)
+                    useVReg(i, arg.vreg);
+                defVReg(i, p->resultVReg);
             }
             continue;
         }

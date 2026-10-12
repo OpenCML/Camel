@@ -254,6 +254,41 @@ class Encoder {
         asmLineAt(at, std::string("pop ") + regName(reg));
     }
 
+    // mov [rsp + disp], reg: a slot of a frame being built on the stack. REX.W 89 /r with SIB
+    void movToStack(int disp, uint8_t reg) {
+        size_t at = here();
+        emitRex(true, hw(reg), 4);
+        emitByte(0x89);
+        emitByte(static_cast<uint8_t>((fitsDisp8(disp) ? 0x40 : 0x80) | ((hw(reg) & 7) << 3) | 4));
+        emitByte(0x24);
+        if (fitsDisp8(disp))
+            emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitDisp32(disp);
+        asmLineAt(at, std::string("mov [rsp+") + std::to_string(disp) + "], " + regName(reg));
+    }
+    // push / pop qword [rdi + disp]. FF /6, 8F /0
+    void pushFrameSlot(int disp) {
+        size_t at = here();
+        emitByte(0xff);
+        emitByte(static_cast<uint8_t>((fitsDisp8(disp) ? 0x40 : 0x80) | (6 << 3) | 7));
+        if (fitsDisp8(disp))
+            emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitDisp32(disp);
+        asmLineAt(at, "push qword [rdi+" + std::to_string(disp) + "]");
+    }
+    void popFrameSlot(int disp) {
+        size_t at = here();
+        emitByte(0x8f);
+        emitByte(static_cast<uint8_t>((fitsDisp8(disp) ? 0x40 : 0x80) | 7));
+        if (fitsDisp8(disp))
+            emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitDisp32(disp);
+        asmLineAt(at, "pop qword [rdi+" + std::to_string(disp) + "]");
+    }
+
     // 32-bit integer forms. Writing a 32-bit register clears the upper half of the 64-bit one.
     // op r/m32, r32 (01 = add, 29 = sub, 39 = cmp, 89 = mov)
     void emitAluRegReg32(uint8_t opcode, uint8_t rm, uint8_t reg, const char *mnemonic) {

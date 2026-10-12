@@ -138,6 +138,24 @@ class MirBuilder {
     void emitSubRsp8() { push(MirOp::SubRsp8, 0, 0); }
     void emitAddRsp8() { push(MirOp::AddRsp8, 0, 0); }
     void emitRet() { push(MirOp::Ret, 0, 0); }
+    void emitPushFrameSlot(int disp) {
+        Mir m;
+        m.op   = MirOp::PushFrameSlot;
+        m.disp = disp;
+        push(m);
+    }
+    void emitPushImm64(uint64_t imm64) {
+        Mir m;
+        m.op    = MirOp::PushImm64;
+        m.imm64 = imm64;
+        push(m);
+    }
+    void emitPopFrameSlot(int disp) {
+        Mir m;
+        m.op   = MirOp::PopFrameSlot;
+        m.disp = disp;
+        push(m);
+    }
     void emitJmpRax() { push(MirOp::JmpRax, 0, 0); }
     /** Inserted between every two instructions in Debug builds; pc is the current bytecode pc, used
      * by jitDebugTrace for printing. */

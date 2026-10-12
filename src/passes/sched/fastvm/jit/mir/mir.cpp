@@ -367,10 +367,19 @@ std::string mirToString(const Mir &m) {
         break;
     case MirOp::NativeJitFuncCall: {
         auto *p = reinterpret_cast<const NativeJitCallParams *>(m.imm64);
-        os << "native_jit_func_call " << (p->isSameGraph ? "self" : "cross")
-           << " args=" << static_cast<int>(p->argsCnt) << " resultDisp=" << p->resultDisp;
+        os << "native_self_call args=" << p->args.size() << " frame=" << p->calleeSlotBytes
+           << " resultDisp=" << p->resultDisp;
         break;
     }
+    case MirOp::PushFrameSlot:
+        os << "push [rdi+" << m.disp << "]";
+        break;
+    case MirOp::PushImm64:
+        os << "push 0x" << std::hex << m.imm64 << std::dec;
+        break;
+    case MirOp::PopFrameSlot:
+        os << "pop [rdi+" << m.disp << "]";
+        break;
     case MirOp::MovRsiR13:
         os << "mov rsi, r13";
         break;
@@ -403,6 +412,8 @@ static bool mirOpUsesFrameDisp(MirOp op) {
     case MirOp::VXmmStoreToFrame:
     case MirOp::VXmm32LoadFromFrame:
     case MirOp::VXmm32StoreToFrame:
+    case MirOp::PushFrameSlot:
+    case MirOp::PopFrameSlot:
         return true;
     default:
         return false;
@@ -664,9 +675,14 @@ size_t mirSizeBytes(const Mir &m) {
     case MirOp::DebugTrace:
         return 80;
     case MirOp::NativeJitFuncCall:
-        return 250;
+        return 64;
     case MirOp::MovRsiR13:
         return 3;
+    case MirOp::PushFrameSlot:
+    case MirOp::PopFrameSlot:
+        return fitsDisp8(m.disp) ? 3 : 6;
+    case MirOp::PushImm64:
+        return 10 + 2;
     case MirOp::Nop:
         return 1;
     }
