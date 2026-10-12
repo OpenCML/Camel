@@ -153,6 +153,27 @@ static string uriToPath(const string &uri) {
     return path;
 }
 
+// 本地路径转为 URI (file:///...)，用于 relatedInformation 的 location
+static string pathToUri(const string &path) {
+    if (path.compare(0, 7, "file://") == 0)
+        return path;
+    string p = fs::absolute(fs::path(path)).generic_string();
+    string uri = "file://";
+    if (p.empty() || p[0] != '/')
+        uri += '/'; // C:/... -> file:///C:/...
+    static const char *hex = "0123456789ABCDEF";
+    for (unsigned char c : p) {
+        if (isalnum(c) || c == '/' || c == '-' || c == '_' || c == '.' || c == '~' || c == ':') {
+            uri += static_cast<char>(c);
+        } else {
+            uri += '%';
+            uri += hex[c >> 4];
+            uri += hex[c & 0xF];
+        }
+    }
+    return uri;
+}
+
 // 解析并编译 Camel 源码（与 `camel check` 相同的管线），返回 parser 与所有
 // 用户模块的 LSP 诊断数组（语法 + 语义：未解析引用、类型错误等）。
 static json buildDiagnosticsArray(const string &uri, const string &content) {
@@ -171,6 +192,10 @@ static json buildDiagnosticsArray(const string &uri, const string &content) {
             .entryFile   = path,
             .searchPaths = std::move(searchPaths),
         },
+        // 导入的模块与主模块一样收集全部编译错误（编辑器需要一次看到所有问题）；
+        // 语言服务器不执行程序，运行期诊断池保持“首个即止”。
+        DiagsConfig{.total_limit = -1});
+    ctx->runtimeDiagSink()->setConfig(
         DiagsConfig{
             .total_limit         = -1,
             .per_severity_limits = {{Severity::Error, 0}},
@@ -206,8 +231,42 @@ static json buildDiagnosticsArray(const string &uri, const string &content) {
         diag["severity"] = severityToLsp(d.severity);
         diag["source"]   = "Camel";
         diag["message"]  = d.message;
+        // code: the catalog code, the same string as in `camel --output-format json`
+        // (`camel --explain <code>` describes it). The suggestion and the notes are not part
+        // of the message; they travel in `data` (LSP hands it back with code action requests).
+        diag["code"]         = "0x" + Diagnostic::hex8(d.diagCode());
+        json data            = json::object();
+        data["name"]         = d.name;
         if (!d.suggestion.empty())
-            diag["code"] = d.suggestion;
+            data["suggestion"] = d.suggestion;
+        if (!d.notes.empty())
+            data["notes"] = d.notes;
+        diag["data"] = data;
+        // Secondary locations -> relatedInformation.
+        if (!d.related.empty()) {
+            json related = json::array();
+            for (const DiagLabel &label : d.related) {
+                json info        = json::object();
+                json location    = json::object();
+                location["uri"]  = label.path.empty() || label.path == d.modulePath
+                                       ? (d.modulePath.empty() || d.modulePath == path
+                                              ? uri
+                                              : pathToUri(d.modulePath))
+                                       : pathToUri(label.path);
+                if (holds_alternative<CharRange>(label.range)) {
+                    CharRange r       = get<CharRange>(label.range);
+                    location["range"] = rangeJson(
+                        positionJson(r.start.line, r.start.character),
+                        positionJson(r.end.line, r.end.character));
+                } else {
+                    location["range"] = rangeJson(positionJson(0, 0), positionJson(0, 0));
+                }
+                info["location"] = location;
+                info["message"]  = label.message;
+                related.push_back(info);
+            }
+            diag["relatedInformation"] = related;
+        }
         // parser 与模块诊断可能重复（共享编译产物），按键去重
         const json &r   = diag["range"];
         std::string key = std::to_string(r["start"]["line"].get<int>()) + ":" +
