@@ -179,6 +179,11 @@ class GrowableFreeListAllocator final : public IAllocator, public detail::Growab
     size_t available() const override;
     bool contains(void *ptr) const override { return segmentOf(ptr) != nullptr; }
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override;
+    /// Whether `payload` is a block the space handed out and has not freed.
+    bool isAllocated(void *payload) const {
+        FreeListAllocator *segment = segmentOf(payload);
+        return segment != nullptr && segment->isAllocated(payload);
+    }
     /// Releases many blocks at once, each into its segment, in one pass per segment.
     void freeBulk(const std::vector<ObjectHeader *> &objects) override;
 

@@ -1148,7 +1148,13 @@ rtdata::Object *GenerationalAllocatorWithGC::relocateForMinor(
         // graph, an attached rule) is reached only here, through the Function that owns it or
         // through another graph. Its static area can hold young constants, so it is traced
         // once per collection like a root.
-        if (minorTracedGraphs_.insert(ref).second) {
+        //
+        // The Function may itself be dead: a minor collection also follows what a dead but
+        // not yet swept old object refers to. Its graph can then have been released already
+        // (GCGraphManager frees the graphs a rewrite replaced), so the carrier is traced only
+        // if the graph space still holds it. A new graph at the same address is a live graph,
+        // and tracing a live graph once more is harmless.
+        if (graphSpace().isAllocated(ref) && minorTracedGraphs_.insert(ref).second) {
             minorGraphScan_.push_back(ref);
         }
         return ref;

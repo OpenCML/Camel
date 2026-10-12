@@ -253,6 +253,14 @@ class FreeListAllocator : public IAllocator {
         }
     }
 
+    /// Whether `payload` is a block this allocator handed out and has not freed. Only for an
+    /// allocator that keeps its table of sizes (not sizesFromHeaders).
+    bool isAllocated(void *payload) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        ASSERT(!sizesFromHeaders_, "isAllocated() needs the table of sizes");
+        return allocatedSizes_.contains(payload);
+    }
+
     void reset() override {
         std::lock_guard<std::mutex> lock(mutex_);
         size_t total_capacity = end_ - start_;
