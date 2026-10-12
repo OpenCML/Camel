@@ -61,6 +61,7 @@ func main(): int sync {
 - 实参按位置对应形参，类型必须完全一致（不做隐式转换）。不匹配是 `SemanticDiag::NoMatchingFunction` 或 `SemanticDiag::ArgumentsMismatch`，诊断里列出可用的签名。
 - 同名函数有多个时按重载规则选择（[7.4.3](07_statements.md#743-重载)）。
 - 关键字实参 `f(a: 1)` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。
+- 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
 - 直接调用一个写在括号里的 lambda（`((x: int) => x + 1)(3)`）目前不可用；先用 `let` 绑定到名字再调用。
 
 ## 6.5 管道

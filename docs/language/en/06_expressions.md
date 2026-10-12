@@ -61,6 +61,7 @@ func main(): int sync {
 - Arguments correspond to parameters by position, and the types must match exactly (no implicit conversions). A mismatch is `SemanticDiag::NoMatchingFunction` or `SemanticDiag::ArgumentsMismatch`, and the diagnostic lists the available signatures.
 - When there are several functions of the same name, one is selected by the overloading rules ([7.4.3](07_statements.md#743-overloading)).
 - Keyword arguments `f(a: 1)` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`).
+- Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
 - Directly calling a lambda written in parentheses (`((x: int) => x + 1)(3)`) is currently unavailable; first bind it to a name with `let`, then call it.
 
 ## 6.5 Pipes

@@ -13,8 +13,8 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 ## 2. 当前基线
 
-- 开发分支 `fsh-dev`；默认测试集（`smoke` 加全部 `feat` 计划）1966 条，全部通过，没有遗留失败。
-- 核心（`src/` 与 `include/`）约 9.7 万行，库（`modules/` 与 `stdlib/`）约 3.5 万行，工具（`tools/`）另有约 1.6 万行；42 个内建遍（另有 35 个别名）加 2 个由模块提供的遍（`tensor::fuse`、`onnx::export`）；四种执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）以及到 C++ 的转译。
+- 开发分支 `fsh-dev`；默认测试集（`smoke` 加全部 `feat` 计划）按计划文件统计为 2143 条，另有示例计划 `test/plans/feat/examples.plan.toml`（每个示例在四种后端上各算一条，共一百余条）；计划中没有标为已知失败的用例。
+- 核心（`src/` 与 `include/`）约 9.8 万行，库（`modules/` 与 `stdlib/`）约 3.8 万行，工具（`tools/`）另有约 1.6 万行；42 个内建遍（另有 35 个别名）加 2 个由模块提供的遍（`tensor::fuse`、`onnx::export`）；四种执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）以及到 C++ 的转译。
 - 持续集成在推送（`main`、`develop`、`fsh-dev`）与合并请求时构建并运行默认测试集：Linux x64 与 Windows x64 必须通过，macOS arm64 是试验项，失败不阻断；打标签时另外构建发布包。
 
 下面各项前的记号：`[定]` 语义已裁定，可以直接做；`[稿]` 要先出设计稿，经语言作者过目；`[问]` 还有未决的问题（见设计原则第 6 节）。没有记号的不涉及语义。
@@ -30,7 +30,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
   - 通用的随机程序生成器加差分测试，覆盖字符串、集合、闭包、高阶函数（现有生成器只覆盖三种程序形状）。（状态：已完成，见 `test/tools/progen`、`test/plans/feat/opt/progen.plan.toml`）
   - 把"保持效应顺序"收进图改写接口，提供不能绕过的保序替换原语。近期修复的静默算错集中在五类根因：效应顺序丢失、把被写的变量当成单一的值、分支臂、宏的操作数被提前内联、无界增长。（状态：部分完成——已有保序的节点替换 `replaceNode`（`src/passes/opt/generic/rewrite.h`）与保序内联 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）；`GraphDraft` 上不保序的底层编辑仍可直接调用，并非不能绕过）
   - 统一的效应与别名分析，供各遍共用；分析结果的缓存与失效。（状态：未开始）
-  - `[定]` 给标准库各模块的算子补上纯度声明。（状态：部分完成——内建算子与 `math`、`tensor`、`nn`、`sim`、`autodiff` 已在 `OperatorTraitsRegistry` 中声明；`fs`、`io`、`os`、`sys`、`time`、`json`、`re`、`random`、`crypto`、`algo`、`statistics` 等模块没有声明，其算子一律按有副作用处理）
+  - `[定]` 给标准库各模块的算子补上纯度声明。（状态：部分完成——内建算子与 `algo`、`crypto`、`fs`、`json`、`math`、`os`、`para`、`random`、`re`、`sim`、`statistics`、`str`、`sys`、`this`、`time`、`tensor`、`nn`、`autodiff`、`onnx` 的每个算子都有声明，由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束（`camel inspect --ops` 可查）；还差 `python`、`pyplot` 两个模块，它们的算子没有声明，按有副作用处理）
 - **图的容量** `[定]`：单张图 65,535 的上限不放宽。查清是哪个遍把子图压平到超限（已知案例：gru 的一步需要 100,533 个边表项），让它在容量内工作。（状态：部分完成——上限没有放宽，超限是带位置的 `RuntimeDiag::GraphTooLarge` 或导出时的拒绝（`test/plans/feat/opt/generic.plan.toml`）；已查明压平到超限的是 ONNX 导出时不设上限的内联与展开（`benchmarks/README.md`），但它还不能在容量内工作）
 - **下游工具链的适配**：导出器覆盖更多构造；与封闭语言近邻（Futhark、Dex、Relay 等）做同一批程序的实测对比。（状态：部分完成——导出能力见 `export_matrix.md`（106 个算子中 66 个前向算子、23 个梯度算子有 ONNX 下降）；与 Futhark、Dex、Relay 等的同批程序实测对比未做）
 - **论文**：稿件与证据在归档仓库中维护，不在本文档展开。（状态：未核实——稿件与证据不在本仓库中）
@@ -41,14 +41,14 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 ### 4.1 边界问题
 
-- 堵住静默丢弃：列表推导得到空数组；`case 'a' | 'b'` 只认第一个模式；`??`、`!!` 的右侧被丢弃；非字面量模式抛内部错误。一律改成明确的编译期错误，或者按裁定实现。（状态：已完成，见 `test/plans/feat/compile/not_supported.plan.toml`、`test/plans/feat/compile/tagged.plan.toml`、`test/cases/linear/match/multi_pattern.cml`）
+- 堵住静默丢弃：列表推导得到空数组；`case 'a' | 'b'` 只认第一个模式；`??`、`!!` 的右侧被丢弃；非字面量模式抛内部错误。一律改成明确的编译期错误，或者按裁定实现。（状态：已完成，见 `test/plans/feat/compile/not_supported.plan.toml`、`test/plans/feat/compile/tagged.plan.toml`、`test/cases/linear/match/multi_pattern.cml`；同类的还有：没有 `case _` 的 `match` 是警告 `MatchWithoutDefault`，遇到未列出的值是带位置的 `MatchNotExhaustive`（`test/plans/feat/consistency/match.plan.toml`），无人使用的分支臂里的 `return`/`throw` 是警告 `ExitInUnusedBranch`（`test/plans/feat/compile/branch_exit.plan.toml`），函数值可以写在数组、元组、结构体字面量与分支臂里（`test/plans/feat/compile/function_value_positions.plan.toml`））
 - 即时编译的整数除法没有除零检查；发布构建下断言为空，越界访问不检查。（状态：部分完成——即时编译的除零已是带位置的 `DivisionByZero`（`test/plans/feat/linear/faults.plan.toml`），数组下标与切片越界在发布构建下也报诊断（`test/plans/feat/consistency/faults.plan.toml`）；`ASSERT` 在发布构建下仍为空，只靠断言把守的检查依旧不生效）
 - 四个后端的一致性：把运行期故障与递归用例铺到每个后端做差分测试。（状态：已完成，见 `test/plans/feat/consistency/`（故障、递归上限、取值、清理、`match` 五个计划））
 - `[定]` 非尾递归使用可配置的上限；超限在所有后端上都是带位置的诊断，不得崩溃。（状态：已完成，见 `--max-recursion-depth`、`CAMEL_MAX_RECURSION_DEPTH`，`test/plans/feat/consistency/limits.plan.toml`）
 
 ### 4.2 类型系统（优先级很高）
 
-- `[定]` 泛型函数按实参类型实例化：泛型函数是子图模板，每组具体类型实例化出一张子图。复用现有的专门化与类型重推断。（状态：部分完成——同一模块内按实参类型实例化已实现并有测试（`docs/technical/28_generic_functions_and_type_functions.md`、`test/plans/feat/compile/generics.plan.toml`）；泛型函数还不能跨模块导出，也不能当作函数值）
+- `[定]` 泛型函数按实参类型实例化：泛型函数是子图模板，每组具体类型实例化出一张子图。复用现有的专门化与类型重推断。（状态：部分完成——按实参类型实例化已实现并有测试，泛型函数可以跨模块导出，由导入它的模块各自实例化（`docs/technical/28_generic_functions_and_type_functions.md`、`test/plans/feat/compile/generics.plan.toml` 中的 `generic_exported` 各项，`stdlib/array.cml` 即这样导出）；泛型函数还不能当作函数值，导入的泛型函数体不能使用它所在模块的顶层值，实例放在哪个模块标为 `DESIGN-QUESTION(generic-export)`，待裁定）
 - `[定]` 类型变量用 `typeas T` 就地绑定。（状态：已完成，见 `test/plans/feat/compile/generics.plan.toml`）
 - `[定]` 类型函数用专门的类型表达式来写，在类型位置上用尖括号调用；带参数的类型声明就是类型函数。（状态：已完成，见 `type Pair<T> = (T, T)`，`test/plans/feat/compile/generics.plan.toml`）
 - `[定]` `T?` 与 `T!` 两种专用的内建形式；错误值是固定的内建结构。（状态：部分完成——两种形式与内建的 `Error` 结构已实现并有测试（`docs/technical/29_nullable_and_fallible_values.md`、`test/plans/feat/compile/tagged.plan.toml`）；隐式转换、嵌套、`match` 的写法等十一处行为按建议实现，代码中标为 `DESIGN-QUESTION(nullable-error)`，待裁定）
@@ -93,10 +93,10 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
   - `std::jit`：恢复对算子调用、下标访问、函数值调用、跨图调用的编译（现在只编译纯算术加自递归的图，其余整张图退回解释器）；补除零检查与栈深探测；`[稿]` 栈映射与安全点，与分代回收一起设计；ARM64 后端。（状态：部分完成——除零检查与编译后递归的深度检查已做（`test/plans/feat/linear/faults.plan.toml`、`test/plans/feat/consistency/limits.plan.toml`）；含算子调用、下标访问、函数值调用、跨图调用的图仍整张退回解释器；栈映射与安全点的设计稿、ARM64 后端未开始）
   - `std::prl`：非 Linux 平台的栈耗尽防护；故障在并行任务之间的传播。（状态：部分完成——并行任务中的故障会终止整个程序并只报告第一个（`test/plans/feat/consistency/faults.plan.toml` 覆盖 `std::prl`）；Windows 与 macOS 上读取栈界的代码已写，未经编译与运行）
   - `std::fvm`：单张图的槽位上限（32,767）随"图的容量"一项一并处理。（状态：部分完成——超过 32,767 个槽位在任何构建下都被检出并终止，不再静默截断（`src/passes/sched/fastvm/bytecode.h`）；报出的仍是不带位置的文本，上限本身未随"图的容量"处理）
-- **标准库** `[定]`：原语用 C++，组合逻辑用 Camel。（状态：部分完成——见下面各子项；用 Camel 写的组合逻辑库还没有，`stdlib/` 下只有 `perf.cml` 与签名文件）
-  - 字符串（切分、修剪、大小写、替换、查找；`[定]` 按字节，另有码点算子）、数组与高阶函数、位运算：已有（`str`、`array`、`math`，见 `docs/stdlib-reference.md`）。未做：字节缓冲区、带比较函数的排序、`group_by`（等映射类型）。（状态：部分完成——字符串、数组、位运算的函数已有并由 `test/plans/feat/modules/` 下的计划测试；字节缓冲区、带比较函数的排序、`group_by` 未做）
-  - `math`、`statistics` 已补全；`time` 的补全；`fs` 补全与路径处理；子进程、套接字、日志；CSV、TOML、base64、压缩。（状态：部分完成——`math`、`statistics` 已补全，`fs` 有 `try_read_text`；`time` 的补全、路径处理、子进程、套接字、日志、CSV、TOML、base64、压缩未做）
-  - 签名文件已与实现对齐并由测试约束（`scripts/stdlib-reference.mjs --verify-ops`），参考文档由签名文件生成；纯度已逐个算子声明并由测试约束。`tensor`、`nn` 等模块的签名文件未做。（状态：部分完成——标准模块的签名文件、`docs/stdlib-reference.md` 与纯度声明已有并由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束；`tensor`、`nn` 等模块的签名文件未做）
+- **标准库** `[定]`：原语用 C++，组合逻辑用 Camel。（状态：部分完成——原语在 C++ 模块里（`modules/`），用 Camel 写的库已有 `stdlib/array.cml`（数组与高阶函数，建立在内建算子与 `algo` 的三个原语之上）；其余组合逻辑还没有用 Camel 写的库，见下面各子项）
+  - 字符串（切分、修剪、大小写、替换、查找；`[定]` 按字节，另有码点算子）、数组与高阶函数、位运算：已有（`str`、`array`、`math`，见 `docs/stdlib-reference.md`）。未做：字节缓冲区、带比较函数的排序、`group_by`（等映射类型）。（状态：部分完成——`str`（C++）、`array`（Camel，`stdlib/array.cml`）与 `math` 的位运算函数已有，由 `test/plans/feat/modules/stdlib_values.plan.toml`、`stdlib_faults.plan.toml` 测试；字节缓冲区、带比较函数的排序（现有 `sort_by` 按键排序）、`group_by` 未做）
+  - `math`、`statistics` 已补全；`time` 的补全；`fs` 补全与路径处理；子进程、套接字、日志；CSV、TOML、base64、压缩。（状态：部分完成——`math`、`statistics` 已补全（`docs/stdlib-reference.md`），`fs` 有 `try_read_text`、`read_chunk`、`is_file`、`is_dir`、`mkdir`、`mkdirs`；`time` 仍只有 `now`、`strftime`、`strptime`，路径处理、子进程、套接字、日志、CSV、TOML、base64、压缩未做）
+  - 签名文件已与实现对齐并由测试约束（`scripts/stdlib-reference.mjs --verify-ops`），参考文档由签名文件生成；纯度已逐个算子声明并由测试约束。`tensor`、`nn` 等模块的签名文件未做。（状态：部分完成——十五个签名文件（`stdlib/signatures/`）与注册的算子一致（`scripts/stdlib-reference.mjs --verify-ops`），`docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 生成（`--verify-doc`），纯度逐个算子声明（`camel inspect --ops`），三者都由 `test/plans/feat/modules/stdlib_registry.plan.toml` 约束；`tensor`、`nn`、`autodiff`、`onnx`、`sim` 没有签名文件）
   - 用 Camel 写的测试框架与断言库。（状态：未开始）
 - **模块接口** `[定]`：整理出一层公开的 C++ 接口并按版本承诺兼容；纯度声明进入这层接口。（状态：未开始）
 - **跨语言互操作**：Python 桥的自动类型转换；从 Python 里 `import camel` 运行图；C FFI。（状态：未开始）
@@ -110,8 +110,8 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 - **调试器** `[定]`：源码行与图节点两种视图，两种单步；变量查看与调用栈；实现标准调试协议。（状态：部分完成——已有的 `camel-db`（`tools/debugger`）提供图节点视图、节点断点与按节点单步；源码行视图与按行单步、变量查看、调用栈、标准调试协议未做）
 - **语言服务器**：悬停、跳转到定义、补全、重命名、语义高亮、增量同步（现在只有诊断与格式化）。（状态：未开始）
 - **编辑器支持**：语法高亮定义与 VS Code 扩展。（状态：未开始）
-- **其他工具**：REPL；`camel test`；性能分析器；文档生成器；包管理器。（状态：部分完成——已有按阶段计时的 `-P`/`--profile` 与 `camel-profiler`；REPL、`camel test`、文档生成器、包管理器未做）
-- **文档**：入门教程、按任务组织的指南、标准库参考、通用示例集；设计原则的英文译本同步（目前落后于中文版）；`[定]` README 的定位表述更新。（状态：部分完成——入门教程（`docs/tutorial/`，中英文）、通用示例集（`examples/`，由 `test/plans/feat/examples.plan.toml` 逐个运行并核对输出）、设计原则的英文译本（`docs/design-principles.en.md`）、README 的定位表述已完成；按任务组织的指南只有示例集，没有成文的指南；标准库参考未做）
+- **其他工具**：REPL；`camel test`；性能分析器；文档生成器；包管理器。（状态：部分完成——已有按阶段计时的 `-P`/`--profile` 与性能分析器 `camel-pr`（`tools/profiler`）；文档生成器只有生成标准库参考的 `scripts/stdlib-reference.mjs`，没有面向用户代码的文档生成器；REPL、`camel test`、包管理器未做）
+- **文档**：入门教程、按任务组织的指南、标准库参考、通用示例集；设计原则的英文译本同步（目前落后于中文版）；`[定]` README 的定位表述更新。（状态：部分完成——入门教程（`docs/tutorial/tutorial.cn.md`、`tutorial.en.md`）、标准库参考（`docs/stdlib-reference.md`，由签名文件与库源码生成）、通用示例集（`examples/`，由 `test/plans/feat/examples.plan.toml` 逐个运行并核对输出）、中英文语言参考（`docs/language/`、`docs/language/en/`）、设计原则的英文译本（`docs/design-principles.en.md`）、README 的定位表述已完成；按任务组织的指南只有按任务分目录的示例集，没有成文的指南）
 
 ## 7. 依赖关系
 
