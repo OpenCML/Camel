@@ -157,8 +157,9 @@ case = "../../../cases/compile/surface/main_implicit_result.cml"
 args = ["${case}"]
 expect_exit = 0
 verify_script = """
-assert(input.stdout === 'printed by the program\n', JSON.stringify(input.stdout))
+assert(input.normalized.stdout === 'printed by the program\n', JSON.stringify(input.normalized.stdout))
 """
+normalizers = ["normalize_newlines"]
 
 [[tests]]
 name = "surface.main_void_result"
