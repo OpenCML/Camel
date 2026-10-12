@@ -73,9 +73,9 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     void beginCompile(const camel::core::context::context_ptr_t &ctx);
     /// After it. `root` is the graph before any pass; null when the program did not compile.
     void endCompile(camel::runtime::GCGraph *root);
-    /// Before the passes run. `unsupported`: why this pipeline cannot be debugged (empty when
-    /// it can); the program then runs without stops and every breakpoint says so.
-    void beginRun(const std::string &unsupported);
+    /// Before the passes run. `notice`: what the user is told about this run (a back end
+    /// replaced by a debuggable one); empty when there is nothing to say.
+    void beginRun(const std::string &notice);
     /// After the run: `outcome` is "completed", "failed" or "terminated".
     void endRun(const std::string &outcome, std::optional<int> exitCode);
 
@@ -215,7 +215,6 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     bool stopOnEntry_    = false;
     bool stopOnEntryOnce_ = false;
     int nextBreakpointId_ = 1;
-    std::string unsupported_;
     json lastStop_;
     json lastException_;
     bool resumePending_ = false;

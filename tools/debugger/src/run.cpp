@@ -117,29 +117,34 @@ namespace {
 
 using debugger::core::DebugCore;
 
-/// The pass sequence as it runs under the debugger, and why it cannot be debugged (empty when
-/// it can). Compiled code has no hooks, so std::jit runs as the interpreter it is built on;
-/// the parallel scheduler has no single current node (docs/technical/34_debugger.md, 7.2).
+/// The pass sequence as it runs under the debugger, and what the user is told when it is not
+/// the one that was asked for (empty otherwise). Only the sequential interpreters have hooks
+/// (docs/technical/34_debugger.md, 7.2): compiled code cannot be stopped, so std::jit runs as
+/// the interpreter it is built on; the parallel scheduler runs several nodes at once and has no
+/// single current node, so it is replaced by std::fvm, one of the orders it may choose.
 std::vector<std::string>
-debuggablePasses(const std::vector<std::string> &passes, std::string &unsupported) {
+debuggablePasses(const std::vector<std::string> &passes, std::string &notice) {
     std::vector<std::string> out;
     for (const std::string &pass : passes) {
+        std::string reason;
         if (pass == "std::jit" || pass == "std::fastvm::jit") {
-            std::cerr << "[camel-db] " << pass
-                      << " runs as std::fvm under the debugger: compiled code cannot be stopped."
-                      << std::endl;
-            out.push_back("std::fvm");
+            reason = "compiled code cannot be stopped";
+        } else if (pass == "std::tf" || pass == "std::prl" || pass == "std::parallel" ||
+                   pass == "std::taskflow") {
+            // DESIGN-QUESTION(parallel-debugging)
+            reason = "the parallel scheduler runs several nodes at once, so there is no single "
+                     "current node; the order of evaluation under the debugger is the "
+                     "sequential one of std::fvm";
+        }
+        if (reason.empty()) {
+            out.push_back(pass);
             continue;
         }
-        if (pass == "std::tf" || pass == "std::prl" || pass == "std::parallel" ||
-            pass == "std::taskflow") {
-            unsupported = "The parallel scheduler (" + pass +
-                          ") cannot be debugged: several nodes run at once, so there is no "
-                          "single current node. The program runs without stopping; use "
-                          "std::nvm or std::fvm to debug it.";
-            std::cerr << "[camel-db] " << unsupported << std::endl;
+        if (!notice.empty()) {
+            notice += "\n";
         }
-        out.push_back(pass);
+        notice += "[camel-db] " + pass + " runs as std::fvm under the debugger: " + reason + ".";
+        out.push_back("std::fvm");
     }
     return out;
 }
@@ -233,9 +238,12 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
     }
     st.compiledPending = false;
 
-    std::string unsupported;
-    const std::vector<std::string> passes = debuggablePasses(st.runPasses, unsupported);
-    core.beginRun(unsupported);
+    std::string notice;
+    const std::vector<std::string> passes = debuggablePasses(st.runPasses, notice);
+    // A debug adapter shows the notice from the core's event; other clients read the log.
+    if (!notice.empty() && !quiet)
+        std::cerr << notice << std::endl;
+    core.beginRun(notice);
     // Every exit reports the end of the run to the core.
     std::string outcome = "failed";
     struct EndRun {

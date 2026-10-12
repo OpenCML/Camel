@@ -153,7 +153,7 @@ void DebugCore::endCompile(GCGraph *root) {
     pushEvent(json{{"type", "loaded"}, {"compiled", root != nullptr}});
 }
 
-void DebugCore::beginRun(const std::string &unsupported) {
+void DebugCore::beginRun(const std::string &notice) {
     stack_.clear();
     activationBase_.clear();
     handles_.clear();
@@ -166,7 +166,6 @@ void DebugCore::beginRun(const std::string &unsupported) {
     pauseRequested_.store(false);
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        unsupported_      = unsupported;
         state_            = State::Running;
         entryStopPending_ = stopOnEntry_ || stopOnEntryOnce_;
         stopOnEntryOnce_  = false;
@@ -174,11 +173,8 @@ void DebugCore::beginRun(const std::string &unsupported) {
         lastStop_         = nullptr;
         lastException_    = nullptr;
     }
-    if (!unsupported.empty()) {
-        reverifyAll();
-    }
     camel::execute::setExecutionObserver(this);
-    pushEvent(json{{"type", "started"}, {"unsupported", unsupported}});
+    pushEvent(json{{"type", "started"}, {"notice", notice}});
 }
 
 void DebugCore::endRun(const std::string &outcome, std::optional<int> exitCode) {
@@ -221,11 +217,6 @@ json DebugCore::breakpointJson(const LineBreakpoint &bp) const {
 void DebugCore::verify(LineBreakpoint &bp) {
     // mutex_ is held by the caller; the index has its own lock.
     bp.origins.clear();
-    if (!unsupported_.empty()) {
-        bp.verified = false;
-        bp.message  = unsupported_;
-        return;
-    }
     std::lock_guard<std::mutex> lock(indexMutex_);
     if (!index_.isCompiled()) {
         bp.verified = false;
@@ -1247,7 +1238,6 @@ json DebugCore::command(const std::string &name, const json &args) {
                 {"ok", true},
                 {"state", state},
                 {"stop", lastStop_},
-                {"unsupported", unsupported_},
                 {"lastEvent", nextEventSeq_ - 1}};
         }
         if (name == "setBreakpoints") {

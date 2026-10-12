@@ -35,6 +35,7 @@
 #include "command/commands.h"
 #include "command/dispatcher.h"
 #include "compile.h"
+#include "dap/adapter.h"
 #include "repl.h"
 #include "spawn.h"
 #include "state.h"
@@ -65,12 +66,31 @@ static bool isPositiveInt(const std::string &s) {
     return true;
 }
 
+/// The path of this executable, for starting it again as a worker (`--run-worker`): absolute,
+/// so that a change of the working directory does not lose it.
+static std::string resolveExePath(const char *argv0Text) {
+    fs::path argv0(argv0Text);
+    if (argv0.is_absolute() && fs::exists(argv0))
+        return argv0.string();
+    fs::path dir = camel::utils::getExecutableDirectory();
+    if (!dir.empty() && fs::exists(dir / argv0.filename()))
+        return (dir / argv0.filename()).string();
+    fs::path abs = fs::absolute(argv0);
+    return fs::exists(abs) ? abs.string() : std::string();
+}
+
 int main(int argc, char *argv[]) {
     // 子进程入口：由父进程 spawn 时传入 --run-worker <script>，此处直接进入 worker 模式并退出，
     // 不启动 REPL、不解析其它全局选项，保证子进程行为单一（只跑脚本 + HTTP 服务）。
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--run-worker")
             return debugger::runWorkerMode(argc, argv);
+    }
+    // The debug adapter: the Debug Adapter Protocol on stdin/stdout, nothing else on stdout.
+    // It only translates between an editor and a worker process, so it starts no runtime.
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--dap")
+            return debugger::dap::runAdapter(resolveExePath(argv[0]));
     }
 
     camel::ScopedRuntime camelRuntime;
@@ -81,24 +101,7 @@ int main(int argc, char *argv[]) {
     // 任意退出路径（return/exit）都会执行：关闭 Job、终止子进程，防止主进程退出后子进程残留。
     std::atexit([] { debugger::terminateAllWorkers(); });
 
-    // 解析可执行路径并保存，供 spawn 子进程时构造命令行（子进程需用同一 exe 启动 --run-worker）。
-    // 优先使用绝对路径或基于 getExecutableDirectory 的路径，避免工作目录变化导致找不到 exe。
-    {
-        fs::path argv0(argv[0]);
-        if (argv0.is_absolute() && fs::exists(argv0)) {
-            debugger::setExePath(argv0.string());
-        } else {
-            fs::path dir = camel::utils::getExecutableDirectory();
-            if (!dir.empty())
-                debugger::setExePath((dir / argv0.filename()).string());
-            std::string &exe = debugger::getExePath();
-            if (exe.empty() || !fs::exists(exe)) {
-                fs::path abs = fs::absolute(argv0);
-                if (fs::exists(abs))
-                    exe = abs.string();
-            }
-        }
-    }
+    debugger::setExePath(resolveExePath(argv[0]));
 
     EXEC_WHEN_DEBUG({
         // Debug 构建下将 libcamel 的 assert 转为抛异常，便于在调试器中捕获并上报给 Web UI
