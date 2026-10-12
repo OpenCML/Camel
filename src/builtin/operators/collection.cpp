@@ -58,11 +58,10 @@ const SetType *setTypeOf(ArgsView &args, size_t index) {
 /// `m[k]`: null when absent, otherwise the value in the form the lookup type has
 /// (DESIGN-QUESTION(map-nullable-value)).
 slot_t lookup(const Table *table, slot_t key, const MapType *type) {
-    const ptrdiff_t at = table::find(table, key, type->keyType());
-    if (at < 0) {
+    slot_t value = NullSlot;
+    if (!table::lookup(table, key, type->keyType(), value)) {
         return NullSlot;
     }
-    const slot_t value = table->values()[at];
     if (!type->lookupBoxes()) {
         return value;
     }
@@ -87,10 +86,13 @@ slot_t __coll_map_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __coll_map_get_or__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const Table *table = norm.get<Table *>(0);
-    const ptrdiff_t at =
-        table::find(table, configArg(with, norm, 0), mapTypeOf(norm, 0)->keyType());
-    return at < 0 ? configArg(with, norm, 1) : table->values()[at];
+    slot_t value     = NullSlot;
+    const bool found = table::lookup(
+        norm.get<Table *>(0),
+        configArg(with, norm, 0),
+        mapTypeOf(norm, 0)->keyType(),
+        value);
+    return found ? value : configArg(with, norm, 1);
 }
 
 slot_t __coll_map_put__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -112,11 +114,8 @@ slot_t __coll_remove__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __coll_has__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const ptrdiff_t at = table::find(
-        norm.get<Table *>(0),
-        configArg(with, norm, 0),
-        collTypeOf(norm, 0)->keyType());
-    return toSlot<Bool>(at >= 0);
+    return toSlot<Bool>(
+        table::has(norm.get<Table *>(0), configArg(with, norm, 0), collTypeOf(norm, 0)->keyType()));
 }
 
 slot_t __coll_len__(ArgsView &with, ArgsView &norm, Context &ctx) {
