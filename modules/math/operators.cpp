@@ -18,6 +18,7 @@
  */
 
 #include "operators.h"
+#include "numeric.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -190,7 +191,8 @@ slot_t __math_sqrt__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 std::unordered_map<std::string, operator_t> getMathOpsMap() {
-    return {
+    std::unordered_map<std::string, operator_t> ops = getMathNumericOpsMap();
+    ops.merge(std::unordered_map<std::string, operator_t>{
         {"abs_i", __math_abs__},     {"abs_l", __math_abs__},     {"abs_f", __math_abs__},
         {"abs_d", __math_abs__},     {"exp_f", __math_exp__},     {"exp_d", __math_exp__},
         {"round_f", __math_round__}, {"round_d", __math_round__}, {"ceil_f", __math_ceil__},
@@ -198,5 +200,6 @@ std::unordered_map<std::string, operator_t> getMathOpsMap() {
         {"bin_i", __math_bin__},     {"bin_l", __math_bin__},     {"oct_i", __math_oct__},
         {"oct_l", __math_oct__},     {"hex_i", __math_hex__},     {"hex_l", __math_hex__},
         {"sqrt", __math_sqrt__},
-    };
+    });
+    return ops;
 }

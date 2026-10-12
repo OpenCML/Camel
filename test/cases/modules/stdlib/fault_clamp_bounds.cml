@@ -1,0 +1,10 @@
+module fault_clamp_bounds
+
+import { clamp } from math
+
+func main(): int sync {
+    println('before')
+    println(clamp(5, 10, 0))
+    println('not reached')
+    return 0
+}
