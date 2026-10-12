@@ -49,7 +49,7 @@ type Pair<T> = (T, T)
   | `int('42')`, `float('1.5')` | `42`, `1.5`. **The whole string must be one number**: it may carry one sign (`'-12'`, `'+12'`), an integer is decimal digits only, a float may have a fraction and an exponent (`'1e3'`, `'.5'`) or be `inf` or `nan`. Blanks around it (`' 7'`), anything after the number (`'12abc'`), `'1.5'`, `'0x10'` or `'1_000'` for an integer, and a number outside the range of the type are the fault `RuntimeDiag::InvalidNumberText` |
   | `parse_int('42')`, `parse_float('x')` | `int!`, `float!`: read by the same rule; text that is not one number gives an error value (`ParseError`), not a fault (see 3.4) |
   | `string(42)`, `string(true)`, `string([1, 2])` | `'42'`, `'true'`, `'[1, 2]'` |
-  | `string(3.5)` | `'3.500000'` (fixed 6 decimal places; for another format use `format`) |
+  | `string(3.5)`, `string(2.0)` | `'3.5'`, `'2.0'`: the text `println` and a `{}` of `format` write, the shortest that reads back as the same number ([2.5.2](02_lexical.md#252-floating-point-numbers)); `float(string(x))` gives `x` back |
 
 - **A typed declaration gives a literal its type**: `let a: i32 = 3`, `let b: f32 = 0.1`. `as` is not used for conversions between numbers (`1 as float` is a compile-time error); use the conversion functions above.
 - There is no `bool(x)`, and no conversion from `bool` to an integer; use a comparison to get a boolean (`n != 0`), and `if` to get an integer.

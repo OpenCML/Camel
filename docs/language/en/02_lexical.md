@@ -68,7 +68,19 @@ For the status of each word in the last row see [8.6](08_top_level_and_grammar.m
 
 - The form is "digits `.` digits", optionally with an exponent: `1.0`, `0.5`, `2.5e+3`, `1.0e-2`. There must be digits on both sides of the decimal point (`.5` and `5.` are syntax errors).
 - The type is `float` (64-bit double precision). The value of a literal is the double-precision number nearest to the decimal number written (round to even), the same value that `float('...')` gives for the same text.
-- Printing keeps 6 significant digits by default and drops trailing zeros: `1.0` prints as `1`, `0.1 + 0.2` prints as `0.3`, `3.14159265358979` prints as `3.14159`. For another precision use `format`: `'{:.17g}'->format<0.1>` gives `0.10000000000000001`.
+- **A float has one text: the shortest that reads back as the same number.** `println`, `print`, `string(x)`, a `{}` of `format`, and a float element of an array, tuple, struct or `Map` all write the same text:
+
+  | Value | Text | Note |
+  |---|---|---|
+  | `2.0`, `100000.0` | `2.0`, `100000.0` | A float with a whole value keeps `.0`, so it reads back as a float |
+  | `0.1 + 0.2`, `1.0 / 3.0` | `0.30000000000000004`, `0.3333333333333333` | No longer cut to 6 significant digits |
+  | `0.1`, `3.14159265358979` | `0.1`, `3.14159265358979` | The shortest one |
+  | `1.0e21`, `1.0e-7` | `1e+21`, `1e-07` | With a decimal exponent below -4 or of 16 and more the exponent form is used, with a sign and at least two digits |
+  | `1.0e15`, `0.0001` | `1000000000000000.0`, `0.0001` | Otherwise the plain decimal form |
+  | The two zeros | `0.0`, `-0.0` | |
+  | Infinities, NaN | `inf`, `-inf`, `nan` | A NaN has no sign (`-nan` is never printed) |
+
+  A `f32` is written as the shortest text that reads back as that `f32` (`f32(0.1)` is `0.1`). `float(s)` and `parse_float(s)` read every text above. For another form give the placeholder of `format` a specification: `'{:.2f}'->format<2.5>` is `2.50`, `'{:.17g}'->format<0.1>` is `0.10000000000000001`.
 
 ### 2.5.3 Strings
 

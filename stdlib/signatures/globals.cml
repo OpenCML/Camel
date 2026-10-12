@@ -62,7 +62,8 @@ inner func f32(x: i32 | int | f32 | float | string): f32 {
     return ':op/*tof'
 }
 
-/// x as text. A float is written with six decimals: string(2.5) is '2.500000'.
+/// x as text, as println writes it. A float is written as the shortest text that reads back as
+/// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 /// @pure
 /// @example string(42)    // '42'
 inner func string(x: any): string {

@@ -273,7 +273,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Byte:
             DO_CONV(Float32, Byte, static_cast<Byte>(static_cast<int>(v) & 0xFF));
         case TypeCode::String: {
-            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
+            ::String *s = ::String::from(camel::utils::floatText(v), mm::autoSpace());
             return toSlot(s);
         }
         default:
@@ -294,7 +294,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Byte:
             DO_CONV(Float64, Byte, static_cast<Byte>(static_cast<int>(v) & 0xFF));
         case TypeCode::String: {
-            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
+            ::String *s = ::String::from(camel::utils::floatText(v), mm::autoSpace());
             return toSlot(s);
         }
         default:

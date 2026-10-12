@@ -135,13 +135,13 @@ slot_t __ltos__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 slot_t __ftos__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 v = norm.get<Float32>(0);
-    String *s = String::from(std::to_string(v), mm::autoSpace());
+    String *s = String::from(camel::utils::floatText(v), mm::autoSpace());
     return toSlot(s);
 }
 
 slot_t __dtos__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 v = norm.get<Float64>(0);
-    String *s = String::from(std::to_string(v), mm::autoSpace());
+    String *s = String::from(camel::utils::floatText(v), mm::autoSpace());
     return toSlot(s);
 }
 

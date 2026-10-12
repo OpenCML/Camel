@@ -30,6 +30,7 @@
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/manager.h"
+#include "camel/utils/number_text.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -287,9 +288,9 @@ void saveValue(slot_t value, Type *valueType, const std::string &path, const std
     case TypeCode::Int64:
         return writeText(std::to_string(rtdata::fromSlot<int64_t>(value)));
     case TypeCode::Float32:
-        return writeText(std::format("{}", rtdata::fromSlot<float>(value)));
+        return writeText(camel::utils::floatText(rtdata::fromSlot<float>(value)));
     case TypeCode::Float64:
-        return writeText(std::format("{}", rtdata::fromSlot<double>(value)));
+        return writeText(camel::utils::floatText(rtdata::fromSlot<double>(value)));
     case TypeCode::Bool:
         return writeText(rtdata::fromSlot<bool>(value) ? "true" : "false");
     case TypeCode::String:
