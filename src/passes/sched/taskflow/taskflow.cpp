@@ -1094,8 +1094,9 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     if (gcStats) {
         TaskflowGcGate::instance().reportStats(std::cerr);
         std::cerr << std::format(
-            "[taskflow] run: task_graphs={}\n",
-            taskGraphsRun_.load(std::memory_order_relaxed));
+            "[taskflow] run: task_graphs={} workers={}\n",
+            taskGraphsRun_.load(std::memory_order_relaxed),
+            executor_.num_workers());
     }
     return nullptr;
 }

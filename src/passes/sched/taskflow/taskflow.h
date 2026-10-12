@@ -496,7 +496,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     std::unordered_map<camel::runtime::GCGraph *, bool> heavyGraphs_;
     bool graphIsHeavy(camel::runtime::GCGraph *graph);
     bool boundedLight(GraphPlan &plan);
-    // Scopes run as task graphs since the pass started (reported with CAMEL_TF_GC_STATS).
+    // Task graphs run since the pass started: scopes, and unordered operators that asked for
+    // helpers (reported with CAMEL_TF_GC_STATS).
     std::atomic<uint64_t> taskGraphsRun_{0};
 
     GraphPlan *planFor(camel::runtime::GCGraph *graph);
