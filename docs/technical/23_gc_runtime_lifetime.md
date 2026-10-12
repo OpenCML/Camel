@@ -49,9 +49,9 @@ Invariants:
   request, the usage, the limit and the variable that raises it. The first caller that knows
   what was being built adds it (`during`): the graph builder names the function being compiled,
   the encoders name the graph. The pass driver, the graph builder and the command line report
-  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own (objects that do
-  not fit the elder space go to the large-object space, which takes memory from the host); a
-  refusal by the host is reported the same way.
+  it as `RuntimeDiag::MemoryExhausted`. The auto space has no limit of its own unless `CAMEL_GC_HEAP_LIMIT_MB` sets one (the
+  elder space grows by segments, the large-object space takes blocks from the host); the limit
+  and a refusal by the host are reported the same way.
 
 This does not stand in the way of a moving collector for small objects: nothing here hands out
 pointers to collectable objects, and the spaces hold only what is never moved.
@@ -116,23 +116,35 @@ The GC reaches live objects through these roots:
 Context teardown must clear the installed root set before destroying `GCGraphManager`, otherwise the
 global `autoSpace` singleton can retain a dangling vector pointer.
 
-## Current Collector Mode
+## Collectors
 
-The production configuration currently disables young-generation copying:
+Two collectors run the auto space; `--gc` / `CAMEL_GC` chooses (`docs/cli.md`, "The
+collector"). The default is the non-moving one.
 
-```cpp
-.enableYoungGenCopying = false
-```
+- **mark-sweep.** Small objects are allocated from the free lists of the elder space, objects
+  above 4 KB as separate blocks in the large-object space. A major collection marks from the
+  roots and sweeps both. No object ever moves.
+- **generational.** Objects up to 64 KB are allocated by bumping a pointer in the birth space
+  (4 MB). A minor collection copies what is reachable into a survivor space (1 MB), or into the
+  elder space after four survivals or when the survivor space is full, and frees the rest by
+  resetting the spaces; a major collection first runs a minor one, then marks and sweeps the
+  elder and large-object spaces. A minor collection is asked for when the birth space is 90 %
+  full. Its cost is what survives plus the roots: dead objects are not visited (those with a
+  finalizer register themselves, `IAllocator::noteFinalizable`).
 
-Runtime schedulers and native graph payloads still pass raw object pointers through frames and static
-slots, so stable addresses are the safe default. With copying disabled, small objects allocate into
-the elder free-list space and major GC performs mark-sweep over elder and large-object spaces.
+The elder space grows by segments (32 MB first, each further one as large as everything
+reserved so far, at most 256 MB), so neither allocation nor promotion fails short of the host
+refusing memory. Major collections are paced by volume for both old spaces: one is asked for
+when a space has taken, since its last sweep, the larger of a floor (32 MB for the elder space,
+`CAMEL_GC_LARGE_BUDGET_MB` for large objects) and `CAMEL_GC_GROWTH_PERCENT` percent of what
+that sweep left alive. `CAMEL_GC_HEAP_LIMIT_MB` bounds what the two hold together.
 
-The young-copying path is kept structurally valid for future work: relocated objects carry their
-layout type during scan, graph/static roots are traced even when the root object itself is outside
-autoSpace, and moving major collection relocates young objects before marking final heap locations.
-Fully enabling copying still requires complete typed root coverage and write barriers for
-old-to-young references.
+What C++ code may do with objects under either collector is the subject of
+`32_gc_handle_rules.md`. In short for this file: a minor collection updates the roots in place
+(frame slots, static areas of graphs including graphs reached only through function values,
+`RootHandle`s, the evaluator's roots, registered tracers); an object born old is tracked until
+the next minor collection and scanned then, so its creator needs no barrier; later stores of
+young references into old objects go through the typed barrier.
 
 ## Phase 2 Safepoint Contract
 
@@ -156,7 +168,9 @@ frames, macro value roots, or explicit `mm::RootHandle` instances for C++ locals
 
 The current non-moving domains are intentional:
 
-- JIT machine code has no stack maps yet, so JIT execution remains outside the moving-GC contract.
+- JIT machine code has no stack maps. No collection runs while a native frame exists (compiled
+  code calls nothing and polls nothing; a safepoint under a native frame is refused), and with
+  the generational collector a graph with an object constant is not compiled.
 - Taskflow workers stop for a collection through a handshake (`TaskflowGcGate`), not by moving-safe
   stack maps. Work that can hold a value no root reaches yet (an operator and the store of its
   result, the fill of a callee frame, the store of a call result) runs inside a region; a worker
@@ -184,7 +198,7 @@ remembered when promotion leaves old-to-young edges behind.
 
 The verifier compares remembered entries against typed old/large objects whose layouts are known
 from barriers, roots, or relocation metadata. Missing remembered entries report the owner slot, slot
-type, region, and young target. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is an explicit test/debug opt-in;
+type, region, and young target. `CAMEL_GC=generational` selects the moving collector;
 the production default remains address-stable.
 
 Intentionally unbarriered paths are limited to storage that is not an old auto-space container:
@@ -196,7 +210,7 @@ data objects do not participate in runtime auto-space collection.
 
 Camel slots remain plain 8-byte values. A slot that names an external/native resource stores an
 ordinary `rtdata::Object *`, specifically a `ForeignResourceObject`. The wrapper is GC-managed and
-may move under the experimental young-copying collector; the native resource itself lives behind a
+may move under the generational collector; the native resource itself lives behind a
 `ForeignResourceControlBlock` with explicit retain/release, idempotent disposal, kind metadata, and
 debug counters.
 
@@ -278,7 +292,7 @@ do not need source changes:
 - `CAMEL_GC_STRESS_SAFEPOINT=N` requests a collection every `N` explicit runtime safepoints.
 - `CAMEL_GC_STRESS_MODE=minor|major|both` selects which collection kind stress requests use.
 - `CAMEL_GC_LOG_MOVES=1` emits movement records when the copying path relocates an object.
-- `CAMEL_GC_ENABLE_YOUNG_COPYING=1` enables the experimental young-copying path for targeted GC
+- `CAMEL_GC=generational` (older spelling `CAMEL_GC_ENABLE_YOUNG_COPYING=1`) selects the generational collector for GC
   tests. It is off by default.
 - `CAMEL_GC_PRINT_CONFIG=1` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.

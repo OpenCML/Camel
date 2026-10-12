@@ -47,6 +47,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-t`, `--threads <num>`: Maximum number of threads  
 - `--max-recursion-depth <n>`: Limit on the calls that may be open at once without being tail calls (1 to 1000000; see "Resource limits"). Also `CAMEL_MAX_RECURSION_DEPTH=<n>`; the option wins  
 - `--max-macro-depth <n>`: Limit on nested calls while `std::macro` evaluates a call ahead of time (default 64; same range). Also `CAMEL_MAX_MACRO_DEPTH=<n>`  
+- `--gc <collector>`: Collector of run-time values: `mark-sweep` (default; an object keeps its address) or `generational` (young objects are copied and die cheaply; see "The collector"). Also `CAMEL_GC=<collector>`; the option wins  
 - `-n`, `--no-cache`: Disable cache modules  
 - `-I`, `--include <dir>`: Add module search path (can be used multiple times)  
 - `-L`, `--stdlib <path>`: Standard library path, added to the module search path. When omitted, the environment variable `CAMEL_STD_LIB` is used; with neither, the standard library is looked up in the `stdlib` directory next to the executable and under the installation root (`CAMEL_HOME`)  
@@ -288,6 +289,27 @@ The other limits marked "no" are compile-time constants (`generic.h`, the inline
 `std::opt::simplify` unrolls a recursion whose arguments are constants one level per round (`fib(15)` would become its whole call tree); the growth budget is what stops it. `onnx.export_model` simplifies the function it exports without the growth budget and the inline size cap, because an export has to reach straight-line code; a pipeline that exports through `std::opt::simplify onnx::export` is held to them and may need `CAMEL_OPT_GROWTH_BUDGET` raised for a large model (the export pass then refuses with `TranslationRefused` rather than writing a partial model, and the refusal names the budget, its value and the variable).
 
 ---
+
+### The collector (`--gc`, `CAMEL_GC`)
+
+Run-time values (arrays, strings, tuples, structs, function values, maps, tensors) are reclaimed by a collector that runs only at safepoints: calls, the element calls of higher-order operators, pass boundaries. Two collectors exist; which one runs is chosen per process and changes neither what a program prints nor which programs are accepted.
+
+| Collector | How | Choose it when |
+|---|---|---|
+| `mark-sweep` (default) | Every object stays where it was allocated. Small objects come from a free list in the elder space, large ones (above 4 KB) are separate blocks; a major collection marks what is reachable and sweeps the rest | always safe; what every release so far has run |
+| `generational` | Small objects are allocated by bumping a pointer in a 4 MB birth space. A minor collection copies the survivors (to a survivor space, to the elder space after four survivals) and frees everything else at once; major collections mark and sweep the elder and large-object spaces as above | the program makes many short-lived small values: allocation is cheaper and the dead cost nothing. A program that builds a large structure and keeps it pays for copying it up to four times |
+
+`--gc generational` on the command line, or `CAMEL_GC=generational` in the environment; `--gc` wins. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling of the latter. Anything else than the two names is refused (`--gc`) or ignored with a line on standard error (`CAMEL_GC`). The collector applies to `std::nvm`, `std::fvm`, `std::tf` / `std::prl` and to the interpreted part of `std::jit`; with `generational`, `std::jit` leaves a function whose graph holds an object constant (a string literal, a constant array) to the interpreter, because compiled code would contain the constant's address.
+
+Related settings, all environment variables:
+
+| Variable | Meaning |
+|---|---|
+| `CAMEL_GC_STATS=1` (`2`) | One line on standard error at exit (`[camel] gc: ...`): minor and major collections, objects moved and promoted, megabytes allocated per space, what the elder and large-object spaces hold and have reserved, the time the program was stopped (`minor_pause_ms`, `major_pause_ms`) and the longest single stop (`..._max_ms`). `2` adds a line per major collection |
+| `CAMEL_GC_HEAP_LIMIT_MB=<n>` | Limit on what the elder and large-object spaces hold together. Without it the heap is bounded by the memory of the machine only. An allocation that crosses the limit asks for a major collection at the next safepoint; if what is alive still exceeds the limit after it, or the program allocates past one and a half times the limit before it reaches a safepoint, or one value is larger than the limit, the program stops with `RuntimeDiag::MemoryExhausted`, which names the space (`auto`, run-time values), the request, the usage, the limit and this variable |
+| `CAMEL_GC_GROWTH_PERCENT=<n>`, `CAMEL_GC_LARGE_BUDGET_MB=<n>` | Pacing of major collections: allocation allowed between two of them, in percent of what the last one left alive (default 100), and its floor for the large-object space (default 4 MB; the floor of the elder space is its first segment, 32 MB) |
+| `CAMEL_GC_PROMOTION_AGE=<n>` | Minor collections a value survives before it is promoted (1 to 15, default 4) |
+| `CAMEL_GC_POISON=1`, `CAMEL_GC_VERIFY`, `CAMEL_GC_STRESS_*` | Diagnostic modes for people who write operators in C++: `docs/technical/32_gc_handle_rules.md`, `docs/technical/24_gc_verification_guide.md` |
 
 ## Information Display
 
