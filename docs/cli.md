@@ -309,7 +309,7 @@ Related settings, all environment variables:
 | `CAMEL_GC_HEAP_LIMIT_MB=<n>` | Limit on what the elder and large-object spaces hold together. Without it the heap is bounded by the memory of the machine only. An allocation that crosses the limit asks for a major collection at the next safepoint; if what is alive still exceeds the limit after it, or the program allocates past one and a half times the limit before it reaches a safepoint, or one value is larger than the limit, the program stops with `RuntimeDiag::MemoryExhausted`, which names the space (`auto`, run-time values), the request, the usage, the limit and this variable |
 | `CAMEL_GC_GROWTH_PERCENT=<n>`, `CAMEL_GC_LARGE_BUDGET_MB=<n>` | Pacing of major collections: allocation allowed between two of them, in percent of what the last one left alive (default 100), and its floor for the large-object space (default 4 MB; the floor of the elder space is its first segment, 32 MB) |
 | `CAMEL_GC_PROMOTION_AGE=<n>` | Minor collections a value survives before it is promoted (1 to 15, default 4) |
-| `CAMEL_GC_POISON=1`, `CAMEL_GC_VERIFY`, `CAMEL_GC_STRESS_*` | Diagnostic modes for people who write operators in C++: `docs/technical/32_gc_handle_rules.md`, `docs/technical/24_gc_verification_guide.md` |
+| `CAMEL_GC_POISON=1`, `CAMEL_GC_VERIFY`, `CAMEL_GC_STRESS_*` | Diagnostic modes for people who write operators in C++: `docs/technical/34_gc_handle_rules.md`, `docs/technical/24_gc_verification_guide.md` |
 
 ## Information Display
 

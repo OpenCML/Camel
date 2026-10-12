@@ -140,7 +140,7 @@ when a space has taken, since its last sweep, the larger of a floor (32 MB for t
 that sweep left alive. `CAMEL_GC_HEAP_LIMIT_MB` bounds what the two hold together.
 
 What C++ code may do with objects under either collector is the subject of
-`32_gc_handle_rules.md`. In short for this file: a minor collection updates the roots in place
+`34_gc_handle_rules.md`. In short for this file: a minor collection updates the roots in place
 (frame slots, static areas of graphs including graphs reached only through function values,
 `RootHandle`s, the evaluator's roots, registered tracers); an object born old is tracked until
 the next minor collection and scanned then, so its creator needs no barrier; later stores of

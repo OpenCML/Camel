@@ -283,7 +283,7 @@ timeout_scale = 20                    # their timeouts are multiplied by this
 Only `behavior` and `snapshot` tests of the `camel` tool are taken; a test marked
 `known_fail` or `sweep = false` is left out. Use a sweep for a property that every program
 must keep whatever it computes: `feat/mm/gc_poison_sweep.plan.toml` checks the handle rules
-of the collector (`docs/technical/32_gc_handle_rules.md`) against the tests of the modules,
+of the collector (`docs/technical/34_gc_handle_rules.md`) against the tests of the modules,
 so an operator added later is covered as soon as it has a test. A test that cannot run under
 a sweep (it asserts wall-clock time, or which graphs a back end compiles) says
 `sweep = false` with a comment.

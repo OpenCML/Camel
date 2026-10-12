@@ -3,7 +3,7 @@ order = 369
 tier = "feat"
 tags = ["feat", "mm", "gc", "poison"]
 desc = """
-The handle rules (docs/technical/32_gc_handle_rules.md) checked against what the other plans
+The handle rules (docs/technical/34_gc_handle_rules.md) checked against what the other plans
 exercise: their tests are run again with safepoint poisoning (CAMEL_GC_POISON=1), in which every
 safepoint moves every young object and overwrites where it was, so a C++ pointer kept across a
 safepoint, a missing root or a stale interior pointer ends the program with a report instead of
@@ -19,7 +19,7 @@ A test that cannot run in the mode says `sweep = false` and why.
 
 [[sweeps]]
 name = "poison"
-plans = ["../../smoke", "../modules", "../compile", "../linear", "../para", "../trans"]
+plans = ["../../smoke", "../modules", "../compile", "../linear", "../para", "../trans", "../consistency/attempt.plan.toml", "../consistency/faults.plan.toml", "../consistency/cleanup.plan.toml", "../consistency/values.plan.toml", "../consistency/match.plan.toml"]
 exclude = ["modules/autodiff", "modules/onnx"]
 envs = ["CAMEL_GC_POISON=1"]
 skip_env_prefix = "CAMEL_GC_"
