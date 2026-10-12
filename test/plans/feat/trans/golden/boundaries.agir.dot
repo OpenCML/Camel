@@ -27,7 +27,7 @@ digraph GraphIR {
                 N02 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_6__::node#1"];
                 N03 [label="1", type="DATA", shape=circle, style=solid, tooltip="1\n__g_6__::node#-1"];
                 N04 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\n__g_6__::node#2\nrole scalar-boundary: tensor -> host f64"];
-                N05 [label="2", type="DATA", shape=circle, style=solid, tooltip="2\n__g_6__::node#-2"];
+                N05 [label="2.0", type="DATA", shape=circle, style=solid, tooltip="2.0\n__g_6__::node#-2"];
                 N06 [label=":op/\nmul_d", type="OPER", shape=diamond, style=solid, tooltip=":op/mul_d\n__g_6__::node#3"];
                 N07 [label="tensor:\nmult...", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:multiply\n__g_6__::node#4\nrole scalar-boundary: host f64 -> tensor"];
                 F04 -> N02 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
@@ -67,7 +67,7 @@ digraph GraphIR {
             N0E -> N10 [label="1|0", type="CTRL", style=dashed, arrowhead=empty];
         }
         O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-        N11 [label="[1, -2,\n 3, ...", type="DATA", shape=circle, style=solid, tooltip="[1, -2, 3, 0.5]\nmain::node#-1"];
+        N11 [label="[1.0, -\n2.0,...", type="DATA", shape=circle, style=solid, tooltip="[1.0, -2.0, 3.0, 0.5]\nmain::node#-1"];
         N12 [label="[4]", type="DATA", shape=circle, style=solid, tooltip="[4]\nmain::node#-2"];
         N13 [label="tensor:\nreshape", type="OPER", shape=diamond, style=solid, tooltip="tensor:reshape\nmain::node#1"];
         N14 [label="gate", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="gate\nmain::node#2"];

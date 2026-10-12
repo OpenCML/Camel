@@ -750,7 +750,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
+assert(out === '[12, 2]\n36.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -768,7 +768,7 @@ verify_script = """
 const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
 assert(stats.graphs > 5 && stats.graphs <= 40, `unexpected graph count: ${stats.graphs}`)
-assert(out.endsWith('[12, 2]\n36'), `unexpected output: ${out}`)
+assert(out.endsWith('[12, 2]\n36.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -876,7 +876,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
+assert(out === '[12, 2]\n36.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000

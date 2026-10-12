@@ -20,7 +20,7 @@ digraph GraphIR {
                 N02 [label="PORT", type="PORT"];
                 N03 [label="1", type="DATA", origin=214, span="11:50-11:51", srcfile="exemplars/01_scalar_boundary/program.cml"];
                 N04 [label="tensor:idx", type="OPER", role="scalar-boundary", origin=215, span="11:49-11:50", srcfile="exemplars/01_scalar_boundary/program.cml"];
-                N05 [label="2", type="DATA", origin=216, span="11:55-11:58", srcfile="exemplars/01_scalar_boundary/program.cml"];
+                N05 [label="2.0", type="DATA", origin=216, span="11:55-11:58", srcfile="exemplars/01_scalar_boundary/program.cml"];
                 N06 [label=":op/mul_d", type="OPER", origin=217, span="11:53-11:54", srcfile="exemplars/01_scalar_boundary/program.cml"];
                 N07 [label="tensor:multiply", type="OPER", role="scalar-boundary", origin=218, span="11:45-11:46", srcfile="exemplars/01_scalar_boundary/program.cml"];
                 F04 -> N02 [label="0", type="WITH_PORT"];
@@ -60,12 +60,12 @@ digraph GraphIR {
             N0E -> N10 [label="1|0", type="CTRL"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N11 [label="[1, -2, 3, 0.5]", type="DATA", origin=223, span="15:25-15:46", srcfile="exemplars/01_scalar_boundary/program.cml"];
+        N11 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=223, span="15:25-15:46", srcfile="exemplars/01_scalar_boundary/program.cml"];
         N12 [label="[4]", type="DATA", origin=224, span="15:48-15:51", srcfile="exemplars/01_scalar_boundary/program.cml"];
         N13 [label="tensor:reshape", type="OPER", origin=225, span="15:17-15:24", srcfile="exemplars/01_scalar_boundary/program.cml"];
         N14 [label="gate", type="FUNC", origin=226, span="15:16-15:53", srcfile="exemplars/01_scalar_boundary/program.cml"];
         N15 [label=":io/println", type="OPER", role="effect", origin=227, span="15:4-15:11", srcfile="exemplars/01_scalar_boundary/program.cml"];
-        N16 [label="[0.25, -2, 3, 0.5]", type="DATA", origin=231, span="16:25-16:47", srcfile="exemplars/01_scalar_boundary/program.cml"];
+        N16 [label="[0.25, -2.0, 3.0, 0.5]", type="DATA", origin=231, span="16:25-16:47", srcfile="exemplars/01_scalar_boundary/program.cml"];
         N17 [label="[4]", type="DATA", origin=232, span="16:49-16:52", srcfile="exemplars/01_scalar_boundary/program.cml"];
         N18 [label="tensor:reshape", type="OPER", origin=233, span="16:17-16:24", srcfile="exemplars/01_scalar_boundary/program.cml"];
         N19 [label="gate", type="FUNC", origin=234, span="16:16-16:54", srcfile="exemplars/01_scalar_boundary/program.cml"];

@@ -41,7 +41,7 @@ func main(): int sync {
 ```
 
 ```text
-3 2
+3.0 2.0
 ```
 
 ### 5.2.1 Modules provided with Camel

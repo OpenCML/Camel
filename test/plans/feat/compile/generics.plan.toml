@@ -901,7 +901,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-const want = ["101", "[3, 2, 1]", "[b, a]", "[5, 4]", "101", "2", "[false, true]", "(3, 3)"].join('\n')
+const want = ["101", "[3, 2, 1]", "[b, a]", "[5, 4]", "101", "2.0", "[false, true]", "(3, 3)"].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
 """
@@ -918,7 +918,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-const want = ["101", "[3, 2, 1]", "[b, a]", "[5, 4]", "101", "2", "[false, true]", "(3, 3)"].join('\n')
+const want = ["101", "[3, 2, 1]", "[b, a]", "[5, 4]", "101", "2.0", "[false, true]", "(3, 3)"].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
 """

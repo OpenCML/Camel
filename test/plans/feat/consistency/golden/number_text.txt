@@ -1,21 +1,21 @@
 [12]
 12
 12
+12.0
 12
-12
-12
+12.0
 [-12]
 -12
 -12
+-12.0
 -12
--12
--12
+-12.0
 [+12]
 12
 12
+12.0
 12
-12
-12
+12.0
 [ 7]
 error InvalidNumberText: Cannot convert the string ' 7' to i64.
 error InvalidNumberText: Cannot convert the string ' 7' to i32.
@@ -49,9 +49,9 @@ error ParseError: '1.5' is not an integer
 [1e3]
 error InvalidNumberText: Cannot convert the string '1e3' to i64.
 error InvalidNumberText: Cannot convert the string '1e3' to i32.
-1000
+1000.0
 error ParseError: '1e3' is not an integer
-1000
+1000.0
 [0x10]
 error InvalidNumberText: Cannot convert the string '0x10' to i64.
 error InvalidNumberText: Cannot convert the string '0x10' to i32.
@@ -67,9 +67,9 @@ error ParseError: '1_000' is not a number
 [3000000000]
 3000000000
 error InvalidNumberText: Cannot convert the string '3000000000' to i32 (the number is outside its range).
-3e+09
+3000000000.0
 3000000000
-3e+09
+3000000000.0
 [99999999999999999999]
 error InvalidNumberText: Cannot convert the string '99999999999999999999' to i64 (the number is outside its range).
 error InvalidNumberText: Cannot convert the string '99999999999999999999' to i32 (the number is outside its range).

@@ -183,7 +183,7 @@ kind = "behavior"
 case = "../../../cases/linear/nvm/nested_array_type.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["nested_array_type head=3 g21=21 acc=[[20, 21, 22]] lens=[3, 3, 3] corner=8"]
+expect_stdout_contains = ["nested_array_type head=3.0 g21=21 acc=[[20, 21, 22]] lens=[3, 3, 3] corner=8"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -194,6 +194,6 @@ kind = "behavior"
 case = "../../../cases/linear/nvm/nested_array_type.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["nested_array_type head=3 g21=21 acc=[[20, 21, 22]] lens=[3, 3, 3] corner=8"]
+expect_stdout_contains = ["nested_array_type head=3.0 g21=21 acc=[[20, 21, 22]] lens=[3, 3, 3] corner=8"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

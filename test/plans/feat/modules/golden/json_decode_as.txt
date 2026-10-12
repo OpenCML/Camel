@@ -7,7 +7,7 @@
 {a: null, b: 3}
 { x: 1, y: 2 }
 (1, one)
-[1.5, 2]
+[1.5, 2.0]
 s true {}
 error JsonTypeError: at $.b: expected an integer, found a string
 error JsonParseError: parse error at line 1, column 8: syntax error while parsing object - unexpected end of input; expected '}'

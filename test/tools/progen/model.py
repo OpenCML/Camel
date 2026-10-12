@@ -398,7 +398,10 @@ def show_in(v) -> str:
 
 
 def show_float(v: float) -> str:
-    return "%g" % v
+    # The one text of a float (design principles 2.10): the shortest that reads back as the
+    # same number, with a fraction or an exponent. Python's repr follows the same layout
+    # (an exponent below -4 or from 16 up, `1e+16`, `1e-05`, `-0.0`, `inf`); a NaN has no sign.
+    return "nan" if v != v else repr(float(v))
 
 
 class Evaluator:
