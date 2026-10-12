@@ -210,6 +210,7 @@ Run the following commands to install the required dependencies:
   - `format`: Code formatter `camel-format`
   - `codegen`: Code generation from AST `camel-codegen`
   - `profiler`: Profiling tool `camel-pr`
+  - `lang-server`: Language server `camel-ls` (see 3.7)
 
 Build outputs are under `build/tools/<tool>/<Config>/`. The `camel` executable is copied to the project root.
 
@@ -236,6 +237,19 @@ Build outputs are under `build/tools/<tool>/<Config>/`. The `camel` executable i
    ```
 
 5. CMake options (FastVM JIT, computed goto, Python embedding modules) and the `CAMEL_SKIP_PYTHON` environment variable: see [Build options](build-options.en.md).
+
+### 3.7 Editor Support
+
+The build also produces the language server `camel-ls` (`out/latest/bin/camel-ls`). A VS Code extension with syntax highlighting and a client for the server lives in `editors/vscode`:
+
+```bash
+cd editors/vscode
+npm install
+npm run package
+code --install-extension camel-lang-0.1.0.vsix
+```
+
+See [Editor support](editor-support.en.md) for what the server supports, the extension's commands and settings, and configurations for Neovim, Emacs and Helix.
 
 ---
 
