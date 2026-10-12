@@ -152,6 +152,15 @@ ResolvedRuntimeLocation RuntimeLocationResolver::resolve(const ExecutionSite &si
 
 Diagnostic
 RuntimeErrorReporter::report(const RuntimeFault &fault, const ExecutionSite &site) const {
+    Diagnostic d = describe(fault, site);
+    if (sink_) {
+        return sink_->add(std::move(d));
+    }
+    return d;
+}
+
+Diagnostic
+RuntimeErrorReporter::describe(const RuntimeFault &fault, const ExecutionSite &site) const {
     const auto info = getDiagInfo(fault.diag());
     uint32_t key    = static_cast<uint32_t>(fault.diag());
     Diagnostic d;
@@ -178,10 +187,6 @@ RuntimeErrorReporter::report(const RuntimeFault &fault, const ExecutionSite &sit
         d.modulePath = resolved.sourcePath;
     }
     d.moduleName = defaultModuleName(site, resolved.sourcePath);
-
-    if (sink_) {
-        return sink_->add(std::move(d));
-    }
     return d;
 }
 
@@ -222,7 +227,65 @@ Diagnostic reportRuntimeFault(
     if (!reporter) {
         return DiagnosticBuilder::of(fault.diag()).commit(fault.what());
     }
+    if (faultIsolationDepth() != 0 && isIsolatableFault(fault.diag())) [[unlikely]] {
+        return reporter->describe(fault, site);
+    }
     return reporter->report(fault, site);
 }
+
+// ---- Fault isolation ----
+
+namespace {
+thread_local uint32_t tlsFaultIsolationDepth = 0;
+} // namespace
+
+bool isIsolatableFault(RuntimeDiag diag) {
+    switch (diag) {
+    // Faults of the program's own computation.
+    case RuntimeDiag::RuntimeError:
+    case RuntimeDiag::DivisionByZero:
+    case RuntimeDiag::IndexOutOfRange:
+    case RuntimeDiag::KeyNotFound:
+    case RuntimeDiag::FieldNotFound:
+    case RuntimeDiag::MatchNotExhaustive:
+    // Checked before the call that does not fit: unwinding gives everything back.
+    case RuntimeDiag::MaxRecursionDepthExceeded:
+    // An operator refused its operands.
+    case RuntimeDiag::TensorDimensionMismatch:
+    case RuntimeDiag::InvalidNumberText:
+    case RuntimeDiag::FormatFailed:
+    case RuntimeDiag::OperandTypeUnsupported:
+    case RuntimeDiag::InvalidArgument:
+    // A library operator that is not declared `T!` failed.
+    case RuntimeDiag::FileOpenFailed:
+    case RuntimeDiag::FileSystemError:
+    case RuntimeDiag::JsonDecodeFailed:
+    case RuntimeDiag::JsonEncodeUnsupported:
+    case RuntimeDiag::RegexInvalid:
+    case RuntimeDiag::TimeFormatFailed:
+        return true;
+    default:
+        // Defects and limits of the compiler (PassInternalError, UnrecognizedOperatorURI,
+        // UnsupportedBytecode, OperatorNotImplemented, GraphTooLarge, MemoryExhausted, ...),
+        // diagnostics that are not raised while a graph runs, and everything not listed.
+        return false;
+    }
+}
+
+bool isIsolatedFault(const Diagnostic &d) {
+    // RuntimeDiag values are the `specific` part of the code (severity bits included).
+    return !d.persisted && d.type == DiagType::RuntimeDiag && d.severity == Severity::Error &&
+           isIsolatableFault(static_cast<RuntimeDiag>(d.specific));
+}
+
+uint32_t faultIsolationDepth() { return tlsFaultIsolationDepth; }
+
+FaultIsolationScope::FaultIsolationScope() { ++tlsFaultIsolationDepth; }
+FaultIsolationScope::~FaultIsolationScope() { --tlsFaultIsolationDepth; }
+
+InheritedFaultIsolation::InheritedFaultIsolation(uint32_t depth) : saved_(tlsFaultIsolationDepth) {
+    tlsFaultIsolationDepth = depth;
+}
+InheritedFaultIsolation::~InheritedFaultIsolation() { tlsFaultIsolationDepth = saved_; }
 
 } // namespace camel::core::error

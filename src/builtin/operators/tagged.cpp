@@ -33,6 +33,7 @@
 #include "camel/core/type/resolver.h"
 
 #include "camel/core/error/runtime.h"
+#include "camel/execute/fault_isolation.h"
 
 #include <charconv>
 #include <optional>
@@ -235,6 +236,18 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
                           }
                       }
                       return errorType();
+                  })}}),
+        // Fault isolation: a marked call of the function value given first. The schedulers
+        // run it themselves (":mark/..."); see camel/execute/fault_isolation.h.
+        OperatorGroup::create(
+            camel::execute::kFaultIsolationName,
+            {{std::string(camel::execute::kFaultIsolationUri),
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {-1, {}}},
+                  "(f: (...args: A) => T, ...args: A) => T!",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> optional<Type *> {
+                      return camel::execute::resolveFaultIsolationType(with, norm);
                   })}}),
         OperatorGroup::create(
             "parse_int",

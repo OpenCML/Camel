@@ -157,7 +157,12 @@ class RuntimeErrorReporter {
         diagnostic_sink_ptr_t sink, camel::source::source_context_ptr_t sourceContext)
         : sink_(std::move(sink)), resolver_(std::move(sourceContext)) {}
 
+    /// Records the fault in the sink and returns the recorded diagnostic (or throws, when the
+    /// sink stops at the first error).
     Diagnostic report(const RuntimeFault &fault, const ExecutionSite &site) const;
+    /// The same located diagnostic, not recorded anywhere (`persisted` stays false): what a
+    /// fault inside a fault-isolation boundary is carried to the boundary as.
+    Diagnostic describe(const RuntimeFault &fault, const ExecutionSite &site) const;
     diagnostic_sink_ptr_t sink() const { return sink_; }
 
   private:
@@ -173,8 +178,50 @@ ExecutionSite makePcExecutionSite(
     size_t pc, size_t frameDepth = 0, std::string taskLabel = "",
     ExecutionSiteKind kind = ExecutionSiteKind::BytecodePc);
 
+/// Reports a fault at `site`. Outside every fault-isolation boundary the diagnostic is recorded
+/// in the context's sink; inside one (FaultIsolationScope) a fault that can be isolated is only
+/// described: the diagnostic returned was not recorded, and whoever catches it at the boundary
+/// turns it into an error value. Either way the caller throws what is returned.
 Diagnostic reportRuntimeFault(
     camel::core::context::Context &ctx, const RuntimeFault &fault, const ExecutionSite &site);
+
+// ---- Fault isolation (design principles 2.9; docs/technical/32_fault_isolation.md) ----
+
+/// Whether a fault with this diagnostic may become an error value at a fault-isolation
+/// boundary. An allow-list of the faults of a program's own computation: defects and limits of
+/// the compiler (internal errors, unknown operators, graph capacity, memory) are never isolated,
+/// and a diagnostic added later is not isolated until it is listed here.
+/// DESIGN-QUESTION(attempt-fault-set)
+bool isIsolatableFault(RuntimeDiag diag);
+
+/// Whether `d` is a fault on its way to a fault-isolation boundary: described by
+/// reportRuntimeFault inside a boundary, so never recorded, and of an isolatable kind.
+bool isIsolatedFault(const Diagnostic &d);
+
+/// Number of fault-isolation boundaries open around what the calling thread is running.
+uint32_t faultIsolationDepth();
+
+/// Opens one boundary on the calling thread for its lifetime.
+class FaultIsolationScope {
+  public:
+    FaultIsolationScope();
+    ~FaultIsolationScope();
+    FaultIsolationScope(const FaultIsolationScope &)            = delete;
+    FaultIsolationScope &operator=(const FaultIsolationScope &) = delete;
+};
+
+/// A task that runs on another thread on behalf of code inside boundaries: while the object
+/// lives the calling thread counts `depth` open boundaries, afterwards what it had.
+class InheritedFaultIsolation {
+  public:
+    explicit InheritedFaultIsolation(uint32_t depth);
+    ~InheritedFaultIsolation();
+    InheritedFaultIsolation(const InheritedFaultIsolation &)            = delete;
+    InheritedFaultIsolation &operator=(const InheritedFaultIsolation &) = delete;
+
+  private:
+    uint32_t saved_;
+};
 
 template <typename... Args>
 [[noreturn]] inline void throwRuntimeFault(RuntimeDiag diag, Args &&...args) {

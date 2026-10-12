@@ -23,6 +23,7 @@
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
@@ -876,6 +877,8 @@ void NodeVMSchedPass::evalMarkedOperator(
         evalMarkedOperator_reduce_arr(graph, nodeRef, currFrame);
     } else if (uri == "foreach_arr" || uri == "unordered_foreach_arr") {
         evalMarkedOperator_foreach_arr(graph, nodeRef, currFrame);
+    } else if (uri == camel::execute::kFaultIsolationMark) {
+        evalMarkedOperator_isolate(graph, nodeRef, currFrame);
     } else {
         ASSERT(false, std::format("Mark operator {} not implemented in NodeVM.", uri));
     }
@@ -1018,4 +1021,50 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         call(func->graph(), frame);
     }
     currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);
+}
+
+// The fault-isolation node (docs/technical/32_fault_isolation.md): a call of the function value
+// given first, in which a fault of the program becomes the failed form of the node's `T!`.
+void NodeVMSchedPass::evalMarkedOperator_isolate(
+    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
+    const auto normInputs = graph->normInputsOf(nodeRef);
+    ASSERT(!normInputs.empty(), "The fault-isolation node requires a function input.");
+    const auto resultSlot = dataIndexOf(graph, nodeRef);
+    Function *func        = currFrame.get<Function *>(dataIndexOf(graph, normInputs.front()));
+    ASSERT(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
+    auto *target = func->graph();
+
+    std::vector<slot_t> args;
+    args.reserve(normInputs.size() - 1);
+    for (size_t i = 1; i < normInputs.size(); ++i) {
+        args.push_back(currFrame.get<slot_t>(dataIndexOf(graph, normInputs[i])));
+    }
+
+    // The room for the call is the caller's: a recursion limit reached here is a fault of the
+    // enclosing graph, outside the boundary.
+    requireRecursionRoom(graph);
+    const size_t depthBefore = currRecursionDepth_;
+    (void)depthBefore;
+    Frame *frame = framePool_.acquire(target);
+    bindMarkedFunctionFrame(frame, func, args);
+    slot_t value = NullSlot;
+    try {
+        camel::core::error::FaultIsolationScope boundary;
+        value = call(target, frame);
+    } catch (const Diagnostic &fault) {
+        if (!camel::core::error::isIsolatedFault(fault)) {
+            throw;
+        }
+        // Every activation inside the boundary released its frames and its depth count
+        // while the exception passed (see call()); nothing of the boundary is left.
+        ASSERT(
+            currRecursionDepth_ == depthBefore,
+            "A fault left the call depth changed at its isolation boundary.");
+        currFrame.set(resultSlot, camel::execute::isolatedFaultToError(fault));
+        return;
+    }
+    const Type *calleeResult = target->funcType() ? target->funcType()->exitType() : nullptr;
+    currFrame.set(
+        resultSlot,
+        camel::execute::wrapIsolatedResult(value, calleeResult, currFrame.typeAt<Type>(resultSlot)));
 }
