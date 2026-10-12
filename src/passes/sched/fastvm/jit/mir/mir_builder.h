@@ -199,21 +199,15 @@ class MirBuilder {
         m.imm64 = addr;
         push(m);
     }
-    void emitVCopy(VRegId dst, VRegId src) {
-        push(MirOp::VCopy, dst, src);
-    }
+    void emitVCopy(VRegId dst, VRegId src) { push(MirOp::VCopy, dst, src); }
     void emitVTest(VRegId vreg) {
         Mir m;
         m.op = MirOp::VTest;
         m.r0 = vreg;
         push(m);
     }
-    void emitVCmove(VRegId dst, VRegId src) {
-        push(MirOp::VCmove, dst, src);
-    }
-    void emitVCmovnz(VRegId dst, VRegId src) {
-        push(MirOp::VCmovnz, dst, src);
-    }
+    void emitVCmove(VRegId dst, VRegId src) { push(MirOp::VCmove, dst, src); }
+    void emitVCmovnz(VRegId dst, VRegId src) { push(MirOp::VCmovnz, dst, src); }
     void emitVLoadImm32(VRegId vreg, uint32_t imm32) {
         Mir m;
         m.op    = MirOp::VLoadImm32;

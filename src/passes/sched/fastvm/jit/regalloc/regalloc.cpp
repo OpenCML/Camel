@@ -536,8 +536,7 @@ struct VLiveInterval {
     size_t end;
 };
 
-bool linearScanVReg(
-    const x64::MirBuffer &buf, VRegAllocation *out, std::string *failureReason) {
+bool linearScanVReg(const x64::MirBuffer &buf, VRegAllocation *out, std::string *failureReason) {
     auto fail = [&](std::string reason) {
         if (failureReason)
             *failureReason = std::move(reason);
@@ -568,18 +567,19 @@ bool linearScanVReg(
         if (!used)
             continue; // defined and never read, or an id that does not occur
         if (!defined || lastUse[v] < firstDef[v])
-            return fail(
-                std::format("v{} is used at MIR instruction {} before it is defined", v, lastUse[v]));
+            return fail(std::format(
+                "v{} is used at MIR instruction {} before it is defined",
+                v,
+                lastUse[v]));
         intervals.push_back({static_cast<x64::VRegId>(v), firstDef[v], lastUse[v]});
         auto call = std::upper_bound(calls.begin(), calls.end(), firstDef[v]);
         if (call != calls.end() && *call < lastUse[v])
-            return fail(
-                std::format(
-                    "v{} (MIR instructions {} to {}) is live across the call at {}",
-                    v,
-                    firstDef[v],
-                    lastUse[v],
-                    *call));
+            return fail(std::format(
+                "v{} (MIR instructions {} to {}) is live across the call at {}",
+                v,
+                firstDef[v],
+                lastUse[v],
+                *call));
     }
     std::sort(
         intervals.begin(),

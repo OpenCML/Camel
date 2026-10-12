@@ -926,13 +926,12 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             params->calleeSlotBytes =
                 static_cast<uint32_t>((slotCount * sizeof(slot_t) + 15u) & ~size_t{15});
             if (params->calleeSlotBytes > x64::kMaxNativeFrameBytes)
-                return fail(
-                    std::format(
-                        "pc={} self call with a frame of {} bytes (more than {}): the recursion "
-                        "would not fit the machine stack at the recursion limit",
-                        pc,
-                        params->calleeSlotBytes,
-                        x64::kMaxNativeFrameBytes));
+                return fail(std::format(
+                    "pc={} self call with a frame of {} bytes (more than {}): the recursion "
+                    "would not fit the machine stack at the recursion limit",
+                    pc,
+                    params->calleeSlotBytes,
+                    x64::kMaxNativeFrameBytes));
             // Phase L: the arguments of a call with few of them are loaded by visible
             // VLoadFromFrame, so that peephole can fuse a preceding store with the load.
             const bool inRegisters = srcArgs.size() <= kMaxRegisterArgs;

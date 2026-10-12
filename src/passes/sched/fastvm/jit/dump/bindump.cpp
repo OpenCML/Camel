@@ -126,15 +126,15 @@ JitBinaryDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
         // As at run time: with a frame-pool address the backend encodes self calls natively.
         static uint64_t dummyPoolTop = 0;
         CompilationUnit unit{
-            .runtimeGraph = runtimeGraph,
-            .bytecodes    = bcSpan,
-            .entryPc      = entryPc,
-            .graphLength  = graphLengths.contains(runtimeGraph) ? graphLengths.at(runtimeGraph)
-                                                                : static_cast<size_t>(0),
-            .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
-            .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
-            .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
-            .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+            .runtimeGraph   = runtimeGraph,
+            .bytecodes      = bcSpan,
+            .entryPc        = entryPc,
+            .graphLength    = graphLengths.contains(runtimeGraph) ? graphLengths.at(runtimeGraph)
+                                                                  : static_cast<size_t>(0),
+            .trampolineFunc = reinterpret_cast<void *>(&trampolineFunc),
+            .trampolineTail = reinterpret_cast<void *>(&trampolineTail),
+            .trampolineOper = reinterpret_cast<void *>(&trampolineOper),
+            .trampolineCast = reinterpret_cast<void *>(&trampolineCast),
             .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
             .poolTopAddr              = &dummyPoolTop,
             .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),

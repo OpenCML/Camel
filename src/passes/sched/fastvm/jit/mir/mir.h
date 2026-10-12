@@ -181,8 +181,8 @@ enum class JitFaultKind : uint32_t {
 };
 
 // Where compiled code finds the fields of JitContext (runtime/trampoline.h asserts them).
-constexpr int32_t kJitCtxFaultKindOffset = 16;
-constexpr int32_t kJitCtxFaultPcOffset   = 20;
+constexpr int32_t kJitCtxFaultKindOffset   = 16;
+constexpr int32_t kJitCtxFaultPcOffset     = 20;
 constexpr int32_t kJitCtxDepthBudgetOffset = 24;
 
 // A native self call puts a frame of the graph on the machine stack, up to the interpreter's
@@ -212,17 +212,17 @@ struct Mir {
 struct NativeJitCallParams {
     // One entry per argument, in the order of the bytecode's direct-call layout.
     struct Arg {
-        int32_t dstDisp = 0;        // [callee base + dstDisp]: the parameter's slot
-        VRegId vreg = kInvalidVReg; // loaded before the call; else copied inside it from:
-        int32_t srcDisp = 0;        //   [rdi + srcDisp] in the caller, or
-        bool isImm      = false;    //   a constant of the static area,
-        uint64_t imm    = 0;        //   with this value
+        int32_t dstDisp = 0;            // [callee base + dstDisp]: the parameter's slot
+        VRegId vreg     = kInvalidVReg; // loaded before the call; else copied inside it from:
+        int32_t srcDisp = 0;            //   [rdi + srcDisp] in the caller, or
+        bool isImm      = false;        //   a constant of the static area,
+        uint64_t imm    = 0;            //   with this value
     };
     std::vector<Arg> args;
-    int32_t resultDisp = 0;           // [rdi + resultDisp]
+    int32_t resultDisp = 0;            // [rdi + resultDisp]
     VRegId resultVReg  = kInvalidVReg; // Call result; kInvalidVReg = stored to resultDisp inside
-    uint32_t calleeSlotBytes = 0; // Size of the callee's frame (16-byte aligned)
-    uint32_t pc              = 0; // Bytecode pc of the call
+    uint32_t calleeSlotBytes = 0;      // Size of the callee's frame (16-byte aligned)
+    uint32_t pc              = 0;      // Bytecode pc of the call
 };
 
 using MirBuffer = std::vector<Mir>;

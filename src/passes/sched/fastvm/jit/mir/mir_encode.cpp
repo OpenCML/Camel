@@ -26,7 +26,6 @@
 
 namespace camel::jit::x64 {
 
-
 using ::camel::jit::kSpilled;
 using ::camel::jit::VRegAllocation;
 
@@ -42,8 +41,8 @@ struct JumpPatch {
 void encodeMirBuffer(
     const MirBuffer &buf, std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset,
     const VRegAllocation *vregAlloc,
-    std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries,
-    void *debugTraceFn, size_t faultExitOffset) {
+    std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries, void *debugTraceFn,
+    size_t faultExitOffset) {
     // Every operand that is used has a register: linearScanVReg fails otherwise. A register of
     // kSpilled here means a value that is defined and never used; its definition is skipped.
     const bool recordAsm = asmOut != nullptr || instructionBoundaries != nullptr;
@@ -363,7 +362,13 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0)
-                emitIdiv(dr, lr, rr, false, (m.imm64 & 1) != 0, static_cast<uint32_t>(m.imm64 >> 1));
+                emitIdiv(
+                    dr,
+                    lr,
+                    rr,
+                    false,
+                    (m.imm64 & 1) != 0,
+                    static_cast<uint32_t>(m.imm64 >> 1));
             break;
         }
         case MirOp::VCmpSetL:
@@ -658,11 +663,11 @@ void encodeMirBuffer(
             if (dr >= 0 && lr >= 0 && rr >= 0) {
                 const bool isDouble = m.op == MirOp::VXmmAdd || m.op == MirOp::VXmmSub ||
                                       m.op == MirOp::VXmmMul || m.op == MirOp::VXmmDiv;
-                const uint8_t opcode =
-                    (m.op == MirOp::VXmmAdd || m.op == MirOp::VXmm32Add)   ? 0x58
-                    : (m.op == MirOp::VXmmSub || m.op == MirOp::VXmm32Sub) ? 0x5c
-                    : (m.op == MirOp::VXmmMul || m.op == MirOp::VXmm32Mul) ? 0x59
-                                                                           : 0x5e;
+                const uint8_t opcode = (m.op == MirOp::VXmmAdd || m.op == MirOp::VXmm32Add)   ? 0x58
+                                       : (m.op == MirOp::VXmmSub || m.op == MirOp::VXmm32Sub) ? 0x5c
+                                       : (m.op == MirOp::VXmmMul || m.op == MirOp::VXmm32Mul)
+                                           ? 0x59
+                                           : 0x5e;
                 if (opcode == 0x5e && (m.imm64 & 1) != 0)
                     emitFloatDivisorCheck(rr, isDouble, static_cast<uint32_t>(m.imm64 >> 1));
                 emitFloatArith(dr, lr, rr, isDouble, opcode);
@@ -850,7 +855,8 @@ void encodeMirBuffer(
         const size_t rel = enc.jmpRel32Patchable();
         enc.patchRel32At(
             rel,
-            static_cast<int32_t>(static_cast<int64_t>(faultExitOffset) - static_cast<int64_t>(rel + 4)));
+            static_cast<int32_t>(
+                static_cast<int64_t>(faultExitOffset) - static_cast<int64_t>(rel + 4)));
     }
     // Patch rel32: target = startOffset[targetMirIndex], nextIp = jumpPos + instrLen (x86: rel32
     // is relative to the next byte after the instruction).
