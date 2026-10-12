@@ -359,6 +359,7 @@ void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
 #if ENABLE_FASTVM_JIT
         setJitCompileFailedOf(runtimeGraph, false, true);
 #endif
+        statsNoteGraph(runtimeGraph, offset);
     }
 }
 
@@ -459,6 +460,11 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
 
     stackDepth_  = 0;
     nestedCalls_ = 0;
+    // Written however the run ends (no-op unless CAMEL_FVM_STATS is set).
+    struct StatsAtExit {
+        FastVMSchedPass *vm;
+        ~StatsAtExit() { vm->statsWrite(); }
+    } statsAtExit{this};
 
 #if ENABLE_FASTVM_JIT
     if (jitConfig_.policy != JitPolicy::Disabled && !jitBackend_) {
@@ -471,6 +477,7 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     }
     JitContext jitCtx{this, bytecodes_.data()};
     currentJitCtx_ = &jitCtx;
+    statsBegin();
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "JIT",
         "JIT policy: {}",
@@ -500,6 +507,8 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
         "JIT",
         "Entry graph '{}' not in JIT cache, falling back to interpreter",
         runtimeRoot->name());
+#else
+    statsBegin();
 #endif
 
     opperf::start();
@@ -843,6 +852,31 @@ void FastVMSchedPass::setJitFailureReportedOf(camel::runtime::GCGraph *graph, bo
     }
 }
 
+#endif
+
+size_t FastVMSchedPass::graphLengthOf(camel::runtime::GCGraph *graph) const {
+    return fastVmGraphLengthOf(graph).value_or(0);
+}
+
+#if ENABLE_FASTVM_JIT
+CompilationUnit FastVMSchedPass::jitUnitFor(
+    camel::runtime::GCGraph *graph, size_t entryPc, const CompilationDebugOptions *debug) const {
+    return CompilationUnit{
+        .runtimeGraph             = graph,
+        .bytecodes                = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
+        .entryPc                  = entryPc,
+        .graphLength              = fastVmGraphLengthOf(graph).value_or(0),
+        .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
+        .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
+        .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
+        .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
+        .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
+        .poolTopAddr              = const_cast<ctx::FramePool &>(framePool_).topAddr(),
+        .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
+        .debug                    = debug,
+    };
+}
+
 void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_t entryPc) {
     if (!graph) {
         return;
@@ -858,20 +892,8 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
     CompilationDebugOptions debugOptions{
         .enableDebugTrace = enableJitTraceMir_,
     };
-    CompilationUnit unit{
-        .runtimeGraph             = graph,
-        .bytecodes                = std::span<const Bytecode>(bytecodes_.data(), bytecodes_.size()),
-        .entryPc                  = entryPc,
-        .graphLength              = fastVmGraphLengthOf(graph).value_or(0),
-        .trampolineFunc           = reinterpret_cast<void *>(&trampolineFunc),
-        .trampolineTail           = reinterpret_cast<void *>(&trampolineTail),
-        .trampolineOper           = reinterpret_cast<void *>(&trampolineOper),
-        .trampolineCast           = reinterpret_cast<void *>(&trampolineCast),
-        .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
-        .poolTopAddr              = framePool_.topAddr(),
-        .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
-        .debug                    = enableJitTraceMir_ ? &debugOptions : nullptr,
-    };
+    const CompilationUnit unit =
+        jitUnitFor(graph, entryPc, enableJitTraceMir_ ? &debugOptions : nullptr);
     std::string failureReason;
     auto compiled = jitBackend_->compile(unit, &failureReason);
     if (!compiled) {
@@ -915,6 +937,7 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
     if (fn) {
         setJitFnOf(graph, fn);
         jitFnToGraph_[fn] = graph;
+        statsNoteCompiled(entryPc);
         setJitCompileFailedOf(graph, false);
         setJitFailureReportedOf(graph, false);
         for (size_t pc = 0; pc < bytecodes_.size();) {

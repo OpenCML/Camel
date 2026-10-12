@@ -103,9 +103,33 @@ isTrapFreeConstDivisor(const Bytecode &bc, const camel::runtime::GCGraph *graph,
     return divisor != 0 && divisor != -1;
 }
 
-std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
-    if (unit.graphLength == 0)
-        return "graph bytecode span is empty";
+// What keeps a unit out of the compiler, in bytecode order: the single place that says which
+// bytecode is compiled. With `firstOnly` the scan stops at the first finding (what compile()
+// reports); without, every finding is listed (what the coverage statistics count).
+std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstOnly) {
+    std::vector<JitBlocker> found;
+    auto add = [&](size_t pc, std::string kind, std::string text) {
+        found.push_back({pc, std::move(kind), std::move(text)});
+    };
+    if (!unit.runtimeGraph) {
+        add(0, "no-graph", "null runtime graph in JIT compilation unit");
+        return found;
+    }
+    if (!unit.runtimeGraph->hasFrameLayout()) {
+        add(
+            0,
+            "no-frame-layout",
+            "incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
+        return found;
+    }
+    if (!unit.runtimeGraph->staticArea()) {
+        add(0, "no-static-area", "graph '" + unit.runtimeGraph->name() + "' has no static area");
+        return found;
+    }
+    if (unit.graphLength == 0) {
+        add(0, "empty", "graph requires interpreter fallback: graph bytecode span is empty");
+        return found;
+    }
     // Compiled code has no stack maps: the collector neither sees nor updates what a native
     // frame or a register holds. Two things keep that sound with the moving collector.
     //
@@ -120,47 +144,99 @@ std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
     //    (emitLoadStaticConst): for an object constant that is the address the object had at
     //    compile time, and it outlives any number of collections. A graph with an object
     //    constant in its static area is therefore not compiled when objects can move.
-    if (camel::core::mm::autoSpace().youngGenCopyingEnabled() && unit.runtimeGraph != nullptr) {
+    if (camel::core::mm::autoSpace().youngGenCopyingEnabled()) {
         const auto *staticLayout = unit.runtimeGraph->staticDataType();
-        if (staticLayout != nullptr && staticLayout->refCount() != 0)
-            return "the graph has object constants (moving collector)";
+        if (staticLayout != nullptr && staticLayout->refCount() != 0) {
+            add(0,
+                "object-constants",
+                "graph requires interpreter fallback: the graph has object constants (moving "
+                "collector)");
+            return found;
+        }
     }
     const size_t graphEnd = unit.entryPc + unit.graphLength;
     ASSERT(
         graphEnd <= unit.bytecodes.size(),
         "Current graph bytecode range exceeds linked bytecode span.");
+    const size_t frameBytes =
+        (unit.runtimeGraph->runtimeDataType()->size() * sizeof(slot_t) + 15u) & ~size_t{15};
     for (size_t pc = unit.entryPc; pc < graphEnd;) {
-        const Bytecode &bc = unit.bytecodes[pc];
+        if (firstOnly && !found.empty())
+            return found;
+        const Bytecode &bc      = unit.bytecodes[pc];
+        const std::string where = "pc=" + std::to_string(pc);
+        const std::string fallback = "graph requires interpreter fallback: " + where;
         switch (bc.opcode) {
         case OpCode::OPER:
-            return "pc=" + std::to_string(pc) + " contains OPER";
+            add(pc, "OPER", fallback + " contains OPER");
+            break;
         case OpCode::CAST:
-            return "pc=" + std::to_string(pc) + " contains CAST";
+            add(pc, "CAST", fallback + " contains CAST");
+            break;
         case OpCode::COPY:
-            return "pc=" + std::to_string(pc) + " contains COPY";
+            add(pc, "COPY", fallback + " contains COPY");
+            break;
         case OpCode::FILL:
-            return "pc=" + std::to_string(pc) + " contains FILL";
+            add(pc, "FILL", fallback + " contains FILL");
+            break;
         case OpCode::CALL:
-            return "pc=" + std::to_string(pc) + " contains indirect CALL";
+            add(pc, "CALL", fallback + " contains indirect CALL");
+            break;
         case OpCode::ACCS:
-            return "pc=" + std::to_string(pc) + " contains ACCS";
+            add(pc, "ACCS", fallback + " contains ACCS");
+            break;
+        case OpCode::SCHD:
+            add(pc, "SCHD", where + " unsupported opcode SCHD");
+            break;
         case OpCode::FUNC:
-        case OpCode::TAIL:
-            if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph) {
-                const auto *target = getFuncExtraRuntimeGraph(&bc);
-                return std::format(
-                    "pc={} targets non-self graph '{}' ({:p})",
-                    pc,
-                    target ? target->name() : "<null>",
-                    static_cast<const void *>(target));
+        case OpCode::TAIL: {
+            const auto *target = getFuncExtraRuntimeGraph(&bc);
+            if (target != unit.runtimeGraph) {
+                add(pc,
+                    bc.opcode == OpCode::FUNC ? "FUNC-other-graph" : "TAIL-other-graph",
+                    std::format(
+                        "graph requires interpreter fallback: pc={} targets non-self graph "
+                        "'{}' ({:p})",
+                        pc,
+                        target ? target->name() : "<null>",
+                        static_cast<const void *>(target)));
+            } else if (bc.opcode == OpCode::FUNC && frameBytes > x64::kMaxNativeFrameBytes) {
+                add(pc,
+                    "frame-too-large",
+                    std::format(
+                        "pc={} self call with a frame of {} bytes (more than {}): the recursion "
+                        "would not fit the machine stack at the recursion limit",
+                        pc,
+                        frameBytes,
+                        x64::kMaxNativeFrameBytes));
             }
+            break;
+        }
+        case OpCode::BRCH:
+            if (bc.withCnt() != 0)
+                add(pc,
+                    "BRCH-match",
+                    where +
+                        " BRCH only supports simple if-else (withCnt=0); match-case (withCnt>0) "
+                        "not yet implemented, got " +
+                        std::to_string(bc.withCnt()));
+            break;
+        case OpCode::JOIN:
+            if (bc.result != 0 && bc.extra()->pType != camel::core::type::Type::Void() &&
+                bc.withCnt() != 2)
+                add(pc,
+                    "JOIN-match",
+                    where +
+                        " JOIN only supports withCnt=2 (if-else); match-case (withCnt>2) not yet "
+                        "implemented, got " +
+                        std::to_string(bc.withCnt()));
             break;
         default:
             break;
         }
         pc += bc.opsize;
     }
-    return {};
+    return found;
 }
 
 // Camel standard slot model: every slot is one word (8 bytes); bool / 32-bit / 64-bit / pointer
@@ -199,6 +275,10 @@ int X64Backend::slotDisp(int idx) const {
 }
 
 void X64Backend::registerTrampoline(const char *name, void *addr) { trampolines_[name] = addr; }
+
+std::vector<JitBlocker> X64Backend::blockers(const CompilationUnit &unit) const {
+    return collectBlockers(unit, false);
+}
 
 std::unique_ptr<CompiledCode>
 X64Backend::compile(const CompilationUnit &unit, std::string *failureReason) {
@@ -245,13 +325,13 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         return LowerResult::Failed;
     };
 
-    if (!unit.runtimeGraph)
-        return fail("null runtime graph in JIT compilation unit");
-    if (!unit.runtimeGraph->hasFrameLayout())
-        return fail("incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
-    // Graphs without constants are left to the interpreter.
-    if (!unit.runtimeGraph->staticArea())
-        return fail("graph '" + unit.runtimeGraph->name() + "' has no static area");
+    // What this back end compiles is decided in one place, before anything is lowered. What
+    // passes never calls into C++: its calls are native self calls and its tail calls are
+    // jumps. The lowerings of OPER, CAST, COPY, FILL, CALL and ACCS further down are therefore
+    // not reached today; graphs that need them run in the interpreter.
+    if (const auto blocked = collectBlockers(unit, true); !blocked.empty()) {
+        return fail(blocked.front().text);
+    }
 
     const Bytecode *base = unit.bytecodes.data();
     size_t entryPc       = unit.entryPc;
@@ -276,20 +356,6 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
     x64::VRegId nextVReg                     = 0;
-    const std::string framelessFailureReason = describeFramelessSelfFuncFailure(unit);
-    const bool canUseFramelessSelfFunc       = framelessFailureReason.empty();
-    // The current x64 JIT is only sound for graphs whose execution stays within
-    // the slot-native bytecode subset. Graphs that rely on runtime Function
-    // carriers, indirect CALL, or frame-dependent trampolines still execute
-    // correctly through the interpreter, while pure callee graphs such as
-    // recursive fib keep the hot-path JIT speedup.
-    //
-    // What passes this check never calls into C++: its calls are native self calls and its
-    // tail calls are jumps. The lowerings of OPER, CAST, COPY, FILL, CALL and ACCS further
-    // down are therefore not reached today.
-    if (!canUseFramelessSelfFunc)
-        return fail("graph requires interpreter fallback: " + framelessFailureReason);
-
     // Arguments of a call that are kept in registers at once; a call with more copies them
     // one by one through memory (see FUNC and TAIL).
     constexpr size_t kMaxRegisterArgs = 4;
@@ -928,7 +994,7 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         }
         case OpCode::FUNC: {
             // Every call in a graph that gets here is a call to the graph itself
-            // (describeFramelessSelfFuncFailure). It is encoded natively, in the JIT's own
+            // (collectBlockers). It is encoded natively, in the JIT's own
             // convention on every ABI: the callee's frame is allocated on the machine stack
             // and the body is entered directly, with no frame pool and no C++ in between.
             if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph)

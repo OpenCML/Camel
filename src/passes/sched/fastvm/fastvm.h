@@ -120,6 +120,10 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     // Shared JIT call context consumed by interpreter-side FUNC/TAIL slow paths.
     void *currentJitCtx_{};
     void compileAndCacheGraph(camel::runtime::GCGraph *graph, size_t entryPc);
+    /// What the back end is given to compile `graph`, whose bytecode starts at `entryPc`.
+    jit::CompilationUnit jitUnitFor(
+        camel::runtime::GCGraph *graph, size_t entryPc,
+        const jit::CompilationDebugOptions *debug) const;
     bool jitEnabled() const { return jitConfig_.policy != jit::JitPolicy::Disabled; }
 
     Bytecode *materializeCallTarget(size_t pc, Bytecode *bc);
@@ -137,6 +141,18 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     void *currentJitCtx_{};
     constexpr bool jitEnabled() const { return false; }
 #endif
+
+    // Coverage statistics (fastvm_stats.cpp), off unless CAMEL_FVM_STATS names a file. While
+    // they are on, opCounts_ points to one counter per bytecode pc and the interpreter counts
+    // every bytecode it runs; otherwise it is null and the interpreter is not slowed.
+    struct Stats;
+    std::shared_ptr<Stats> stats_;
+    uint64_t *opCounts_ = nullptr;
+    size_t graphLengthOf(camel::runtime::GCGraph *graph) const; // in bytecode units; 0 unknown
+    void statsBegin();
+    void statsNoteGraph(camel::runtime::GCGraph *graph, size_t pc);
+    void statsNoteCompiled(size_t pc);
+    void statsWrite();
 
     // The interpreter's own call stack: a direct call (FUNC) pushes its return pc and frame
     // here and does not nest on the native stack. The two arrays start with room for the

@@ -84,6 +84,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 }
             }
             const Bytecode &bc = bytecodes_[pc];
+            if (opCounts_ != nullptr) [[unlikely]] {
+                ++opCounts_[pc]; // coverage statistics (fastvm_stats.cpp)
+            }
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                 "FastVM",
                 "Executing bytecode: {}",

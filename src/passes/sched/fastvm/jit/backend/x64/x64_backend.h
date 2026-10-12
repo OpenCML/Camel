@@ -33,6 +33,7 @@ class X64Backend : public IJitBackend {
 
     std::unique_ptr<CompiledCode>
     compile(const CompilationUnit &unit, std::string *failureReason = nullptr) override;
+    std::vector<JitBlocker> blockers(const CompilationUnit &unit) const override;
     void registerTrampoline(const char *name, void *addr) override;
     JitEntryFn load(std::unique_ptr<CompiledCode> code) override;
     void unload(JitEntryFn fn) override;

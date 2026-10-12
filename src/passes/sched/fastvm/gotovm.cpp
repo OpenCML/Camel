@@ -285,8 +285,24 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             &&label_DGE,
         };
 
+        // Coverage statistics (opCounts_, fastvm_stats.cpp; a switch for the whole process):
+        // when they are on, every entry of the dispatch table is redirected, once, to
+        // label_COUNT, which counts the bytecode and continues at its handler through the
+        // saved table. When they are off nothing here runs and the dispatch is untouched.
+        static void *handlerTable[256];
+        if (opCounts_ != nullptr && handlerTable[0] == nullptr) [[unlikely]] {
+            for (size_t i = 0; i < 256; ++i) {
+                handlerTable[i]  = dispatchTable[i];
+                dispatchTable[i] = &&label_COUNT;
+            }
+        }
+
         // Initial dispatch
         JUMP();
+
+    label_COUNT:
+        ++opCounts_[pc];
+        goto *handlerTable[static_cast<size_t>(bc->opcode)];
 
     label_RETN: {
         EXEC_WHEN_DEBUG(

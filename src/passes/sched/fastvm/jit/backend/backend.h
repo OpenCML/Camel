@@ -87,12 +87,26 @@ struct CompiledCode {
 
 using JitEntryFn = slot_t (*)(slot_t *slots, void *ctx);
 
+// One construct of a graph's bytecode that keeps the graph from being compiled. `kind` is a
+// stable short name for counting (OPER, CAST, COPY, FILL, CALL, ACCS, FUNC-other-graph,
+// TAIL-other-graph, BRCH-match, JOIN-match, SCHD, opcode:<name>, frame-too-large,
+// no-static-area, ...); `text` is the sentence the compile log gives.
+struct JitBlocker {
+    size_t pc = 0;
+    std::string kind;
+    std::string text;
+};
+
 class IJitBackend {
   public:
     virtual ~IJitBackend() = default;
 
     virtual std::unique_ptr<CompiledCode>
     compile(const CompilationUnit &unit, std::string *failureReason = nullptr) = 0;
+    /// Every construct of the unit this back end does not compile, in bytecode order: what the
+    /// coverage statistics count (FastVMSchedPass::writeStats). compile() fails with the first
+    /// of them; it can also fail later (register allocation) with an empty list here.
+    virtual std::vector<JitBlocker> blockers(const CompilationUnit &unit) const = 0;
     virtual void registerTrampoline(const char *name, void *addr)              = 0;
     virtual JitEntryFn load(std::unique_ptr<CompiledCode> code)                = 0;
     virtual void unload(JitEntryFn fn)                                         = 0;
