@@ -1,11 +1,11 @@
 /**
- * Level-2 boundary (E13/T5): a training step of a recurrent network whose cell
- * update branches on the step's input (a gated GRU) still cannot be exported.
- * Differentiating the unrolled loop builds a decision tree of (value, pullback)
- * branches; inside it the loop-counter arithmetic and the recursive call lose
- * their staticness, so the recursion cannot be unrolled at export time. This
- * case locks the boundary; the single-level tensor-arm branch family (see
- * export_train_step_branch_tensor / _disjoint) is fixed.
+ * Level-2 (E13/T5): the training step of a recurrent network whose cell update branches on the
+ * step's input (a gated GRU, T = 3) is exported. Differentiating the unrolled loop builds a
+ * decision tree of (value, pullback) branches: the model holds one If per gate decision and
+ * per value that depends on it, nested (the forward alone is export_gated_gru_forward).
+ *
+ * ort_gated_gru_step.py runs the model on ONNX Runtime for every gate pattern and compares it
+ * with the native run of the same step (ort_gated_gru_step.cml holds the same functions).
  */
 module export_gated_gru_step
 
@@ -76,6 +76,6 @@ func main(): int sync {
         [2, 3, 2]
     )
     export_model(step, (m, x), get_env('ONNX_OUT'))
-    println('unreachable')
+    println('exported')
     return 0
 }

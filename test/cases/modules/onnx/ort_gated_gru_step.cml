@@ -1,0 +1,69 @@
+/**
+ * The training step of export_gated_gru_step.cml (the same functions, kept in step with it),
+ * run natively: loads the weights from the directory PARAMS (one .npy per field) and the input
+ * from X, and writes the loss to OUT/loss.npy and the updated weights to OUT/params.
+ * Driven by ort_gated_gru_step.py.
+ */
+module ort_gated_gru_step
+
+import { Tensor, sigmoid, tanh, slice, reshape, shape, zeros, mean, abs, load_npy, save_npy } from tensor
+import { value_and_grad } from autodiff
+import { sgd, save_params } from nn
+import { get_env } from sys
+
+type Gru = {
+    w_ir: Tensor, w_iz: Tensor, w_in: Tensor,
+    w_hr: Tensor, w_hz: Tensor, w_hn: Tensor,
+    b_ir: Tensor, b_iz: Tensor, b_in: Tensor,
+    b_hr: Tensor, b_hz: Tensor, b_hn: Tensor,
+    fc_w: Tensor, fc_b: Tensor
+}
+
+with <m: Gru>
+func cell(xt: Tensor, h: Tensor): Tensor {
+    let r = sigmoid(xt @ m.w_ir + m.b_ir + h @ m.w_hr + m.b_hr)
+    let z = sigmoid(xt @ m.w_iz + m.b_iz + h @ m.w_hz + m.b_hz)
+    let n = tanh(xt @ m.w_in + m.b_in + r * (h @ m.w_hn + m.b_hn))
+    return (1.0 - z) * n + z * h
+}
+
+with <m: Gru, x: Tensor>
+func gated(t: int, h: Tensor): Tensor {
+    let xt = reshape(slice(x, 1, t, t + 1), [shape(x)[0], shape(x)[2]])
+    return if mean(abs(xt)) > 0.5 then cell<m>(xt, h) else h
+}
+
+with <m: Gru, x: Tensor>
+func run(t: int, steps: int, h: Tensor): Tensor {
+    return if t >= steps then h else run<m, x>(t + 1, steps, gated<m, x>(t, h))
+}
+
+with <m: Gru>
+func loss(x: Tensor): float {
+    let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
+    let y = h @ m.fc_w + m.fc_b
+    return mean(y * y)
+}
+
+func step(m: Gru, x: Tensor): (float, Gru) {
+    let vg = value_and_grad(loss)<m>(x)
+    return (vg.0, sgd(m, vg.1, 0.01))
+}
+
+func loaded(dir: string): Gru {
+    return {
+        w_ir: load_npy(dir + '/w_ir.npy'), w_iz: load_npy(dir + '/w_iz.npy'), w_in: load_npy(dir + '/w_in.npy'),
+        w_hr: load_npy(dir + '/w_hr.npy'), w_hz: load_npy(dir + '/w_hz.npy'), w_hn: load_npy(dir + '/w_hn.npy'),
+        b_ir: load_npy(dir + '/b_ir.npy'), b_iz: load_npy(dir + '/b_iz.npy'), b_in: load_npy(dir + '/b_in.npy'),
+        b_hr: load_npy(dir + '/b_hr.npy'), b_hz: load_npy(dir + '/b_hz.npy'), b_hn: load_npy(dir + '/b_hn.npy'),
+        fc_w: load_npy(dir + '/fc_w.npy'), fc_b: load_npy(dir + '/fc_b.npy')
+    }
+}
+
+func main(): int sync {
+    let r = step(loaded(get_env('PARAMS')), load_npy(get_env('X')))
+    save_npy(reshape([r.0], [1]), get_env('OUT') + '/loss.npy')
+    save_params(r.1, get_env('OUT') + '/params')
+    println('ran')
+    return 0
+}

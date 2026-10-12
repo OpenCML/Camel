@@ -400,10 +400,11 @@ What differs from the design above:
   (`enableBranchedCallSplit`, valid only for a consumer that builds no
   execution order, which is why it cannot be a pass before a scheduler).
   `onnx.export_model` also expands macros; the pass leaves that to `std::macro`.
-  For nineteen programs of `test/cases/modules/onnx` the two entries write
+  For twenty-six programs of `test/cases/modules/onnx` the two entries write
   models with bit-identical ONNX Runtime outputs (`pass_export.py equiv`),
-  among them the four `export_train_step_branch*` and `export_gated_gru_forward`,
-  which the pass used to refuse. `export_gated_gru_step` is refused by both;
+  among them the four `export_train_step_branch*`, `export_gated_gru_forward`
+  and `export_gated_gru_step` (the training step of the gated GRU, checked
+  against the native run on all eight gate patterns by `ort_gated_gru_step.py`).
   `export_import_order` is refused by the pass because its captured weights
   come from `random` and only exist at run time.
 - **Control dependencies are checked, not translated.** The lowering walk

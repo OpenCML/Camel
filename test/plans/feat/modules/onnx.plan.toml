@@ -395,22 +395,53 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_gated_gru_step"
-desc = "E13/T5 boundary, moved three times forward and once back: a branched training step of a recurrent network (gated GRU) still cannot be exported. The export stops at an indirect call of a pullback that stays in 'step', reported at the slice. Until the inliner kept the body of a callee that had itself been inlined into behind the control predecessors of its call (that body used to run unordered, which made programs print wrong results), the split of that call across its branch went through and the export stopped later, at the gradient of the slice (tensor:slice_grad has no lowering for bounds that depend on the model input). Now the tuple that holds the pullback is still read by a GATE with no value user that other nodes wait on, and the split leaves a projection with a second reader alone. Dropping such a GATE in dead-code elimination lets the split through again (tried, not validated)."
+desc = "E13/T5: the training step of a recurrent network whose cell update branches on the step's input (gated GRU, T = 3) exports: weights and input in, the loss and the 14 updated weights out, a nested decision tree of If operators and no Loop. It used to be refused, last at an indirect call of a pullback: a closure that is called through a branch stayed read by a GATE that nothing reads and other nodes wait on, which dead-code elimination kept, so the call was not split across the branch. The numbers are checked by ort_gated_gru_step."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_step.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=tmp/test/onnx/export_gated_gru_step.onnx"]
-expect_exit = 1
+expect_exit = 0
+expect_stdout_contains = ["exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
-({ input, assert }) => {
-const text = input.normalized.output
-assert(text.includes("in 'step': an indirect call remains after simplification"), 'missing detail: ' + text)
-assert(/at [^ ]*export_gated_gru_step[.]cml:54:26[)]/.test(text), 'missing source position of the slice: ' + text)
-assert(!text.includes('unreachable'), 'export must fail before the next statement')
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const fs = await import('fs')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const file = path.join(input.repo_root, 'tmp/test/onnx/export_gated_gru_step.onnx')
+const model = readOnnxModel(file)
+const weights = 'w_ir,w_iz,w_in,w_hr,w_hz,w_hn,b_ir,b_iz,b_in,b_hr,b_hz,b_hn,fc_w,fc_b'
+assert(model.inputs.join() === weights + ',input1', `weights and the input must be graph inputs: ${model.inputs}`)
+assert(model.outputs.join() === 'output_0,' + weights.split(',').map((w) => 'output_1_' + w).join(), `loss and updated weights must be outputs: ${model.outputs}`)
+assert(!model.initializers.some((n) => weights.split(',').includes(n)), `weights must be inputs, not initializers: ${model.initializers}`)
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('If') >= 3, `expected an If per gate decision at the top level, got ${model.ops}`)
+assert(count('Loop') === 0, `the recursion over three steps must be unrolled, got ${model.ops}`)
+// nested decision tree: every NodeProto op_type (field 4 -> key 0x22, length 2) equal to "If"
+const buf = fs.readFileSync(file)
+const mark = Buffer.from([0x22, 0x02, 0x49, 0x66])
+let ifs = 0, at = 0
+while ((at = buf.indexOf(mark, at)) !== -1) { ifs += 1; at += 1 }
+assert(ifs >= 7, `expected at least the 2^3 - 1 = 7 If nodes of the forward's decision tree, got ${ifs}`)
 }
 """
-timeout_ms = 6000
+timeout_ms = 20000
+
+[[tests]]
+name = "ort_gated_gru_step"
+desc = "The exported training step of the gated GRU on every path of its decision tree: the model of export_gated_gru_step.cml passes onnx.checker's full check and is run on ONNX Runtime for all 2^3 gate patterns, with the program's weights and with random ones. Two comparisons, reported apart, each within 1e-5: the model on ONNX Runtime against Camel's native run of the same step (ort_gated_gru_step.cml; loss and the 14 updated weights), and the native run against PyTorch autograd on the same equations. The GRU weights must move exactly when some gate fires."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_gated_gru_step.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime, torch"]
+expect_exit = 0
+expect_stdout_contains = ["onnx.checker ok", "16 with the weight updates their gates imply", "artifact (ORT vs Camel native): worst", "reference (Camel native vs PyTorch): worst", "PASS"]
+expect_output_not_contains = ["FAIL", "not run"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
 
 [[tests]]
 name = "export_train_step_dynamic"
@@ -718,7 +749,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "pass_export_equals_export_model"
-desc = "For twenty-five programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt::simplify onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
+desc = "For twenty-six programs (forward, training steps with sgd/Adam/batch-norm/conv/frozen parameters, an If, dynamic axes, and since the pass finishes simplification with the example shapes and the branched-call split: the four branched training steps, the gated GRU forward and its training step, the dynamic-batch mean step, a local variable, a float array literal, gradients through mean and vector matmul, a loop that returns its state with a counter and the gradient of a loss over it) the model written by `std::macro std::opt::simplify onnx::export` and the one written by export_model both pass onnx.checker(full_check) and give bit-identical ONNX Runtime outputs on the same inputs (numpy array_equal)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/pass_export.py"
