@@ -86,7 +86,7 @@ func hof(xs: int[], k: int, acc: int): int {
 }
 
 func floats(n: int, acc: float): float {
-    return if n == 0 then acc else floats(n - 1, acc * 0.5 + float(n) / 4.0)
+    return if n == 0 then acc else floats(n - 1, acc * 0.5 + float(n % 7))
 }
 
 func main(): int sync {

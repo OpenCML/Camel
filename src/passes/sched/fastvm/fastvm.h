@@ -28,6 +28,7 @@
 #include "camel/runtime/graph.h"
 #include "compile.h"
 #include <array>
+#include <cstdlib>
 #include <memory>
 #include <vector>
 
@@ -237,6 +238,13 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
                   break;
               }
               c.hotThreshold = config.jitHotThreshold;
+              // A switch for testing the compiler: CAMEL_JIT_HOT_THRESHOLD=0 compiles a graph
+              // at its first call instead of at the second from one call site, so that short
+              // programs (the random ones of test/tools/progen) run as compiled code too.
+              if (const char *threshold = std::getenv("CAMEL_JIT_HOT_THRESHOLD");
+                  threshold != nullptr && threshold[0] >= '0' && threshold[0] <= '9') {
+                  c.hotThreshold = static_cast<size_t>(std::strtoull(threshold, nullptr, 10));
+              }
               return c;
           }()),
           enableJitTraceMir_(config.enableJitTraceMir)
