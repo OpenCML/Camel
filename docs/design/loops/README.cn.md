@@ -404,7 +404,7 @@ L3 的逐轮展开不会发生在循环节点上；内联引擎对递归的各�
 
 `for`、`in` 已是词法记号；`while` 需要新增为关键字（现有 `.cml` 文件里没有把 `while` 用作标识符的【实测 grep `test/cases`、`stdlib`、`examples`】）。在 `ctrlExpr` 下增加两条产生式，循环体复用 `stmtBlock`（因此 `sync` 写在花括号前，与 `then sync { ... }` 一致）：
 
-```antlr
+```
 ctrlExpr
     : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     | MATCH identRef '{' matchCase+ '}'
@@ -414,7 +414,7 @@ ctrlExpr
     ;
 ```
 
-条件后面直接跟 `{` 不产生歧义：`logicalOrExpr` 的后缀只有下标、调用、尖括号实参和 `!`，`{` 不能接在表达式后面【读 `antlr/OpenCML.g4`】。
+条件后面直接跟 `{` 不产生歧义：`logicalOrExpr` 的后缀只有下标、调用、尖括号实参和 `!`，`{` 不能接在表达式后面【读 `src/parse/syntax/parser_expr.cpp` 的 `parseAnno`，即语言参考 8.5 的 `annoExpr`】。
 
 ```camel
 while i <= n sync { ... }                       // 语句形式
@@ -554,7 +554,7 @@ let h = while let (h, k) = (x, 0); k < 6 && sum(h * h) >= 1.0 {
 
 | 位置 | 改动 | 规模 | (a) 之下 |
 |---|---|---|---|
-| `antlr/OpenCMLLex.g4`、`OpenCML.g4` | `WHILE` 记号，两条产生式 | 约 10 行 | 相同 |
+| `include/camel/parse/syntax/token_kinds.def`、`node_kinds.def`、`src/parse/syntax/parser*.cpp` | 关键字记号、节点种类、解析函数（步骤见 `docs/technical/34_handwritten_parser.md` 第 4 节） | 约 10 行 | 相同 |
 | `src/parse/ast/builder.cpp`（2878 行）`visitCtrlExpr` | 两种循环的 AST 节点；`break`/`continue` 的诊断 | 约 150 行 | 相同 |
 | `src/compile/gct/builder.cpp`（2535 行），仿 `visitIfExpr`（1535 行处） | 新的 `LoopLoad`，子节点为状态声明、条件、循环体 | 约 150 行 | 相同 |
 | `src/compile/gir/builder.cpp`（3545 行），仿 `visitBrchNode`（2969–3224） | 为条件与循环体各开一张子图（`enterScope`）、建 `LOOP` 节点、连状态边与捕获边；语句形式用 `capturedUsesOf` / `recordWrite` 记为被捕获变量的写入者；同步链；状态类型的统一；`reportDroppedEffects` 认识循环 | 约 350 行 | 改为生成一张自递归子图与 `BRCH`，约 250 行 |
