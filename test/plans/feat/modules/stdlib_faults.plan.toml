@@ -1,0 +1,358 @@
+id = "modules.stdlib_faults"
+order = 370
+tier = "feat"
+tags = ["feat", "modules", "stdlib", "consistency", "fault"]
+desc = "The core standard library: an index or range out of bounds and an argument outside what an operator defines is a located fault, the same on the four back ends"
+
+# Only an operation declared to fail returns an error value (design principles 2.9); out of
+# range is a fault. Each case prints a line, faults, and must not print the next line. The
+# four back ends agree on exit code, standard output and the diagnostic (name, line, column).
+# Each is also run through std::opt: the faulting call has constant arguments and the operator
+# is pure, and the fault must still happen when the program runs, at the same place.
+
+[defaults]
+kind = "negative"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_output_not_contains = ["not reached", "Floating point exception", "Segmentation fault", "dumped core"]
+expect_stdout_starts_with = "before\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stdlib.fault.substr_start"
+desc = "substr that starts past the end of the string."
+case = "../../../cases/modules/stdlib/fault_substr_start.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.substr_start.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_substr_start.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.substr_length"
+desc = "substr whose range runs past the end: a fault, not a shorter result (DESIGN-QUESTION(slice-bounds))."
+case = "../../../cases/modules/stdlib/fault_substr_length.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.substr_length.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_substr_length.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.substr_negative"
+desc = "substr with a negative length."
+case = "../../../cases/modules/stdlib/fault_substr_negative.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.substr_negative.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_substr_negative.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.index"
+desc = "A string indexed at its length."
+case = "../../../cases/modules/stdlib/fault_index.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.index.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_index.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.index_negative"
+desc = "A string indexed with a negative number."
+case = "../../../cases/modules/stdlib/fault_index_negative.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.index_negative.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_index_negative.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.index_empty"
+desc = "An empty string indexed at 0."
+case = "../../../cases/modules/stdlib/fault_index_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.index_empty.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_index_empty.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+
+[[tests]]
+name = "stdlib.fault.char_at"
+desc = "char_at past the last character (the string is valid UTF-8: not an error value)."
+case = "../../../cases/modules/stdlib/fault_char_at.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.char_at.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_char_at.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.char_substr"
+desc = "char_substr whose range runs past the last character."
+case = "../../../cases/modules/stdlib/fault_char_substr.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.char_substr.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_char_substr.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.split_empty"
+desc = "split with an empty separator."
+case = "../../../cases/modules/stdlib/fault_split_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.split_empty.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_split_empty.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.replace_empty"
+desc = "replace of the empty string."
+case = "../../../cases/modules/stdlib/fault_replace_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.replace_empty.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_replace_empty.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.repeat_negative"
+desc = "repeat a negative number of times."
+case = "../../../cases/modules/stdlib/fault_repeat_negative.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.repeat_negative.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_repeat_negative.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.repeat_huge"
+desc = "repeat whose result would be longer than a string can be: refused before anything is allocated."
+case = "../../../cases/modules/stdlib/fault_repeat_huge.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.repeat_huge.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_repeat_huge.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.from_bytes"
+desc = "from_bytes with a number that is not a byte."
+case = "../../../cases/modules/stdlib/fault_from_bytes.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.from_bytes.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_from_bytes.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.shl_width"
+desc = "shl by the width of the integer."
+case = "../../../cases/modules/stdlib/fault_shl_width.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.shl_width.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_shl_width.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.shr_negative"
+desc = "shr by a negative count."
+case = "../../../cases/modules/stdlib/fault_shr_negative.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.shr_negative.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_shr_negative.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.shl_i32"
+desc = "shl of an i32 by 32."
+case = "../../../cases/modules/stdlib/fault_shl_i32.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.shl_i32.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_shl_i32.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.clamp_bounds"
+desc = "clamp whose lower bound is above the upper one."
+case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.clamp_bounds.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.clamp_nan"
+desc = "clamp with a NaN bound."
+case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.clamp_nan.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.gcd_overflow"
+desc = "gcd whose result is the magnitude of the smallest integer."
+case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.gcd_overflow.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.lcm_overflow"
+desc = "lcm that does not fit the integer type."
+case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.lcm_overflow.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.quantile_range"
+desc = "quantile outside 0..1."
+case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+
+[[tests]]
+name = "stdlib.fault.quantile_range.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
