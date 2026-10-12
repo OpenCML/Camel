@@ -346,10 +346,17 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         // diagnostic is recorded there and shown as the command line shows it.
         return failed();
     } catch (::Diagnostic &d) {
+        // Recorded and shown like every other diagnostic of a run. The sink throws when it
+        // reaches its error limit, which the first error does: that must not leave a handler.
         if (!d.persisted && st.ctx) {
-            st.ctx->runtimeDiagSink()->add(Diagnostic(d));
+            try {
+                st.ctx->runtimeDiagSink()->add(Diagnostic(d));
+            } catch (const DiagnosticsLimitExceededBaseException &) {
+            }
         }
-        std::cout << "Diagnostic error: " << d.toText() << std::endl;
+        if (st.ctx && st.ctx->runtimeDiagSink()->hasErrors())
+            return failed();
+        std::cout << d.toText() << std::endl;
         getTaskState() = "loaded";
         return RunOutcome::Failed;
     } catch (std::exception &e) {

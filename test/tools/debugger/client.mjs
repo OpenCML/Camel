@@ -224,6 +224,8 @@ export class DapClient {
         dap.proc.stderr.on('data', (d) => (dap.output += d))
         dap.proc.stdin.on('error', () => {})
         dap.exited = new Promise((resolve) => dap.proc.on('exit', (code, signal) => resolve({ code, signal })))
+        // Resolves when the `terminated` event arrives, whoever consumes that event.
+        dap.ended = new Promise((resolve) => (dap.markEnded = resolve))
         return dap
     }
 
@@ -270,6 +272,9 @@ export class DapClient {
         } else if (message.type === 'event') {
             this.events.push(message)
             this.#serveWaiters()
+            if (message.event === 'terminated') {
+                this.markEnded('end')
+            }
         } else {
             this.protocolErrors.push(`neither a response nor an event: ${JSON.stringify(message).slice(0, 200)}`)
         }
@@ -403,6 +408,11 @@ export class DapClient {
             name: frames[0]?.name,
             names: frames.map((f) => f.name),
         }
+    }
+
+    /** The next stop, or the string 'end' when the session terminates first. */
+    waitStopOrEnd(timeoutMs = WAIT_MS) {
+        return Promise.race([this.waitStop(timeoutMs), this.ended])
     }
 
     /** The variables of a scope of a frame as `{ name: { value, type, variablesReference } }`. */
