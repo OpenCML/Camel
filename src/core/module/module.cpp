@@ -65,7 +65,15 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
                         name = group->name();
                     }
                     for (const auto &r : group->resolvers()) {
-                        allResolvers.push_back(r);
+                        // One module's group reaches here twice when a name is imported
+                        // both by name and with the module's default names: the same
+                        // overload is one overload.
+                        const bool known = std::ranges::any_of(allResolvers, [&](const auto &have) {
+                            return have.first == r.first && have.second == r.second;
+                        });
+                        if (!known) {
+                            allResolvers.push_back(r);
+                        }
                     }
                 }
             }
@@ -281,6 +289,31 @@ bool Module::importAllRefsFromImportedNamespace(const Reference &localPrefix) {
     return importedAny;
 }
 
+void Module::noteNamedImport(
+    const Reference &ref, const module_ptr_t &mod, camel::source::origin_id_t origin,
+    size_t tokenStart, size_t tokenEnd) {
+    namedImports_.emplace_back(ref, NamedImport{mod, origin, tokenStart, tokenEnd});
+}
+
+std::vector<std::pair<Reference, std::vector<Module::NamedImport>>>
+Module::namesImportedMoreThanOnce() const {
+    std::vector<std::pair<Reference, std::vector<NamedImport>>> result;
+    for (const auto &[ref, site] : namedImports_) {
+        auto it = std::find_if(result.begin(), result.end(), [&](const auto &entry) {
+            return entry.first == ref;
+        });
+        if (it == result.end()) {
+            result.emplace_back(ref, std::vector<NamedImport>{site});
+        } else if (std::none_of(it->second.begin(), it->second.end(), [&](const auto &have) {
+                       return have.mod == site.mod;
+                   })) {
+            it->second.push_back(site);
+        }
+    }
+    std::erase_if(result, [](const auto &entry) { return entry.second.size() < 2; });
+    return result;
+}
+
 bool Module::hasImportedRef(const Reference &ref) const {
     return !importedBindingsForRef(ref).empty();
 }
@@ -358,6 +391,30 @@ std::optional<entity> Module::getExportedEntity(const Reference &ref) const {
     ASSERT(loaded_, "Module not built: " + name_);
     return exportedEntityNS_->get(ref);
 };
+
+std::vector<Reference> Module::importedRefs() const {
+    std::vector<Reference> refs;
+    refs.reserve(importedRefMap_.size());
+    for (const auto &[ref, bindings] : importedRefMap_) {
+        refs.push_back(ref);
+    }
+    return refs;
+}
+
+std::vector<std::pair<std::string, std::shared_ptr<Module>>> Module::importedNamespaces() const {
+    std::vector<std::pair<std::string, std::shared_ptr<Module>>> out;
+    for (const auto &binding : importedNamespaceBindings_) {
+        std::string prefix;
+        for (const auto &part : binding.localPrefixParts) {
+            if (!prefix.empty()) {
+                prefix += "::";
+            }
+            prefix += part;
+        }
+        out.emplace_back(std::move(prefix), binding.mod);
+    }
+    return out;
+}
 
 const std::vector<Reference> &Module::defaultImportedRefs() const { return defaultImportedRefs_; }
 

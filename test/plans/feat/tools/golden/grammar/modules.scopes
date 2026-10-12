@@ -1,0 +1,204 @@
+>// Module declarations, imports, exports, namespaces and qualified names.
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>module geometry
+#^^^^^^ keyword.control.import.module.camel
+#       ^^^^^^^^ entity.name.namespace.module.camel
+>
+>import time
+#^^^^^^ keyword.control.import.camel
+#       ^^^^ entity.name.namespace.module.camel
+>import ..sibling
+#^^^^^^ keyword.control.import.camel
+#       ^^ punctuation.separator.module.relative.camel
+#         ^^^^^^^ entity.name.namespace.module.camel
+>import ...pkg.deep.name
+#^^^^^^ keyword.control.import.camel
+#       ^^^ punctuation.separator.module.relative.camel
+#          ^^^^^^^^^^^^^ entity.name.namespace.module.camel
+>import { now, sleep } from time
+#^^^^^^ keyword.control.import.camel
+#       ^ meta.block.camel punctuation.section.block.begin.camel
+#            ^ meta.block.camel punctuation.separator.comma.camel
+#                    ^ meta.block.camel punctuation.section.block.end.camel
+#                      ^^^^ keyword.control.import.from.camel
+#                           ^^^^ entity.name.namespace.module.camel
+>import { zen, } from this
+#^^^^^^ keyword.control.import.camel
+#       ^ meta.block.camel punctuation.section.block.begin.camel
+#            ^ meta.block.camel punctuation.separator.comma.camel
+#              ^ meta.block.camel punctuation.section.block.end.camel
+#                ^^^^ keyword.control.import.from.camel
+#                     ^^^^ entity.name.namespace.module.camel
+>import tensor from .local.tensor
+#^^^^^^ keyword.control.import.camel
+#              ^^^^ keyword.control.import.from.camel
+#                   ^ punctuation.separator.module.relative.camel
+#                    ^^^^^^^^^^^^ entity.name.namespace.module.camel
+>
+>namespace shapes {
+#^^^^^^^^^ storage.type.namespace.camel
+#          ^^^^^^ entity.name.namespace.camel
+#                 ^ meta.block.camel punctuation.section.block.begin.camel
+>    type Point = { x: int, y: int }
+#    ^^^^ meta.block.camel meta.type.definition.camel storage.type.type.camel
+#         ^^^^^ meta.block.camel meta.type.definition.camel entity.name.type.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                 ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                   ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                    ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                      ^^^ meta.block.camel meta.block.camel support.type.primitive.camel
+#                         ^ meta.block.camel meta.block.camel punctuation.separator.comma.camel
+#                           ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                            ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                              ^^^ meta.block.camel meta.block.camel support.type.primitive.camel
+#                                  ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>
+>    func origin(): Point {
+#    ^^^^ meta.block.camel meta.function.definition.camel storage.type.function.camel
+#         ^^^^^^ meta.block.camel meta.function.definition.camel entity.name.function.camel
+#               ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                 ^ meta.block.camel punctuation.separator.colon.camel
+#                         ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+>        return { x: 0, y: 0 }
+#        ^^^^^^ meta.block.camel meta.block.camel keyword.control.flow.camel
+#               ^ meta.block.camel meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                 ^ meta.block.camel meta.block.camel meta.block.camel variable.other.property.camel
+#                  ^ meta.block.camel meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                    ^ meta.block.camel meta.block.camel meta.block.camel constant.numeric.integer.decimal.camel
+#                     ^ meta.block.camel meta.block.camel meta.block.camel punctuation.separator.comma.camel
+#                       ^ meta.block.camel meta.block.camel meta.block.camel variable.other.property.camel
+#                        ^ meta.block.camel meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                          ^ meta.block.camel meta.block.camel meta.block.camel constant.numeric.integer.decimal.camel
+#                            ^ meta.block.camel meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    }
+#    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>
+>    namespace detail::impl {
+#    ^^^^^^^^^ meta.block.camel storage.type.namespace.camel
+#              ^^^^^^ meta.block.camel entity.name.namespace.camel
+#                    ^^ meta.block.camel punctuation.separator.namespace.camel
+#                      ^^^^ meta.block.camel entity.name.namespace.camel
+#                           ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+>        func helper(p: shapes::Point): int {
+#        ^^^^ meta.block.camel meta.block.camel meta.function.definition.camel storage.type.function.camel
+#             ^^^^^^ meta.block.camel meta.block.camel meta.function.definition.camel entity.name.function.camel
+#                   ^ meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                    ^ meta.block.camel meta.block.camel meta.parens.camel variable.parameter.camel
+#                     ^ meta.block.camel meta.block.camel meta.parens.camel punctuation.separator.colon.camel
+#                       ^^^^^^ meta.block.camel meta.block.camel meta.parens.camel entity.name.namespace.camel
+#                             ^^ meta.block.camel meta.block.camel meta.parens.camel punctuation.separator.namespace.camel
+#                                    ^ meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                     ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                                       ^^^ meta.block.camel meta.block.camel support.type.primitive.camel
+#                                           ^ meta.block.camel meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+>            return p.x
+#            ^^^^^^ meta.block.camel meta.block.camel meta.block.camel keyword.control.flow.camel
+#                    ^ meta.block.camel meta.block.camel meta.block.camel punctuation.accessor.camel
+#                     ^ meta.block.camel meta.block.camel meta.block.camel variable.other.property.camel
+>        }
+#        ^ meta.block.camel meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    }
+#    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>
+>    using namespace detail::impl
+#    ^^^^^ meta.block.camel keyword.control.import.camel
+#          ^^^^^^^^^ meta.block.camel storage.type.namespace.camel
+#                    ^^^^^^ meta.block.camel entity.name.namespace.camel
+#                          ^^ meta.block.camel punctuation.separator.namespace.camel
+#                            ^^^^ meta.block.camel entity.name.namespace.camel
+>    export { origin }
+#    ^^^^^^ meta.block.camel keyword.control.import.camel
+#           ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>using namespace shapes
+#^^^^^ keyword.control.import.camel
+#      ^^^^^^^^^ storage.type.namespace.camel
+#                ^^^^^^ entity.name.namespace.camel
+>use dist = shapes::detail::impl::helper
+#^^^ keyword.control.import.camel
+#         ^ keyword.operator.assignment.camel
+#           ^^^^^^ entity.name.namespace.camel
+#                 ^^ punctuation.separator.namespace.camel
+#                   ^^^^^^ entity.name.namespace.camel
+#                         ^^ punctuation.separator.namespace.camel
+#                           ^^^^ entity.name.namespace.camel
+#                               ^^ punctuation.separator.namespace.camel
+>
+>export let ORIGIN = shapes::origin()
+#^^^^^^ keyword.control.import.camel
+#       ^^^ meta.declaration.let.camel storage.type.let.camel
+#           ^^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                  ^ keyword.operator.assignment.camel
+#                    ^^^^^^ entity.name.namespace.camel
+#                          ^^ punctuation.separator.namespace.camel
+#                            ^^^^^^ entity.name.function.call.camel
+#                                  ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                                   ^ meta.parens.camel punctuation.section.parens.end.camel
+>export type P = shapes::Point
+#^^^^^^ keyword.control.import.camel
+#       ^^^^ meta.type.definition.camel storage.type.type.camel
+#            ^ meta.type.definition.camel entity.name.type.camel
+#              ^ keyword.operator.assignment.camel
+#                ^^^^^^ entity.name.namespace.camel
+#                      ^^ punctuation.separator.namespace.camel
+>
+>func main(): int sync {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^ meta.function.definition.camel entity.name.function.camel
+#         ^ meta.parens.camel punctuation.section.parens.begin.camel
+#          ^ meta.parens.camel punctuation.section.parens.end.camel
+#           ^ punctuation.separator.colon.camel
+#             ^^^ support.type.primitive.camel
+#                 ^^^^ storage.modifier.sync.camel
+#                      ^ meta.block.camel punctuation.section.block.begin.camel
+>    let p: shapes::Point = shapes::origin()
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#         ^ meta.block.camel punctuation.separator.colon.camel
+#           ^^^^^^ meta.block.camel entity.name.namespace.camel
+#                 ^^ meta.block.camel punctuation.separator.namespace.camel
+#                         ^ meta.block.camel keyword.operator.assignment.camel
+#                           ^^^^^^ meta.block.camel entity.name.namespace.camel
+#                                 ^^ meta.block.camel punctuation.separator.namespace.camel
+#                                   ^^^^^^ meta.block.camel entity.name.function.call.camel
+#                                         ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                          ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let d = shapes::detail::impl::helper(p)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#            ^^^^^^ meta.block.camel entity.name.namespace.camel
+#                  ^^ meta.block.camel punctuation.separator.namespace.camel
+#                    ^^^^^^ meta.block.camel entity.name.namespace.camel
+#                          ^^ meta.block.camel punctuation.separator.namespace.camel
+#                            ^^^^ meta.block.camel entity.name.namespace.camel
+#                                ^^ meta.block.camel punctuation.separator.namespace.camel
+#                                  ^^^^^^ meta.block.camel entity.name.function.call.camel
+#                                        ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                          ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let t = time::now()
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#            ^^^^ meta.block.camel entity.name.namespace.camel
+#                ^^ meta.block.camel punctuation.separator.namespace.camel
+#                  ^^^ meta.block.camel entity.name.function.call.camel
+#                     ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                      ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    d->std::io::println
+#     ^^ meta.block.camel keyword.operator.pipe.camel
+#       ^^^ meta.block.camel entity.name.namespace.camel
+#          ^^ meta.block.camel punctuation.separator.namespace.camel
+#            ^^ meta.block.camel entity.name.namespace.camel
+#              ^^ meta.block.camel punctuation.separator.namespace.camel
+#                ^^^^^^^ meta.block.camel entity.name.function.call.camel
+>    return 0
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#           ^ meta.block.camel constant.numeric.integer.decimal.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel

@@ -76,7 +76,7 @@ case = "../../../cases/modules/onnx/export_branch.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=tmp/test/onnx/export_branch.onnx"]
 expect_exit = 0
-expect_stdout_contains = ["camel gate=2 0 6 1", "exported"]
+expect_stdout_contains = ["camel gate=2.0 0.0 6.0 1.0", "exported"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {

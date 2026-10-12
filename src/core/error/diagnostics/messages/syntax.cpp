@@ -122,6 +122,17 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
                 "file.",
             },
         },
+        {
+            SyntaxDiag::ComparisonAcrossLines,
+            {
+                "ComparisonAcrossLines",
+                "This '>' is read as a comparison with the next line, which starts with {0}: "
+                "two statements may have been joined into one.",
+                "A newline does not end a statement, and a '>' followed by an expression is the "
+                "comparison operator. If this '>' was meant to close '<...>' arguments and the "
+                "next line to be a new statement, write ';' after the '>'.",
+            },
+        },
     };
 
     return infoMap;

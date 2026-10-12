@@ -1,0 +1,18 @@
+var cnt = 0
+
+sync func bump(): int sync {
+    wait cnt += 1
+    return cnt
+}
+
+func read(): int {
+    return cnt
+}
+
+sync func main(): int sync {
+    bump()
+    bump()
+    println(read())
+    println(cnt)
+    return 0
+}

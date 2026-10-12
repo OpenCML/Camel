@@ -1,0 +1,35 @@
+// The same `map` runs sequentially or in parallel depending on the passes chosen on the
+// command line; the program does not change and the results keep the order of the elements.
+// Run: camel examples/parallel/parallel_map.cml
+//      camel examples/parallel/parallel_map.cml std::prl
+module parallel_map
+
+// Number of steps the Collatz sequence takes from `n` down to 1.
+func collatz_steps(n: int, steps: int): int {
+    return if n == 1 then steps
+        else if n % 2 == 0 then collatz_steps(n / 2, steps + 1)
+        else collatz_steps(3 * n + 1, steps + 1)
+}
+
+// The start value in [lo, hi) with the longest sequence, as (start, steps).
+func longest_in(lo: int, hi: int): (int, int) {
+    return range(lo, hi)->reduce<
+        (best: (int, int), n: int): (int, int) => longer(best, (n, collatz_steps(n, 0))),
+        (lo, 0)
+    >
+}
+
+func longer(a: (int, int), b: (int, int)): (int, int) {
+    return if b.1 > a.1 then b else a
+}
+
+func main(): int sync {
+    // Eight independent blocks of 2000 start values; each block is one element of the map.
+    let block = 2000
+    let results = range(0, 8)->map<(i: int): (int, int) => longest_in(i * block + 1, (i + 1) * block + 1)>
+
+    println(results)
+    let best = results->reduce<longer, (1, 0)>
+    println(format<8 * block, best.0, best.1>('longest up to {}: start {} takes {} steps'))
+    return 0
+}

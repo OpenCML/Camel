@@ -1,0 +1,8 @@
+import { indirect } from mi_values
+
+let base = 1000
+
+func main(): int sync {
+    println(indirect(2))
+    return 0
+}

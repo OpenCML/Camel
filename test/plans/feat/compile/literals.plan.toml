@@ -191,3 +191,183 @@ assert(out === want, `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
+
+# A literal its type cannot hold is a located compile-time error. It used to wrap around or to
+# be cut off silently: 9223372036854775808 and 1e400 were the smallest int, and
+# `let b: i32 = 3000000000` was -1294967296
+# (docs/issues/2026-10-12-language-surface-findings.md, 2).
+
+[[tests]]
+name = "literal_range.limits"
+desc = "The largest and the smallest literals an int and an i32 hold are accepted, -9223372036854775808 included, in every base and with an exponent; the four back ends print the same."
+kind = "behavior"
+case = "../../../cases/compile/literals/integer_limits.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "-9223372036854775808 9223372036854775807",
+  "9223372036854775807 -9223372036854775808 7 511 -511",
+  "1000000000000000000 9000000000000000000 -9000000000000000000 15 1 0 0 0",
+  "2147483647 -2147483648 1.5 -2147483648",
+  "9223372036854775806 -9223372036854775807 -9223372036854775808",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.int_too_large"
+desc = "9223372036854775808 does not fit an int; it was the smallest int."
+kind = "behavior"
+case = "../../../cases/compile/literals/int_too_large.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+expect_output_contains = ["'9223372036854775808'", "type 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.int_too_small"
+desc = "-9223372036854775809 does not fit an int."
+kind = "behavior"
+case = "../../../cases/compile/literals/int_too_small.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.int_exponent_too_large"
+desc = "1e400 is an integer literal (no decimal point) and does not fit an int."
+kind = "behavior"
+case = "../../../cases/compile/literals/int_exponent_too_large.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.int_hex_too_large"
+desc = "0x8000000000000000 does not fit an int."
+kind = "behavior"
+case = "../../../cases/compile/literals/int_hex_too_large.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.i32_too_large"
+desc = "`let b: i32 = 3000000000` is an error; it was -1294967296."
+kind = "behavior"
+case = "../../../cases/compile/literals/i32_too_large.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_output_contains = ["'3000000000'", "type 'i32'", "-2147483648 to 2147483647"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.i32_nullable_too_large"
+desc = "The same for a literal declared `i32?`."
+kind = "behavior"
+case = "../../../cases/compile/literals/i32_nullable_too_large.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.i32_too_small"
+desc = "-2147483649 does not fit an i32."
+kind = "behavior"
+case = "../../../cases/compile/literals/i32_too_small.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.float_too_large"
+desc = "1.0e400 is larger than any float; it used to end in the bare text 'Number out of range'."
+kind = "behavior"
+case = "../../../cases/compile/literals/float_too_large.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+expect_output_contains = ["type 'float'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.f32_too_large"
+desc = "`let c: f32 = 1.0e39` is an error; it was inf."
+kind = "behavior"
+case = "../../../cases/compile/literals/f32_too_large.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_output_contains = ["type 'f32'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.base_with_exponent"
+desc = "`0b1e5` is one token of the lexer and not a number: a located InvalidLiteral (it was an exception text)."
+kind = "behavior"
+case = "../../../cases/compile/literals/int_base_with_exponent.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidLiteral"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_range.negative_exponent_warns"
+desc = "`1e-2` is the int 0 and `15e-1` the int 1, as before (whether such a literal is a float or an error is not decided); the dropped fraction is now a located warning. `1500e-2` is exactly 15 and is not reported."
+kind = "behavior"
+case = "../../../cases/compile/literals/int_negative_exponent.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["0 1 15"]
+expect_stderr_contains = ["name=SemanticDiag::IntegerLiteralTruncated", "'1e-2'", "'1.0e-2'", "'15e-1'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const warnings = input.normalized.stderr.split('\n').filter((l) => l.includes('IntegerLiteralTruncated'))
+assert(warnings.length === 2, `expected 2 warnings, got ${warnings.length}: ${input.normalized.stderr}`)
+assert(warnings[0].includes(':2:13:'), warnings[0])
+}
+"""
+timeout_ms = 8000

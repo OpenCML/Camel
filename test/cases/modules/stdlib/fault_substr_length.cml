@@ -4,7 +4,7 @@ import { substr } from str
 
 func main(): int sync {
     println('before')
-    // DESIGN-QUESTION(slice-bounds): a range past the end is a fault; slice on arrays clamps
+    // a range past the end is a fault, as for slice on arrays (design principles 2.10)
     println('hello'->substr<3, 3>)
     println('not reached')
     return 0

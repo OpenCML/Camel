@@ -23,7 +23,7 @@ build\tools\camel-cpp\Release\camel-cpp.exe test\cases\linear\nvm\fib.cml
 .\tmp\fib.exe
 ```
 
-camel-cpp 会自动：解析并编译 `.cml` → 应用 `std::cpp` pass → 写入 `tmp/<stem>.cpp` → 调用 clang++ 编译 → 将 exe 与 libcamel.dll 拷贝到 `tmp/`。详见 [CLI 文档](cli.cn.md#相关工具related-tools)。
+camel-cpp 会自动：解析并编译 `.cml` → 应用 `std::cpp` pass → 写入 `tmp/<stem>.cpp` → 调用 clang++ 编译 → 将 exe 与 libcamel.dll 拷贝到 `tmp/`。详见 [CLI 文档](cli.cn.md#相关工具)。
 
 ---
 

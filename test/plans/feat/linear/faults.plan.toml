@@ -609,7 +609,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "recursion_depth_hot.fvm"
-desc = "A recursion one call deeper than the limit of 256, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (fvm)."
+desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (fvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"
 args = ["${case}", "${run_fvm}"]
@@ -618,14 +618,14 @@ expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
 expect_diagnostic_line = 19
 expect_diagnostic_column = 38
-expect_output_contains = ["loop 500000500000", "down 255", "tree 256", "Maximum recursion depth (256) exceeded"]
+expect_output_contains = ["loop 500000500000", "down 999", "tree 1000", "Maximum recursion depth (1000) exceeded"]
 expect_output_not_contains = ["not reached", "Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "recursion_depth_hot.inline_fvm"
-desc = "A recursion one call deeper than the limit of 256, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_fvm)."
+desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_fvm)."
 kind = "negative"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"
 args = ["${case}", "${run_inline_fvm}"]
@@ -634,14 +634,14 @@ expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
 expect_diagnostic_line = 19
 expect_diagnostic_column = 38
-expect_output_contains = ["loop 500000500000", "down 255", "tree 256", "Maximum recursion depth (256) exceeded"]
+expect_output_contains = ["loop 500000500000", "down 999", "tree 1000", "Maximum recursion depth (1000) exceeded"]
 expect_output_not_contains = ["not reached", "Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "recursion_depth_hot.inline_jit"
-desc = "A recursion one call deeper than the limit of 256, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_jit)."
+desc = "A recursion one call deeper than the default limit of 1000, in a function the JIT compiles after std::inline: MaxRecursionDepthExceeded at the call that goes too deep, at the same call as the bytecode VM, not a stack overflow; a tail recursion of a million calls passes (inline_jit)."
 kind = "negative"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"
 args = ["${case}", "${run_inline_jit}"]
@@ -650,7 +650,7 @@ expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
 expect_diagnostic_line = 19
 expect_diagnostic_column = 38
-expect_output_contains = ["loop 500000500000", "down 255", "tree 256", "Maximum recursion depth (256) exceeded"]
+expect_output_contains = ["loop 500000500000", "down 999", "tree 1000", "Maximum recursion depth (1000) exceeded"]
 expect_output_not_contains = ["not reached", "Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

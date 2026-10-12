@@ -1,0 +1,5 @@
+loss before training: 3.7500
+loss after 10 steps:  0.3186
+loss after 200 steps: 0.0000
+tensor([[      2],
+        [     -1]], dtype=float32)

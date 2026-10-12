@@ -1,0 +1,23 @@
+/**
+ * Boundaries that run side by side. Every element of the outer map isolates the fault of its
+ * own inner map; an element whose inner map does not fault must not be disturbed by the faults
+ * its siblings isolate at the same time (each `attempt` is a fault domain of its own). The
+ * result is the same on every back end.
+ */
+module concurrent
+
+func inv(x: int): int { return 60 / (x - 3) }
+
+func row(i: int): int {
+    // Rows with an even i map over a range that contains 3: their map faults.
+    let lo = if i % 2 == 0 then 0 else 4
+    let ys = attempt(() => range(lo, lo + 8)->map<inv>) !! [0 - i]
+    return ys->reduce<(a: int, x: int): int => a + x, 0>
+}
+
+func main(): int sync {
+    println(range(0, 40)->map<row>)
+    println(range(0, 40)->map<row>->reduce<(a: int, x: int): int => a + x, 0>)
+    println('end')
+    return 0
+}

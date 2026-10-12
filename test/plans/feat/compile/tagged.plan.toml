@@ -86,7 +86,7 @@ const want = [
   "ParseError: 'oops' is not an integer at <parse_int>",
   "ParseError: '99999999999999999999' is out of the range of an integer at <parse_int>",
   "2.5",
-  "-1",
+  "-1.0",
   "error IOError: cannot open 'tagged_no_such_file.txt'",
   "<no file>",
 ].join('\n')

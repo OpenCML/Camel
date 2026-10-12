@@ -14,7 +14,7 @@ func show(r: int!): string {
 
 func main(): int sync {
     println(parse_int('42') !! 0)
-    println(parse_int(' -7 ') !! 0)
+    println(parse_int('-7') !! 0)
     println(parse_int('4x2') !! 0)
     println(show(parse_int('oops')))
     println(show(parse_int('99999999999999999999')))

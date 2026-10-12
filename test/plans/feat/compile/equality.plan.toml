@@ -1,0 +1,89 @@
+id = "compile.equality"
+order = 333
+tier = "feat"
+tags = ["feat", "compile", "equality", "types"]
+desc = "`==` and `!=` by content on arrays, tuples and structs, and `contains` on strings (design principles 2.10): the four back ends, the optimisation pipelines, and what is refused at compile time"
+
+# The values themselves are checked on the four back ends by consistency.values
+# (value.content_equality). Here: the pipelines give the same output (the operator is pure and
+# may be folded), and the operand types `==` is not defined for are located compile-time errors.
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "equality.inline"
+desc = "The golden output of value.content_equality after std::inline, on the three linear back ends."
+backends = ["inline_nvm", "inline_fvm", "inline_jit"]
+args = ["${case}", "${backend}"]
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/consistency/values/content_equality.cml"
+golden = "../consistency/golden/content_equality.txt"
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "equality.fold"
+desc = "The same output under std::opt::fold: folding a comparison of constants gives what running it gives."
+args = ["${case}", "std::opt::fold", "std::fvm"]
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/consistency/values/content_equality.cml"
+golden = "../consistency/golden/content_equality.txt"
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "equality.simplify"
+desc = "The same output under std::opt::simplify."
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/consistency/values/content_equality.cml"
+golden = "../consistency/golden/content_equality.txt"
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "equality.macro_opt"
+desc = "The same output under std::macro std::opt and the JIT."
+args = ["${case}", "std::macro", "std::opt", "std::jit"]
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/consistency/values/content_equality.cml"
+golden = "../consistency/golden/content_equality.txt"
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "equality.err_function_part"
+desc = "An array of function values cannot be compared: no overload of `==`, at the operator; the message lists the overload for composite values and what it needs."
+kind = "negative"
+case = "../../../cases/compile/equality/err_function_part.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_function_part.cml:7:19: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "operator '==' is not defined for these operand types", "T an array, tuple or struct of comparable parts"]
+
+[[tests]]
+name = "equality.err_not_equal_function"
+desc = "A tuple with a function value in it cannot be compared with `!=` either. (`!=` used to accept any two values of one type and compared references.)"
+kind = "negative"
+case = "../../../cases/compile/equality/err_not_equal_function.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_not_equal_function.cml:6:25: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "operator '!=' is not defined for these operand types"]
+
+[[tests]]
+name = "equality.err_types_differ"
+desc = "Both sides must have the same type: int[] against float[] is a compile-time error, nothing is converted."
+kind = "negative"
+case = "../../../cases/compile/equality/err_types_differ.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_types_differ.cml:4:23: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(i64[], f64[])"]

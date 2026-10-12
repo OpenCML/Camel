@@ -742,6 +742,21 @@ void bindPortValueUses(GraphDraft &draft, gc_node_ref_t portNodeId, gc_node_ref_
     // Ports are parameter placeholders. After cloning into the owner draft,
     // all observable value uses must flow from the real caller operand instead.
     draft.replaceAllValueUses(portNodeId, actualInputId);
+    // So must the control uses. A node of the body may wait on a parameter without reading it:
+    // the front end makes a BRCH wait on every value its arms capture, and a rewrite that
+    // removes a node hands its control inputs to its users. Erasing the port dropped those
+    // edges, and with them the only thing that ordered such a node after the argument.
+    const std::vector<gc_node_ref_t> waiting(
+        draft.ctrlUsersOf(portNodeId).begin(),
+        draft.ctrlUsersOf(portNodeId).end());
+    for (gc_node_ref_t user : waiting) {
+        draft.unlinkInput(DraftEdgeKind::Ctrl, user, portNodeId);
+        const auto existing = draft.ctrlInputsOf(user);
+        if (user != actualInputId &&
+            std::find(existing.begin(), existing.end(), actualInputId) == existing.end()) {
+            draft.appendInput(DraftEdgeKind::Ctrl, user, actualInputId);
+        }
+    }
 }
 
 gc_node_ref_t remapFormalNodeToActual(
@@ -1883,12 +1898,7 @@ DraftInlineResult inlineCallableInDraft(
             ctrlPreds.push_back(argument);
         }
     }
-    const bool hasExternalCtrl    = !ctrlPreds.empty();
-    const bool needControlBridge  = hasExternalCtrl || !draft.ctrlUsersOf(funcNodeId).empty() ||
-                                    draft.isBranchArmAnchor(funcNodeId) ||
-                                    draft.entryNode() == funcNodeId ||
-                                    draft.exitNode() == funcNodeId;
-    const bool needParameterGates = hasExternalCtrl;
+    const bool hasExternalCtrl = !ctrlPreds.empty();
 
     DraftGraphCloneResult cloned = calleeDraftView
                                        ? cloneDraftGraphIntoDraft(draft, *calleeDraftView)
@@ -1907,10 +1917,22 @@ DraftInlineResult inlineCallableInDraft(
         funcNodeId,
         entryRoots.size());
 
+    const auto clonedFormalNodes =
+        calleeDraftView ? orderedClonedDirectCallFormalNodes(cloned, *calleeDraftView)
+                        : orderedClonedDirectCallFormalNodes(cloned, funcBody->calleeGraph);
+    ASSERT(
+        clonedFormalNodes.size() == formalNodes.size(),
+        "Runtime inline formal-node planning diverged between source and cloned graphs.");
+
+    // With control predecessors, the body reads each argument through a GATE that waits on
+    // them. The gates order nothing the entry roots below do not order already (every
+    // executable node of the body runs after a root); they are kept because consumers that
+    // read the graph as a value DAG (the ONNX exporter) take a gated constant for "this value
+    // exists only once the branch or the statement before it has run".
     std::vector<gc_node_ref_t> boundActualInputs = actualInputs;
-    std::vector<gc_node_ref_t> parameterGateTargets;
-    if (needParameterGates) {
-        parameterGateTargets.reserve(actualInputs.size());
+    std::vector<gc_node_ref_t> parameterGates;
+    if (hasExternalCtrl) {
+        parameterGates.reserve(actualInputs.size());
         for (size_t i = 0; i < actualInputs.size(); ++i) {
             const DraftNodeHeader *actualHeader = draft.header(actualInputs[i]);
             DraftNodeInit gateInit{
@@ -1921,17 +1943,10 @@ DraftInlineResult inlineCallableInDraft(
                 .normInputs   = std::span<const gc_node_ref_t>(&actualInputs[i], 1),
             };
             const gc_node_ref_t gateId = draft.addNode(gateInit);
-            parameterGateTargets.push_back(gateId);
+            parameterGates.push_back(gateId);
             boundActualInputs[i] = gateId;
         }
     }
-
-    const auto clonedFormalNodes =
-        calleeDraftView ? orderedClonedDirectCallFormalNodes(cloned, *calleeDraftView)
-                        : orderedClonedDirectCallFormalNodes(cloned, funcBody->calleeGraph);
-    ASSERT(
-        clonedFormalNodes.size() == formalNodes.size(),
-        "Runtime inline formal-node planning diverged between source and cloned graphs.");
 
     size_t actualIndex = 0;
     for (const auto &[kind, portId] : clonedFormalNodes) {
@@ -1955,25 +1970,18 @@ DraftInlineResult inlineCallableInDraft(
         }
     }
 
-    std::vector<gc_node_ref_t> entryTargets = entryRoots;
-    if (entryTargets.empty()) {
-        entryTargets = parameterGateTargets;
-    }
-    if (entryTargets.empty() && cloned.entryNode != kInvalidNodeRef) {
-        entryTargets.push_back(remapFormalNodeToActual(
-            cloned.entryNode,
-            cloned,
-            funcBody->calleeGraph,
-            calleeDraftView,
-            boundActualInputs));
-    }
-    std::vector<gc_node_ref_t> parameterCtrlInputs = ctrlPreds;
-    if (entryTargets.size() == 1) {
-        result.ctrlEntry = entryTargets.front();
+    // The entry roots take over the call's predecessors: directly when there is one root,
+    // through a SYNC when there are several. The roots are all there is to order: the
+    // parameter gates and the callee's recorded entry node are not entry points. (They used to
+    // stand in when a body had no root; nothing of such a body reads them, so the
+    // predecessors ended at nodes nothing followed.)
+    std::vector<gc_node_ref_t> gateCtrl = ctrlPreds;
+    if (entryRoots.size() == 1) {
+        result.ctrlEntry = entryRoots.front();
         const std::vector<gc_node_ref_t> mergedCtrlInputs =
             appendUniqueRefs(draft.ctrlInputsOf(result.ctrlEntry), ctrlPreds);
         draft.setCtrlInputs(result.ctrlEntry, mergedCtrlInputs);
-    } else {
+    } else if (entryRoots.size() > 1) {
         DraftNodeInit syncInit{
             .dataIndex    = 0,
             .dataType     = nullptr,
@@ -1981,31 +1989,19 @@ DraftInlineResult inlineCallableInDraft(
             .runtimeFlags = 0,
             .ctrlInputs   = ctrlPreds,
         };
-        result.ctrlEntry    = draft.addNode(syncInit);
-        parameterCtrlInputs = {result.ctrlEntry};
-        for (gc_node_ref_t targetId : entryTargets) {
+        result.ctrlEntry = draft.addNode(syncInit);
+        gateCtrl         = {result.ctrlEntry};
+        for (gc_node_ref_t targetId : entryRoots) {
             const std::vector<gc_node_ref_t> mergedCtrlInputs = appendUniqueRefs(
                 draft.ctrlInputsOf(targetId),
                 std::span<const gc_node_ref_t>(&result.ctrlEntry, 1));
             draft.setCtrlInputs(targetId, mergedCtrlInputs);
         }
     }
-
-    if (!parameterGateTargets.empty() && !parameterCtrlInputs.empty()) {
-        for (gc_node_ref_t gateId : parameterGateTargets) {
-            if (gateId == result.ctrlEntry) {
-                continue;
-            }
-            // Parameter gates must become ready before callee entry nodes consume
-            // them. Wiring a gate to the resolved entry node itself can form a
-            // data/control cycle when that entry node reads the same gate (for
-            // example recursive `timeit` specializations where `repeat - 1`
-            // feeds the next branch condition). Multi-entry splices still use
-            // the synthetic SYNC anchor because it precedes every entry root.
-            const std::vector<gc_node_ref_t> gateCtrlInputs =
-                appendUniqueRefs(draft.ctrlInputsOf(gateId), parameterCtrlInputs);
-            draft.setCtrlInputs(gateId, gateCtrlInputs);
-        }
+    // A gate waits on the predecessors themselves, or on the SYNC that stands for them; never
+    // on an entry root, which may read the gate.
+    for (gc_node_ref_t gateId : parameterGates) {
+        draft.setCtrlInputs(gateId, gateCtrl);
     }
 
     result.valueExit = resolveInlineValueExit(
@@ -2038,13 +2034,24 @@ DraftInlineResult inlineCallableInDraft(
     if (result.ctrlExit == kInvalidNodeRef) {
         result.ctrlExit = result.valueExit;
     }
-    const bool needValueCtrlBridge =
-        result.ctrlExit != kInvalidNodeRef && result.ctrlExit != result.valueExit;
-    if (hasExternalCtrl && needControlBridge &&
-        (result.ctrlEntry == kInvalidNodeRef || !draft.isControlAnchor(result.ctrlEntry))) {
+    const bool resultIsGatedArgument =
+        std::find(parameterGates.begin(), parameterGates.end(), result.valueExit) !=
+            parameterGates.end() &&
+        result.ctrlExit == result.valueExit;
+    if (hasExternalCtrl && entryRoots.empty() && resultIsGatedArgument) {
+        // The body forwards an argument: its gate already waits on the predecessors.
+        result.ctrlEntry = result.valueExit;
+    } else if (hasExternalCtrl && entryRoots.empty()) {
+        // The body executes nothing: its result is a constant or one of the arguments. The
+        // call still ran after its predecessors, and what waited on the call, or read its
+        // value, ran after them too. A GATE on the result carries that. Without it the result
+        // waits on nothing: where the call was the tail of a branch arm (placed in the arm by
+        // the BRCH, or by an argument computed there), the tail became a value outside the
+        // branch, the arm was taken to have no code, and what the call's arguments ran in the
+        // arm belonged to no arm any more.
         const DraftNodeHeader *valueHeader        = draft.header(result.valueExit);
         std::vector<gc_node_ref_t> gateCtrlInputs = ctrlPreds;
-        if (result.ctrlExit != kInvalidNodeRef) {
+        if (result.ctrlExit != result.valueExit) {
             gateCtrlInputs = appendUniqueRefs(
                 std::span<const gc_node_ref_t>(gateCtrlInputs.data(), gateCtrlInputs.size()),
                 std::span<const gc_node_ref_t>(&result.ctrlExit, 1));
@@ -2061,8 +2068,7 @@ DraftInlineResult inlineCallableInDraft(
         result.ctrlEntry               = bridgeGate;
         result.ctrlExit                = bridgeGate;
         result.valueExit               = bridgeGate;
-    }
-    if (needValueCtrlBridge) {
+    } else if (result.ctrlExit != result.valueExit) {
         const DraftNodeHeader *valueHeader = draft.header(result.valueExit);
         DraftNodeInit gateInit{
             .dataIndex    = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
@@ -2075,10 +2081,8 @@ DraftInlineResult inlineCallableInDraft(
         const gc_node_ref_t bridgeGate = draft.addNode(gateInit);
         result.valueExit               = bridgeGate;
         result.ctrlExit                = bridgeGate;
-        if (result.ctrlEntry == kInvalidNodeRef) {
-            result.ctrlEntry = bridgeGate;
-        }
-    } else if (result.ctrlEntry == kInvalidNodeRef) {
+    }
+    if (result.ctrlEntry == kInvalidNodeRef) {
         result.ctrlEntry = result.ctrlExit;
     }
     draft.retargetBranchArmAnchors(funcNodeId, result.ctrlEntry, result.ctrlExit);

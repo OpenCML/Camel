@@ -377,7 +377,7 @@ expect_exit = 1
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/diag_render/runtime_file_open.txt"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_platform_error_messages"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
@@ -442,7 +442,7 @@ expect_exit = 1
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "golden/diag_render/runtime_regex.txt"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_platform_error_messages"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]

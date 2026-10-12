@@ -1,0 +1,13 @@
+{"age":36,"name":"ada","tags":["admin","dev"]}
+{
+  "age": 36,
+  "name": "ada",
+  "tags": [
+    "admin",
+    "dev"
+  ]
+}
+ada, 36, tags: admin/dev
+rejected (JsonTypeError)
+rejected (JsonParseError)
+{art: 78, math: 91} 91 0

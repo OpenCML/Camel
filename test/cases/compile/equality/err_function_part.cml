@@ -1,0 +1,9 @@
+module err_function_part
+
+func inc(x: int): int { return x + 1 }
+
+func main(): int sync {
+    let fs = [inc]
+    println(fs == fs)
+    return 0
+}

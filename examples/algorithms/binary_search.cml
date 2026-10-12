@@ -1,0 +1,37 @@
+// Binary search in a sorted array by tail recursion; a missing value gives null (int?).
+// The search is written out because it is the subject of the example: `index_of` and `find`
+// of the `array` module look a value up in an array in any order.
+// Run: camel examples/algorithms/binary_search.cml
+module binary_search
+
+import { sorted } from algo
+import { index_of } from array
+
+// Searches xs[lo, hi) for `target` and returns its index.
+func search(xs: int[], target: int, lo: int, hi: int): int? {
+    let mid = (lo + hi) / 2
+    return if lo >= hi then { return null }
+        else if xs[mid] == target then { return mid }
+        else if xs[mid] < target then search(xs, target, mid + 1, hi)
+        else search(xs, target, lo, mid)
+}
+
+func describe(xs: int[], target: int): string {
+    let found = search(xs, target, 0, len(xs))
+    return match found {
+        case null => string(target) + ' is not in the array'
+        case i => string(target) + ' is at index ' + string(i)
+    }
+}
+
+func main(): int sync {
+    let xs = sorted([41, 7, 19, 3, 88, 54, 23, 60])
+    println(xs)
+    println([54, 3, 88, 20]->map<(t: int): string => describe(xs, t)>->join<'\n'>)
+    println('index_of gives:', xs->index_of<54> ?? -1, xs->index_of<20> ?? -1)
+
+    // One million even numbers: at most twenty steps.
+    let evens = range(0, 1000000)->map<(i: int): int => i * 2>
+    println(search(evens, 1337330, 0, len(evens)) ?? -1, search(evens, 1337331, 0, len(evens)) ?? -1)
+    return 0
+}

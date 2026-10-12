@@ -329,6 +329,61 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::LiteralOutOfRange,
+            {
+                "LiteralOutOfRange",
+                "The literal '{0}' is out of the range of type '{1}' ({2}).",
+                "A literal that its type cannot hold is not wrapped around or cut off. Write a "
+                "value in the range, or give the literal a wider type.",
+            },
+        },
+        {
+            SemanticDiag::IfArmValueWithoutElse,
+            {
+                "IfArmValueWithoutElse",
+                "This 'if' has no 'else' arm with a value, but its 'then' arm gives a value of "
+                "type '{0}' (in function '{1}').",
+                "An 'if' without 'else' gives nothing when its condition is false, so its arm "
+                "must give nothing either. A call such as 'println(...)' has a value. When the "
+                "'if' is a statement run for its effect, end the arm with 'return null': 'if c "
+                "then sync {{ println(x); return null }}'. When its value is wanted, add an "
+                "'else' arm of the same type.",
+            },
+        },
+        {
+            SemanticDiag::ImportCycle,
+            {
+                "ImportCycle",
+                "The module '{0}' is imported while it is itself being loaded ({1}).",
+                "A module cannot import itself, directly or through the modules it imports. A "
+                "file that imports a module of its own name imports itself. Move what the "
+                "modules share into another module.",
+            },
+        },
+        {
+            SemanticDiag::ImportedFunctionUsesModuleValue,
+            {
+                "ImportedFunctionUsesModuleValue",
+                "The function '{0}' is used from another module, but it uses '{1}' of the top "
+                "level of its own module, directly or through a function it calls.",
+                "A function used from another module cannot yet read a 'let' or a 'var' of the "
+                "top level of the module that declares it: the name would be looked up in the "
+                "importing module. Pass the value as a parameter or a 'with' parameter, or "
+                "write it as a function without parameters ('func base(): int {{ return 10 }}').",
+            },
+        },
+        {
+            SemanticDiag::ImportNameConflict,
+            {
+                "ImportNameConflict",
+                "The name '{0}' is imported from the modules '{1}' and '{2}' with the same "
+                "signature {3}.",
+                "Two imports that bring the same name with the same parameter types conflict; "
+                "neither is chosen silently. Import the name from one of the modules only, and "
+                "reach the other through its module ('import m' and then 'm::name').",
+            },
+        },
+        {
             SemanticDiag::ImmutablePassedToVarParam,
             {
                 "ImmutablePassedToVarParam",
@@ -579,6 +634,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A "
                 "'match' on a bool that has both 'case true' and 'case false' is complete and "
                 "is not reported.",
+            },
+        },
+        {
+            SemanticDiag::IntegerLiteralTruncated,
+            {
+                "IntegerLiteralTruncated",
+                "The integer literal '{0}' is not a whole number: its value is {1}, the "
+                "fraction is dropped.",
+                "A number written without a decimal point is an 'int', with an exponent too. "
+                "For the floating-point number write the decimal point: '{2}'.",
             },
         },
         {

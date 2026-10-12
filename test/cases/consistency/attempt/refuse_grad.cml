@@ -1,0 +1,18 @@
+/**
+ * The value to differentiate flows through a fault boundary. There is no derivative rule for
+ * the boundary: `grad` refuses and names the operator.
+ */
+module refuse_grad
+
+import { grad } from autodiff
+
+func risky(x: float): float { return 6.0 / x }
+
+func through(x: float): float {
+    return (attempt(risky, x) !! 0.0) * x
+}
+
+func main(): int sync {
+    println(grad(through)(3.0))
+    return 0
+}

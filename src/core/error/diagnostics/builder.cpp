@@ -79,6 +79,11 @@ DiagnosticBuilder::related(const CharRange &range, std::string message, std::str
     return *this;
 }
 
+DiagnosticBuilder &DiagnosticBuilder::related(const TokenRange &range, std::string message) {
+    related_.push_back(DiagLabel{range, std::move(message), ""});
+    return *this;
+}
+
 DiagnosticBuilder &DiagnosticBuilder::note(std::string text) {
     if (!text.empty()) {
         notes_.push_back(std::move(text));

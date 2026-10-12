@@ -35,10 +35,9 @@ namespace camel::execute {
 /// in tail position; a tail call replaces its caller and is not counted.
 ///
 /// It is given by `--max-recursion-depth <n>` (EntryConfig::maxRecursionDepth) or, without the
-/// option, by the environment variable CAMEL_MAX_RECURSION_DEPTH. Without either, std::nvm and
-/// std::fvm stop at kDefaultMaxRecursionDepth, and std::tf has no count of its own: it goes as
-/// deep as the native stack of the thread allows. Whether the schedulers should share one
-/// default is an open question of the design principles (section 6); nothing here decides it.
+/// option, by the environment variable CAMEL_MAX_RECURSION_DEPTH. Without either, every
+/// scheduler stops at kDefaultMaxRecursionDepth: the default is 1000 on all of them, and the
+/// parallel scheduler counts like the others (design principles 2.10, "默认值").
 ///
 /// What is counted is the same on every back end: each call of a function (written directly,
 /// made through a function value, or made by a higher-order operator for an element) that is
@@ -48,7 +47,7 @@ namespace camel::execute {
 /// runs, for `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`: L calls of `depth` are
 /// open at the bottom.
 inline constexpr size_t kEntryCalls                     = 1;
-inline constexpr size_t kDefaultMaxRecursionDepth       = 256;
+inline constexpr size_t kDefaultMaxRecursionDepth       = 1000;
 inline constexpr const char *kMaxRecursionDepthEnvVar   = "CAMEL_MAX_RECURSION_DEPTH";
 inline constexpr const char *kMaxRecursionDepthOption   = "--max-recursion-depth";
 
@@ -70,11 +69,11 @@ inline constexpr bool kNativeStackGuard = true;
 #else
 inline constexpr bool kNativeStackGuard = false;
 #endif
-inline constexpr size_t kMaxDepthLimit = kNativeStackGuard ? 1000000 : 256;
+inline constexpr size_t kMaxDepthLimit = kNativeStackGuard ? 1000000 : kDefaultMaxRecursionDepth;
 
 /// Bytes of the frame pool of an interpreter that runs with `limit`: 4 KiB per call that may be
-/// open, which is what the pool had for the default limit (1 MiB for 256), up to 256 MiB. The
-/// pool is reserved once and only the part in use is touched.
+/// open (about 4 MiB for the default limit of 1000), up to 256 MiB. The pool is reserved once
+/// and only the part in use is touched.
 size_t framePoolBytes(size_t limit);
 
 /// A depth limit written as text (an option value, an environment variable): a decimal integer

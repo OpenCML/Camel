@@ -1,0 +1,479 @@
+>// Function definitions, calls, with-parameters, decorators and function literals.
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>module functions
+#^^^^^^ keyword.control.import.module.camel
+#       ^^^^^^^^^ entity.name.namespace.module.camel
+>
+>func fib(n: int): int {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^ meta.function.definition.camel entity.name.function.camel
+#        ^ meta.parens.camel punctuation.section.parens.begin.camel
+#         ^ meta.parens.camel variable.parameter.camel
+#          ^ meta.parens.camel punctuation.separator.colon.camel
+#            ^^^ meta.parens.camel support.type.primitive.camel
+#               ^ meta.parens.camel punctuation.section.parens.end.camel
+#                ^ punctuation.separator.colon.camel
+#                  ^^^ support.type.primitive.camel
+#                      ^ meta.block.camel punctuation.section.block.begin.camel
+>    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#           ^^ meta.block.camel keyword.control.conditional.camel
+#                ^^ meta.block.camel keyword.operator.comparison.camel
+#                   ^ meta.block.camel constant.numeric.integer.decimal.camel
+#                     ^^^^ meta.block.camel keyword.control.conditional.camel
+#                            ^^^^ meta.block.camel keyword.control.conditional.camel
+#                                 ^^^ meta.block.camel entity.name.function.call.camel
+#                                    ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                       ^ meta.block.camel meta.parens.camel keyword.operator.arithmetic.camel
+#                                         ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                                          ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                            ^ meta.block.camel keyword.operator.arithmetic.camel
+#                                              ^^^ meta.block.camel entity.name.function.call.camel
+#                                                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                                    ^ meta.block.camel meta.parens.camel keyword.operator.arithmetic.camel
+#                                                      ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                                                       ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func no_params() sync {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#              ^ meta.parens.camel punctuation.section.parens.begin.camel
+#               ^ meta.parens.camel punctuation.section.parens.end.camel
+#                 ^^^^ storage.modifier.sync.camel
+#                      ^ meta.block.camel punctuation.section.block.begin.camel
+>    println('side effect')
+#    ^^^^^^^ meta.block.camel entity.name.function.call.camel
+#           ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#            ^ meta.block.camel meta.parens.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#             ^^^^^^^^^^^ meta.block.camel meta.parens.camel string.quoted.single.camel
+#                        ^ meta.block.camel meta.parens.camel string.quoted.single.camel punctuation.definition.string.end.camel
+#                         ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func defaults(x: int, var y: float = 1.0, name: string = 'n'): void {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#             ^ meta.parens.camel punctuation.section.parens.begin.camel
+#              ^ meta.parens.camel variable.parameter.camel
+#               ^ meta.parens.camel punctuation.separator.colon.camel
+#                 ^^^ meta.parens.camel support.type.primitive.camel
+#                    ^ meta.parens.camel punctuation.separator.comma.camel
+#                      ^^^ meta.parens.camel storage.modifier.var.camel
+#                          ^ meta.parens.camel variable.parameter.camel
+#                           ^ meta.parens.camel punctuation.separator.colon.camel
+#                             ^^^^^ meta.parens.camel support.type.primitive.camel
+#                                   ^ meta.parens.camel keyword.operator.assignment.camel
+#                                     ^^^ meta.parens.camel constant.numeric.float.camel
+#                                        ^ meta.parens.camel punctuation.separator.comma.camel
+#                                          ^^^^ meta.parens.camel variable.parameter.camel
+#                                              ^ meta.parens.camel punctuation.separator.colon.camel
+#                                                ^^^^^^ meta.parens.camel support.type.primitive.camel
+#                                                       ^ meta.parens.camel keyword.operator.assignment.camel
+#                                                         ^ meta.parens.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                                                          ^ meta.parens.camel string.quoted.single.camel
+#                                                           ^ meta.parens.camel string.quoted.single.camel punctuation.definition.string.end.camel
+#                                                            ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                                             ^ punctuation.separator.colon.camel
+#                                                               ^^^^ support.type.primitive.camel
+#                                                                    ^ meta.block.camel punctuation.section.block.begin.camel
+>    return null
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#           ^^^^ meta.block.camel constant.language.null.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>with <k: int>
+#^^^^ meta.with-parameters.camel keyword.other.with.camel
+#     ^ meta.with-parameters.camel punctuation.definition.with-parameters.begin.camel
+#      ^ meta.with-parameters.camel variable.parameter.camel
+#       ^ meta.with-parameters.camel punctuation.separator.colon.camel
+#         ^^^ meta.with-parameters.camel support.type.primitive.camel
+#            ^ meta.with-parameters.camel punctuation.definition.with-parameters.end.camel
+>func add_n(f: (x: int) => int): (x: int) => int {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^ meta.function.definition.camel entity.name.function.camel
+#          ^ meta.parens.camel punctuation.section.parens.begin.camel
+#           ^ meta.parens.camel variable.parameter.camel
+#            ^ meta.parens.camel punctuation.separator.colon.camel
+#              ^ meta.parens.camel meta.parens.camel punctuation.section.parens.begin.camel
+#               ^ meta.parens.camel meta.parens.camel variable.parameter.camel
+#                ^ meta.parens.camel meta.parens.camel punctuation.separator.colon.camel
+#                  ^^^ meta.parens.camel meta.parens.camel support.type.primitive.camel
+#                     ^ meta.parens.camel meta.parens.camel punctuation.section.parens.end.camel
+#                       ^^ meta.parens.camel keyword.operator.arrow.camel
+#                          ^^^ meta.parens.camel support.type.primitive.camel
+#                             ^ meta.parens.camel punctuation.section.parens.end.camel
+#                              ^ punctuation.separator.colon.camel
+#                                ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                                 ^ meta.parens.camel variable.parameter.camel
+#                                  ^ meta.parens.camel punctuation.separator.colon.camel
+#                                    ^^^ meta.parens.camel support.type.primitive.camel
+#                                       ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                         ^^ keyword.operator.arrow.camel
+#                                            ^^^ support.type.primitive.camel
+#                                                ^ meta.block.camel punctuation.section.block.begin.camel
+>    return (x: int): int => {
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#           ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#            ^ meta.block.camel meta.parens.camel variable.parameter.camel
+#             ^ meta.block.camel meta.parens.camel punctuation.separator.colon.camel
+#               ^^^ meta.block.camel meta.parens.camel support.type.primitive.camel
+#                  ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                   ^ meta.block.camel punctuation.separator.colon.camel
+#                     ^^^ meta.block.camel support.type.primitive.camel
+#                         ^^ meta.block.camel keyword.operator.arrow.camel
+#                            ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+>        return f(x) + k
+#        ^^^^^^ meta.block.camel meta.block.camel keyword.control.flow.camel
+#               ^ meta.block.camel meta.block.camel entity.name.function.call.camel
+#                ^ meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                  ^ meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                    ^ meta.block.camel meta.block.camel keyword.operator.arithmetic.camel
+>    }
+#    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>with <predicate: (p: Point) => bool, var count: int>
+#^^^^ meta.with-parameters.camel keyword.other.with.camel
+#     ^ meta.with-parameters.camel punctuation.definition.with-parameters.begin.camel
+#      ^^^^^^^^^ meta.with-parameters.camel variable.parameter.camel
+#               ^ meta.with-parameters.camel punctuation.separator.colon.camel
+#                 ^ meta.with-parameters.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                  ^ meta.with-parameters.camel meta.parens.camel variable.parameter.camel
+#                   ^ meta.with-parameters.camel meta.parens.camel punctuation.separator.colon.camel
+#                          ^ meta.with-parameters.camel meta.parens.camel punctuation.section.parens.end.camel
+#                            ^^ meta.with-parameters.camel keyword.operator.arrow.camel
+#                               ^^^^ meta.with-parameters.camel support.type.primitive.camel
+#                                   ^ meta.with-parameters.camel punctuation.separator.comma.camel
+#                                     ^^^ meta.with-parameters.camel storage.modifier.var.camel
+#                                         ^^^^^ meta.with-parameters.camel variable.parameter.camel
+#                                              ^ meta.with-parameters.camel punctuation.separator.colon.camel
+#                                                ^^^ meta.with-parameters.camel support.type.primitive.camel
+#                                                   ^ meta.with-parameters.camel punctuation.definition.with-parameters.end.camel
+>func my_filter(points: Point[]): Point[] sync {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#              ^ meta.parens.camel punctuation.section.parens.begin.camel
+#               ^^^^^^ meta.parens.camel variable.parameter.camel
+#                     ^ meta.parens.camel punctuation.separator.colon.camel
+#                            ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                             ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                              ^ meta.parens.camel punctuation.section.parens.end.camel
+#                               ^ punctuation.separator.colon.camel
+#                                      ^ meta.brackets.camel punctuation.section.brackets.begin.camel
+#                                       ^ meta.brackets.camel punctuation.section.brackets.end.camel
+#                                         ^^^^ storage.modifier.sync.camel
+#                                              ^ meta.block.camel punctuation.section.block.begin.camel
+>    var result: Point[] = []
+#    ^^^ meta.block.camel meta.declaration.var.camel storage.type.var.camel
+#        ^^^^^^ meta.block.camel meta.declaration.var.camel variable.other.readwrite.camel
+#              ^ meta.block.camel punctuation.separator.colon.camel
+#                     ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                      ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                        ^ meta.block.camel keyword.operator.assignment.camel
+#                          ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                           ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+>    points->foreach<(p: Point) => sync {
+#          ^^ meta.block.camel keyword.operator.pipe.camel
+#            ^^^^^^^ meta.block.camel entity.name.function.call.camel
+#                   ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                    ^ meta.block.camel meta.angle-arguments.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                     ^ meta.block.camel meta.angle-arguments.camel meta.parens.camel variable.parameter.camel
+#                      ^ meta.block.camel meta.angle-arguments.camel meta.parens.camel punctuation.separator.colon.camel
+#                             ^ meta.block.camel meta.angle-arguments.camel meta.parens.camel punctuation.section.parens.end.camel
+#                               ^^ meta.block.camel meta.angle-arguments.camel keyword.operator.arrow.camel
+#                                  ^^^^ meta.block.camel meta.angle-arguments.camel storage.modifier.sync.camel
+#                                       ^ meta.block.camel meta.angle-arguments.camel meta.block.camel punctuation.section.block.begin.camel
+>        if predicate(p) then sync {
+#        ^^ meta.block.camel meta.angle-arguments.camel meta.block.camel keyword.control.conditional.camel
+#           ^^^^^^^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel entity.name.function.call.camel
+#                    ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                      ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                        ^^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel keyword.control.conditional.camel
+#                             ^^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel storage.modifier.sync.camel
+#                                  ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+>            result->append<p>
+#                  ^^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.block.camel keyword.operator.pipe.camel
+#                    ^^^^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.block.camel entity.name.function.call.camel
+#                          ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                            ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>            return null
+#            ^^^^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.block.camel keyword.control.flow.camel
+#                   ^^^^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.block.camel constant.language.null.camel
+>        }
+#        ^ meta.block.camel meta.angle-arguments.camel meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    }>
+#    ^ meta.block.camel meta.angle-arguments.camel meta.block.camel punctuation.section.block.end.camel
+#     ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>    return result
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>@add_n<1>
+#^ meta.decorator.camel punctuation.definition.decorator.camel
+# ^^^^^ meta.decorator.camel entity.name.function.decorator.camel
+#      ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#       ^ meta.angle-arguments.camel constant.numeric.integer.decimal.camel
+#        ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>@tools::trace
+#^ meta.decorator.camel punctuation.definition.decorator.camel
+# ^^^^^ meta.decorator.camel entity.name.namespace.camel
+#      ^^ meta.decorator.camel punctuation.separator.namespace.camel
+#        ^^^^^ meta.decorator.camel entity.name.function.decorator.camel
+>@mul_n<2>
+#^ meta.decorator.camel punctuation.definition.decorator.camel
+# ^^^^^ meta.decorator.camel entity.name.function.decorator.camel
+#      ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#       ^ meta.angle-arguments.camel constant.numeric.integer.decimal.camel
+#        ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>export sync func core(x: int): int {
+#^^^^^^ keyword.control.import.camel
+#       ^^^^ storage.modifier.sync.camel
+#            ^^^^ meta.function.definition.camel storage.type.function.camel
+#                 ^^^^ meta.function.definition.camel entity.name.function.camel
+#                     ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                      ^ meta.parens.camel variable.parameter.camel
+#                       ^ meta.parens.camel punctuation.separator.colon.camel
+#                         ^^^ meta.parens.camel support.type.primitive.camel
+#                            ^ meta.parens.camel punctuation.section.parens.end.camel
+#                             ^ punctuation.separator.colon.camel
+#                               ^^^ support.type.primitive.camel
+#                                   ^ meta.block.camel punctuation.section.block.begin.camel
+>    return x + 3
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#             ^ meta.block.camel keyword.operator.arithmetic.camel
+#               ^ meta.block.camel constant.numeric.integer.decimal.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func tools::helper(x: int): int {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^ meta.function.definition.camel entity.name.namespace.camel
+#          ^^ meta.function.definition.camel punctuation.separator.namespace.camel
+#            ^^^^^^ meta.function.definition.camel entity.name.function.camel
+#                  ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                   ^ meta.parens.camel variable.parameter.camel
+#                    ^ meta.parens.camel punctuation.separator.colon.camel
+#                      ^^^ meta.parens.camel support.type.primitive.camel
+#                         ^ meta.parens.camel punctuation.section.parens.end.camel
+#                          ^ punctuation.separator.colon.camel
+#                            ^^^ support.type.primitive.camel
+#                                ^ meta.block.camel punctuation.section.block.begin.camel
+>    return x
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func calls(arr: int[], p: Point): int sync {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^ meta.function.definition.camel entity.name.function.camel
+#          ^ meta.parens.camel punctuation.section.parens.begin.camel
+#           ^^^ meta.parens.camel variable.parameter.camel
+#              ^ meta.parens.camel punctuation.separator.colon.camel
+#                ^^^ meta.parens.camel support.type.primitive.camel
+#                   ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                    ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                     ^ meta.parens.camel punctuation.separator.comma.camel
+#                       ^ meta.parens.camel variable.parameter.camel
+#                        ^ meta.parens.camel punctuation.separator.colon.camel
+#                               ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                ^ punctuation.separator.colon.camel
+#                                  ^^^ support.type.primitive.camel
+#                                      ^^^^ storage.modifier.sync.camel
+#                                           ^ meta.block.camel punctuation.section.block.begin.camel
+>    let direct = fib(10)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                 ^^^ meta.block.camel entity.name.function.call.camel
+#                    ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                     ^^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                       ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let with_args = add_n<3>(fib)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                  ^ meta.block.camel keyword.operator.assignment.camel
+#                    ^^^^^ meta.block.camel entity.name.function.call.camel
+#                         ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                          ^ meta.block.camel meta.angle-arguments.camel constant.numeric.integer.decimal.camel
+#                           ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                            ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let bound = arr->slice<0, len(arr) - 1>
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#              ^ meta.block.camel keyword.operator.assignment.camel
+#                   ^^ meta.block.camel keyword.operator.pipe.camel
+#                     ^^^^^ meta.block.camel entity.name.function.call.camel
+#                          ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                           ^ meta.block.camel meta.angle-arguments.camel constant.numeric.integer.decimal.camel
+#                            ^ meta.block.camel meta.angle-arguments.camel punctuation.separator.comma.camel
+#                              ^^^ meta.block.camel meta.angle-arguments.camel entity.name.function.call.camel
+#                                 ^ meta.block.camel meta.angle-arguments.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                     ^ meta.block.camel meta.angle-arguments.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                       ^ meta.block.camel meta.angle-arguments.camel keyword.operator.arithmetic.camel
+#                                         ^ meta.block.camel meta.angle-arguments.camel constant.numeric.integer.decimal.camel
+#                                          ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>    let named = make(x: 1, y: p.x)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#              ^ meta.block.camel keyword.operator.assignment.camel
+#                ^^^^ meta.block.camel entity.name.function.call.camel
+#                    ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                     ^ meta.block.camel meta.parens.camel variable.parameter.camel
+#                      ^ meta.block.camel meta.parens.camel punctuation.separator.colon.camel
+#                        ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                         ^ meta.block.camel meta.parens.camel punctuation.separator.comma.camel
+#                           ^ meta.block.camel meta.parens.camel variable.parameter.camel
+#                            ^ meta.block.camel meta.parens.camel punctuation.separator.colon.camel
+#                               ^ meta.block.camel meta.parens.camel punctuation.accessor.camel
+#                                ^ meta.block.camel meta.parens.camel variable.other.property.camel
+#                                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let qualified = math::sqrt(2.0)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                  ^ meta.block.camel keyword.operator.assignment.camel
+#                    ^^^^ meta.block.camel entity.name.namespace.camel
+#                        ^^ meta.block.camel punctuation.separator.namespace.camel
+#                          ^^^^ meta.block.camel entity.name.function.call.camel
+#                              ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                               ^^^ meta.block.camel meta.parens.camel constant.numeric.float.camel
+#                                  ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let deep = a::b::c(1)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#             ^ meta.block.camel keyword.operator.assignment.camel
+#               ^ meta.block.camel entity.name.namespace.camel
+#                ^^ meta.block.camel punctuation.separator.namespace.camel
+#                  ^ meta.block.camel entity.name.namespace.camel
+#                   ^^ meta.block.camel punctuation.separator.namespace.camel
+#                     ^ meta.block.camel entity.name.function.call.camel
+#                      ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                       ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                        ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let method = p.norm()
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                  ^ meta.block.camel punctuation.accessor.camel
+#                   ^^^^ meta.block.camel entity.name.function.call.camel
+#                       ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                        ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let chained = make_adder(1)(2)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                ^ meta.block.camel keyword.operator.assignment.camel
+#                  ^^^^^^^^^^ meta.block.camel entity.name.function.call.camel
+#                            ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                             ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                              ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                               ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let indexed = table[0](3)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                ^ meta.block.camel keyword.operator.assignment.camel
+#                       ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                        ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                         ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                          ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                           ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                            ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let member = pairs[0].0
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                      ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                       ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                        ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                         ^ meta.block.camel punctuation.accessor.camel
+#                          ^ meta.block.camel constant.numeric.integer.index.camel
+>    let converted = float(direct) + int(2.5)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                  ^ meta.block.camel keyword.operator.assignment.camel
+#                    ^^^^^ meta.block.camel support.type.primitive.camel
+#                         ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                  ^ meta.block.camel keyword.operator.arithmetic.camel
+#                                    ^^^ meta.block.camel support.type.primitive.camel
+#                                       ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                        ^^^ meta.block.camel meta.parens.camel constant.numeric.float.camel
+#                                           ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let lambda = (x: int): int => x + 1
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                  ^ meta.block.camel meta.parens.camel variable.parameter.camel
+#                   ^ meta.block.camel meta.parens.camel punctuation.separator.colon.camel
+#                     ^^^ meta.block.camel meta.parens.camel support.type.primitive.camel
+#                        ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                         ^ meta.block.camel punctuation.separator.colon.camel
+#                           ^^^ meta.block.camel support.type.primitive.camel
+#                               ^^ meta.block.camel keyword.operator.arrow.camel
+#                                    ^ meta.block.camel keyword.operator.arithmetic.camel
+#                                      ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let block_lambda = (var acc: int, x: int) => sync {
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                     ^ meta.block.camel keyword.operator.assignment.camel
+#                       ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                        ^^^ meta.block.camel meta.parens.camel storage.modifier.var.camel
+#                            ^^^ meta.block.camel meta.parens.camel variable.parameter.camel
+#                               ^ meta.block.camel meta.parens.camel punctuation.separator.colon.camel
+#                                 ^^^ meta.block.camel meta.parens.camel support.type.primitive.camel
+#                                    ^ meta.block.camel meta.parens.camel punctuation.separator.comma.camel
+#                                      ^ meta.block.camel meta.parens.camel variable.parameter.camel
+#                                       ^ meta.block.camel meta.parens.camel punctuation.separator.colon.camel
+#                                         ^^^ meta.block.camel meta.parens.camel support.type.primitive.camel
+#                                            ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                              ^^ meta.block.camel keyword.operator.arrow.camel
+#                                                 ^^^^ meta.block.camel storage.modifier.sync.camel
+#                                                      ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+>        acc += x
+#            ^^ meta.block.camel meta.block.camel keyword.operator.assignment.compound.camel
+>    }
+#    ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    let compare = direct < 5 && direct > 2
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                ^ meta.block.camel keyword.operator.assignment.camel
+#                         ^ meta.block.camel keyword.operator.comparison.camel
+#                           ^ meta.block.camel constant.numeric.integer.decimal.camel
+#                             ^^ meta.block.camel keyword.operator.logical.camel
+#                                       ^ meta.block.camel keyword.operator.comparison.camel
+#                                         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let tight = add_n<direct>(fib)(1) >= 2
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#              ^ meta.block.camel keyword.operator.assignment.camel
+#                ^^^^^ meta.block.camel entity.name.function.call.camel
+#                     ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                            ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                             ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                  ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                   ^ meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#                                    ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                      ^^ meta.block.camel keyword.operator.comparison.camel
+#                                         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    wait no_params()
+#    ^^^^ meta.block.camel keyword.control.flow.camel
+#         ^^^^^^^^^ meta.block.camel entity.name.function.call.camel
+#                  ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                   ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    return lambda(direct)
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#           ^^^^^^ meta.block.camel entity.name.function.call.camel
+#                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                        ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel

@@ -87,6 +87,8 @@ FSTRING
     : '`' ('\\`' | '\\\\' | .)*? '`'
     ;
 
+// A number carries no sign: `a-1` is `a`, `-`, `1`. The sign of a literal (`-1`, `+1`) is read
+// by the parser rule `literal`. The sign of an exponent stays in the token (`1.0e-2`).
 INTEGER
     : (DEC | OCT | HEX | BIN) EXPONENT?
     ;
@@ -96,23 +98,23 @@ REAL
     ;
 
 fragment DEC
-    : [+-]? ([1-9] [0-9]* | '0')
+    : [1-9] [0-9]* | '0'
     ;
 
 fragment OCT
-    : [+-]? '0' [0-7]+
+    : '0' [0-7]+
     ;
 
 fragment HEX
-    : [+-]? '0x' [0-9a-fA-F]+
+    : '0x' [0-9a-fA-F]+
     ;
 
 fragment BIN
-    : [+-]? '0b' [01]+
+    : '0b' [01]+
     ;
 
 fragment FLOAT
-    : [+-]? [0-9]+ '.' [0-9]+
+    : [0-9]+ '.' [0-9]+
     ;
 
 fragment EXPONENT

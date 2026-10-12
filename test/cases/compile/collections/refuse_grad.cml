@@ -8,12 +8,12 @@ import { grad } from autodiff
 
 func through_map(x: float): float {
     let m = [(1, x)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func beside_map(x: float): float {
     let m = [(1, 2.0)] as Map<int, float>
-    return get_or(m, 1, 0.0) * x
+    return m->get_or<1, 0.0> * x
 }
 
 func main(): int sync {

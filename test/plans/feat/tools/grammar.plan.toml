@@ -1,0 +1,179 @@
+id = "tools.grammar"
+order = 380
+tier = "feat"
+tags = ["feat", "tools", "editor", "grammar"]
+desc = "The TextMate grammar of the VS Code extension (editors/vscode): its tables against the lexer, and the scopes it gives representative programs."
+
+[[tests]]
+name = "grammar.tables"
+desc = "Every keyword token of antlr/OpenCMLLex.g4 is matched by exactly one keyword pattern of the grammar and the grammar lists no other keyword; every literal token of antlr/OpenCML.g4 is matched by an operator or punctuation pattern; the built-in type names are those of the compiler's root type scope. No dependencies."
+kind = "behavior"
+tool = "node"
+case = "../../../../editors/vscode/scripts/check-grammar.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["grammar check passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "grammar.files"
+desc = "The grammar, the language configuration and the extension manifest are valid JSON and refer to each other consistently (scope name, paths, language id, the custom semantic token modifiers). No dependencies."
+kind = "behavior"
+tool = "node"
+case = "../../../../editors/vscode/scripts/check-manifest.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["manifest check passed"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "grammar.scopes.literals"
+desc = "Scopes of every literal form of the lexer: integers in each radix with and without exponent, reals, strings with escapes and placeholders, multi-line strings, formatted strings, booleans, null, tuple element access."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/tools/grammar/literals.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/literals.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.comments"
+desc = "Scopes of line, block and documentation comments, of '#' command lines, and of comment openers inside strings."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/tools/grammar/comments.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/comments.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.keywords"
+desc = "Scopes of every keyword of the lexer, by group: control, import, declaration, modifier, word operator, constant."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/tools/grammar/keywords.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/keywords.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.operators"
+desc = "Scopes of every operator and punctuation token of the parser grammar, including ->, ?->, .., ?.., ..., ??, !!, the compound assignments and the type operators."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/tools/grammar/operators.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/operators.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.functions"
+desc = "Scopes of function declarations, with-parameters, decorators, calls, with-arguments in angle brackets, pipeline targets and function literals."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/tools/grammar/functions.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/functions.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.modules"
+desc = "Scopes of module declarations, imports with relative and dotted module names, namespaces and qualified names."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/tools/grammar/modules.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/modules.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.types"
+desc = "Scopes of type declarations, type parameters, built-in type names and the carriers of let / var declarations."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/tools/grammar/types.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/types.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.real_snake"
+desc = "Scopes of a real program: examples/tty/snake.cml."
+kind = "snapshot"
+tool = "node"
+case = "../../../../examples/tty/snake.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/real_snake.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.real_decorators"
+desc = "Scopes of a real program: test/cases/linear/nvm/decorator_multi.cml."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/linear/nvm/decorator_multi.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/real_decorators.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.real_var"
+desc = "Scopes of a real program: test/cases/linear/nvm/var.cml (var parameters and sync functions)."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/linear/nvm/var.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/real_var.scopes"
+timeout_ms = 30000

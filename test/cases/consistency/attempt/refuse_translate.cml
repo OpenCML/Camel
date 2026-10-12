@@ -1,0 +1,16 @@
+/**
+ * A pure program whose `main` computes through a fault boundary. A translation pass has no
+ * counterpart for the boundary (C++ and ONNX have no value that "may have failed" in this
+ * sense), so std::cpp and onnx::export refuse the graph with a diagnostic at the `attempt`.
+ */
+module refuse_translate
+
+func risky(x: float): float { return 6.0 / x }
+
+func safe(x: float): float {
+    return attempt(risky, x) !! 0.0
+}
+
+func main(): float {
+    return safe(2.0)
+}

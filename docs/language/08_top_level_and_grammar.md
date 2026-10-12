@@ -1,131 +1,119 @@
-# 8. 顶层组成与文法概要
+# 8. 程序与文法
 
-本章描述 Camel 的**顶层组成**（程序与文件）、**文件输入与交互**，以及与 **ANTLR** 文法文件的**对应关系**（文法概要）。精确语法以 `antlr/OpenCML.g4`、`antlr/OpenCMLLex.g4` 为准。
+[English](en/08_top_level_and_grammar.md) | 中文
 
----
-
-## 8.1 程序与文件
-
-### 8.1.1 程序结构
-
-- **program**：**`SEP? (decl SEP?)* EOF`**。
-  - 即：可选前导分号、若干声明（声明之间可选分号）、文件结束。
-- **decl**：**moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl | dataDecl | funcDecl | typeDecl | useDecl**。
-- 完整程序由若干**声明**组成；执行从入口（如 **main**）开始，由调度器（线性或并行）执行图或字节码。
-
-### 8.1.2 顶层声明类型
-
-| 声明 | 文法规则 | 说明 |
-|------|----------|------|
-| 模块 | **moduleDecl** | `MODULE identDef` |
-| 导入 | **importDecl** | `IMPORT (moduleName \| (identDef \| bracedIdents) FROM moduleName)` |
-| 导出 | **exportDecl** | `EXPORT (dataDecl \| typeDecl \| bracedIdents)` |
-| 命名空间 | **namespaceDecl** | `NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}'` |
-| 展开命名空间 | **usingNamespaceDecl** | `USING NAMESPACE identRef` |
-| 数据 | **dataDecl** | `(LET \| VAR) carrier (':' typeList)? '=' dataList` |
-| 函数 | **funcDecl** | `(WITH angledParams)? EXPORT? implMark? modifiers? FUNC identRef parentParams (':' typeExpr)? stmtBlock` |
-| 类型 | **typeDecl** | `implMark? TYPE identRef ('<' identDef (',' identDef)* ','? '>')? '=' (typeExpr \| STRING)` |
-| use | **useDecl** | `USE (identDef '=')? identRef` |
-
-> 语法中已有、但**尚未实现**的部分：`implMark`（`inner` / `outer`）和 `modifiers` 中的 `atomic` / `shared`
-> 能被解析并记录，没有任何语义；`retStmt` 的 `RAISE` / `THROW` 与 `ctrlExpr` 的 `TRY ... CATCH ... FINALLY`
-> 语法接受，使用时是编译期错误 `SemanticDiag::ConstructNotSupported`（异常机制没有实现）。
-
-### 8.1.3 语句（用于块内与顶层）
-
-- **stmt**：**dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt | blockStmt**。
-- **stmtList**：**stmt (SEP? stmt)* SEP?**。
-- **namespaceItem**：**namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl | typeDecl | useDecl**。
+本章描述程序的顶层结构，给出文法概要，并汇总文法接受但尚未实现的写法。精确的文法在 `antlr/OpenCML.g4`、`antlr/OpenCMLLex.g4`。
 
 ---
 
-## 8.2 块与表达式层次
+## 8.1 程序
 
-### 8.2.1 块
+```
+program : (decl ';'?)* EOF
+decl    : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
+        | dataDecl | funcDecl | typeDecl
+```
 
-- **stmtBlock**：**`SYNC? '{' stmtList? '}'`**。
-  - 这里的 `SYNC` 是**块修饰符**（同步块）；**funcDecl** 的 `modifiers` 中的 `sync` 是**函数修饰符**。两者含义不同，见第 4 章 4.4.2、4.4.3。
-- **blockStmt**：**`WAIT? stmtBlock`**。
-- **blockExpr**：**stmtBlock | dataExpr**（用于 then/else、match case、Lambda 体等）。
+模块顶层只有声明，没有可执行语句；执行从 `main` 开始（[4.1](04_execution_model.md#41-程序与入口)）。
 
-### 8.2.2 表达式层次（从高到低）
+| 声明 | 文法 | 章节 |
+|---|---|---|
+| 模块 | `module 名字` | [5.1](05_modules.md#51-模块声明) |
+| 导入 | `import (模块 \| (名字 \| { 名字, ... }) from 模块)` | [5.2](05_modules.md#52-导入) |
+| 导出 | `export (dataDecl \| typeDecl \| { 名字, ... })`；函数的 `export` 写在 `func` 前 | [5.3](05_modules.md#53-导出) |
+| 命名空间 | `namespace 限定名 { ... }` | [5.4](05_modules.md#54-命名空间) |
+| 展开命名空间 | `using namespace 限定名` | [5.2](05_modules.md#52-导入) |
+| 数据 | `(let \| var) 名字 (: 类型)? = 表达式` | [7.2](07_statements.md#72-let-与-var) |
+| 函数 | `标注* (with <形参>)? export? 修饰符* func 名字(形参) (: 类型)? 块` | [7.4](07_statements.md#74-函数) |
+| 类型 | `type 名字 (<参数, ...>)? = 类型` | [7.7](07_statements.md#77-类型声明) |
 
-与 ANTLR 规则对应，从**最低优先级**到**最高优先级**：
+## 8.2 语句与块
 
-| 规则名 | 说明 |
-|--------|------|
-| **waitExpr** | `WAIT? assignExpr` |
-| **assignExpr** | logicalOrExpr + 可选赋值 |
-| **logicalOrExpr** | logicalAndExpr **\|\|** logicalAndExpr * |
-| **logicalAndExpr** | equalityExpr **&&** equalityExpr * |
-| **equalityExpr** | relationalExpr (**=== \| !== \| == \| !=**) relationalExpr * |
-| **relationalExpr** | additiveExpr (**< \| > \| <= \| >=**) additiveExpr * |
-| **additiveExpr** | multiplicativeExpr (**+ \| -**) multiplicativeExpr * |
-| **multiplicativeExpr** | nullableExpr (**\* \| / \| ^ \| @ \| %**) nullableExpr * |
-| **nullableExpr** | unaryExpr (**?? \| !!** dataExpr)? |
-| **unaryExpr** | linkExpr (**AS \| IS** typeExpr)? \| (**! \| - \| ~**) linkExpr |
-| **linkExpr** | compExpr (**-> \| ?->** compExpr)* |
-| **compExpr** | annoExpr (**.. \| ?..** annoExpr)* |
-| **annoExpr** | accessExpr (相邻时：indices \| parentArgues \| angledValues \| **!**)* |
-| **accessExpr** | primaryData (**.** (IDENTIFIER \| INTEGER))* |
-| **primaryData** | identRef \| literal \| arrayData \| structData \| tupleData \| funcData（`(e)` 是括号表达式，`(e,)` 是单元素元组，二者同属 tupleData） |
+```
+stmt      : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt | blockStmt
+retStmt   : (return | throw) dataList
+stmtBlock : sync? '{' (stmt ';'?)* '}'
+blockExpr : stmtBlock | dataExpr            // 分支臂、lambda 体
+```
 
-**ctrlExpr**（控制表达式，在 dataExpr 中）：
+## 8.3 表达式
 
-- **IF** logicalOrExpr **THEN** blockExpr (**ELSE** blockExpr)?
-- **MATCH** identRef **'{'** matchCase+ **'}'**
-- **TRY** stmtBlock catchClause+ (**FINALLY** stmtBlock)?（**未实现**：编译期错误 `ConstructNotSupported`）
+从低优先级到高优先级（见 [6.12](06_expressions.md#612-运算符优先级)）：
 
----
+```
+dataExpr   : waitExpr | ctrlExpr
+ctrlExpr   : if logicalOr then blockExpr (else blockExpr)?
+           | match 名字 '{' (case pattern ('|' pattern)* '=>' blockExpr)+ '}'
+waitExpr   : wait? assignExpr
+assignExpr : logicalOr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOr)?
+logicalOr  : logicalAnd ('||' logicalAnd)*
+logicalAnd : equality ('&&' equality)*
+equality   : relational (('===' | '!==' | '==' | '!=') relational)*
+relational : additive (('<' | '>' | '<=' | '>=') additive)*
+additive   : multiplicative (('+' | '-') multiplicative)*
+multiplicative : nullable (('*' | '/' | '^' | '@' | '%') nullable)*
+nullable   : unary (('??' | '!!') dataExpr)?
+unary      : link (as 类型)? | ('!' | '-' | '~') link
+link       : comp (('->' | '?->') comp)*
+comp       : anno ('..' anno)*
+anno       : primary ( '.'字段 | '[' 下标 ']' | '(' 实参 ')' | '<' with 实参 '>' )*
+primary    : 名字 | 字面量 | '[' 元素, ... ']' | '{' 键: 值, ... '}' | '(' 表达式, ... ')' | lambda
+lambda     : 修饰符* ('<' 形参 '>')? '(' 形参 ')' (':' 类型)? '=>' blockExpr
+pattern    : 字面量 | '_' | null | error 名字 | 名字
+```
 
-## 8.3 类型与模式
+下标、实参与 `with` 实参必须紧贴它前面的表达式。`(e)` 是括号表达式，`(e,)` 是单元素元组。
 
-### 8.3.1 类型表达式
+## 8.4 类型
 
-- **typeExpr**：**unionType (('?' \| '!')+ \| '?' unionType)?**（`T?` 可能为空，`T!` 可能出错，见 3.2.4；`T ? U` 为预留写法）。
-- **unionType**：**interType ('|' interType)***。
-- **interType**：**diffType ('&' diffType)***。
-- **diffType**：**keyUnionDiffType ('\\' keyUnionDiffType)***。
-- **keyUnionDiffType**：**keyInterType (('+' \| '-') keyInterType)***。
-- **keyInterType**：**typeUnit ('^' typeUnit)***。
-- **typeUnit**：**(identDef OF)? arrayType**。
-- **arrayType**：**specType ('[' ']')***。
-- **specType**：**primaryType ('<' typeOrData (',' typeOrData)* '>')?**。
-- **primaryType**：**structType \| identRef \| '(' typeExpr ')' \| tupleType \| funcType \| TYPEOF dataExpr \| TYPEAS identDef**。
-- **structType**：**'{' (keyTypePair (',' keyTypePair)*)? ','? '}'**。
-- **tupleType**：**'(' typeList? ','? ')'**。
-- **funcType**：**modifiers? angledParams? parentParams '=>' typeExpr**。
+```
+typeExpr : unionType ('?' | '!')*
+unionType: arrayType ('|' arrayType)*
+arrayType: specType ('[' ']')*
+specType : primaryType ('<' (类型 | const 数据), ... '>')?
+primaryType : 名字 | '(' 类型 ')' | '(' 类型, ... ')' | '{' 名字: 类型, ... '}'
+            | 修饰符* '(' 形参 ')' '=>' 类型 | typeas 名字
+```
 
-其中已经有语义的部分：
+- `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
+- `typeas T`：[7.5](07_statements.md#75-泛型函数)。
+- 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
 
-- **`TYPEAS identDef`**（`typeas T`）：在函数声明的形参里就地绑定类型变量，见 7.2.5 的"泛型函数"。
-- **specType** 的尖括号：基类型是模块类型时（如 `Tensor<f32, const [3]>`），实参的含义由该类型自己定义；
-  基类型是带参数的类型声明（类型函数）时，实参替换其参数，见 7.2.6。
-- 联合 **`|`**。
-
-**未实现**（写了会被编译器拒绝）：`&`、`\`、`+`、`-`、`^`、`typeof`、`ident of T`，以及
-`T ? U`。它们的含义尚未确定。`T?` 目前被当作 `T`。
-
-### 8.3.2 模式（match）
-
-- **pattern**：**identRef identDef? \| literal \| '(' (dataList \| identList)? ','? ')' \| '{' (pairedValues \| identList)? ','? '}' \| '_'**。
-- **matchCase**：**CASE** pattern (**'|'** pattern)* **'=>'** blockExpr。
-
----
-
-## 8.4 文件输入与交互
-
-- 实现可支持从**文件**读入源码（如 **`camel run <file>.cml`**）、或**交互式**输入。
-- 具体由 CLI 与运行时约定；参见 [CLI 文档](../cli.cn.md)、[../cli.md](../cli.md)。
-
----
-
-## 8.5 文法文件索引
+## 8.5 文件
 
 | 文件 | 内容 |
-|------|------|
-| **antlr/OpenCMLLex.g4** | 词法规则：分隔符、关键字、标识符、字面量、注释等 |
-| **antlr/OpenCML.g4** | 语法规则：program、decl、stmt、表达式层次、类型、模式等 |
-| **docs/Camel.asdl** | AST 结构定义（ASDL），供实现使用 |
+|---|---|
+| `antlr/OpenCMLLex.g4` | 词法规则 |
+| `antlr/OpenCML.g4` | 语法规则 |
+| `docs/Camel.asdl` | 抽象语法树的结构定义 |
+| `docs/diagnostics.md` | 全部诊断的目录（由脚本生成） |
 
-关键字与字面量详见 [02_lexical.md](02_lexical.md)；运算符与优先级详见 [06_expressions.md](06_expressions.md#612-运算符优先级从低到高)。
+## 8.6 保留但尚未实现的写法
+
+下列写法文法接受（或关键字已保留），编译器明确拒绝。它们的含义多数尚未决定，不要依赖。
+
+| 写法 | 得到的诊断 | 现在的替代写法 |
+|---|---|---|
+| 列表推导 `[e for x in xs if c]` | `SemanticDiag::ConstructNotSupported` | `xs->filter<...>->map<...>` |
+| 展开 `[...xs, y]`、`{ ...p, x: 1 }`、`f(...args)` | `ConstructNotSupported` | `concat(xs, [y])`；逐个写出字段 |
+| 格式化字符串 `` `x = {x}` `` | `ConstructNotSupported` | `'x = {}'->format<x>` |
+| `e is T` | `ConstructNotSupported` | 无（运行时没有类型信息） |
+| 非空断言 `x!` | `ConstructNotSupported` | `x ?? 默认值`、`match` |
+| `f ?.. g` | `ConstructNotSupported` | 无 |
+| `f..g` | 组合的结果不能被调用（`ArgumentsMismatch`） | `(x: T) => g(f(x))` |
+| `wait { ... }`，以及名字、字面量、lambda 之前的 `wait` | `ConstructNotSupported` | `sync { ... }` |
+| `raise e` | `ConstructNotSupported` | `throw e` |
+| `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage`（不属于语言） | `T!` 与 `!!`、`?->`、`case error e` |
+| 元组模式、结构体模式；对普通类型的标识符模式 | `ConstructNotSupported` | `if` 链；先取成员 |
+| 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |
+| 关键字实参 `f(a: 1)` | `FeatureNotSupported` | 按位置传 |
+| 形参默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参 |
+| `use 名字 = 限定名` | `FeatureNotSupported` | `import { 名字 } from 模块`；换名用 `let 新名 = 模块::名字`（[5.5](05_modules.md#55-use)） |
+| 切片下标 `xs[a:b]`、`xs[a:b:c]` | `SemanticDiag::NoMatchingFunction`（没有专门的诊断：按“下标运算符没有接受这些实参的重载”报告） | `xs->slice<a, b>` |
+| 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
+| `typeof e`、`T ? U`、`名字 of T` | `FeatureNotSupported` | 无 |
+| `keyof`、`enum` | 语法错误 | 无 |
+| `for`、`while` 循环 | 语法错误（没有循环语法） | 递归；`map`/`filter`/`reduce`/`foreach` |
+| 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
+
+此外有几处“能写出来但目前用不了”：联合类型 `A | B`（成员类型的值不能进入它）、带函数类型的声明 `let f: (x: int) => int = g`。

@@ -1,0 +1,32 @@
+/**
+ * `slice` inside the array, at its edges and with an empty range; `take` and `drop` cut to the
+ * array by definition and never fault.
+ */
+module slice_take_drop
+
+import { take, drop } from array
+
+func cut(xs: int[], a: int, b: int): int[] { return xs->slice<a, b> }
+
+func main(): int sync {
+    let xs = [10, 20, 30, 40]
+    println(cut(xs, 0, 4))
+    println(cut(xs, 1, 3))
+    println(cut(xs, 0, 0))
+    println(cut(xs, 4, 4))
+    println(cut(xs, 3, 1))
+    println(xs->take<2>)
+    println(xs->take<4>)
+    println(xs->take<9>)
+    println(xs->take<0>)
+    println(xs->take<0 - 3>)
+    println(xs->drop<1>)
+    println(xs->drop<4>)
+    println(xs->drop<9>)
+    println(xs->drop<0>)
+    println(xs->drop<0 - 3>)
+    // a fault inside a boundary becomes an error value
+    println(attempt(cut, xs, 2, 9))
+    println(attempt(cut, xs, 5, 5))
+    return 0
+}

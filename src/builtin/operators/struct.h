@@ -34,3 +34,4 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
 slot_t __append_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+slot_t __contains_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

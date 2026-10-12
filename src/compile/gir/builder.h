@@ -29,6 +29,7 @@
 
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/compile/semantic_recorder.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
@@ -91,6 +92,24 @@ class Builder {
     // is skipped (and what *it* declares is poisoned in turn).
     std::map<node_scope_ptr_t, std::unordered_set<std::string>> poisonedNames_;
     bool isPoisonedName(const std::string &name) const;
+
+    // ---- Facts for tools (camel/compile/semantic_recorder.h) ----
+    // Null unless the context has a recorder; every report is guarded by it. The origin of
+    // the declaration that bound each name, by the scope it was bound in, so that a reference
+    // can report which declaration it resolved to. Filled only while recording.
+    camel::compile::SemanticRecorder *recorder_ = nullptr;
+    std::unordered_map<
+        const node_scope_t *, std::unordered_map<std::string, camel::source::origin_id_t>>
+        declOrigins_;
+    // Reports that `decl` bound `name` (to `node`) in the current scope.
+    void
+    recordDeclaration(const std::string &name, node_handle_t node, const GCT::node_ptr_t &decl);
+    // The declaration a reference to `name` from the current scope resolved to.
+    camel::source::origin_id_t declarationOf(const std::string &name) const;
+    // Reports the type of the value `res` that visiting `gct` produced.
+    void recordResult(const GCT::node_ptr_t &gct, const std::any &res);
+    // visit() without the report.
+    std::any dispatch(const GCT::node_ptr_t &gct);
     // Functions whose body is in error. One declared without a return type then never gets
     // one, and a call of it would be reported as a call of an incomplete function.
     std::unordered_set<const void *> failedBodies_;
@@ -108,6 +127,9 @@ class Builder {
     std::unordered_set<DraftGraphBuilder *> usedGraphs_;
     // The decorated form of each function declared with decorators, by its own graph.
     std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> decoratedOf_;
+    // The functions that stand for library operators named as values (operatorValueGraphOf),
+    // by operator URI and signature.
+    std::unordered_map<std::string, compile_graph_ptr_t> operatorValueGraphs_;
     std::unordered_map<DraftGraphBuilder *, node_modifier_map_t> nodeModifierMaps_;
     // With-arguments bound to a callee by `f<a, b>`, consumed when the callee is invoked. Kept
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
@@ -132,6 +154,9 @@ class Builder {
     // The source text of the expression `expr` when it is short and on one line; empty
     // otherwise. For diagnostics that suggest source text.
     std::string sourceTextOf(const GCT::node_ptr_t &expr) const;
+    // See the definition: the hint for a call that put with-arguments in the parentheses.
+    std::string withArgumentsHint(
+        const std::string &name, const std::vector<Argument> &arguments, size_t normCount) const;
     // A use of a variable that no writer has been ordered after yet. A read (`:var/get`) hands
     // the value on, so the operations that take the read's result are the direct users of the
     // value; an operation that uses the variable itself (a call of a function that captured
@@ -259,6 +284,8 @@ class Builder {
     // Set while an instance of a generic function imported from another module is built: the
     // name of that function. Such a body cannot capture a module-level value of its module.
     std::string foreignInstanceOf_;
+    // Where each function imported from another module was last named in this module.
+    std::unordered_map<const void *, camel::source::origin_id_t> importedUseOrigins_;
     std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
 
     // A type read from the GCT, with the type variables of the current instance replaced.
@@ -348,6 +375,11 @@ class Builder {
     std::unordered_set<FunctionType *> redeclaredFuncTypes_;
     void leaveScope();
 
+    // Reports a name imported from two modules with the same signature (ImportNameConflict).
+    void reportImportNameConflicts();
+    // Refuses the use of a function of another module that captures values of the top level
+    // of its own module (ImportedFunctionUsesModuleValue).
+    void rejectImportedFunctionWithCaptures(const compile_graph_ptr_t &graph);
     node_handle_t createFuncDataNode(
         const compile_graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
@@ -369,6 +401,15 @@ class Builder {
     // a place that needs a value.
     void rejectNameWithoutValue(
         node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
+    // A function with the parameters of the operator `op` that calls it: what a library
+    // operator named as a value (`xs->map<trim>`) stands for. Null when the operator has no
+    // such function (it changes an argument in place).
+    compile_graph_ptr_t operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
+    // The one function of the name `node` (a DREF to several overloads or to an operator
+    // group) that has exactly the parameters and the result of `expected`, as a value; null
+    // when none or several do.
+    node_handle_t overloadValueFor(
+        node_handle_t node, FunctionType *expected, const GCT::node_ptr_t &origin);
     // A function with the declared parameters of `target` that captures the names `target`
     // captured and calls it with them: what a function value of `target` refers to once the
     // captures of `target` have become with-parameters (createFuncDataNode).

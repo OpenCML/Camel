@@ -272,9 +272,8 @@ slot_t __str_find__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return makeSome(toSlot(static_cast<Int64>(at)), resultType);
 }
 
-// DESIGN-QUESTION(slice-bounds): a range that does not lie inside the string is a fault, as an
-// index out of range is. The built-in `slice` on arrays clamps instead; which of the two a
-// range operation does is not ruled on.
+// A range that does not lie inside the string is a fault, as an index out of range is and as
+// the built-in `slice` on arrays does (design principles 2.10).
 slot_t __str_substr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const std::string s = textOf(norm, 0);
     const Int64 start   = with.get<Int64>(0);
@@ -426,7 +425,7 @@ slot_t __str_char_at__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return makeOk(makeString(text.substr(from, to - from)), resultType);
 }
 
-// DESIGN-QUESTION(slice-bounds): as for substr, a range outside the string is a fault.
+// As for substr, a range outside the string is a fault (design principles 2.10).
 slot_t __str_char_substr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     static const TupleType *resultType = TupleType::fallible(Type::String());
     const std::string text             = textOf(norm, 0);

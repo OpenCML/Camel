@@ -1,368 +1,299 @@
 # 4. 执行模型
 
-> **先读 [`../design-principles.cn.md`](../design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
+[English](en/04_execution_model.md) | 中文
 
-本章描述 Camel 的**程序结构**、**命名与绑定**、**异常与退出**，以及**执行模型**：依赖驱动求值、**sync**（块修饰符与函数修饰符）、引用与 **var** / **let**、**wait**、**macro**（见 4.4）。
+> 本章的规则来自 [设计原则](../design-principles.cn.md) 第 2–4 节，冲突时以它为准。
+
+Camel 的程序是一张图。本章说明这张图怎样被求值：按依赖求值、`sync`、`var` 与 `wait`、`macro`、故障与退出、遍。
+
+| 语言元素 | 在图上是什么 |
+|---|---|
+| 表达式、算子调用 | 节点与数据边；只有从函数出口沿边可达的节点才会执行 |
+| 函数 | 属于它自己的一张子图；调用处是外层图里指向该子图的一个节点 |
+| `sync { ... }` 块 | 块内相邻表达式之间的控制边 |
+| `sync func`（函数修饰符） | 函数类型上的标记；不产生函数体内的任何边 |
+| `var` 形参 | 被调子图与调用方指向同一个对象 |
+| `wait e` | `e` 与前后使用其值或被它修改的变量的操作之间的控制边 |
+| `if`、`match`、`??`、`!!`、`?->` | 分支节点，每个臂是一张子图 |
+| `macro` 函数 | 普通子图；`std::macro` 遍可以提前求值，把结果物化为图中的常量 |
 
 ---
 
-## 4.1 程序结构
+## 4.1 程序与入口
 
-- 程序由**模块**组成；每个源文件是一个**模块**。
-- 顶层可包含：
-  - **module** 声明
-  - **import** / **export**
-  - **类型定义**（type）
-  - **数据声明**（let / var）
-  - **函数定义**（func）
-  - **use** 声明
-  - 以及可执行语句（表达式、return 等）
-- **执行入口**由实现约定，通常为名为 **`main`** 的函数；可带参数与返回值，如 **`func main(): int sync { ... }`**。
+- 每个源文件是一个模块，由声明组成（[8.1](08_top_level_and_grammar.md#81-程序)）。
+- 入口是名为 `main` 的函数。它与别的函数一样是一张子图，可以带参数、有返回值：
 
-**示例：典型顶层结构**
+  - 参数是程序的输入，在命令行上用 `--arg 名字=值` 给出；缺少时是带位置的错误 `RuntimeDiag::EntryArgumentMissing`，不会用零或默认值代替。
+  - **只有写明了返回类型的 `main`，它的返回值才算程序的结果**（退出码，以及 `-o` 写出的内容）。
+  - 返回 `int`（或 `bool`）时，返回值是进程的退出码。
+  - 返回其他类型的值（`float`、`string`、张量、元组……）时，这个值是程序的结果：打印到标准输出，或由 `-o <文件>` 写入文件。
+  - 返回 `void` 时退出码是 0。不写返回类型的 `main` 没有结果：函数体仍然有值（[7.4.1](07_statements.md#741-声明)，例如以 `println('a')` 结尾时是 `'a'`，因为 `println(x)` 返回 `x`），但这个值既不打印、不写出，也不当作退出码，退出码是 0。
+  - 返回类型是 `T!` 时：返回的是成功值，就按 `T` 处理；返回的是**没有被处理的错误值**，它作为诊断 `RuntimeDiag::UnhandledError` 打印到**标准错误**，位置是错误值里记录的产生处，退出码为 1（见 [4.6](#46-故障退出与资源上限)）。
 
 ```cml
-module merge_sort
-
-import { now } from time
-import { seed, rand, shuffle } from random
-import { sort, sorted, merge_sorted_arrays } from algo
-
-func merge(lhs: int[], rhs: int[]): int[] sync { ... }
-func mergesort(arr: int[]): int[] sync { ... }
-
-func main(): int sync {
-    let n = 1e8
-    seed(s)
-    let arr = range(0, n)->shuffle
-    let sorted = mergesort(arr)
+// camel greet.cml --arg name=Camel --arg times=2
+func main(name: string, times: int): int sync {
+    println('Hello, {}! x{}'->format<name, times>)
     return 0
 }
 ```
 
----
-
-## 4.2 命名与绑定
-
-### 4.2.1 作用域
-
-- **模块顶层**、**函数参数**、**块**（`{ }`）各自引入作用域。
-- 内层可**遮蔽**外层同名；同一作用域内同一名字不能重复 **let**（同一名字不能重复声明为 let）。
-
-### 4.2.2 let：不可变绑定
-
-- 在当前作用域引入一个名字，绑定到初值；该绑定**不可重新赋值**。
-
-```cml
-let idx = 30
-let WIDTH = 20
-let start = now()
-let res = fib(idx)
-let duration = now() - start
-let initial_snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }]
+```text
+Hello, Camel! x2
 ```
 
-### 4.2.3 var：可变变量
+详细规则见 [cli.cn.md](../cli.cn.md)“`main` 带参数或有返回值的程序”。
 
-- 引入可**重新赋值**的变量；支持复合赋值（如 **`+=`**）。
-- `var` 标记可变对象，`let` 标记不可变对象；一切值按引用传递，`var` 形参是引用（见 4.4.4）。
+## 4.2 按依赖求值
+
+求值由依赖驱动，没有固定的执行顺序：一个表达式被求值，当且仅当它的结果被需要，即经数据边或控制边到达函数的返回。互不依赖的表达式之间没有先后，可以乱序或并行。
+
+**同步块之外、结果没有被使用的带副作用的调用不会执行。** 这是按依赖求值的自然结果，是合法的，不是错误。编译器给出警告 `SemanticDiag::EffectNotExecuted`，以免漏写 `sync`：
 
 ```cml
-var c = 0
-var result: Point[] = []
-sync func update(var w: Tensor): Tensor {
-    ...
-    return w = w - lr * dw
+func greet(): int {
+    println('hello from greet')     // 结果没人用，也不在同步块里：不执行
+    return 1
+}
+
+func main(): int sync {
+    println(greet())
+    return 0
 }
 ```
 
-### 4.2.4 import：从模块引入符号
+```text
+warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
+  --> greet.cml:2:5
+   |
+ 2 |     println('hello from greet')     // 结果没人用，也不在同步块里：不执行
+   |     ^^^^^^^
+help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
+      variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
+      block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
-- **`import { a, b } from mod`**：将模块 **mod** 中的 **a**、**b** 引入当前模块。
-- **`import mod`**：导入模块命名空间，但不把模块导出的符号直接注入当前模块；应通过 **`mod::name`** 或 **`mod::Namespace::name`** 访问。
-- **`using namespace mod`**：将已导入的模块命名空间中的导出符号注入当前模块。
-- **`using namespace mod::Namespace`**：只注入某个嵌套命名空间下的导出符号。
-- 显式列出的名字在**当前模块**可见；裸 `import mod` 本身不使 `name` 直接可见。
-
-```cml
-import { now } from time
-import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from os
-import { zen } from this
-import { Tensor, ones, zeros, sum, transpose, shape, concat, random } from tensor
-import tensor
-let a = tensor::Tensor::ones([2, 2])
-using namespace tensor
-let b = Tensor::ones([2, 2])
+1
 ```
 
-### 4.2.5 with：上下文/泛型式参数
+警告输出到标准错误，程序照常运行。用 `-Wno-effect-not-executed` 关闭，用 `-Werror` 把警告当作错误（见 [cli.cn.md](../cli.cn.md)“诊断”）。
 
-- 在函数上声明 **with** 参数，调用时通过 **`func<with_args>`** 传入；函数体内直接使用对应名字。
-- 用于“泛型”或“依赖注入”式写法。
+## 4.3 `sync`
 
-```cml
-with <predicate: (p: Point) => bool>
-func my_filter(points: Point[]): Point[] sync { ... }
+`sync` 出现在两个位置，含义不同。
 
-// 调用时传入 predicate
-points->my_filter<(p: Point): bool => {
-    return p.x >= 0 && p.x < WIDTH && p.y >= 0 && p.y < HEIGHT
-}>
+### 4.3.1 同步块（块修饰符）
 
-with <weights: Tensor>
-func predict(X: Tensor): Tensor { ... }
+写在块前的 `sync` 表示同步块：块内的表达式**按书写顺序执行**，相当于编译器在相邻的表达式之间插入控制边。在同步块里调用什么、有没有副作用都无所谓，因为已经有顺序了。
 
-with <X: Tensor, y: Tensor, lr: float, its: int>
-sync func train(var weights: Tensor): void { ... }
-```
-
----
-
-## 4.3 异常与退出
-
-### 4.3.1 return
-
-- **`return e1, e2, ...`**：返回多个值（dataList）；或 **`return`** 无值返回。
-- 可返回 **`null`** 表示“无有效值”（如某些 sync 分支）。
+- 作函数体：`func f(...): T sync { ... }`（`sync` 在返回类型之后）。
+- 作分支臂或 lambda 体：`if c then sync { ... }`、`(x: int) => sync { ... }`。
+- 单独的块语句 `sync { ... }`。注意它本身也是一个表达式：写在非同步的函数体里而值没有被使用时，整个块不执行。
 
 ```cml
-return 0
-return null
-return if n <= 1 then n else fib(n - 1) + fib(n - 2)
-return result
-return [res1, res2]
-```
-
-### 4.3.2 throw 与错误值
-
-- **`throw e`** 返回一个错误值，与 `return` 同构（语法 **retStmt**：**RETURN | RAISE | THROW** + **dataList**）。它不展开调用栈，
-  没有"传播"与"捕获"：调用方拿到的是一个 `T!` 的值，用 `!!`、`?->` 或 `match` 处理（见 [6.6](06_expressions.md)、
-  [7.1.2](07_statements.md)）。
-- **`raise`** 的去留未定，使用它是编译期错误 `SemanticDiag::ConstructNotSupported`。
-- **错误与故障是两回事**：除零、越界、递归过深是故障，带位置终止程序，不是错误值。
-
-### 4.3.3 try-catch-finally（不属于语言）
-
-`try`/`catch` 在图上没有稳定的映射，不进入 Camel；写了得到编译期错误 `SemanticDiag::TryCatchNotInLanguage`。
-
----
-
-## 4.4 执行模型：依赖驱动、sync、引用与 wait
-
-本节是语言规则。当前实现与规则不一致之处在各小节末尾以“实现现状”标出，并随实现跟进而删除。
-
-**总原则：Camel 是图原生的。** 语言只对计算意图建模；每个语言元素都直接映射到图结构，语言的其他性质
-都由这一映射得出。下面每条规则都同时给出它的图映射：
-
-| 语言元素 | 图映射 |
-|---|---|
-| 函数 | 一张属于它自己的子图；调用处是外层图里指向该子图的一个节点 |
-| 表达式之间的值依赖 | 数据边；只有从函数出口沿边可达的节点才会被执行 |
-| `sync { ... }` 块 | 块内相邻表达式之间的控制边 |
-| `sync func`（函数修饰符） | 函数类型上的标记；不产生函数体内的任何边 |
-| `var` 形参 / 按引用 | 被调子图与调用方指向同一个对象 |
-| `wait e` | `e` 与使用其值或被其修改的值的前后操作之间的控制边 |
-| `macro` 函数 | 普通子图；`std::macro` 遍可以提前求值并把结果物化为图中的常量 |
-
-### 4.4.1 依赖驱动求值
-
-- 表达式被求值，当且仅当它的结果被需要：经数据依赖或控制依赖到达函数的返回。
-- 因此，**同步块之外、结果未被使用的效应调用不会执行**。这是合法的，是依赖驱动求值的自然结果；
-  编译器在能够检测到时给出告警。
-
-```cml
-func f(): int {
-    println("hello")   // 结果未被使用，且不在同步块内：不执行（可能有告警）
+func greet(): int sync {
+    println('hello from greet')     // 同步块：执行，并且先于 return
     return 1
 }
 ```
 
-**函数的行为由函数自身决定。** 函数编译为它自己的子图；调用方只是把这个子图节点放进更大的图里，不改变
-它的结构。因此，从同步块里调用一个非同步函数，该函数体内仍然按依赖驱动规则求值：
+### 4.3.2 函数的行为由它自己决定
+
+函数编译成它自己的子图。调用只是把这个子图节点放进更大的图里，不改变它的结构。所以从同步块里调用一个函数体不是同步块的函数，函数体内仍按依赖求值：
 
 ```cml
 func log(x: int): int {
-    println(x)      // 结果未被使用，函数体不是同步块 -> 不执行
+    println(x)          // 结果没人用，函数体不是同步块：不执行
     return x + 1
 }
 
 func main(): int sync {
     let a = log(1)
     let b = log(a)
-    return b        // 返回 3，什么也不打印
-}
-```
-
-要让它打印，`log` 的函数体必须是同步块：`func log(x: int): int sync { ... }`。
-
-> 实现现状：行为与规则一致。被丢弃的效应调用给出告警 `EffectNotExecuted`（定位在该调用、赋值或分支处；
-> 同步块内不会出现）；没有 Error 的模块的告警在编译之后、运行之前输出到标准错误（见 `docs/cli.md`
-> “Warnings”）。通过函数值的调用只能按其类型（`sync` 修饰符、`var` 形参）识别为有副作用。
-
-### 4.4.2 sync 块（块修饰符）
-
-- **`sync { ... }`** 是同步块：块内表达式**按书写顺序执行**，等价于编译器在相邻表达式之间插入控制边。
-  > 图上的精确形式：相邻两个表达式之间若已有数据依赖（后者使用前者的值），顺序已由这条数据边决定，
-  > 编译器**不再另加控制边**；只有没有数据依赖的相邻表达式之间才插入控制边。设计要求的是顺序，不是某一种边。
-- 把同步块用作函数体写作 **`func f(...): T sync { ... }`**（`sync` 在返回类型之后、函数体之前）。
-- 常用于 I/O、终端控制等需要严格顺序的代码。
-
-```cml
-func main(): int sync {
-    println('Hello, Camel!')   // 同步块内：执行，且先于 return
+    println(b)
     return 0
 }
-
-func render(snake: Point[]): void sync {
-    print('\033[2J\033[H')
-    let rows = range(0, HEIGHT)
-    rows->foreach<(y: int) => sync {
-        let cols = range(0, WIDTH)
-        cols->map<(x: int): string => { ... }>->join<"">->println
-    }>
-    println("")
-}
 ```
 
-### 4.4.3 sync func（函数修饰符）
+```text
+3
+```
 
-- **`sync func f(...)`** 中的 `sync` 修饰的是**函数**：它声明该函数有副作用、需要被同步，调用方可能需要
-  `wait` 它。带 `var` 形参的函数必须这样声明。
-- 它与 4.4.2 的块修饰符是**两个不同的东西**：`sync func` **不会**使函数体成为同步块。函数体若不是同步块，
-  体内仍按 4.4.1 的依赖驱动规则求值。
-- 需要函数体按书写顺序执行时，把函数体写成同步块；二者可以同时使用。
-- 写入被捕获变量（包括模块顶层变量）的函数同样有副作用，也应这样声明；没有声明时编译器给出告警
-  （`CapturedWriteInAsyncFunction`；`var` 形参对应的是 `VarParamInAsyncFunction`）。
+（另有一条 `SemanticDiag::EffectNotExecuted` 警告指向 `println(x)`。）`main` 的函数体是同步块，两次 `log` 调用按顺序执行；但 `println(x)` 属于 `log` 自己的函数体。要打印，把 `log` 写成 `func log(x: int): int sync { ... }`。
+
+### 4.3.3 `sync func`（函数修饰符）
+
+写在 `func` 之前的 `sync` 修饰的是函数：声明它有副作用、需要被同步，调用方可能需要 `wait` 它。
+
+- 带 `var` 形参的函数、写入被捕获变量（包括模块顶层变量）的函数应当这样声明；没有声明时编译器给出警告 `SemanticDiag::VarParamInAsyncFunction`、`SemanticDiag::CapturedWriteInAsyncFunction`。lambda 的写法是 `sync (x: int) => ...`。
+- **它不会使函数体成为同步块。** 要让函数体按顺序执行，两者并用：
 
 ```cml
-// 只有函数修饰符：函数体不是同步块，println 不执行（设计如此）
 sync func f(): int {
-    println("hello")
+    println('f')        // 仍然不执行
     return 1
 }
 
-// 函数修饰符 + 同步块函数体：println 执行
 sync func g(): int sync {
-    println("hello")
-    return 1
-}
-```
-
-> 实现现状：函数修饰符 `sync` 目前只是声明。编译器只检查“有副作用的函数是否声明了它”（上面两个告警），
-> 不依据它在调用处产生任何顺序，也不要求调用处写 `wait`；调用处应当如何对待这个修饰符，有待语言作者决定。
-
-### 4.4.4 引用、var 与 let
-
-- Camel 中一切值**默认按引用传递**。
-- **`var`** 标记可变对象，**`let`** 标记不可变对象。
-- `var` 形参是引用：函数对它的写入就是对调用方变量的写入。
-- 被 `if` 分支或 lambda 捕获的变量按引用捕获：在其中的写入作用于外层变量。
-- 把 `let` 对象传给 `var` 形参是**编译期错误**。
-- 同一个变量传给两个 `var` 形参时，两个形参是同一个对象的别名。
-
-```cml
-sync func update(var target: int) {
-    wait target += 1
+    println('g')        // 执行：函数体是同步块
+    return 2
 }
 
 func main(): int sync {
-    var c = 0
-    wait update(c)
-    println(c)        // 1
+    println(f() + g())
     return 0
 }
 ```
 
-```cml
-let k = 0
-wait update(k)        // 错误：k 是 let（不可变），不能传给 var 形参
+```text
+g
+3
 ```
 
-> 实现现状：以上各条已按引用实现（`var` 变量是一个共享的单元，见技术文档 18 的 8.1），在各调度器与各标准
-> 优化遍之后结果相同。实现中由规范未明确、暂按下述方式处理的几点（均已列为向语言作者提出的问题）：
-> 没有 `var` 的形参与 `let` 一样视为不可变，不能传给 `var` 形参；把 `var` 变量传给没有 `var` 的形参、或写
-> `let y = x` 时，取的是变量当时所持的对象（对象本身是共享的：之后经 `x` 原地修改它，`y` 也会看到）；
-> 字段或元素（`s.x`、`arr[0]`）不是可写的目标，对它赋值是编译期错误（`AssignmentTargetNotVariable`）；
-> 带 `var` 形参的函数不能交给会调用它的算子（如 `foreach`），但可以交给 `grad` 这类改写函数的 macro 算子。
+目前这个修饰符只是声明：编译器检查“有副作用的函数是否声明了它”，不依据它在调用处产生顺序。调用处应当如何对待它尚待确定。
 
-### 4.4.5 wait
+## 4.4 `var`、引用与 `wait`
 
-- **`wait`** 作用于它后面的**那一个表达式**。
-- 含义：`wait` 前后的操作，如果用到了该表达式的值，或者用到了被它修改的值（也就是用到了它的副作用），
-  就与它**局部有序**。编译器自动跟踪带可变输入参数（`var` 形参）的调用的对外副作用，并插入控制依赖。
-  “默认按引用”的设计正是为此。
-  > 图上的精确形式：一次被等待的写入排在此后对该变量的**读取**之前——控制边从写入指向读取节点
-  > （`:var/get`），使用这次读取的操作再经数据依赖排在其后；控制边并不直接指向“下一条语句”的节点。
-- 在同步块内写不写 `wait` 都一样：块内本来就有顺序（见 4.4.2）。副作用只在默认的无序执行下才需要考虑，
-  因为它限制了哪些操作不能被随意调换顺序。
-- 修改的追踪是完整的：函数通过捕获（包括模块顶层的变量）写入一个 `var`，与通过 `var` 形参写入一样，
-  调用处记为对该变量的一次写入；进入一个写入了被捕获变量的分支也是如此。
-- `wait` 不是机械的排序，它依靠 `var` 的使用情况来排序：被排在修改之前的，是此前**直接使用**了该变量的值的
-  那些操作。`A(i + 1); wait modify(i)` 中直接使用 `i` 的是 `+`，所以 `modify` 排在 `+` 之后，而不保证排在
-  `A` 之后。
-- 被 `wait` 的表达式如果不涉及任何 `var`（例如只有输入输出类的副作用），`wait` 没有可依据的东西，也就没有
-  意义；这类调用应当写在同步块里。不写 `wait` 不是错误。
+- 一切值按引用传递。`var` 形参是引用，函数对它的写入就是对调用方变量的写入；同一个变量传给两个 `var` 形参时，两个形参是同一个对象的别名。
+- 赋值是带副作用的操作。**副作用的声明是一个闭环**：要修改一个参数，它必须声明为 `var`；可变性从最底层的算子声明一路向上，每一层都显式声明。没有把参数声明为 `var` 的函数不可能修改它。
+- 把 `let` 传给 `var` 形参、在函数体内对非 `var` 的形参赋值，都是编译期错误（`SemanticDiag::ImmutablePassedToVarParam`）。
+
+**`wait` 作用于它后面的那一个表达式。** `wait` 前后的操作，如果用到了该表达式的值，或用到了被它修改的变量，就与它局部有序：
 
 ```cml
-A(i)
-wait modify(i)     // 编译器插入控制依赖：A → modify → B
-B(i)
-```
+sync func bump(var counter: int) {
+    wait counter += 1
+}
 
-> 实现现状：两个方向的依赖都已建立并有测试：`modify` 之后对该变量的读取排在它之后；带 `wait` 的 `modify`
-> 排在此前用过该变量取值的操作之后。经由捕获的写入同样被跟踪：直接调用一个写入被捕获变量的函数（包括它
-> 直接调用的函数，逐层传递），或进入一个有分支臂写入被捕获变量的分支，在调用处或分支处记为对该变量的
-> 一次写入；只读取被捕获变量的函数调用或分支，记为对该变量的一次使用（排在此前的写入之后，并排在此后
-> 带 `wait` 的写入之前）。跟踪按图、按变量名进行，以下情形不在其内（副作用的管理与追踪仍在研究中）：
-> 不带 `wait`、也不在同步块内的写入，与此前的读取之间没有顺序；通过**函数值**（作为实参传递、作为返回值
-> 或存放起来的 lambda 或函数）进行的调用，调用处看不到它对被捕获变量的读写，因为函数类型不携带这一信息
-> （已列为向语言作者提出的问题）。
+// 函数体不是同步块：顺序来自 wait 与数据依赖
+func twice(): int {
+    var c = 0
+    wait bump(c)
+    wait bump(c)
+    return c
+}
 
-```cml
-with <X: Tensor, y: Tensor, lr: float>
-sync func update(var w: Tensor): Tensor {
-    let pred = X @ w
-    let errors = pred - y
-    var dw = transpose(X) @ errors
-    let m = shape(X)[0]
-    wait dw = 2.0 / float(m) * dw
-    return w = w - lr * dw
+func main(): int sync {
+    println(twice())
+    return 0
 }
 ```
 
-### 4.4.6 let 是编译期约束
+```text
+2
+```
 
-- `let` 对象严格不可修改。这是**编译期校验**，不是对内存加锁：会修改变量的操作本身是 `sync` 的，并且必须
-  明确声明哪个形参是 `var`；`let` 变量不能传给 `var` 形参，所以无从修改。运行期不做额外检查。
-- 闭包（lambda）与 `if` 分支对变量的捕获同样是按引用。
+- `wait` 不是机械的排序，它依靠 `var` 的使用情况来排序。被排在修改之前的，是此前**直接使用**了该变量的值的那些操作：`A(i + 1); wait modify(i)` 中直接使用 `i` 的是 `+`，所以 `modify` 排在 `+` 之后，而不保证排在 `A` 之后。一次被等待的写入排在此后对该变量的读取之前。
+- 被 `wait` 的表达式如果不涉及任何 `var`（例如只有输入输出），`wait` 没有可依据的东西，也就没有意义；这类调用写在同步块里。
+- 在同步块里写不写 `wait` 都一样。
+- `wait modify(i)` 之后如果没有任何地方再读 `i`，这次修改不执行（按依赖求值）。
+- 不带 `wait`、也不在同步块里的写入，与此前的读取之间没有顺序；编译器给出警告 `SemanticDiag::IgnoredSideEffect`。
+- 修改的追踪覆盖捕获：函数通过捕获写入一个 `var`，调用处记为对该变量的一次写入。通过函数值（作为实参、返回值或存起来的 lambda）进行的调用，调用处只能按它的类型（`sync` 修饰符、`var` 形参）识别副作用。
+- `wait` 可以写在调用、赋值与运算符表达式之前。写在块、名字、字面量、lambda 之前保留，尚未实现（`SemanticDiag::ConstructNotSupported`）；要让一个块按顺序执行，用 `sync { ... }`。
 
-### 4.4.7 遍流水线与默认流水线
+副作用的管理与追踪仍在研究中（设计原则 2.8）。同一个可变对象在同步块之外被多处写入、且都没有 `wait` 时的行为尚未决定。
 
-- 程序由命令行上的**遍序列**处理：`camel file.cml pass1 pass2 ...`。每个遍是对图做变换、调度执行或转译的
-  程序。
-- **语言核心对遍的顺序不做限制**。不同的顺序**可以**给出不同的结果：遍并不承诺产出同一张图，它会修改图，
-  并且可以有副作用。“任意遍序列下行为相同”不是语言的性质。
-- 不指定任何遍时，执行 `std::default`，它是 `std::nodevm`（节点虚拟机）的别名；可由 `.opencmlrc` 的
-  `passes.fallback` 改变。指定的遍没有消费掉图时，同样接着执行这个默认遍。
-- 随 Camel 发布的**标准优化遍**（`std::devirtualize`、`std::specialize`、`std::inline`、`std::opt::fold`、
-  `std::opt::cse`、`std::opt::dce`、`std::opt::simplify`、`tensor::fuse` 等）以保持程序结果为目标；这是对
-  这些遍的质量要求，由测试检验，不是语言层面的约定。
-- 建立在遍机制之上的库可以有自己的前提。例如自动微分库（`autodiff`）的 `grad` 需要流水线先运行
-  `std::macro`：没有执行过 macro 的图信息不足以做微分。这是该库的约束，不是语言核心的约束；前提不满足时
-  库应当给出清楚的、带源码位置的诊断。
+## 4.5 `macro` 函数
 
-### 4.4.8 macro 函数
+标记为 `macro` 的函数可以被 `std::macro` 遍提前求值，结果物化为图中的常量：
 
-- 标记为 **`macro`** 的函数可以被可选的 **`std::macro`** 遍提前求值，结果物化进图；不使用该遍时，
-  它与普通函数一样在运行期执行。
-- 带效应的 macro 函数体与普通函数完全一样：它的效应在它被求值的时候发生（使用 `std::macro` 时即在该遍
-  执行期间）。这是设计如此。
-- **求值失败的 macro 调用**（暂定规则，尚未最终确定）：在使用 `std::macro` 时是编译期错误
-  （`RuntimeDiag::MacroEvaluationFailed`，阶段 `pass:std::macro`），直接报告调用位置与原因，流水线就此停止，
-  程序不运行。“失败”指实参全部是常量、求值过程中算子报错、抛出异常或超过求值深度上限（64 帧）；
-  实参不是常量不算失败，该调用照常留到运行期。由此带来的后果：
-  - 一个失败的 macro 调用即使在运行期永远不会被执行到（写在没有被调用的函数里，或没有走到的分支里），
-    程序也会被拒绝。
-  - 超过求值深度上限也算失败：不加 `std::macro` 时能正常运行的程序，加上之后可能被拒绝。
-  - 失败之前已经执行的效应已经在该遍执行期间发生（每轮一次）；程序不再运行，所以不会重复。
-  - 流水线里没有 `std::macro` 时一切照旧：它是普通调用，执行到时才会失败。
+```cml
+macro func cube(x: int): int { return x * x * x }
+
+func main(): int sync {
+    println(cube(3))
+    return 0
+}
+```
+
+`camel m.cml` 与 `camel m.cml std::macro std::nvm` 都打印 `27`；后者的图里 `cube(3)` 已经是常量 `27`（用 `camel m.cml std::macro std::rgir` 可以看到）。
+
+- `macro` 本身不定义阶段，也不是必需的：流水线里没有 `std::macro` 时，macro 函数就是普通函数。
+- 只有实参全是常量（或另一个 macro 的结果）的调用才被提前求值；否则调用留到运行时。
+- macro 函数体里的副作用与普通函数一样处理：在求值的时候发生。
+- 提前求值失败（算子报错、超过求值深度上限，默认 64 层，`--max-macro-depth` 可调）是编译期错误 `RuntimeDiag::MacroEvaluationFailed`，程序不运行。
+- 自动微分的 `grad` 等是 macro 算子，使用它们需要流水线里有 `std::macro`（教程第 16 节）。这是该库的前提，不是语言的约束。
+
+## 4.6 故障、退出与资源上限
+
+**故障**是程序无法继续的情形：除数为零、下标越界、`match` 没有分支匹配、递归过深、数字文本无法转换等。故障使程序带源码位置终止，退出码为 1；它之前已经产生的输出照常写出。故障不是错误值，`!!` 接不住它。
+
+```cml
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println('before')
+    println(xs[5])
+    println('after')
+    return 0
+}
+```
+
+```text
+before
+error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of length 3.
+  --> fault.cml:4:15
+   |
+ 4 |     println(xs[5])
+   |               ^
+help: Ensure the index is within the valid range of the collection.
+```
+
+把故障隔离在子图边界上的算子（设计原则中暂名 `attempt`）尚未提供。
+
+**`exit(n)`** 立即结束程序，退出码为 `n`；此前的输出照常写出。
+
+**递归深度。** 尾位置的调用不占用栈帧，尾递归可以任意深。非尾递归同时打开的调用数有上限，默认 1000，超过是故障 `RuntimeDiag::MaxRecursionDepthExceeded`；用 `--max-recursion-depth <n>` 或环境变量 `CAMEL_MAX_RECURSION_DEPTH` 调整。计数包括通过函数值的调用和高阶算子对每个元素的调用。默认值在各执行后端上相同，并行调度器同样计数。
+
+```cml
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)     // 非尾递归
+}
+
+func count(n: int, acc: int): int {
+    return if n == 0 then acc else count(n - 1, acc + 1)   // 尾递归
+}
+
+func main(): int sync {
+    println(count(1000000, 0))
+    println(depth(200))
+    println(depth(1200))
+    return 0
+}
+```
+
+```text
+1000000
+200
+error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) exceeded when evaluating graph '__g_7__'.
+```
+
+（其后是位置与建议。）
+
+**其他上限**：单张图的节点、块与边表项各不超过 65,535；图空间、永久空间、元空间三块内存各 256 MB，分别由 `CAMEL_GRAPH_SPACE_LIMIT_MB`、`CAMEL_PERM_SPACE_LIMIT_MB`、`CAMEL_META_SPACE_LIMIT_MB` 调整，耗尽时是 `RuntimeDiag::MemoryExhausted`。完整的表见 [cli.cn.md](../cli.cn.md)“资源上限”。
+
+## 4.7 遍与流水线
+
+程序由命令行上的遍序列处理：`camel file.cml pass1 pass2 ...`。每个遍变换图、执行图（调度遍）或把图翻译成别的东西（转译遍）。
+
+| 遍 | 作用 |
+|---|---|
+| （不写） | `std::default`，即 `std::nvm` |
+| `std::nvm` | 节点虚拟机：直接在图上解释执行 |
+| `std::fvm` | 字节码虚拟机 |
+| `std::jit` | 带即时编译的字节码虚拟机；不能编译的图由解释器执行 |
+| `std::prl` | 并行调度：互不依赖的节点可以并发执行 |
+| `std::macro` | 提前求值 macro 调用 |
+| `std::opt`、`std::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt::simplify` | 优化 |
+| `std::rgir`、`std::gir` | 打印图（DOT 格式），不运行 |
+| `std::stats` | 打印图的统计数字，图原样传下去 |
+| `onnx::export`、`std::cpp` | 转译为 ONNX 模型、C++ 源码 |
+
+- **语言不限制遍的顺序，顺序可以影响结果。** 遍会修改图，可以有副作用；“任意遍序列下行为相同”不是语言的性质。
+- 调度遍与转译遍消费掉图，写在它们之后的遍不会运行（有警告 `RuntimeDiag::PassesNeverRun`）。指定的遍都没有消费掉图时，接着运行默认遍。
+- 源码层的规则（`var`/`let`、`wait`、`sync`）约束的是编译器怎样构造图；图一旦得到，这些规则不再约束后续的遍。标准库的优化遍以不改变程序结果为目标，这是对这些遍的质量要求，由测试保证。
+- 命令行上写某个模块的遍（如 `onnx::export`）时，编译器自动加载该模块。
+
+## 4.8 高阶算子的顺序
+
+- `map`、`filter` 的各个元素之间没有执行顺序的约定：并行调度（`std::prl`）可以并发执行它们，结果按元素位置排列。同步块不改变这一点。元素函数里的副作用在并行的 `map` 下顺序不作保证。
+- `foreach`、`reduce` 按元素顺序执行。它们的无序并行版本是 `para` 模块的 `unordered_foreach`、`unordered_reduce`。

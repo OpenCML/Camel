@@ -1,0 +1,65 @@
+// Reads a log file and works on its lines: `split`, `trim`, `find` and `substr` of `str` cut
+// a line into fields and select lines by a substring, `count` of `array` counts per level,
+// and `re.test` is used where a pattern is needed.
+// Run: camel examples/text/log_filter.cml
+module log_filter
+
+import { test } from re
+import { split, trim, find, substr } from str
+import { count } from array
+import { mkdirs, write_text, try_read_text } from fs
+
+type Entry = { time: string, level: string, message: string }
+
+func has(text: string, part: string): bool {
+    let at = text->find<part>
+    return match at {
+        case null => false
+        case i => true
+    }
+}
+
+// '09:00:07 WARN  disk usage at 81%': the time, then the level up to the next space, then
+// the message.
+func parse(line: string): Entry {
+    let rest = line->substr<9, len(line) - 9>
+    let cut = rest->find<' '> ?? len(rest)
+    return {
+        time: line->substr<0, 8>,
+        level: rest->substr<0, cut>,
+        message: rest->substr<cut, len(rest) - cut>->trim
+    }
+}
+
+func main(): int sync {
+    let path = 'tmp/examples/service.log'
+    mkdirs('tmp/examples')
+    write_text(path, '09:00:01 INFO  service started
+09:00:07 WARN  disk usage at 81%
+09:01:12 ERROR cannot open cache.db
+
+09:01:13 INFO  retrying in 5s
+09:01:18 ERROR cannot open cache.db
+09:02:00 INFO  shutdown requested
+')
+
+    // The file ends with a line feed and has an empty line: both give empty pieces.
+    let lines = (try_read_text(path) !! '')->split<'\n'>
+        ->map<(l: string): string => trim(l)>
+        ->filter<(l: string): bool => len(l) > 0>
+    let entries = lines->map<parse>
+    println('lines:', len(lines))
+
+    let levels = ['INFO', 'WARN', 'ERROR']
+    levels->foreach<(level: string) => sync {
+        println(format<level, entries->count<(e: Entry): bool => e.level == level>>('{:<5} {}'))
+    }>
+
+    println('problems:')
+    entries->filter<(e: Entry): bool => e.level != 'INFO'>
+        ->foreach<(e: Entry) => sync { println('  ' + e.time + ' ' + e.message) }>
+
+    println('lines that mention cache.db:', lines->count<(l: string): bool => has(l, 'cache.db')>)
+    println('lines with a number followed by a unit:', lines->count<(l: string): bool => test('[0-9]+(%|s)', l)>)
+    return 0
+}

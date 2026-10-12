@@ -135,25 +135,29 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
     // form). Both come out in key order.
     if (const CollectionType *coll = asCollectionType(t)) {
         const Table *table = fromSlot<Table *>(s);
-        if (!coll->isMap()) {
-            json jarr = json::array();
-            for (size_t i = 0; table && i < table->size(); ++i) {
-                auto elem = camelToJson(coll->keyType(), table->keys()[i], ctx);
-                if (!elem)
-                    return std::nullopt;
-                jarr.push_back(std::move(*elem));
+        const bool object  = coll->isMap() && coll->keyType()->code() == TypeCode::String;
+        if (!coll->isMap() || object) {
+            json out    = object ? json::object() : json::array();
+            bool failed = false;
+            if (table != nullptr) {
+                table::forEachEntry(table, coll, [&](slot_t key, slot_t value) {
+                    if (failed) {
+                        return;
+                    }
+                    auto encoded = object ? camelToJson(coll->valueType(), value, ctx)
+                                          : camelToJson(coll->keyType(), key, ctx);
+                    if (!encoded) {
+                        failed = true;
+                    } else if (object) {
+                        out[fromSlot<String *>(key)->toString()] = std::move(*encoded);
+                    } else {
+                        out.push_back(std::move(*encoded));
+                    }
+                });
             }
-            return jarr;
-        }
-        if (coll->keyType()->code() == TypeCode::String) {
-            json jobj = json::object();
-            for (size_t i = 0; table && i < table->size(); ++i) {
-                auto val = camelToJson(coll->valueType(), table->values()[i], ctx);
-                if (!val)
-                    return std::nullopt;
-                jobj[fromSlot<String *>(table->keys()[i])->toString()] = std::move(*val);
-            }
-            return jobj;
+            if (failed)
+                return std::nullopt;
+            return out;
         }
     }
     throwRuntimeFault(RuntimeDiag::JsonEncodeUnsupported, t->toString());

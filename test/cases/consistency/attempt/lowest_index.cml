@@ -1,0 +1,62 @@
+/**
+ * Several elements of an unordered operator fault together: the fault reported is that of the
+ * smallest element index (design principles 2.10), on every run and on every back end, so it
+ * is the one a back end that takes the elements in order reports. For nested operators the
+ * outer index decides first, then the inner one.
+ *
+ * Every fault here is an index out of range whose message names the index, which tells the
+ * elements apart: element x of the first map reads tbl[x + 10], and so on.
+ */
+module lowest_index
+
+import { unordered_foreach } from para
+
+func tbl(): int[] { return [1, 2, 3] }
+
+func bad(x: int): int { return tbl()[x + 10] }
+func late(x: int): int { return if x < 5 then x else tbl()[x + 20] }
+func odd(x: int): bool { return tbl()[x + 200] > 0 }
+func row(i: int): int[] { return range(0, 16)->map<(j: int): int => tbl()[1000 + i * 100 + j]> }
+func show(x: int): int sync { return println(tbl()[x + 300]) }
+
+func all(): int[] { return range(0, 64)->map<bad> }
+func some(): int[] { return range(0, 64)->map<late> }
+func kept(): int[] { return range(0, 64)->filter<odd> }
+func nested(): int[][] { return range(0, 16)->map<row> }
+func each(): int sync {
+    range(0, 64)->unordered_foreach<show>
+    return 0
+}
+
+func main(): int sync {
+    // The same question many times: the answer may not depend on the run.
+    range(0, 40)->foreach<(round: int) => sync {
+        let r = attempt(all)
+        println(match r {
+            case error e => e.message
+            case v => 'no fault'
+        })
+    }>
+    let s = attempt(some)
+    println(match s {
+        case error e => e.message
+        case v => 'no fault'
+    })
+    let k = attempt(kept)
+    println(match k {
+        case error e => e.message
+        case v => 'no fault'
+    })
+    let n = attempt(nested)
+    println(match n {
+        case error e => e.message
+        case v => 'no fault'
+    })
+    let f = attempt(each)
+    println(match f {
+        case error e => e.message
+        case v => 'no fault'
+    })
+    println('after')
+    return 0
+}

@@ -1,0 +1,16 @@
+/**
+ * The integer literals an int and an i32 can just hold, in every base and with an exponent.
+ * -9223372036854775808 is in range although its digits without the sign are not.
+ */
+func main(): int sync {
+    println(-9223372036854775808, 9223372036854775807)
+    println(0x7fffffffffffffff, -0x8000000000000000, 0b111, 0777, -0777)
+    println(1e18, 9e18, -9e18, 1500e-2, 1e0, 0e5, 0, 00)
+    let a: i32 = 2147483647
+    let b: i32 = -2147483648
+    let c: f32 = 1.5
+    let d: i32? = -2147483648
+    println(a, b, c, d ?? a)
+    println(9223372036854775807 - 1, -9223372036854775808 + 1, -9223372036854775807-1)
+    return 0
+}

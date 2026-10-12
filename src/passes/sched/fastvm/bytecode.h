@@ -148,6 +148,7 @@ enum class MarkOpCode {
     ReduceArr,
     FilterArr,
     ForeachArr,
+    Isolate, // the fault-isolation node (camel/execute/fault_isolation.h)
 };
 
 // 0 means null; positive values are dynamic data indices, negative values are the negated static

@@ -44,7 +44,8 @@ class Namespace : public std::enable_shared_from_this<Namespace<Key, Val>> {
         for (const auto &[nsName, nsPtr] : innerNamespaces_) {
             if (nsPtr) {
                 pathStack.push_back(nsName);
-                nsPtr->forEachImpl(pathStack, visitor);
+                // The const overload: through the pointer both would be viable.
+                static_cast<const Namespace &>(*nsPtr).forEachImpl(pathStack, visitor);
                 pathStack.pop_back();
             }
         }

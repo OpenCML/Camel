@@ -114,3 +114,447 @@ case = "../../../cases/compile/collections/macro_constants.cml"
 args = ["${case}", "std::macro", "std::gc::verify", "${run_prl}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_stdout_contains = ["\"ok\":true", "{1: one, 2: two, 4: more} two 3", "{alpha, beta, gamma} true false", "{1: one, 2: two, 4: more, 9: nine} {1: one, 2: two, 4: more}", "{outer: {xs: [1, 2, 3]}} 3", "42 -21 21 [double, negate]"]
+
+# ---- Trees of tables (docs/technical/31_map_and_set.md, section 5.3) ----
+#
+# The program above keeps its collections small enough to be single tables under the default
+# widths. Here it runs again with tiny tables (2 entries to a leaf, 4 children to a branch), so
+# that its maps and sets are trees four and five levels high whose branches the collector has
+# to trace and, when it moves a table, to update; then a program whose collections are trees
+# under the default widths too. CAMEL_COLL_VALIDATE=1 checks every table an operation returns.
+
+[[tests]]
+name = "gc.collections_tiny_major_stable_nvm"
+desc = "Maps and sets as trees of tiny tables on std::nvm with the non-moving collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_tiny_major_stable_fvm"
+desc = "Maps and sets as trees of tiny tables on std::fvm with the non-moving collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_tiny_major_stable_prl"
+desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_tiny_major_young_nvm"
+desc = "Maps and sets as trees of tiny tables on std::nvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_tiny_major_young_fvm"
+desc = "Maps and sets as trees of tiny tables on std::fvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_tiny_major_young_prl"
+desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+
+[[tests]]
+name = "gc.collections_tiny_minor_stable_nvm"
+desc = "Maps and sets as trees of tiny tables on std::nvm with the non-moving collector, stress mode minor, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+
+[[tests]]
+name = "gc.collections_tiny_minor_stable_fvm"
+desc = "Maps and sets as trees of tiny tables on std::fvm with the non-moving collector, stress mode minor, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+
+[[tests]]
+name = "gc.collections_tiny_minor_stable_prl"
+desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+
+[[tests]]
+name = "gc.collections_tiny_minor_young_nvm"
+desc = "Maps and sets as trees of tiny tables on std::nvm with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+
+[[tests]]
+name = "gc.collections_tiny_minor_young_fvm"
+desc = "Maps and sets as trees of tiny tables on std::fvm with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+
+[[tests]]
+name = "gc.collections_tiny_minor_young_prl"
+desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+
+[[tests]]
+name = "gc.collections_tiny_both_stable_nvm"
+desc = "Maps and sets as trees of tiny tables on std::nvm with the non-moving collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_tiny_both_stable_fvm"
+desc = "Maps and sets as trees of tiny tables on std::fvm with the non-moving collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_tiny_both_stable_prl"
+desc = "Maps and sets as trees of tiny tables on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_tiny_both_young_nvm"
+desc = "Maps and sets as trees of tiny tables on std::nvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_tiny_both_young_fvm"
+desc = "Maps and sets as trees of tiny tables on std::fvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collections_tiny_both_young_prl"
+desc = "Maps and sets as trees of tiny tables on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collection_trees_tree_major_stable_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::nvm with the non-moving collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_major_stable_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::fvm with the non-moving collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_major_stable_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_major_young_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::nvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_major_young_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::fvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_major_young_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_minor_stable_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::nvm with the non-moving collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_minor_stable_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::fvm with the non-moving collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_minor_stable_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_minor_young_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::nvm with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_minor_young_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::fvm with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_minor_young_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_both_stable_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::nvm with the non-moving collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_both_stable_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::fvm with the non-moving collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_both_stable_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_both_young_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::nvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_both_young_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::fvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tree_both_young_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under the default widths on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_major_stable_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::nvm with the non-moving collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_major_stable_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::fvm with the non-moving collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_major_stable_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_major_young_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::nvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_major_young_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::fvm with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_major_young_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode major, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_minor_stable_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::nvm with the non-moving collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_minor_stable_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::fvm with the non-moving collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_minor_stable_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_minor_young_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::nvm with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_minor_young_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::fvm with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_minor_young_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode minor, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_both_stable_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::nvm with the non-moving collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_both_stable_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::fvm with the non-moving collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_both_stable_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the non-moving collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_both_young_nvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::nvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_both_young_fvm"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::fvm with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_trees_tiny_both_young_prl"
+desc = "Maps and sets of 150 to 260 entries with string and tuple keys and array and `T?` values, built and cut down entry by entry while the earlier versions are kept, under tiny tables on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
+case = "../../../cases/feat/mm/gc/gc_collection_trees.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_COLL_VALIDATE=1", "CAMEL_COLL_LEAF_CAPACITY=2", "CAMEL_COLL_FANOUT=4", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "m=150/1124950 grown=160/2015440 cut=66/1239480", "[1, 1] [189, 35721] [0] false true", "s=260 k=160 both=148 either=272 only=12 subset=true", "grid=170 hit=key-24 miss=? items=170", "true false true 150 1124950"]
+
+[[tests]]
+name = "gc.collection_constant_trees_nvm"
+desc = "Collection constants large enough to be trees, stored in the static area of a graph by std::macro, on std::nvm under heap verification and a collection every seventh allocation and fortieth safepoint (the non-moving collector; the program makes some ten thousand allocations): every table of the constant, and what the tables hold, is carried over and stays alive, and the tables built from the constant at run time share its unchanged ones."
+case = "../../../cases/compile/collections/macro_constant_trees.cml"
+args = ["${case}", "std::macro", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=7", "CAMEL_GC_STRESS_SAFEPOINT=40", "CAMEL_GC_STRESS_MODE=both"]
+timeout_ms = 180000
+expect_stdout_contains = ["\"ok\":true", "400 305471 v1 v399 v144", "400 576520 last ? 400 305471 v0", "true false true", "600 true false 600 false 599 1 {w0}", "300 42 22 22 -21", "301 441"]
+
+[[tests]]
+name = "gc.collection_constant_trees_fvm"
+desc = "Collection constants large enough to be trees, stored in the static area of a graph by std::macro, on std::fvm under heap verification and a collection every seventh allocation and fortieth safepoint (the non-moving collector; the program makes some ten thousand allocations): every table of the constant, and what the tables hold, is carried over and stays alive, and the tables built from the constant at run time share its unchanged ones."
+case = "../../../cases/compile/collections/macro_constant_trees.cml"
+args = ["${case}", "std::macro", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=7", "CAMEL_GC_STRESS_SAFEPOINT=40", "CAMEL_GC_STRESS_MODE=both"]
+timeout_ms = 180000
+expect_stdout_contains = ["\"ok\":true", "400 305471 v1 v399 v144", "400 576520 last ? 400 305471 v0", "true false true", "600 true false 600 false 599 1 {w0}", "300 42 22 22 -21", "301 441"]
+
+[[tests]]
+name = "gc.collection_constant_trees_prl"
+desc = "Collection constants large enough to be trees, stored in the static area of a graph by std::macro, on std::prl under heap verification and a collection every seventh allocation and fortieth safepoint (the non-moving collector; the program makes some ten thousand allocations): every table of the constant, and what the tables hold, is carried over and stays alive, and the tables built from the constant at run time share its unchanged ones."
+case = "../../../cases/compile/collections/macro_constant_trees.cml"
+args = ["${case}", "std::macro", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_COLL_VALIDATE=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=7", "CAMEL_GC_STRESS_SAFEPOINT=40", "CAMEL_GC_STRESS_MODE=both"]
+timeout_ms = 180000
+expect_stdout_contains = ["\"ok\":true", "400 305471 v1 v399 v144", "400 576520 last ? 400 305471 v0", "true false true", "600 true false 600 false 599 1 {w0}", "300 42 22 22 -21", "301 441"]
+
+[[tests]]
+name = "gc.collfuzz"
+desc = "Random programs over maps and sets (test/tools/collfuzz/collfuzz.py), whose reference answer the generator computes on Python dicts and sets, under collection stress: 4 programs on std::nvm, std::fvm and std::prl, under the default tree, the flat table and trees of tiny tables, with the non-moving and with the moving collector, a collection requested every third allocation and at every safepoint and the heap verified before and after each. Every run prints the reference answer and every verification is ok."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/collfuzz/collfuzz.py"
+args = ["${case}", "check", "--seeds", "0:4", "--ops", "40", "--size", "16", "--matrix", "gc"]
+envs = []
+expect_exit = 0
+expect_stdout_contains = ["72 of 72 runs agree with the reference", "PASS"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 600000

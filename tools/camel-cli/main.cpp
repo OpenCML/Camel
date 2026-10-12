@@ -26,6 +26,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/introspect.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/core/type.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
@@ -53,6 +54,7 @@
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 
 namespace mm = camel::core::mm;
@@ -114,6 +116,40 @@ void writePassDump(PassDumpState &state, const string &passName, camel::runtime:
 
 void passDumpHandler(const char *passName, size_t, camel::runtime::GCGraph *graph, void *userData) {
     writePassDump(*static_cast<PassDumpState *>(userData), passName ? passName : "", graph);
+}
+
+} // namespace
+
+namespace {
+
+/// Whether the function `main` declared at the top level of the entry module writes a return
+/// type (`func main(): int`). Only then is what it returns the result of the program (design
+/// principles 2.10). nullopt when the tree holds no such declaration (`main` bound some other
+/// way): the value then counts as it always did.
+std::optional<bool> entryDeclaresReturnType(const AST::node_ptr_t &node, int depth = 0) {
+    if (!node || depth > 3) {
+        return std::nullopt;
+    }
+    if (auto decl = std::dynamic_pointer_cast<AST::FuncDeclLoad>(node->load());
+        decl && decl->ref().plain() && decl->ref().ident() == "main") {
+        for (const auto &child : *node) {
+            if (!child || !std::dynamic_pointer_cast<AST::FuncDataLoad>(child->load())) {
+                continue;
+            }
+            // FuncData(FuncType(with params, params, optional return type), body)
+            if (child->size() == 0 || child->at(0)->size() < 3) {
+                return std::nullopt;
+            }
+            return !child->at(0)->at(2)->empty();
+        }
+        return std::nullopt;
+    }
+    for (const auto &child : *node) {
+        if (auto found = entryDeclaresReturnType(child, depth + 1)) {
+            return found;
+        }
+    }
+    return std::nullopt;
 }
 
 } // namespace
@@ -211,6 +247,12 @@ int main(int argc, char *argv[]) {
             .maxMacroDepth     = Run::maxMacroDepth,
         },
         compileDiagsConfig);
+    // However the run ends (main returns, a fault, exit(n)), it ends by returning from here:
+    // the external resources the program still holds are released first, before the context
+    // and the modules that own their release code go away (design principles 2.9).
+    struct ReleaseExternalResources {
+        ~ReleaseExternalResources() { camel::core::rtdata::disposeAllForeignResources(); }
+    } releaseExternalResources;
     ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig);
 
     parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
@@ -246,12 +288,28 @@ int main(int argc, char *argv[]) {
     };
 
     try {
+        if (selectedCommand == Command::Check && Check::lexical) {
+            // `check -i`: the tokens only. Nothing is parsed, so only lexical errors (an
+            // illegal character, an unclosed string) can be reported.
+            if (!parser->lex(*input)) {
+                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+                compileSummary(false);
+                return 1;
+            }
+            return 0;
+        }
         if (!parser->parse(*input)) {
             // Syntax errors: nothing after the parser can run, and compiling the module would
             // only read and parse the file a second time.
             ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
             compileSummary(false);
-            return selectedCommand == Command::Check ? 0 : 1;
+            return 1;
+        }
+        if (selectedCommand == Command::Check && Check::syntaxOnly) {
+            // `check -s`: the file was read into a syntax tree; names, types and imports are
+            // not looked at.
+            ctx->dumpModuleWarnings(std::cerr, useJsonFormat, {});
+            return 0;
         }
         CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", targetFile);
 
@@ -326,7 +384,7 @@ int main(int argc, char *argv[]) {
         if (!mainModule->loaded()) {
             ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
             compileSummary(false);
-            return selectedCommand == Command::Check ? 0 : 1;
+            return 1;
         }
         // The program compiled. Its warnings go to stderr, before anything runs and whatever
         // the log level: stdout stays the program's output (and, on an error, the diagnostics
@@ -390,10 +448,14 @@ int main(int argc, char *argv[]) {
                     }
                     // What `main` returns goes to the output: the file given with -o, else
                     // standard output (where an exit code is not printed).
+                    // Only a `main` that declares its return type has a result.
+                    ctx->setEntryResultDeclared(
+                        entryDeclaresReturnType(parser->ast()).value_or(true));
                     camel::execute::writeEntryResultTo(
                         ctx,
                         Run::outputFile.empty() || Run::outputFile == "stdout" ? std::string()
-                                                                      : Run::outputFile);
+                                                                      : Run::outputFile,
+                        useJsonFormat);
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {
                         passDump.dir = Run::dumpAfterEachPassDir;
@@ -476,7 +538,7 @@ int main(int argc, char *argv[]) {
             } catch (DiagnosticsLimitExceededBaseException &e) {
                 const auto &diags = ctx->runtimeDiagSink();
                 diags->dump(os, useJsonFormat);
-                return selectedCommand == Command::Check ? 0 : 1;
+                return 1;
             }
 
             memperf::stop();
@@ -501,12 +563,12 @@ int main(int argc, char *argv[]) {
     } catch (DiagnosticsLimitExceededBaseException &e) {
         ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
         compileSummary(true);
-        return selectedCommand == Command::Check ? 0 : 1;
+        return 1;
     } catch (Diagnostic &d) {
         RangeConverter conv(parser->getTokens());
         d.fetchRange(conv);
         os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText(os)) << endl;
-        return selectedCommand == Command::Check ? 0 : 1;
+        return 1;
     } catch (const mm::MemoryExhausted &e) {
         // A memory space reached its limit outside any pass (while the program was compiled
         // into graphs). The pass driver and the graph builder report theirs; this is the rest.
@@ -535,10 +597,15 @@ int main(int argc, char *argv[]) {
                       .toJson()
                << "\n]" << endl;
         } else {
-            os << e.what() << endl;
+            // Not a diagnostic: a defect of the compiler. Said as such, with the text of the
+            // exception (it used to be printed bare: a line reading `bad any_cast`).
+            os << "camel: internal error: " << e.what()
+               << "\nThis is a defect of the compiler, not an error of the program. Please "
+                  "report it with the program that shows it."
+               << endl;
         }
         ASSERT(false, e.what());
-        return selectedCommand == Command::Check ? 0 : 1;
+        return 1;
     } catch (...) {
         os << "Unknown error occurred." << endl;
         ASSERT(false, "Unknown error occurred.");

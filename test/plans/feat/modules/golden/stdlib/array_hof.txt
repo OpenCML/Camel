@@ -10,7 +10,7 @@ true false true
 [fig, Fig, pear, Apple, apple]
 [Apple, apple, fig, Fig, pear]
 [Apple, Fig, apple, fig, pear]
-[-1, 0, 2.5] [false, true, true]
+[-1.0, 0.0, 2.5] [false, true, true]
 [Bob, Di, Ann, Cy]
 [Ann, Cy, Bob, Di]
 [11, 22, 33]

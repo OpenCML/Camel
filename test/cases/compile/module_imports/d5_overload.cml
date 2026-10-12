@@ -1,0 +1,7 @@
+import { f } from conf_b
+import { f } from conf_s
+
+func main(): int sync {
+    println(f(1), f('a'))
+    return 0
+}

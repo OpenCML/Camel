@@ -1,0 +1,11 @@
+// A tiny model as a pure program: `main` is the model, its parameters are the inputs.
+// Run:    camel docs/tutorial/examples/15_model.cml --arg x=docs/tutorial/examples/x.npy
+// Export: CAMEL_ONNX_OUT=model.onnx camel docs/tutorial/examples/15_model.cml std::macro std::opt::simplify onnx::export
+module model
+
+import { Tensor, ones, relu, sum } from tensor
+
+func main(x: Tensor<f32, const [2, 3]>): Tensor {
+    let w = ones([3, 1])
+    return relu(x @ w)
+}

@@ -1,0 +1,8 @@
+import mi_values
+
+let base = 1000
+
+func main(): int sync {
+    println(mi_values::bump(1))
+    return 0
+}

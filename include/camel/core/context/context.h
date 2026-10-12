@@ -41,6 +41,10 @@ namespace camel::core::module {
 class Module;
 }
 
+namespace camel::compile {
+class SemanticRecorder;
+}
+
 // Forward declarations for execute (avoid circular include with executor.h)
 class Executor;
 class ExecutorManager;
@@ -86,11 +90,17 @@ class Context : public std::enable_shared_from_this<Context> {
         loadedDllHandles_; // .cmo path -> handle; keep DLLs loaded.
     std::optional<int> processExitCode_;
     std::function<void(camel::runtime::GCGraph *, slot_t)> entryResultHandler_;
+    /// See setEntryResultDeclared.
+    bool entryResultDeclared_ = true;
     /** Most recent reason a ".cmo found but failed to load" case occurred, used by ModuleNotFound
      * diagnostics. */
     mutable std::string lastCmoLoadError_;
+    // The modules whose load is in progress, outermost first (see importModule).
+    std::vector<std::string> loadingModules_;
     /// See setPassFact.
     std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
+    /// See setSemanticRecorder.
+    camel::compile::SemanticRecorder *semanticRecorder_ = nullptr;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>
@@ -179,6 +189,15 @@ class Context : public std::enable_shared_from_this<Context> {
     void setEntryResultHandler(EntryResultHandler handler) {
         entryResultHandler_ = std::move(handler);
     }
+    /**
+     * Whether the entry function declares its return type. Only then is the value it returns
+     * the result of the program: the exit code, and what `-o` writes (design principles 2.10).
+     * A `main` without a declared return type still has a value (that of its body), which is
+     * nobody's result. The front end that knows the declaration says so here; without a word
+     * from it the value counts, as it did before the rule.
+     */
+    void setEntryResultDeclared(bool declared) { entryResultDeclared_ = declared; }
+    bool entryResultDeclared() const { return entryResultDeclared_; }
     std::optional<int> processExitCode() const { return processExitCode_; }
     int processExitCodeOr(int fallback = 0) const { return processExitCode_.value_or(fallback); }
 
@@ -196,6 +215,16 @@ class Context : public std::enable_shared_from_this<Context> {
         const auto it = passFacts_.find(key);
         return it == passFacts_.end() ? nullptr : it->second;
     }
+
+    /**
+     * Who is told what the builders learn about the names and types of the modules compiled on
+     * this context (camel/compile/semantic_recorder.h). Null, the default, for a compilation
+     * that only wants the graph. Not owned: it must outlive the compilations.
+     */
+    void setSemanticRecorder(camel::compile::SemanticRecorder *recorder) {
+        semanticRecorder_ = recorder;
+    }
+    camel::compile::SemanticRecorder *semanticRecorder() const { return semanticRecorder_; }
 
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

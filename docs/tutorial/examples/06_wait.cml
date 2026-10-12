@@ -1,0 +1,20 @@
+// var parameters are references; `wait` orders one expression against the uses of the variable.
+// Run: camel docs/tutorial/examples/06_wait.cml
+module wait_demo
+
+sync func bump(var counter: int) {
+    wait counter += 1
+}
+
+// Not a sync block: the order comes from `wait` and from the data dependencies.
+func twice(): int {
+    var c = 0
+    wait bump(c)
+    wait bump(c)
+    return c
+}
+
+func main(): int sync {
+    println(twice())
+    return 0
+}

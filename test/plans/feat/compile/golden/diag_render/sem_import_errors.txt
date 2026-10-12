@@ -6,7 +6,10 @@ error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'missing_in_lib'
 help: Make sure the name is declared and in scope.
 
 error[SemanticDiag::ImportedModuleHasErrors]: Cannot import module 'broken_lib': it has errors (<ROOT>/test/cases/compile/diag_render/broken_lib.cml).
-  --> <ROOT>/test/cases/compile/diag_render/sem_import_errors.cml
+  --> <ROOT>/test/cases/compile/diag_render/sem_import_errors.cml:3:1
+   |
+ 3 | import { helper } from broken_lib
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 help: The errors are reported for that module. This one follows from them and goes away when they
       are fixed.
 

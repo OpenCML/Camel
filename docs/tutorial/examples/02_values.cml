@@ -1,0 +1,31 @@
+// Values, types, let and var.
+// Run: camel docs/tutorial/examples/02_values.cml
+module values
+
+type Point = { x: int, y: int }
+
+func main(): int sync {
+    let n = 42                      // int (64-bit)
+    let ratio = 0.75                // float (64-bit)
+    let ok = true                   // bool
+    let name = 'camel'              // string
+    let xs = [1, 2, 3]              // int[]
+    let pair = (1, 'one')           // (int, string)
+    let p: Point = { x: 3, y: 4 }   // a struct
+
+    println(n, ratio, ok, name)
+    println(xs, xs[0], len(xs))
+    println(pair, pair.0, pair.1)
+    println(p, p.x + p.y)
+
+    // No implicit numeric conversion: write float(n) or int(ratio).
+    println(float(n) * ratio)
+    println(int(3.99), string(n) + '!')
+
+    // let cannot be assigned again; var can.
+    var count = 0
+    count = count + 1
+    count += 10
+    println(count)
+    return 0
+}

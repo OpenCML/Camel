@@ -1,0 +1,14 @@
+var n = 0
+
+func bump(): int sync {
+    wait n += 1
+    return n
+}
+
+let _b = wait bump()
+let seen = n
+
+func main(): int sync {
+    println(seen)
+    return 0
+}

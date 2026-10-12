@@ -1,0 +1,11 @@
+// A fault (division by zero, index out of range) is not an error value: it ends the program.
+// Run: camel docs/tutorial/examples/09_fault.cml
+module fault
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println('before')
+    println(xs[5])
+    println('after')
+    return 0
+}

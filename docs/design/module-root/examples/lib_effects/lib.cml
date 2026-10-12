@@ -1,0 +1,8 @@
+module lib
+
+let _banner = println('lib: loading')
+let table = println('lib: building table')
+
+export func one(): int {
+    return 1
+}

@@ -1,0 +1,11 @@
+/**
+ * `head` of an empty array: there is no first element. The same fault as `xs[0]`; it used to
+ * return a zero value (0 for an int[]).
+ */
+func main(): int sync {
+    println(head([7, 8]))
+    let e: int[] = []
+    println(head(e))
+    println('not reached')
+    return 0
+}

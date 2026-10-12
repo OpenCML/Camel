@@ -31,7 +31,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 46 |
+| [built-in](#built-in-functions) | none | C++ | 47 |
 | [str](#str) | `import { ... } from str` | C++ | 20 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 45 |
@@ -69,7 +69,7 @@ int: (x: i32 | int | f32 | float | string) => int
 x as a 64-bit integer.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not an integer; use parse_int to handle that in the program.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program.
 - Example: `int(2.9)` gives `2`
 
 #### `i64`
@@ -81,7 +81,7 @@ i64: (x: i32 | int | f32 | float | string) => int
 The same as int.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not an integer.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN.
 - Example: `i64('42')` gives `42`
 
 #### `i32`
@@ -93,7 +93,7 @@ i32: (x: i32 | int | f32 | float | string) => i32
 x as a 32-bit integer.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not an integer.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN.
 - Example: `i32(7)` gives `7`
 
 #### `float`
@@ -105,7 +105,7 @@ float: (x: i32 | int | f32 | float | string) => float
 x as a 64-bit float.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not a number; use parse_float to handle that in the program.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one number; use parse_float to handle that in the program.
 - Example: `float(3)` gives `3`
 
 #### `f64`
@@ -138,7 +138,8 @@ x as a 32-bit float.
 string: (x: any) => string
 ```
 
-x as text. A float is written with six decimals: string(2.5) is '2.500000'.
+x as text, as println writes it. A float is written as the shortest text that reads back as
+the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 
 - Pure.
 - Example: `string(42)` gives `'42'`
@@ -152,7 +153,7 @@ parse_int: (text: string) => int!
 The integer a text spells, or an error value.
 
 - Pure.
-- Failure: error `ParseError` when the text is not an integer.
+- Failure: error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped).
 - Example: `parse_int('42') !! 0` gives `42`
 
 #### `parse_float`
@@ -296,6 +297,7 @@ head: (xs: T[]) => T
 The first element. An empty array has none: check len first.
 
 - Pure.
+- Failure: fault `IndexOutOfRange` when the array is empty.
 - Example: `head([1, 2, 3])` gives `1`
 
 #### `tail`
@@ -315,8 +317,9 @@ The elements after the first; empty for an array of fewer than two elements.
 slice: <start: int, end: int> (xs: T[]) => T[]
 ```
 
-The elements from index start up to, not including, end. A negative index counts from the
-end, and a range reaching outside the array is cut to it: this never faults.
+The elements from index start up to, not including, end. Both are positions from 0 to the
+length; a bound outside the array (a negative one included) is a fault, as an index out of
+range is. `take` and `drop` of the module `array` cut to the array instead.
 
 - Pure.
 - Example: `[1, 2, 3, 4]->slice<1, 3>` gives `[2, 3]`
@@ -338,10 +341,23 @@ The elements of xs followed by those of ys, as a new array.
 contains: <value: T> (xs: T[]) => bool
 ```
 
-Whether an element of xs equals value.
+Whether an element of xs equals value, by the `==` of the element type (by content for
+arrays, tuples and structs).
 
 - Pure.
 - Example: `[1, 2, 3]->contains<2>` gives `true`
+
+#### `contains`
+
+```camel
+contains: <sub: string> (s: string) => bool
+```
+
+Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
+string.
+
+- Pure.
+- Example: `'hello'->contains<'ell'>` gives `true`
 
 #### `zip`
 
@@ -350,6 +366,7 @@ zip: (xs: T[], ys: U[]) => (T, U)[]
 ```
 
 Two arrays combined element by element into pairs. They must have the same length.
+Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
 
 - Pure.
 - Failure: fault `InvalidArgument` when the lengths differ.
@@ -439,6 +456,28 @@ Replaces every element of the variable xs by f of it, in place.
 - With effects: changes its argument.
 - Example: `apply<(x: int) => x * 2>(xs)`
 
+### Fault isolation
+
+A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
+the program with a located diagnostic. `attempt` isolates it at the boundary of one call
+(design principles 2.9; docs/technical/33_fault_isolation.md). The name is provisional.
+
+#### `attempt`
+
+```camel
+attempt: (f: (...args: A) => T, ...args: A) => T!
+```
+
+Calls f with the arguments. A fault raised inside the call becomes an error value whose kind
+is the name of the fault (`DivisionByZero`, ...), with the fault's message and position;
+otherwise the result of f. When f itself returns `U!`, so does attempt. What the call did
+before the fault is not undone; exit() and the failures of the compiler itself are not
+isolated.
+
+- With effects: what f does.
+- Example: `attempt(risky, 0) !! -1`
+- Example: `attempt(() => xs->map<risky>) !! [-1]`
+
 #### `len`
 
 ```camel
@@ -459,7 +498,7 @@ get: <key: K> (m: Map<K, V>) => V?
 The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 
 - Pure.
-- Example: `get(m, 'z') ?? 0` gives `0 when m has no 'z'`
+- Example: `m->get<'z'> ?? 0` gives `0 when m has no 'z'`
 
 #### `get_or`
 
@@ -470,7 +509,7 @@ get_or: <key: K, fallback: V> (m: Map<K, V>) => V
 The value stored under key, or fallback when the map has no such key.
 
 - Pure.
-- Example: `get_or(m, 'z', -1)` gives `-1 when m has no 'z'`
+- Example: `m->get_or<'z', -1>` gives `-1 when m has no 'z'`
 
 #### `put`
 
@@ -481,7 +520,7 @@ put: <key: K, value: V> (m: Map<K, V>) => Map<K, V>
 A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
 
 - Pure.
-- Example: `put([('a', 1), ('b', 2)] as Map<string, int>, 'c', 3)` gives `{a: 1, b: 2, c: 3}`
+- Example: `([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>` gives `{a: 1, b: 2, c: 3}`
 
 #### `remove`
 
@@ -492,7 +531,7 @@ remove: <key: K> (c: Map<K, V> | Set<K>) => Map<K, V> | Set<K>
 A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
 
 - Pure.
-- Example: `remove([('a', 1), ('b', 2)] as Map<string, int>, 'a')` gives `{b: 2}`
+- Example: `([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>` gives `{b: 2}`
 
 #### `has`
 
@@ -503,7 +542,7 @@ has: <key: K> (c: Map<K, V> | Set<K>) => bool
 Whether a map has an entry of key, or a set has the element.
 
 - Pure.
-- Example: `has([('a', 1)] as Map<string, int>, 'a')` gives `true`
+- Example: `([('a', 1)] as Map<string, int>)->has<'a'>` gives `true`
 
 #### `keys`
 
@@ -580,7 +619,7 @@ add: <value: T> (s: Set<T>) => Set<T>
 A set with value added; s is unchanged.
 
 - Pure.
-- Example: `add([1, 2, 3] as Set<int>, 9)` gives `{1, 2, 3, 9}`
+- Example: `([1, 2, 3] as Set<int>)->add<9>` gives `{1, 2, 3, 9}`
 
 #### `union`
 

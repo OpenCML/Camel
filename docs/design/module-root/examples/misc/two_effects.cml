@@ -1,0 +1,13 @@
+func noisy(tag: string): int sync {
+    println(tag)
+    return 1
+}
+
+let first = noisy('first')
+let second = noisy('second')
+let third = noisy('third')
+
+func main(): int sync {
+    println(third + first + second)
+    return 0
+}

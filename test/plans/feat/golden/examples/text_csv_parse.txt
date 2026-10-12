@@ -1,0 +1,8 @@
+data lines: 5
+line 2: Lyon       2020   522250
+line 3: Graz       2021   291134
+line 4: skipped, FieldCount: expected 3 fields, got 2
+line 5: skipped, ParseError: 'about 289000' is not an integer
+line 6: Tartu      2022    97435
+rows read: 3
+people in all: 910819

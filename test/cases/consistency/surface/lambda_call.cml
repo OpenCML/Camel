@@ -1,0 +1,17 @@
+/**
+ * A lambda written where it is called: in parentheses before the arguments, on the right of
+ * `->` and of `?->`. Each used to end in the bare text `bad any_cast`.
+ */
+func main(): int sync {
+    println(((x: int): int => x + 1)(3))
+    println(((a: int, b: int): int => a * b)(6, 7))
+    println(3->(x: int): int => x + 1)
+    let k = 10
+    println(((x: int): int => x + k)(5))
+    let r = parse_int('4') ?-> (x: int): int => x * 2
+    println(r !! -1)
+    let bad = parse_int('4x') ?-> (x: int): int => x * 2
+    println(bad !! -1)
+    println([1, 2, 3]->map<(x: int): int => ((y: int): int => y * y)(x)>)
+    return 0
+}

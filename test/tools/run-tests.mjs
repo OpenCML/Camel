@@ -138,11 +138,6 @@ function applyNormalizers(text, names) {
                 .join('\n')
         } else if (name === 'normalize_paths') {
             output = normalizePathText(output)
-        } else if (name === 'normalize_platform_error_messages') {
-            // Equivalent standard-library error spellings on Windows and Unix.
-            output = output
-                .replace(/(error\[RuntimeDiag::FileOpenFailed\]: [^\n]*: )no such file or directory\./g, '$1No such file or directory.')
-                .replace(/(error\[RuntimeDiag::RegexInvalid\]: [^\n]+ is not a valid regular expression: )regex_error\(error_paren\): The expression contained mismatched \( and \)\.\./g, "$1Mismatched '(' and ')' in regular expression.")
         } else if (name === 'normalize_addresses') {
             output = output.replace(/0x[0-9a-fA-F]+/g, '<ADDR>')
         } else if (name === 'normalize_duration_seconds') {

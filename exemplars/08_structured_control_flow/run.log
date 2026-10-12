@@ -3,7 +3,7 @@
 
 $ ONNX_OUT=<tmp>/gate.onnx camel exemplars/08_structured_control_flow/program.cml
 exit 0
-camel gate=2 0 6 1
+camel gate=2.0 0.0 6.0 1.0
 exported
 
 $ camel exemplars/08_structured_control_flow/program.cml std::argir

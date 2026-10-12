@@ -1,0 +1,13 @@
+// Evaluation follows dependencies: outside a sync block, an effect nobody uses does not run.
+// Run: camel docs/tutorial/examples/06_unused_effect.cml
+module unused_effect
+
+func greet(): int {
+    println('hello from greet')     // not used, not in a sync block: never runs
+    return 1
+}
+
+func main(): int sync {
+    println(greet())
+    return 0
+}

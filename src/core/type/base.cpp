@@ -19,6 +19,7 @@
 
 #include "camel/core/type/base.h"
 #include "camel/core/mm.h"
+#include "camel/core/numeric_convert.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/composite.h"
@@ -241,7 +242,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         Int64 v = fromSlot<Int64>(static_cast<slot_t>(value));
         switch (to) {
         case TypeCode::Int32:
-            DO_CONV(Int64, Int32, v);
+            return toSlot(checkedNarrow<Int32>(v, "i32"));
         case TypeCode::Float32:
             DO_CONV(Int64, Float32, v);
         case TypeCode::Float64:
@@ -262,9 +263,9 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         Float32 v = fromSlot<Float32>(static_cast<slot_t>(value));
         switch (to) {
         case TypeCode::Int32:
-            DO_CONV(Float32, Int32, v);
+            return toSlot(checkedTruncate<Int32>(v, "i32"));
         case TypeCode::Int64:
-            DO_CONV(Float32, Int64, v);
+            return toSlot(checkedTruncate<Int64>(v, "i64"));
         case TypeCode::Float64:
             DO_CONV(Float32, Float64, v);
         case TypeCode::Bool:
@@ -272,7 +273,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Byte:
             DO_CONV(Float32, Byte, static_cast<Byte>(static_cast<int>(v) & 0xFF));
         case TypeCode::String: {
-            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
+            ::String *s = ::String::from(camel::utils::floatText(v), mm::autoSpace());
             return toSlot(s);
         }
         default:
@@ -283,9 +284,9 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         Float64 v = fromSlot<Float64>(static_cast<slot_t>(value));
         switch (to) {
         case TypeCode::Int32:
-            DO_CONV(Float64, Int32, v);
+            return toSlot(checkedTruncate<Int32>(v, "i32"));
         case TypeCode::Int64:
-            DO_CONV(Float64, Int64, v);
+            return toSlot(checkedTruncate<Int64>(v, "i64"));
         case TypeCode::Float32:
             DO_CONV(Float64, Float32, v);
         case TypeCode::Bool:
@@ -293,7 +294,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Byte:
             DO_CONV(Float64, Byte, static_cast<Byte>(static_cast<int>(v) & 0xFF));
         case TypeCode::String: {
-            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
+            ::String *s = ::String::from(camel::utils::floatText(v), mm::autoSpace());
             return toSlot(s);
         }
         default:
@@ -353,38 +354,16 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     case TypeCode::String: {
         ::String *s = reinterpret_cast<::String *>(static_cast<uintptr_t>(value));
         switch (to) {
-        case TypeCode::Int32: {
-            try {
-                Int32 v = std::stoi(s->toString());
-                return toSlot(v);
-            } catch (...) {
-                ASSERT(false, "castSlotFrom String->Int32 parse failed");
-            }
-        }
-        case TypeCode::Int64: {
-            try {
-                Int64 v = std::stoll(s->toString());
-                return toSlot(v);
-            } catch (...) {
-                ASSERT(false, "castSlotFrom String->Int64 parse failed");
-            }
-        }
-        case TypeCode::Float32: {
-            try {
-                Float32 v = std::stof(s->toString());
-                return toSlot(v);
-            } catch (...) {
-                ASSERT(false, "castSlotFrom String->Float32 parse failed");
-            }
-        }
-        case TypeCode::Float64: {
-            try {
-                Float64 v = std::stod(s->toString());
-                return toSlot(v);
-            } catch (...) {
-                ASSERT(false, "castSlotFrom String->Float64 parse failed");
-            }
-        }
+        // The whole string must be one number; otherwise the fault of the conversion
+        // functions (design principles 2.10).
+        case TypeCode::Int32:
+            return toSlot(integerFromText<Int32>(s->view(), "i32"));
+        case TypeCode::Int64:
+            return toSlot(integerFromText<Int64>(s->view(), "i64"));
+        case TypeCode::Float32:
+            return toSlot(floatFromText<Float32>(s->view(), "f32"));
+        case TypeCode::Float64:
+            return toSlot(floatFromText<Float64>(s->view(), "f64"));
         case TypeCode::String:
             return value;
         default:

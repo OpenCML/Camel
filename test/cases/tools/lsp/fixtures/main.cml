@@ -1,0 +1,44 @@
+module main
+
+import { norm2, scale } from shapes
+import { now } from time
+
+type Pair = (int, string)
+
+// Returns its argument.
+func identity(x: typeas T): T {
+    let copy = x
+    return copy
+}
+
+func add(a: int, b: int): int {
+    return a + b
+}
+
+func add(a: float, b: float): float {
+    return a + b
+}
+
+sync func bump(var counter: int, by: int) {
+    counter += by
+    return counter
+}
+
+func main() sync {
+    let p = { x: 3, y: 4 }
+    let n = norm2(p)
+    let q = scale(p, 2)
+    var total = 0
+    total += q.x
+    let i = identity(n)
+    let s = identity('text')
+    let sum = add(1, 2)
+    let fsum = add(1.5, 2.5)
+    let pair: Pair = (1, 'one')
+    let first = pair.0
+    let double = (v: int) => v * 2
+    let d = double(sum)
+    println(format<i, s, d>('{} {} {}'))
+    let t = now()
+    return 0
+}

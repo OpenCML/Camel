@@ -20,6 +20,7 @@
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/derivative.h"
+#include "builtin/operators/ops.h"
 #include "builtin/operators/collection.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
@@ -589,6 +590,30 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::Bool()),
                 },
+                {
+                    ":op/eq",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {false, false}}},
+                        "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            // By content (design principles 2.10): both sides of one type,
+                            // an array, a tuple or a struct, every part of which is itself
+                            // comparable (no function value, no tensor). Anything else has no
+                            // overload, which is a located compile-time error.
+                            const TypeCode code = norm[0]->code();
+                            const bool composite =
+                                code == TypeCode::Array || code == TypeCode::Struct ||
+                                (code == TypeCode::Tuple &&
+                                 !tt::as_ptr<TupleType>(norm[0])->isCell() &&
+                                 !tt::as_ptr<TupleType>(norm[0])->isTagged());
+                            if (!composite || !norm[0]->equals(norm[1]) ||
+                                !isContentComparable(norm[0])) {
+                                return nullopt;
+                            }
+                            return Type::Bool();
+                        }),
+                },
             }),
         OperatorGroup::create(
             "__neq__",
@@ -639,10 +664,21 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/ne",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
-                        "(self: typeas T, other: T) => bool",
+                        "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            if (!norm[0]->equals(norm[1])) {
+                            // By content (design principles 2.10): both sides of one type,
+                            // an array, a tuple or a struct, every part of which is itself
+                            // comparable (no function value, no tensor). Anything else has no
+                            // overload, which is a located compile-time error.
+                            const TypeCode code = norm[0]->code();
+                            const bool composite =
+                                code == TypeCode::Array || code == TypeCode::Struct ||
+                                (code == TypeCode::Tuple &&
+                                 !tt::as_ptr<TupleType>(norm[0])->isCell() &&
+                                 !tt::as_ptr<TupleType>(norm[0])->isTagged());
+                            if (!composite || !norm[0]->equals(norm[1]) ||
+                                !isContentComparable(norm[0])) {
                                 return nullopt;
                             }
                             return Type::Bool();
@@ -1401,6 +1437,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             return Type::Bool();
                         }),
+                },
+                {
+                    ":struct/contains_str",
+                    StaticFuncTypeResolver::create(
+                        {{Type::String(), false}},
+                        {{Type::String(), false}},
+                        Type::Bool()),
                 },
             }),
         // ======= Marked Operators =======

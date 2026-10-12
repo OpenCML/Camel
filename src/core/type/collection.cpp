@@ -39,7 +39,7 @@ namespace camel::core::type {
 
 // ---- Key types ----
 
-// DESIGN-QUESTION(map-key-types): what may be a key. The reasons are part of the diagnostic.
+// What may be a key (design principles 2.10). The reasons are part of the diagnostic.
 std::string collectionKeyProblem(Type *type) {
     if (type == nullptr) {
         return "it has no type";

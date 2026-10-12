@@ -105,6 +105,99 @@ of the encoder found more defects of the second kind than the findings showed:
   bits, values without a register silently dropped, self tail calls reading another
   activation's frame).
 
+## Fixed (branch `lane/opt-hardening`)
+
+What a branch arm is was a convention every rewrite and every back end kept on its own. It is
+now a stated invariant, checked whenever a graph is committed (`27ba80a3`;
+`docs/technical/17_graph_rewrite_api_contracts.md`, 4.1; `src/runtime/branch_arms.cpp`): every
+node that runs because of a BRCH belongs to exactly one arm, an arm being what its tail depends
+on between the BRCH and the JOIN. A graph that breaks it is an internal error of the pass that
+committed it, naming the node and the arms, where it used to be a silent wrong result. The
+front end's graphs satisfy it (the whole default test set, and the programs of seeds 1-1000
+without passes), and it costs 1 to 2 ms per compilation of the benchmark models.
+
+Four more causes, each with one commit and one archived finding:
+
+- **E** (`7f1b3f05`, `src/execute/graph_runtime_support.cpp`; F38). The parallel scheduler
+  refills the frame in place for a self tail call and wrote the parameters one argument after
+  the other: `r(0, a)` stored 0 into `a` and then read `a` for the second parameter. The graph
+  was right. Inlining exposes it, because it turns the recursive call of an arm's graph into a
+  self tail call. Seed 5362.
+- **F** (`fda8ac4f`, same file; F39). The execution order collected the code of a branch by
+  walking users from the BRCH and visited what that code reads. Users can be dead (an inlined
+  callee that ignores an argument leaves the argument's inner branch unused), and visiting
+  their inputs laid out dead code: a BRCH without its JOIN, at which every back end lost its
+  way (the rest of the graph skipped, or the order entered again and again). The graphs were
+  right. Seeds 5321, 166, 249 and 426, and 9, 49 and 148 at size 4. Seed 426 passed until
+  cause B was fixed (bisected: good at `d4cb17b9`, bad from `4a091ca6` on, with `380924bf`
+  good as well): keeping an inlined body inside the arm of its call also keeps its dead nodes
+  hanging off that arm, which is what this walk tripped over. Neither commit was wrong alone.
+- **G** (`553d3bd8`, `src/runtime/draft_inline.cpp`; F40). A callee that executes nothing (it
+  returns a constant or an argument) has no entry root, and its result waited on nothing of
+  what the call had waited on. Where the call was the tail of an arm, the tail became a value
+  outside the branch and what computed the arguments was left in no arm. Seed 108 at size 4
+  (it never returned on the node VM and the parallel scheduler).
+- **H** (`29198bff`, `src/passes/opt/inline/engine.cpp`; F41). The users of an inlined call
+  are made to wait on what its arguments were computed from. For a call that was the tail of
+  an arm the user is the JOIN, which then waited on code of the arm that no tail depended on.
+  Found by the check alone: seeds 7113, 7176, 7317, 7347, 7359, 7533 and 7555 were internal
+  errors of `std::opt` and `std::opt::simplify` once it existed. Without the check these
+  programs printed the right output (the stray code is laid out behind the last arm and
+  happens to be entered or skipped as needed).
+
+`f1e577ce` keeps the control uses of a parameter when a callee is spliced (they were dropped
+with the PORT; no program is known that this broke).
+
+Not done, with the reason:
+
+- *A dedicated SYNC as the head of every arm.* The back ends and the check define an arm by
+  its tail, and none of E to H is about a head. A SYNC per arm adds a node to every arm of
+  every graph (the benchmark models have 30 to 48 branches after `std::opt::simplify`),
+  changes 14 recorded graphs and touches 17 source files that read arm heads, among them the
+  JIT and the ONNX exporter, which other lines are changing.
+- *Removing the parameter GATEs of the inliner.* They order nothing the entry roots do not
+  (measured without them: 9% fewer nodes after `std::inline` on the benchmark models). The
+  ONNX exporter reads a gated constant as "exists only once the branch has run": without the
+  gates four of its tests fail (an `export_model` request made in an arm is no longer
+  refused). That has to be expressed otherwise before the gates can go.
+
+Still open here: `collectRuntimeBranchArmRegion` (used by the C++ emitter, by the ONNX
+exporter's search for the branch around a request, and by a part of the parallel scheduler
+that nothing calls) takes the control users of a BRCH for the heads of its arms. That holds
+for the graphs of the front end only.
+
+Before and after, each set run on both builds (before: `a3554607`, the trunk these commits
+were made on; after: the branch rebased on `4e14dee7`, which also brought the fixes of the JIT
+line). `cross` has 41 cells per program, `quick` 33. "bad" counts silent mismatches, hangs and
+unlocated errors; cells not run after four hangs of a program are listed apart.
+
+| set | matrix | programs | before: OK / legal refusal / bad / not run (programs with a bad cell) | after |
+|---|---|---|---|---|
+| seeds 1-1000 | cross | 1000 | 40961 / 0 / 17 / 22 (4: 166, 249, 426, 975) | 41000 / 0 / 0 / 0 (none) |
+| seeds 5001-5400 | cross | 400 | 16363 / 24 / 13 / 0 (3: 5254, 5321, 5362) | 16376 / 24 / 0 / 0 (none) |
+| seeds 7001-7600, not used before | cross | 600 | 24578 / 16 / 6 / 0 (2: 7016, 7550) | 24584 / 16 / 0 / 0 (none) |
+| seeds 1-200 at size 4 | quick | 200 | 6504 / 56 / 26 / 14 (6: 9, 47, 49, 108, 148, 187) | 6540 / 60 / 0 / 0 (none) |
+| seeds 201-400 at size 4, not used before | quick | 200 | 6529 / 52 / 18 / 1 (6: 204, 208, 305, 339, 370, 372) | 6548 / 52 / 0 / 0 (none) |
+
+Of the bad cells before, those on `std::jit` alone (seeds 5254, 7016, 47, 187, 204, 208, 305,
+370, 372) are the JIT line's. With these commits on `a3554607`, before the JIT fixes were
+merged, only cells on `std::jit` were left (all of those seeds but 370), and seed 187 had two
+more of them (`std::opt` and `std::macro std::opt` on `std::jit`, which passed before; the
+bytecode VM, which runs the same bytecode, printed the expected output). Cause by program: E
+5362; F 166, 249, 426, 5321 and 9, 49, 148 at size 4 (each passes with E and F alone and not
+with E alone); G 108 at size 4. Seeds 975 (bad on `std::prl` only, as E is), 7550 and 339 at
+size 4 pass since these commits and were not reduced.
+
+The default test set on `d944ff79` with these commits: 2275 tests, 2265 pass, 10 skipped, none
+fails. (On `4e14dee7`, 1969 tests: `gc_pacing.growth_25_prl` failed in one full run on a loaded
+machine and passed three times alone.) The five sets above were not run again after the last
+rebase.
+
+Graph sizes of the benchmark models after `std::inline`, `std::opt` and
+`std::macro std::opt::simplify` (`std::stats`), before and after on `a3554607`: the same
+number of graphs and branches for mlp, lenet, gru, resnet and transformer, 6 more nodes each
+(the GATE on a constant arm, cause G) and 33 to 39 fewer edges.
+
 ## How they were found
 
 | batch | seeds | features | matrix (cells per program) | programs | cells | agree | located refusal (legal) | silent mismatch | crash | run-stage error | other bad | not run | programs with a bad cell |
@@ -210,6 +303,8 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 | F32 | `fold_inline_match_arm_value.cml` | `std::opt::fold std::inline` | all | `L4 0 3 a` | `L4 0 0 a` (a pure function; no effect, no variable) | branch arm | fixed (A, e82fa21e) |
 | F36 | `inline_jit_second_call.cml` | `std::inline` | jit | `1`, `1`, `11` | `1`, `2`, `17` (found by hand: a self-tail-recursive function, right on its first call, wrong on later ones) | (other) wrong value after inlining | fixed (J-B) |
 | F35 | `opt_cast_argument_value.cml` | `std::opt`, `std::opt::simplify`, `std::specialize` | all | `7.5`, `17.25`, `10.75` | `0.5`, `-1.75`, `7.75` (found by hand: an argument written `i as float`) | (other) wrong value after a rewrite | fixed (D, ca28e0b8) |
+| F38 | `inline_prl_tail_call_arguments.cml` | `std::inline` | prl | `L4 0 6` | `L4 0 0` (a self tail call with its parameters permuted; nvm, fvm and jit print 6) | (other) wrong value after inlining | fixed (E, 7f1b3f05) |
+| F39 | `opt_dead_branch_laid_out.cml` | `std::opt`, `std::inline` | all | an empty line | nothing on nvm and prl; on fvm and jit the unreduced program repeats its first lines until memory is exhausted | branch arm | fixed (F, fda8ac4f) |
 
 ### Faults and crashes after a standard pass
 
@@ -222,6 +317,8 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 | F22 | `specialize_inline_crash.cml` | `std::specialize std::inline` | all | an empty line | segmentation fault | (other) crash after a rewrite | fixed (A, e82fa21e) |
 | F23 | `simplify_crash.cml` | `std::opt::simplify` | all | nothing | segmentation fault | (other) crash after a rewrite | passes since A-C; see the note below; the schedulers also misread the arm (cause C1, 741b8705) |
 | F34 | `opt_permanent_space.cml` | `std::specialize std::opt` | all (the pass fails before any scheduler runs) | nothing, exit 0 | `PassInternalError`: "Permanent space exhausted (32 MB of types and layouts)", no position, exit 1 | unbounded growth (a query that allocates; cause C3) | open: cause C3 |
+| F40 | `opt_rootless_callee_arm_tail.cml` | `std::opt`, `std::opt::simplify` | all (the pass fails) | nothing, exit 0 | `PassInternalError` of the branch-arm check, "GATE ... belongs to no arm"; before the check the unreduced program (seed 108, size 4) hung on nvm and prl | branch arm | fixed (G, 553d3bd8) |
+| F41 | `opt_argument_wait_on_join.cml` | `std::opt`, `std::opt::simplify` | all (the pass fails) | nothing, exit 0 | `PassInternalError` of the branch-arm check, "BRCH ... belongs to no arm"; before the check the program printed the right output | branch arm | fixed (H, 29198bff) |
 
 ### Without any pass
 

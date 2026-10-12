@@ -1,0 +1,15 @@
+/**
+ * Every element of a map faults and nothing isolates the fault: the program ends with the
+ * fault of element 0, on every run and on every back end.
+ */
+module parallel_lowest_index
+
+func tbl(): int[] { return [1, 2, 3] }
+func bad(x: int): int { return tbl()[x + 10] }
+
+func main(): int sync {
+    println('before')
+    println(range(0, 64)->map<bad>)
+    println('not reached')
+    return 0
+}

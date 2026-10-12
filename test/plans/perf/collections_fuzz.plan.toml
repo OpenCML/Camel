@@ -1,0 +1,46 @@
+id = "perf.collections_fuzz"
+order = 410
+tier = "benchmark"
+tags = ["perf", "collections", "map", "set", "fuzz", "gc"]
+desc = "The long runs of the random and differential tests of `Map<K, V>` and `Set<T>` (test/tools/collfuzz/collfuzz.py; docs/technical/31_map_and_set.md, section 8). The short runs are in the default set (compile.collections `collfuzz.quick`, mm.gc_collections `gc.collfuzz`); these take minutes and are run on demand: `node scripts/test.js test/plans/perf/collections_fuzz.plan.toml`."
+
+# A generated program is run on Camel and its output compared with the answer the generator
+# computed on Python dicts and sets. Every program runs under the default tree, the flat
+# sorted array and trees of tiny tables, with the invariants of every table checked
+# (CAMEL_COLL_VALIDATE=1).
+
+[defaults]
+kind = "behavior"
+tool = "python"
+case = "../../tools/collfuzz/collfuzz.py"
+expect_exit = 0
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "collfuzz.many_small"
+desc = "200 programs of 60 operations on collections of up to about 70 entries, on the four back ends under four representations: 3200 runs."
+args = ["${case}", "check", "--seeds", "1000:1200", "--ops", "60", "--size", "24", "--matrix", "quick"]
+expect_stdout_contains = ["3200 of 3200 runs agree with the reference", "PASS"]
+timeout_ms = 1800000
+
+[[tests]]
+name = "collfuzz.large"
+desc = "60 programs of 150 operations on collections of up to several hundred entries (trees under the default widths too), on the four back ends under four representations: 960 runs."
+args = ["${case}", "check", "--seeds", "2000:2060", "--ops", "150", "--size", "120", "--matrix", "quick"]
+expect_stdout_contains = ["960 of 960 runs agree with the reference", "PASS"]
+timeout_ms = 1800000
+
+[[tests]]
+name = "collfuzz.gc"
+desc = "40 programs of 40 operations under collection stress (a collection every third allocation and at every safepoint, heap verification before and after each), on std::nvm, std::fvm and std::prl under three representations, with the non-moving and with the moving collector: 720 runs."
+args = ["${case}", "check", "--seeds", "3000:3040", "--ops", "40", "--size", "16", "--matrix", "gc"]
+expect_stdout_contains = ["720 of 720 runs agree with the reference", "PASS"]
+timeout_ms = 3600000
+
+[[tests]]
+name = "collfuzz.gc_large"
+desc = "6 programs of 60 operations on collections of up to about 150 entries under the same collection stress: 108 runs."
+args = ["${case}", "check", "--seeds", "4000:4006", "--ops", "60", "--size", "50", "--matrix", "gc", "--timeout", "1800"]
+expect_stdout_contains = ["108 of 108 runs agree with the reference", "PASS"]
+timeout_ms = 3600000

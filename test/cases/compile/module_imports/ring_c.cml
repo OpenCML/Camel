@@ -1,0 +1,6 @@
+module ring_c
+import { f } from ring_a
+
+export func h(n: int): int {
+    return if n == 0 then 0 else f(n - 1)
+}

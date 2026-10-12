@@ -1,0 +1,8 @@
+[a, b]
+[A, B]
+padded|
+let-bound|
+IN AN ARRAY
+RETURNED returned|
+3 2.5
+42 2.5

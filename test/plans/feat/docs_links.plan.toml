@@ -1,0 +1,23 @@
+id = "docs.links"
+order = 920
+tier = "feat"
+tags = ["feat", "docs"]
+desc = "The relative links of the reader-facing documents point at files and headings that exist"
+
+# scripts/check-doc-links.mjs reads the READMEs, the roadmap, the design principles, the CLI
+# guides, the language reference, the tutorial, the technical index and the example READMEs,
+# and checks every relative link: the file exists and, for a link with a fragment, the target
+# has a heading with that anchor. `node scripts/check-doc-links.mjs --all` checks every
+# document of the repository.
+
+[[tests]]
+name = "docs.links.reader_facing"
+desc = "No broken relative link or anchor in the reader-facing documents."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["no broken links in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000

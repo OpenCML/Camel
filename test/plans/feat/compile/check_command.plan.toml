@@ -1,0 +1,87 @@
+id = "compile.check_command"
+order = 331
+tier = "feat"
+tags = ["feat", "compile", "cli", "check"]
+desc = "`camel check`: the exit code says whether an error was found, `-s` stops after the syntax tree, `-i` after the tokens"
+
+# `camel check` returned 0 whatever it found, and its options `-i` / `--lexical-only` and
+# `-s` / `--syntax-only` were read and ignored
+# (docs/issues/2026-10-12-language-surface-findings.md, 20). A file that does not parse is
+# named in its diagnostics by the module it declares, as it is in semantic ones (22).
+
+[defaults]
+kind = "behavior"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "check.semantic_error_exit"
+desc = "An unresolved name: the error is printed and the exit code is 1 (it was 0)."
+case = "../../../cases/compile/check/semantic_error.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 2
+
+[[tests]]
+name = "check.clean_exit"
+desc = "A program without errors: nothing is printed, nothing is run, the exit code is 0."
+case = "../../../cases/compile/check/clean.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["not printed by check", "Error"]
+
+[[tests]]
+name = "check.syntax_only_skips_semantics"
+desc = "`-s` stops once the file is a syntax tree: the unresolved name is not looked at."
+case = "../../../cases/compile/check/semantic_error.cml"
+args = ["check", "-s", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "UnresolvedReference"]
+
+[[tests]]
+name = "check.syntax_only_reports_syntax"
+desc = "`-s` reports a syntax error, with exit code 1; the diagnostic names the module the file declares."
+case = "../../../cases/compile/check/syntax_error.cml"
+args = ["check", "--syntax-only", "-O", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_line = 5
+expect_output_contains = ["(my_module)"]
+expect_output_not_contains = ["(main)"]
+
+[[tests]]
+name = "check.lexical_only_skips_syntax"
+desc = "`-i` stops after the tokens: a file whose tokens are all valid passes although it does not parse."
+case = "../../../cases/compile/check/syntax_error.cml"
+args = ["check", "-i", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["Error"]
+
+[[tests]]
+name = "check.lexical_only_reports_lexical"
+desc = "`-i` reports an illegal character, with exit code 1."
+case = "../../../cases/compile/check/lexical_error.cml"
+args = ["check", "--lexical-only", "-O", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::IllegalCharacter"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 15
+
+[[tests]]
+name = "check.json_exit"
+desc = "With `-O json` the output is the diagnostics array and the exit code is 1 as well."
+case = "../../../cases/compile/check/semantic_error.cml"
+args = ["check", "-O", "json", "${case}"]
+expect_exit = 1
+expect_stdout_contains = ["UnresolvedReference"]
+
+[[tests]]
+name = "check.run_syntax_error_module_name"
+desc = "Running a file that does not parse: the syntax diagnostic reads `(my_module)`, not `(main)`."
+case = "../../../cases/compile/check/syntax_error.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_output_contains = ["(my_module)"]
+expect_output_not_contains = ["(main)"]
