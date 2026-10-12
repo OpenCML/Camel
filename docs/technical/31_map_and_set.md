@@ -3,7 +3,7 @@
 This note describes the two built-in collection types `Map<K, V>` and `Set<T>`: what was
 ruled, what was investigated, what was chosen and why, what was measured, and what remains
 for the language author. The normative text is `docs/design-principles.cn.md` section 2.9,
-"数据与控制"; the user-facing description is `docs/language/` 3.2.6 and 6.3.2.
+"数据与控制"; the user-facing description is `docs/language/` 3.5 and 6.3.
 
 Choices the design principles do not make are collected in section 10. Each is implemented
 the way that section recommends and marked in the code with `DESIGN-QUESTION(<tag>)`, so that

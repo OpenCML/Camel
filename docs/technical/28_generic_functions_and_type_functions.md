@@ -2,8 +2,8 @@
 
 This note describes how generic functions (`typeas`) and type functions (type declarations
 with parameters) are compiled. The normative text is `docs/design-principles.cn.md` section
-2.9, "类型、泛型与类型函数"; the user-facing description is in `docs/language/` (3.2.3, 7.2.5,
-7.2.6). Everything here happens while a module is compiled: no pass, backend or runtime
+2.9, "类型、泛型与类型函数"; the user-facing description is in `docs/language/` (3.1, 7.5,
+7.7). Everything here happens while a module is compiled: no pass, backend or runtime
 structure knows about either construct.
 
 ## 1. What they are on the graph
