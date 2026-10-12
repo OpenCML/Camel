@@ -27,6 +27,7 @@
 #include "../../runtime/jit_debug_trace.h"
 #include "../../runtime/trampoline.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/mm/gen.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/utils/assert.h"
@@ -105,6 +106,20 @@ isTrapFreeConstDivisor(const Bytecode &bc, const camel::runtime::GCGraph *graph,
 std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
     if (unit.graphLength == 0)
         return "graph bytecode span is empty";
+    // Compiled code has no stack maps: the collector neither sees nor updates what a native
+    // frame or a register holds, and a static slot that the code reads is baked into it as
+    // an immediate (emitLoadStaticConst), i.e. as the address the object had at compile time.
+    // With the moving collector a graph is therefore compiled only when none of its slots,
+    // dynamic or static, holds an object reference: what the native frames of such a graph
+    // hold are scalars, whatever the collector does while they exist.
+    if (camel::core::mm::autoSpace().youngGenCopyingEnabled() && unit.runtimeGraph != nullptr) {
+        const auto *dynamicLayout = unit.runtimeGraph->runtimeDataType();
+        if (dynamicLayout != nullptr && dynamicLayout->refCount() != 0)
+            return "the graph holds object references in its frame (moving collector)";
+        const auto *staticLayout = unit.runtimeGraph->staticDataType();
+        if (staticLayout != nullptr && staticLayout->refCount() != 0)
+            return "the graph has object constants (moving collector)";
+    }
     const size_t graphEnd = unit.entryPc + unit.graphLength;
     ASSERT(
         graphEnd <= unit.bytecodes.size(),
