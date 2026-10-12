@@ -408,7 +408,7 @@ timeout_ms = 30000
 # Granularity: a scope runs as a task graph only when it has two unordered items that are each
 # a higher-order operator or a call of a heavy graph (one that reaches a higher-order operator,
 # a module operator or a call of a function value). Asserted through the scheduler's statistics
-# line (CAMEL_TF_GC_STATS: "[taskflow] run: task_graphs=N"), not through time.
+# line (CAMEL_TF_GC_STATS: "[taskflow] run: task_graphs=N workers=W"), not through time.
 [[tests]]
 name = "scalar_recursion_inline.prl"
 desc = "Light side of the granularity rule: fib and a mutual recursion, bodies of built-in arithmetic only, make unordered recursive calls but run inline under PRL: 0 task graphs."
