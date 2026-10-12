@@ -44,8 +44,10 @@ type Pair<T> = (T, T)
   |---|---|
   | `float(3)` | `3.0` |
   | `int(3.99)`, `int(-3.99)` | `3`, `-3` (truncation towards zero) |
-  | `int('42')`, `float('1.5')` | `42`, `1.5`; text that is not a number is the fault `RuntimeDiag::InvalidNumberText` |
-  | `parse_int('42')`, `parse_float('x')` | `int!`, `float!`: when the text is not a number the result is an error value, not a fault (see 3.4) |
+  | `int(1.0e30)`, `int(nan)`, `int(inf)`, `i32(5000000000)` | The fault `RuntimeDiag::ConversionOutOfRange`: the value does not fit the target type (a float that is NaN, infinite, or whose truncation is outside the integer type; an `int` outside `i32`). The message gives the value and the target type |
+  | `f32(1.0e39)` | `inf`: a float converted to a narrower float is rounded as IEEE says, and beyond the range that is an infinity, not a fault |
+  | `int('42')`, `float('1.5')` | `42`, `1.5`. **The whole string must be one number**: it may carry one sign (`'-12'`, `'+12'`), an integer is decimal digits only, a float may have a fraction and an exponent (`'1e3'`, `'.5'`) or be `inf` or `nan`. Blanks around it (`' 7'`), anything after the number (`'12abc'`), `'1.5'`, `'0x10'` or `'1_000'` for an integer, and a number outside the range of the type are the fault `RuntimeDiag::InvalidNumberText` |
+  | `parse_int('42')`, `parse_float('x')` | `int!`, `float!`: read by the same rule; text that is not one number gives an error value (`ParseError`), not a fault (see 3.4) |
   | `string(42)`, `string(true)`, `string([1, 2])` | `'42'`, `'true'`, `'[1, 2]'` |
   | `string(3.5)` | `'3.500000'` (fixed 6 decimal places; for another format use `format`) |
 

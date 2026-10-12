@@ -1,0 +1,32 @@
+1
+1
+-1
+-1
+9200000000000000000
+error ConversionOutOfRange: Cannot convert 9.2e+18 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+error ConversionOutOfRange: Cannot convert 9.3e+18 to i64: the value is outside the range of i64 (-9223372036854775808 to 9223372036854775807).
+error ConversionOutOfRange: Cannot convert 9.3e+18 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+error ConversionOutOfRange: Cannot convert -9.3e+18 to i64: the value is outside the range of i64 (-9223372036854775808 to 9223372036854775807).
+error ConversionOutOfRange: Cannot convert -9.3e+18 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+error ConversionOutOfRange: Cannot convert 1e+30 to i64: the value is outside the range of i64 (-9223372036854775808 to 9223372036854775807).
+error ConversionOutOfRange: Cannot convert 1e+30 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+2147483647
+2147483647
+2147483648
+error ConversionOutOfRange: Cannot convert 2147483648.0 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+-2147483648
+-2147483648
+-2147483649
+error ConversionOutOfRange: Cannot convert -2147483649.0 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+error ConversionOutOfRange: Cannot convert inf to i64: the value is outside the range of i64 (-9223372036854775808 to 9223372036854775807).
+error ConversionOutOfRange: Cannot convert inf to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+error ConversionOutOfRange: Cannot convert -inf to i64: the value is outside the range of i64 (-9223372036854775808 to 9223372036854775807).
+error ConversionOutOfRange: Cannot convert -inf to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+error ConversionOutOfRange: Cannot convert nan to i64: NaN is not a number an integer can hold.
+error ConversionOutOfRange: Cannot convert nan to i32: NaN is not a number an integer can hold.
+2147483647
+error ConversionOutOfRange: Cannot convert 2147483648 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+-2147483648
+error ConversionOutOfRange: Cannot convert -2147483649 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+error ConversionOutOfRange: Cannot convert 5000000000 to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+true

@@ -16,7 +16,7 @@
 
 /// x as a 64-bit integer.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not an integer; use parse_int to handle that in the program
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
 /// @example int(2.9)    // 2
 inner func int(x: i32 | int | f32 | float | string): int {
     return ':op/*tol'
@@ -24,7 +24,7 @@ inner func int(x: i32 | int | f32 | float | string): int {
 
 /// The same as int.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not an integer
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN
 /// @example i64('42')    // 42
 inner func i64(x: i32 | int | f32 | float | string): int {
     return ':op/*tol'
@@ -32,7 +32,7 @@ inner func i64(x: i32 | int | f32 | float | string): int {
 
 /// x as a 32-bit integer.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not an integer
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN
 /// @example i32(7)    // 7
 inner func i32(x: i32 | int | f32 | float | string): i32 {
     return ':op/*toi'
@@ -40,7 +40,7 @@ inner func i32(x: i32 | int | f32 | float | string): i32 {
 
 /// x as a 64-bit float.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not a number; use parse_float to handle that in the program
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one number; use parse_float to handle that in the program
 /// @example float(3)    // 3
 inner func float(x: i32 | int | f32 | float | string): float {
     return ':op/*tod'
@@ -71,7 +71,7 @@ inner func string(x: any): string {
 
 /// The integer a text spells, or an error value.
 /// @pure
-/// @fails error `ParseError` when the text is not an integer
+/// @fails error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped)
 /// @example parse_int('42') !! 0    // 42
 inner func parse_int(text: string): int! {
     return ':op/parse_int'

@@ -163,9 +163,13 @@ case = "../../../cases/consistency/values/float_special.cml"
 expect_stdout_starts_with = "inf\n-inf\n"
 
 [[tests]]
-name = "value.float_to_int_range"
-desc = "int() of a float outside the range of int, of an infinity and of NaN. The result is not laid down (a question for the language author; today it is what the hardware conversion gives); no crash, and the four back ends agree."
-kind = "behavior"
-case = "../../../cases/consistency/values/float_to_int_range.cml"
-expect_stdout_starts_with = "before\n"
-expect_stdout_contains = ["after"]
+name = "value.number_text"
+desc = "Text to number: the whole string must be one number. int(), i32() and float() fault on blanks, a trailing part, another base, a separator (seen through attempt); parse_int and parse_float give an error value by the same rule. (int('12abc') was 12, int(' 7') was 7, int('1e3') was 1.)"
+case = "../../../cases/consistency/values/number_text.cml"
+golden = "golden/number_text.txt"
+
+[[tests]]
+name = "value.number_fit"
+desc = "Number to number: a float inside the range truncates toward zero; NaN, an infinity, a float beyond the integer's range and an int beyond i32 are ConversionOutOfRange (seen through attempt); a float beyond f32 becomes an infinity."
+case = "../../../cases/consistency/values/number_fit.cml"
+golden = "golden/number_fit.txt"

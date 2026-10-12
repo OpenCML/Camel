@@ -20,6 +20,7 @@
 #include "cast.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/numeric_convert.h"
 
 #include <sstream>
 
@@ -32,31 +33,23 @@ slot_t __itoi__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot
 
 slot_t __ltoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 v = norm.get<Int64>(0);
-    return toSlot(static_cast<Int32>(v));
+    return toSlot(camel::core::checkedNarrow<Int32>(v, "i32"));
 }
 
 slot_t __ftoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 v = norm.get<Float32>(0);
-    return toSlot(static_cast<Int32>(v));
+    return toSlot(camel::core::checkedTruncate<Int32>(v, "i32"));
 }
 
 slot_t __dtoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 v = norm.get<Float64>(0);
-    return toSlot(static_cast<Int32>(v));
+    return toSlot(camel::core::checkedTruncate<Int32>(v, "i32"));
 }
 
 slot_t __stoi__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The whole string must be one number (design principles 2.10).
     String *s = norm.get<String *>(0);
-    try {
-        Int32 v = std::stoi(s->toString());
-        return toSlot(v);
-    } catch (...) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidNumberText,
-            s->toString(),
-            "i32",
-            "an integer");
-    }
+    return toSlot(camel::core::integerFromText<Int32>(s->view(), "i32"));
 }
 
 slot_t __itol__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -68,26 +61,18 @@ slot_t __ltol__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot
 
 slot_t __ftol__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float32 v = norm.get<Float32>(0);
-    return toSlot(static_cast<Int64>(v));
+    return toSlot(camel::core::checkedTruncate<Int64>(v, "i64"));
 }
 
 slot_t __dtol__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Float64 v = norm.get<Float64>(0);
-    return toSlot(static_cast<Int64>(v));
+    return toSlot(camel::core::checkedTruncate<Int64>(v, "i64"));
 }
 
 slot_t __stol__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The whole string must be one number (design principles 2.10).
     String *s = norm.get<String *>(0);
-    try {
-        Int64 v = std::stoll(s->toString());
-        return toSlot(v);
-    } catch (...) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidNumberText,
-            s->toString(),
-            "i64",
-            "an integer");
-    }
+    return toSlot(camel::core::integerFromText<Int64>(s->view(), "i64"));
 }
 
 slot_t __itof__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -108,17 +93,9 @@ slot_t __dtof__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __stof__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The whole string must be one number (design principles 2.10).
     String *s = norm.get<String *>(0);
-    try {
-        Float32 v = std::stof(s->toString());
-        return toSlot(v);
-    } catch (...) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidNumberText,
-            s->toString(),
-            "f32",
-            "a number");
-    }
+    return toSlot(camel::core::floatFromText<Float32>(s->view(), "f32"));
 }
 
 slot_t __itod__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -139,17 +116,9 @@ slot_t __ftod__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __dtod__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot(0); }
 
 slot_t __stod__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // The whole string must be one number (design principles 2.10).
     String *s = norm.get<String *>(0);
-    try {
-        Float64 v = std::stod(s->toString());
-        return toSlot(v);
-    } catch (...) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidNumberText,
-            s->toString(),
-            "f64",
-            "a number");
-    }
+    return toSlot(camel::core::floatFromText<Float64>(s->view(), "f64"));
 }
 
 slot_t __itos__(ArgsView &with, ArgsView &norm, Context &ctx) {

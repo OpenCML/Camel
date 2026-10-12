@@ -1,0 +1,114 @@
+[12]
+12
+12
+12
+12
+12
+[-12]
+-12
+-12
+-12
+-12
+-12
+[+12]
+12
+12
+12
+12
+12
+[ 7]
+error InvalidNumberText: Cannot convert the string ' 7' to i64.
+error InvalidNumberText: Cannot convert the string ' 7' to i32.
+error InvalidNumberText: Cannot convert the string ' 7' to f64.
+error ParseError: ' 7' is not an integer
+error ParseError: ' 7' is not a number
+[7 ]
+error InvalidNumberText: Cannot convert the string '7 ' to i64.
+error InvalidNumberText: Cannot convert the string '7 ' to i32.
+error InvalidNumberText: Cannot convert the string '7 ' to f64.
+error ParseError: '7 ' is not an integer
+error ParseError: '7 ' is not a number
+[12abc]
+error InvalidNumberText: Cannot convert the string '12abc' to i64.
+error InvalidNumberText: Cannot convert the string '12abc' to i32.
+error InvalidNumberText: Cannot convert the string '12abc' to f64.
+error ParseError: '12abc' is not an integer
+error ParseError: '12abc' is not a number
+[]
+error InvalidNumberText: Cannot convert the string '' to i64.
+error InvalidNumberText: Cannot convert the string '' to i32.
+error InvalidNumberText: Cannot convert the string '' to f64.
+error ParseError: '' is not an integer
+error ParseError: '' is not a number
+[1.5]
+error InvalidNumberText: Cannot convert the string '1.5' to i64.
+error InvalidNumberText: Cannot convert the string '1.5' to i32.
+1.5
+error ParseError: '1.5' is not an integer
+1.5
+[1e3]
+error InvalidNumberText: Cannot convert the string '1e3' to i64.
+error InvalidNumberText: Cannot convert the string '1e3' to i32.
+1000
+error ParseError: '1e3' is not an integer
+1000
+[0x10]
+error InvalidNumberText: Cannot convert the string '0x10' to i64.
+error InvalidNumberText: Cannot convert the string '0x10' to i32.
+error InvalidNumberText: Cannot convert the string '0x10' to f64.
+error ParseError: '0x10' is not an integer
+error ParseError: '0x10' is not a number
+[1_000]
+error InvalidNumberText: Cannot convert the string '1_000' to i64.
+error InvalidNumberText: Cannot convert the string '1_000' to i32.
+error InvalidNumberText: Cannot convert the string '1_000' to f64.
+error ParseError: '1_000' is not an integer
+error ParseError: '1_000' is not a number
+[3000000000]
+3000000000
+error InvalidNumberText: Cannot convert the string '3000000000' to i32 (the number is outside its range).
+3e+09
+3000000000
+3e+09
+[99999999999999999999]
+error InvalidNumberText: Cannot convert the string '99999999999999999999' to i64 (the number is outside its range).
+error InvalidNumberText: Cannot convert the string '99999999999999999999' to i32 (the number is outside its range).
+1e+20
+error ParseError: '99999999999999999999' is out of the range of an integer
+1e+20
+[.5]
+error InvalidNumberText: Cannot convert the string '.5' to i64.
+error InvalidNumberText: Cannot convert the string '.5' to i32.
+0.5
+error ParseError: '.5' is not an integer
+0.5
+[inf]
+error InvalidNumberText: Cannot convert the string 'inf' to i64.
+error InvalidNumberText: Cannot convert the string 'inf' to i32.
+inf
+error ParseError: 'inf' is not an integer
+inf
+[-inf]
+error InvalidNumberText: Cannot convert the string '-inf' to i64.
+error InvalidNumberText: Cannot convert the string '-inf' to i32.
+-inf
+error ParseError: '-inf' is not an integer
+-inf
+[nan]
+error InvalidNumberText: Cannot convert the string 'nan' to i64.
+error InvalidNumberText: Cannot convert the string 'nan' to i32.
+nan
+error ParseError: 'nan' is not an integer
+nan
+[Infinity]
+error InvalidNumberText: Cannot convert the string 'Infinity' to i64.
+error InvalidNumberText: Cannot convert the string 'Infinity' to i32.
+error InvalidNumberText: Cannot convert the string 'Infinity' to f64.
+error ParseError: 'Infinity' is not an integer
+error ParseError: 'Infinity' is not a number
+[1e999]
+error InvalidNumberText: Cannot convert the string '1e999' to i64.
+error InvalidNumberText: Cannot convert the string '1e999' to i32.
+error InvalidNumberText: Cannot convert the string '1e999' to f64 (the number is outside its range).
+error ParseError: '1e999' is not an integer
+error ParseError: '1e999' is out of the range of a number

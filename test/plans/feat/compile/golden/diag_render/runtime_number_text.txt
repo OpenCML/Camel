@@ -3,5 +3,6 @@ error[RuntimeDiag::InvalidNumberText]: Cannot convert the string 'abc' to i64.
    |
  5 |     println(int(s))
    |             ^^^
-help: The string must hold an integer and nothing else that the conversion cannot skip. Check the
-      value before converting it; a conversion that fails is a fault and ends the program.
+help: The whole string must be an integer: no blanks before or after it and nothing else. A
+      conversion that fails is a fault and ends the program; parse_int and parse_float return an
+      error value (T!) instead.

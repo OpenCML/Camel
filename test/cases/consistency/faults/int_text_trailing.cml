@@ -1,0 +1,13 @@
+/**
+ * int('12abc'): a number followed by something else is not a number (it used to give 12).
+ */
+module int_text_trailing
+
+func conv(s: string): int { return int(s) }
+
+func main(): int sync {
+    println(conv('12'))
+    println(conv('12abc'))
+    println('not reached')
+    return 0
+}

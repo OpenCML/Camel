@@ -25,6 +25,7 @@
  * a pass that evaluates one early changes nothing as long as its result is used in that arm.
  */
 
+#include "camel/utils/number_text.h"
 #include "tagged.h"
 #include "camel/core/context/context.h"
 #include "camel/core/rtdata/tagged.h"
@@ -97,39 +98,28 @@ slot_t __error_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 
-/// The text without surrounding blanks; a number may be written with them.
-std::string_view trimmed(std::string_view text) {
-    const auto blank = [](char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; };
-    while (!text.empty() && blank(text.front())) {
-        text.remove_prefix(1);
-    }
-    while (!text.empty() && blank(text.back())) {
-        text.remove_suffix(1);
-    }
-    return text;
-}
-
+/// `parse_int` and `parse_float` read a number under the rule of the conversion functions
+/// (design principles 2.10): the whole string must be one number, without blanks around it.
+/// What is a fault there is an error value here.
 template <typename T>
 slot_t parseNumber(ArgsView &norm, const TupleType *resultType, const char *what, const char *op) {
-    String *str            = norm.get<String *>(0);
-    const std::string raw  = str ? str->toString() : std::string();
-    std::string_view text  = trimmed(raw);
-    const bool explicitPos = !text.empty() && text.front() == '+';
-    if (explicitPos) {
-        text.remove_prefix(1);
-    }
+    String *str           = norm.get<String *>(0);
+    const std::string raw = str ? str->toString() : std::string();
     T value{};
-    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
-    // A sign after '+' ("+-1") is not a number either.
-    const bool doubleSign = explicitPos && !text.empty() && text.front() == '-';
-    if (text.empty() || doubleSign || ec == std::errc::invalid_argument ||
-        end != text.data() + text.size()) {
+    camel::utils::NumberTextStatus status;
+    if constexpr (std::is_floating_point_v<T>) {
+        status = camel::utils::parseWholeFloat<T>(raw, value);
+    } else {
+        status = camel::utils::parseWholeInteger<T>(raw, value);
+    }
+    switch (status) {
+    case camel::utils::NumberTextStatus::Ok:
+        return makeOk(toSlot<T>(value), resultType);
+    case camel::utils::NumberTextStatus::OutOfRange:
+        return makeError("ParseError", "'" + raw + "' is out of the range of " + what, op);
+    default:
         return makeError("ParseError", "'" + raw + "' is not " + what, op);
     }
-    if (ec == std::errc::result_out_of_range) {
-        return makeError("ParseError", "'" + raw + "' is out of the range of " + what, op);
-    }
-    return makeOk(toSlot<T>(value), resultType);
 }
 
 } // namespace

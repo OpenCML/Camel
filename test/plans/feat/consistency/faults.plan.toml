@@ -253,6 +253,53 @@ expect_diagnostic_column = 13
 # --- conversions --------------------------------------------------------------------------
 
 [[tests]]
+name = "fault.int_text_trailing"
+desc = "int('12abc') is a fault: the whole string must be one number (design principles 2.10). It gave 12."
+case = "../../../cases/consistency/faults/int_text_trailing.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 36
+expect_stdout_starts_with = "12\n"
+expect_output_contains = ["Cannot convert the string '12abc' to i64."]
+
+[[tests]]
+name = "fault.int_text_blank"
+desc = "int(' 7') is a fault: blanks are not part of a number. It gave 7."
+case = "../../../cases/consistency/faults/int_text_blank.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
+expect_diagnostic_line = 6
+expect_stdout_starts_with = "7\n"
+expect_output_contains = ["Cannot convert the string ' 7' to i64."]
+
+[[tests]]
+name = "fault.float_to_int_range"
+desc = "int(1e30): a float beyond the range of int is a fault with a code of its own, the value and the target type in the message. (It gave what the hardware conversion gives.)"
+case = "../../../cases/consistency/faults/float_to_int_range.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_code = "0x04000050"
+expect_diagnostic_line = 6
+expect_stdout_starts_with = "before\n9000000000000000000\n"
+expect_output_contains = ["Cannot convert 1e+30 to i64: the value is outside the range of i64 (-9223372036854775808 to 9223372036854775807)."]
+
+[[tests]]
+name = "fault.float_nan_to_int"
+desc = "int(nan) is a fault."
+case = "../../../cases/consistency/faults/float_nan_to_int.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_line = 6
+expect_stdout_starts_with = "2\n"
+expect_output_contains = ["Cannot convert nan to i64: NaN is not a number an integer can hold."]
+
+[[tests]]
+name = "fault.i32_out_of_range"
+desc = "i32(5000000000): an int beyond i32 is a fault. It wrapped to 705032704."
+case = "../../../cases/consistency/faults/i32_out_of_range.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_line = 6
+expect_stdout_starts_with = "5\n"
+expect_output_contains = ["Cannot convert 5000000000 to i32: the value is outside the range of i32 (-2147483648 to 2147483647)."]
+
+[[tests]]
 name = "fault.parse_int"
 desc = "int('abc') stops the program at the conversion (int() of a string is a fault; parse_int returns an error value). The name of the diagnostic is left to the agreement check."
 case = "../../../cases/consistency/faults/parse_int_fault.cml"

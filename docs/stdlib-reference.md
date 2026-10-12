@@ -69,7 +69,7 @@ int: (x: i32 | int | f32 | float | string) => int
 x as a 64-bit integer.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not an integer; use parse_int to handle that in the program.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program.
 - Example: `int(2.9)` gives `2`
 
 #### `i64`
@@ -81,7 +81,7 @@ i64: (x: i32 | int | f32 | float | string) => int
 The same as int.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not an integer.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN.
 - Example: `i64('42')` gives `42`
 
 #### `i32`
@@ -93,7 +93,7 @@ i32: (x: i32 | int | f32 | float | string) => i32
 x as a 32-bit integer.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not an integer.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN.
 - Example: `i32(7)` gives `7`
 
 #### `float`
@@ -105,7 +105,7 @@ float: (x: i32 | int | f32 | float | string) => float
 x as a 64-bit float.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not a number; use parse_float to handle that in the program.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one number; use parse_float to handle that in the program.
 - Example: `float(3)` gives `3`
 
 #### `f64`
@@ -152,7 +152,7 @@ parse_int: (text: string) => int!
 The integer a text spells, or an error value.
 
 - Pure.
-- Failure: error `ParseError` when the text is not an integer.
+- Failure: error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped).
 - Example: `parse_int('42') !! 0` gives `42`
 
 #### `parse_float`
