@@ -1,0 +1,19 @@
+id = "tools.lsp"
+order = 900
+tier = "feat"
+tags = ["feat", "tools", "lsp"]
+desc = "camel-ls, the language server. Each test is a script that starts the server, talks LSP to it over stdio (test/tools/lsp/client.mjs) and checks the answers."
+
+[defaults]
+kind = "behavior"
+tool = "node"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "ok "
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "lsp.basics"
+desc = "Lifecycle, full document synchronisation, pull diagnostics (code, data, range), whole-document formatting, MethodNotFound for an unknown request."
+case = "../../../cases/tools/lsp/basics.test.mjs"
