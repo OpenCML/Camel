@@ -169,6 +169,7 @@ inner func range(start: int, end: int): int[] {
 
 /// The first element. An empty array has none: check len first.
 /// @pure
+/// @fails fault `IndexOutOfRange` when the array is empty
 /// @example head([1, 2, 3])    // 1
 inner func head(xs: T[]): T {
     return ':struct/head_arr'
@@ -206,6 +207,7 @@ inner func contains(xs: T[]): bool {
 }
 
 /// Two arrays combined element by element into pairs. They must have the same length.
+/// Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
 /// @pure
 /// @fails fault `InvalidArgument` when the lengths differ
 /// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]

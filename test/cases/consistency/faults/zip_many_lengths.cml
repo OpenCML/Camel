@@ -1,0 +1,5 @@
+func main(): int sync {
+    println(zip([1, 2], ['a', 'b'], [1.5]))
+    println('not reached')
+    return 0
+}

@@ -1,0 +1,12 @@
+/**
+ * `zip` of three arrays gives triples. The result type always was an array of triples, but the
+ * tuples were built with two elements: the third array was dropped and `.2` read past the tuple.
+ */
+func main(): int sync {
+    let z = zip([1, 2], ['a', 'b'], [1.5, 2.5])
+    println(z)
+    println(z[0].0, z[0].1, z[0].2, z[1].2)
+    println(zip([1], [2]), zip([1, 2], [3, 4], [5, 6], [7, 8]))
+    println(len(zip([true], ['x'], [0])))
+    return 0
+}

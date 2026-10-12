@@ -32,3 +32,9 @@ name = "surface.member_chain"
 desc = "`t.0.1`, `p.pair.1.0`, `f(x).0.1`, `ts[1].0.1`: a chain of tuple indices, whose `0.1` the lexer reads as one real number."
 case = "../../../cases/consistency/surface/member_chain.cml"
 golden = "golden/surface_member_chain.txt"
+
+[[tests]]
+name = "surface.zip_many"
+desc = "`zip` of three or four arrays gives tuples of three or four elements (it built pairs under a type of triples and dropped the third array)."
+case = "../../../cases/consistency/surface/zip_many.cml"
+golden = "golden/surface_zip_many.txt"

@@ -43,30 +43,49 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *lhs    = norm.get<Array *>(0);
-    Array *rhs    = norm.get<Array *>(1);
-    auto *lhsType = tt::as_ptr<ArrayType>(norm.type(0));
-    auto *rhsType = tt::as_ptr<ArrayType>(norm.type(1));
-    auto *tupleType =
-        TupleType::create(std::vector<Type *>{lhsType->elemType(), rhsType->elemType()});
+    // Two or more arrays (the resolver refuses fewer); the result type is an array of tuples
+    // with one element per array. With three arrays the tuples used to be built with two
+    // elements under a type of three: the third array was dropped and reading `.2` read
+    // past the tuple.
+    const size_t arity = norm.size();
+    std::vector<Array *> arrays;
+    std::vector<Type *> elemTypes;
+    arrays.reserve(arity);
+    elemTypes.reserve(arity);
+    for (size_t k = 0; k < arity; ++k) {
+        arrays.push_back(norm.get<Array *>(k));
+        elemTypes.push_back(tt::as_ptr<ArrayType>(norm.type(k))->elemType());
+    }
+    auto *tupleType  = TupleType::create(std::move(elemTypes));
     auto *resultType = ArrayType::create(tupleType);
 
-    size_t n = lhs->size();
-    if (rhs->size() != n) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "zip",
-            std::format(
-                "the two sequences have {} and {} elements, and they must have the same number",
-                n,
-                rhs->size()));
+    const size_t n = arrays[0]->size();
+    for (size_t k = 1; k < arity; ++k) {
+        if (arrays[k]->size() != n) {
+            throwRuntimeFault(
+                RuntimeDiag::InvalidArgument,
+                "zip",
+                arity == 2
+                    ? std::format(
+                          "the two sequences have {} and {} elements, and they must have the "
+                          "same number",
+                          n,
+                          arrays[k]->size())
+                    : std::format(
+                          "sequences 1 and {} have {} and {} elements, and all must have the "
+                          "same number",
+                          k + 1,
+                          n,
+                          arrays[k]->size()));
+        }
     }
 
     Array *result = Array::create(mm::autoSpace(), n);
     for (size_t i = 0; i < n; ++i) {
-        Tuple *t = Tuple::create(2, mm::autoSpace());
-        t->set<slot_t>(0, lhs->get<slot_t>(i), tupleType);
-        t->set<slot_t>(1, rhs->get<slot_t>(i), tupleType);
+        Tuple *t = Tuple::create(arity, mm::autoSpace());
+        for (size_t k = 0; k < arity; ++k) {
+            t->set<slot_t>(k, arrays[k]->get<slot_t>(i), tupleType);
+        }
         result->set<rtdata::Object *>(i, t, resultType);
     }
     return rtdata::toSlot(result);
@@ -75,7 +94,9 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __head_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr = norm.get<Array *>(0);
     if (!arr || arr->size() == 0) {
-        return NullSlot;
+        // An empty array has no first element: the same fault as `xs[0]`. It used to return
+        // a zero slot (0, 0.0, or a null object the caller then read as a value).
+        throwRuntimeFault(RuntimeDiag::IndexOutOfRange, Int64{0}, "an array", size_t{0});
     }
     return arr->get<slot_t>(0);
 }

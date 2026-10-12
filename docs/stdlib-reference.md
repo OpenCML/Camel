@@ -296,6 +296,7 @@ head: (xs: T[]) => T
 The first element. An empty array has none: check len first.
 
 - Pure.
+- Failure: fault `IndexOutOfRange` when the array is empty.
 - Example: `head([1, 2, 3])` gives `1`
 
 #### `tail`
@@ -350,6 +351,7 @@ zip: (xs: T[], ys: U[]) => (T, U)[]
 ```
 
 Two arrays combined element by element into pairs. They must have the same length.
+Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
 
 - Pure.
 - Failure: fault `InvalidArgument` when the lengths differ.

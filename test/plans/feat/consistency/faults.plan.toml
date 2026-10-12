@@ -330,3 +330,23 @@ kind = "behavior"
 case = "../../../cases/consistency/faults/error_reaches_main.cml"
 expect_exit = false
 expect_stdout_starts_with = "before\n"
+
+# --- the first element of an empty array -----------------------------------------------------
+
+[[tests]]
+name = "fault.head_empty"
+desc = "`head` of an empty array is the fault of `xs[0]` (it returned a zero value)."
+case = "../../../cases/consistency/faults/head_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_stdout_starts_with = "7\n"
+
+[[tests]]
+name = "fault.zip_many_lengths"
+desc = "`zip` of three arrays of which the third is shorter: InvalidArgument naming the two lengths."
+case = "../../../cases/consistency/faults/zip_many_lengths.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 13
+expect_output_contains = ["sequences 1 and 3 have 2 and 1 elements"]
