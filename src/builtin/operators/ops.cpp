@@ -630,6 +630,20 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
             }
             return arr->get<slot_t>(idx);
         }
+        case TypeCode::String: {
+            // A string is bytes and its indices count bytes (design principles 2.9).
+            // DESIGN-QUESTION(string-index): the byte at the index is returned as a string
+            // of that one byte; the alternative is a number (there is no byte type in the
+            // language). A byte of a multi-byte character is not a valid string by itself.
+            String *str = norm.get<String *>(0);
+            Int64 raw   = norm.get<Int64>(1);
+            size_t idx  = static_cast<size_t>(raw);
+            if (raw < 0 || idx >= str->size()) {
+                throwRuntimeFault(RuntimeDiag::IndexOutOfRange, raw, "a string", str->size());
+            }
+            const char byte = str->data()[idx];
+            return toSlot(String::from(std::string(1, byte), mm::autoSpace()));
+        }
         case TypeCode::Struct: {
             Struct *st = norm.get<Struct *>(0);
             Int64 raw  = norm.get<Int64>(1);
