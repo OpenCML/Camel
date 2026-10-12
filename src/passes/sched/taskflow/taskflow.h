@@ -110,9 +110,27 @@ namespace ctx = camel::core::context;
 //
 // Not covered (as before graphs ran as tasks): the collection the allocator runs inside an
 // allocation that finds the heap full; it does not go through a poll.
+// The part of a run that one fault ends (docs/technical/32_fault_isolation.md, 3.6). The run has
+// a root domain; every fault-isolation node opens one for the call it makes. A domain holds the
+// first fault raised in it and whether work in it that has not started may still start. Tasks
+// belong to the domain of the thread that started them (ThreadState::faultDomain).
+struct TaskflowFaultDomain {
+    TaskflowFaultDomain *parent = nullptr;
+    // Fault-isolation boundaries open around the domain (0: the root domain).
+    uint32_t isolationDepth = 0;
+    // Set by the first failure in the domain: items, calls and elements of the domain (and of
+    // the domains inside it) that have not started do not start.
+    std::atomic<bool> aborting{false};
+    std::mutex mutex;
+    // The first fault of the domain, the only one reported for it.
+    std::exception_ptr firstFault;
+};
+
 class TaskflowGcGate {
   public:
     struct alignas(64) ThreadState {
+        // The fault domain of what this thread is running (nullptr: the root domain).
+        TaskflowFaultDomain *faultDomain = nullptr;
         std::atomic<bool> active{false};
         uint32_t depth = 0;
         // Calls of graphs now open on this thread's native stack (for the diagnostic of a
@@ -310,6 +328,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         std::exception_ptr error;
         // Calls open on the thread that runs the scope; its tasks continue from there.
         uint32_t parentDepth = 0;
+        // The fault domain of the thread that runs the scope.
+        TaskflowFaultDomain *parentDomain = nullptr;
     };
     struct PlanScope {
         std::vector<PlanItem> items; // linear order
@@ -353,20 +373,45 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
 
     std::shared_mutex plansMutex_;
     std::unordered_map<camel::runtime::GCGraph *, std::unique_ptr<GraphPlan>> plans_;
-    // Set by the first task that fails; items not yet started then do nothing.
-    std::atomic<bool> aborting_{false};
+    // The fault domain of everything outside a fault-isolation boundary. A failure in it ends
+    // the run.
+    TaskflowFaultDomain rootDomain_;
+    // Number of domains that are aborting: while it is zero no thread has to look at its domain.
+    std::atomic<uint32_t> abortingDomains_{0};
+    TaskflowFaultDomain &domainOf(const TaskflowGcGate::ThreadState &thread) {
+        return thread.faultDomain ? *thread.faultDomain : rootDomain_;
+    }
+    // Whether work of `thread` that has not started must not start: its domain, or one that
+    // encloses it, is aborting.
+    // DESIGN-QUESTION(attempt-parallel-siblings): what has started runs to its end, what has
+    // not started does not start, and whoever waits for the work waits for all that started.
+    bool aborting(const TaskflowGcGate::ThreadState &thread) const {
+        if (abortingDomains_.load(std::memory_order_relaxed) == 0) [[likely]] {
+            return false;
+        }
+        const TaskflowFaultDomain *domain = thread.faultDomain ? thread.faultDomain : &rootDomain_;
+        for (; domain != nullptr; domain = domain->parent) {
+            if (domain->aborting.load(std::memory_order_acquire)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    void abortDomain(TaskflowFaultDomain &domain);
+    // A task of `domain` ended with the exception being handled: a fault that will be isolated
+    // aborts the domain, anything else (a recorded fault, exit(), a defect) the whole run.
+    void noteTaskFailure(TaskflowFaultDomain *domain);
     // The limit on calls open at once that are not tail calls, when one was given by the
     // option or the environment; 0 when not: the native stack alone then bounds a recursion
     // (camel/execute/limits.h). The count follows a call across threads: a task continues
     // from the open calls of the thread that started it (ThreadState::callDepth).
     size_t maxRecursionDepth_ = 0;
-    // The first fault of a run, the only one reported. Element functions that run
-    // concurrently can fault together; a fault ends the program, so one diagnostic is printed,
-    // and every later fault unwinds with what reporting the first one threw.
-    std::mutex faultMutex_;
-    std::exception_ptr firstFault_;
     // Reports `fault` at node `nodeRef` of `graph` (at the graph when the node has no source
-    // position) unless a fault was reported already, and unwinds.
+    // position) unless a fault was reported already in the fault domain of the calling thread,
+    // and unwinds. Element functions that run concurrently can fault together: only the first
+    // fault of a domain is reported (it ends the program, or becomes the error value of the
+    // fault-isolation node), and every later one unwinds with what reporting the first threw.
+    // DESIGN-QUESTION(attempt-parallel-first-fault): which is first is not defined.
     [[noreturn]] void raiseFault(
         const camel::core::error::RuntimeFault &fault, camel::runtime::GCGraph *graph,
         camel::runtime::gc_node_ref_t nodeRef);
@@ -432,6 +477,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::GCGraph *graph      = nullptr;
         camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
         uint32_t depth                      = 0;
+        TaskflowFaultDomain *domain         = nullptr;
     };
     // Calls the function value held in slot `funcIdx` of `funcFrame` (its graph is
     // `targetGraph`): `fillArgs(span)` reads the arguments and `sink(result)` stores the
@@ -556,6 +602,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     void mark_unordered_reduce_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         tf::Subflow &sf);
+    // The fault-isolation node: calls the function value given first on the calling thread, in
+    // a fault domain of its own, and turns a fault raised in it into the node's error value.
+    slot_t executeIsolateNode(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
 };
 
 class TfDumpPass : public GraphIRPass {

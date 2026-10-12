@@ -25,6 +25,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
@@ -198,17 +199,26 @@ struct OpenCall {
     uint32_t &depth_;
 };
 
-// A task continues from the calls open on the thread that started it: while the object lives,
-// the running thread counts from `depth`; afterwards from what it had (a worker that picked
-// the task up while waiting inside another call).
+// A task continues from the calls open on the thread that started it, in that thread's fault
+// domain: while the object lives, the running thread counts from `depth` and works in `domain`;
+// afterwards it has what it had (a worker that picked the task up while waiting inside another
+// call).
 struct InheritedDepth {
-    InheritedDepth(TaskflowGcGate::ThreadState &thread, uint32_t depth)
-        : depth_(thread.callDepth), saved_(thread.callDepth) {
-        depth_ = depth;
+    InheritedDepth(
+        TaskflowGcGate::ThreadState &thread, uint32_t depth, TaskflowFaultDomain *domain)
+        : thread_(thread), savedDepth_(thread.callDepth), savedDomain_(thread.faultDomain),
+          isolation_(domain ? domain->isolationDepth : 0) {
+        thread.callDepth   = depth;
+        thread.faultDomain = domain;
     }
-    ~InheritedDepth() { depth_ = saved_; }
-    uint32_t &depth_;
-    uint32_t saved_;
+    ~InheritedDepth() {
+        thread_.callDepth   = savedDepth_;
+        thread_.faultDomain = savedDomain_;
+    }
+    TaskflowGcGate::ThreadState &thread_;
+    uint32_t savedDepth_;
+    TaskflowFaultDomain *savedDomain_;
+    camel::core::error::InheritedFaultIsolation isolation_;
 };
 
 int64_t steadyNowNs() {
@@ -962,10 +972,11 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
         std::lock_guard lock(heavyMutex_);
         heavyGraphs_.clear();
     }
-    aborting_.store(false, std::memory_order_relaxed);
+    abortingDomains_.store(0, std::memory_order_relaxed);
     {
-        std::lock_guard lock(faultMutex_);
-        firstFault_ = nullptr;
+        std::lock_guard lock(rootDomain_.mutex);
+        rootDomain_.aborting.store(false, std::memory_order_relaxed);
+        rootDomain_.firstFault = nullptr;
     }
     {
         std::unique_lock lock(plansMutex_);
@@ -1094,7 +1105,10 @@ void TaskflowExecSchedPass::runScope(
                         // started is skipped.
                         try {
                             TaskflowGcRegion taskRegion;
-                            InheritedDepth inherited(taskRegion.thread(), self->parentDepth);
+                            InheritedDepth inherited(
+                                taskRegion.thread(),
+                                self->parentDepth,
+                                self->parentDomain);
                             runItems(
                                 *planPtr,
                                 scopePtr->chains[chain],
@@ -1102,7 +1116,7 @@ void TaskflowExecSchedPass::runScope(
                                 *self->tailNode,
                                 taskRegion);
                         } catch (...) {
-                            aborting_.store(true, std::memory_order_release);
+                            noteTaskFailure(self->parentDomain);
                             std::lock_guard lock(self->errorMutex);
                             if (!self->error) {
                                 self->error = std::current_exception();
@@ -1119,7 +1133,8 @@ void TaskflowExecSchedPass::runScope(
     taskGraphsRun_.fetch_add(1, std::memory_order_relaxed);
     instance->frame       = frame;
     instance->tailNode    = &tailNode;
-    instance->parentDepth = region.thread().callDepth;
+    instance->parentDepth  = region.thread().callDepth;
+    instance->parentDomain = region.thread().faultDomain;
     region.leave(); // the calling thread waits for (and helps with) the tasks from here on
     runOnExecutor(instance->flow);
     std::exception_ptr error = std::exchange(instance->error, nullptr);
@@ -1137,7 +1152,7 @@ void TaskflowExecSchedPass::runItems(
     std::atomic<uint32_t> &tailNode, TaskflowGcRegion &region) {
     GCGraph *graph = plan.graph;
     for (const PlanItem &item : items) {
-        if (aborting_.load(std::memory_order_relaxed)) [[unlikely]] {
+        if (aborting(region.thread())) [[unlikely]] {
             return;
         }
         switch (item.kind) {
@@ -1183,7 +1198,7 @@ void TaskflowExecSchedPass::runItems(
                     tailNode,
                     region);
             }
-            if (aborting_.load(std::memory_order_relaxed)) [[unlikely]] {
+            if (aborting(region.thread())) [[unlikely]] {
                 return;
             }
             if (item.afterTail && tailNode.load(std::memory_order_acquire) != kInvalidNodeRef) {
@@ -1209,7 +1224,7 @@ void TaskflowExecSchedPass::runLinearBody(
     std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
 
     for (size_t i = 0; i < nodes.size(); ++i) {
-        if (aborting_.load(std::memory_order_relaxed)) [[unlikely]] {
+        if (aborting(region.thread())) [[unlikely]] {
             return;
         }
         const gc_node_ref_t nodeRef = nodes[i];
@@ -1288,10 +1303,30 @@ void TaskflowExecSchedPass::runLinearBody(
     }
 }
 
+void TaskflowExecSchedPass::abortDomain(TaskflowFaultDomain &domain) {
+    if (!domain.aborting.exchange(true, std::memory_order_acq_rel)) {
+        abortingDomains_.fetch_add(1, std::memory_order_release);
+    }
+}
+
+void TaskflowExecSchedPass::noteTaskFailure(TaskflowFaultDomain *domain) {
+    try {
+        throw;
+    } catch (const Diagnostic &failure) {
+        abortDomain(domain != nullptr && isIsolatedFault(failure) ? *domain : rootDomain_);
+    } catch (...) {
+        abortDomain(rootDomain_);
+    }
+}
+
 void TaskflowExecSchedPass::raiseFault(
     const RuntimeFault &fault, GCGraph *graph, gc_node_ref_t nodeRef) {
-    std::lock_guard lock(faultMutex_);
-    if (!firstFault_) {
+    // A fault that no boundary isolates ends the run, wherever it was raised.
+    TaskflowFaultDomain &domain = isIsolatableFault(fault.diag())
+                                      ? domainOf(TaskflowGcGate::instance().self())
+                                      : rootDomain_;
+    std::lock_guard lock(domain.mutex);
+    if (!domain.firstFault) {
         auto site = makeGraphExecutionSite(context_->sourceContext(), graph, 0, "taskflow");
         if (nodeRef != kInvalidNodeRef) {
             if (const uint64_t origin = graph->nodeOrigin(nodeRef)) {
@@ -1300,13 +1335,15 @@ void TaskflowExecSchedPass::raiseFault(
         }
         // Reporting records the diagnostic and gives it back to be thrown, or throws itself
         // when the diagnostics sink stops at the first error (as the command line sets it).
+        // Inside a fault-isolation boundary an isolatable fault is described, not recorded.
         try {
             throw reportRuntimeFault(*context_, fault, site);
         } catch (...) {
-            firstFault_ = std::current_exception();
+            domain.firstFault = std::current_exception();
         }
+        abortDomain(domain);
     }
-    std::rethrow_exception(firstFault_);
+    std::rethrow_exception(domain.firstFault);
 }
 
 // Out of line: the fault is a large temporary, and the frame of the caller is what every level
@@ -1373,7 +1410,11 @@ void TaskflowExecSchedPass::callClosure(
     std::array<slot_t, 2> args{NullSlot, NullSlot};
     ASSERT(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
     TaskflowGcRegion region;
-    InheritedDepth inherited(region.thread(), site.depth);
+    InheritedDepth inherited(region.thread(), site.depth, site.domain);
+    // An element that has not started when its domain is aborting does not start.
+    if (aborting(region.thread())) [[unlikely]] {
+        return;
+    }
     requireCallRoom(region.thread(), site.graph, site.node);
     OpenCall openCall(region.thread().callDepth);
     region.enter();
@@ -1387,7 +1428,14 @@ void TaskflowExecSchedPass::callClosure(
         result = evalGraph(targetGraph, callee, region);
     } catch (...) {
         framePool_.release(callee);
+        // What is not a fault (exit(), a defect) stops the other elements as a fault does.
+        noteTaskFailure(site.domain);
         throw;
+    }
+    // The element was cut short by an abort raised elsewhere: it has no result.
+    if (aborting(region.thread())) [[unlikely]] {
+        framePool_.release(callee);
+        return;
     }
     sink(result);
     framePool_.release(callee);
@@ -1426,10 +1474,14 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
 
 slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    if (camel::execute::isFaultIsolationUri(graph->nodeBodyAs<GCOperBody>(nodeRef)->uri())) {
+        return executeIsolateNode(graph, nodeRef, frame);
+    }
     tf::Taskflow flow;
-    const uint32_t depth = TaskflowGcGate::instance().self().callDepth;
-    flow.emplace([this, graph, nodeRef, frame, depth](tf::Subflow &sf) {
-        InheritedDepth inherited(TaskflowGcGate::instance().self(), depth);
+    const uint32_t depth        = TaskflowGcGate::instance().self().callDepth;
+    TaskflowFaultDomain *domain = TaskflowGcGate::instance().self().faultDomain;
+    flow.emplace([this, graph, nodeRef, frame, depth, domain](tf::Subflow &sf) {
+        InheritedDepth inherited(TaskflowGcGate::instance().self(), depth, domain);
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
         const std::string uri(body->uri());
         if (uri == ":mark/map_arr") {
@@ -1886,6 +1938,8 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
             mark_foreach_arr(graph, nodeRef, frame, sf);
         } else if (uri == ":mark/unordered_foreach_arr") {
             mark_unordered_foreach_arr(graph, nodeRef, frame, sf);
+        } else if (camel::execute::isFaultIsolationUri(uri)) {
+            return executeIsolateNode(graph, nodeRef, frame);
         } else {
             const slot_t result = executePreparedOperator(graph, nodeRef, frame);
             frame->set(node->dataIndex, result);
@@ -2204,7 +2258,11 @@ gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
 void TaskflowExecSchedPass::mark_map_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
-    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
+    const ElementCallSite site{
+        graph,
+        nodeRef,
+        region.thread().callDepth,
+        region.thread().faultDomain};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2243,7 +2301,11 @@ void TaskflowExecSchedPass::mark_map_arr(
 void TaskflowExecSchedPass::mark_apply_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
-    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
+    const ElementCallSite site{
+        graph,
+        nodeRef,
+        region.thread().callDepth,
+        region.thread().faultDomain};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2290,7 +2352,11 @@ void TaskflowExecSchedPass::mark_apply_arr(
 void TaskflowExecSchedPass::mark_filter_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
-    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
+    const ElementCallSite site{
+        graph,
+        nodeRef,
+        region.thread().callDepth,
+        region.thread().faultDomain};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2332,7 +2398,11 @@ void TaskflowExecSchedPass::mark_filter_arr(
 void TaskflowExecSchedPass::mark_reduce_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
-    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
+    const ElementCallSite site{
+        graph,
+        nodeRef,
+        region.thread().callDepth,
+        region.thread().faultDomain};
     region.enter();
     const auto arrIdx     = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto withInputs = graph->withInputsOf(nodeRef);
@@ -2376,7 +2446,8 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     (void)sf;
     TaskflowGcRegion region;
-    const uint32_t depth = region.thread().callDepth;
+    const uint32_t depth        = region.thread().callDepth;
+    TaskflowFaultDomain *domain = region.thread().faultDomain;
     region.enter();
     const auto arrIdx     = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto withInputs = graph->withInputsOf(nodeRef);
@@ -2440,10 +2511,10 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
             continue;
         }
         level
-            .emplace([frame, arrIdx, begin, end, chunk, arrType, depth, &partialsRoot,
+            .emplace([frame, arrIdx, begin, end, chunk, arrType, depth, domain, &partialsRoot,
                       &hasPartial, &fold]() {
                 TaskflowGcRegion chunkRegion;
-                InheritedDepth inherited(chunkRegion.thread(), depth);
+                InheritedDepth inherited(chunkRegion.thread(), depth, domain);
                 chunkRegion.enter();
                 const slot_t acc = fold(
                     chunkRegion,
@@ -2481,7 +2552,11 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
 void TaskflowExecSchedPass::mark_foreach_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
-    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
+    const ElementCallSite site{
+        graph,
+        nodeRef,
+        region.thread().callDepth,
+        region.thread().faultDomain};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2517,7 +2592,11 @@ void TaskflowExecSchedPass::mark_foreach_arr(
 void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
     TaskflowGcRegion region;
-    const ElementCallSite site{graph, nodeRef, region.thread().callDepth};
+    const ElementCallSite site{
+        graph,
+        nodeRef,
+        region.thread().callDepth,
+        region.thread().faultDomain};
     region.enter();
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
@@ -2539,6 +2618,87 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     }
     sf.join();
     frame->set(dataIndexOf(graph, nodeRef), NullSlot);
+}
+
+// The fault-isolation node (docs/technical/32_fault_isolation.md, 3.6).
+//
+// The callee runs on the calling thread, like any call, in a fault domain of its own. Tasks it
+// starts inherit the domain. Every flow is joined by the thread that started it, so when a
+// fault arrives here as an exception, no task of the boundary is still running: the node gives
+// its error value only after everything that had started inside the boundary has ended.
+slot_t TaskflowExecSchedPass::executeIsolateNode(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    const auto *node = requireNode(graph, nodeRef);
+    TaskflowGcRegion region;
+    auto &thread = region.thread();
+    region.enter();
+    const auto normInputs = graph->normInputsOf(nodeRef);
+    ASSERT(!normInputs.empty(), "The fault-isolation node requires a function input.");
+    Function *func = frame->get<Function *>(dataIndexOf(graph, normInputs.front()));
+    ASSERT(func != nullptr && func->graph() != nullptr, "Fault-isolation callee is null.");
+    GCGraph *target = func->graph();
+
+    // The room for the call is the caller's: a recursion limit reached here is a fault of the
+    // enclosing graph, outside the boundary.
+    requireCallRoom(thread, graph, nodeRef);
+    OpenCall openCall(thread.callDepth);
+
+    std::vector<slot_t> args;
+    args.reserve(normInputs.size() - 1);
+    for (size_t i = 1; i < normInputs.size(); ++i) {
+        args.push_back(frame->get<slot_t>(dataIndexOf(graph, normInputs[i])));
+    }
+    Frame *callee = acquirePreparedClosureCallFrame(target, func->tuple(), args);
+
+    TaskflowFaultDomain domain;
+    domain.parent = thread.faultDomain ? thread.faultDomain : &rootDomain_;
+    // Leaves the domain: nothing of it is running any more.
+    const auto closeDomain = [&] {
+        if (domain.aborting.load(std::memory_order_acquire)) {
+            abortingDomains_.fetch_sub(1, std::memory_order_release);
+        }
+    };
+
+    slot_t value = NullSlot;
+    try {
+        FaultIsolationScope boundary;
+        domain.isolationDepth = faultIsolationDepth();
+        struct DomainScope {
+            DomainScope(TaskflowGcGate::ThreadState &t, TaskflowFaultDomain *d)
+                : thread(t), saved(t.faultDomain) {
+                thread.faultDomain = d;
+            }
+            ~DomainScope() { thread.faultDomain = saved; }
+            TaskflowGcGate::ThreadState &thread;
+            TaskflowFaultDomain *saved;
+        } domainScope(thread, &domain);
+        value = evalGraph(target, callee, region);
+    } catch (const Diagnostic &fault) {
+        framePool_.release(callee);
+        closeDomain();
+        if (!isIsolatedFault(fault)) {
+            throw;
+        }
+        region.enter();
+        const slot_t failed = camel::execute::isolatedFaultToError(fault);
+        frame->set(node->dataIndex, failed);
+        return failed;
+    } catch (...) {
+        framePool_.release(callee);
+        closeDomain();
+        throw;
+    }
+    closeDomain();
+    region.enter();
+    const auto *calleeType   = target->funcType();
+    const Type *calleeResult = calleeType ? calleeType->exitType() : nullptr;
+    const slot_t result      = camel::execute::wrapIsolatedResult(
+        value,
+        calleeResult,
+        frame->typeAt<Type>(node->dataIndex));
+    frame->set(node->dataIndex, result);
+    framePool_.release(callee);
+    return result;
 }
 
 template void TaskflowExecSchedPass::instantiate_graph_instance_generic<tf::Taskflow>(
