@@ -93,6 +93,7 @@ bool JsonModule::load() {
             // Functions of their argument: the same text or value gives the same result.
             {"encode", true},
             {"decode", true},
+            {"decode_as", true},
         });
     loaded_ = true;
     return true;
