@@ -106,6 +106,8 @@ class Builder {
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
 
     std::unordered_set<DraftGraphBuilder *> usedGraphs_;
+    // The decorated form of each function declared with decorators, by its own graph.
+    std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> decoratedOf_;
     std::unordered_map<DraftGraphBuilder *, node_modifier_map_t> nodeModifierMaps_;
     // With-arguments bound to a callee by `f<a, b>`, consumed when the callee is invoked. Kept
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
@@ -357,6 +359,10 @@ class Builder {
     // captured and calls it with them: what a function value of `target` refers to once the
     // captures of `target` have become with-parameters (createFuncDataNode).
     compile_graph_ptr_t forwardingGraphOf(const compile_graph_ptr_t &target);
+    // The functions named `name` when `decorated` is one of several of that name (the set a
+    // call chooses from); null when the decorated function is the only one.
+    graph_set_ptr_t
+    overloadsOfDecorated(const std::string &name, const compile_graph_ptr_t &decorated);
     // The function a decorated graph produces when its decorators run.
     node_handle_t lowerDecoratedGraphValue(
         const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin);

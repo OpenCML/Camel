@@ -1160,6 +1160,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     if (!annoNodes.empty()) {
         graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
         insertDecoratedGraph(name, decorated);
+        decoratedOf_[graph.get()] = decorated;
     }
 
     LEAVE("FUNC");
@@ -2045,6 +2046,11 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return drefNode;
     }
     auto optDecorated = decoratedGraphAt(name);
+    if (optDecorated.has_value() && overloadsOfDecorated(name, *optDecorated) != nullptr) {
+        // A decorated function that shares its name with other functions: the name stands
+        // for the set, and a call chooses among them (visitLinkNode).
+        optDecorated.reset();
+    }
     if (optDecorated.has_value()) {
         node_handle_t drefNode = graph->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{optDecorated.value()});
@@ -2585,6 +2591,21 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
     return decoratedGraph;
 }
 
+graph_set_ptr_t Builder::overloadsOfDecorated(
+    const std::string &name, const compile_graph_ptr_t &decorated) {
+    auto graphs = graphsAt(name);
+    if (!graphs.has_value() || graphs.value()->size() < 2) {
+        return nullptr;
+    }
+    for (const auto &g : *graphs.value()) {
+        auto it = decoratedOf_.find(g.get());
+        if (it != decoratedOf_.end() && it->second == decorated) {
+            return graphs.value();
+        }
+    }
+    return nullptr;
+}
+
 node_handle_t Builder::lowerDecoratedGraphValue(
     const compile_graph_ptr_t &decoratedGraph, const GCT::node_ptr_t &origin) {
     currGraph_->addDependencyGraph(decoratedGraph);
@@ -2824,6 +2845,38 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
 
+    // A call of a decorated function calls the function its decorators returned, so the
+    // arguments are checked against that function's parameters (they were not checked at
+    // all: a float passed where the decorated function takes an int was read as an int).
+    const auto callDecorated = [&](const compile_graph_ptr_t &decoratedGraph) {
+        node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
+        FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
+        StaticFuncTypeResolver resolver(factoryType);
+        if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+            reportConversionGaps(
+                {{std::string(), factoryType}},
+                withInputs,
+                normInputs,
+                withInputTypes,
+                normInputTypes,
+                gct);
+            diags_->of(SemanticDiag::ArgumentsMismatch)
+                .atOrigin(gct->load()->origin())
+                .commit(
+                    factoryType->toString(),
+                    std::format(
+                        "<{}> ({})",
+                        strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
+                        strutil::join(normInputTypes, ", ", [](Type *t) {
+                            return t->toString();
+                        })));
+            throw BuildAbortException();
+        }
+        targetNode = currGraph_->addCallNode(factoryType->exitType());
+        linkNodes(LinkType::With, decoratorInvoke, targetNode);
+        targetFuncType = factoryType;
+    };
+
     if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
         // A call of a generic function: the argument types select (and, the first time,
         // build) the instance, which is then called like any other function.
@@ -2844,11 +2897,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // The first overload, in declaration order, whose parameters take the arguments.
             // Only the chosen one has to be complete: an overload the call does not mean may
             // still be waiting for its return type.
+            // A decorated overload is what its decorators return: it is chosen by that
+            // function's parameters and called through it.
+            compile_graph_ptr_t chosenDecorated = nullptr;
+            const auto signatureOf = [&](const compile_graph_ptr_t &g) -> FunctionType * {
+                if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
+                    return tt::as_ptr<FunctionType>(it->second->funcType()->exitType());
+                }
+                return g->funcType();
+            };
             for (const auto &g : *graphs) {
-                const auto &funcType = g->funcType();
+                FunctionType *funcType = signatureOf(g);
                 StaticFuncTypeResolver resolver(funcType);
                 if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
                     continue;
+                }
+                if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
+                    chosenDecorated = it->second;
+                    break;
                 }
                 if (!funcType->hasExitType()) {
                     if (failedBodies_.contains(g.get())) {
@@ -2863,10 +2929,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 targetGraph = g;
                 break;
             }
-            if (!targetGraph) {
+            if (!targetGraph && !chosenDecorated) {
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
                 for (const auto &g : *graphs) {
-                    candidates.emplace_back(g->name(), g->funcType());
+                    candidates.emplace_back(g->name(), signatureOf(g));
                 }
                 reportConversionGaps(
                     candidates,
@@ -2884,8 +2950,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     strutil::join(
                         *graphs,
                         "\n    ",
-                        [](const graph_ptr_t &g) {
-                            return g->name() + ": " + g->funcType()->toString();
+                        [&](const graph_ptr_t &g) {
+                            return g->name() + ": " + signatureOf(g)->toString();
                         }) +
                     "\n";
                 diags_->of(SemanticDiag::NoMatchingFunction)
@@ -2893,9 +2959,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     .commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
-            currGraph_->addDependencyGraph(targetGraph);
-            targetNode     = createFuncDataNode(targetGraph, false, true);
-            targetFuncType = targetGraph->funcType();
+            if (chosenDecorated) {
+                callDecorated(chosenDecorated);
+            } else {
+                currGraph_->addDependencyGraph(targetGraph);
+                targetNode     = createFuncDataNode(targetGraph, false, true);
+                targetFuncType = targetGraph->funcType();
+            }
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops        = std::get<oper_group_ptr_t>(drefTarget);
             // Constant arguments (shape literals, axes) let operators refine their result type.
@@ -3023,12 +3093,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
         } else if (std::holds_alternative<graph_ptr_t>(drefTarget)) {
-            auto decoratedGraph           = std::get<graph_ptr_t>(drefTarget);
-            node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
-            FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
-            targetNode                    = currGraph_->addCallNode(factoryType->exitType());
-            linkNodes(LinkType::With, decoratorInvoke, targetNode);
-            targetFuncType = factoryType;
+            callDecorated(std::get<graph_ptr_t>(drefTarget));
         } else {
             ASSERT(false, "Dref target must be graph set, operator group, or decorated graph.");
         }
@@ -4211,6 +4276,18 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
             continue;
         }
         auto optDecorated = decoratedGraphAt(ref.toString());
+        if (optDecorated.has_value() &&
+            overloadsOfDecorated(ref.toString(), *optDecorated) != nullptr) {
+            // An exported name is one decorated function or a set of plain ones; the set of
+            // both has no exported form yet. Exporting the decorated one alone dropped the
+            // others without a word.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .atOrigin(gct->load()->origin())
+                .commit(
+                    ref.toString(),
+                    "a decorated function that has overloads cannot be exported yet");
+            throw BuildAbortException();
+        }
         if (optDecorated.has_value()) {
             module_->exportEntity(
                 ref,

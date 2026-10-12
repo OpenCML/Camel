@@ -213,7 +213,7 @@ match dir {
 - 写在 `func` 之前的 **`sync`** 是函数修饰符：声明函数有副作用、需要被同步（带 `var` 形参的函数必须如此声明）；它**不会**使函数体成为同步块。要让函数体按书写顺序执行，把函数体写成同步块：`func f(): T sync { ... }`，或两者并用 `sync func f(): T sync { ... }`（见第 4 章 4.4.2、4.4.3）。
 - `var` 形参是引用；把 `let` 对象传给 `var` 形参是编译期错误（见第 4 章 4.4.4）。
 - **parentParams**：**`'(' pairedParams? ','? ')'`**；**keyParamPair**：**`var? identDef ':' typeExpr ('=' dataExpr)?`**。
-- **重载**：同一个块里同名而形参类型不同的函数是重载，各有自己的子图；调用按书写顺序取第一个形参接受实参的。形参类型完全相同的第二个同名函数是编译期错误 `SemanticDiag::Redeclaration`（返回类型与形参名不参与区分）。泛型函数不能与其他函数同名。
+- **重载**：同一个块里同名而形参类型不同的函数是重载，各有自己的子图；调用按书写顺序取第一个形参接受实参的。形参类型完全相同的第二个同名函数是编译期错误 `SemanticDiag::Redeclaration`（返回类型与形参名不参与区分）。泛型函数不能与其他函数同名。重载里可以有带装饰器的函数：它参与选择时用的是装饰器返回的那个函数的形参，被选中后调用的也是那个函数；对带装饰器的函数的调用按那个函数的形参检查实参（不匹配是 `SemanticDiag::ArgumentsMismatch`）。既有带装饰器的函数又有其他重载的名字目前不能导出（`SemanticDiag::ConstructNotSupported`）。
 - **函数作为值**：只代表一个函数的名字可以当值用，凡是能写值的位置都可以——作实参、`with` 实参、`let g = f`、`var v = f`、`return f`、数组／元组／结构体字面量的元素（`[inc, dec]`）、`if` 与 `match` 分支臂的值（`if c then inc else dec`）、被 lambda 捕获。代表运算符或一组重载的名字没有单一的函数值：在上述位置使用它是编译期错误 `SemanticDiag::FunctionNameAsValue`，可改写成参数类型写明的 lambda。泛型函数的名字不能当值用（`SemanticDiag::GenericFunctionAsValue`）。
 
 **无参、带返回类型与 sync**

@@ -1,0 +1,46 @@
+/**
+ * Overloads of which some are decorated. A decorated function is what its decorators return,
+ * and a call chooses among the functions of the name by their parameters, in declaration
+ * order. It used to see the decorated function declared last only, and passed it the
+ * arguments unchecked: `scale(1.5)` handed a float to a function that takes an int.
+ */
+module decorated_overloads
+
+func twice(f: (x: int) => int): (x: int) => int {
+    return (x: int) => f(f(x))
+}
+
+func twice_f(f: (x: float) => float): (x: float) => float {
+    return (x: float) => f(f(x))
+}
+
+// Both overloads decorated.
+@twice
+func step(x: int): int { return x + 1 }
+@twice_f
+func step(x: float): float { return x + 0.5 }
+
+// The decorated one first, a plain one after it.
+@twice
+func scale(x: int): int { return x * 3 }
+func scale(x: float): float { return x * 1.5 }
+
+// A plain one first, the decorated one after it.
+func shift(x: float): float { return x - 0.5 }
+@twice
+func shift(x: int): int { return x - 1 }
+
+// A single decorated function, still a value.
+@twice
+func alone(x: int): int { return x + 10 }
+
+func apply(f: (x: int) => int, x: int): int { return f(x) }
+
+func main(): int sync {
+    println(step(1), step(1.5))
+    println(scale(2), scale(2.0))
+    println(shift(5), shift(5.0))
+    let k = alone
+    println(alone(1), k(1), apply(alone, 1), [alone][0](1))
+    return 0
+}
