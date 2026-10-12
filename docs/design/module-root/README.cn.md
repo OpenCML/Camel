@@ -952,15 +952,17 @@ CAMEL_ONNX_OUT=/tmp/m.onnx camel docs/design/module-root/examples/onnx_let/main.
 
 ## 附录 B 调研中发现的现有缺陷
 
-都没有修；最小复现在示例目录里。
+D1–D5 已改为带位置的编译期诊断（功能本身——导出值、合并 root、按“模块 + 名字”绑定捕获——仍待裁定，没有实现）；D6 已修。最小复现保留在示例目录里，下表“现在”一列是它们今天的输出。正文第 0、1、5 节描述的是修改之前（基线 `0c842f2c`）的行为。测试：`test/plans/feat/compile/module_imports.plan.toml`。
 
-| 编号 | 现象 | 复现 | 期望 |
-|---|---|---|---|
-| D1 | 导入的函数用到它自己模块顶层的值时，按名字在**导入方**里找：导入方有同名的顶层值就悄悄用它（打印 `1001`，应为 `11`）；没有就是指在 `main` 上的 `UnresolvedReference` | `camel examples/lib_let/main_shadow.cml`、`examples/lib_let/main.cml`、`examples/var_lib/main.cml` | 用声明它的模块里的值 |
-| D2 | 导入的值一被使用，编译器段错误（退出码 139） | `camel examples/export_let/main.cml`、`main_ns.cml` | 在合并 root 之前：带位置的诊断 |
-| D3 | 两个模块互相导入，`camel` 与 `camel check` 段错误 | `camel examples/mutual/main.cml`、`camel check examples/mutual/a.cml` | `ImportCycle`，列出环路 |
-| D4 | `std::cpp` 遇到算出来的顶层值段错误 | `camel examples/defects/cpp_computed_let.cml std::cpp` | 翻译，或 `TranslationRefused` |
-| D5 | 从两个模块导入同名、同签名的函数，静默取先导入的（打印 `2`） | `camel examples/conflict/main.cml` | 编译期错误（设计原则 2.10） |
-| D6 | `std::rgir` 里带捕获的函数的端口名错一位：捕获端口被标成第一个参数的名字，参数被标成 `PORT` | `camel examples/now_let/main.cml std::rgir` 中的 `add_k` | 名字与端口对应 |
+| 编号 | 调研时的现象 | 复现 | 状态 | 现在 |
+|---|---|---|---|---|
+| D1 | 导入的函数用到它自己模块顶层的值时，按名字在**导入方**里找：导入方有同名的顶层值就悄悄用它（打印 `1001`，应为 `11`）；没有就是指在 `main` 上的 `UnresolvedReference` | `camel examples/lib_let/main_shadow.cml`、`examples/lib_let/main.cml`、`examples/var_lib/main.cml` | **已改为诊断** | `ImportedFunctionUsesModuleValue`，定位在 `lib.cml` 里该函数的声明，附注导入方使用它的位置；间接用到（经本模块未导出的函数）同样报告；泛型函数原来的 `GenericFunctionUnsupported` 并入这一条。期望的行为（用声明它的模块里的值）要等合并 root |
+| D2 | 导入的值一被使用，编译器段错误（退出码 139） | `camel examples/export_let/main.cml`、`main_ns.cml` | **已改为诊断** | `ConstructNotSupported`，定位在使用处；只导入不使用仍然正常 |
+| D3 | 两个模块互相导入，`camel` 与 `camel check` 段错误 | `camel examples/mutual/main.cml`、`camel check examples/mutual/a.cml` | **已改为诊断** | `ImportCycle`，定位在闭合环的那条 `import`，消息列出环路（`import cycle: a -> b -> a`） |
+| D4 | `std::cpp` 遇到算出来的顶层值段错误 | `camel examples/defects/cpp_computed_let.cml std::cpp` | **已改为诊断** | `TranslationRefused`，定位在那个顶层值的初始化表达式 |
+| D5 | 从两个模块导入同名、同签名的函数，静默取先导入的（打印 `2`） | `camel examples/conflict/main.cml` | **已改为诊断** | `ImportNameConflict`，定位在后一条 `import`，附注前一条。同名不同签名（`main_overload.cml`）仍合并成重载集，见 Q11 |
+| D6 | `std::rgir` 里带捕获的函数的端口名错一位：捕获端口被标成第一个参数的名字，参数被标成 `PORT` | `camel examples/now_let/main.cml std::rgir` 中的 `add_k` | **已修** | 捕获端口标捕获的名字（`k`），参数标参数名（`x`） |
+
+D5 的范围：只检查按名字的导入（`import { f } from m`）；`using namespace` 带进来的名字、自动带入的全局算子组与用户导入同名，保持原状。
 
 另外三处是已定但尚未实现的功能，不算缺陷：导入改名（`examples/rename/`）、部分应用 `let g = f<w>`（`examples/misc/partial.cml`）、`docs/language/05_modules.md` 5.2 仍写着“导入时不能改名”。

@@ -25,8 +25,9 @@ import math                          // bring in only the module's namespace: ac
 ```
 
 - `import module` does not inject the names in the module directly into the current module; access them through `module::name`, or additionally write `using namespace module` to inject all the names it exports.
-- A module cannot import itself: `import m` in the file `m.cml` is `SemanticDiag::ImportCycle`. A module that is not found is `SemanticDiag::ModuleNotFound`, located at the `import`.
+- A module cannot import itself: `import m` in the file `m.cml` is `SemanticDiag::ImportCycle`. Modules cannot import each other either (`a` imports `b` and `b` imports `a`, or a longer ring): that is `ImportCycle` too, located at the `import` that closes the ring, and the message lists the modules of the ring: `import cycle: a -> b -> a`. Move what the modules share into a third module. A module that is not found is `SemanticDiag::ModuleNotFound`, located at the `import`.
 - A name cannot be renamed when it is imported (there is no `import { a as b }`). When two modules have a function of the same name, import one of them and use the qualified name for the other: `import array`, then `array::find`.
+- Two imports by name that bring functions of the same name and the same parameter types are `SemanticDiag::ImportNameConflict`, located at the later `import` and pointing to the earlier one; neither is chosen silently. Functions of the same name and different parameter types currently form one set of overloads, chosen by the argument types (whether this stays is undecided).
 - **Search order**: `.cml` files in the same directory as the entry file, the directories given by `-I <dir>`, the directories listed in the environment variable `CAMEL_PACKAGES`, and the modules installed with Camel.
 
 ```cml
@@ -109,6 +110,21 @@ func main(): int sync {
 
 - `export` is written before a `func`, `type` or `let`/`var` declaration, or in the form `export { a, b }` listing names already declared.
 - Generic functions can be exported ([7.5](07_statements.md#75-generic-functions)). A name that has both an annotated function and other overloads currently cannot be exported (`SemanticDiag::ConstructNotSupported`).
+
+Two current restrictions (the values of the top level of a module cannot be used across modules yet):
+
+- **A function used from another module cannot use a value of the top level of its own module** (`let`/`var`), whether directly or through a function of its module that it calls. Once such a function is used in another module, that is `SemanticDiag::ImportedFunctionUsesModuleValue`, located at the declaration of the function and pointing to the place that uses it. Pass the value as a parameter or a `with` parameter, or write the constant as a function without parameters:
+
+  ```cml
+  module lib
+  let base = 10                                   // usable only among lib's own functions
+  export func bump(x: int): int { return x + base }       // an error once another module uses it
+  export func base2(): int { return 10 }                  // the constant as a function
+  export func bump2(x: int): int { return x + base2() }   // fine
+  ```
+
+  The functions of the entry module that use the values of its own top level are not affected.
+- **An exported value cannot be used by the importing module yet.** `export let pi = 3.14159` can be written, and another module can `import { pi }`, but using `pi` (or `lib::pi`) is `SemanticDiag::ConstructNotSupported`, located at the use. Export a function without parameters instead.
 
 ## 5.4 Namespaces
 

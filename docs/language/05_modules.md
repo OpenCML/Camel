@@ -25,8 +25,9 @@ import math                          // 只引入模块的命名空间：用 mat
 ```
 
 - `import 模块` 不把模块里的名字直接注入当前模块；通过 `模块::名字` 访问，或再写 `using namespace 模块` 把它导出的名字全部注入。
-- 模块不能导入自身：文件 `m.cml` 里写 `import m` 是 `SemanticDiag::ImportCycle`。找不到模块是 `SemanticDiag::ModuleNotFound`，定位在那条 `import`。
+- 模块不能导入自身：文件 `m.cml` 里写 `import m` 是 `SemanticDiag::ImportCycle`。模块之间也不能互相导入（`a` 导入 `b`、`b` 又导入 `a`，或更长的环），同样是 `ImportCycle`，定位在闭合这个环的那条 `import`，消息里列出环上的模块：`import cycle: a -> b -> a`。两个模块共用的部分放进第三个模块。找不到模块是 `SemanticDiag::ModuleNotFound`，定位在那条 `import`。
 - 导入时不能改名（没有 `import { a as b }`）。两个模块有同名函数时，只导入其中一个，另一个用限定名：`import array` 后写 `array::find`。
+- 两条按名字的导入带来同名、参数类型也相同的函数，是 `SemanticDiag::ImportNameConflict`，定位在后一条 `import`，并指出前一条；不会悄悄取其中一个。同名而参数类型不同的函数目前合成一组重载，按实参类型选择（这一点是否保留尚未确定）。
 - **查找顺序**：与入口文件同目录的 `.cml` 文件、`-I <目录>` 给出的目录、环境变量 `CAMEL_PACKAGES` 列出的目录，以及随 Camel 安装的模块。
 
 ```cml
@@ -109,6 +110,21 @@ func main(): int sync {
 
 - `export` 写在 `func`、`type`、`let`/`var` 声明之前，或写成 `export { a, b }` 列出已声明的名字。
 - 泛型函数可以导出（[7.5](07_statements.md#75-泛型函数)）。既有带标注的函数又有其他重载的名字目前不能导出（`SemanticDiag::ConstructNotSupported`）。
+
+目前的两条限制（模块顶层的值还不能跨模块使用）：
+
+- **被别的模块使用的函数不能用到它所在模块顶层的值**（`let`/`var`），直接用到或经它调用的本模块函数用到都一样。这样的函数一旦在别的模块里被使用，就是 `SemanticDiag::ImportedFunctionUsesModuleValue`，定位在这个函数的声明，并指出使用它的位置。把值作为参数或 `with` 参数传入，或者把常量写成没有参数的函数：
+
+  ```cml
+  module lib
+  let base = 10                                   // 只能在 lib 自己的函数之间使用
+  export func bump(x: int): int { return x + base }       // 别的模块一用就报错
+  export func base2(): int { return 10 }                  // 常量写成函数
+  export func bump2(x: int): int { return x + base2() }   // 可以
+  ```
+
+  入口模块自己的函数使用自己顶层的值不受影响。
+- **导出的值还不能被导入方使用。** `export let pi = 3.14159` 可以写，别的模块也可以 `import { pi }`，但使用 `pi`（或 `lib::pi`）是 `SemanticDiag::ConstructNotSupported`，定位在使用处。改为导出一个没有参数的函数。
 
 ## 5.4 命名空间
 
