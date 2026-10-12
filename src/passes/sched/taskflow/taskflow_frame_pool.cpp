@@ -20,12 +20,15 @@
 #include "taskflow.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cstdlib>
 
 namespace camel::core::context {
 
 TaskflowFramePool::TaskflowFramePool(size_t chunkBytes, size_t minChunkFrames)
-    : chunkBytes_(chunkBytes), minChunkFrames_(std::max<size_t>(1, minChunkFrames)) {
+    : chunkBytes_(chunkBytes), minChunkFrames_(std::max<size_t>(1, minChunkFrames)),
+      poolId_(nextPoolId()) {
     camel::core::mm::autoSpace().registerExternalRootTracer(
         this,
         "TaskflowFramePool.activeFrames",
@@ -42,23 +45,42 @@ TaskflowFramePool::~TaskflowFramePool() {
     }
 }
 
+uint64_t TaskflowFramePool::nextPoolId() {
+    static std::atomic<uint64_t> next{1};
+    return next.fetch_add(1, std::memory_order_relaxed);
+}
+
 uintptr_t TaskflowFramePool::arenaKey(camel::runtime::GCGraph *graph) {
     return reinterpret_cast<uintptr_t>(graph);
 }
 
 TaskflowFramePool::GraphArena &TaskflowFramePool::getOrCreateArena(camel::runtime::GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime graph is null.");
-    std::scoped_lock lock(arenasMutex_);
-    auto it = arenas_.find(arenaKey(graph));
-    if (it != arenas_.end()) {
-        return *it->second;
+    // Every call takes a frame and gives it back, on every worker. The arenas a thread used
+    // last are remembered per thread, so that only the first use of a graph on a thread takes
+    // the lock of the table, which all workers share. An arena lives as long as its pool; the
+    // pool is told apart by its id, not by its address.
+    struct CachedArena {
+        uint64_t poolId   = 0;
+        uintptr_t key     = 0;
+        GraphArena *arena = nullptr;
+    };
+    thread_local std::array<CachedArena, 16> cache{};
+    const uintptr_t key = arenaKey(graph);
+    CachedArena &cached = cache[(key >> 4 ^ key >> 12) % cache.size()];
+    if (cached.poolId == poolId_ && cached.key == key) {
+        return *cached.arena;
     }
 
-    auto arena               = std::make_unique<GraphArena>();
-    arena->runtimeGraph      = graph;
-    auto &ref                = *arena;
-    arenas_[arenaKey(graph)] = std::move(arena);
-    return ref;
+    std::scoped_lock lock(arenasMutex_);
+    auto it = arenas_.find(key);
+    if (it == arenas_.end()) {
+        auto arena          = std::make_unique<GraphArena>();
+        arena->runtimeGraph = graph;
+        it                  = arenas_.emplace(key, std::move(arena)).first;
+    }
+    cached = {poolId_, key, it->second.get()};
+    return *it->second;
 }
 
 void TaskflowFramePool::allocateChunk(GraphArena &arena, size_t minFrameCount) {

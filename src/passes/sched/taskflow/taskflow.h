@@ -22,6 +22,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/core/operator.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/runtime_sched.h"
@@ -83,8 +84,12 @@ class TaskflowFramePool {
     traceActiveFrames(const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate);
     static uintptr_t arenaKey(camel::runtime::GCGraph *graph);
 
+    static uint64_t nextPoolId();
+
     size_t chunkBytes_;
     size_t minChunkFrames_;
+    // Distinguishes this pool in the per-thread arena caches (getOrCreateArena); never 0.
+    uint64_t poolId_;
     std::mutex arenasMutex_;
     std::unordered_map<uintptr_t, std::unique_ptr<GraphArena>> arenas_;
 };
@@ -349,6 +354,13 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::gc_node_ref_t join = camel::runtime::kInvalidNodeRef;
         std::vector<int32_t> armScopes; // -1: the arm runs nothing
     };
+    // An operator node: where its with and norm arguments are in GraphPlan::operArgs.
+    struct PreparedOper {
+        uint32_t withBegin = 0;
+        uint32_t normBegin = 0;
+        uint32_t end       = 0;
+        bool prepared      = false;
+    };
     struct GraphPlan {
         camel::runtime::GCGraph *graph = nullptr;
         // False: the graph does not fit the scope model (or task graphs are switched off); it
@@ -364,6 +376,12 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         // result reaches the tail JOIN only through forwarding GATEs and nested JOINs, with
         // nothing of its arm running after it (the rule NodeVM and FastVM use).
         std::vector<camel::runtime::gc_node_ref_t> tailCalls;
+        // Per node ref. The function of an operator is stored when the operator first runs
+        // (resolving it can import a module, and an unknown operator is a fault of the
+        // execution, not of the plan); nullptr until then.
+        std::vector<PreparedOper> opers;
+        std::vector<camel::runtime::gc_data_idx_t> operArgs;
+        std::unique_ptr<std::atomic<operator_t>[]> resolvedOpers;
         bool isTailCall(camel::runtime::gc_node_ref_t ref) const {
             return std::binary_search(tailCalls.begin(), tailCalls.end(), ref);
         }
@@ -477,8 +495,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
         std::span<const camel::runtime::gc_node_ref_t> topoNodes);
     slot_t runPreparedSubgraph(tf::Subflow &sf, camel::runtime::GCGraph *graph, ctx::Frame *frame);
+    // `plan`: the plan of `graph` when the caller has it (operators are then resolved once).
     slot_t executeLinearNode(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        const GraphPlan *plan = nullptr);
     slot_t executeLinearMarkedOperator(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
 
@@ -489,7 +509,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::GCGraph *targetGraph, ::Tuple *closure, std::span<const slot_t> args);
 
     slot_t executePreparedOperator(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
+        const GraphPlan *plan = nullptr);
     slot_t executePreparedNode(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
         tf::Subflow &sf, const RuntimeBuildInfo *buildInfo);

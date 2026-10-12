@@ -556,6 +556,28 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
             plan->tailCalls.end());
     }
 
+    // Where each operator of the graph reads its arguments, and room for the operator itself
+    // once it has been resolved (executePreparedOperator).
+    plan->opers.resize(graph->nodeBlockCount());
+    plan->resolvedOpers =
+        std::make_unique<std::atomic<operator_t>[]>(graph->nodeBlockCount());
+    for (gc_node_ref_t ref : plan->topo) {
+        if (ref >= plan->opers.size() || requireNode(graph, ref)->kind != GCNodeKind::Oper) {
+            continue;
+        }
+        PreparedOper &oper = plan->opers[ref];
+        oper.withBegin     = static_cast<uint32_t>(plan->operArgs.size());
+        for (gc_node_ref_t inputRef : graph->withInputsOf(ref)) {
+            plan->operArgs.push_back(dataIndexOf(graph, inputRef));
+        }
+        oper.normBegin = static_cast<uint32_t>(plan->operArgs.size());
+        for (gc_node_ref_t inputRef : graph->normInputsOf(ref)) {
+            plan->operArgs.push_back(dataIndexOf(graph, inputRef));
+        }
+        oper.end      = static_cast<uint32_t>(plan->operArgs.size());
+        oper.prepared = true;
+    }
+
     if (!forceLinear_) {
         try {
             buildStructuredPlan(*plan);
@@ -1021,11 +1043,35 @@ slot_t TaskflowExecSchedPass::evalGraphTF(GCGraph *graph, Frame *frame) {
 
 slot_t TaskflowExecSchedPass::evalGraph(GCGraph *graph, Frame *frame, TaskflowGcRegion &region) {
     ASSERT(graph != nullptr, "Taskflow evaluation requires a runtime graph.");
-    Frame *rootFrame = frame;
     Frame *currFrame = frame;
-    Frame *twinFrame = nullptr;
     GraphPlan *plan  = planFor(graph);
     std::atomic<uint32_t> tailNode{kInvalidNodeRef};
+
+    // The frames this activation runs tail calls in, one per graph, with the plan of the graph:
+    // [0] is the caller's frame, the others were taken here and go back to the pool when the
+    // activation ends. Graphs that tail-call each other in a cycle (a recursive function whose
+    // `if` arms are graphs of their own makes a cycle of three or four) then alternate between
+    // the frames they already have. With a single spare frame every step of a cycle of three
+    // gave a frame back and took another, and looked its plan up again: two mutexes of the
+    // pool and the lock of the plan table per tail call, shared by all workers.
+    struct TailFrames {
+        struct Entry {
+            GCGraph *graph  = nullptr;
+            Frame *frame    = nullptr;
+            GraphPlan *plan = nullptr;
+        };
+        TaskflowFramePool &pool;
+        std::array<Entry, 4> entries{};
+        size_t count  = 0;
+        size_t victim = 0;
+        ~TailFrames() {
+            for (size_t i = 1; i < count; ++i) {
+                pool.release(entries[i].frame);
+            }
+        }
+    } tailFrames{.pool = framePool_};
+    tailFrames.entries[0] = {graph, frame, plan};
+    tailFrames.count      = 1;
 
     for (;;) {
         // Nothing of this graph instance is in flight here: every live value is in a frame.
@@ -1055,31 +1101,40 @@ slot_t TaskflowExecSchedPass::evalGraph(GCGraph *graph, Frame *frame, TaskflowGc
             camel::execute::fillFrameForDirectInvoke(lastFrame, currFrame, callerGraph, tailRef);
             continue;
         }
-        plan = planFor(target);
-        if (twinFrame && twinFrame->runtimeGraph() == target) {
-            currFrame = twinFrame;
-            twinFrame = lastFrame;
-        } else {
-            if (twinFrame != nullptr && twinFrame != rootFrame) {
-                framePool_.release(twinFrame);
+        TailFrames::Entry *entry = nullptr;
+        for (size_t i = 0; i < tailFrames.count; ++i) {
+            if (tailFrames.entries[i].graph == target) {
+                entry = &tailFrames.entries[i];
+                break;
             }
-            twinFrame = currFrame;
-            currFrame = framePool_.acquire(target);
         }
+        if (entry == nullptr) {
+            if (tailFrames.count < tailFrames.entries.size()) {
+                entry = &tailFrames.entries[tailFrames.count];
+            } else {
+                // Full: replace one that is neither the caller's frame nor the frame the
+                // arguments are about to be read from.
+                do {
+                    tailFrames.victim = tailFrames.victim % (tailFrames.entries.size() - 1) + 1;
+                    entry             = &tailFrames.entries[tailFrames.victim];
+                } while (entry->frame == lastFrame);
+                framePool_.release(entry->frame);
+                // Keep the table consistent should the two calls below throw.
+                *entry = tailFrames.entries[tailFrames.count - 1];
+                --tailFrames.count;
+                entry = &tailFrames.entries[tailFrames.count];
+            }
+            GraphPlan *targetPlan = planFor(target);
+            *entry                = {target, framePool_.acquire(target), targetPlan};
+            ++tailFrames.count;
+        }
+        plan      = entry->plan;
+        currFrame = entry->frame;
         camel::execute::fillFrameForDirectInvoke(lastFrame, currFrame, callerGraph, tailRef);
     }
 
     region.enter();
-    slot_t result = camel::execute::readRuntimeGraphReturn(plan->graph, currFrame);
-    if (twinFrame != nullptr) {
-        if (currFrame != rootFrame) {
-            framePool_.release(currFrame);
-        }
-        if (twinFrame != rootFrame) {
-            framePool_.release(twinFrame);
-        }
-    }
-    return result;
+    return camel::execute::readRuntimeGraphReturn(plan->graph, currFrame);
 }
 
 void TaskflowExecSchedPass::runScope(
@@ -1169,7 +1224,7 @@ void TaskflowExecSchedPass::runItems(
                 continue;
             }
             region.enter();
-            (void)executeLinearNode(graph, item.node, frame);
+            (void)executeLinearNode(graph, item.node, frame, &plan);
             if (requireNode(graph, item.node)->kind == GCNodeKind::Oper) {
                 // An operator can run for long; do not keep a collector waiting for the
                 // next one as well.
@@ -1294,12 +1349,12 @@ void TaskflowExecSchedPass::runLinearBody(
                 break;
             }
             region.enter();
-            (void)executeLinearNode(graph, nodeRef, frame);
+            (void)executeLinearNode(graph, nodeRef, frame, &plan);
             region.leave();
             break;
         default:
             region.enter();
-            (void)executeLinearNode(graph, nodeRef, frame);
+            (void)executeLinearNode(graph, nodeRef, frame, &plan);
             break;
         }
     }
@@ -1471,8 +1526,8 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
 }
 
-slot_t
-TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+slot_t TaskflowExecSchedPass::executeLinearNode(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
     const auto *node = requireNode(graph, nodeRef);
 
     switch (node->kind) {
@@ -1608,7 +1663,7 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         if (body->uri().starts_with(":mark/")) {
             return executeLinearMarkedOperator(graph, nodeRef, frame);
         }
-        const slot_t result = executePreparedOperator(graph, nodeRef, frame);
+        const slot_t result = executePreparedOperator(graph, nodeRef, frame, plan);
         frame->set(node->dataIndex, result);
         return result;
     }
@@ -1681,15 +1736,47 @@ Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
 }
 
 slot_t TaskflowExecSchedPass::executePreparedOperator(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
     ASSERT(graph != nullptr, "Taskflow operator execution requires a graph.");
     ASSERT(frame != nullptr, "Taskflow operator execution requires a frame.");
+
+    // An operator that ran before on this plan: its function and the places of its arguments
+    // are known. Looking the operator up by URI on every execution (two string copies, two
+    // hash lookups and the read lock of the executor table, which all workers share) cost more
+    // than a built-in operator itself.
+    const bool prepared =
+        plan != nullptr && nodeRef < plan->opers.size() && plan->opers[nodeRef].prepared;
+    if (prepared) {
+        if (const operator_t resolved =
+                plan->resolvedOpers[nodeRef].load(std::memory_order_acquire)) {
+            const PreparedOper &oper = plan->opers[nodeRef];
+            const data_arr_t wargs{
+                plan->operArgs.data() + oper.withBegin,
+                oper.normBegin - oper.withBegin};
+            const data_arr_t nargs{
+                plan->operArgs.data() + oper.normBegin,
+                oper.end - oper.normBegin};
+            FrameArgsView withView(*frame, wargs);
+            FrameArgsView normView(*frame, nargs);
+            if (camel::core::effect_trace::enabled()) [[unlikely]] {
+                camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
+            }
+            try {
+                return resolved(withView, normView, *context_);
+            } catch (const RuntimeFault &fault) {
+                raiseFault(fault, graph, nodeRef);
+            }
+        }
+    }
 
     const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
     const std::string uri(body->uri());
     auto opFunc = context_->execMgr().find(uri);
     if (!opFunc) {
         raiseFault(RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri), graph, nodeRef);
+    }
+    if (prepared) {
+        plan->resolvedOpers[nodeRef].store(*opFunc, std::memory_order_release);
     }
 
     std::vector<runtime_data_idx_t> withIndices;
