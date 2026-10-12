@@ -1,0 +1,8 @@
+error[SyntaxDiag::KeywordAsIdentifier]: 'func' is a keyword and cannot be used as a name.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_keyword_as_name.cml:4:9
+   |
+ 4 |     let func = 1
+   |         ^^^^
+help: Choose another name, for example 'func_'.
+
+camel: 1 error

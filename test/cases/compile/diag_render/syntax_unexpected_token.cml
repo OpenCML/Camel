@@ -1,0 +1,6 @@
+module syntax_unexpected_token
+
+func main(): int sync {
+    let x = 1 else 2
+    return x
+}

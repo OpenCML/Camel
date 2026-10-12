@@ -1,0 +1,6 @@
+module syntax_keyword_as_name
+
+func main(): int sync {
+    let func = 1
+    return func
+}

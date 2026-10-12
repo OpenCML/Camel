@@ -1,0 +1,399 @@
+id = "compile.diag_options"
+order = 329
+tier = "feat"
+tags = ["feat", "compile", "diagnostics"]
+
+[[tests]]
+name = "format.short"
+desc = "--error-format short is the one-line form the tools read: one line per diagnostic with name and code, and no excerpt."
+kind = "behavior"
+case = "../../../cases/compile/diag_render/sem_cascade.cml"
+args = ["--error-format", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_code = "0x0300000B"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 17
+expect_output_not_contains = ["-->", "help:", "camel: "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "format.env"
+desc = "Without the option the format comes from CAMEL_ERROR_FORMAT (the test runner sets it to short for every test)."
+kind = "behavior"
+case = "../../../cases/compile/diag_render/sem_cascade.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["sem_cascade.cml:6:17: [Error]: Unresolved reference: 'nope'."]
+expect_output_not_contains = ["-->"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "format.option_wins"
+desc = "The option outranks the environment variable."
+kind = "behavior"
+case = "../../../cases/compile/diag_render/sem_cascade.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+expect_output_contains = ["error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'nope'.", "  --> "]
+expect_output_not_contains = ["(name="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "format.unknown"
+desc = "An unknown format is refused before anything is compiled."
+kind = "behavior"
+case = "../../../cases/compile/diag_render/sem_cascade.cml"
+args = ["--error-format", "fancy", "${case}"]
+expect_exit = 1
+expect_output_contains = ["unknown diagnostics format 'fancy'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "color.none_when_piped"
+desc = "Output that is not a terminal carries no colour codes, in either text form."
+kind = "behavior"
+case = "../../../cases/compile/diag_render/sem_cascade.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(!input.stdout.includes('\u001b'), 'escape codes in piped output')
+assert(input.stdout.includes('^^^^'), 'the excerpt is there')
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "color.none_when_piped_short"
+desc = "The one-line form too: it used to be coloured whatever it was written to."
+kind = "behavior"
+case = "../../../cases/compile/diag_render/sem_cascade.cml"
+args = ["--error-format", "short", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(!input.stdout.includes('\u001b'), 'escape codes in piped output')
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "color.always"
+desc = "--color always colours piped output."
+kind = "behavior"
+case = "../../../cases/compile/diag_render/sem_cascade.cml"
+args = ["--error-format", "text", "--color", "always", "${case}"]
+expect_exit = 1
+verify_script = """
+assert(input.stdout.includes('\u001b[1;31merror[SemanticDiag::UnresolvedReference]'), 'severity is coloured')
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "errors.default_limit"
+desc = "By default the compiler reports 20 errors and stops."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/many_errors.cml"
+args = ["${case}"]
+expect_exit = 1
+verify_script = """
+const n = (input.stdout.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
+assert(n === 20, '20 errors reported, got ' + n)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "errors.no_limit"
+desc = "--max-errors 0 removes the limit."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/many_errors.cml"
+args = ["--max-errors", "0", "${case}"]
+expect_exit = 1
+verify_script = """
+const n = (input.stdout.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
+assert(n === 25, '25 errors reported, got ' + n)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "errors.limit_one"
+desc = "--max-errors 1 is the former behaviour: the first error only."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/many_errors.cml"
+args = ["--max-errors", "1", "${case}"]
+expect_exit = 1
+verify_script = """
+const n = (input.stdout.match(/name=SemanticDiag::UnresolvedReference/g) || []).length
+assert(n === 1, '1 error reported, got ' + n)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "errors.json_array"
+desc = "With several errors --output-format json is still one array."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/many_errors.cml"
+args = ["--output-format", "json", "--max-errors", "4", "${case}"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+assert(diags.length === 4, '4 diagnostics, got ' + diags.length)
+assert(diags.every((d) => d.data.name === 'SemanticDiag::UnresolvedReference'), 'all unresolved references')
+assert(diags[3].range.start.line === 9, 'fourth error on line 10, got ' + (diags[3].range.start.line + 1))
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "errors.runtime_first_fault"
+desc = "A run-time fault ends the run at the first one, whatever --max-errors says."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/two_faults.cml"
+args = ["--max-errors", "0", "${case}"]
+expect_exit = 1
+verify_script = """
+const n = (input.stdout.match(/name=RuntimeDiag::IndexOutOfRange/g) || []).length
+assert(n === 1, 'one fault reported, got ' + n)
+assert(input.stdout.includes('Index 5 is out of range'), 'the first fault')
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "json.related_information"
+desc = "The secondary location of a diagnostic is relatedInformation in JSON: the call that instantiated the generic function, with its file and range; the message is free of it."
+kind = "behavior"
+case = "../../../cases/compile/diag_render/sem_generic_instance.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+const d = diags.find((x) => x.message.includes("operator '+' is not defined"))
+assert(d, 'the error of the instance is there')
+assert(!d.message.includes('instantiated'), 'the message does not hold the instance note: ' + d.message)
+assert(Array.isArray(d.relatedInformation) && d.relatedInformation.length === 1, 'one related location')
+const r = d.relatedInformation[0]
+assert(r.message.includes("in the instance 'twice<i64[]>' of the generic function 'twice' with T = i64[]"), r.message)
+assert(r.location.path.endsWith('sem_generic_instance.cml'), r.location.path)
+assert(r.location.range.start.line === 9 && r.location.range.start.character === 17, JSON.stringify(r.location.range))
+assert(typeof d.data.suggestion === 'string' && d.data.suggestion.length > 0, 'the suggestion is in data')
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "errors.imports"
+desc = "Each import that fails is reported, and a type one of them would have declared is not reported as unresolved."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/missing_module.cml"
+args = ["${case}"]
+expect_exit = 1
+verify_script = """
+const n = (input.stdout.match(/name=SemanticDiag::ModuleNotFound/g) || []).length
+assert(n === 2, 'two imports reported, got ' + n)
+assert(input.stdout.includes("Module 'no_such_module_a' not found") && input.stdout.includes("Module 'no_such_module_b' not found"), input.stdout)
+assert(!input.stdout.includes('UnresolvedTypeReference'), 'the use of the imported type is not reported')
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.shown"
+desc = "The warning, as a baseline for the switches below: on stderr, exit 0."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::EffectNotExecuted, code=0x03100004"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.wno"
+desc = "-Wno-<name> switches a warning off; the name is matched without case, '-' and '_'."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["-Wno-effect-not-executed", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.stderr === '', 'no warning: ' + input.stderr)
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.wnone"
+desc = "-Wnone switches every warning off."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["-Wnone", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.stderr === '', 'no warning: ' + input.stderr)
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.werror"
+desc = "-Werror reports the warning as an error: stdout, exit 1, the code unchanged, and the program does not run."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["-Werror", "${case}"]
+expect_exit = 1
+expect_stdout_contains = ["[Error]:", "name=SemanticDiag::EffectNotExecuted, code=0x03100004"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.werror_name"
+desc = "-Werror=<name> does the same for one warning."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["-Werror=EffectNotExecuted", "${case}"]
+expect_exit = 1
+expect_stdout_contains = ["[Error]:", "name=SemanticDiag::EffectNotExecuted"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.werror_other_name"
+desc = "-Werror=<name> leaves other warnings warnings."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["-Werror=IgnoredSideEffect", "${case}"]
+expect_exit = 0
+expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::EffectNotExecuted"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.wno_error_name"
+desc = "-Wno-error=<name> keeps one warning a warning under -Werror."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["-Werror", "-Wno-error=effect_not_executed", "${case}"]
+expect_exit = 0
+expect_stderr_contains = ["[Warn]:", "name=SemanticDiag::EffectNotExecuted"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.werror_note"
+desc = "In the text form a promoted warning says why it is an error."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["--error-format", "text", "-Werror", "${case}"]
+expect_exit = 1
+expect_stdout_contains = ["error[SemanticDiag::EffectNotExecuted]:", "note: this warning is reported as an error because of -Werror"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.unknown_name"
+desc = "A name that is no warning is refused, with the list of warnings; a misspelt switch does not silently do nothing."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["-Wno-efect-not-executed", "${case}"]
+expect_exit = 1
+expect_output_contains = ["no warning is named 'efect-not-executed'", "EffectNotExecuted"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.unknown_option"
+desc = "An unknown -W option is refused."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["-Wall-the-things", "${case}"]
+expect_exit = 1
+expect_output_contains = ["unknown option -Wall-the-things"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.max_warning"
+desc = "-N / --max-warning limits the warnings shown and says how many were not (it was accepted and ignored before)."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["--max-warning", "0", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(!input.stderr.includes('EffectNotExecuted'), 'the warning is not shown')
+assert(input.stderr.includes('1 more warning(s) not shown (--max-warning 0)'), input.stderr)
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.werror_pass_warning"
+desc = "A warning raised by a pass and made an error ends the pipeline after that pass: the program is not run."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault.cml"
+args = ["-Werror", "${case}", "std::opt::fold", "std::nvm"]
+expect_exit = 1
+verify_script = """
+assert(input.stdout.includes('[Error]: This constant expression faults whenever it is evaluated (DivisionByZero)'), input.stdout)
+assert(input.stdout.includes('name=RuntimeDiag::ConstantExpressionFaults, code=0x04100015'), input.stdout)
+assert(!/^7$/m.test(input.stdout), 'the program did not run: ' + input.stdout)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "warn.wno_pass_warning"
+desc = "A warning raised by a pass is switched off like any other."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_constant_fault.cml"
+args = ["-Wno-constant-expression-faults", "${case}", "std::opt::fold", "std::nvm"]
+expect_exit = 0
+verify_script = """
+assert(input.stderr === '', 'no warning: ' + input.stderr)
+assert(input.stdout === '7\n', input.stdout)
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "explain.name"
+desc = "--explain prints the catalog entry of a name (with or without the type, in any case)."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["--explain", "indexoutofrange"]
+expect_exit = 0
+expect_stdout_contains = ["RuntimeDiag::IndexOutOfRange  (0x04000002, Error)", "message: Index {0} is out of range for {1} of length {2}."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "explain.code"
+desc = "--explain takes a code."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["--explain", "0x0300000B"]
+expect_exit = 0
+expect_stdout_contains = ["SemanticDiag::UnresolvedReference  (0x0300000B, Error)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "explain.unknown"
+desc = "--explain of something that is no diagnostic fails."
+kind = "behavior"
+case = "../../../cases/compile/diag_options/warning.cml"
+args = ["--explain", "NoSuchDiagnostic"]
+expect_exit = 1
+expect_output_contains = ["no diagnostic is named or numbered 'NoSuchDiagnostic'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lsp.code_and_related"
+desc = "The language server puts the catalog code in `code`, the name and the suggestion in `data`, and secondary locations in `relatedInformation`; it reports every error of a document, without the consequences of earlier ones."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/diag_options/lsp_diagnostics.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

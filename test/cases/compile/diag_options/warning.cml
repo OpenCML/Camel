@@ -1,0 +1,10 @@
+/**
+ * One warning (EffectNotExecuted: `main` is not a sync function, so the println nothing depends
+ * on does not run) and no error. Used to test the command-line switches for warnings.
+ */
+module warning
+
+func main(): int {
+    println('never printed')
+    return 0
+}

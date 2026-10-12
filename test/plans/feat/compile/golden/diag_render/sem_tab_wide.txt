@@ -1,0 +1,8 @@
+error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'nope'.
+  --> <ROOT>/test/cases/compile/diag_render/sem_tab_wide.cml:4:19
+   |
+ 4 |     let s = '中文字符' + nope   // 注释
+   |                          ^^^^
+help: Make sure the name is declared and in scope.
+
+camel: 1 error

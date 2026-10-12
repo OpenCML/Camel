@@ -1,0 +1,10 @@
+module syntax_first_only
+
+func main(): int sync {
+    let func = 1
+    return func
+}
+
+func other(): int {
+    return 1 +
+}

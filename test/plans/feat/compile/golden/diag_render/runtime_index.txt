@@ -1,0 +1,6 @@
+error[RuntimeDiag::IndexOutOfRange]: Index 7 is out of range for an array of length 3.
+  --> <ROOT>/test/cases/compile/diag_render/runtime_index.cml:3:44
+   |
+ 3 | func at(xs: int[], i: int): int { return xs[i] }
+   |                                            ^
+help: Ensure the index is within the valid range of the collection.

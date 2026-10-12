@@ -1,0 +1,6 @@
+module syntax_missing_initializer
+
+func main(): int sync {
+    let x
+    return 0
+}

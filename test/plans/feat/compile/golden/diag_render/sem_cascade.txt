@@ -1,0 +1,15 @@
+error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'nope'.
+  --> <ROOT>/test/cases/compile/diag_render/sem_cascade.cml:6:17
+   |
+ 6 |     let r = add(nope, 2)
+   |                 ^^^^
+help: Make sure the name is declared and in scope.
+
+error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'another_missing_name'.
+   --> <ROOT>/test/cases/compile/diag_render/sem_cascade.cml:10:13
+    |
+ 10 |     println(another_missing_name)
+    |             ^^^^^^^^^^^^^^^^^^^^
+help: Make sure the name is declared and in scope.
+
+camel: 2 errors

@@ -1,0 +1,13 @@
+module sem_multiline
+
+func main(): int sync {
+    let x = 5
+    let y = if x > 1 then {
+        1
+    } else {
+        let q = 2
+        let r = 3
+        'a'
+    }
+    return 0
+}
