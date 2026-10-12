@@ -9,6 +9,7 @@ add_executable(camel-debugger
     src/state.cpp
     src/compile.cpp
     src/gir_json.cpp
+    src/process.cpp
     src/spawn.cpp
     src/run.cpp
     src/worker.cpp

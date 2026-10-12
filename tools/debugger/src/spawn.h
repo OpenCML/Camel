@@ -20,8 +20,8 @@
 
 /**
  * @file spawn.h
- * @brief 子进程创建与回收：Windows 下 CreateProcess + Job
- * Object，保证主进程退出时子进程被系统回收。
+ * @brief Worker processes of the gateway, started through ChildProcess (process.h): a worker
+ * ends when the gateway does, on every platform process.h implements.
  *
  * 设计要点：
  * - 子进程通过环境变量 CAMEL_DB_WORKER_PORT 获知自己的 HTTP 端口；run 时父进程 POST /api/run
@@ -35,8 +35,8 @@
 
 namespace debugger {
 
-/// 启动一个 worker 子进程（camel-db --run-worker <path>），返回 (成功?, 子进程 HTTP 端口)。仅
-/// Windows 实现。断点由父进程在 spawn/run 后按统一模型推送（breakpoint-spaces、gir-breakpoints
+/// 启动一个 worker 子进程（camel-db --run-worker <path>），返回 (成功?, 子进程 HTTP 端口)。
+/// 断点由父进程在 spawn/run 后按统一模型推送（breakpoint-spaces、gir-breakpoints
 /// 等）。 sendRun：true 时注册为 "running" 并由调用方转发 /api/run；false 时仅注册为 "loaded"。
 /// desiredPort：>0 时复用该端口（用于 restart），不注册新任务。
 std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun = true, int desiredPort = 0);
