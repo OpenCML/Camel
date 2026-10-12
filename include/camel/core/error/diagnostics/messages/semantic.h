@@ -99,6 +99,7 @@ enum class SemanticDiag : uint32_t {
     // Rulings of 2026-10-12 (design principles 2.10): 0xB0 and up.
     MatchWithoutDefault          = 0x0000B0,
     IfWithoutElseAsValue         = 0x0000B1,
+    EmptyArrayWithoutType        = 0x0000B2,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

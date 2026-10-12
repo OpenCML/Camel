@@ -1,13 +1,13 @@
 /**
- * A plain value is not passed where a `T?` is expected: nothing is converted implicitly at a
- * call. Written `f(5 as int?)` it compiles.
+ * A plain value passed where a `T?` is expected enters the form by itself (design principles
+ * 2.10): `f(5)` is `f(5 as int?)`. It used to be an error that asked for the conversion.
  */
 module err_argument
 
 func f(x: int?): int { return x ?? 0 }
 
 func main(): int sync {
-    println('never printed')
-    println(f(5))
+    println('reached')
+    println(f(5), f(null))
     return 0
 }

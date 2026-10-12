@@ -98,7 +98,7 @@ total = 35
 
 ```cml
 func half(x: int): int! {
-    return if x % 2 == 0 then { return x / 2 } else { throw error('Odd', 'not even') }
+    return if x % 2 == 0 then x / 2 else { throw error('Odd', 'not even') }
 }
 
 func main(): int sync {
@@ -116,6 +116,7 @@ func main(): int sync {
 ```
 
 - 右侧只在被选中时求值。
+- **右侧可以是可空的。** `a ?? b` 的 `b` 是 `T` 时结果是 `T`；`b` 是 `T?` 时结果是 `T?`。所以 `a ?? b ?? 9` 是“先试 `a`，再试 `b`，最后给默认值”，不论怎样加括号结果都一样。`!!` 同理（`b` 是 `T!` 时结果是 `T!`）。图上每个 `??` 仍是一个分支。右侧是 `[]` 时取左侧的元素类型。
 - `??`、`!!` 的右侧一直延伸到表达式结束：`x ?? 0 + 1` 是 `x ?? (0 + 1)`。要先取值再运算，加括号：`(x ?? 0) + 1`。
 - 左侧不是所要求的形式（对普通的 `int` 用 `??`，对 `T?` 用 `!!` 或 `?->`），或右侧类型不对，是 `SemanticDiag::TaggedOperandMismatch`。
 
@@ -158,7 +159,7 @@ func main(): int sync {
 
 `e as T` 用于：
 
-- 进入可空或可能出错的形式：`5 as int?`、`null as int?`、`v as int!`；
+- 进入可空或可能出错的形式：`5 as int?`、`null as int?`、`v as int!`（目标类型已知的位置不必写，见 [3.4](03_data_model.md)）；
 - 构造映射与集合：`[...] as Map<K, V>`、`[...] as Set<T>`；
 - 模块类型的检查式转换：`t as Tensor<f32, const [3]>`，在转换处检查形状；
 - 给 `json::decode` 等返回未定类型的结果指定类型：`decode(s) as int[]`。
@@ -278,7 +279,7 @@ func report(r: int!): string {
 }
 
 func main(): int sync {
-    println(show(5 as int?), show(null as int?))
+    println(show(5), show(null))
     println(report(parse_int('7')), report(parse_int('x')))
     return 0
 }

@@ -550,9 +550,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TaggedOperandMismatch",
                 "'{0}' cannot be applied here: {1}.",
-                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T'. 'a !! b' needs 'a' of "
-                "type 'T!' and 'b' of type 'T'. 'x ?-> f' needs 'x' of type 'T!' and a "
-                "function 'f' that takes a 'T'.",
+                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or "
+                "'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). "
+                "'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'. 'x ?-> f' needs "
+                "'x' of type 'T!' and a function 'f' that takes a 'T'.",
             },
         },
         {
@@ -620,6 +621,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "arm gives is dropped. It can only stand as a statement. Where a value is "
                 "wanted, add an 'else' arm of the same type ('if c then 1 else 0'), or make "
                 "the result nullable ('if c then 1 else null').",
+            },
+        },
+        {
+            SemanticDiag::EmptyArrayWithoutType,
+            {
+                "EmptyArrayWithoutType",
+                "'{0}' is bound to an empty array '[]' that has no element type.",
+                "The empty array literal takes its element type from where it stands: a "
+                "declared type, a parameter, the other arm of a branch, an 'as'. Here there "
+                "is none. Write the type: 'let {0}: int[] = []'.",
             },
         },
         {

@@ -158,6 +158,10 @@ class Builder {
     node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
     node_ptr_t visitArrayData(const AST::node_ptr_t &ast);
+    /// `ast` lowered where a value of type `type` is expected. An array literal whose
+    /// elements are to be put into `T?` / `T!` is built with the conversions in place, and
+    /// `entered` is set; anything else is visitData(ast).
+    node_ptr_t visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered);
     node_ptr_t visitStructData(const AST::node_ptr_t &ast);
     node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncData(const AST::node_ptr_t &ast);

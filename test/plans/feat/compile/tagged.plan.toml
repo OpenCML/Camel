@@ -1239,14 +1239,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "argument_not_converted"
-desc = "A plain value is not converted at a call (`f(5)` with `f(x: int?)`)."
-kind = "negative"
+name = "argument_enters"
+desc = "A plain value and null enter a `T?` parameter at a call (`f(5)`, `f(null)` with `f(x: int?)`; design principles 2.10). It used to be NoMatchingFunction. The positions are tested in consistency/entering.plan.toml."
+kind = "behavior"
 case = "../../../cases/compile/tagged/err_argument.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_argument.cml:11:14:", "<> (i64)", "f: (x: i64?) => i64"]
-expect_output_not_contains = ["never printed", "UnknownInternalError"]
+expect_exit = 0
+expect_stdout_starts_with = "reached\n5 0\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

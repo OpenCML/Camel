@@ -531,6 +531,16 @@ class Builder {
     /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
     node_handle_t castNodeTo(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// `node` where a value of type `target` is expected (design principles 2.10): `node`
+    /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
+    /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of
+    /// `target`. nullptr when the value does not enter (camel::core::type::entersImplicitly).
+    node_handle_t coerceTo(
+        node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The same at the exit of a branch arm already built: what `arm` gives enters `target`.
+    void coerceArmExit(
+        const compile_graph_ptr_t &arm, camel::core::type::Type *target,
+        const GCT::node_ptr_t &origin);
     /// The return type the function around the current position declares (looking out of
     /// branch arms), or nullptr when it declares none.
     camel::core::type::Type *declaredExitTypeHere() const;

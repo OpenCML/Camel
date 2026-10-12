@@ -657,8 +657,8 @@ help: Ensure the index is within the valid range of the collection.
 module nullable
 
 func find(xs: int[], target: int, i: int): int? {
-    return if i >= len(xs) then { return null }
-        else if xs[i] == target then { return i }
+    return if i >= len(xs) then null
+        else if xs[i] == target then i
         else find(xs, target, i + 1)
 }
 
@@ -688,7 +688,7 @@ null
 ```
 
 - `a ?? b`：为空取 `b`。`match` 用 `case null` 与 `case v`。
-- 普通的 `int` 不会自己变成 `int?`：在返回 `int?` 的函数里用 `return`，在声明里写类型（`let maybe: int? = ...`），或写 `5 as int?`。
+- 普通的 `int` 进入 `int?` 的位置时自动装入：`find` 的两条臂一条是 `null`、一条是 `i`，分支就是 `int?`；实参（`show(5)`）、带类型的声明（`let maybe: int? = 5`）、`return` 同理。反过来不行：`int?` 要当 `int` 用，必须用 `??` 或 `match` 拆开。
 
 ## 11. 映射与集合
 

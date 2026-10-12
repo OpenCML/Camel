@@ -169,15 +169,11 @@ HéLLO 6 5 e
 
 ```cml
 func positive(x: int): int? {
-    return if x > 0 then { return x } else { return null }
+    return if x > 0 then x else null
 }
 
 func safe_div(a: int, b: int): int! {
-    return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
-    } else {
-        return a / b
-    }
+    return if b == 0 then { throw error('DivByZero', 'the divisor is zero') } else a / b
 }
 
 func main(): int sync {
@@ -197,13 +193,16 @@ error DivByZero: the divisor is zero
 规则：
 
 - `T?`、`T!` 与 `T` 是不同的类型。这两种值可以保存、传递、返回、打印，但**不能当作 `T` 使用**：算术、比较等运算符与接受 `T` 的函数都不接受它们，也不能对它们取成员。只能用 `??`、`!!`、`?->`（[6.6](06_expressions.md#66-空值与错误的运算符)）或 `match` 的固定模式（[6.8.2](06_expressions.md#682-match)）拆开。
-- **`T` 不会自己变成 `T?`/`T!`。** 进入这两种形式的写法只有：
-  - `v as T?`、`v as T!`；
+- **值进入 `T?`、`T!` 的位置时自动装入**，只要目标类型已知；`null` 同理。这些位置是：
+  - 调用的实参：形参是 `x: int?` 时可以写 `f(5)`、`f(null)`。有重载时精确匹配的优先：`f(5)` 在 `f(x: int)` 与 `f(x: int?)` 之间取前者；
   - 带类型的声明 `let x: T? = v`；
-  - 返回类型声明为 `T?`/`T!` 的函数里的 `return v`（`throw e` 给出错误，`return null` 给出空）。
+  - 数组的元素：`let xs: (int?)[] = [1, null, 3]`；没有写类型时，元素里有 `null` 的数组字面量是 `T?` 的数组（`[1, null, 3]` 是 `(int?)[]`）；
+  - 分支的两条臂：一条臂是 `T`、另一条是 `null` 或 `T?` 时，分支是 `T?`（`if c then 1 else null` 是 `int?`）；`T` 与 `T!` 同理；
+  - 返回类型声明为 `T?`/`T!` 的函数里的 `return v`（`throw e` 给出错误）。
 
-  调用的实参不转换：把 `5` 传给形参 `x: int?` 是错误，写 `f(5 as int?)`、`f(null as int?)`。
-- 分支各臂的类型必须相同：`if c then 1 else null` 是错误。在返回 `T?` 的函数里把两臂都写成带 `return` 的块（如上例），或对两臂都用 `as`。
+  也可以显式写 `v as T?`。可以一次进入多层：`let x: int?! = 5`。图上每装入一层是一个转换节点（`CAST`），自动装入就是由编译器补上这个节点，与手写 `as` 得到的图相同。
+- **反方向永不自动。** `T?`、`T!` 要当 `T` 用，必须拆开；`int?` 也不会变成 `float?`，数值之间仍不做隐式转换。内建算子（`append`、`println` 等）的实参不在此列：它们的形参类型由 C++ 的类型规则从实参算出，没有可供装入的目标类型，需要时写 `as`。
+- **空数组字面量 `[]` 的元素类型取自它所在的位置**：声明的类型（`let xs: int[] = []`）、形参（`count([])`）、分支的另一条臂、`??`/`!!` 的左侧（`attempt(f) !! []`）、声明的返回类型、`as`（`[] as Map<string, int>`）。把 `[]` 绑定到没有写类型的名字上（`let xs = []`）是编译期错误 `SemanticDiag::EmptyArrayWithoutType`，诊断提示写出类型。
 - 两种标记可以组合：`T?!`、`T!?`。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
 - 与泛型配合：`(typeas T)?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
 - `let x: int! = v` 中 `!` 与 `=` 之间要有空格。
@@ -211,7 +210,7 @@ error DivByZero: the divisor is zero
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
 
-**当前实现的行为，尚待确定**：`T` 不隐式流入 `T?`/`T!`；允许 `T?!` 与 `T!?`；`throw` 只接受 `error(...)` 造出的错误值；`?->` 只对 `T!` 有定义；`??`/`!!` 右侧的类型必须是 `T`；`match` 对这两种值恰好两个分支；它们可以打印但不能用 `==` 比较。早先预留的记号 `T ? U` 与 `T!` 的关系未定，使用它是编译期错误（`SemanticDiag::FeatureNotSupported`）。
+**当前实现的行为，尚待确定**：`?->` 只对 `T!` 有定义；`match` 对这两种值恰好两个分支；它们可以打印但不能用 `==` 比较。早先预留的记号 `T ? U` 与 `T!` 的关系未定，使用它是编译期错误（`SemanticDiag::FeatureNotSupported`）。
 
 ## 3.5 映射与集合
 

@@ -606,7 +606,15 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             for (size_t i = 0; i < refs.size(); ++i) {
                 const auto &ref         = refs[i];
                 const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
-                node_ptr_t dataNode     = visitData(dataASTNode);
+                // The declared type first: an array literal takes the form of its elements
+                // from it (visitDataInto).
+                Type *declaredType = i < typeNodes->size()
+                                         ? visitType(typeNodes->atAs<AST::TypeLoad>(i))
+                                         : nullptr;
+                bool enteredLiteral = false;
+                node_ptr_t dataNode = declaredType != nullptr
+                                          ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
+                                          : visitData(dataASTNode);
 
                 // Validate the identifier
                 if (!validateIdent(ref.ident())) {
@@ -616,15 +624,14 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     throw BuildAbortException();
                 }
 
-                if (i < typeNodes->size()) {
-                    const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(i);
-                    Type *type              = visitType(typeASTNode);
+                if (i < typeNodes->size() && !enteredLiteral) {
+                    Type *type = declaredType;
                     // Try a static type conversion first.
                     if (asTagged(type) != nullptr ||
                         (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
                         // Decided when the generic function is instantiated. A declared
-                        // `T?` / `T!` puts the value into that form (design principles 2.9;
-                        // DESIGN-QUESTION(nullable-error) Q1): a CAST, for any expression.
+                        // `T?` / `T!` puts the value into that form (design principles
+                        // 2.10): a CAST, for any expression.
                         node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
                         *castNode << dataNode;
                         setOriginFromAst(
@@ -685,8 +692,8 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     if (asTagged(type) != nullptr ||
                         (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
                         // Decided when the generic function is instantiated. A declared
-                        // `T?` / `T!` puts the value into that form (design principles 2.9;
-                        // DESIGN-QUESTION(nullable-error) Q1): a CAST, for any expression.
+                        // `T?` / `T!` puts the value into that form (design principles
+                        // 2.10): a CAST, for any expression.
                         node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
                         *castNode << dataNode;
                         setOriginFromAst(
@@ -1659,8 +1666,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::As: {
         const auto &rhsASTNode = ast->atAs<AST::TypeLoad>(1);
-        const auto &dataNode   = visitData(lhsASTNode);
         const auto &dstType    = visitType(rhsASTNode);
+        // `[1, null] as (int?)[]`: the literal takes the form of its elements from the type.
+        bool enteredLiteral  = false;
+        const auto &dataNode = visitDataInto(lhsASTNode, dstType, enteredLiteral);
+        if (enteredLiteral) {
+            res = dataNode;
+            break;
+        }
         // A conversion to a type written with a type variable is decided when the generic
         // function is instantiated, for a literal as for any other value.
         // A conversion into `T?` / `T!` is a CAST node for a literal too: the value is put
@@ -2118,8 +2131,28 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
-    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+    // `[1, null, 3]`: a `null` among other elements makes the array one of `T?` (design
+    // principles 2.10), whose elements are put into that form when the program runs. Which
+    // `T` is known to the GIR builder only, so every element is left to it as a computed one
+    // (visitDataNode joins their types and adds the CASTs).
+    const auto &items   = ast->atAs<AST::RepeatedLoad>(0);
+    bool hasNullLiteral = false;
+    for (const auto &item : *items) {
+        hasNullLiteral |= item->type() == AST::LoadType::Data &&
+                          item->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Literal &&
+                          item->loadAs<AST::LiteralLoad>()->value().type() == LiteralType::Null;
+    }
+    const bool allComputed = hasNullLiteral && items->size() > 1;
+
+    for (const auto &item : *items) {
         node_ptr_t dataNode = visitData(item);
+        if (allComputed) {
+            auto [refNode, refData] = makeRefData(dataNode);
+            *execNode << refNode;
+            dangling = true;
+            factory.add(refData);
+            continue;
+        }
         auto [data, _]      = extractData(dataNode, execNode, dangling);
         try {
             factory.add(data);
@@ -2142,6 +2175,64 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     LEAVE("ArrayData");
     return res;
+}
+
+namespace {
+
+/// The element type of the array type `type` when a literal written where `type` is expected
+/// has elements to put into `T?` / `T!` (directly, or in arrays nested in it); else nullptr.
+Type *taggedElementTarget(Type *type) {
+    if (type == nullptr || type->code() != TypeCode::Array || containsTypeVar(type)) {
+        return nullptr;
+    }
+    Type *elem = tt::as_ptr<ArrayType>(type)->elemType();
+    return asTagged(elem) != nullptr || taggedElementTarget(elem) != nullptr ? elem : nullptr;
+}
+
+} // namespace
+
+node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered) {
+    entered        = false;
+    Type *elemType = taggedElementTarget(type);
+    if (elemType == nullptr || ast->type() != AST::LoadType::Data ||
+        ast->loadAs<AST::DataLoad>()->dataType() != AST::DataType::Array ||
+        ast->atAs<AST::RepeatedLoad>(0)->size() == 0) {
+        return visitData(ast);
+    }
+    // Design principles 2.10: the elements of an array literal are a position where a value
+    // enters `T?` / `T!` when the element type is known, as it is here. Each element is the
+    // value under a CAST to the element type (the conversion an annotated `let` writes), so
+    // the array is built from computed elements of exactly that type.
+    entered = true;
+    ArrayDataFactory factory;
+    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+        bool nested         = false;
+        node_ptr_t dataNode = visitDataInto(item, elemType, nested);
+        if (asTagged(elemType) != nullptr) {
+            node_ptr_t castNode = createNodeAs<CastLoad>(elemType, true);
+            *castNode << dataNode;
+            setOriginFromAst(
+                context_,
+                castNode,
+                item,
+                camel::source::OriginKind::GctNode,
+                "gct.cast");
+            dataNode = castNode;
+        } else if (!nested && dataNode->type() == LoadType::DATA) {
+            // An inner literal without elements to put into a form (`[]`): the literal of
+            // the element type.
+            const auto &data = dataNode->loadAs<DataLoad>()->data();
+            if (auto converted = data->convertTo(elemType)) {
+                dataNode = createNodeAs<DataLoad>(converted);
+            }
+        }
+        auto [refNode, refData] = makeRefData(dataNode);
+        *execNode << refNode;
+        factory.add(refData);
+    }
+    *execNode << createNodeAs<DataLoad>(factory.build());
+    return execNode;
 }
 
 /*

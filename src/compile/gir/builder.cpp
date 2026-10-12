@@ -1427,9 +1427,27 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             patternAt(i)->toString());
     };
     // Each variable takes the type found at its `typeas` position...
+    // An argument that is not of the form of a `T?` / `T!` parameter enters it (design
+    // principles 2.10), so it binds the variables of the payload: `or_zero(5, 0)` with
+    // `x: (typeas T)?` gives `T = int`. `null` binds nothing.
     type_bindings_t bindings;
+    const std::function<bool(Type *, Type *)> bindEntering = [&](Type *pattern, Type *actual) {
+        type_bindings_t attempt = bindings;
+        if (bindTypeVars(pattern, actual, attempt)) {
+            bindings = std::move(attempt);
+            return true;
+        }
+        TupleType *tagged = asTagged(pattern);
+        if (tagged == nullptr) {
+            return false;
+        }
+        if (tagged->isNullable() && actual->code() == TypeCode::Void) {
+            return true;
+        }
+        return bindEntering(tagged->payloadType(), actual);
+    };
     for (size_t i = 0; i < withCount + normCount; ++i) {
-        if (!bindTypeVars(patternAt(i), actualAt(i), bindings)) {
+        if (!bindEntering(patternAt(i), actualAt(i))) {
             reject(describe(i) + " needs a type of that form to bind its type variables");
         }
     }
@@ -1439,7 +1457,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         if (containsTypeVar(wanted)) {
             reject(describe(i) + " leaves a type variable without a type");
         }
-        if (!wanted->assignableFrom(actualAt(i))) {
+        if (!entersImplicitly(wanted, actualAt(i))) {
             reject(std::format(
                 "{} is '{}' here ({})",
                 describe(i),
@@ -1667,6 +1685,25 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             ASSERT(
                 holes.size() == refNodes.size(),
                 "Composite holes must match unresolved reference count.");
+            if (dataType->code() == TypeCode::Array && !dataType->resolved() &&
+                !refTypes.empty()) {
+                // An array whose elements are all computed (`[x, null]`, `[a, b]` with an
+                // `int` and an `int?`): its element type is what the elements join to, and
+                // an element that is not of that type enters it (design principles 2.10).
+                Type *joined = valueTypeOf(refTypes.front());
+                for (size_t i = 1; i < refTypes.size() && joined != nullptr; ++i) {
+                    joined = joinTypes(joined, valueTypeOf(refTypes[i]));
+                }
+                for (size_t i = 0; i < refTypes.size() && joined != nullptr; ++i) {
+                    if (joined->assignableFrom(valueTypeOf(refTypes[i]))) {
+                        continue;
+                    }
+                    if (node_handle_t entered = coerceTo(refNodes[i], joined, gct)) {
+                        refNodes[i] = entered;
+                        refTypes[i] = joined;
+                    }
+                }
+            }
             auto filledType       = dataType->resolved()
                                         ? dataType
                                         : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
@@ -1781,6 +1818,22 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         throw;
     }
     declaresVariable_ = isVar;
+    // Design principles 2.10: the empty literal `[]` takes its element type from where it
+    // stands (an annotation, a parameter, the other arm of a branch, `as`). A name bound to
+    // it without one has no element type; say so here, where the type can be written. (A
+    // name the compiler made for an element of a literal starts with a digit.)
+    if (Type *type = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
+        type != nullptr && type->code() == TypeCode::Array &&
+        tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void && !ident.empty() &&
+        !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
+        diags_->of(SemanticDiag::EmptyArrayWithoutType)
+            .atOrigin(gct->at(0)->load()->origin())
+            .commit(ident);
+        if (!declScope->has(ident, false)) {
+            poisonedNames_[declScope].insert(ident);
+        }
+        throw BuildAbortException();
+    }
     // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
     node_handle_t bound = isVar ? newVariable(node) : node;
@@ -2425,6 +2478,14 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
+    if (asTagged(targetType) != nullptr &&
+        targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
+        // Several levels at once (`let x: int?! = 5`): one CAST per level.
+        if (node_handle_t entered = coerceTo(valueNode, targetType, gct)) {
+            LEAVE("CAST");
+            return entered;
+        }
+    }
     // Safe conversions always; an Unsafe one only into a module type, which then checks the
     // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
     // that may lose information stay refused.
@@ -3519,14 +3580,69 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         settle(normInputs, normInputTypes, false);
     }
 
+    // Design principles 2.10: an argument enters a `T?` / `T!` parameter by itself, `null`
+    // too, and `[]` takes the element type of its parameter. A callee is first tried with the
+    // argument types as they are, so that among overloads an exact match wins (`f(5)` with
+    // `f(x: int)` and `f(x: int?)`); then with every argument that enters its parameter
+    // counted as having the parameter's type. The CASTs are added once the callee is known
+    // (enterParameters below).
+    // DESIGN-QUESTION(entering-operator-args): operators are not tried this way. Their
+    // parameter types are computed from the arguments by C++ resolvers, so there is no
+    // target type before a resolver has accepted the arguments (`append(xs, 5)` with
+    // `xs: (int?)[]` still needs `5 as int?`, and `len([])` keeps `[]` without an element
+    // type). The alternative is to let a resolver name the type it would accept.
+    const auto enteringTypes = [](FunctionType *funcType, const type_vec_t &types, bool with) {
+        type_vec_t entered = types;
+        const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
+        for (size_t i = 0; i < entered.size() && i < count; ++i) {
+            Type *param      = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+            const bool isVar = with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
+            if (!isVar && param != nullptr && !param->assignableFrom(entered[i]) &&
+                entersImplicitly(param, entered[i])) {
+                entered[i] = param;
+            }
+        }
+        return entered;
+    };
+    const auto accepts = [&](FunctionType *funcType, bool entering) {
+        StaticFuncTypeResolver resolver(funcType);
+        if (!entering) {
+            return resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value();
+        }
+        return resolver
+            .resolve(
+                enteringTypes(funcType, withInputTypes, true),
+                enteringTypes(funcType, normInputTypes, false),
+                Modifier::None)
+            .has_value();
+    };
+    const auto enterParameters = [&](FunctionType *funcType) {
+        const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
+            const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
+            for (size_t i = 0; i < inputs.size() && i < count; ++i) {
+                Type *param      = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+                const bool isVar = with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
+                if (isVar || param == nullptr || containsTypeVar(param) ||
+                    param->assignableFrom(types[i])) {
+                    continue;
+                }
+                if (node_handle_t entered = coerceTo(inputs[i].node, param, inputs[i].expr)) {
+                    inputs[i].node = entered;
+                    types[i]       = param;
+                }
+            }
+        };
+        enter(withInputs, withInputTypes, true);
+        enter(normInputs, normInputTypes, false);
+    };
+
     // A call of a decorated function calls the function its decorators returned, so the
     // arguments are checked against that function's parameters (they were not checked at
     // all: a float passed where the decorated function takes an int was read as an int).
     const auto callDecorated = [&](const compile_graph_ptr_t &decoratedGraph) {
         node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
         FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
-        StaticFuncTypeResolver resolver(factoryType);
-        if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+        if (!accepts(factoryType, false) && !accepts(factoryType, true)) {
             reportConversionGaps(
                 {{std::string(), factoryType}},
                 withInputs,
@@ -3580,10 +3696,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 return g->funcType();
             };
+            for (const bool entering : {false, true}) {
+            if (targetGraph || chosenDecorated) {
+                break;
+            }
             for (const auto &g : *graphs) {
                 FunctionType *funcType = signatureOf(g);
-                StaticFuncTypeResolver resolver(funcType);
-                if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+                if (!accepts(funcType, entering)) {
                     continue;
                 }
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
@@ -3602,6 +3721,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 targetGraph = g;
                 break;
+            }
             }
             if (!targetGraph && !chosenDecorated) {
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
@@ -3818,8 +3938,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
-        StaticFuncTypeResolver resolver(funcType);
-        if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+        if (!accepts(funcType, false) && !accepts(funcType, true)) {
             reportConversionGaps(
                 {{std::string(), funcType}},
                 withInputs,
@@ -3853,6 +3972,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
 
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
+    if (targetOperator == nullptr) {
+        enterParameters(targetFuncType);
+    }
     if (recorder_) {
         recorder_->callResolved(
             gct->load()->origin(),
@@ -4131,6 +4253,56 @@ Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &or
     return castNode;
 }
 
+node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
+    Type *source = valueTypeOf(nodeTypeOf(node));
+    if (target->assignableFrom(source)) {
+        return node;
+    }
+    if (!entersImplicitly(target, source)) {
+        return nullptr;
+    }
+    node = valueOf(node); // what a variable holds, not the variable
+    if (TupleType *tagged = asTagged(target)) {
+        // `null` is the null slot of every `T?`; any other value enters the payload first.
+        if (tagged->isNullable() && source->code() == TypeCode::Void) {
+            return castNodeTo(node, tagged, origin);
+        }
+        node_handle_t inner = coerceTo(node, tagged->payloadType(), origin);
+        return inner != nullptr ? castNodeTo(inner, tagged, origin) : nullptr;
+    }
+    // The empty literal `[]`: the same literal with the element type its position gives it.
+    ASSERT(target->code() == TypeCode::Array, "Only an empty array literal is left here.");
+    node_handle_t typed = currGraph_->addStaticDataNode(
+        tt::as_shared<Data>(ArrayData::create(tt::as_ptr<ArrayType>(target)->elemType())));
+    registerNodeOrigin(context_, typed, origin, "gir.data");
+    return typed;
+}
+
+void Builder::coerceArmExit(
+    const compile_graph_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
+    Type *exitType = arm->funcType()->exitType();
+    if (exitType != nullptr && target->assignableFrom(exitType)) {
+        return;
+    }
+    // The nodes are added to the arm's own graph; no name is looked up, so the scopes of the
+    // position the branch stands at do no harm.
+    const compile_graph_ptr_t outer = std::exchange(currGraph_, arm);
+    node_handle_t output            = arm->draft().node(arm->draft().exitNode());
+    node_handle_t coerced           = coerceTo(output, target, origin);
+    ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+    if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
+        // A literal took the place of the output (`[]`): what the output waited for (the
+        // statements of a sync arm) is still waited for.
+        node_handle_t gate = currGraph_->addGateNode(target);
+        linkNodes(LinkType::Norm, coerced, gate);
+        linkNodes(LinkType::Ctrl, output, gate);
+        coerced = gate;
+    }
+    arm->funcType()->setExitType(target);
+    setGraphReturnFromResult(arm, nodeIdOf(coerced), nodeIdOf(coerced), target);
+    currGraph_ = outer;
+}
+
 Type *Builder::declaredExitTypeHere() const {
     compile_graph_ptr_t graph = currGraph_;
     while (graph != nullptr && openArmGraphs_.contains(graph.get())) {
@@ -4175,12 +4347,13 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
         return fallible->equals(nodeTypeOf(thrown)) ? thrown : castNodeTo(thrown, fallible, gct->at(0));
     }
     // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
-    // `throw` (DESIGN-QUESTION(nullable-error) Q1). A value that already has the declared
-    // type, and one that fits neither way (reported by checkDeclaredReturn), is left alone.
-    if (TupleType *tagged = asTagged(declared);
-        tagged != nullptr && !tagged->assignableFrom(valueType) &&
-        tagged->castSafetyFrom(valueType) == CastSafety::Safe) {
-        return castNodeTo(value, tagged, gct->at(0));
+    // `throw`, and one of the positions where a value enters by itself (design principles
+    // 2.10; coerceTo). A value that already has the declared type, and one that fits neither
+    // way (reported by checkDeclaredReturn), is left alone.
+    if (declared != nullptr && !declared->assignableFrom(valueType)) {
+        if (node_handle_t entered = coerceTo(value, declared, gct->at(0))) {
+            return entered;
+        }
     }
     return value;
 }
@@ -4250,10 +4423,30 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
         // evaluated, only when the tag selects it. Arm 1 takes the value out.
         arms[0] = buildArmGraph(exec);
-        arms[1] = buildArmGraph(exec, [&] { return applyTagOperator(valueOp, name, gct); });
-        // DESIGN-QUESTION(nullable-error) Q7: the right-hand side has the payload type.
+        // Design principles 2.10: the right-hand side is a `T`, and the result is a `T`; or
+        // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
+        // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
+        // taking the value out. Either way it is one branch.
         Type *fallback = arms[0]->funcType()->exitType();
-        if (fallback == nullptr || payload->unify(fallback) == nullptr) {
+        const bool plain =
+            fallback != nullptr &&
+            (payload->unify(fallback) != nullptr || entersImplicitly(payload, fallback));
+        const bool chained = !plain && fallback != nullptr &&
+                             entersImplicitly(subjectType, fallback);
+        if (plain) {
+            if (payload->unify(fallback) == nullptr) {
+                coerceArmExit(arms[0], payload, gct);
+            }
+            arms[1] = buildArmGraph(exec, [&] { return applyTagOperator(valueOp, name, gct); });
+        } else if (chained) {
+            coerceArmExit(arms[0], subjectType, gct);
+            arms[1] = buildArmGraph(exec, [&] {
+                const auto dref = std::make_shared<GCT::Node>(
+                    std::make_shared<GCT::DRefLoad>(Reference(name)));
+                dref->load()->setOrigin(gct->load()->origin());
+                return visitDRefNode(dref);
+            });
+        } else {
             diags_->of(SemanticDiag::TaggedOperandMismatch)
                 .atOrigin(gct->load()->origin())
                 .commit(
@@ -4475,10 +4668,12 @@ node_handle_t Builder::buildBranch(
     // The variables the arms captured, and whether some arm writes them.
     std::vector<CapturedUse> captured;
     std::vector<DraftGraphBuilder *> armGraphs;
+    std::vector<graph_ptr_t> armList;
 
     // Makes `subGraph` the next arm of the branch.
     const auto addArm = [&](const graph_ptr_t &subGraph) {
         armGraphs.push_back(subGraph.get());
+        armList.push_back(subGraph);
         for (const CapturedUse &use : capturedUsesOf(subGraph)) {
             auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
             if (known == captured.end()) {
@@ -4523,8 +4718,11 @@ node_handle_t Builder::buildBranch(
             setNodeType(joinNode, joinType);
         } else {
             // Arms must agree up to refinement: unify widens (for example two
-            // tensors whose shapes differ in one extent) or fails.
-            Type *unified = joinType->unify(exitType);
+            // tensors whose shapes differ in one extent) or fails. Failing that, one arm may
+            // enter the form of the other (design principles 2.10): `if c then 1 else null`
+            // is an `int?`, `if c then v else failed` a `T!`. The arm that is not of the
+            // joined type gets the CAST at its exit once the type is known (below).
+            Type *unified = joinTypes(joinType, exitType);
             if (unified != nullptr && unified != joinType) {
                 joinType = unified;
                 setNodeType(joinNode, joinType);
@@ -4586,6 +4784,16 @@ node_handle_t Builder::buildBranch(
         }
         addArm(subGraph);
     }
+    if (joinType != nullptr && !absentElse) {
+        for (size_t i = 0; i < armList.size(); ++i) {
+            Type *exitType = armList[i]->funcType()->exitType();
+            if (exitType != nullptr && !joinType->assignableFrom(exitType) &&
+                entersImplicitly(joinType, exitType)) {
+                coerceArmExit(armList[i], joinType, gct);
+            }
+        }
+    }
+
     runtime::DraftBrchPayload payload{
         .join       = nodeIdOf(joinNode),
         .armCount   = static_cast<runtime::gc_cnt_t>(branchArms.size()),

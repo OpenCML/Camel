@@ -221,6 +221,17 @@ inline TupleType *asFallible(Type *type) {
     return tuple && tuple->isFallible() ? tuple : nullptr;
 }
 
+/// Whether a value of type `source` enters a position of type `target` by itself (design
+/// principles 2.10): it is assignable; or `target` is `T?` / `T!` and the value enters `T`
+/// (so it is put into the form, one level at a time: an `int` enters `int?!`); or `source`
+/// is the type of `null` and `target` is a `T?`; or `source` is the type of the empty array
+/// literal `[]` and `target` is an array type. Never the other way: a `T?` is not a `T`.
+bool entersImplicitly(Type *target, Type *source);
+/// The type two branch arms (or two elements of an array literal) have in common: the type
+/// they unify to, or the tagged form one of them enters (`int` and `null` give `int?`, `int`
+/// and `int!` give `int!`). nullptr when there is none.
+Type *joinTypes(Type *a, Type *b);
+
 /// The type of the value an argument of type `type` carries: the content type of a variable
 /// cell, `type` itself otherwise. Overloads are resolved on value types.
 inline Type *valueTypeOf(Type *type) {

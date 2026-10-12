@@ -657,8 +657,8 @@ A value of type **`T?`** is either `null` or a `T`. [`examples/10_nullable.cml`]
 module nullable
 
 func find(xs: int[], target: int, i: int): int? {
-    return if i >= len(xs) then { return null }
-        else if xs[i] == target then { return i }
+    return if i >= len(xs) then null
+        else if xs[i] == target then i
         else find(xs, target, i + 1)
 }
 
@@ -688,7 +688,7 @@ null
 ```
 
 - `a ?? b`: takes `b` when `a` is null. `match` uses `case null` and `case v`.
-- An ordinary `int` does not turn into an `int?` by itself: use `return` in a function that returns `int?`, write the type in the declaration (`let maybe: int? = ...`), or write `5 as int?`.
+- An ordinary `int` is put into an `int?` wherever one is expected: the two arms of `find` are `null` and `i`, so the branch is an `int?`; an argument (`show(5)`), a declaration with a type (`let maybe: int? = 5`) and `return` work the same way. Not the other way round: to use an `int?` as an `int`, open it with `??` or `match`.
 
 ## 11. Maps and sets
 

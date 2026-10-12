@@ -1,0 +1,34 @@
+/**
+ * `a ?? b`: when `b` is itself a `T?` the result is a `T?`, when it is a `T` the result is a
+ * `T` (design principles 2.10); `!!` likewise with `T!`. A chain `a ?? b ?? 9` tries `a`, then
+ * `b`, then gives the default, and a right side is evaluated only when it is needed. Each
+ * `??` is one branch on the graph.
+ */
+module fallback_chain
+
+func look(tag: string, x: int?): int? sync {
+    println('look ' + tag)
+    return x
+}
+func parse(s: string): int! { return parse_int(s) }
+func plain(x: int): int { return x }
+
+func main(): int sync {
+    let none: int? = null
+    let some: int? = 4
+    let other: int? = 5
+    // the type of the result
+    let r1: int? = none ?? some
+    let r2 = plain(none ?? some ?? 9)
+    println(r1, r2, none ?? none ?? 9, some ?? other ?? 9, none ?? null)
+    // grouped either way: the same
+    println((none ?? some) ?? 9, none ?? (some ?? 9), (none ?? none) ?? 9, none ?? (none ?? 9))
+    // a right side is evaluated only when the left one is null
+    println(look('a', some) ?? look('b', other) ?? 0)
+    println(look('c', none) ?? look('d', other) ?? 0)
+    println(look('e', none) ?? look('f', none) ?? 0)
+    // `!!`
+    let p: int! = parse('x') !! parse('12')
+    println(p, parse('x') !! parse('y') !! -1, parse('7') !! parse('y') !! -1)
+    return 0
+}

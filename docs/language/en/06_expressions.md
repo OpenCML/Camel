@@ -98,7 +98,7 @@ For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). O
 
 ```cml
 func half(x: int): int! {
-    return if x % 2 == 0 then { return x / 2 } else { throw error('Odd', 'not even') }
+    return if x % 2 == 0 then x / 2 else { throw error('Odd', 'not even') }
 }
 
 func main(): int sync {
@@ -116,6 +116,7 @@ func main(): int sync {
 ```
 
 - The right side is evaluated only when it is selected.
+- **The right-hand side may be nullable.** In `a ?? b`, when `b` is a `T` the result is a `T`; when `b` is a `T?` the result is a `T?`. So `a ?? b ?? 9` tries `a`, then `b`, then gives the default, and the result is the same however it is parenthesized. Likewise `!!` (when `b` is a `T!` the result is a `T!`). On the graph each `??` is still one branch. A right-hand side `[]` takes the element type of the left-hand side.
 - The right side of `??` and `!!` extends to the end of the expression: `x ?? 0 + 1` is `x ?? (0 + 1)`. To take the value first and then compute, add parentheses: `(x ?? 0) + 1`.
 - A left side that is not of the required form (`??` on a plain `int`, `!!` or `?->` on a `T?`), or a right side of the wrong type, is `SemanticDiag::TaggedOperandMismatch`.
 
@@ -158,7 +159,7 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
 
 `e as T` is used for:
 
-- entering the nullable or fallible form: `5 as int?`, `null as int?`, `v as int!`;
+- entering the nullable or fallible form: `5 as int?`, `null as int?`, `v as int!` (not needed where the target type is known, see [3.4](03_data_model.md));
 - constructing maps and sets: `[...] as Map<K, V>`, `[...] as Set<T>`;
 - checked conversion of module types: `t as Tensor<f32, const [3]>`, where the shape is checked at the conversion;
 - giving a type to a result of undetermined type, as returned by `json::decode` and the like: `decode(s) as int[]`.
@@ -278,7 +279,7 @@ func report(r: int!): string {
 }
 
 func main(): int sync {
-    println(show(5 as int?), show(null as int?))
+    println(show(5), show(null))
     println(report(parse_int('7')), report(parse_int('x')))
     return 0
 }
