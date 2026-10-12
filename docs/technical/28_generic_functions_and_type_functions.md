@@ -1,8 +1,8 @@
 # Generic Functions and Type Functions
 
 This note describes how generic functions (`typeas`) and type functions (type declarations
-with parameters) are compiled. The normative text is `docs/design-principles.cn.md` section
-2.9, "类型、泛型与类型函数"; the user-facing description is in `docs/language/` (3.1, 7.5,
+with parameters) are compiled. The normative text is `docs/design-principles.cn.md` sections
+2.9, "类型、泛型与类型函数", and 2.10; the user-facing description is in `docs/language/` (3.1, 7.5,
 7.7). Everything here happens while a module is compiled: no pass, backend or runtime
 structure knows about either construct.
 
@@ -95,15 +95,23 @@ block: each `FUNC` child whose type is still generic under the current bindings
 the scopes of the block (node, graph, decorated and template scopes, owner graph). A call may
 therefore precede the declaration. `visitDeclNode` and `visitFuncNode` skip such a function.
 
-**Calls.** `visitLinkNode` marks its callee position (`genericCalleeAllowed_`); a `DREF` that
-names a template yields a marker node recorded in `genericDrefs_` there, and
-`GenericFunctionAsValue` anywhere else. `resolveGenericCall` then
+**Calls.** A `DREF` that names a template yields a marker node recorded in `genericDrefs_`,
+wherever it stands. For a call, `resolveGenericCall` collects what all arguments say about the
+variables and then solves, at the call and nowhere else:
 
-1. checks the argument counts,
-2. binds each variable from the argument type at its `typeas` position (`bindTypeVars`),
-3. holds every argument to its parameter with the variables replaced, by the rule for
-   ordinary functions (`Type::assignableFrom`; nothing is converted implicitly),
-4. asks `instantiateGeneric` for the instance.
+1. it checks the argument counts;
+2. each variable takes the type of the argument at its `typeas` position (`bindTypeVars`; an
+   argument that is not of the form of a `T?`/`T!` parameter enters it and binds the payload);
+3. a variable that position left open takes the type found at any other occurrence
+   (`unifyTypeVars`): `or_zero(null, 4)` binds `T` from the second argument;
+4. the arguments that name a generic function themselves wait for this. For each, the
+   parameter it is passed to, with what is known so far, is the function it has to be
+   (`instantiateGenericAs`); its instance then says what was still open in that parameter
+   (its return type), which may let the next one go. This repeats while it makes progress;
+5. a variable or an argument left over is an error that names the variables
+   (`GenericArgumentsMismatch`);
+6. every argument is held to its parameter with the variables replaced
+   (`entersImplicitly`), and `instantiateGeneric` is asked for the instance.
 
 The rest of `visitLinkNode` (argument passing, `var` arguments, captured variables, sync
 order) runs unchanged on the instance, which is an ordinary graph.
@@ -151,7 +159,7 @@ modules use the same types; the declaring module's graph then changes after it w
 - `export` of a generic function exports its `GenericTemplate` as a module entity of its own
   kind (`Entity::generic_payload_t`, opaque outside the GIR builder; `EntityAccess`).
 - A `DREF` that resolves to such an entity is treated like the name of a local template: a
-  marker node in callee position, `GenericFunctionAsValue` elsewhere.
+  marker node, instantiated by a call or by the position it stands in (section 6).
 - `instantiateGeneric` recognises a template of another builder by its `homeRoot` (the root
   graph of the builder that registered it). For such a template it
   - looks for, and records, the instance under the *importing* builder's root graph
@@ -169,10 +177,53 @@ modules use the same types; the declaring module's graph then changes after it w
 - An error in the body is reported in the declaring module's file
   (`Diagnostics::locateByOriginFrom`), with the call that asked for the instance.
 
-## 6. Limits of this implementation
+## 6. A generic function where a function is expected
 
-- A generic function has no function value: it cannot be bound to a name, passed as an
-  argument or decorated (`GenericFunctionAsValue`, `GenericFunctionUnsupported`).
+Design principles 2.10: a generic function may stand wherever a function is expected, and is
+instantiated once the position fixes its type variables. The delay exists while the module is
+compiled: the marker node of the name is replaced by the function value of an instance
+before the call it belongs to is built, and no graph ever holds a template.
+
+| Position | What fixes the types | Where |
+|---|---|---|
+| argument of a function with one signature, of a function value | the parameter's function type | `settle` in `visitLinkNode` -> `genericValueFor` |
+| argument of a generic function | the solver above | `resolveGenericCall` |
+| `let f: (x: int) => int = id`, `id as (x: int) => int` | the written type | GCT emits a `CAST` for a declared function type; `visitCastNode` resolves it and adds no node |
+| `return id` | the declared return type | `visitExitNode` |
+| argument of a built-in operator (`map`, `filter`, `reduce`, ...) | trial, see below | `settleGenericOperatorArguments` |
+| anything else (`let g = id`, an array element) | nothing: `GenericFunctionAsValue`, naming the variables | `rejectNameWithoutValue`, `visitNRefNode` |
+
+`instantiateGenericAs(tmpl, expected)` binds the template's variables from the parameter
+types of the expected function type (`unifyTypeVars`), requires the instance to have exactly
+those parameters, builds it, and compares its return type when the expected one is known.
+
+**Built-in operators.** The type rule of an operator is C++ code (a resolver) that is handed
+the argument types and answers yes or no; it cannot be asked which function it expects. So
+the instances the other arguments suggest are tried. The candidate types for the parameters
+of the function are what those arguments are made of (the element type of an array or a set,
+the key and value types of a map and their pair) and then their own types; every choice of
+candidates that unifies with the template's parameters and fixes all its variables gives a
+function type. The operator is asked about that type *before* the instance is built (with
+the declared return type, or, when none is declared, with the return types an element
+function usually has), so that the body of an instance the operator would refuse is never
+built and cannot report errors for types the program does not mean. The first instance the
+operator accepts is taken. An instance that was built and then refused (its result type is
+not what the operator needs) stands for the name, so that the operator's own diagnostic says
+what does not fit. Not covered: a name with several ordinary functions (`xs->map<abs>`)
+is still `FunctionNameAsValue`, and an operator whose required result type is none of the
+usual ones may refuse a function it could take; a lambda with written types always works.
+
+**Functions written in place.** A `FUNC` node without a name whose type still holds a
+variable is registered where it stands (`anonymousTemplateOf`) and yields the same marker.
+Programs cannot write one (`typeas` is refused in a lambda); the list comprehension does:
+`[e for x in xs if c]` is lowered by the GCT builder (`visitComprehension`) to
+`xs->filter<F>->map<G>` with `F`, `G` taking `x` of a fresh type variable, which the two
+operators fix as above. The graph is the one the two calls written out have.
+
+## 7. Limits of this implementation
+
+- A generic function cannot be decorated (`GenericFunctionUnsupported`), and `f<w>` with a
+  generic `f` is not a partial application (`PartialApplicationRefused`).
 - One name is either a generic function or ordinary functions; two generic functions with
   one name are a `Redeclaration`.
 - A generic function that is never called is never instantiated, so its body is never typed.
@@ -182,8 +233,10 @@ modules use the same types; the declaring module's graph then changes after it w
 - Composite types are still not canonical: two instantiations of `T[]` are distinct objects
   compared with `equals`.
 
-## 7. Tests
+## 8. Tests
 
 `test/plans/feat/compile/generics.plan.toml` (cases under `test/cases/compile/generics/`):
 behaviour, the four backends and the `std::opt` / `std::inline` / `std::macro` pipelines, the
-shape of the graph, and each diagnostic with its position.
+shape of the graph, and each diagnostic with its position. Generic functions as values:
+`test/plans/feat/consistency/generic_values.plan.toml`; list comprehensions:
+`test/plans/feat/consistency/comprehension.plan.toml`.

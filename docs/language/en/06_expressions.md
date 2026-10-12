@@ -22,7 +22,8 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 
 - The elements of an array literal must have the same type. The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
 - The keys of a struct literal are identifiers.
-- The list comprehension `[e for x in xs if c]` and the spread `...xs` are reserved, not implemented (`SemanticDiag::ConstructNotSupported`). Write `xs->filter<...>->map<...>` and `concat(xs, ys)`.
+- **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
+- The spread `...xs` is reserved and not implemented (`SemanticDiag::ConstructNotSupported`). Write `concat(xs, ys)`.
 
 ## 6.3 Access and subscripts
 

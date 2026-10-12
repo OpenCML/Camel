@@ -175,7 +175,7 @@ func main(): int sync {
 ```
 
 - A generic function is a **subgraph template**. Each call with a set of concrete types instantiates a subgraph in which all types are concrete (the same set of types is instantiated only once; in `std::rgir` one can see subgraphs named `first<int>` and `first<string>`). The graph contains only concrete types, and no type information is needed at run time.
-- **Binding happens only at the positions of `typeas`**: the type variable takes the type the argument has at that position. The other positions are ordinary parameters, checked against the type after substitution, with no implicit conversion: `pick(true, 1, 2.5)` is an error (`T` is already bound to `int`).
+- **A type variable takes its type from the arguments.** First the type of the argument at its `typeas` position; when the argument there says nothing (it is `null`, or a generic function that is itself waiting for its types), the type found at another occurrence. The constraints of all arguments are collected before any is checked: every parameter is then checked against its type with the variables replaced, without implicit conversion (except that a value enters a `T?`/`T!` parameter, see [3.4](03_data_model.md)). `pick(true, 1, 2.5)` is an error (`T` is bound to `int`); a variable that cannot be determined is a compile-time error, and the diagnostic says which.
 - `typeas` can appear in these positions: array elements, tuple elements, struct fields, the parameters and return value of a function type, the inner type of `T?`/`T!`, the arguments of `Map`/`Set` and of type functions. It cannot appear in a union type, nor as an argument of a module type.
 - `typeas` can only be written in the parameters (including the `with` parameters) of a function declaration. A type variable must be bound before it is used (in the order written, `with` parameters first); binding the same variable twice, or giving it the name of an existing type, is an error.
 - **The function body is checked at instantiation.** Type errors in the function body are reported at instantiation; the diagnostic gives the position of the error in the function body and states which instance it is and which call instantiated it. A generic function that is never called is not checked.
@@ -201,7 +201,33 @@ func main(): int sync {
 3
 ```
 
-**Current restrictions**: a generic function can only be called directly; it cannot be used as a value (where needed, wrap it in a lambda that spells out the parameter types: `xs->map<(x: int) => id(x)>`) and cannot be annotated; type arguments cannot be given explicitly in a call (whether to allow this is not yet decided).
+**A generic function may stand wherever a function is expected**, also as an argument of another generic function. The compiler delays its instantiation until the type variables can be determined from the context; the delay exists at compile time only, and the graph holds the concrete instances.
+
+```cml
+func apply(f: (x: typeas T) => typeas U, x: T): U { return f(x) }
+func id(x: typeas A): A { return x }
+func pair(x: typeas A): (A, A) { return (x, x) }
+
+func main(): int sync {
+    println(apply(id, 3), apply(pair, 'a'))   // T comes from 3: id becomes id<int>, so U = int
+    println([[1, 2], [3, 4]]->map<pair>)      // handed to a built-in higher-order operator
+    let f: (x: int) => int = id               // the written type chooses the instance
+    println(f(4))
+    return 0
+}
+```
+
+```text
+3 (a, a)
+[([1, 2], [1, 2]), ([3, 4], [3, 4])]
+4
+```
+
+- The context may be: a parameter of another function (a function type), the other arguments of a generic function, a declared type (`let f: (x: int) => int = id`), a declared return type (`return id`), a built-in higher-order operator (`map`, `filter`, `reduce`, ...). The type rule of a built-in operator is C++ code and cannot say which function it expects, so the compiler tries the element types of the other arguments and takes the instance the operator accepts.
+- When nothing determines the variables it is the compile-time error `SemanticDiag::GenericFunctionAsValue` (or, for an argument, `SemanticDiag::GenericArgumentsMismatch`), which names them: `let g = id` has no context (write the type); in `apply(id, id)` each argument waits for the other.
+- An imported generic function can be a value too (`xss->map<reverse>`, with `reverse` from the `array` module).
+
+**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; type arguments cannot be written at a call (whether to allow that is undecided).
 
 ## 7.6 Annotations
 

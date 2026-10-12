@@ -130,6 +130,22 @@ FunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t 
  */
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings);
 
+/**
+ * Collects what `actual` says about the variables of `pattern`: a variable that is not bound
+ * yet is bound from the type found at ANY of its occurrences, binding or not (design
+ * principles 2.10: the constraints all arguments give are collected, then solved). `actual`
+ * may itself still hold variables (the type an argument is expected to have, not yet known in
+ * full); a position where it does binds nothing. A `T?` / `T!` in `pattern` met by a type
+ * that is not of that form takes the type as its payload (the value enters the form).
+ * Returns false when the shapes differ where a variable still had to be reached. Whether the
+ * argument fits the parameter is left to the check of the substituted type.
+ */
+bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings);
+
+/// The names of all variables in `type`, binding or not, appended to `names` without
+/// duplicates.
+void collectTypeVars(Type *type, std::vector<std::string> &names);
+
 /// The names of the variables `pattern` can bind (see bindTypeVars), appended to `names`
 /// without duplicates. A `typeas` inside a union is not among them: there is no position of
 /// the argument type to take it from. Among the arguments of a module type it is, when those

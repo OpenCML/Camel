@@ -158,6 +158,11 @@ class Builder {
     node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
     node_ptr_t visitArrayData(const AST::node_ptr_t &ast);
+    /// `[e for x in xs if c]`: `xs->filter<(x) => c>->map<(x) => e>` (design principles
+    /// 2.10), built as those two calls are. The type of `x` is the element type of `xs`,
+    /// which only the GIR builder knows: each of the two functions is written with a type
+    /// variable for it and is instantiated where `map` / `filter` receive it.
+    node_ptr_t visitComprehension(const AST::node_ptr_t &ast);
     /// `ast` lowered where a value of type `type` is expected. An array literal whose
     /// elements are to be put into `T?` / `T!` is built with the conversions in place, and
     /// `entered` is set; anything else is visitData(ast).

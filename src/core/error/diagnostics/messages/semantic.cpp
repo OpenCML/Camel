@@ -413,19 +413,23 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericArgumentsMismatch",
                 "The generic function '{0}' cannot be called with argument types {1}: {2}.",
-                "A type variable is bound once, at its 'typeas' position, from the type of the "
-                "argument found there; every other parameter is then checked against its type "
-                "with the variables replaced. Nothing is converted implicitly. Signature: {3}",
+                "A type variable takes the type of the argument found at its 'typeas' position, "
+                "or, when that argument says nothing (a 'null', a generic function that is "
+                "itself waiting for its types), at another occurrence; every parameter is then "
+                "checked against its type with the variables replaced. A value enters a 'T?' "
+                "or 'T!' parameter by itself; nothing else is converted. Signature: {3}",
             },
         },
         {
             SemanticDiag::GenericFunctionAsValue,
             {
                 "GenericFunctionAsValue",
-                "The generic function '{0}' is used as a value, but it is only a template until "
-                "it is called with arguments that fix its type variables.",
-                "Call it directly, or wrap the call in a function whose parameter types are "
-                "written out, e.g. '(x: int) => {0}(x)'.",
+                "The generic function '{0}' cannot be given its types here: {1}.",
+                "A generic function may stand wherever a function is expected, also as an "
+                "argument of another generic function. It is a template: the compiler builds "
+                "the instance once the position fixes its type variables (a parameter of "
+                "function type, a declared type, the other arguments of the call). Here they "
+                "are not fixed. Signature: {2}",
             },
         },
         {
@@ -631,6 +635,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The empty array literal takes its element type from where it stands: a "
                 "declared type, a parameter, the other arm of a branch, an 'as'. Here there "
                 "is none. Write the type: 'let {0}: int[] = []'.",
+            },
+        },
+        {
+            SemanticDiag::ComprehensionSourceRefused,
+            {
+                "ComprehensionSourceRefused",
+                "The source of this list comprehension has type '{0}', which has no elements "
+                "to take.",
+                "A list comprehension '[e for x in xs if c]' is "
+                "'xs->filter<(x) => c>->map<(x) => e>': 'xs' must be an array (or another value "
+                "'map' and 'filter' accept), and 'x' has the type of its elements.",
             },
         },
         {

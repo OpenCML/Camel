@@ -627,7 +627,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 if (i < typeNodes->size() && !enteredLiteral) {
                     Type *type = declaredType;
                     // Try a static type conversion first.
+                    // A declared function type says which function a name stands for
+                    // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
+                    // no node.
                     if (asTagged(type) != nullptr ||
+                        (type->code() == TypeCode::Function &&
+                         dataNode->type() != LoadType::DATA) ||
                         (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
                         // Decided when the generic function is instantiated. A declared
                         // `T?` / `T!` puts the value into that form (design principles
@@ -689,7 +694,12 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
                     Type *type              = visitType(typeASTNode);
                     // Try a static type conversion first.
+                    // A declared function type says which function a name stands for
+                    // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
+                    // no node.
                     if (asTagged(type) != nullptr ||
+                        (type->code() == TypeCode::Function &&
+                         dataNode->type() != LoadType::DATA) ||
                         (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
                         // Decided when the generic function is instantiated. A declared
                         // `T?` / `T!` puts the value into that form (design principles
@@ -2126,6 +2136,11 @@ ArrayData() : Data* data ;
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
+    if (ast->size() > 1) {
+        node_ptr_t res = visitComprehension(ast);
+        LEAVE("ArrayData");
+        return res;
+    }
 
     ArrayDataFactory factory;
     bool dangling       = false;
@@ -2175,6 +2190,54 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     LEAVE("ArrayData");
     return res;
+}
+
+node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
+    const AST::node_ptr_t &elementAst = ast->at(1);
+    const AST::node_ptr_t &nameAst    = ast->at(2);
+    const AST::node_ptr_t &sourceAst  = ast->at(3);
+    const AST::node_ptr_t conditionAst =
+        ast->at(4)->empty() ? AST::node_ptr_t{} : ast->at(4)->at(0);
+    const Reference nameRef = nameAst->loadAs<AST::RefDataLoad>()->ref();
+    if (!validateIdent(nameRef.ident())) {
+        diags_->of(SemanticDiag::ReservedIdentifier).at(nameAst->load()->tokenRange()).commit();
+        throw BuildAbortException();
+    }
+    const auto place = [&](const node_ptr_t &node, const AST::node_ptr_t &at, const char *what) {
+        setOriginFromAst(context_, node, at, camel::source::OriginKind::GctNode, what);
+        return node;
+    };
+    // The function `(x) => body`: what a lambda with an expression body is, with the type of
+    // `x` left to the call that receives it (a type variable no program can write).
+    const auto elementFunction = [&](const AST::node_ptr_t &body) {
+        FunctionTypeFactory factory;
+        factory.addNormArg(
+            nameRef.ident(),
+            TypeVarType::create("$element" + std::to_string(idIndex_++), true),
+            false);
+        FunctionType *type  = tt::as_ptr<FunctionType>(factory.build());
+        node_ptr_t typeNode = place(createNodeAs<TypeLoad>(type, type->implMark()), body, "gct.func.type");
+        const ValueUseScope valueUseScope(*this);
+        valueUse_           = {};
+        node_ptr_t bodyNode = place(createNodeAs<ExecLoad>(false), body, "gct.block");
+        *bodyNode << visitData(body);
+        node_ptr_t funcNode = place(createNodeAs<FuncLoad>(std::string()), body, "gct.func");
+        *funcNode << typeNode << bodyNode;
+        return funcNode;
+    };
+    // `value->op<function>`.
+    const auto apply = [&](const char *op, const node_ptr_t &function, const node_ptr_t &value) {
+        node_ptr_t withNode = place(createNodeAs<WithLoad>(1), ast, "gct.with");
+        *withNode << place(createNodeAs<DRefLoad>(Reference(op)), ast, "gct.dref") << function;
+        node_ptr_t linkNode = place(createNodeAs<LinkLoad>(1), ast, "gct.link");
+        *linkNode << withNode << value;
+        return linkNode;
+    };
+    node_ptr_t result = visitData(sourceAst);
+    if (conditionAst) {
+        result = apply("filter", elementFunction(conditionAst), result);
+    }
+    return apply("map", elementFunction(elementAst), result);
 }
 
 namespace {

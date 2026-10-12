@@ -221,7 +221,6 @@ The following constructs are accepted by the grammar (or their keywords are rese
 
 | Construct | Diagnostic given | Alternative today |
 |---|---|---|
-| List comprehension `[e for x in xs if c]` | `SemanticDiag::ConstructNotSupported` | `xs->filter<...>->map<...>` |
 | Spread `[...xs, y]`, `{ ...p, x: 1 }`, `f(...args)` | `ConstructNotSupported` | `concat(xs, [y])`; write out the fields one by one |
 | Format string `` `x = {x}` `` | `ConstructNotSupported` | `'x = {}'->format<x>` |
 | `e is T` | `ConstructNotSupported` | None (there is no type information at run time) |

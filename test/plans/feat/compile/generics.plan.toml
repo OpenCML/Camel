@@ -845,7 +845,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "generic_as_value"
-desc = "A generic function named as a value (bound to a name, handed to `map`): it is a template without a graph. Whether this should be allowed is an open question."
+desc = "A generic function bound to a name without a type: nothing fixes its type variables (design principles 2.10; where a position does, see consistency/generic_values.plan.toml)."
 kind = "negative"
 case = "../../../cases/compile/generics/err_as_value.cml"
 args = ["${case}"]
@@ -853,21 +853,18 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericFunctionAsValue"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 13
-expect_output_contains = ["The generic function 'id' is used as a value"]
+expect_output_contains = ["The generic function 'id' cannot be given its types here", "its type variable(s) T cannot be determined"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
 name = "generic_as_argument"
-desc = "A generic function handed to another generic function."
-kind = "negative"
+desc = "A generic function handed to another generic function is instantiated from the other argument (it used to be an error)."
+kind = "behavior"
 case = "../../../cases/compile/generics/err_generic_arg.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::GenericFunctionAsValue"
-expect_diagnostic_line = 12
-expect_diagnostic_column = 19
-expect_output_contains = ["The generic function 'id' is used as a value"]
+expect_exit = 0
+expect_stdout_starts_with = "3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -969,7 +966,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "generic_exported_as_value"
-desc = "An imported generic function has no function value either."
+desc = "An imported generic function bound to a name without a type: as for a local one, nothing fixes its type variables."
 kind = "negative"
 case = "../../../cases/compile/generics/err_export_value.cml"
 args = ["${case}"]

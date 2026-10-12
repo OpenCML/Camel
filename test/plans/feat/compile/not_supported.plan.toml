@@ -5,17 +5,13 @@ tags = ["feat", "compile", "semantic", "negative"]
 
 [[tests]]
 name = "not_supported.list_comprehension"
-desc = "A list comprehension is rejected at the literal; it used to be compiled as the empty array, silently."
-kind = "negative"
+desc = "A list comprehension is implemented (filter then map; consistency/comprehension.plan.toml). It was rejected at the literal here, and before that compiled as the empty array, silently."
+kind = "behavior"
 case = "../../../cases/compile/not_supported/list_comprehension.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 14
-expect_output_contains = ["'[... for ... in ...]' is not supported: list comprehensions are not implemented"]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+expect_exit = 0
+expect_stdout_starts_with = "reached\n[4, 6]\n"
+expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

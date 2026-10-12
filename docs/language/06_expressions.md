@@ -22,7 +22,8 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 
 - 数组字面量的元素类型必须相同。空数组 `[]` 的元素类型来自上下文：`let xs: int[] = []`、`[] as Map<string, int>`。
 - 结构体字面量的键是标识符。
-- 列表推导 `[e for x in xs if c]` 与展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `xs->filter<...>->map<...>` 与 `concat(xs, ys)`。
+- **列表推导** `[e for x in xs if c]` 就是 `xs->filter<(x) => c>->map<(x) => e>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
+- 展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `concat(xs, ys)`。
 
 ## 6.3 访问与下标
 

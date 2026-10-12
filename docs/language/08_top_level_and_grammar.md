@@ -221,7 +221,6 @@ typeList           : typeExpr (',' typeExpr)*
 
 | 写法 | 得到的诊断 | 现在的替代写法 |
 |---|---|---|
-| 列表推导 `[e for x in xs if c]` | `SemanticDiag::ConstructNotSupported` | `xs->filter<...>->map<...>` |
 | 展开 `[...xs, y]`、`{ ...p, x: 1 }`、`f(...args)` | `ConstructNotSupported` | `concat(xs, [y])`；逐个写出字段 |
 | 格式化字符串 `` `x = {x}` `` | `ConstructNotSupported` | `'x = {}'->format<x>` |
 | `e is T` | `ConstructNotSupported` | 无（运行时没有类型信息） |

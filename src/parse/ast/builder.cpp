@@ -2395,19 +2395,36 @@ any Builder::visitArrayData(cst::ArrayData context) {
     if (context->get<cst::IndexValues>()) {
         *dataNode << any2node(visitIndexValues(context->get<cst::IndexValues>()));
     } else {
-        if (context->tok(TK::KwFor)) {
-            // `[e for x in xs if c]` is in the grammar, but its meaning is not specified (how
-            // `x` is bound, the order and the effects of the element expressions). It used to
-            // be compiled as the empty array, silently.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(context->firstToken(), context->lastToken()))
-                .commit(
-                    "[... for ... in ...]",
-                    "list comprehensions are not implemented; write it with 'map' and 'filter'");
-            // The error above stops compilation; the empty array keeps the rest of the file
-            // checked.
-        }
         *dataNode << createNodeAs<RepeatedLoad>("Data");
+        if (context->tok(TK::KwFor)) {
+            // `[e for x in xs if c]` (design principles 2.10): `filter` then `map`. The parts
+            // are kept as they are written, after the (empty) element list: the element
+            // expression, the name, the source and the optional condition. The GCT builder
+            // lowers them to the two calls (visitComprehension).
+            std::vector<cst::Node> exprs;
+            for (const auto &expr : context->exprs()) {
+                exprs.push_back(expr);
+            }
+            // The name after `for` is an expression node of its own when a bare name is one.
+            const size_t written = 2 + (context->has(TK::KwIf) ? 1 : 0);
+            const bool nameIsExpr = exprs.size() == written + 1;
+            const cst::Node nameSyntax =
+                nameIsExpr ? exprs[1] : cst::Node(context->get<cst::IdentRef>());
+            if (nameIsExpr) {
+                exprs.erase(exprs.begin() + 1);
+            }
+            *dataNode << any2node(visitExpr(exprs[0]));
+            node_ptr_t nameNode = createNodeAs<RefDataLoad>(Reference(nameSyntax->text()));
+            setNodeTokenRangeByContext(nameNode, nameSyntax);
+            *dataNode << nameNode;
+            *dataNode << any2node(visitExpr(exprs[1]));
+            node_ptr_t condNode = createNodeAs<OptionalLoad>("Data");
+            if (exprs.size() > 2) {
+                setNodeTokenRangeByContext(condNode, exprs[2]);
+                *condNode << any2node(visitExpr(exprs[2]));
+            }
+            *dataNode << condNode;
+        }
     }
     LEAVE("ArrayData");
     return dataNode;

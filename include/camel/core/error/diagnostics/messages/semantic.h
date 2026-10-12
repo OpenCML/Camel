@@ -101,6 +101,7 @@ enum class SemanticDiag : uint32_t {
     IfWithoutElseAsValue         = 0x0000B1,
     EmptyArrayWithoutType        = 0x0000B2,
     PartialApplicationRefused    = 0x0000B3,
+    ComprehensionSourceRefused   = 0x0000B4,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,
