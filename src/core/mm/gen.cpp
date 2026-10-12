@@ -19,6 +19,7 @@
 
 #include "camel/core/mm/gen.h"
 
+#include "camel/core/mm/poison.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
@@ -183,12 +184,41 @@ void GenerationalAllocatorWithGC::recordOldToYoungRef(
     writeBarrier(oldObj, oldType, youngObj, youngType);
 }
 
+void GenerationalAllocatorWithGC::publishSafepointSlowPathUnlocked() {
+    // The one predicate the schedulers read before they enter the allocator (gen.h).
+    detail::autoSpaceSafepointSlowPath.store(
+        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
+            debugConfig_.poisonAtSafepoints ||
+            pendingSafepointCollection_ != CollectionKind::None,
+        std::memory_order_release);
+}
+
+namespace {
+
+// Marks the allocator as standing at a safepoint for the life of the guard.
+class SafepointScope {
+  public:
+    explicit SafepointScope(bool &flag) : flag_(flag), previous_(flag) { flag_ = true; }
+    ~SafepointScope() { flag_ = previous_; }
+
+  private:
+    bool &flag_;
+    bool previous_;
+};
+
+} // namespace
+
 void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
     std::lock_guard<std::mutex> lock(mutex_);
+    SafepointScope atSafepoint(atSafepoint_);
     ++stats_.safepoints;
     if (debugConfig_.stressEveryNSafepoints != 0 &&
         stats_.safepoints % debugConfig_.stressEveryNSafepoints == 0) {
         requestStressCollectionUnlocked("safepoint interval");
+    }
+    if (debugConfig_.poisonAtSafepoints) {
+        // Every safepoint moves every young object (minorGCUnlocked poisons what they leave).
+        requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "safepoint poisoning");
     }
 
     CollectionKind requested        = pendingSafepointCollection_;
@@ -196,38 +226,31 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
     const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
     collectAtSafepointUnlocked(requested, gcReason);
     pendingCause_ = {};
-    detail::autoSpaceSafepointSlowPath.store(
-        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
-            pendingSafepointCollection_ != CollectionKind::None,
-        std::memory_order_release);
+    publishSafepointSlowPathUnlocked();
 }
 
 void GenerationalAllocatorWithGC::minorGC() {
     std::lock_guard<std::mutex> lock(mutex_);
+    SafepointScope atSafepoint(atSafepoint_);
     ++stats_.safepoints;
     requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "manual minor GC");
     CollectionKind requested    = pendingSafepointCollection_;
     pendingSafepointCollection_ = CollectionKind::None;
     collectAtSafepointUnlocked(requested, "manual minor GC");
     pendingCause_ = {};
-    detail::autoSpaceSafepointSlowPath.store(
-        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
-            pendingSafepointCollection_ != CollectionKind::None,
-        std::memory_order_release);
+    publishSafepointSlowPathUnlocked();
 }
 
 void GenerationalAllocatorWithGC::majorGC() {
     std::lock_guard<std::mutex> lock(mutex_);
+    SafepointScope atSafepoint(atSafepoint_);
     ++stats_.safepoints;
     requestCollectionAtSafepointUnlocked(CollectionKind::Major, "manual major GC");
     CollectionKind requested    = pendingSafepointCollection_;
     pendingSafepointCollection_ = CollectionKind::None;
     collectAtSafepointUnlocked(requested, "manual major GC");
     pendingCause_ = {};
-    detail::autoSpaceSafepointSlowPath.store(
-        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0 ||
-            pendingSafepointCollection_ != CollectionKind::None,
-        std::memory_order_release);
+    publishSafepointSlowPathUnlocked();
 }
 
 bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
@@ -322,6 +345,48 @@ bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
     if (!inYoungGenSpace(autoHeaderForPayload(storedArrayChild))) {
         throw std::runtime_error(
             "GC remembered-set self-test array child was not kept in young space");
+    }
+    return true;
+}
+
+bool GenerationalAllocatorWithGC::debugRunPoisonSelfTest() {
+    if (!debugConfig().poisonAtSafepoints) {
+        throw std::runtime_error("GC poison self-test requires CAMEL_GC_POISON=1");
+    }
+    const slot_t poisonWord = poison::word();
+
+    String *text = String::from("poison-selftest", *this);
+    RootHandle root(*this, text, type::Type::String(), "GC.poison.selftest.string");
+    // What a violation of the handle rules looks like: the address, kept in a C++ variable.
+    const auto *stale = reinterpret_cast<const slot_t *>(text);
+
+    safepoint("GC poison self-test");
+
+    String *moved = root.getAs<String>();
+    if (moved == text) {
+        throw std::runtime_error("GC poison self-test: the safepoint did not move a young object");
+    }
+    if (moved->view() != "poison-selftest") {
+        throw std::runtime_error("GC poison self-test: the rooted object lost its contents");
+    }
+    // The first word of an object is its vtable pointer: a virtual call through the stale
+    // address would load the poison and fault in the guard page.
+    if (stale[0] != poisonWord || !poison::isPoison(stale[0])) {
+        throw std::runtime_error(
+            "GC poison self-test: the address an object moved away from was not poisoned");
+    }
+
+    // The addresses stay poisoned over the following safepoints, not just the first.
+    for (int i = 0; i < 8; ++i) {
+        (void)String::from("poison-selftest-filler", *this);
+        safepoint("GC poison self-test");
+        if (stale[0] != poisonWord) {
+            throw std::runtime_error(
+                "GC poison self-test: an evacuated address was handed out again too early");
+        }
+    }
+    if (root.getAs<String>()->view() != "poison-selftest") {
+        throw std::runtime_error("GC poison self-test: the rooted object lost its contents");
     }
     return true;
 }
@@ -468,6 +533,15 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
     if (kind == CollectionKind::None) {
         return;
     }
+    // The invariant every holder of a raw object pointer relies on: objects are moved and
+    // freed at safepoints only. Checked in release builds too; it costs one test per
+    // collection.
+    if (!atSafepoint_) [[unlikely]] {
+        throw std::logic_error(
+            std::format(
+                "GC invariant violated: a collection ({}) was started outside a safepoint",
+                reason));
+    }
     ++stats_.requestedCollections;
 
     if (debugConfig_.verifyBeforeGC) {
@@ -509,7 +583,13 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
 
         // 1. Swap Cache and Haven
         cacheSpace_.swap(havenSpace_);
-        havenSpace_.reset(); // Clear the new Haven (To) space
+        if (debugConfig_.poisonAtSafepoints) {
+            // The new To space was poisoned when it was emptied; keep that poison in place
+            // for as long as the survivors fit above it.
+            havenSpace_.rewindIfShort(birthSpace_.used() + cacheSpace_.used());
+        } else {
+            havenSpace_.reset(); // Clear the new Haven (To) space
+        }
 
         auto relocateYoung =
             [this](rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &)
@@ -568,8 +648,17 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
         // the "moving the wrapper does not retain/release the native resource" contract.
         finalizeUnforwardedObjectsIn(birthSpace_);
         finalizeUnforwardedObjectsIn(cacheSpace_);
-        birthSpace_.reset();
-        cacheSpace_.reset();
+        if (debugConfig_.poisonAtSafepoints) {
+            // Whatever still points at the objects that were here reads the poison word from
+            // now on, and the addresses are not handed out again while a quarter of the space
+            // remains above them.
+            const slot_t poisonWord = poison::word();
+            birthSpace_.resetPoisoned(poisonWord, birthSpace_.capacity() / 4);
+            cacheSpace_.resetPoisoned(poisonWord, 0);
+        } else {
+            birthSpace_.reset();
+            cacheSpace_.reset();
+        }
 
         relocationScan_.clear();
         relocationScanIndex_ = 0;

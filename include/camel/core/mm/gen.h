@@ -238,6 +238,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
         bool verifyBeforeGC             = false;
         bool verifyAfterGC              = false;
         bool logMovements               = false;
+        // Safepoint poisoning (CAMEL_GC_POISON): every safepoint evacuates the whole young
+        // generation and overwrites the addresses the objects had with a poison word, so a
+        // pointer that C++ code kept across the safepoint reads poison instead of a value
+        // that happens to be still right. Requires young copying. See poison.h.
+        bool poisonAtSafepoints = false;
     };
 
     struct RuntimeStats {
@@ -319,6 +324,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void verifyHeapOrThrow(std::string_view where);
 
+    // The only place a collection may start (together with minorGC/majorGC below, which are
+    // safepoints of their caller). Allocation never collects and never moves an object: it
+    // can only ask for a collection at the next safepoint. collectAtSafepointUnlocked checks
+    // this (atSafepoint_), in release builds too.
     void safepoint(std::string_view reason = {});
 
     void writeBarrier(
@@ -334,6 +343,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
         const type::Type *youngType);
 
     bool debugRunRememberedSetSelfTest();
+
+    // White-box check of safepoint poisoning (std::gc::poison): an address kept across a
+    // safepoint reads the poison word, a RootHandle follows the object. Needs CAMEL_GC_POISON.
+    bool debugRunPoisonSelfTest();
 
     // Minor GC: collect the young generation (Birth + From).
     void minorGC();
@@ -368,6 +381,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void requestCollectionAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
 
     void collectAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
+
+    void publishSafepointSlowPathUnlocked();
 
     void minorGCUnlocked();
 
@@ -440,6 +455,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // GC state and roots
     // ============================================================================
     bool inGC_ = false; // Reentrancy guard for nested GC
+    // Set while safepoint(), minorGC() or majorGC() runs. A collection that starts anywhere
+    // else (an allocation, a barrier) would move or free objects under C++ code that holds
+    // them; it is refused with a logic error instead.
+    bool atSafepoint_ = false;
     // Untyped roots are reserved for graph carriers whose updateRefs implementation owns its
     // layout. Runtime frames and temporary values must register typed external tracers instead.
     std::vector<rtdata::Object *> *rootObjectSet_{};

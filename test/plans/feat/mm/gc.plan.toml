@@ -136,3 +136,15 @@ expect_exit = 0
 expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.foreign_resource\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "gc.poison_selftest"
+desc = "Checks safepoint poisoning: an address kept across a safepoint reads the poison word, a RootHandle follows the object."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_fib10.cml"
+args = ["${case}", "std::gc::poison", "${run_nvm}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout_contains = ["\"ok\":true", "\"kind\":\"gc.poison\"", "Fibonacci(10) = 55"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_duration_seconds"]
+timeout_ms = 4000

@@ -192,6 +192,17 @@ class GcRememberedSetPass final : public GraphIRPass {
     }
 };
 
+class GcPoisonPass final : public GraphIRPass {
+  public:
+    explicit GcPoisonPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    GCGraph *apply(GCGraph *graph, std::ostream &os) override {
+        camel::core::mm::autoSpace().debugRunPoisonSelfTest();
+        os << "{\"ok\":true,\"kind\":\"gc.poison\"}\n";
+        return graph;
+    }
+};
+
 class GcForeignResourcePass final : public GraphIRPass {
   public:
     explicit GcForeignResourcePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
@@ -319,6 +330,7 @@ PassScopePtr initPassScope() {
                          {"summary", def(PASS(GcSummaryPass))},
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
                          {"foreign_resource", def(PASS(GcForeignResourcePass))},
+                         {"poison", def(PASS(GcPoisonPass))},
                      })},
                     {"nodevm", def(PASS(NodeVMSchedPass))},
                     {"fastvm",
@@ -420,6 +432,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcsummary", "std::gc::summary"},
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
+    {"std::gcpoison", "std::gc::poison"},
     {"std::bc", "std::fastvm::bytecode"},
     {"std::lbc", "std::fastvm::linked_bytecode"},
     {"std::bin", "std::fastvm::jit::dump::bin"},

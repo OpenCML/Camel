@@ -19,6 +19,8 @@
 
 #include "camel/core/mm/gen.h"
 
+#include "camel/core/mm/poison.h"
+
 #include <algorithm>
 #include <format>
 #include <mutex>
@@ -36,13 +38,23 @@ namespace camel::core::mm {
 
 void GenerationalAllocatorWithGC::configureDebug(DebugConfig config) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (config.poisonAtSafepoints) {
+        if (!enableYoungGenCopying_) {
+            throw std::runtime_error(
+                "safepoint poisoning needs the moving collector (CAMEL_GC_POISON implies "
+                "CAMEL_GC_GENERATIONAL when it is read from the environment)");
+        }
+        poison::install();
+        // Nothing is promoted by age: an object in the elder space no longer moves, and a
+        // stale pointer to it would go unnoticed. (A survivor space that is full still
+        // promotes.)
+        promotionAgeThreshold_ = 16;
+    }
     debugConfig_                = config;
     pendingSafepointCollection_ = CollectionKind::None;
     // GC stress deliberately turns normal safepoints into collection opportunities. Keep the
     // runtime-visible slow-path flag in sync so schedulers can stay cheap when diagnostics are off.
-    detail::autoSpaceSafepointSlowPath.store(
-        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0,
-        std::memory_order_release);
+    publishSafepointSlowPathUnlocked();
 }
 
 GenerationalAllocatorWithGC::DebugConfig GenerationalAllocatorWithGC::debugConfig() const {
@@ -154,6 +166,18 @@ bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
     std::string_view path) const {
     if (!allocator.contains(object)) {
         return false;
+    }
+    if (!allocator.containsAllocated(object)) {
+        // The space was emptied since this address was handed out: the object moved or died.
+        issues.push_back(makeIssue(
+            "Reference points into an evacuated part of a young space (stale pointer)",
+            std::string(path),
+            {},
+            {},
+            std::string(regionName),
+            0,
+            reinterpret_cast<uintptr_t>(object)));
+        return true;
     }
 
     ObjectHeader *header = headerOf(object);

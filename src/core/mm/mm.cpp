@@ -112,6 +112,7 @@ GenerationalAllocatorWithGC::DebugConfig debugConfigFromEnv() {
     config.stressEveryNSafepoints  = envSize("CAMEL_GC_STRESS_SAFEPOINT");
     config.stressCollection        = envCollectionKind();
     config.logMovements            = envFlag("CAMEL_GC_LOG_MOVES");
+    config.poisonAtSafepoints      = envFlag("CAMEL_GC_POISON");
 
     std::string verifyRaw = envString("CAMEL_GC_VERIFY");
     if (!verifyRaw.empty()) {
@@ -153,7 +154,8 @@ void maybePrintDebugConfig(
               << " stressAlloc=" << config.stressEveryNAllocations
               << " stressSafepoint=" << config.stressEveryNSafepoints
               << " stressMode=" << collectionKindName(config.stressCollection)
-              << " logMoves=" << (config.logMovements ? "true" : "false") << '\n';
+              << " logMoves=" << (config.logMovements ? "true" : "false")
+              << " poison=" << (config.poisonAtSafepoints ? "true" : "false") << '\n';
 }
 
 } // namespace
@@ -161,13 +163,17 @@ void maybePrintDebugConfig(
 // Managed automatically by the GC system and must remain reachable from roots.
 GenerationalAllocatorWithGC &autoSpace() {
     static auto *allocator = [] {
-        const bool youngCopying = envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING");
-        const auto debugConfig  = debugConfigFromEnv();
+        const auto debugConfig = debugConfigFromEnv();
+        // Safepoint poisoning is a mode of the moving collector, so it turns it on.
+        const bool youngCopying =
+            envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING") || debugConfig.poisonAtSafepoints;
         auto *instance = new GenerationalAllocatorWithGC(GenerationalAllocatorWithGC::Config{
             // Keep the default process-start footprint modest. The current runtime disables
             // young-generation copying, so large preallocated semispaces only add startup cost.
             .birthSize             = 4 * MB,
-            .havenSize             = 1 * MB,
+            // Under safepoint poisoning nothing is promoted by age, so the survivor spaces
+            // must hold whatever the birth space can.
+            .havenSize             = debugConfig.poisonAtSafepoints ? 4 * MB : 1 * MB,
             .elderGenSize          = 32 * MB,
             .promotionAgeThreshold = 4,      // Promotion threshold.
             .largeObjThreshold     = 4 * KB, // Large-object threshold.
