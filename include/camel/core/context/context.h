@@ -93,6 +93,8 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Most recent reason a ".cmo found but failed to load" case occurred, used by ModuleNotFound
      * diagnostics. */
     mutable std::string lastCmoLoadError_;
+    // The modules whose load is in progress, outermost first (see importModule).
+    std::vector<std::string> loadingModules_;
     /// See setPassFact.
     std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
     /// See setSemanticRecorder.

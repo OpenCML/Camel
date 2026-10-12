@@ -336,6 +336,17 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
                 throw DiagnosticBuilder::of(SemanticDiag::ImportCycle)
                     .commit(name, "file " + it->second->path());
             }
+            // A module still being loaded is imported again by a module it imports
+            // (a imports b, b imports a; or a longer ring). It has no graphs yet, and handing
+            // it out crashed the compiler. Mutual import is not supported: say which ring.
+            if (auto at = std::find(loadingModules_.begin(), loadingModules_.end(), name);
+                at != loadingModules_.end()) {
+                std::string chain = "import cycle: ";
+                for (auto m = at; m != loadingModules_.end(); ++m) {
+                    chain += *m + " -> ";
+                }
+                throw DiagnosticBuilder::of(SemanticDiag::ImportCycle).commit(name, chain + name);
+            }
             return it->second;
         }
 
@@ -349,7 +360,16 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             // Register before load so compile failures remain visible to dumpAllModuleDiagnostics.
             modules_[name] = module;
             if (!module->loaded()) {
-                if (!module->load()) {
+                loadingModules_.push_back(name);
+                bool loadedOk = false;
+                try {
+                    loadedOk = module->load();
+                } catch (...) {
+                    loadingModules_.pop_back();
+                    throw;
+                }
+                loadingModules_.pop_back();
+                if (!loadedOk) {
                     // A module that was found and is in error is not a module that was not
                     // found: its own diagnostics say what is wrong with it.
                     auto ud = std::dynamic_pointer_cast<UserDefinedModule>(module);
