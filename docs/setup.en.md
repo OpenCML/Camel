@@ -209,7 +209,7 @@ Run the following commands to install the required dependencies:
   - `camel-cpp`: Transpile `.cml` to C++ and auto-compile, outputs to `tmp/`
   - `format`: Code formatter `camel-format`
   - `codegen`: Code generation from AST `camel-codegen`
-  - `profiler`: Profiling tool `camel-profiler`
+  - `profiler`: Profiling tool `camel-pr`
 
 Build outputs are under `build/tools/<tool>/<Config>/`. The `camel` executable is copied to the project root.
 

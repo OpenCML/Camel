@@ -2,7 +2,7 @@
 
 [English](cli.md) | 中文简体
 
-> 本文是英文版 [cli.md](cli.md) 的译文；两者不一致时以英文版为准。
+> 本文与英文版 [cli.md](cli.md) 对应。文中的示例输出、诊断文本和默认值按当前实现写出。
 
     camel [options] [<target file>]
     camel <command> [command-options] <target file>
@@ -44,14 +44,14 @@
 - `--dump-after-each-pass <dir>`：把第一个遍之前的图（`00_input`）和每个返回图的遍之后的图（`NN_<pass>`，`::` 写作 `.`）写入 `<dir>`：一份可读的 DOT（`.rgir.dot`，即 `std::rgir` 格式，每个节点带 `origin`/`span`/`srcfile`）和 `std::stats` 的计数（`.stats.json`）。调度遍和翻译遍消耗图，不留下快照。比较两份快照用 `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `--arg <name>=<value>`：`main` 的一个参数的值（可重复；见“`main` 带参数或有返回值的程序”）  
 - `-o`, `--output <file>`：`main` 的返回值写到哪里（默认：标准输出；见同一节）  
-- `-P`, `--profile`：记录各阶段耗时并输出性能报告  
+- `-P`, `--profile`：记录各阶段耗时，把跟踪文件写到 `profile_reports/`。只在 debug 构建中生效；release 构建接受这个选项，但不产生报告  
 - `-S`, `--scheduler <type>`：指定调度器类型  
 - `-t`, `--threads <num>`：最大线程数  
 - `--max-recursion-depth <n>`：可同时处于打开状态且不是尾调用的调用数上限（1 到 1000000；见“资源上限”）。也可用 `CAMEL_MAX_RECURSION_DEPTH=<n>`；选项优先  
 - `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。也可用 `CAMEL_MAX_MACRO_DEPTH=<n>`  
 - `-n`, `--no-cache`：不使用缓存模块  
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次使用）  
-- `-L`, `--stdlib <path>`：指定标准库路径（默认：当前目录下的 `./stdlib`）  
+- `-L`, `--stdlib <path>`：指定标准库路径，加入模块搜索路径。省略时用环境变量 `CAMEL_STD_LIB`；两者都没有时，标准库在可执行文件旁和安装根目录（`CAMEL_HOME`）下的 `stdlib` 目录里查找  
 - `-E`, `--error-format`, `--output-format <text|short|json>`：诊断的格式（默认：`text`），见下文“诊断”；`--timeit` 的输出也沿用这个选项
 - `--color`、`--max-errors`、`-N`/`--max-warning`、`-W...`：见下文“诊断”
 
@@ -69,20 +69,31 @@
            |             ^^^^^^^^^^^^^^
         help: Make sure the name is declared and in scope.
 
+        camel: 1 error
+
+    编译错误之后有一行总数（`camel: 1 error`、`camel: 3 errors`）；运行期故障之后没有这一行。
+
   - `short`：每条诊断一行，`(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`。这是脚本匹配的形式，测试运行器用的就是它。
   - `json`：对象数组，含 `range`、`severity`、`code`、`message`、`relatedInformation`（次要位置：`location.path`、`location.range`、`message`）和 `data`（`stage`、`name`、`moduleName`、`modulePath`、`suggestion`、`notes`）。
   - 未给出该选项时，由环境变量 `CAMEL_ERROR_FORMAT` 决定格式。
   - 行号和列号在 `text` 与 `short` 中从 1 开始，在 `json` 中从 0 开始；列按字符计，不按字节计。
 - `--color <auto|always|never>`：`text` 与 `short` 中的颜色（默认 `auto`：只在输出流是终端时启用，设置了 `NO_COLOR` 时一律不启用）。
-- `--max-errors <n>`：编译器放弃之前报告的编译错误数（默认 20；0：不限）。一次运行会报告它找到的每一个相互独立的错误；由已报告的错误引出的错误不再报告（见 [technical/30_diagnostics_reporting.md](technical/30_diagnostics_reporting.md)）。运行期故障总是在第一个故障处结束运行。
-- `-N`, `--max-warning <n>`：显示的警告数（默认 1000）；其余只计数，数目在最后打印。
-- 警告的名字与 [diagnostics.md](diagnostics.md) 中一致，但不带类型前缀；大小写、`-` 和 `_` 都不影响（`ignored-side-effect` 就是 `IgnoredSideEffect`）。不是警告的名字会被拒绝。
+- `--max-errors <n>`：编译器放弃之前报告的编译错误数（默认 20；0：不限）。到达上限时，`text` 格式的总数行写明这一点：`camel: 2 errors; stopped at the limit of 2 errors (--max-errors <n> raises it, 0 removes it)`。一次运行会报告它找到的每一个相互独立的错误；由已报告的错误引出的错误不再报告（见 [technical/30_diagnostics_reporting.md](technical/30_diagnostics_reporting.md)）。运行期故障总是在第一个故障处结束运行。
+- `-N`, `--max-warning <n>`：显示的警告数（默认 1000）；其余只计数，数目在最后打印（`camel: 1 more warning(s) not shown (--max-warning 0)`）。
+- 警告的名字与 [diagnostics.md](diagnostics.md) 中一致，但不带类型前缀；大小写、`-` 和 `_` 都不影响（`ignored-side-effect` 就是 `IgnoredSideEffect`）。不是警告的名字会被拒绝：stderr 上是 `Error: -Wno-bogus: no warning is named 'bogus'. The warnings are: ...`，后面列出全部警告名，退出码为 1，程序不编译。
   - `-Wno-<name>`：不报告警告 `<name>`。
   - `-Wnone`：不报告任何警告。
-  - `-Werror`：把每个警告都按错误报告（程序不运行）。
+  - `-Werror`：把每个警告都按错误报告（程序不运行，退出码为 1）。`text` 格式下这样的错误带一行 `note: this warning is reported as an error because of -Werror`。
   - `-Werror=<name>`：把警告 `<name>` 按错误报告。
   - `-Wno-error=<name>`：在 `-Werror` 下让 `<name>` 仍是警告。
-- `--explain <name or code>`：打印一条诊断在目录中的条目（`camel --explain IndexOutOfRange`、`camel --explain 0x04000002`）。
+- `--explain <name or code>`：打印一条诊断在目录中的条目（`camel --explain IndexOutOfRange`、`camel --explain 0x04000002`）。名字可以不带类型前缀，大小写、`-` 和 `_` 同样不影响。未知的名字或代码在 stderr 上被拒绝，退出码为 1。
+
+        RuntimeDiag::IndexOutOfRange  (0x04000002, Error)
+
+          message: Index {0} is out of range for {1} of length {2}.
+          help:    Ensure the index is within the valid range of the collection.
+
+          {0}, {1}, ... stand for the values a concrete report fills in. A triggering example is in docs/diagnostics.md.
 
 ### `main` 带参数或有返回值的程序（`--arg`、`-o`）
 
@@ -99,9 +110,9 @@
 - **运行需要每个参数都有值。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`，或默认运行）拒绝仍带参数的入口图，诊断为 `RuntimeDiag::EntryArgumentMissing`（`0x04000010`，阶段 `run`），定位在 `main` 的定义处，并列出没有值的参数。什么都不会运行；绝不假定默认值、零值或随机值。重写遍和翻译遍接受未绑定的参数。
 - **错误的实参**（名字不是参数、同一名字给了两次、文本不是该类型的字面量、文件不存在、张量形状不同、对没有参数的 `main` 使用 `--arg`）是 `RuntimeDiag::EntryArgumentInvalid`（`0x04000011`），定位在 `main`，在任何遍运行之前报告。
 - **`main` 的返回值写到输出**，即 `-o` / `--output <file>`，默认是标准输出，前提是有调度遍运行了程序。确切规则如下：
-  - `main` 不返回值（`void`）：什么都不写。此时使用 `-o` 是 `RuntimeDiag::EntryResultNotWritten`（`0x04000012`），定位在 `main`。
+  - `main` 不返回值（声明为 `: void`）：什么都不写。此时使用 `-o` 是 `RuntimeDiag::EntryResultNotWritten`（`0x04000012`），定位在 `main`，在程序运行之后报告，退出码为 1。
   - `main` 返回退出码（`int`、`bool`、`byte`：进程退出码由这些类型导出）：该值就是退出码，与任何 `main` 一样，并且 **不** 打印到标准输出，所以 `main` 返回自身状态的程序行为不变。只有 `-o` 指定了文件时才把它（作为文本）写出。
-  - `main` 返回其他值（`float`、`string`、张量、元组、结构体……）：该值是程序的结果。不带 `-o` 时，它按 `println` 的方式打印到标准输出，在程序自身的输出之后单独占一行（元组或结构体用其文本形式，例如 `(tensor([...]), tensor([...]))`）。带 `-o path` 时，它按 `--arg` 读取的布局写出：标量写成存放字面量的文本文件，张量写成 `.npy` 文件（`path` 是别的扩展名或没有扩展名时追加 `.npy`），结构体或元组写成目录 `path`，每个叶子一个文件（`0.npy`、`1.w.npy`）。
+  - `main` 返回其他值（`float`、`string`、张量、元组、结构体……）：该值是程序的结果。不带 `-o` 时，它按 `println` 的方式打印到标准输出，在程序自身的输出之后单独占一行（元组或结构体用其文本形式，例如 `(tensor([...]), tensor([...]))`）。带 `-o path` 时，它按 `--arg` 读取的布局写出：标量写成存放字面量的文本文件，张量写成 `.npy` 文件（`path` 是别的扩展名或没有扩展名时追加 `.npy`），结构体或元组写成目录 `path`，每个叶子一个文件（张量叶子是 `0.npy`、`1.w.npy`，标量叶子是不带扩展名的文本文件 `0`、`1`）。
   - 无法写入文件的值（路径不可写、类型没有文件格式，如数组或函数）是 `EntryResultNotWritten`，定位在 `main`；退出状态为 1。
   - 这条规则与 `main` 是否带参数无关。翻译遍和各种转储不受影响：它们写出的内容不变。
 - `--timeit` 像普通运行一样绑定 `--arg`；在那里 `main` 的结果既不打印也不写出。
@@ -110,8 +121,8 @@
 
 命令行上给出的遍按书写顺序运行。每个遍或者变换图，或者执行图（调度遍），或者翻译图（翻译遍）。
 
-- **默认流水线。** 不给出任何遍时运行 `std::default`；它是 `std::nodevm`（节点虚拟机）的别名。给出的遍都没有消耗图时，在它们之后也运行这个默认遍。`.opencmlrc`（`passes.fallback`）可以改变它。
-- **所有遍的名字都在运行之前检查。** 程序编译之后（模块贡献的遍此时才存在）、第一个遍运行之前、第一份 `--dump-after-each-pass` 快照写出之前，流水线和后备遍的所有名字都被解析（先解析别名）。第一个未知的名字报告为 `RuntimeDiag::UnrecognizedGraphPass`，阶段为 `pass:<name>`，可用的遍列在 stderr 上，退出码为 1。此时什么都没有执行：`camel f.cml std::nvm std::no_such_pass` 不会运行程序。
+- **默认流水线。** 不给出任何遍时运行 `std::default`；它是 `std::nodevm`（节点虚拟机）的别名，本文其余地方用的 `std::nvm` 是同一个遍的另一个别名（同样，`std::fvm` 是 `std::fastvm`，`std::jit` 是 `std::fastvm::jit`，`std::tf` 与 `std::prl` 是 `std::taskflow`）。给出的遍都没有消耗图时，在它们之后也运行这个默认遍。`.opencmlrc`（`passes.fallback`）可以改变它。
+- **所有遍的名字都在运行之前检查。** 程序编译之后（模块贡献的遍此时才存在）、第一个遍运行之前、第一份 `--dump-after-each-pass` 快照写出之前，流水线和后备遍的所有名字都被解析（先解析别名）。第一个未知的名字报告为 `RuntimeDiag::UnrecognizedGraphPass`，阶段为 `pass:<name>`，可用的遍和别名列在 stderr 上（`Pass <std::no_such_pass> not found, available passes are:`，然后是 `Available aliases are:`），退出码为 1。此时什么都没有执行：`camel f.cml std::nvm std::no_such_pass` 不会运行程序。
 - **写在消耗图的遍之后的遍永远不会运行。** 调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）执行程序，翻译遍（`std::gir`、`std::rgir`、`std::cpp`、`onnx::export`、字节码和即时编译的转储）翻译程序；二者都不把图传下去，流水线到此结束。`camel f.cml std::nvm std::inline` 在节点虚拟机上运行程序，永远不会运行 `std::inline`。这种写法被接受，但在任何东西运行之前会在 stderr 上给出警告 `RuntimeDiag::PassesNeverRun`（`0x0410000F`，阶段 `pass:<消耗图的遍>`），列出不会运行的遍（见“警告”）。
 - **语言不限制遍的顺序，而顺序可能有影响。** 一个遍并不承诺得到与另一种顺序相同的图：它修改图，并且可能有副作用。“任意遍序列给出相同行为”不是 Camel 的性质。
 - **标准优化遍**（`std::devirtualize`、`std::specialize`、`std::inline`、`std::opt::fold`、`std::opt::cse`、`std::opt::dce`、`std::opt::simplify`、`tensor::fuse`）力求保持程序的结果。这是对这些遍的质量要求，由测试检查，不是语言保证。
@@ -138,13 +149,13 @@
 
 当每个实参都是常量时，`std::macro` 把对 `macro` 函数或宏算子的调用替换为它的结果。有两种情况会让调用留在程序里：
 
-- **某个实参不是常量。** 这是正常情况，不是失败；什么都不打印。带 `-v` 时有一行日志指出这次调用和那个实参：`<Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
-- **求值失败**：某个算子抛出错误（除以零、`autodiff: no derivative rule for operator ...`）、有异常逃逸，或者求值所需的嵌套调用数超过求值器的上限（64，除非 `--max-macro-depth` 或 `CAMEL_MAX_MACRO_DEPTH` 另有指定）。这是编译期错误（见设计原则 2.7）：`RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，阶段 `pass:std::macro`），定位在这次调用，并带有原因：`m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.` 流水线在此停止，退出码为 1；后面的遍不运行，程序不执行。
+- **某个实参不是常量。** 这是正常情况，不是失败；什么都不打印。带 `-v` 时 stderr 上有一行日志指出这次调用和那个实参：`[WARN] <Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
+- **求值失败**：某个算子抛出错误（除以零、`autodiff: no derivative rule for operator ...`）、有异常逃逸，或者求值所需的嵌套调用数超过求值器的上限（64，除非 `--max-macro-depth` 或 `CAMEL_MAX_MACRO_DEPTH` 另有指定）。这是编译期错误（见设计原则 2.7）：`RuntimeDiag::MacroEvaluationFailed`（`0x0400000E`，阶段 `pass:std::macro`），定位在这次调用，并带有原因（`short` 格式，后面还有建议和诊断名）：`(m)m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero. ...` 流水线在此停止，退出码为 1；后面的遍不运行，程序不执行。
 
 这条规则的后果：
 
 - 一次失败的宏调用会使程序被拒绝，**即使这次调用在运行期永远不会到达**（调用位于没有任何地方调用的函数里，或位于没有被选中的分支里）：`std::macro` 对每一个实参都是常量的宏调用求值。
-- 深度超过求值器上限（默认 64 帧）的宏递归是一次失败的求值，所以不带 `std::macro` 能运行的程序，带上它可能被拒绝（对 `macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)` 调用 `count(40)`）。消息给出上限以及提高它的办法：`--max-macro-depth <n>` 或 `CAMEL_MAX_MACRO_DEPTH=<n>`。
+- 深度超过求值器上限（默认 64 帧）的宏递归是一次失败的求值，所以不带 `std::macro` 能运行的程序，带上它可能被拒绝（对 `macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)` 调用 `count(40)`）。消息给出上限以及提高它的办法：`'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls (at 'count'). The limit is set with --max-macro-depth <n> or CAMEL_MAX_MACRO_DEPTH=<n>.`
 - 失败的求值在失败之前已经产生的效应，发生在遍运行的时候（遍的每一轮一次）。它们不会重复，因为程序不运行。
 - 流水线里没有 `std::macro` 时一切照旧：这次调用是普通调用，只有在被执行到时才可能失败。
 - `onnx.export_model` 在程序运行期间用同一个求值器展开它所导出函数中的宏；那里求值失败是同一条诊断，阶段为 `run`。
@@ -180,7 +191,7 @@
 
 ### 警告
 
-警告（`[Warn]` 诊断）不会让程序停下。编译器关于效应的警告：
+警告（`[Warn]` 诊断）不会让程序停下。下表是编译器关于效应的警告和流水线的警告；其余的警告（`InvalidEscapeSequence`、`ExitInUnusedBranch`、`MatchWithoutDefault`）见 [diagnostics.md](diagnostics.md)。
 
 | 名字 | 代码 | 位置 | 含义 |
 |---|---|---|---|
@@ -193,24 +204,26 @@
 
 对 `EffectNotExecuted` 来说，什么算效应：在算子特性注册表里既不是纯的也不是仅状态的算子（与效应追踪记录的是同一个集合）、对声明为 `sync func` 或带 `var` 参数的函数的调用、对自身结果依赖某个效应的函数的调用，以及有这样的分支臂的分支。通过函数值进行的调用只能凭它的类型识别（`sync` 修饰符、`var` 参数）。
 
-- **编译没有错误的程序** 把它的警告打印到 **stderr**，只打印一次，在编译之后、第一个遍运行之前，使用默认日志级别即可（不需要 `-v`）。文本模式下每个警告一行：`(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`。使用 `--output-format json` 时，stderr 上是一个 JSON 数组，其中的对象与下文的错误数组相同（`"severity":"Warn"`）。没有警告时什么都不写（没有空数组）。
+- **编译没有错误的程序** 把它的警告打印到 **stderr**，只打印一次，在编译之后、第一个遍运行之前，使用默认日志级别即可（不需要 `-v`）。默认的 `text` 格式下，警告的写法与错误相同，以 `warning[SemanticDiag::IgnoredSideEffect]: ...` 开头，带源码行和 `help:`；`short` 格式下每个警告一行：`(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`（没有源码位置的警告写作 `():?:?: [Warn]: ...`）。使用 `--output-format json` 时，stderr 上是一个 JSON 数组，其中的对象与下文的错误数组相同（`"severity":"Warn"`）。没有警告时什么都不写（没有空数组）。
 - **两种模式下 stdout 都与没有警告时相同**：程序的输出，以及只在有错误时才出现的诊断数组。解析 stdout 的工具不受影响。
-- **有错误的模块** 把它的警告与错误一起显示（JSON 模式下在 stdout 的数组里）；它们不在 stderr 上重复。
+- **有错误的模块** 把它的警告与错误一起显示在 stdout 上，警告在前（JSON 模式下在同一个数组里）；它们不在 stderr 上重复。`EffectNotExecuted` 在模块有错误时不报告。
 - `camel check` 以同样的方式打印它们。`--timeit`、`camel inspect`、`camel-cpp` 和调试器不打印警告。
 
 ### JSON 诊断（`--output-format json`）
 
-错误打印在 stdout 上，位于程序的输出之后，是一个由对象组成的 JSON 数组：
+错误打印在 stdout 上，位于程序的输出之后，是一个由对象组成的 JSON 数组（`[` 和 `]` 各占一行，每个对象一行）：
 
 ```json
+[
 {"range":{"start":{"line":6,"character":13},"end":{"line":6,"character":14}},"severity":"Error","code":"0x04000001","source":"Camel","message":"Attempted division by zero.","data":{"stage":"run","name":"RuntimeDiag::DivisionByZero","moduleName":"m","modulePath":"m.cml","suggestion":"..."}}
+]
 ```
 
 - `range` 从 0 开始计数；`data.modulePath` 是文件。没有源码位置的诊断（未知的遍名、永远不会运行的遍）的 range 全为零，`modulePath` 为空。
 - `data.name` 是稳定的诊断名；`code` 是它的数字形式。
 - 遍提交的每一张图（以及前端编码的每一张图）都做结构校验，release 构建中也是如此：节点、槽和边的引用在范围内，输入和输出互为镜像，`BRCH`/`JOIN` 的分支臂数目，`GATE` 有一个值输入和一个控制输入，直接调用传入的实参个数与被调用者接受的一致。违反时是 `RuntimeDiag::PassInternalError`，指出提交该图的遍，在任何东西运行之前报告。
 - 从某个遍逃逸出来而又不是诊断的异常（提交重写时的图校验、调度器构建执行顺序时遇到环）报告为 `RuntimeDiag::PassInternalError`（`0x0400000C`），阶段为 `pass:<name>`，消息里是异常的文本，没有源码位置，退出码为 1。它标志的是编译器的缺陷，不是对程序的拒绝。即使那是调度遍，阶段给出的也是遍的名字，所以它不能说明程序是否已经运行了一部分。任何遍之外的异常报告为 `InternalDiag::UnknownInternalError`，阶段为 `internal`。
-- `data.stage` 说明诊断在流水线的哪里产生：`parse`、`typecheck`、重写遍或翻译遍的 `pass:<name>`（包括未知的遍名）、调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）的 `run`，或 `internal`。
+- `data.stage` 说明诊断在流水线的哪里产生：`parse`、`typecheck`、`compile`（见“资源上限”）、重写遍或翻译遍的 `pass:<name>`（包括未知的遍名）、调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）的 `run`，或 `internal`。
 
 ### 效应追踪（`CAMEL_EFFECT_TRACE`）
 
@@ -218,6 +231,7 @@
 
 ```json
 {"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...","payload":"string=hello|||"}
+{"seq":1,"uri":":op/assn_l","stage":"run","origin":{"file":"a.cml","line":13,"col":7},"payload_sha1":"...","payload":"var i64=(1)|i64=5|||"}
 ```
 
 - `std::macro` 提前求值一次调用期间 `stage` 是 `macro`，其他时候是 `run`。
@@ -237,8 +251,8 @@
 | `std::inline` 向其中内联的图的大小 | 4096 个节点 | 否 | 这次调用不内联 |
 | `std::opt::simplify` 的轮数 | 16 | 否 | 程序按现状传下去。带 `-v` 时有日志 |
 | 同一个递归函数的仅类型特化（张量实参的形状在递归的每一层都变化） | 8 | 否 | 这次调用保留它的被调用者 |
-| `std::nvm`、`std::fvm` 以及 `std::jit` 解释执行部分的非尾递归 | 256 个打开的调用 | `--max-recursion-depth <n>`、`CAMEL_MAX_RECURSION_DEPTH=<n>`（1 到 1000000） | 程序停止，诊断为 `RuntimeDiag::MaxRecursionDepthExceeded`（`0x04000004`，阶段 `run`，退出码 1），定位在将成为第 257 个打开调用的调用表达式；在它之前运行的已经运行，其输出已经写出。消息给出上限，建议给出选项和变量 |
-| `std::jit` 编译为原生代码的代码中的递归（分支臂已被内联的自递归函数，例如在 `std::inline` 或 `std::opt` 之后） | 无 | 否 | 不计数也不检查：受帧池和原生栈限制；耗尽其中任何一个都会使进程在没有诊断的情况下结束。（针对已编译代码的深度检查正在另行添加。） |
+| `std::nvm`、`std::fvm` 和 `std::jit` 上的非尾递归（`std::jit` 上解释执行的和编译为原生代码的调用一样计数） | 256 个打开的调用 | `--max-recursion-depth <n>`、`CAMEL_MAX_RECURSION_DEPTH=<n>`（1 到 1000000） | 程序停止，诊断为 `RuntimeDiag::MaxRecursionDepthExceeded`（`0x04000004`，阶段 `run`，退出码 1），定位在将成为第 257 个打开调用的调用表达式；在它之前运行的已经运行，其输出已经写出。消息给出上限（`Maximum recursion depth (256) exceeded when evaluating graph '...'.`），建议给出选项和变量 |
+| `std::jit` 编译为原生代码的代码中的递归（分支臂已被内联的自递归函数，例如在 `std::inline` 之后）占用的原生栈 | 无单独的上限：递归深度按上一行计数 | 上一行的选项和变量 | 默认上限下与解释执行给出同一条诊断（`camel f.cml std::inline std::jit`：`depth(255)` 运行，`depth(256)` 是 `MaxRecursionDepthExceeded`）。原生栈将满的检查不覆盖已编译的代码：上限调得很高而递归确实很深时，进程以段错误结束，没有诊断（上限为 1000000 时，20000 层的递归能运行，100000 层的递归崩溃） |
 | `std::tf` 上的非尾递归 | 无：线程的原生栈允许多深就多深（8 MiB 的栈上，一个小函数大约 14800 次调用） | 同一个选项和变量；给出任何一个，`std::tf` 就像其他后端一样计数 | 有上限时：与 `std::nvm` / `std::fvm` 在同一次调用处给出同一条诊断。没有上限时：线程的栈用掉十六分之十五时，在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小 |
 | 线程的原生栈，所有执行后端 | 线程的栈（Linux 上主线程默认 8 MiB） | `ulimit -s` 之类 | 在原生栈将满（剩余不足十六分之一，且至少保留 128 KiB）时还要嵌套的调用，在到达上面的上限之前就被拒绝，诊断为 `MaxRecursionDepthExceeded`；消息说明原生栈已满。正是这一点使调高的上限不至于以段错误告终。栈的边界在 Linux（glibc）、Windows 和 macOS 上读取（后两者已实现，但没有编译或运行过）；在其他平台上，上限不能调高到默认值以上 |
 | `std::macro` 对 `macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`、`CAMEL_MAX_MACRO_DEPTH=<n>`（1 到 1000000） | 求值失败：在该调用处给出错误 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
@@ -248,9 +262,9 @@
 | 元空间（正在编译的图的常量和函数值；每个拥有它的函数、lambda 或分支臂约 1.2 KB） | 总共 256 MB，按段 | `CAMEL_META_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`，阶段 `compile`，定位在正在编译的函数 |
 | 自动空间（运行期的值，受垃圾回收管理） | 宿主机的内存 | 否 | `RuntimeDiag::MemoryExhausted`（阶段 `pass:<scheduler>`），说明宿主机拒绝了这次分配 |
 
-**递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行）以及给出上限时的 `std::tf` 上都是如此：默认值下是 `depth(255)`。改变存在哪些调用的遍（`std::inline`）也改变被计数的内容，因为它们改变了图。
+**递归上限计的是什么** 在每个执行后端上都相同：每一次处于打开状态且不是尾调用的函数调用，不论它是写成一次调用、通过函数值进行，还是由高阶算子（`map`、`filter`、`reduce`、`foreach`）为某个元素进行。处于尾位置的调用替换它的调用者，不计数（见 `docs/technical/19_tail_call_optimization.md`），所以任意深度的尾递归在任何上限下都能运行。`if` 的分支臂是它们所在函数的尾调用。唯一不由程序自己发出的调用，即运行时对 `main` 的调用，不计数。因此上限为 L 时，对于从 `main` 调用的 `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`，`depth(L - 1)` 是能运行的最深调用，在 `std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的）以及给出上限时的 `std::tf` 上都是如此：默认值下是 `depth(255)`。改变存在哪些调用的遍（`std::inline`）也改变被计数的内容，因为它们改变了图。
 
-**设置它。** 命令行上的 `--max-recursion-depth <n>`，否则是环境变量 `CAMEL_MAX_RECURSION_DEPTH=<n>`；`n` 是 1 到 1000000 的整数。其他任何值（0、文本、更大的数）在程序编译之前就在标准错误上被拒绝，退出码为 1。没有对应的 `.opencmlrc` 键。既没有选项也没有变量时，`std::nvm` 和 `std::fvm` 在 256 处停下，`std::tf` 不计数；所有调度器是否应当共用一个默认值，是设计原则（第 6 节）里的一个未决问题。
+**设置它。** 命令行上的 `--max-recursion-depth <n>`，否则是环境变量 `CAMEL_MAX_RECURSION_DEPTH=<n>`；`n` 是 1 到 1000000 的整数。其他任何值（0、文本、更大的数）在程序编译之前就在标准错误上被拒绝（`Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000.`），退出码为 1。没有对应的 `.opencmlrc` 键。既没有选项也没有变量时，`std::nvm`、`std::fvm` 和 `std::jit` 在 256 处停下，`std::tf` 不计数；所有调度器是否应当共用一个默认值，是设计原则（第 6 节）里的一个未决问题。
 
 **调高上限的代价**（在 Linux x86-64、release 构建上测得，函数有三个槽）：
 
@@ -286,14 +300,16 @@
 
     camel check [options] <cml file or directory>
 
-- `-i`, `--lexical-only`：只做词法分析  
-- `-s`, `--syntax-only`：只做语法检查（不含格式和语义）  
+- `-i`, `--lexical-only`：只做词法分析（当前实现接受这个选项，但不改变检查范围：语义错误照常报告）  
+- `-s`, `--syntax-only`：只做语法检查（不含格式和语义；当前实现同样不改变检查范围）  
 - `-O`, `--output-format <text|short|json>`：诊断的格式（默认：`text`）  
 - `-N`, `--max-warning <num>`：显示的警告数；`--color`、`--max-errors` 和 `-W...` 选项的用法与运行时相同（见“诊断”）  
 - `-c`, `--config <file>`：规则定义文件的路径  
 - `-e`, `--ignore`：忽略定义文件  
 - `-o`, `--output <file>`：输出文件（默认：控制台）  
 - 可用的通用选项：`-v` / `-vv` / `-vvv` / `-vvvv`、`--verbose`、`--log-level`、`--log-preset`、`--log-include`
+
+错误打印到标准输出，警告打印到标准错误，格式与运行时相同。`camel check` 只报告：即使发现了错误，退出码也是 0，所以脚本应当看输出（例如 `-O json` 的数组），不要看退出码。
 
 ---
 
@@ -307,7 +323,7 @@
 - `-c`, `-C`, `--gct`, `--graph-construct-tree`：打印图构造树（GCT）  
 - `-g`, `-G`, `--gir`, `--graph-ir`：打印图中间表示（GIR）  
 - `--tns`, `--topo-node-seq`：打印拓扑排序后的节点序列  
-- `--ops`, `--operators`：列出内建模块与该程序导入的每个模块的算子，每个重载一行 `OPERATOR {json}`：模块、名字、URI、参数个数、声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名
+- `--ops`, `--operators`：列出内建模块与该程序导入的每个模块的算子，每个重载一行 `OPERATOR {json}`：模块、名字、URI、参数个数、声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名，例如 `OPERATOR {"module":"<builtin>","name":"__add__","uri":":op/add_l","with":0,"norm":2,"purity":"pure","signature":"(i64, i64) => i64"}`
 - `--gen`, `--gene-code`：从 AST 生成代码  
 - `-p`, `-P`, `--pass-until <n>`：执行到指定的图优化阶段为止  
 - 可用的通用选项：`-v` / `-vv` / `-vvv` / `-vvvv`、`--verbose`、`--log-level`、`--log-preset`、`--log-include`
@@ -330,7 +346,7 @@ Camel CLI（`camel`）负责运行、检查和查看。格式化由单独的工�
   - 等价于：`camel <file.cml> std::cpp`，输出写入 `tmp/<stem>.cpp`，然后用 clang++ 编译，生成 `tmp/<stem>.exe` 和 `tmp/libcamel.dll`。
   - 构建位置：`build/tools/camel-cpp/Release/camel-cpp.exe`（Windows；为便于移动，libcamel.dll 会一并复制到旁边）。
 
-其他工具：`camel-codegen`、`camel-profiler`。全部构建在 `build/tools/` 下。
+其他工具：`camel-codegen`、`camel-pr`（性能分析器）、`camel-db`（调试器）、`camel-ls`（语言服务器）。全部构建在 `build/tools/` 下，与 `camel` 一起安装到 `out/latest/bin/`。
 
 ---
 

@@ -209,7 +209,7 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
   - `camel-cpp`：`.cml` → C++ 转译并自动编译，产物到 `tmp/`
   - `format`：代码格式化工具 `camel-format`
   - `codegen`：从 AST 生成代码 `camel-codegen`
-  - `profiler`：性能分析工具 `camel-profiler`
+  - `profiler`：性能分析工具 `camel-pr`
 
 构建产物位于 `build/tools/<tool>/<Config>/`，`camel` 可执行文件会复制到项目根目录。
 

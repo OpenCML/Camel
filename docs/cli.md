@@ -42,14 +42,14 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `--dump-after-each-pass <dir>`: Write the graph before the first pass (`00_input`) and after each pass that returns a graph (`NN_<pass>`, `::` written as `.`) into `<dir>`: a readable DOT (`.rgir.dot`, the `std::rgir` format with `origin`/`span`/`srcfile` per node) and the `std::stats` counters (`.stats.json`). Scheduling and translation passes consume the graph and leave no snapshot. Compare two snapshots with `python tools/graph-diff/graph_diff.py BEFORE AFTER`  
 - `--arg <name>=<value>`: Value of a parameter of `main` (repeatable; see "Programs whose `main` takes parameters")  
 - `-o`, `--output <file>`: Where the value `main` returns is written (default: standard output; same section)  
-- `-P`, `--profile`: Record time spent in each stage and output a performance report  
+- `-P`, `--profile`: Record time spent in each stage and write trace files to `profile_reports/`. Effective in debug builds only; a release build accepts the option and produces no report  
 - `-S`, `--scheduler <type>`: Specify the scheduler type  
 - `-t`, `--threads <num>`: Maximum number of threads  
 - `--max-recursion-depth <n>`: Limit on the calls that may be open at once without being tail calls (1 to 1000000; see "Resource limits"). Also `CAMEL_MAX_RECURSION_DEPTH=<n>`; the option wins  
 - `--max-macro-depth <n>`: Limit on nested calls while `std::macro` evaluates a call ahead of time (default 64; same range). Also `CAMEL_MAX_MACRO_DEPTH=<n>`  
 - `-n`, `--no-cache`: Disable cache modules  
 - `-I`, `--include <dir>`: Add module search path (can be used multiple times)  
-- `-L`, `--stdlib <path>`: Specify standard library path (default: `./stdlib` under current directory)  
+- `-L`, `--stdlib <path>`: Standard library path, added to the module search path. When omitted, the environment variable `CAMEL_STD_LIB` is used; with neither, the standard library is looked up in the `stdlib` directory next to the executable and under the installation root (`CAMEL_HOME`)  
 - `-E`, `--error-format`, `--output-format <text|short|json>`: Format of diagnostics (default: `text`), see "Diagnostics" below; `--timeit` reuses this for its own output
 - `--color`, `--max-errors`, `-N`/`--max-warning`, `-W...`: see "Diagnostics" below
 
@@ -67,20 +67,31 @@ A compile error or a run-time fault is printed on standard output, a warning on 
            |             ^^^^^^^^^^^^^^
         help: Make sure the name is declared and in scope.
 
+        camel: 1 error
+
+    Compile errors are followed by a line with their count (`camel: 1 error`, `camel: 3 errors`); a run-time fault is not.
+
   - `short`: one line per diagnostic, `(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`. This is the form scripts match; the test runner uses it.
   - `json`: an array of objects with `range`, `severity`, `code`, `message`, `relatedInformation` (the secondary locations: `location.path`, `location.range`, `message`) and `data` (`stage`, `name`, `moduleName`, `modulePath`, `suggestion`, `notes`).
   - The environment variable `CAMEL_ERROR_FORMAT` gives the format when the option is absent.
   - Lines and columns start at 1 in `text` and `short` and at 0 in `json`; a column counts characters, not bytes.
 - `--color <auto|always|never>`: colours in `text` and `short` (default `auto`: only when the stream is a terminal, and never when `NO_COLOR` is set).
-- `--max-errors <n>`: compile errors reported before the compiler gives up (default 20; 0: no limit). One run reports every independent error it finds; what follows from an error already reported is not reported again (see [technical/30_diagnostics_reporting.md](technical/30_diagnostics_reporting.md)). A run-time fault always ends the run at the first one.
-- `-N`, `--max-warning <n>`: warnings shown (default 1000); the rest are counted and the count is printed at the end.
-- Warnings are named as in [diagnostics.md](diagnostics.md), without the type prefix; case, `-` and `_` do not matter (`ignored-side-effect` is `IgnoredSideEffect`). A name that is not a warning is refused.
+- `--max-errors <n>`: compile errors reported before the compiler gives up (default 20; 0: no limit). When the limit is reached, the count line of the `text` format says so: `camel: 2 errors; stopped at the limit of 2 errors (--max-errors <n> raises it, 0 removes it)`. One run reports every independent error it finds; what follows from an error already reported is not reported again (see [technical/30_diagnostics_reporting.md](technical/30_diagnostics_reporting.md)). A run-time fault always ends the run at the first one.
+- `-N`, `--max-warning <n>`: warnings shown (default 1000); the rest are counted and the count is printed at the end (`camel: 1 more warning(s) not shown (--max-warning 0)`).
+- Warnings are named as in [diagnostics.md](diagnostics.md), without the type prefix; case, `-` and `_` do not matter (`ignored-side-effect` is `IgnoredSideEffect`). A name that is not a warning is refused: `Error: -Wno-bogus: no warning is named 'bogus'. The warnings are: ...` on stderr, followed by all warning names, exit code 1, and the program is not compiled.
   - `-Wno-<name>`: do not report the warning `<name>`.
   - `-Wnone`: report no warnings.
-  - `-Werror`: report every warning as an error (the program is not run).
+  - `-Werror`: report every warning as an error (the program is not run; exit code 1). In the `text` format such an error carries the line `note: this warning is reported as an error because of -Werror`.
   - `-Werror=<name>`: report the warning `<name>` as an error.
   - `-Wno-error=<name>`: keep `<name>` a warning under `-Werror`.
-- `--explain <name or code>`: print the catalog entry of a diagnostic (`camel --explain IndexOutOfRange`, `camel --explain 0x04000002`).
+- `--explain <name or code>`: print the catalog entry of a diagnostic (`camel --explain IndexOutOfRange`, `camel --explain 0x04000002`). The name may be written without the type prefix; case, `-` and `_` do not matter here either. An unknown name or code is refused on stderr with exit code 1.
+
+        RuntimeDiag::IndexOutOfRange  (0x04000002, Error)
+
+          message: Index {0} is out of range for {1} of length {2}.
+          help:    Ensure the index is within the valid range of the collection.
+
+          {0}, {1}, ... stand for the values a concrete report fills in. A triggering example is in docs/diagnostics.md.
 
 ### Programs whose `main` takes parameters or returns a value (`--arg`, `-o`)
 
@@ -97,9 +108,9 @@ A compile error or a run-time fault is printed on standard output, a warning on 
 - **Running needs every parameter.** A scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`, or the default run) refuses an entry graph that still has parameters with `RuntimeDiag::EntryArgumentMissing` (`0x04000010`, stage `run`), located at the definition of `main` and naming the parameters without a value. Nothing runs; no default, zero or random value is ever assumed. Rewriting and translation passes accept open parameters.
 - **A bad argument** (a name that is no parameter, a name given twice, text that is not a literal of the type, a missing file, a tensor of another shape, `--arg` for a `main` without parameters) is `RuntimeDiag::EntryArgumentInvalid` (`0x04000011`), located at `main`, before any pass runs.
 - **The value `main` returns goes to the output**, `-o` / `--output <file>`, which is standard output by default, when a scheduling pass has run the program. The exact rule:
-  - `main` returns nothing (`void`): nothing is written. With `-o` that is `RuntimeDiag::EntryResultNotWritten` (`0x04000012`), located at `main`.
+  - `main` returns nothing (declared `: void`): nothing is written. With `-o` that is `RuntimeDiag::EntryResultNotWritten` (`0x04000012`), located at `main`, reported after the program has run, with exit code 1.
   - `main` returns an exit code (`int`, `bool`, `byte`: the types the process exit code is derived from): the value is the exit code, as for any `main`, and is **not** printed on standard output, so a program whose `main` returns its status behaves as it always did. It is written (as text) only when `-o` names a file.
-  - `main` returns anything else (a `float`, a `string`, a tensor, a tuple, a struct, ...): that value is the result of the program. Without `-o` it is printed on standard output as `println` prints it, on a line of its own after the program's own output (a tuple or struct in its text form, e.g. `(tensor([...]), tensor([...]))`). With `-o path` it is written in the layout `--arg` reads: a scalar as a text file holding the literal, a tensor as a `.npy` file (`.npy` is appended when `path` has another extension or none), a struct or tuple as the directory `path` with one file per leaf (`0.npy`, `1.w.npy`).
+  - `main` returns anything else (a `float`, a `string`, a tensor, a tuple, a struct, ...): that value is the result of the program. Without `-o` it is printed on standard output as `println` prints it, on a line of its own after the program's own output (a tuple or struct in its text form, e.g. `(tensor([...]), tensor([...]))`). With `-o path` it is written in the layout `--arg` reads: a scalar as a text file holding the literal, a tensor as a `.npy` file (`.npy` is appended when `path` has another extension or none), a struct or tuple as the directory `path` with one file per leaf (a tensor leaf is `0.npy`, `1.w.npy`; a scalar leaf is a text file without extension, `0`, `1`).
   - A value that cannot be written to the file (an unwritable path, a type without a file format such as an array or a function) is `EntryResultNotWritten`, located at `main`; the exit status is 1.
   - The rule does not depend on whether `main` has parameters. Translation passes and dumps are not affected: they write what they always wrote.
 - `--timeit` binds `--arg` like a plain run; the result of `main` is neither printed nor written there.
@@ -108,8 +119,8 @@ A compile error or a run-time fault is printed on standard output, a warning on 
 
 The passes given on the command line run in the order written. Each pass transforms the graph, executes it (a scheduling pass) or translates it (a translation pass).
 
-- **Default pipeline.** With no pass given, `std::default` runs; it is an alias of `std::nodevm` (the node VM). The same default runs after the given passes when none of them consumed the graph. `.opencmlrc` (`passes.fallback`) can change it.
-- **Every pass name is checked before anything runs.** After the program is compiled (passes contributed by modules exist only then) and before the first pass runs or the first `--dump-after-each-pass` snapshot is written, all names of the pipeline and of the fallback are resolved (aliases first). The first unknown one is reported as `RuntimeDiag::UnrecognizedGraphPass` with stage `pass:<name>`, the available passes are listed on stderr, and the exit code is 1. Nothing has executed: `camel f.cml std::nvm std::no_such_pass` does not run the program.
+- **Default pipeline.** With no pass given, `std::default` runs; it is an alias of `std::nodevm` (the node VM), and `std::nvm`, used in the rest of this guide, is another alias of the same pass (likewise `std::fvm` is `std::fastvm`, `std::jit` is `std::fastvm::jit`, and `std::tf` and `std::prl` are `std::taskflow`). The same default runs after the given passes when none of them consumed the graph. `.opencmlrc` (`passes.fallback`) can change it.
+- **Every pass name is checked before anything runs.** After the program is compiled (passes contributed by modules exist only then) and before the first pass runs or the first `--dump-after-each-pass` snapshot is written, all names of the pipeline and of the fallback are resolved (aliases first). The first unknown one is reported as `RuntimeDiag::UnrecognizedGraphPass` with stage `pass:<name>`, the available passes and aliases are listed on stderr (`Pass <std::no_such_pass> not found, available passes are:`, then `Available aliases are:`), and the exit code is 1. Nothing has executed: `camel f.cml std::nvm std::no_such_pass` does not run the program.
 - **Passes written after a pass that consumes the graph never run.** A scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`) executes the program and a translation pass (`std::gir`, `std::rgir`, `std::cpp`, `onnx::export`, the bytecode and JIT dumps) translates it; neither hands a graph on, so the pipeline ends there. `camel f.cml std::nvm std::inline` runs the program on the node VM and never runs `std::inline`. This is accepted, with the warning `RuntimeDiag::PassesNeverRun` (`0x0410000F`, stage `pass:<consuming pass>`) on stderr before anything runs, naming the passes that will not run (see "Warnings").
 - **Pass order is not restricted by the language, and it can matter.** A pass does not promise to produce the same graph as another order would: it modifies the graph and may have side effects. "Any pass sequence gives the same behaviour" is not a property of Camel.
 - **Standard optimisation passes** (`std::devirtualize`, `std::specialize`, `std::inline`, `std::opt::fold`, `std::opt::cse`, `std::opt::dce`, `std::opt::simplify`, `tensor::fuse`) aim to preserve a program's results. That is a quality requirement on those passes, checked by tests, not a language guarantee.
@@ -136,18 +147,16 @@ Macro operators over functions (`grad`, `value_and_grad`, `vjp` of `autodiff`) t
 
 `std::macro` replaces a call of a `macro` function or macro operator by its result when every argument is a constant. Two things can keep a call in the program:
 
-- **An argument is not a constant.** This is the normal case and not a failure; nothing is printed. With `-v` a log line names the call and the argument: `<Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
-- **The evaluation fails**: an operator raises an error (division by zero, `autodiff: no derivative rule for operator ...`), an exception escapes, or the evaluation needs more nested calls than the evaluator's limit (64 unless `--max-macro-depth` or `CAMEL_MAX_MACRO_DEPTH` says otherwise). This is a compile-time error (decided 2026-10-06, design principles 2.7): `RuntimeDiag::MacroEvaluationFailed` (`0x0400000E`, stage `pass:std::macro`), located at the call, with the reason: `m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.` The pipeline stops there with exit code 1; no later pass runs and the program is not executed.
+- **An argument is not a constant.** This is the normal case and not a failure; nothing is printed. With `-v` a log line on stderr names the call and the argument: `[WARN] <Macro> 'count' at m.cml:11:17 stays a run-time call: argument 1 is not a constant.`
+- **The evaluation fails**: an operator raises an error (division by zero, `autodiff: no derivative rule for operator ...`), an exception escapes, or the evaluation needs more nested calls than the evaluator's limit (64 unless `--max-macro-depth` or `CAMEL_MAX_MACRO_DEPTH` says otherwise). This is a compile-time error (design principles 2.7): `RuntimeDiag::MacroEvaluationFailed` (`0x0400000E`, stage `pass:std::macro`), located at the call, with the reason (`short` format; the suggestion and the diagnostic name follow): `(m)m.cml:19:17: [Error]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero. ...` The pipeline stops there with exit code 1; no later pass runs and the program is not executed.
 
 Consequences of the rule:
 
 - A program is rejected for a failing macro call **even if the call would never be reached at run time** (a call in a function nothing calls, or in an arm that is not taken): `std::macro` evaluates every macro call whose arguments are constants.
-- A macro recursion deeper than the evaluator's limit (64 frames by default) is a failed evaluation, so a program that runs without `std::macro` can be rejected with it (`count(40)` for `macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)`). The message names the limit and how to raise it: `--max-macro-depth <n>` or `CAMEL_MAX_MACRO_DEPTH=<n>`.
+- A macro recursion deeper than the evaluator's limit (64 frames by default) is a failed evaluation, so a program that runs without `std::macro` can be rejected with it (`count(40)` for `macro func count(n) = if n == 0 then 0 else 1 + count(n - 1)`). The message names the limit and how to raise it: `'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls (at 'count'). The limit is set with --max-macro-depth <n> or CAMEL_MAX_MACRO_DEPTH=<n>.`
 - Effects that the failed evaluation performed before it failed have happened at pass time (once per round of the pass). They are not repeated, since the program does not run.
 - Without `std::macro` in the pipeline nothing changes: the call is an ordinary call and fails, if at all, when it is reached.
 - `onnx.export_model` expands macros of the function it exports with the same evaluator while the program runs; a failed evaluation there is the same diagnostic, with stage `run`.
-
-Before this rule (up to commit `b0fa6b4b`) a failed evaluation was the warning `RuntimeDiag::MacroEvaluationDeferred` and the call was left to run with the program; that behaviour is one commit away (`git revert` of the commit that introduced `MacroEvaluationFailed`).
 
 ### ONNX export as a pass (`onnx::export`)
 
@@ -172,7 +181,7 @@ When no `export_model` call exists anywhere in the program, the pass translates 
 - **Outputs**: the value `main` returns; a tuple or struct is expanded into one output per leaf (`output`, or `output_0`, `output_1_w`, ...).
 - **Where it is written**: `CAMEL_ONNX_OUT`, which is required here.
 - **Refusal**: the pass translates what it can and refuses where it cannot, with `TranslationRefused` at the construct: an effect (`println`, a file read), an unexpanded macro (run `std::macro`), a call no simplification removes, an operator without a lowering. There is no separate check that the program is "pure"; a program that does more than compute exports one of its functions with `onnx.export_model` instead, and the refusal says so. The pass inlines the call of `main` itself, so it also works without `std::opt::simplify` before it; `std::macro` is still needed for programs that use `grad` or `value_and_grad`.
-- A program that does contain an `export_model` call is never translated this way, wherever the call is: if the call is not visible in the entry graph (nothing was inlined), the refusal names `std::opt::simplify` as before.
+- A program that does contain an `export_model` call is never translated this way, wherever the call is: if the call is not visible in the entry graph (nothing was inlined), the refusal names `std::opt::simplify`.
 
 To check an exported model against the program itself, run the program with the same values and compare: `camel model.cml --arg x=x.npy --arg p=weights -o out` writes what `main` returns in files a NumPy script reads.
 
@@ -180,7 +189,7 @@ Running the program without passes (`camel m.cml`) keeps working: `export_model`
 
 ### Warnings
 
-A warning (a `[Warn]` diagnostic) does not stop a program. The compiler's warnings about effects:
+A warning (a `[Warn]` diagnostic) does not stop a program. The table lists the compiler's warnings about effects and the warnings of the pipeline; for the others (`InvalidEscapeSequence`, `ExitInUnusedBranch`, `MatchWithoutDefault`) see [diagnostics.md](diagnostics.md).
 
 | Name | Code | Where | Meaning |
 |---|---|---|---|
@@ -193,31 +202,34 @@ A warning (a `[Warn]` diagnostic) does not stop a program. The compiler's warnin
 
 What counts as an effect for `EffectNotExecuted`: an operator that is neither pure nor state-only in the operator-traits registry (the same set the effect trace records), a call of a function declared `sync func` or with a `var` parameter, a call of a function whose own result depends on an effect, and a branch with such an arm. A call through a function value is only recognised by its type (`sync` modifier, `var` parameter).
 
-- **A program that compiles without an error** prints its warnings on **stderr**, once, after compilation and before the first pass runs, at the default log level (no `-v` needed). In text mode, one line per warning: `(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)`. With `--output-format json`, one JSON array on stderr with the same objects as the error array below (`"severity":"Warn"`). Nothing is written when there is no warning (no empty array).
+- **A program that compiles without an error** prints its warnings on **stderr**, once, after compilation and before the first pass runs, at the default log level (no `-v` needed). In the default `text` format a warning is written like an error, starting with `warning[SemanticDiag::IgnoredSideEffect]: ...`, with the source line and `help:`; in the `short` format, one line per warning: `(module)file:line:col: [Warn]: text suggestion (name=SemanticDiag::IgnoredSideEffect, code=0x03100002)` (a warning without a source position is written `():?:?: [Warn]: ...`). With `--output-format json`, one JSON array on stderr with the same objects as the error array below (`"severity":"Warn"`). Nothing is written when there is no warning (no empty array).
 - **stdout is the same in both modes as without warnings**: the program's output, and the diagnostics array only when there is an error. Tools that parse stdout are not affected.
-- **A module that has an error** shows its warnings with the error, as before (in the stdout array in JSON mode); they are not repeated on stderr.
+- **A module that has an error** shows its warnings with the errors on stdout, warnings first (in the same array in JSON mode); they are not repeated on stderr. `EffectNotExecuted` is not reported when the module has an error.
 - `camel check` prints them the same way. `--timeit`, `camel inspect`, `camel-cpp` and the debugger do not print warnings.
 
 ### JSON diagnostics (`--output-format json`)
 
-Errors are printed on stdout, after any program output, as a JSON array of objects:
+Errors are printed on stdout, after any program output, as a JSON array of objects (`[` and `]` each on a line of their own, one object per line):
 
 ```json
+[
 {"range":{"start":{"line":6,"character":13},"end":{"line":6,"character":14}},"severity":"Error","code":"0x04000001","source":"Camel","message":"Attempted division by zero.","data":{"stage":"run","name":"RuntimeDiag::DivisionByZero","moduleName":"m","modulePath":"m.cml","suggestion":"..."}}
+]
 ```
 
 - `range` is 0-based; `data.modulePath` is the file. A diagnostic without a source position (an unknown pass name, passes that never run) has an all-zero range and an empty `modulePath`.
 - `data.name` is the stable diagnostic name; `code` is its numeric form.
 - Every graph a pass commits (and every graph the front end encodes) is validated structurally, in release builds as well: node, slot and edge references in range, inputs and outputs mirroring each other, `BRCH`/`JOIN` arm counts, a `GATE` with a value and a control input, a direct call passing as many arguments as its callee takes. A violation is a `RuntimeDiag::PassInternalError` naming the pass that committed the graph, before anything runs.
 - An exception that escapes a pass without being a diagnostic (graph validation when a rewrite is committed, a cycle met while a scheduler builds its execution order) is reported as `RuntimeDiag::PassInternalError` (`0x0400000C`) with stage `pass:<name>`, the exception text in the message, no source position, and exit code 1. It marks a defect of the compiler, not a refusal of the program. The stage names the pass even when it is a scheduling pass, so it does not tell whether part of the program had already run. An exception outside any pass is reported as `InternalDiag::UnknownInternalError` with stage `internal`.
-- `data.stage` tells where in the pipeline the diagnostic was raised: `parse`, `typecheck`, `pass:<name>` for a rewrite or translation pass (including an unknown pass name), `run` for a scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`), or `internal`.
+- `data.stage` tells where in the pipeline the diagnostic was raised: `parse`, `typecheck`, `compile` (see "Resource limits"), `pass:<name>` for a rewrite or translation pass (including an unknown pass name), `run` for a scheduling pass (`std::nvm`, `std::fvm`, `std::jit`, `std::tf`), or `internal`.
 
 ### Effect trace (`CAMEL_EFFECT_TRACE`)
 
-Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, in-place array operators, ...), in call order. Creating and reading a `var` variable (`:var/new`, `:var/get`) are state-only and emit no event; a store into one (`:op/assn*`) does, as before variables became cells:
+Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, in-place array operators, ...), in call order. Creating and reading a `var` variable (`:var/new`, `:var/get`) are state-only and emit no event; a store into one (`:op/assn*`) does:
 
 ```json
 {"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...","payload":"string=hello|||"}
+{"seq":1,"uri":":op/assn_l","stage":"run","origin":{"file":"a.cml","line":13,"col":7},"payload_sha1":"...","payload":"var i64=(1)|i64=5|||"}
 ```
 
 - `stage` is `macro` while `std::macro` evaluates a call ahead of time and `run` otherwise.
@@ -237,8 +249,8 @@ Limits of the compiler and the back ends. A pass that reaches one of its limits 
 | Size of a graph that `std::inline` inlines into | 4096 nodes | no | that call is not inlined |
 | Rounds of `std::opt::simplify` | 16 | no | the program is passed on as it is. Logged with `-v` |
 | Type-only specializations of one recursive function (a tensor argument whose shape changes at every level of the recursion) | 8 | no | the call keeps its callee |
-| Non-tail recursion on `std::nvm`, `std::fvm` and the interpreted part of `std::jit` | 256 open calls | `--max-recursion-depth <n>`, `CAMEL_MAX_RECURSION_DEPTH=<n>` (1 to 1000000) | the program stops with `RuntimeDiag::MaxRecursionDepthExceeded` (`0x04000004`, stage `run`, exit 1) at the call expression that would be open call 257; what ran before it has run and its output is written. The message gives the limit, the suggestion the option and the variable |
-| Recursion in code `std::jit` compiled to native code (a self-recursive function whose branch arms were inlined, e.g. after `std::inline` or `std::opt`) | none | no | not counted and not checked: limited by the frame pool and the native stack; exhausting either ends the process without a diagnostic. (A depth check for compiled code is being added separately.) |
+| Non-tail recursion on `std::nvm`, `std::fvm` and `std::jit` (on `std::jit`, interpreted calls and calls compiled to native code count alike) | 256 open calls | `--max-recursion-depth <n>`, `CAMEL_MAX_RECURSION_DEPTH=<n>` (1 to 1000000) | the program stops with `RuntimeDiag::MaxRecursionDepthExceeded` (`0x04000004`, stage `run`, exit 1) at the call expression that would be open call 257; what ran before it has run and its output is written. The message gives the limit (`Maximum recursion depth (256) exceeded when evaluating graph '...'.`), the suggestion the option and the variable |
+| Native stack used by recursion in code `std::jit` compiled to native code (a self-recursive function whose branch arms were inlined, e.g. after `std::inline`) | no separate limit: the depth is counted by the row above | the option and variable of the row above | Under the default limit the diagnostic is the same as for interpreted code (`camel f.cml std::inline std::jit`: `depth(255)` runs, `depth(256)` is `MaxRecursionDepthExceeded`). The check for a nearly full native stack does not cover compiled code: with a very high limit and a recursion that really is that deep, the process ends with a segmentation fault and no diagnostic (with a limit of 1000000, a recursion of 20000 levels runs and one of 100000 levels crashes) |
 | Non-tail recursion on `std::tf` | none: as deep as the native stack of the thread allows (about 14800 calls of a small function on an 8 MiB stack) | the same option and variable; with either, `std::tf` counts like the others | with a limit: the same diagnostic at the same call as on `std::nvm` / `std::fvm`. Without: `MaxRecursionDepthExceeded` at the call when fifteen sixteenths of the thread's stack are used; the message then gives the number of open calls and the stack size |
 | Native stack of a thread, on every back end | the thread's stack (8 MiB for the main thread on Linux by default) | `ulimit -s` and the like | a call that would nest on a nearly full native stack (less than a sixteenth of it, at least 128 KiB, left) is refused with `MaxRecursionDepthExceeded` before the limit above is reached; the message says the native stack is full. This is what keeps a raised limit from ending in a segmentation fault. The stack bounds are read on Linux (glibc), Windows and macOS (the last two are implemented but have not been compiled or run); on another platform the limits cannot be raised above their defaults |
 | Ahead-of-time evaluation of a `macro` function by `std::macro` | 64 evaluator frames (a self-recursion of 32 levels: `count(31)` is evaluated, `count(32)` is not) | `--max-macro-depth <n>`, `CAMEL_MAX_MACRO_DEPTH=<n>` (1 to 1000000) | the evaluation has failed: error `RuntimeDiag::MacroEvaluationFailed` at the call, the pipeline stops (see "What `std::macro` reports"). The evaluator nests on the native stack (about 630 bytes a frame), and is stopped the same way when the stack is nearly full |
@@ -248,9 +260,9 @@ Limits of the compiler and the back ends. A pass that reaches one of its limits 
 | Meta space (constants and function values of the graphs being compiled; about 1.2 KB for every function, lambda or branch arm that owns one) | 256 MB in all, by segments | `CAMEL_META_SPACE_LIMIT_MB=<megabytes>` | `RuntimeDiag::MemoryExhausted`, stage `compile`, located at the function being compiled |
 | Auto space (run-time values, garbage collected) | the memory of the host | no | `RuntimeDiag::MemoryExhausted` (stage `pass:<scheduler>`), saying that the host refused the allocation |
 
-**What the recursion limit counts** is the same on every back end: each call of a function that is open and was not a tail call, whether it is written as a call, made through a function value, or made by a higher-order operator (`map`, `filter`, `reduce`, `foreach`) for an element. A call in tail position replaces its caller and is not counted (see `docs/technical/19_tail_call_optimization.md`), so tail recursion of any depth runs under any limit. The arms of an `if` are tail calls of the function they are written in. The one call the program does not make itself, the run-time's call of `main`, is not counted. So with a limit of L, for `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)` called from `main`, `depth(L - 1)` is the deepest call that runs, on `std::nvm`, `std::fvm`, `std::jit` (interpreted) and, when a limit is given, `std::tf`: `depth(255)` with the default. (Before the limit was configurable the back ends counted differently: `depth(253)` was the deepest on `std::nvm` and `depth(255)` on `std::fvm`, and `std::fvm` did not count calls through function values at all, which ended in a segmentation fault.) Passes that change which calls exist (`std::inline`) change what is counted, as they change the graph.
+**What the recursion limit counts** is the same on every back end: each call of a function that is open and was not a tail call, whether it is written as a call, made through a function value, or made by a higher-order operator (`map`, `filter`, `reduce`, `foreach`) for an element. A call in tail position replaces its caller and is not counted (see `docs/technical/19_tail_call_optimization.md`), so tail recursion of any depth runs under any limit. The arms of an `if` are tail calls of the function they are written in. The one call the program does not make itself, the run-time's call of `main`, is not counted. So with a limit of L, for `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)` called from `main`, `depth(L - 1)` is the deepest call that runs, on `std::nvm`, `std::fvm`, `std::jit` (interpreted and compiled to native code) and, when a limit is given, `std::tf`: `depth(255)` with the default. Passes that change which calls exist (`std::inline`) change what is counted, as they change the graph.
 
-**Setting it.** `--max-recursion-depth <n>` on the command line, else the environment variable `CAMEL_MAX_RECURSION_DEPTH=<n>`; `n` is an integer from 1 to 1000000. Anything else (0, text, a larger number) is refused on standard error with exit code 1 before the program is compiled. There is no `.opencmlrc` key. Without option and variable, `std::nvm` and `std::fvm` stop at 256 and `std::tf` has no count; whether all schedulers should share one default is an open question of the design principles (section 6).
+**Setting it.** `--max-recursion-depth <n>` on the command line, else the environment variable `CAMEL_MAX_RECURSION_DEPTH=<n>`; `n` is an integer from 1 to 1000000. Anything else (0, text, a larger number) is refused on standard error (`Invalid --max-recursion-depth value: '0'. Expected an integer from 1 to 1000000.`) with exit code 1 before the program is compiled. There is no `.opencmlrc` key. Without option and variable, `std::nvm`, `std::fvm` and `std::jit` stop at 256 and `std::tf` has no count; whether all schedulers should share one default is an open question of the design principles (section 6).
 
 **What a raised limit costs** (measured on Linux x86-64, release build, a function with three slots):
 
@@ -261,7 +273,7 @@ Limits of the compiler and the back ends. A pass that reaches one of its limits 
 | `std::fvm`, a call through a function value or an element call of a higher-order operator | as above, plus a nested activation of the interpreter loop on the native stack | about 1.7 KiB of native stack for the nested activation | 4587 nested activations; then the diagnostic (crash at 4890 without the check) |
 | `std::tf` | frame in a per-graph pool (heap), and the evaluator on the native stack | about 520 bytes of native stack | 14875 calls; then the diagnostic (crash at 15858 without the check) |
 
-The frame pool of `std::nvm` and `std::fvm` is sized with the limit: 4 KiB per call that may be open (1 MiB for the default, as before), at most 256 MiB; it is reserved once and only the part in use is touched. A recursion of functions with very large frames can fill it before the count is reached; that is the same located diagnostic, saying the frame pool is full (it was an unlocated `std::bad_alloc`). Running time is not affected by the limit. `CAMEL_NATIVE_STACK_GUARD=0` switches the native-stack check off; it exists to measure where the stack really ends (the crash points above) and is not for normal use.
+The frame pool of `std::nvm` and `std::fvm` is sized with the limit: 4 KiB per call that may be open (1 MiB for the default), at most 256 MiB; it is reserved once and only the part in use is touched. A recursion of functions with very large frames can fill it before the count is reached; that is the same located diagnostic, saying the frame pool is full. Running time is not affected by the limit. `CAMEL_NATIVE_STACK_GUARD=0` switches the native-stack check off; it exists to measure where the stack really ends (the crash points above) and is not for normal use.
 
 The three space limits bound the size of the compiled program, not of one graph: they are totals that only guard against a compiler that does not stop allocating (a pass whose unrolling or inlining never ends is stopped by the graph or permanent space filling up, and the time that takes grows faster than the limit, which is why the defaults are not larger). `CAMEL_GC_STATS=1` prints the occupancy of the three spaces at exit (`[camel] spaces: ...`: bytes in use, high-water mark, bytes reserved, segments, allocations, limit).
 
@@ -286,14 +298,16 @@ The other limits marked "no" are compile-time constants (`generic.h`, the inline
 
     camel check [options] <cml file or directory>
 
-- `-i`, `--lexical-only`: Perform lexical analysis only  
-- `-s`, `--syntax-only`: Perform syntax check only (excluding formatting or semantics)  
+- `-i`, `--lexical-only`: Perform lexical analysis only (the current implementation accepts the option without changing what is checked: semantic errors are reported as usual)  
+- `-s`, `--syntax-only`: Perform syntax check only (excluding formatting or semantics; likewise without effect at present)  
 - `-O`, `--output-format <text|short|json>`: Format of diagnostics (default: `text`)  
 - `-N`, `--max-warning <num>`: Warnings shown; `--color`, `--max-errors` and the `-W...` options work as for a run (see "Diagnostics")  
 - `-c`, `--config <file>`: Path to rule definition file  
 - `-e`, `--ignore`: Ignore definition files  
 - `-o`, `--output <file>`: Output file (default: console)  
 - Available global options: `-v` / `-vv` / `-vvv` / `-vvvv`, `--verbose`, `--log-level`, `--log-preset`, `--log-include`
+
+Errors are printed on standard output and warnings on standard error, in the same formats as for a run. `camel check` only reports: its exit code is 0 even when it found errors, so a script should read the output (for example the array of `-O json`), not the exit code.
 
 ---
 
@@ -307,7 +321,7 @@ The other limits marked "no" are compile-time constants (`generic.h`, the inline
 - `-c`, `-C`, `--gct`, `--graph-construct-tree`: Print Graph Construction Tree (GCT)  
 - `-g`, `-G`, `--gir`, `--graph-ir`: Print Graph Intermediate Representation (GIR)  
 - `--tns`, `--topo-node-seq`: Print topologically sorted node sequence  
-- `--ops`, `--operators`: List the operators of the built-in module and of every module the program imports, one line `OPERATOR {json}` per overload: module, name, URI, parameter counts, declared purity (`pure`, `effectful`, `state`, `undeclared`) and signature  
+- `--ops`, `--operators`: List the operators of the built-in module and of every module the program imports, one line `OPERATOR {json}` per overload: module, name, URI, parameter counts, declared purity (`pure`, `effectful`, `state`, `undeclared`) and signature, e.g. `OPERATOR {"module":"<builtin>","name":"__add__","uri":":op/add_l","with":0,"norm":2,"purity":"pure","signature":"(i64, i64) => i64"}`  
 - `--gen`, `--gene-code`: Generate code from AST  
 - `-p`, `-P`, `--pass-until <n>`: Execute up to a specified graph optimization stage  
 - Available global options: `-v` / `-vv` / `-vvv` / `-vvvv`, `--verbose`, `--log-level`, `--log-preset`, `--log-include`
@@ -330,7 +344,7 @@ Camel CLI (`camel`) handles run, check, and inspect. Formatting is provided by a
   - Equivalent to: `camel <file.cml> std::cpp` with output written to `tmp/<stem>.cpp`, then compiles with clang++, producing `tmp/<stem>.exe` and `tmp/libcamel.dll`.
   - Built at: `build/tools/camel-cpp/Release/camel-cpp.exe` (Windows; libcamel.dll is copied alongside for portability).
 
-Other tools: `camel-codegen`, `camel-profiler`. All are built under `build/tools/`.
+Other tools: `camel-codegen`, `camel-pr` (the profiler), `camel-db` (the debugger), `camel-ls` (the language server). All are built under `build/tools/` and installed with `camel` into `out/latest/bin/`.
 
 ---
 
