@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include "camel/utils/int_div.h"
 #include "fastvm.h"
 
 #include "camel/core/effect_trace.h"
@@ -153,7 +154,7 @@ static thread_local size_t s_jit_save_depth = 0;
         if (rhs == ZERO_CHECK) {                                                                   \
             throwRuntimeFault(RuntimeDiag::DivisionByZero);                                        \
         }                                                                                          \
-        TYPE res = lhs / rhs;                                                                      \
+        TYPE res = camel::utils::quotient(lhs, rhs);                                               \
         fastFrameSet(currFrame, bc->result, res);                                                  \
         NEXT();                                                                                    \
     }

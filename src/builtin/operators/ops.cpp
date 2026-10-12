@@ -24,6 +24,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/assert.h"
+#include "camel/utils/int_div.h"
 
 #include <cmath>
 
@@ -187,7 +188,7 @@ slot_t __builtin__assn_div_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
-    lhs /= rhs;
+    lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
@@ -201,7 +202,7 @@ slot_t __builtin__assn_div_l__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
-    lhs /= rhs;
+    lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
@@ -215,7 +216,7 @@ slot_t __builtin__assn_div_f__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
-    lhs /= rhs;
+    lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
@@ -229,7 +230,7 @@ slot_t __builtin__assn_div_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
 
-    lhs /= rhs;
+    lhs = camel::utils::quotient(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
@@ -242,8 +243,7 @@ template <typename T> static slot_t assignMod(ArgsView &norm) {
     if (rhs == 0) {
         throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
-    // Every remainder by -1 is 0; computing the one of the smallest integer overflows in C++.
-    lhs = rhs == static_cast<T>(-1) ? static_cast<T>(0) : static_cast<T>(lhs % rhs);
+    lhs = camel::utils::remainder(lhs, rhs);
     cell->set(0, lhs);
     return toSlot(lhs);
 }
@@ -489,7 +489,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs / rhs);
+        return toSlot(camel::utils::quotient(lhs, rhs));
     }
 
     case TypeCode::Int64: {
@@ -498,7 +498,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs / rhs);
+        return toSlot(camel::utils::quotient(lhs, rhs));
     }
 
     case TypeCode::Float32: {
@@ -507,7 +507,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0.0f) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs / rhs);
+        return toSlot(camel::utils::quotient(lhs, rhs));
     }
 
     case TypeCode::Float64: {
@@ -516,7 +516,7 @@ slot_t __builtin__div__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0.0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs / rhs);
+        return toSlot(camel::utils::quotient(lhs, rhs));
     }
 
     default:
@@ -537,7 +537,7 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs % rhs);
+        return toSlot(camel::utils::remainder(lhs, rhs));
     }
 
     case TypeCode::Int64: {
@@ -546,7 +546,7 @@ slot_t __builtin__mod__(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (rhs == 0) {
             throwRuntimeFault(RuntimeDiag::DivisionByZero);
         }
-        return toSlot(lhs % rhs);
+        return toSlot(camel::utils::remainder(lhs, rhs));
     }
 
     default:

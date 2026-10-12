@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include "camel/utils/int_div.h"
 #include "fastvm.h"
 
 #include "camel/core/effect_trace.h"
@@ -63,7 +64,7 @@ using namespace camel::jit;
         if (rhs == ZERO_CHECK) {                                                                   \
             throwRuntimeFault(RuntimeDiag::DivisionByZero);                                        \
         }                                                                                          \
-        TYPE res = lhs / rhs;                                                                      \
+        TYPE res = camel::utils::quotient(lhs, rhs);                                               \
         currFrame->set(bc.result, res);                                                            \
     } break;
 
