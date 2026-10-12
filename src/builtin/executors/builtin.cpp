@@ -34,6 +34,7 @@ using namespace camel::core::rtdata;
 #include "../operators/profiler.h"
 #include "../operators/str.h"
 #include "../operators/struct.h"
+#include "../operators/collection.h"
 #include "../operators/tagged.h"
 #include "camel/core/operator_traits.h"
 
@@ -269,6 +270,28 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/error_new", __error_new__},
         {"op/parse_int", __parse_int__},
         {"op/parse_float", __parse_float__},
+
+        // Map and Set (operators/collection.h). All are under coll/: pure.
+        {"coll/map_idx", __coll_map_idx__},
+        {"coll/map_get", __coll_map_get__},
+        {"coll/map_get_or", __coll_map_get_or__},
+        {"coll/has", __coll_has__},
+        {"coll/set_contains", __coll_has__},
+        {"coll/len", __coll_len__},
+        {"coll/map_put", __coll_map_put__},
+        {"coll/set_add", __coll_set_add__},
+        {"coll/remove", __coll_remove__},
+        {"coll/merge", __coll_merge__},
+        {"coll/set_union", __coll_merge__},
+        {"coll/set_intersect", __coll_set_intersect__},
+        {"coll/set_difference", __coll_set_difference__},
+        {"coll/set_is_subset", __coll_set_is_subset__},
+        {"coll/keys", __coll_keys__},
+        {"coll/map_values", __coll_map_values__},
+        {"coll/map_items", __coll_map_items__},
+        {"coll/set_items", __coll_keys__},
+        {"coll/eq", __coll_eq__},
+        {"coll/neq", __coll_neq__},
     };
     return map;
 }
@@ -293,8 +316,9 @@ void registerBuiltinOperatorTraits() {
     auto &registry = camel::core::OperatorTraitsRegistry::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
-        const bool pure =
-            (key.starts_with("op/") && !key.starts_with("op/assn")) || kPureHelpers.contains(key);
+        // Every operator over Map and Set (coll/) returns a new value and changes nothing.
+        const bool pure = (key.starts_with("op/") && !key.starts_with("op/assn")) ||
+                          key.starts_with("coll/") || kPureHelpers.contains(key);
         if (pure) {
             registry.set(":" + name, {.pure = true, .elementwise = false});
         }

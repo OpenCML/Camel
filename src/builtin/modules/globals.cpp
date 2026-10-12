@@ -20,12 +20,15 @@
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/derivative.h"
+#include "builtin/operators/collection.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
 #include "camel/core/type/resolver.h"
 
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
+
+#include <algorithm>
 
 using namespace std;
 using namespace camel::core::context;
@@ -1568,7 +1571,25 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     registerBuiltinOperatorTraits();
     registerBuiltinDerivatives();
+    // The operators over Map and Set (design principles 2.9). Those named like a group of
+    // this module (`len`, `contains`, `__idx__`, `__eq__`, `__neq__`) are further overloads
+    // of it: one group is exported per name, the existing overloads first.
+    std::vector<oper_group_ptr_t> collectionGroups = getCollectionOperatorGroups();
     for (const auto &group : getGlobalOperatorGroups()) {
+        const auto extra = std::find_if(
+            collectionGroups.begin(),
+            collectionGroups.end(),
+            [&](const oper_group_ptr_t &other) { return other->name() == group->name(); });
+        if (extra == collectionGroups.end()) {
+            exportEntity(group->name(), group);
+            continue;
+        }
+        auto resolvers = group->resolvers();
+        resolvers.insert(resolvers.end(), (*extra)->resolvers().begin(), (*extra)->resolvers().end());
+        exportEntity(group->name(), OperatorGroup::create(group->name(), resolvers));
+        collectionGroups.erase(extra);
+    }
+    for (const auto &group : collectionGroups) {
         exportEntity(group->name(), group);
     }
     // The operators over T? and T! (design principles 2.9).
