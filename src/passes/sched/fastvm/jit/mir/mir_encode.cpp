@@ -575,9 +575,13 @@ void encodeMirBuffer(
             // allocatable).
             enc.pushRdi();
             enc.subRspImm(p->calleeSlotBytes);
-            // slot[0] is the Frame* by convention; the callee inherits the caller's.
-            enc.movRegFromFrame(kRegR11, 0);
-            enc.movToStack(0, kRegR11);
+            // slot[0] is the Frame* by convention. Compiled code never reads it (it calls no
+            // C++); only the debug trace does, so only then does the callee inherit the
+            // caller's.
+            if (debugTraceFn) {
+                enc.movRegFromFrame(kRegR11, 0);
+                enc.movToStack(0, kRegR11);
+            }
             // Direct-call arguments land on the callee's formal port slots, not on sequential
             // slot numbers.
             for (const auto &arg : p->args) {

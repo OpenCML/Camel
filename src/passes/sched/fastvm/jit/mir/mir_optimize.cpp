@@ -262,8 +262,6 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
                     if (arg.vreg == kInvalidVReg && !arg.isImm)
                         liveSlots.insert(arg.srcDisp);
                 }
-                // The call hands the caller's slot[0] (the Frame*) on to the callee.
-                liveSlots.insert(0);
             }
             continue;
         }

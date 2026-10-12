@@ -286,8 +286,6 @@ sub r15, 1                   ; 递归深度余量
 jb  .fault_depth             ; 用尽 → 故障桩（第 16 节）
 push rdi                     ; 保存调用方 slot 基址
 sub rsp, N                   ; 被调方的帧
-mov r11, [rdi]               ; slot[0]（Frame*）沿用调用方的
-mov [rsp], r11
 mov [rsp + dst_i], reg_i     ; 已在寄存器里的实参
 mov r11, [rdi + src_j]       ; 其余实参逐个经 r11（常量用 mov r11, imm64）
 mov [rsp + dst_j], r11
@@ -333,8 +331,8 @@ rdi 在所有实参写完之后才切换，所以实参的来源始终按调用�
 在 Frame-based 路径中，`slot[0]` 恒存当前 Frame 指针：
 
 - 解释器/gotovm 在调用 JIT 入口前写入。
-- 原生自调用把调用方的 slot[0] 原样写进被调方栈上帧的 slot[0]，所以整条原生调用链上 slot[0] 都是最外层那个帧池帧的 `Frame*`。
-- 这意味着 **slot[0] 不能用来读当前激活的数据**：`trampolineFunc/Tail/Oper` 都通过 `slots[0]` 的 `Frame*` 读操作数，在栈上帧里读到的是最外层激活的值。这是此前 SysV 下自尾调用算错的原因之一，也是 trampoline 目前不可达、不应在未重写前重新启用的原因。
+- 原生自调用的帧在机器栈上，**它的 slot[0] 不写**（只有开启 debug trace 时才把调用方的 slot[0] 抄过去，即最外层那个帧池帧的 `Frame*`）。
+- 所以 **slot[0] 不能用来读当前激活的数据**：`trampolineFunc/Tail/Oper` 都通过 `slots[0]` 的 `Frame*` 读操作数，在栈上帧里读不到当前激活的值。这是此前 SysV 下自尾调用算错的原因之一，也是 trampoline 目前不可达、不应在未重写前重新启用的原因。
 
 ### 6.3 静态区访问
 
