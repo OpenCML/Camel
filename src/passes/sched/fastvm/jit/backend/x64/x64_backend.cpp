@@ -270,14 +270,21 @@ bool X64Backend::compileBytecode(
         data_idx_t resultSlot = 0; // comparison's result slot (= BRCH's condSlot)
     } fusedCmp;
 
-    // BRCH/JOIN simplification: when fused cmp-BRCH is active, the then-path
-    // is handled by JUMP (writes w0 directly), so JOIN only executes from the
-    // else-path where idx is always 1. We skip the branch-index write entirely
-    // and let JOIN take w1 directly.
-    struct FusedBrchJoinInfo {
-        bool active        = false;
-        data_idx_t idxSlot = 0;
-    } fusedBrchJoin;
+    // A fused cmp-BRCH does not compute the branch index its JOIN selects by. Two ways to do
+    // without it:
+    // - Arm 0 is empty (its jump-table entry is the JUMP to the JOIN): that JUMP is lowered as
+    //   "take w0 and leave", so whatever else reaches the JOIN comes from arm 1 and the JOIN
+    //   takes w1 directly. Keyed by the index slot, because a nested fused branch in arm 1 is
+    //   lowered between this BRCH and its JOIN.
+    // - Otherwise an arm with code of its own reaches the JOIN, by a jump or by falling into
+    //   it, depending on how the arms were laid out. The index is then written where each arm
+    //   starts: at the two jump-table entries after the BRCH.
+    std::unordered_set<data_idx_t> joinsTakingArm1;
+    struct ArmIndexWrite {
+        data_idx_t idxSlot;
+        uint32_t armIndex;
+    };
+    std::unordered_map<size_t, ArmIndexWrite> armIndexWrites;
 
     // Read-only slot cache:
     // if a dynamic slot is never written by any bytecode in this function,
@@ -358,6 +365,11 @@ bool X64Backend::compileBytecode(
         build.setNextPc(static_cast<uint32_t>(pc));
         if (debug && debug->enableDebugTrace) {
             build.emitDebugTrace(static_cast<uint32_t>(pc));
+        }
+        if (auto write = armIndexWrites.find(pc); write != armIndexWrites.end()) {
+            x64::VRegId vIdx = nextVReg++;
+            build.emitVLoadImm32(vIdx, write->second.armIndex);
+            build.emitVStoreToFrame(slotDisp(write->second.idxSlot), vIdx);
         }
         switch (bc.opcode) {
         case OpCode::LADD: {
@@ -738,11 +750,25 @@ bool X64Backend::compileBytecode(
             size_t t0 = pc + bc.opsize;
             size_t t1 = pc + bc.opsize + 1;
             if (fusedCmp.active) {
-                // Fused compare-branch: CPU flags already set by preceding cmp.
-                // Phase K: skip branch-index write — JOIN only executes from
-                // the else-path where idx would always be 1, so we tell JOIN
-                // to take w1 directly via fusedBrchJoin.
-                fusedBrchJoin = {true, bc.result};
+                // Fused compare-branch: CPU flags already set by preceding cmp. The branch
+                // index is not computed here; see joinsTakingArm1 / armIndexWrites.
+                size_t joinPc = pcEnd;
+                for (size_t p = t1 + 1; p < pcEnd; p += base[p].opsize) {
+                    if (base[p].opcode == OpCode::JOIN && base[p].normCnt() > 0 &&
+                        base[p].nargs()[0] == bc.result) {
+                        joinPc = p;
+                        break;
+                    }
+                }
+                const bool arm0Empty = joinPc < pcEnd && base[joinPc].withCnt() == 2 &&
+                                       base[t0].opcode == OpCode::JUMP &&
+                                       getJumpTargetPc(&base[t0]) == joinPc;
+                if (arm0Empty) {
+                    joinsTakingArm1.insert(bc.result);
+                } else if (bc.result > 0) {
+                    armIndexWrites[t0] = {bc.result, 0};
+                    armIndexWrites[t1] = {bc.result, 1};
+                }
                 // Emit inverted jcc: jump to else (t1) when condition is NOT met
                 auto u32t1 = static_cast<uint32_t>(t1);
                 switch (fusedCmp.cmpOp) {
@@ -819,10 +845,10 @@ bool X64Backend::compileBytecode(
             data_idx_t w1      = bc.wargs()[1];
             int d1 = slotDisp(w1), dr = slotDisp(bc.result);
 
-            if (fusedBrchJoin.active && fusedBrchJoin.idxSlot == idxSlot) {
-                // Phase K: fused cmp-BRCH already handled then-path via JUMP.
-                // JOIN only executes from else-path, so take w1 directly. The then-path
-                // jumps past this code, so what follows the JOIN must not reuse the load.
+            if (joinsTakingArm1.count(idxSlot)) {
+                // Arm 0 of a fused cmp-BRCH left through its JUMP (see joinsTakingArm1), so
+                // this code runs for arm 1 only: take w1 directly. Arm 0 jumps past this
+                // code, so what follows the JOIN must not reuse the load.
                 x64::VRegId v1 = nextVReg++;
                 loadSlot(w1, d1, v1, false);
 
@@ -830,14 +856,13 @@ bool X64Backend::compileBytecode(
                 // JOIN's result, emit VRet directly — skip the intermediate store.
                 size_t nextPc = pc + bc.opsize;
                 if (nextPc < pcEnd && base[nextPc].opcode == OpCode::RETN &&
-                    base[nextPc].fastop[0] == bc.result) {
+                    base[nextPc].fastop[0] == bc.result && !blockStarts.count(nextPc)) {
                     build.emitVRet(v1);
                     // Advance pc so the loop's `pc += bc.opsize` lands past RETN.
                     pc = nextPc + base[nextPc].opsize - bc.opsize;
                 } else {
                     build.emitVStoreToFrame(dr, v1);
                 }
-                fusedBrchJoin.active = false;
             } else {
                 // Generic JOIN is lowered as a select: start with w0, then
                 // overwrite with w1 when idx != 0. The extra frame disp passed
