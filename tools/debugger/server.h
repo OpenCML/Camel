@@ -54,12 +54,11 @@
 
 namespace debugger {
 
-struct RestartRequestedException : std::exception {
-    const char *what() const noexcept override { return "restart requested"; }
-};
-struct TerminateRequestedException : std::exception {
-    const char *what() const noexcept override { return "terminate requested"; }
-};
+/// Thrown out of a pause to end the run. Deliberately not std::exception (like
+/// camel::core::ProcessExit): the pass driver turns a std::exception into a diagnostic of the
+/// pass and a failed run, and a run that was asked to stop has not failed.
+struct RestartRequestedException {};
+struct TerminateRequestedException {};
 
 class DebuggerServer {
   public:

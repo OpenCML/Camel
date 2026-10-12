@@ -152,6 +152,9 @@ int runWorkerMode(int argc, char *argv[]) {
         });
     });
     getState().targetFile = path;
+    // A worker exists for one file: it is loaded from the start. (The gateway adopts the state a
+    // worker reports, and runs only tasks that are loaded, completed or terminated.)
+    getTaskState() = "loaded";
     clearRunState();
 
     registerAllCommands(getDispatcher());
