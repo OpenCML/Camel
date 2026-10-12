@@ -567,6 +567,23 @@ Reading:
   (once loops exist) does. Until then the fix on the program's side is to build the entries
   as an array and convert once (`as`), which is the 0.09 s row.
 
+### After the persistent tree
+
+The table above was measured on the single sorted array. With the persistent B+ tree
+(section 5) the same accumulation, run with `CAMEL_COLL_LEAF_CAPACITY=0` for the old
+representation and without it for the tree, on the same busy machine (load above 40, minimum
+of two runs, `std::fvm`):
+
+| n times `put` in a tail-recursive loop | Tree | Single array |
+|---|---|---|
+| 10,000 | 0.04 s, 43 MB | 0.29 s, 84 MB |
+| 100,000 | 0.63 s, 48 MB | 16.8 s, 172 MB |
+| 300,000 | 2.35 s, 48 MB | not run (112 s in the table above) |
+
+A lookup in a map of 100,000 entries costs about 30 ns in the tree and about 330 ns in the
+single array in the same run. Entry-by-entry construction is no longer quadratic, and the
+advice to build an array and convert once is no longer needed for speed.
+
 ## 10. Questions for the language author
 
 Each is implemented as recommended here; the tag is in the code.
@@ -590,8 +607,7 @@ Each is implemented as recommended here; the tag is in the code.
   Candidates: only the `with` form (consistent with `contains<v>(xs)`); only the plain form
   (the sketch in the principles). Related, not decided here: `f(a<b>(x), c<d>(y))` is parsed
   as comparisons.
-- **`map-persistence`.** Sorted array, O(n) `put` (section 9). Candidate: a persistent
-  balanced tree behind the same operators.
+- **`map-persistence`.** Done: a persistent B+ tree behind the same operators (sections 5 and 9).
 - **`json-typed-decode`.** `json::decode_as<shape>(text): T!` (section 7, with the two
   alternatives).
 - **Not tagged, the same kind of question:** should `let m: Map<string, int> = [...]`
