@@ -8,7 +8,7 @@ mark-sweep, what it costs, and what is known to be wrong. Its last section is fo
 author: whether the generational collector should become the default is his decision.
 
 How to use the switch and its settings is in `docs/cli.md` ("The collector"); what C++ code
-must observe is in `34_gc_handle_rules.md`; the allocation domains are described in
+must observe is in `35_gc_handle_rules.md`; the allocation domains are described in
 `23_gc_runtime_lifetime.md`, the verification modes in `24_gc_verification_guide.md`.
 
 Everything in sections 3 to 6 was run for this report on one machine: Linux x86-64, 18
@@ -83,7 +83,7 @@ not sound. The defects, in the order of the commits (`git log origin/fsh-dev..la
 | `fix(gc): do not trace a released graph reached through a dead function value` | A minor collection also follows what dead, not yet swept old objects refer to. A dead function value can name a graph that a rewrite has replaced and released; tracing it read freed graph memory. A graph is traced only while the graph space still holds its block. |
 
 The audit of the C++ sources against the handle rules (about 480 sites, 24 findings) is in
-`34_gc_handle_rules.md` section 7; it was not repeated for this report.
+`35_gc_handle_rules.md` section 7; it was not repeated for this report.
 
 One test was adjusted while closing this work: `attempt.compiled.jit_log` asserts the reason
 `std::jit` logs for not compiling the graphs that hold the `attempt` node ("contains OPER").
@@ -337,7 +337,7 @@ collector updates; neither was attempted.
 
 ### 6.2 What C++ authors must observe
 
-`34_gc_handle_rules.md` is the contract. In short: an operator may use raw pointers to objects
+`35_gc_handle_rules.md` is the contract. In short: an operator may use raw pointers to objects
 freely until it reaches a safepoint (a call into Camel code, the macro evaluator, a pass
 boundary, an explicit `safepoint()`); across one it must hold the object in a `RootHandle` and
 read every pointer again afterwards; a store of a reference into an object that already
@@ -360,7 +360,7 @@ a module outside it has been checked by nobody.
 ### 6.4 Known problems, not fixed
 
 **A reference in a slot typed `any` is invisible to the collector (both collectors).** Recorded
-as an open question in `34_gc_handle_rules.md` section 9; reproduced for this report:
+as an open question in `35_gc_handle_rules.md` section 9; reproduced for this report:
 
 ```camel
 module anyref

@@ -317,4 +317,4 @@ a stale pointer that is never used again; code that no test runs.
   nodes. Making `any` sound needs either a run-time tag on such values or their removal in
   favour of generics; design principles section 6 lists the position of `any` as undecided.
 - **Whether the generational collector becomes the default** (measurements in
-  `35_generational_gc_report.md`).
+  `36_generational_gc_report.md`).

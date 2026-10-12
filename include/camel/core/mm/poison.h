@@ -22,7 +22,7 @@
 #include "camel/core/slot.h"
 
 // Safepoint poisoning: the debugging mode that makes a C++ pointer kept across a safepoint
-// fail at once (CAMEL_GC_POISON, docs/technical/34_gc_handle_rules.md).
+// fail at once (CAMEL_GC_POISON, docs/technical/35_gc_handle_rules.md).
 //
 // In this mode every safepoint evacuates the whole young generation, and the collector
 // overwrites what the objects left behind with one word, the poison word. The word is the

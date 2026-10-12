@@ -644,7 +644,7 @@ Each is implemented as recommended here; the tag is in the code.
   collections: a graph draft holds plain copies of slots, and drafts were open while later
   calls of the same round were still being evaluated, across safepoints. The pass now
   evaluates a whole round before it rewrites (`src/execute/macro/macro.cpp`,
-  `34_gc_handle_rules.md` section 7, finding 2), and collection constants are verified with
+  `35_gc_handle_rules.md` section 7, finding 2), and collection constants are verified with
   both collectors (`gc.macro_constants.*`, `gc.collection_constants_*`).
 - **Not verified:** the Windows and macOS builds (the work was built and tested on Linux
   only); programs that hold more than 2^32 entries (the size field is 32 bits, as in `Tuple`).

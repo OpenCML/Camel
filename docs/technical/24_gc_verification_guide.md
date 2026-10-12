@@ -87,7 +87,7 @@ Use these controls for deterministic GC validation:
 | `CAMEL_GC_STRESS_MODE=minor|major|both` | Select the requested stress collection kind. |
 | `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
 | `CAMEL_GC=generational` (`--gc generational`) | Run the generational collector: young objects are copied. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and is still read. |
-| `CAMEL_GC_POISON=1` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`34_gc_handle_rules.md` section 8). Implies the generational collector. |
+| `CAMEL_GC_POISON=1` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`35_gc_handle_rules.md` section 8). Implies the generational collector. |
 | `CAMEL_GC_PROMOTION_AGE=N` | Minor collections an object survives before promotion (1 to 15, default 4). |
 | `CAMEL_GC_LARGE_THRESHOLD_KB=N`, `CAMEL_GC_NURSERY_MB=N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
 | `CAMEL_GC_HEAP_LIMIT_MB=N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
