@@ -2347,7 +2347,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "unended_unrolling.pass"
-desc = "An export whose simplification does not end (a constant typed by a declared return type that says neither element type nor shape, used inside a recursion: every unrolled level is more precisely typed than the loop) is refused at the recursive call, saying that the unrolling did not end and what no longer fits. It used to be the unlocated 'Runtime draft encoding failed to allocate ... bytes'. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused at the construct. The graph space is limited to 64 MB (its size when it could not grow) so that the unrolling reaches the limit in a few seconds: with the default of 256 MB the same refusal comes after about 45 s."
+desc = "An export whose simplification does not end (a constant typed by a declared return type that says neither element type nor shape, used inside a recursion: every unrolled level is more precisely typed than the loop) is refused, naming the recursive call, saying that the unrolling did not end and what to do. It used to be the unlocated 'Runtime draft encoding failed to allocate ... bytes'. By the pass (std::macro std::opt::simplify onnx::export): TranslationRefused. The unrolling stops at whichever limit it meets first: the space all graphs live in (refused at the recursive call) or the size of one graph (refused at the export_model call, with the recursive call in the text); which one depends on how compact the unrolled levels are, so the test holds for both. The graph space is limited to 64 MB (its size when it could not grow) so that the unrolling reaches a limit in a few seconds."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/unended_unrolling.cml"
 args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]
@@ -2355,9 +2355,7 @@ envs = ["CAMEL_GRAPH_SPACE_LIMIT_MB=64"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 24
-expect_diagnostic_column = 54
-expect_output_contains = ["the simplification of the exported function did not end: unrolling the recursion", "filled the memory the compiler keeps graphs in", "bytes and no longer fits"]
+expect_output_contains = ["did not end", "unended_unrolling.cml:24:54", "arguments more specific than the loop's own (a more precise type, or a constant)", "types that say their element type and shape"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "Runtime draft encoding failed to allocate"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000
