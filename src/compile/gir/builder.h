@@ -210,6 +210,9 @@ class Builder {
         compile_graph_ptr_t graph;
         // An error was found in the body: later calls with the same types fail quietly.
         bool failed = false;
+        // The root graph of the module the instance was built in. A module that imports a
+        // generic function builds its own instances (DESIGN-QUESTION(generic-export)).
+        DraftGraphBuilder *owner = nullptr;
     };
     struct GenericTemplate {
         std::string name;
@@ -222,6 +225,11 @@ class Builder {
         camel::core::type::type_bindings_t outerBindings;
         // Where the function was declared: instances are built there, not at the call.
         compile_graph_ptr_t ownerGraph;
+        // The module that declares the function and the root graph of its builder. A builder
+        // with another root graph is an importing module: it builds the instance under its
+        // own root graph, and resolves the names of the body in the declaring module.
+        camel::core::module::module_ptr_t module;
+        DraftGraphBuilder *homeRoot = nullptr;
         node_scope_ptr_t nodeScope;
         graph_scope_ptr_t graphScope;
         decorated_scope_ptr_t decoratedScope;
@@ -248,6 +256,9 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
+    // Set while an instance of a generic function imported from another module is built: the
+    // name of that function. Such a body cannot capture a module-level value of its module.
+    std::string foreignInstanceOf_;
     std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
 
     // A type read from the GCT, with the type variables of the current instance replaced.

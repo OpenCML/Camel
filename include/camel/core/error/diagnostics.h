@@ -234,6 +234,11 @@ class Diagnostics {
     /// found. An error that already has `limit` secondary locations is marked as having more
     /// (relatedElided) instead of getting another one (0: no limit).
     void addRelatedToErrorsFrom(size_t from, const DiagLabel &label, size_t limit = 0);
+    /// Gives every diagnostic recorded at index `from` or later the file its origin lies in,
+    /// when that is not this module's file: the body of a generic function imported from
+    /// another module is compiled by the importing module, and its errors are in the other
+    /// file.
+    void locateByOriginFrom(size_t from);
     size_t count(Severity severity) const;
     size_t count(DiagType type) const;
     std::unordered_map<Severity, size_t> countBySeverity() const;

@@ -1,0 +1,48 @@
+/**
+ * Helper module: exports generic functions. Their instances are built by the modules that
+ * call them; the names their bodies use are resolved here.
+ */
+module export_lib
+
+import { sqrt } from math
+
+let bias = 100
+
+// Not exported: reached only through the bodies of the exported functions.
+func helper(x: int): int {
+    return x + 100
+}
+
+func keep(x: typeas T): T {
+    return x
+}
+
+export func inc(x: int): int {
+    return helper(x)
+}
+
+export func rev(xs: (typeas T)[]): T[] {
+    return if len(xs) <= 1 then keep(xs) else concat(rev(tail(xs)), [head(xs)])
+}
+
+export func plus_helper(xs: (typeas T)[]): int {
+    return helper(len(xs))
+}
+
+export func root_len(xs: (typeas T)[]): float {
+    return sqrt(len(xs) as float)
+}
+
+export func biased(x: typeas T): int {
+    return bias
+}
+
+export func bad(x: typeas T): T {
+    return x + 1
+}
+
+namespace Tools {
+    export func twice(x: typeas T): (T, T) {
+        return (x, x)
+    }
+}

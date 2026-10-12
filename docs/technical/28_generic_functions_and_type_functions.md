@@ -137,12 +137,38 @@ diagnostics.
 step (`f((x, x))`). Nested instantiations overall are limited to 128. A recursive call with
 the same types is not a new instance and is not limited.
 
-## 5. Limits of this implementation
+## 5. Exported generic functions
+
+`DESIGN-QUESTION(generic-export)`: where the instances of an imported generic function live is
+not ruled on. Implemented: **the template is exported by the module that declares it, and each
+importing module builds the instances it calls**. The alternative is one instance per set of
+types for the whole program, owned by the declaring module (smaller graphs when several
+modules use the same types; the declaring module's graph then changes after it was compiled).
+
+- `export` of a generic function exports its `GenericTemplate` as a module entity of its own
+  kind (`Entity::generic_payload_t`, opaque outside the GIR builder; `EntityAccess`).
+- A `DREF` that resolves to such an entity is treated like the name of a local template: a
+  marker node in callee position, `GenericFunctionAsValue` elsewhere.
+- `instantiateGeneric` recognises a template of another builder by its `homeRoot` (the root
+  graph of the builder that registered it). For such a template it
+  - looks for, and records, the instance under the *importing* builder's root graph
+    (`GenericInstance::owner`), so two importing modules each have their own;
+  - creates the instance graph under the importing module's root graph;
+  - moves to the template's scopes as for a local template, and also to its module
+    (`module_`), so that names the body imports are looked up in the declaring module;
+  - enters a scope whose name carries the importing root, because scopes are kept by name
+    under the scope they are entered from, which here belongs to the declaring module.
+- The body may call private functions, other generic functions and imports of its module.
+  It may not use a top-level *value* of its module: that node lies in a graph that does not
+  enclose the instance, so it cannot be captured (`GenericFunctionUnsupported`, located at
+  the function). A constant a library needs is written as a function.
+- An error in the body is reported in the declaring module's file
+  (`Diagnostics::locateByOriginFrom`), with the call that asked for the instance.
+
+## 6. Limits of this implementation
 
 - A generic function has no function value: it cannot be bound to a name, passed as an
-  argument, decorated, or exported (`GenericFunctionAsValue`, `GenericFunctionUnsupported`).
-  Importing one would need the importing module to build instances from the exporting
-  module's GCT and scopes.
+  argument or decorated (`GenericFunctionAsValue`, `GenericFunctionUnsupported`).
 - One name is either a generic function or ordinary functions; two generic functions with
   one name are a `Redeclaration`.
 - A generic function that is never called is never instantiated, so its body is never typed.
@@ -152,7 +178,7 @@ the same types is not a new instance and is not limited.
 - Composite types are still not canonical: two instantiations of `T[]` are distinct objects
   compared with `equals`.
 
-## 6. Tests
+## 7. Tests
 
 `test/plans/feat/compile/generics.plan.toml` (cases under `test/cases/compile/generics/`):
 behaviour, the four backends and the `std::opt` / `std::inline` / `std::macro` pipelines, the

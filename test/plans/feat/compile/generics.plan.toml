@@ -885,17 +885,98 @@ expect_output_contains = ["'id'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
+# DESIGN-QUESTION(generic-export): the template is exported by the module that declares it and
+# each importing module builds the instances it calls.
+
 [[tests]]
 name = "generic_exported"
-desc = "Exporting a generic function is not supported yet and says so."
+desc = "Generic functions exported by a module written in Camel: called from another module by name, by qualified name and from a namespace; their bodies use private functions, a private generic function and an import of their own module; two modules each instantiate the same types. The four back ends and the optimizing pipelines agree."
+kind = "behavior"
+case = "../../../cases/compile/generics/export_use.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["101", "[3, 2, 1]", "[b, a]", "[5, 4]", "101", "2", "[false, true]", "(3, 3)"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "generic_exported_opt"
+desc = "The same program through std::opt and std::macro std::opt."
+kind = "behavior"
+case = "../../../cases/compile/generics/export_use.cml"
+args = ["${case}", "std::macro", "std::opt", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["101", "[3, 2, 1]", "[b, a]", "[5, 4]", "101", "2", "[false, true]", "(3, 3)"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "generic_exported_instances"
+desc = "Each importing module holds its own instance: the graph shows rev<i64> twice, once under the module that re-exports a use of it."
+kind = "behavior"
+case = "../../../cases/compile/generics/export_use.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (s) => out.split(`label="${s}";`).length - 1
+assert(count('rev<i64>') === 2, `rev<i64> clusters: ${count('rev<i64>')}`)
+assert(count('rev<string>') === 1, `rev<string> clusters: ${count('rev<string>')}`)
+assert(count('rev<bool>') === 1, `rev<bool> clusters: ${count('rev<bool>')}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "generic_exported_body_error"
+desc = "An error in the body of an imported generic function is reported in the file that declares it, with the call that asked for the instance."
 kind = "negative"
-case = "../../../cases/compile/generics/err_export.cml"
+case = "../../../cases/compile/generics/err_export_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["export_lib.cml:41:16: [Error]: No matching function found", "in the instance 'bad<string>'", "err_export_body.cml:7:16", "name=SemanticDiag::NoMatchingFunction"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_exported_capture"
+desc = "The body of an imported generic function cannot use a top-level value of its own module: the instance is not built inside that module."
+kind = "negative"
+case = "../../../cases/compile/generics/err_export_capture.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericFunctionUnsupported"
-expect_diagnostic_line = 1
-expect_diagnostic_column = 1
-expect_output_contains = ["The generic function 'id' cannot be exported"]
+expect_diagnostic_line = 36
+expect_output_contains = ["export_lib.cml:36:1", "The generic function 'biased' cannot be instantiated in another module while its body uses 'bias'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_exported_as_value"
+desc = "An imported generic function has no function value either."
+kind = "negative"
+case = "../../../cases/compile/generics/err_export_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericFunctionAsValue"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

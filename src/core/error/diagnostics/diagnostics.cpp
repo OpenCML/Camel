@@ -491,6 +491,27 @@ void Diagnostics::addRelatedToErrorsFrom(size_t from, const DiagLabel &label, si
     }
 }
 
+void Diagnostics::locateByOriginFrom(size_t from) {
+    std::lock_guard<std::mutex> lk(mtx_);
+    for (size_t i = from; i < storage_.size(); ++i) {
+        Diagnostic &d = storage_[i];
+        if (!d.sourceContext || !std::holds_alternative<camel::source::origin_id_t>(d.range)) {
+            continue;
+        }
+        const std::string path =
+            d.sourceContext->pathForOrigin(std::get<camel::source::origin_id_t>(d.range));
+        if (path.empty()) {
+            continue;
+        }
+        std::error_code ec;
+        const auto here  = std::filesystem::weakly_canonical(d.modulePath, ec);
+        const auto there = std::filesystem::weakly_canonical(path, ec);
+        if (here != there) {
+            d.modulePath = path;
+        }
+    }
+}
+
 size_t Diagnostics::count(Severity severity) const {
     std::lock_guard<std::mutex> lk(mtx_);
     return countBySeverityInternal(severity);

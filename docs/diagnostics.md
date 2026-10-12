@@ -1658,17 +1658,17 @@ The generic function '{0}' cannot be {1}.
 This use of a generic function is not supported.
 ```
 
-**Example** (`test/cases/compile/generics/err_export.cml`, run as `camel test/cases/compile/generics/err_export.cml`)
+**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
 
 ```camel
-module err_export
+module err_export_capture
 
-export func id(x: typeas T): T {
-    return x
-}
+import { biased } from export_lib
 
 func main(): int sync {
-    println(id(1))
+    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
+    // cannot capture a top-level value of the module that declares it.
+    println(biased(1))
     return 0
 }
 ```

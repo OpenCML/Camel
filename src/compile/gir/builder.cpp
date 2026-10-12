@@ -983,6 +983,34 @@ node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::strin
     compile_graph_ptr_t curr = currGraph_;
     node_scope_ptr_t scope   = nodeScope_;
 
+    if (!foreignInstanceOf_.empty() && node) {
+        // The instance of an imported generic function hangs under the importing module's
+        // root graph, so a value of the declaring module's top level is not in a graph that
+        // encloses it and cannot be captured (DESIGN-QUESTION(generic-export)).
+        bool enclosed = false;
+        for (compile_graph_ptr_t g = currGraph_; g; g = g->outerGraph()) {
+            if (g.get() == nodeGraphOf(node)) {
+                enclosed = true;
+                break;
+            }
+        }
+        if (!enclosed) {
+            auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+            auto origin        = (sourceContext && currGraph_)
+                                     ? sourceContext->debugMap().graphOrigin(currGraph_->stableId())
+                                     : camel::source::kInvalidOriginId;
+            diags_->of(SemanticDiag::GenericFunctionUnsupported)
+                .atOrigin(origin)
+                .commit(
+                    foreignInstanceOf_,
+                    std::format(
+                        "instantiated in another module while its body uses '{}', a value of "
+                        "the top level of its own module",
+                        name));
+            throw BuildAbortException();
+        }
+    }
+
     while (curr && node && curr.get() != nodeGraphOf(node)) {
         if (usedGraphs_.find(curr.get()) != usedGraphs_.end()) {
             diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall).commit(name, curr->name());
@@ -1253,6 +1281,8 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
+        tmpl->module         = module_;
+        tmpl->homeRoot       = rootGraph_.get();
         tmpl->nodeScope      = nodeScope_;
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
@@ -1372,8 +1402,14 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     };
     // One instance per set of types. An instance whose body is still being built is found
     // here too: that is a recursive call.
+    // DESIGN-QUESTION(generic-export): a generic function imported from another module is
+    // instantiated here, in the module that calls it: the template travels with the module
+    // that declares it, each importing module holds its own instances (under its own root
+    // graph), and the body resolves its names where it was declared. The alternative is one
+    // instance per set of types for the whole program, owned by the declaring module.
+    const bool foreign = tmpl->homeRoot != rootGraph_.get();
     for (const GenericInstance &instance : tmpl->instances) {
-        if (sameBindings(instance.bindings)) {
+        if (instance.owner == rootGraph_.get() && sameBindings(instance.bindings)) {
             if (instance.failed) {
                 throw BuildAbortException();
             }
@@ -1426,11 +1462,14 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         type_bindings_t bindings;
         bool waited, synced, varied, declaresVariable, calleeAllowed;
         node_handle_t lastSynced;
+        camel::core::module::module_ptr_t module;
+        std::string foreignInstanceOf;
         GenericTemplate &opened;
         BuildState(Builder &b, GenericTemplate &t)
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
               bindings(b.typeBindings_), waited(b.waited_), synced(b.synced_), varied(b.varied_),
+              module(b.module_), foreignInstanceOf(b.foreignInstanceOf_),
               declaresVariable(b.declaresVariable_), calleeAllowed(b.genericCalleeAllowed_),
               lastSynced(b.lastSyncedNode_), opened(t) {
             ++self.instantiationDepth_;
@@ -1438,6 +1477,8 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         }
         ~BuildState() {
             --opened.openInstances;
+            self.module_               = module;
+            self.foreignInstanceOf_    = std::move(foreignInstanceOf);
             self.currGraph_            = graph;
             self.nodeScope_            = nodeScope;
             self.graphScope_           = graphScope;
@@ -1460,7 +1501,14 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     compile_graph_ptr_t graph;
     try {
         BuildState saved(*this, *tmpl);
-        currGraph_      = tmpl->ownerGraph;
+        // An imported template: the instance belongs to this module (its graph hangs under
+        // this module's root graph), the names of its body to the declaring module.
+        currGraph_ = foreign && tmpl->ownerGraph.get() == tmpl->homeRoot ? rootGraph_
+                                                                         : tmpl->ownerGraph;
+        if (foreign) {
+            module_            = tmpl->module;
+            foreignInstanceOf_ = tmpl->name;
+        }
         nodeScope_      = tmpl->nodeScope;
         graphScope_     = tmpl->graphScope;
         decoratedScope_ = tmpl->decoratedScope;
@@ -1476,13 +1524,21 @@ compile_graph_ptr_t Builder::instantiateGeneric(
 
         FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings);
         graph                  = createCompileGraph(funcType, currGraph_, instanceName);
-        tmpl->instances.push_back({bindings, graph, false});
-        enterGraphScope(graph, instanceName);
+        tmpl->instances.push_back({bindings, graph, false, rootGraph_.get()});
+        // Scopes are kept by name under the scope they were entered from, here a scope of
+        // the declaring module: the instances of two importing modules need two scopes.
+        enterGraphScope(
+            graph,
+            foreign ? std::format("{}@{:p}", instanceName, static_cast<void *>(rootGraph_.get()))
+                    : instanceName);
         buildFuncBody(tmpl->func, graph, funcType, instanceName);
         leaveScope();
     } catch (...) {
         if (instanceIndex < tmpl->instances.size()) {
             tmpl->instances[instanceIndex].failed = true;
+        }
+        if (foreign) {
+            diags_->locateByOriginFrom(diagsBefore);
         }
         diags_->addRelatedToErrorsFrom(diagsBefore, instanceLabel, 3);
         throw;
@@ -1491,6 +1547,9 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     // instance is unusable all the same.
     if (diags_->count(Severity::Error) > errorsBefore) {
         tmpl->instances[instanceIndex].failed = true;
+        if (foreign) {
+            diags_->locateByOriginFrom(diagsBefore);
+        }
         diags_->addRelatedToErrorsFrom(diagsBefore, instanceLabel, 3);
         throw BuildAbortException();
     }
@@ -2101,6 +2160,23 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             const auto node = asCompileNode(camel::core::module::detail::EntityAccess::node(e));
             LEAVE("DREF");
             return node;
+        } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(e)) {
+            // A generic function of another module: like a local one it can only be called;
+            // the call builds the instance in this module (instantiateGeneric).
+            if (!callee) {
+                diags_->of(SemanticDiag::GenericFunctionAsValue)
+                    .atOrigin(gct->load()->origin())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            node_handle_t drefNode = graph->addDrefNode(
+                std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
+                    std::make_shared<graph_set_t>()});
+            genericDrefs_[drefNode] = std::static_pointer_cast<GenericTemplate>(
+                camel::core::module::detail::EntityAccess::genericTemplate(e));
+            registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
+            LEAVE("DREF");
+            return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isGraphSet(e)) {
             auto graphs = asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(e));
             node_handle_t drefNode{graph->addDrefNode(
@@ -4390,14 +4466,14 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
                     eraseCompileGraphSet(optGraph.value())));
             continue;
         }
-        if (templateScope_->get(ref.toString()).has_value()) {
-            diags_->of(SemanticDiag::GenericFunctionUnsupported)
-                .atOrigin(gct->load()->origin())
-                .commit(
-                    ref.toString(),
-                    "exported: a module exports graphs, a generic function has one per set of "
-                    "types it is called with, and an importing module cannot build them yet");
-            throw BuildAbortException();
+        if (auto optTemplate = templateScope_->get(ref.toString()); optTemplate.has_value()) {
+            // DESIGN-QUESTION(generic-export): a generic function has no graph to export.
+            // The template is exported; each importing module builds the instances it calls.
+            module_->exportEntity(
+                ref,
+                camel::core::module::detail::EntityAccess::makeGenericTemplate(
+                    std::static_pointer_cast<void>(optTemplate.value())));
+            continue;
         }
         if (isPoisonedName(ref.toString())) {
             throw BuildAbortException();

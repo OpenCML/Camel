@@ -40,6 +40,16 @@ class EntityAccess {
     static Entity makeGraphSet(graph_set_ptr_t graphs) { return Entity(std::move(graphs)); }
     static Entity makeDecoratedGraph(graph_handle_t graph) { return Entity(std::move(graph)); }
 
+    static Entity makeGenericTemplate(std::shared_ptr<void> tmpl) {
+        return Entity(Entity::generic_payload_t{std::move(tmpl)});
+    }
+    static bool isGenericTemplate(const Entity &entity) {
+        return std::holds_alternative<Entity::generic_payload_t>(entity.storage_);
+    }
+    static const std::shared_ptr<void> &genericTemplate(const Entity &entity) {
+        return std::get<Entity::generic_payload_t>(entity.storage_).tmpl;
+    }
+
     static bool isNode(const Entity &entity) {
         return std::holds_alternative<node_handle_t>(entity.storage_);
     }
