@@ -8,21 +8,7 @@
 
 ---
 
-## 1. 函数组合 `f..g` 的结果不能调用
-
-```cml
-func inc(x: int): int { return x + 1 }
-func dbl(x: int): int { return x * 2 }
-func main(): int sync {
-    let f = inc..dbl
-    println(f(3))
-    return 0
-}
-```
-
-当前：`[Error]: Function of type 'i64' cannot be called with argument types: <> (i64). (name=SemanticDiag::ArgumentsMismatch)`。`println(inc..dbl)` 打印 `0`。加 `std::macro` 结果相同。
-
-期望：`f` 是函数 `(x: int) => int`，`f(3)` 得 8；或者在含义确定之前，`..` 与 `?..` 一样给出 `ConstructNotSupported`。
+## 1.（已处理，见文末）
 
 ## 2. `i32(x)` 对超出范围的运行期值截断
 
@@ -54,21 +40,7 @@ func main(): int sync { println(int('4x')); println(float('abc')); return 0 }
 
 期望：两者一致，`int('4x')` 同样是 `InvalidNumberText`（`parse_int('4x')` 已经给出错误值）。
 
-## 5. 直接调用括号里的 lambda；把内建算子当值
-
-```cml
-func main(): int sync { println(((x: int): int => x + 1)(3)); return 0 }
-```
-
-当前：输出一行裸文本 `bad any_cast`，没有诊断名与位置。`3->(x: int): int => x + 1` 相同。
-
-```cml
-func main(): int sync { println(println); return 0 }
-```
-
-当前：`Compile graph 'main' still contains a live DREF node at draft ref 1.`（内部错误文本）。
-
-期望：前者得 4；后者是 `SemanticDiag::FunctionNameAsValue`。两者都不应露出内部文本。
+## 5.（已处理，见文末）
 
 ## 6.（已修复，见文末）
 
@@ -103,31 +75,9 @@ func main(): int sync { println(show(2)); return 0 }
 
 期望：联合类型要么可用，要么在声明处被拒绝。**与未决问题有关**：设计原则 2.9“不做通用联合类型的运行时分辨”、第 6 节“类型表达式语言的具体内容”。
 
-## 10. 没有 `else` 的 `if`：诊断里的类型不对
+## 10.（已处理，见文末）
 
-```cml
-func main(): int sync {
-    let a = 1
-    if a < 2 then println('lt')
-    return 0
-}
-```
-
-当前：`[Error]: Return type mismatch between branches (in function 'main: () => i64'): expected 'string', found 'void'. (name=SemanticDiag::BranchReturnTypeMismatch)`。写成 `if a < 2 then sync { println('lt'); return null }` 可以通过。
-
-期望：臂的值是 `void` 的单臂 `if` 作语句应当被接受；诊断里的 `expected 'string'` 与程序无关。
-
-## 11. 两处诊断没有位置
-
-```cml
-func main(): int sync { println([1, 2.0]); return 0 }
-```
-
-当前：`(main)t.cml:?:?: [Error]: Cannot insert data of type 'f64' into a(n) Array with element type 'i64'. (name=SemanticDiag::ElementTypeMismatch)`。
-
-`import nosuch`（模块不存在）的 `SemanticDiag::ModuleNotFound` 同样是 `?:?`。
-
-期望：定位在那个元素、那条 `import`。
+## 11.（已处理，见文末）
 
 ## 12. 尖括号的歧义（语法层面，一组）
 
@@ -209,54 +159,13 @@ func main(): int sync { println(3.5, string(3.5), string(1.0)); return 0 }
 
 期望：两者一致，或在标准库参考里写明 `string` 对浮点数固定 6 位小数。
 
-## 15. `camel --help` 的文字
+## 15.（已处理，见文末）
 
-- `-S` 的占位符拼作 `<schedular type>`。
-- `check -i, --lexical-only` 的说明是“indentation size in spaces”，与选项无关。
-- `-P, --profile` 在 release 构建里被接受但不产生报告，帮助里没有说明。
+## 16.（已处理，见文末）
 
-期望：帮助文字与行为一致（`docs/cli.md`、`docs/cli.cn.md` 已按实际行为写）。
+## 17.（已处理，见文末）
 
-## 16. `?->` 右侧直接写 lambda
-
-```cml
-func main(): int sync {
-    let r = parse_int('4') ?-> (x: int): int => x + 1
-    println(r)
-    return 0
-}
-```
-
-当前：输出一行裸文本 `bad any_cast`，退出码 1，没有诊断名与位置。右侧写函数名（`?-> inc`）正常。与第 5 条是同一类表现。
-
-期望：`r` 是 `int!`，打印 `5`。
-
-## 17. 把无参的库常量当值用
-
-```cml
-import { pi } from math
-func main(): int sync { println(pi); return 0 }
-```
-
-当前：`Compile graph 'main' still contains a live DREF node at draft ref 1.`（内部错误文本）。写成调用 `pi()` 正常。
-
-期望：`SemanticDiag::FunctionNameAsValue`，提示写 `pi()`。
-
-## 18. 库算子不能直接作函数值
-
-```cml
-import { trim } from str
-func mytrim(s: string): string { return trim(s) }
-func main(): int sync {
-    println([' a ', ' b']->map<mytrim>)
-    println([' a ', ' b']->map<trim>)
-    return 0
-}
-```
-
-当前：第一个 `map` 可以；第二个是 `[Error]: No matching function found for argument types: <void> (string[]). ... <:mark/map_arr>: <f: (item: T) => U> (collect: T[]) => U[]`。
-
-期望：只有一个重载的库算子与用户函数一样可以当值用；有多个重载的给出 `FunctionNameAsValue`。
+## 18.（已处理，见文末）
 
 ## 19. `match` 的一个臂是值、另一个臂是 `throw`
 
@@ -275,18 +184,7 @@ func main(): int sync { println(parse(1)); return 0 }
 
 期望：在返回 `T!` 的函数里，作为返回值的分支的值臂与 `return v` 一样进入 `T!`。**与未决问题有关**：`DESIGN-QUESTION(nullable-error)` Q1（`T` 是否隐式流入 `T!`）与 Q9（两臂形式不同）。
 
-## 20. `camel check` 的退出码与 `-i`/`-s`
-
-```cml
-func main(): int sync {
-    let x = undefined_name + 1
-    return 0
-}
-```
-
-当前：`camel check -O short t.cml` 打印 `UnresolvedReference` 错误，退出码为 0。`camel check -s`（只做语法检查）、`-i`（只做词法分析）仍然报告这条语义错误：两个选项被解析但不起作用。
-
-期望：发现错误时退出码非 0；`-i`、`-s` 按说明限制检查范围，或者去掉。
+## 20.（已处理，见文末）
 
 ## 21. `std::inline std::jit` 下很深的原生递归段错误
 
@@ -301,29 +199,7 @@ func main(): int sync { println(depth(100000)); return 0 }
 
 期望：原生栈将满的检查覆盖已编译的代码，给出带位置的 `MaxRecursionDepthExceeded`。
 
-## 22. 入口的两处细节
-
-```cml
-func main() sync {
-    println('printed by the program')
-}
-```
-
-当前：`camel t.cml -o out.txt` 退出码为 0，`out.txt` 的内容是 `printed by the program`：没有声明返回类型、函数体以 `println(...)` 结尾的 `main` 不被当作不返回值。声明为 `: void` 时，`-o` 是 `RuntimeDiag::EntryResultNotWritten`。
-
-期望：两种写法一致。
-
-```cml
-module my_module
-func main(): int sync {
-    let x =
-    return 0
-}
-```
-
-当前：`(main)t.cml:4:5: [Error]: Unexpected 'return'; expected an expression. (name=SyntaxDiag::UnexpectedToken)`：语法错误诊断里的模块名是 `(main)`，不是文件声明的 `my_module`（语义错误的诊断用的是声明的名字）。
-
-期望：用声明的模块名。
+## 22.（已处理，见文末）
 
 ---
 
@@ -363,3 +239,22 @@ func main(): int sync {
 - `stdlib/signatures/globals.cml` 列出不存在的函数：签名文件现已与实现对齐，并由 `scripts/stdlib-reference.mjs --verify-ops` 约束。
 - 第 6 条 `n-1` 是语法错误（更严重的表现是 `let b = a-1` 把 `b` 绑定为 `a`、静默丢掉 `-1`）：词法的数字记号不再带正负号，两个操作数之间的 `-`、`+` 总是二元运算符；在需要操作数的位置上紧跟着数字的符号由语法规则 `literal` 读作字面量的符号（`-1`、`case -1 =>`、`-9223372036854775808` 不变）。同一根源的 `t.0.1`（`0.1` 被读成一个浮点数）也已可用。测试：`test/plans/feat/consistency/surface.plan.toml`、`test/plans/feat/parse/numbers.plan.toml`。
 - 第 2 条中超出范围的字面量静默回绕（`9223372036854775808`、`1e400` 得到最小整数，`let b: i32 = 3000000000` 截断，`1.0e400` 输出裸的异常文本）：现在是带位置的 `SemanticDiag::LiteralOutOfRange`；`-9223372036854775808` 仍然合法。测试：`test/plans/feat/compile/literals.plan.toml` 的 `literal_range.*`。
+- 第 1 条 函数组合 `f..g`：在含义确定之前是 `SemanticDiag::ConstructNotSupported`（按原“期望”的第二种）；组合的语义没有实现，仍待裁定。
+- 第 5 条 直接调用括号里的 lambda 与把内建算子当值：`((x: int): int => x + 1)(3)`、`3->(x: int): int => x + 1` 现在可用；`println(println)`、`println(len<1>)` 是带位置的 `SemanticDiag::FunctionNameAsValue`。
+- 第 10 条 没有 `else` 的 `if`：规则未改（臂必须没有值），诊断改为 `SemanticDiag::IfArmValueWithoutElse`，说明原因与写法。是否允许臂不写 `return null` 仍待裁定。
+- 第 11 条 两处诊断没有位置：数组字面量的 `ElementTypeMismatch` 定位在那个元素，`ModuleNotFound`（以及 `ImportedModuleHasErrors`）定位在那条 `import`。
+- 第 15 条 `camel --help` 的文字：`<scheduler type>`、`-i`/`-s` 的说明、`-P` 在 release 构建不产生报告的说明已改。
+- 第 16 条 `?->` 右侧直接写 lambda：现在可用（与第 5 条同一个根因）。
+- 第 17 条 把无参的库函数当值用：`pi` 只有一个签名，现在与用户函数一样是函数值（`println(pi)` 打印函数，`pi()` 是调用）；不再有内部错误。
+- 第 18 条 库算子作函数值：只有一个固定签名的库算子可直接作值（`xs->map<trim>`）；有多个签名的名字在被调用者的形参类型能唯一选出一个时取那一个，否则是列出各签名的 `FunctionNameAsValue`。
+- 第 20 条 `camel check`：发现错误时退出码为 1；`-i` 只做词法分析，`-s` 做到语法树为止。
+- 第 22 条 入口的两处细节：语法错误诊断里的模块名现在是文件声明的名字；未声明返回类型、以 `println(...)` 结尾的 `main` 返回被打印的值是现有规则的结果（函数体没有 `return` 时取最后一条语句的值，而 `println(x)` 的值是 `x`），已写进语言参考 7.4.1 与 4.1，行为未改，两条规则是否保留见下面“待裁定”。
+- 其他工作线记录的几条：`zip` 传三个数组时只用前两个（并且按三元组的类型读两元素的元组）——现在按数组个数构造元组；`head([])` 返回零值——现在是 `RuntimeDiag::IndexOutOfRange`；模块导入自身时段错误——现在是 `SemanticDiag::ImportCycle`。
+- 第 12 条 (a)(b)：语法未改；在被读成比较的那个 `>` 处增加了警告 `SyntaxDiag::ComparisonAcrossLines`，指出两条语句可能被连成了一条。(c)(d) 不变。
+
+## 待裁定（修复这批缺陷时遇到的）
+
+- 带符号的数字字面量是一个操作数：`-2->f` 是 `(-2)->f`，而 `-a->f` 是 `-(a->f)`；`-2 ^ 2` 与 `-a ^ 2` 都是先取负。前者是否改成与一元 `-` 一致。
+- `1e-2` 这类带负指数、没有小数点的字面量：现在是 `int`（值 0）加警告；定为浮点数，还是编译期错误。
+- `println(x)` 的值是 `x`，而签名文件写的是 `=> void`；函数体没有 `return` 时取最后一条语句的值，而语言参考此前写的是“没有 `return` 的函数返回 `void`”。两者合起来使 `func main() sync { println('a') }` 把 `a` 输出两次。
+- `inc<1>`（给没有 `with` 形参的函数绑定 `with` 实参）作为值使用时，绑定被静默丢掉：`let f = inc<1>; f(2)` 得 3。是报错，还是定义为部分应用。

@@ -116,4 +116,4 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | `for`, `while` loops | Syntax error (there is no loop syntax) | Recursion; `map`/`filter`/`reduce`/`foreach` |
 | Modifiers `atomic`, `shared`, `inner`, `outer` | No diagnostic; no semantics | Do not write them |
 
-In addition there are a few things that "can be written but cannot be used at present": the union type `A | B` (values of the member types cannot enter it), a declaration with a function type `let f: (x: int) => int = g`, and directly calling a lambda in parentheses.
+In addition there are a few things that "can be written but cannot be used at present": the union type `A | B` (values of the member types cannot enter it), and a declaration with a function type `let f: (x: int) => int = g`.

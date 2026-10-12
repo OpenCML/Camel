@@ -542,7 +542,7 @@ func main(): int sync {
 
 - Functions are values: they can be bound to a name, passed as arguments, returned, and put in an array. A function type is written `(x: int) => int`.
 - A lambda captures variables from the enclosing scope, and the capture is by reference. The last lambda writes to the captured `total`, so it has the function modifier `sync` in front of it (declaring that it has side effects), and its body is also a sync block (`=> sync { ... }`).
-- Functions with the same name and different parameter types are overloads; a name that stands for a set of overloads cannot be used directly as a value, so wrap it in a lambda.
+- Functions with the same name and different parameter types are overloads; a name that stands for a set of overloads can be used as a value only where the expected function type selects one of them (passed to a function whose parameter type is written out); elsewhere wrap it in a lambda. A library operator with one signature (such as `trim`) is a value directly: `xs->map<trim>`.
 
 ## 8. Generics
 

@@ -10,7 +10,7 @@ This chapter describes the lexical structure of source code. The exact rules are
 
 - Spaces, tabs and newlines are only separators and have no syntactic meaning. Statements may be separated by a newline or by `;`; use `;` when writing several statements on one line.
 - **A call, a subscript or angle-bracket arguments must directly follow the expression before them**, with no whitespace in between: `f(1)`, `xs[0]`, `scale<3>`. `f (1)` is a syntax error, because `(1)` is taken as the start of another expression.
-- A newline by itself does not end a statement: the parser always tries to absorb the following tokens into the current expression. When the previous statement ends with `>` (`with` arguments) and the next line starts with a literal, the two may be read as one comparison; in that case write `;` between the two statements, or write the next line in the form of a function call (`println(...)`).
+- A newline by itself does not end a statement: the parser always tries to absorb the following tokens into the current expression. When the previous statement ends with `>` (`with` arguments) and the next line starts with a literal, the two may be read as one comparison; when the next line has angle brackets of its own, the compiler gives the warning `SyntaxDiag::ComparisonAcrossLines` at that `>`, saying that two statements may have been joined; in that case write `;` between the two statements, or write the next line in the form of a function call (`println(...)`).
 - Source files are read as UTF-8.
 
 ```cml

@@ -27,7 +27,7 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
   - The parameters are the inputs of the program, given on the command line with `--arg name=value`; a missing one is the located error `RuntimeDiag::EntryArgumentMissing`, and is not replaced by zero or a default value.
   - When it returns `int` (or `bool`), the return value is the exit code of the process.
   - When it returns a value of another type (`float`, `string`, a tensor, a tuple, ...), this value is the result of the program: it is printed to standard output, or written to a file by `-o <file>`.
-  - When the return type is not written or is `void`, the exit code is 0.
+  - When it returns `void`, the exit code is 0. A return type that is not written is inferred from the body: a `main` whose body ends in `println(...)` returns the printed value, which is then written once more as the result of the program; an entry should declare its return type.
 
 ```cml
 // camel greet.cml --arg name=Camel --arg times=2

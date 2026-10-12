@@ -62,7 +62,7 @@ func main(): int sync {
 - 同名函数有多个时按重载规则选择（[7.4.3](07_statements.md#743-重载)）。
 - 关键字实参 `f(a: 1)` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。
 - 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
-- 直接调用一个写在括号里的 lambda（`((x: int) => x + 1)(3)`）目前不可用；先用 `let` 绑定到名字再调用。
+- 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->`、`?->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) ?-> (x: int): int => x * 2`。
 
 ## 6.5 管道
 
@@ -84,7 +84,7 @@ total = 35
 ```
 
 - `x ?-> f` 见 [6.6](#66-空值与错误的运算符)。
-- `f..g`（函数组合）目前不可用：能通过解析，但组合的结果不能被调用。用 lambda：`(x: int): int => g(f(x))`。`?..` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。
+- `f..g`（函数组合）与 `?..` 保留，尚未实现，含义也没有确定：写了是 `SemanticDiag::ConstructNotSupported`。用 lambda：`(x: int): int => g(f(x))`。
 
 ## 6.6 空值与错误的运算符
 
@@ -193,7 +193,7 @@ func sign(x: int): string {
 }
 ```
 
-- 没有 `else` 的 `if` 没有值：它只能作语句，臂里做带副作用的事，并且通常要写在同步块里。这时臂必须是以 `return null` 结束的块：`if c then sync { println('x'); return null }`；否则是 `SemanticDiag::BranchReturnTypeMismatch`。
+- 没有 `else` 的 `if` 没有值：它只能作语句，臂里做带副作用的事，并且通常要写在同步块里。这时臂必须是以 `return null` 结束的块：`if c then sync { println('x'); return null }`；臂有值时（`if c then println('x')`，`println` 的调用有值）是 `SemanticDiag::IfArmValueWithoutElse`。
 - 条件的类型是 `bool`；没有“真值”转换。
 
 > **块里的 `return` 给出的是这个块的值，不是离开函数。**
@@ -346,7 +346,8 @@ func main(): int sync {
 ```
 
 - lambda 捕获外层的变量，捕获是引用：外层的 `var` 被修改后 lambda 看到新值，lambda 对它的写入外层也看到。
-- 代表一组重载或一个运算符的名字没有单一的函数值，把它当值用是 `SemanticDiag::FunctionNameAsValue`；写一个写明形参类型的 lambda。泛型函数的名字同理（`SemanticDiag::GenericFunctionAsValue`）。
+- 只有一个签名、且签名不随实参变化的库算子与用户函数一样是函数值：`xs->map<trim>`、`let t = trim`。
+- 代表一组重载（几个同名的用户函数，或有几个签名的算子，如 `abs`）的名字，在被调用者只有一个签名、且那个形参是函数类型的位置上，取签名与之完全相同的那一个：`func on_int(f: (x: int) => int, v: int)` 的调用 `on_int(abs, -3)`。其他位置上它没有单一的函数值，把它当值用是 `SemanticDiag::FunctionNameAsValue`，诊断列出各个签名；写一个写明形参类型的 lambda。签名随实参变化的算子（`println`、`len`、`map`）以及原地修改实参的算子（`append`）同样没有函数值。泛型函数的名字同理（`SemanticDiag::GenericFunctionAsValue`）。
 - 带函数类型的声明 `let f: (x: int) => int = inc` 目前不可用（`SemanticDiag::FeatureNotSupported`）；省略类型即可。
 
 ## 6.10 高阶算子

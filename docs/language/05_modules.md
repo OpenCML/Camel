@@ -25,6 +25,7 @@ import math                          // 只引入模块的命名空间：用 mat
 ```
 
 - `import 模块` 不把模块里的名字直接注入当前模块；通过 `模块::名字` 访问，或再写 `using namespace 模块` 把它导出的名字全部注入。
+- 模块不能导入自身：文件 `m.cml` 里写 `import m` 是 `SemanticDiag::ImportCycle`。找不到模块是 `SemanticDiag::ModuleNotFound`，定位在那条 `import`。
 - 导入时不能改名（没有 `import { a as b }`）。两个模块有同名函数时，只导入其中一个，另一个用限定名：`import array` 后写 `array::find`。
 - **查找顺序**：与入口文件同目录的 `.cml` 文件、`-I <目录>` 给出的目录、环境变量 `CAMEL_PACKAGES` 列出的目录，以及随 Camel 安装的模块。
 

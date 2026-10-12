@@ -78,12 +78,12 @@ println(xs[0], len(xs), grid[0][1])
   | Form | Result |
   |---|---|
   | `len(xs)` | Length |
-  | `head(xs)`, `tail(xs)` | The first element; the array without its first element |
+  | `head(xs)`, `tail(xs)` | The first element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`, as for `xs[0]`); the array without its first element |
   | `range(a, b)` | `[a, a+1, ..., b-1]`; empty when `a >= b` |
   | `xs->slice<a, b>` | A new array of subscripts `a` to `b-1`; the part out of range is cut off |
   | `concat(xs, ys)` | Concatenation into a new array |
   | `xs->contains<v>` | Whether it contains `v` |
-  | `zip(xs, ys)` | An array of `(x, y)` tuples |
+  | `zip(xs, ys)` | An array of `(x, y)` tuples; three or more arrays give tuples of that many elements (`zip(xs, ys, zs)`); the lengths must be equal |
   | `strs->join<sep>` | Joins a `string[]` into one string |
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
   | `xs->append<v>`, `xs->extend<ys>` | **Modify in place**; `xs` must be a `var` (see 3.6) |

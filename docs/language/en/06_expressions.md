@@ -62,7 +62,7 @@ func main(): int sync {
 - When there are several functions of the same name, one is selected by the overloading rules ([7.4.3](07_statements.md#743-overloading)).
 - Keyword arguments `f(a: 1)` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`).
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
-- Directly calling a lambda written in parentheses (`((x: int) => x + 1)(3)`) is currently unavailable; first bind it to a name with `let`, then call it.
+- A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->` and `?->`: `3->(x: int): int => x + 1`, `parse_int(s) ?-> (x: int): int => x * 2`.
 
 ## 6.5 Pipes
 
@@ -84,7 +84,7 @@ total = 35
 ```
 
 - For `x ?-> f` see [6.6](#66-operators-for-null-and-errors).
-- `f..g` (function composition) is currently unavailable: it parses, but the result of the composition cannot be called. Use a lambda: `(x: int): int => g(f(x))`. `?..` is reserved, not implemented (`SemanticDiag::ConstructNotSupported`).
+- `f..g` (function composition) and `?..` are reserved: they are not implemented and their meaning is not decided, and writing one is `SemanticDiag::ConstructNotSupported`. Use a lambda: `(x: int): int => g(f(x))`.
 
 ## 6.6 Operators for null and errors
 
@@ -193,7 +193,7 @@ func sign(x: int): string {
 }
 ```
 
-- An `if` without `else` has no value: it can only be a statement whose arm does something with side effects, and it usually has to be written in a sync block. In this case the arm must be a block ending with `return null`: `if c then sync { println('x'); return null }`; otherwise it is `SemanticDiag::BranchReturnTypeMismatch`.
+- An `if` without `else` has no value: it can only be a statement whose arm does something with side effects, and it usually has to be written in a sync block. In this case the arm must be a block ending with `return null`: `if c then sync { println('x'); return null }`; an arm with a value (`if c then println('x')`: the call of `println` has a value) is `SemanticDiag::IfArmValueWithoutElse`.
 - The type of the condition is `bool`; there is no "truthiness" conversion.
 
 > **A `return` in a block gives the value of that block; it does not leave the function.**
@@ -346,7 +346,8 @@ func main(): int sync {
 ```
 
 - A lambda captures variables of the enclosing scope, and a capture is a reference: after an outer `var` is modified the lambda sees the new value, and the outer scope also sees the lambda's writes to it.
-- A name that stands for a group of overloads or for an operator has no single function value, and using it as a value is `SemanticDiag::FunctionNameAsValue`; write a lambda that spells out the parameter types. The same goes for the name of a generic function (`SemanticDiag::GenericFunctionAsValue`).
+- A library operator with one signature that does not vary with its arguments is a function value like a user function: `xs->map<trim>`, `let t = trim`.
+- A name that stands for a group of overloads (several user functions of one name, or an operator with several signatures such as `abs`) is, where the callee has one signature and its parameter there is a function type, the one whose signature is exactly that type: the call `on_int(abs, -3)` of `func on_int(f: (x: int) => int, v: int)`. Anywhere else it has no single function value, and using it as a value is `SemanticDiag::FunctionNameAsValue`, which lists the signatures; write a lambda that spells out the parameter types. An operator whose signature varies with its arguments (`println`, `len`, `map`) or that changes an argument in place (`append`) has no function value either. The same goes for the name of a generic function (`SemanticDiag::GenericFunctionAsValue`).
 - A declaration with a function type, `let f: (x: int) => int = inc`, is currently unavailable (`SemanticDiag::FeatureNotSupported`); just omit the type.
 
 ## 6.10 Higher-order operators

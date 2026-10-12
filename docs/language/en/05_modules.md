@@ -25,6 +25,7 @@ import math                          // bring in only the module's namespace: ac
 ```
 
 - `import module` does not inject the names in the module directly into the current module; access them through `module::name`, or additionally write `using namespace module` to inject all the names it exports.
+- A module cannot import itself: `import m` in the file `m.cml` is `SemanticDiag::ImportCycle`. A module that is not found is `SemanticDiag::ModuleNotFound`, located at the `import`.
 - A name cannot be renamed when it is imported (there is no `import { a as b }`). When two modules have a function of the same name, import one of them and use the qualified name for the other: `import array`, then `array::find`.
 - **Search order**: `.cml` files in the same directory as the entry file, the directories given by `-I <dir>`, the directories listed in the environment variable `CAMEL_PACKAGES`, and the modules installed with Camel.
 

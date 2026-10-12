@@ -78,12 +78,12 @@ println(xs[0], len(xs), grid[0][1])
   | 写法 | 结果 |
   |---|---|
   | `len(xs)` | 长度 |
-  | `head(xs)`、`tail(xs)` | 第一个元素；去掉第一个元素的数组 |
+  | `head(xs)`、`tail(xs)` | 第一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`，与 `xs[0]` 相同）；去掉第一个元素的数组 |
   | `range(a, b)` | `[a, a+1, ..., b-1]`；`a >= b` 时为空 |
   | `xs->slice<a, b>` | 下标 `a` 到 `b-1` 的新数组；超出的部分被截掉 |
   | `concat(xs, ys)` | 连接成新数组 |
   | `xs->contains<v>` | 是否含有 `v` |
-  | `zip(xs, ys)` | `(x, y)` 元组的数组 |
+  | `zip(xs, ys)` | `(x, y)` 元组的数组；三个或更多数组得到相应元数的元组（`zip(xs, ys, zs)`）；长度必须相同 |
   | `strs->join<sep>` | 把 `string[]` 连成一个字符串 |
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
   | `xs->append<v>`、`xs->extend<ys>` | **原地修改**，`xs` 必须是 `var`（见 3.6） |
