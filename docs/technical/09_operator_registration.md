@@ -201,8 +201,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 | **Executor 加载时机** | Executor 按需懒加载，首次查找该 protocol 的算子时才实例化。并行调度器可能从多个工作线程同时查找，`ExecutorManager` 内部已加锁。 |
 | **`load()` 的职责** | `load()` 中应完成 Executor 工厂注册、性质登记和所需初始化（如 Python 解释器）。 |
 
-<<<<<<< HEAD
-## 6. 纯度声明
+## 7. 纯度声明的规则与检查
 
 设计原则 2.9：算子的纯度必须声明；没有声明的算子按有副作用对待（少优化，不会算错）。
 
@@ -231,7 +230,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
   它们仍按有副作用对待。
 - 仓库内的模块由测试约束（`test/plans/feat/modules/stdlib_registry.plan.toml`）：不得有未声明的算子。
 
-## 7. 签名文件与标准库参考
+## 8. 签名文件与标准库参考
 
 - `stdlib/signatures/<模块>.cml` 逐个声明模块导出的算子（`globals.cml` 是内建函数）：`///` 注释写说明，
   `@pure` 或 `@effect <原因>`、`@fails <失败时的行为>`、`@example <代码>    // <结果>`，函数体里
@@ -242,17 +241,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
   每条声明都对应一个已注册的算子、参数个数一致、`@pure`/`@effect` 与登记的纯度一致。三者都在默认测试
   集里（同一个测试计划）。新增或修改算子后：改签名文件，运行 `--write`，提交生成的文档。
 
-## 8. 参考
-
-- `include/camel/core/operator.h`：OperatorGroup、OperatorIndex。
-- `include/camel/core/type/resolver.h`：StaticFuncTypeResolver、DynamicFuncTypeResolver。
-- `include/camel/execute/executor.h`：Executor、ExecutorManager。
-- `src/execute/executor.cpp`：URI 解析与 Executor 分派逻辑。
-- `include/camel/core/operator_traits.h`：纯度等算子性质的登记。
-- `include/camel/core/module/introspect.h`：列出模块的算子（`camel inspect --ops`）。
-- `modules/str/`：一个只有纯算子的小模块，可作新模块的样板；`modules/python/`：带外部运行时的模块。
-=======
-## 7. 参考
+## 9. 参考
 
 - `include/camel/core/operator.h`：`operator_t`、`ArgsView`、`OperatorGroup`、`OperatorIndex`。
 - `include/camel/core/operator_traits.h`：`OperatorTraits` 及各注册表。
@@ -264,4 +253,5 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 - `modules/algo/`：结构最简单的 `.cmo` 模块示例。
 - `modules/python/`：带外部运行时初始化的 `.cmo` 模块示例（`python.cmo`）。
 - `modules/tensor/ops/`：以 `OpDef` 为单一来源的算子注册。
->>>>>>> 1307f61b (docs: repair the technical index and bring operator registration and rewrite-API names up to the code)
+- `include/camel/core/module/introspect.h`：列出模块的算子（`camel inspect --ops`）。
+- `modules/str/`：一个只有纯算子的小模块，可作新模块的样板；`modules/python/`：带外部运行时的模块。
