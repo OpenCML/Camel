@@ -25,8 +25,13 @@ rest are the arguments that function is called with:
 
 ```camel
 let b = attempt(risky, 0) !! -1                // a named function and its argument
-let ys = attempt(() => xs->map<risky>) !! []   // a closure: any expression can be isolated
+let ys = attempt(() => xs->map<risky>) !! [-1] // a closure: any expression can be isolated
 ```
+
+(The sketch in the design principles writes `!! []`. An empty array literal takes its element
+type from an annotation only (`let none: int[] = []`); written in place it is a `void[]`, which
+`!!` refuses, and `[] as int[]` is refused too. The fallback is a named empty array or a
+non-empty literal; that is a limit of array literals, not of this operator.)
 
 It is an ordinary global name resolved like `map` or `println`; the grammar is unchanged.
 The function value may be a named function, a lambda, or any expression of a function type
@@ -373,7 +378,6 @@ functions; release of external resources for the four ways a run ends.
 Linux x86-64, release build, inside the shared build container (other work was running on
 the machine; times are minima of several runs and still noisy).
 
-- **Tests.** See the final report of the work for the counts of the default set.
 - **One million isolated faults** (`many.cml`, `N=1000000`: one isolated fault a round, plus
   10000 rounds with the fault in a `map` element). Peak resident memory:
 
@@ -397,8 +401,20 @@ the machine; times are minima of several runs and still noisy).
   `CAMEL_GC_STRESS_SAFEPOINT=1`, modes `major` and `both`, on the four back ends, and with
   `CAMEL_GC_ENABLE_YOUNG_COPYING=1` on `std::nvm`, `std::fvm`, `std::prl`: correct output, no
   verification issue.
-- **Programs that do not use it.** See the final report for the `fib` numbers before and
-  after.
+- **An `attempt` that does not fault.** Two million calls of a one-line function in a
+  tail-recursive loop, directly / through a function value / through `attempt ... !! 0`:
+  `std::nvm` 813 / 922 / 2385 ms, `std::fvm` 223 / 265 / 868 ms, `std::jit` 272 / 400 /
+  1159 ms, `std::prl` 2718 / 3042 / 4377 ms. That is 0.3 µs (`std::fvm`) to 0.8 µs per
+  `attempt` over a direct call: a nested activation, the allocation of the `T!` box, and the
+  branch of `!!`.
+- **Programs that do not use it.** `test/plans/perf/fib.plan.toml`, mean of 10 passes, the
+  minimum of five runs of the plan before (trunk) and after (this work), in ms: `nvm` 748 /
+  624, `inline_nvm` 761 / 612, `fvm` 136 / 137, `inline_fvm` 138 / 103, `jit` 187 / 164,
+  `inline_jit` 6.6 / 5.8. `fib_recursive.cml` on `std::prl`, whole process, minimum of 7:
+  2160 before, 1848 and 2431 in two series after. The machine's load average was about 20
+  throughout, and the two builds could not be run side by side: the differences, in both
+  directions, are noise of the machine. The budgets of the plan are for another machine and
+  are exceeded by both builds.
 
 ## 9. Questions for the language author
 
@@ -418,7 +434,7 @@ Each is implemented as recommended.
   of the faults of the program's computation, recursion depth included; compiler defects,
   memory exhaustion and `exit` are not. Alternatives: a deny-list (new faults isolated by
   default); excluding recursion depth; excluding the generic `RuntimeError` of modules.
-- **`attempt-memory-exhausted`.** `attempt(() => build_huge()) !! []` when the heap is full.
+- **`attempt-memory-exhausted`.** `attempt(() => build_huge()) !! [-1]` when the heap is full.
   Implemented: not isolated, the program ends with the `MemoryExhausted` diagnostic.
   Alternative: isolate it after a collection at the boundary, when that frees enough.
 - **`attempt-parallel-siblings`.** `attempt(() => xs->map<f>)`, one element faults while

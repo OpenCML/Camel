@@ -289,7 +289,7 @@ inner func apply(var xs: T[]): T[] {
 /// isolated.
 /// @effect what f does
 /// @example attempt(risky, 0) !! -1
-/// @example attempt(() => xs->map<risky>) !! []
+/// @example attempt(() => xs->map<risky>) !! [-1]
 inner func attempt(f: (...args: A) => T, ...args: A): T! {
     return ':mark/isolate'
 }

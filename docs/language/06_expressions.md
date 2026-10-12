@@ -379,6 +379,40 @@ item 5
 
 `foreach` 的元素函数若要产生副作用，函数体必须是同步块（`=> sync { ... }`），理由见 [4.3.2](04_execution_model.md#432-函数的行为由它自己决定)。带 `var` 形参的函数不能交给这些算子。
 
+### 6.10.1 故障隔离 `attempt`（名称暂定）
+
+错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值；除零、下标越界、递归过深等是故障，带位置终止程序，`!!` 接不住它。`attempt(f, a, b)` 调用函数值 `f`，实参是 `a, b`；这次调用里（包括它直接或间接调用的一切）发生的故障，在 `attempt` 处变成一个错误值，再用 `!!`、`?->` 或 `match ... case error e` 处理。任意表达式用闭包包起来：`attempt(() => expr)`。
+
+```cml
+func risky(d: int): int { return 100 / d }
+
+func main(): int sync {
+    println(attempt(risky, 4) !! -1)
+    println(attempt(risky, 0) !! -1)
+    println(attempt(() => [1, 0, 4]->map<risky>) !! [-1])
+    let r = attempt(risky, 0)
+    println(match r {
+        case error e => e.kind + ' at ' + e.location
+        case v => 'no fault'
+    })
+    return 0
+}
+```
+
+```text
+25
+-1
+[-1]
+DivisionByZero at main.cml:1:38
+```
+
+- 类型：`f: (A...) => T` 得到 `T!`；`f` 本身返回 `U!` 时得到 `U!`（它自己返回的错误值原样传出）。带 `with` 参数或 `var` 参数的函数不能直接传入，用闭包。
+- 错误值的 `kind` 是故障的名字（如 `DivisionByZero`、`IndexOutOfRange`、`MaxRecursionDepthExceeded`），`message` 是故障的消息，`location` 是故障发生处的 `文件:行:列`。
+- 边界就是那一次调用：实参的求值在边界之外；边界之内在故障之前已经发生的效应不收回（打印的行、写过的 `var`、写过的文件都保留）。
+- `exit(n)` 不是故障，不被隔离；内存耗尽与编译器自身的错误也不被隔离。
+- 并行调度器下，`map` 的一个元素故障时，已经开始的元素运行到结束，尚未开始的不再开始；`attempt` 在已开始的全部结束之后才给出错误值。
+- 在图上它是一个 `OPER` 节点（`:mark/isolate`），第一个输入是函数值，其余是实参。实现与尚待裁定的问题见 [技术说明](../technical/33_fault_isolation.md)。
+
 ## 6.11 赋值与 `wait`
 
 - `x = e`、`x += e` 等是表达式，值是所赋的值。目标必须是 `var` 变量或 `var` 形参本身（[3.6](03_data_model.md#36-letvar-与引用)）。

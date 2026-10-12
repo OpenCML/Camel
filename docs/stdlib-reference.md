@@ -459,7 +459,7 @@ isolated.
 
 - With effects: what f does.
 - Example: `attempt(risky, 0) !! -1`
-- Example: `attempt(() => xs->map<risky>) !! []`
+- Example: `attempt(() => xs->map<risky>) !! [-1]`
 
 #### `len`
 
