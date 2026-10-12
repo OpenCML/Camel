@@ -65,7 +65,15 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
                         name = group->name();
                     }
                     for (const auto &r : group->resolvers()) {
-                        allResolvers.push_back(r);
+                        // One module's group reaches here twice when a name is imported
+                        // both by name and with the module's default names: the same
+                        // overload is one overload.
+                        const bool known = std::ranges::any_of(allResolvers, [&](const auto &have) {
+                            return have.first == r.first && have.second == r.second;
+                        });
+                        if (!known) {
+                            allResolvers.push_back(r);
+                        }
                     }
                 }
             }

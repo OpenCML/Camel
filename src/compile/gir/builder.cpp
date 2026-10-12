@@ -2505,7 +2505,158 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
             return createFuncDataNode(graphs->front(), true, false);
         }
     }
+    if (std::holds_alternative<oper_group_ptr_t>(target)) {
+        // A library operator with one signature that does not depend on its arguments
+        // (`trim: (s: string) => string`) is one function, like a user function of that
+        // name: its value is a function that calls it.
+        const auto &ops = std::get<oper_group_ptr_t>(target);
+        if (ops->resolvers().size() == 1) {
+            const auto &[uri, resolver] = ops->resolvers().front();
+            if (auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver)) {
+                auto op = std::make_shared<OperatorIndex>(ops->name(), fixed->funcType(), uri);
+                if (compile_graph_ptr_t graph = operatorValueGraphOf(op, origin)) {
+                    return createFuncDataNode(graph, true, false);
+                }
+            }
+        }
+    }
     return node;
+}
+
+compile_graph_ptr_t
+Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin) {
+    FunctionType *opType = op->funcType();
+    if (opType == nullptr || !opType->hasExitType()) {
+        return nullptr;
+    }
+    for (size_t i = 0; i < opType->withTypesCount(); ++i) {
+        if (opType->withIsVarAt(i)) {
+            return nullptr;
+        }
+    }
+    for (size_t i = 0; i < opType->normTypesCount(); ++i) {
+        if (opType->normIsVarAt(i)) {
+            return nullptr;
+        }
+    }
+    // One per place that names the operator: the function is built where it is used.
+    const std::string key = std::format(
+        "{}|{}|{}",
+        static_cast<const void *>(currGraph_.get()),
+        op->uri(),
+        opType->toString());
+    if (auto known = operatorValueGraphs_.find(key); known != operatorValueGraphs_.end()) {
+        return known->second;
+    }
+    // Its own type object (a graph completes its function type in place).
+    FunctionTypeFactory factory;
+    factory.setModifiers(opType->modifiers());
+    factory.setExitType(opType->exitType());
+    const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
+        return argIndex < opType->argNamesCount() && !opType->argNameAt(argIndex).empty()
+                   ? std::string(opType->argNameAt(argIndex))
+                   : std::format("{}{}", prefix, i);
+    };
+    for (size_t i = 0; i < opType->withTypesCount(); ++i) {
+        factory.addWithArg(nameAt(i, "__w", i), opType->withTypeAt(i), false);
+    }
+    for (size_t i = 0; i < opType->normTypesCount(); ++i) {
+        factory.addNormArg(
+            nameAt(opType->withTypesCount() + i, "__n", i),
+            opType->normTypeAt(i),
+            false);
+    }
+    FunctionType *type = factory.build();
+
+    compile_graph_ptr_t graph = enterScope(type);
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        node_handle_t call       = graph->addOperNode(op, 0);
+        if (opType->modifiers().macro()) {
+            setNodeMacro(call, true);
+        }
+        registerNodeOrigin(context_, call, origin, "gir.link.oper");
+        for (draft_node_ref_t port : graph->draft().withPorts()) {
+            linkNodes(LinkType::With, graph->draft().node(port), call);
+        }
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            linkNodes(LinkType::Norm, graph->draft().node(port), call);
+        }
+        setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
+        bodyStates_[graph.get()] = BodyState::Built;
+        builtBodies_.push_back(graph);
+    } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    operatorValueGraphs_[key] = graph;
+    return graph;
+}
+
+node_handle_t Builder::overloadValueFor(
+    node_handle_t node, FunctionType *expected, const GCT::node_ptr_t &origin) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Dref) || expected == nullptr ||
+        !expected->hasExitType()) {
+        return nullptr;
+    }
+    const type_vec_t withTypes(expected->withTypesSpan().begin(), expected->withTypesSpan().end());
+    const type_vec_t normTypes(expected->normTypesSpan().begin(), expected->normTypesSpan().end());
+    const auto &target = nodeGraphOf(node)->drefTarget(node);
+    if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+        auto graphs = asCompileGraphVec(target);
+        compile_graph_ptr_t chosen;
+        if (!graphs) {
+            return nullptr;
+        }
+        for (const auto &g : *graphs) {
+            FunctionType *type = g->funcType();
+            if (decoratedOf_.contains(g.get()) || !type->hasExitType() ||
+                type->withTypesCount() != withTypes.size() ||
+                type->normTypesCount() != normTypes.size() ||
+                !type->exitType()->equals(expected->exitType())) {
+                continue;
+            }
+            bool same = true;
+            for (size_t i = 0; same && i < withTypes.size(); ++i) {
+                same = type->withTypeAt(i)->equals(withTypes[i]) && !type->withIsVarAt(i);
+            }
+            for (size_t i = 0; same && i < normTypes.size(); ++i) {
+                same = type->normTypeAt(i)->equals(normTypes[i]) &&
+                       type->normIsVarAt(i) == expected->normIsVarAt(i);
+            }
+            if (!same) {
+                continue;
+            }
+            if (chosen) {
+                return nullptr;
+            }
+            chosen = g;
+        }
+        return chosen ? createFuncDataNode(chosen, true, false) : nullptr;
+    }
+    if (std::holds_alternative<oper_group_ptr_t>(target)) {
+        const auto &ops = std::get<oper_group_ptr_t>(target);
+        oper_idx_ptr_t chosen;
+        for (const auto &[uri, resolver] : ops->resolvers()) {
+            auto type = resolver->resolve(withTypes, normTypes, Modifier::None);
+            if (!type || !(*type)->hasExitType() ||
+                !(*type)->exitType()->equals(expected->exitType())) {
+                continue;
+            }
+            if (chosen) {
+                return nullptr;
+            }
+            chosen = std::make_shared<OperatorIndex>(ops->name(), *type, uri);
+        }
+        if (chosen) {
+            if (compile_graph_ptr_t graph = operatorValueGraphOf(chosen, origin)) {
+                return createFuncDataNode(graph, true, false);
+            }
+        }
+    }
+    return nullptr;
 }
 
 void Builder::rejectNameWithoutValue(
@@ -2518,6 +2669,33 @@ void Builder::rejectNameWithoutValue(
     if (std::holds_alternative<graph_vec_ptr_t>(target)) {
         auto graphs = asCompileGraphVec(target);
         what        = std::format("{} functions of that name", graphs ? graphs->size() : 0);
+        if (graphs && !graphs->empty()) {
+            what += " [" + strutil::join(*graphs, "; ", [](const graph_ptr_t &g) {
+                return g->funcType()->toString();
+            }) + "]";
+        }
+    } else if (std::holds_alternative<oper_group_ptr_t>(target)) {
+        // The candidates, so that the reader can write the wrapper the message asks for.
+        const auto &ops         = std::get<oper_group_ptr_t>(target);
+        const std::string sigs = strutil::join(
+            ops->resolvers(),
+            "; ",
+            [](const std::pair<std::string, resolver_ptr_t> &p) { return p.second->signature(); });
+        if (ops->resolvers().size() == 1) {
+            const bool fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(
+                                   ops->resolvers().front().second) != nullptr;
+            what = fixed ? std::format(
+                               "an operator that changes its argument in place [{}]",
+                               sigs)
+                         : std::format(
+                               "an operator whose signature depends on its arguments [{}]",
+                               sigs);
+        } else {
+            what = std::format(
+                "an operator with {} signatures [{}]",
+                ops->resolvers().size(),
+                sigs);
+        }
     }
     diags_->of(SemanticDiag::FunctionNameAsValue)
         .atOrigin(origin->load()->origin())
@@ -3004,10 +3182,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             gct->at(0)->type() == GCT::LoadType::WITH;
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
-    ASSERT(
-        targetNodeRes.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of LINK node.");
-    node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
+    // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
+    // `v ?-> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
+    // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
+    node_handle_t targetNode = valueNodeOf(targetNodeRes);
 
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
@@ -3064,6 +3242,72 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputs.push_back({location, gct});
             normInputTypes.push_back(Type::String());
         }
+    }
+
+    // An argument that is still a name without a single function value (several overloads, or
+    // an operator whose signature is not one function type). Where the callee has one known
+    // signature and its parameter there is a function type, the overload with exactly that
+    // type is the argument. Anywhere else the name has no value: it used to be passed on as
+    // a value of type void, which ended in "No matching function ... <void>" or, when the
+    // callee takes anything (`println(println)`), in an internal error about a live DREF.
+    {
+        FunctionType *knownCalleeType = nullptr;
+        if (!genericDrefs_.contains(targetNode)) {
+            if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+                const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
+                if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
+                    auto graphs = asCompileGraphVec(drefTarget);
+                    if (graphs && graphs->size() == 1 &&
+                        !decoratedOf_.contains(graphs->front().get())) {
+                        knownCalleeType = graphs->front()->funcType();
+                    }
+                }
+            } else if (Type *type = nodeTypeOf(targetNode);
+                       type != nullptr && type->code() == TypeCode::Function) {
+                knownCalleeType = tt::as_ptr<FunctionType>(type);
+            }
+        }
+        const auto nameOf = [](const GCT::node_ptr_t &expr) -> std::string {
+            GCT::node_ptr_t at = expr;
+            while (at && at->type() == GCT::LoadType::WITH && at->size() > 0) {
+                at = at->at(0);
+            }
+            return at && at->type() == GCT::LoadType::DREF
+                       ? at->loadAs<GCT::DRefLoad>()->ref().toString()
+                       : std::string("the name");
+        };
+        const auto settle = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                node_handle_t node = inputs[i].node;
+                if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref) ||
+                    genericDrefs_.contains(node)) {
+                    continue;
+                }
+                Type *expected = nullptr;
+                if (knownCalleeType != nullptr) {
+                    const size_t count = with ? knownCalleeType->withTypesCount()
+                                              : knownCalleeType->normTypesCount();
+                    if (i < count) {
+                        expected = with ? knownCalleeType->withTypeAt(i)
+                                        : knownCalleeType->normTypeAt(i);
+                    }
+                }
+                node_handle_t chosen{};
+                if (expected != nullptr && expected->code() == TypeCode::Function) {
+                    chosen = overloadValueFor(
+                        node,
+                        tt::as_ptr<FunctionType>(expected),
+                        inputs[i].expr);
+                }
+                if (chosen == nullptr) {
+                    rejectNameWithoutValue(node, nameOf(inputs[i].expr), inputs[i].expr);
+                }
+                inputs[i].node = chosen;
+                types[i]       = valueTypeOf(nodeTypeOf(chosen));
+            }
+        };
+        settle(withInputs, withInputTypes, true);
+        settle(normInputs, normInputTypes, false);
     }
 
     // A call of a decorated function calls the function its decorators returned, so the
@@ -3494,10 +3738,8 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                             gct->at(0)->type() == GCT::LoadType::DREF;
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
-    ASSERT(
-        targetNodeRes.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of WITH node.");
-    node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
+    // As in visitLinkNode: a lambda written in place gives its graph.
+    node_handle_t targetNode = valueNodeOf(targetNodeRes);
     vector<Argument> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});

@@ -127,6 +127,9 @@ class Builder {
     std::unordered_set<DraftGraphBuilder *> usedGraphs_;
     // The decorated form of each function declared with decorators, by its own graph.
     std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> decoratedOf_;
+    // The functions that stand for library operators named as values (operatorValueGraphOf),
+    // by operator URI and signature.
+    std::unordered_map<std::string, compile_graph_ptr_t> operatorValueGraphs_;
     std::unordered_map<DraftGraphBuilder *, node_modifier_map_t> nodeModifierMaps_;
     // With-arguments bound to a callee by `f<a, b>`, consumed when the callee is invoked. Kept
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
@@ -388,6 +391,15 @@ class Builder {
     // a place that needs a value.
     void rejectNameWithoutValue(
         node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin);
+    // A function with the parameters of the operator `op` that calls it: what a library
+    // operator named as a value (`xs->map<trim>`) stands for. Null when the operator has no
+    // such function (it changes an argument in place).
+    compile_graph_ptr_t operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
+    // The one function of the name `node` (a DREF to several overloads or to an operator
+    // group) that has exactly the parameters and the result of `expected`, as a value; null
+    // when none or several do.
+    node_handle_t overloadValueFor(
+        node_handle_t node, FunctionType *expected, const GCT::node_ptr_t &origin);
     // A function with the declared parameters of `target` that captures the names `target`
     // captured and calls it with them: what a function value of `target` refers to once the
     // captures of `target` have become with-parameters (createFuncDataNode).
