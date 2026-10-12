@@ -393,14 +393,14 @@ timeout_ms = 30000
 
 [[tests]]
 name = "recursion_too_deep.prl"
-desc = "A non-tail recursion deeper than the native stack allows stops under PRL with MaxRecursionDepthExceeded (the scheduler has no fixed limit; it refuses a call when fifteen sixteenths of the thread's stack are used) instead of a segmentation fault; depth(2000) printed before it, nothing after."
+desc = "With the limit raised far above what the native stack holds, a non-tail recursion deeper than the stack allows stops under PRL with MaxRecursionDepthExceeded (a call is refused when fifteen sixteenths of the thread's stack are used) instead of a segmentation fault; depth(2000) printed before it, nothing after. (Without the option PRL counts like the other schedulers and stops at 1000: consistency.limits.)"
 kind = "negative"
 case = "../../../cases/para/core/recursion_too_deep.cml"
-args = ["-t", "4", "${case}", "${run_prl}"]
+args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${run_prl}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
-expect_stdout_contains = ["2000", "Maximum recursion depth ("]
+expect_stdout_contains = ["2000", "the native stack of the thread"]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000

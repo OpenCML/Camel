@@ -392,7 +392,7 @@ the machine; times are minima of several runs and still noisy).
   The growth up to about 109 MiB is the collector's heap reaching its working size (every
   isolated fault allocates an error value: two boxes, a struct, three strings); from one to
   three million rounds the peak does not move. The frame pool of `std::nvm`/`std::fvm` is
-  one fixed block of about 1 MiB (256 calls x 4 KiB): a frame lost per fault would exhaust
+  one fixed block (4 KiB a call the limit allows; about 1 MiB when this was measured): a frame lost per fault would exhaust
   it after a few thousand rounds, and the run would end with `MaxRecursionDepthExceeded`.
   Time: about 24 µs per isolated fault on `std::fvm`, 31 µs on `std::nvm` (a C++ exception
   through several activations, the located diagnostic, the error value); `std::prl` about

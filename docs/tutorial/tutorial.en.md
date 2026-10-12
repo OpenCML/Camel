@@ -157,7 +157,7 @@ func main(): int sync {
 ```
 
 - **A function is a subgraph, and a call is a node in the graph.** You will see this with your own eyes in section 13.
-- **Camel currently has no loop syntax** (no `for`, no `while`). Repeated computation is written as recursion, or with the higher-order operators of the next section. A call in tail position does not take a stack frame, so `sum_to` recursing a hundred thousand levels deep is no problem; for non-tail recursion (such as `fib`), the number of calls open at the same time may not exceed 256 by default (adjustable with `--max-recursion-depth`).
+- **Camel currently has no loop syntax** (no `for`, no `while`). Repeated computation is written as recursion, or with the higher-order operators of the next section. A call in tail position does not take a stack frame, so `sum_to` recursing a hundred thousand levels deep is no problem; for non-tail recursion (such as `fib`), the number of calls open at the same time may not exceed 1000 by default (adjustable with `--max-recursion-depth`).
 - **Two kinds of parameters.** The ones in parentheses are the inputs the function processes; the ones in `with <...>` are the properties the function is configured with (context parameters), and at a call they are written in angle brackets. Configuration that other languages put in the members of an object is a `with` parameter in Camel.
 - **The pipe `->`** passes the value on its left as the argument of the function on its right; `a->f->g` is `g(f(a))`. Data flow written as a chain is exactly a path in the graph.
 

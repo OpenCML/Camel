@@ -15,15 +15,15 @@ func down(n: int): int {
 }
 
 func tree(n: int): int {
-    // The second call ends at once for n < 300, so the depth is that of the first.
-    return if n <= 0 then 1 else tree(n - 1) + tree(n - 300)
+    // The second call ends at once for n < 1200, so the depth is that of the first.
+    return if n <= 0 then 1 else tree(n - 1) + tree(n - 1200)
 }
 
 func main(): int sync {
     println('loop {}'->format<loop(1000000, 0)>)
-    println('down {}'->format<down(255)>)
-    println('tree {}'->format<tree(255)>)
-    println('tree {}'->format<tree(256)>)
+    println('down {}'->format<down(999)>)
+    println('tree {}'->format<tree(999)>)
+    println('tree {}'->format<tree(1000)>)
     println('not reached')
     return 0
 }

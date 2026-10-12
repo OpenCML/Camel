@@ -242,7 +242,7 @@ The operator that isolates a fault at a subgraph boundary (provisionally named `
 
 **`exit(n)`** ends the program immediately with exit code `n`; earlier output is written out as usual.
 
-**Recursion depth.** A call in tail position does not occupy a stack frame, and tail recursion can be arbitrarily deep. The number of calls open at the same time in non-tail recursion has a limit, 256 by default; exceeding it is the fault `RuntimeDiag::MaxRecursionDepthExceeded`; adjust it with `--max-recursion-depth <n>` or the environment variable `CAMEL_MAX_RECURSION_DEPTH`. The count includes calls through function values and the calls a higher-order operator makes for each element. Whether all back ends take the same default is not yet decided (`std::prl` does not count when no limit is given and is limited only by the thread stack).
+**Recursion depth.** A call in tail position does not occupy a stack frame, and tail recursion can be arbitrarily deep. The number of calls open at the same time in non-tail recursion has a limit, 1000 by default; exceeding it is the fault `RuntimeDiag::MaxRecursionDepthExceeded`; adjust it with `--max-recursion-depth <n>` or the environment variable `CAMEL_MAX_RECURSION_DEPTH`. The count includes calls through function values and the calls a higher-order operator makes for each element. The default is the same on every back end, and the parallel scheduler counts like the others.
 
 ```cml
 func depth(n: int): int {
@@ -256,7 +256,7 @@ func count(n: int, acc: int): int {
 func main(): int sync {
     println(count(1000000, 0))
     println(depth(200))
-    println(depth(300))
+    println(depth(1200))
     return 0
 }
 ```
@@ -264,7 +264,7 @@ func main(): int sync {
 ```text
 1000000
 200
-error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (256) exceeded when evaluating graph '__g_7__'.
+error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) exceeded when evaluating graph '__g_7__'.
 ```
 
 (Followed by the location and a suggestion.)

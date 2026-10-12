@@ -242,7 +242,7 @@ help: Ensure the index is within the valid range of the collection.
 
 **`exit(n)`** 立即结束程序，退出码为 `n`；此前的输出照常写出。
 
-**递归深度。** 尾位置的调用不占用栈帧，尾递归可以任意深。非尾递归同时打开的调用数有上限，默认 256，超过是故障 `RuntimeDiag::MaxRecursionDepthExceeded`；用 `--max-recursion-depth <n>` 或环境变量 `CAMEL_MAX_RECURSION_DEPTH` 调整。计数包括通过函数值的调用和高阶算子对每个元素的调用。各执行后端是否取同一个默认值尚未决定（`std::prl` 在不给上限时不计数，只受线程栈限制）。
+**递归深度。** 尾位置的调用不占用栈帧，尾递归可以任意深。非尾递归同时打开的调用数有上限，默认 1000，超过是故障 `RuntimeDiag::MaxRecursionDepthExceeded`；用 `--max-recursion-depth <n>` 或环境变量 `CAMEL_MAX_RECURSION_DEPTH` 调整。计数包括通过函数值的调用和高阶算子对每个元素的调用。默认值在各执行后端上相同，并行调度器同样计数。
 
 ```cml
 func depth(n: int): int {
@@ -256,7 +256,7 @@ func count(n: int, acc: int): int {
 func main(): int sync {
     println(count(1000000, 0))
     println(depth(200))
-    println(depth(300))
+    println(depth(1200))
     return 0
 }
 ```
@@ -264,7 +264,7 @@ func main(): int sync {
 ```text
 1000000
 200
-error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (256) exceeded when evaluating graph '__g_7__'.
+error[RuntimeDiag::MaxRecursionDepthExceeded]: Maximum recursion depth (1000) exceeded when evaluating graph '__g_7__'.
 ```
 
 （其后是位置与建议。）

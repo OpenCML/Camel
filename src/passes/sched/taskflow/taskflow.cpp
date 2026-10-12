@@ -183,8 +183,8 @@ bool nativeStackIsTight(const TaskflowGcGate::ThreadState &ts) {
 }
 
 // True when the calling thread has used fifteen sixteenths of its native stack: one more call
-// of a graph is refused with a diagnostic instead of running into the guard page. The
-// scheduler has no fixed limit of its own (NodeVM stops at 256 frames); what a thread can nest
+// of a graph is refused with a diagnostic instead of running into the guard page. This is
+// apart from the count of open calls (requireCallRoom): what a thread can nest
 // depends on its stack and on what else the worker picked up while waiting. The depth the
 // diagnostic reports is the number of calls open on that thread (a recursion that started on
 // another worker is deeper than that).
@@ -1332,9 +1332,8 @@ void TaskflowExecSchedPass::requireCallRoom(
     // callDepth includes the entry graph's call of main, which is not counted (kEntryCalls).
     const bool overLimit = maxRecursionDepth_ != 0 &&
                            thread.callDepth >= maxRecursionDepth_ + camel::execute::kEntryCalls;
-    // With no limit given, the scheduler nests as deep as the native stack of the thread
-    // allows; what a thread can nest depends on its stack and on what else the worker picked
-    // up while waiting.
+    // Under the limit the native stack of the thread can still run out: what a thread can
+    // nest depends on its stack and on what else the worker picked up while waiting.
     if (!overLimit && !nativeStackIsExhausted(thread)) [[likely]] {
         return;
     }

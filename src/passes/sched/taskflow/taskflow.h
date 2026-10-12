@@ -247,8 +247,9 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     TaskflowExecSchedPass(const ctx::context_ptr_t &ctx, size_t max_concurrent_tasks = 0)
         : RuntimeGraphSchedulePass(ctx), executor_(workerCount(ctx, max_concurrent_tasks)) {
         if (ctx) {
-            const auto limit   = camel::execute::recursionLimit(*ctx);
-            maxRecursionDepth_ = limit.given ? limit.frames : 0;
+            // The same count as on the other schedulers, with the same default (design
+            // principles 2.10).
+            maxRecursionDepth_ = camel::execute::recursionLimit(*ctx).frames;
         }
     }
     ~TaskflowExecSchedPass() override = default;
@@ -378,25 +379,26 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     TaskflowFaultDomain &domainOf(const TaskflowGcGate::ThreadState &thread) {
         return thread.faultDomain ? *thread.faultDomain : rootDomain_;
     }
-    // What a failure stops, for a fault that is isolated and for one that ends the run alike:
-    // DESIGN-QUESTION(attempt-parallel-siblings): tasks that have started run to their end
-    // (with everything they start), tasks of the same flow that have not started do not
-    // start, and whoever started the flow waits for all that started before the failure goes
-    // on. There is no preemption and no flag polled by running code: the executor skips the
-    // tasks of a flow one of whose tasks threw, and a scope skips its remaining chains
-    // (FlowInstance::failed).
+    // What a failure stops, for a fault that is isolated and for one that ends the run alike
+    // (design principles 2.10): tasks that have started run to their end (with everything
+    // they start), tasks that have not started do not start, and whoever started the flow
+    // waits for all that started before the failure goes on. There is no preemption and no
+    // flag polled by running code: a scope skips its remaining chains (FlowInstance::failed),
+    // and an unordered operator skips the elements after the smallest faulting index it
+    // knows (ElementFaults).
 
-    // The limit on calls open at once that are not tail calls, when one was given by the
-    // option or the environment; 0 when not: the native stack alone then bounds a recursion
-    // (camel/execute/limits.h). The count follows a call across threads: a task continues
-    // from the open calls of the thread that started it (ThreadState::callDepth).
+    // The limit on calls open at once that are not tail calls: the option, the environment
+    // or the default, as on the other schedulers (camel/execute/limits.h). 0 only without a
+    // context: the native stack alone then bounds a recursion. The count follows a call
+    // across threads: a task continues from the open calls of the thread that started it
+    // (ThreadState::callDepth).
     size_t maxRecursionDepth_ = 0;
-    // Reports `fault` at node `nodeRef` of `graph` (at the graph when the node has no source
-    // position) unless a fault was reported already in the fault domain of the calling thread,
-    // and unwinds. Element functions that run concurrently can fault together: only the first
-    // fault of a domain is reported (it ends the program, or becomes the error value of the
-    // fault-isolation node), and every later one unwinds with what reporting the first threw.
-    // DESIGN-QUESTION(attempt-parallel-first-fault): which is first is not defined.
+    // Describes `fault` at node `nodeRef` of `graph` (at the graph when the node has no source
+    // position) and throws the diagnostic. Nothing is recorded here: element functions that
+    // run concurrently can fault together, and of their faults the one of the smallest
+    // element index is reported (design principles 2.10; ElementFaults), by the outer index
+    // first for nested operators. The fault that arrives at the entry of the run is recorded
+    // there; the one that arrives at a fault-isolation node becomes its error value.
     [[noreturn]] void raiseFault(
         const camel::core::error::RuntimeFault &fault, camel::runtime::GCGraph *graph,
         camel::runtime::gc_node_ref_t nodeRef);
