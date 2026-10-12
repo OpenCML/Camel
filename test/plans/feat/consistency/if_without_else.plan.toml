@@ -1,0 +1,119 @@
+id = "consistency.if_without_else"
+order = 356
+tier = "feat"
+tags = ["feat", "consistency", "compile", "branches"]
+desc = "An if without else has no value: its arm may be of any type, what the arm gives is dropped, and using the if as a value is a compile-time error (design principles 2.10)"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+timeout_ms = 20000
+
+[[tests]]
+name = "if_without_else.statement"
+desc = "Arms of type string, int and void under an if without else, as a statement, as the last statement of a body, with an empty else, inside a lambda: alike on the four back ends, without a diagnostic."
+kind = "behavior"
+case = "../../../cases/consistency/if_without_else/statement.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+const out = input.normalized.stdout.trim()
+const want = ['checking', 'big', '4', '2', 'tail', 'then', 'older', '1 1', '5', '9'].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+assert(input.stderr === '', 'no diagnostic: ' + input.stderr)
+"""
+
+[[tests]]
+name = "if_without_else.statement.opt"
+desc = "The same program through std::opt, std::nvm."
+kind = "behavior"
+case = "../../../cases/consistency/if_without_else/statement.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
+
+[[tests]]
+name = "if_without_else.statement.inline"
+desc = "The same program through std::inline, std::fvm."
+kind = "behavior"
+case = "../../../cases/consistency/if_without_else/statement.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
+
+[[tests]]
+name = "if_without_else.statement.simplify"
+desc = "The same program through std::opt::simplify, std::nvm."
+kind = "behavior"
+case = "../../../cases/consistency/if_without_else/statement.cml"
+args = ["${case}", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
+
+[[tests]]
+name = "if_without_else.statement.inline_opt"
+desc = "The same program through std::inline, std::opt, std::jit."
+kind = "behavior"
+case = "../../../cases/consistency/if_without_else/statement.cml"
+args = ["${case}", "std::inline", "std::opt", "std::jit"]
+expect_exit = 0
+expect_stdout_starts_with = "checking\nbig\n4\n2\ntail\nthen\nolder\n1 1\n5\n9\n"
+
+[[tests]]
+name = "if_without_else.graph"
+desc = "On the graph it is a branch with two arms and a join of type void: nothing else is added."
+kind = "snapshot"
+case = "../../../cases/consistency/if_without_else/as_statement_graph.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "gir_dot_isomorphic"
+golden = "golden/if_without_else_graph.dot"
+
+[[tests]]
+name = "if_without_else.as_value_let"
+desc = "`let x = if debug then 1`: a located compile-time error."
+kind = "negative"
+case = "../../../cases/consistency/if_without_else/as_value_let.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::IfWithoutElseAsValue"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 13
+expect_output_contains = ["This 'if' has no 'else' and is used as a value."]
+
+[[tests]]
+name = "if_without_else.as_value_argument"
+desc = "As an argument."
+kind = "negative"
+case = "../../../cases/consistency/if_without_else/as_value_argument.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::IfWithoutElseAsValue"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 13
+
+[[tests]]
+name = "if_without_else.as_value_return"
+desc = "As the operand of return."
+kind = "negative"
+case = "../../../cases/consistency/if_without_else/as_value_return.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::IfWithoutElseAsValue"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 12
+
+[[tests]]
+name = "if_without_else.return_null_in_arm"
+desc = "`return null` in an arm of an unused if is warned about like any other exit (it used to be exempt): it does not leave the function, and the program goes on, alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/if_without_else/return_null_in_arm.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "big\nafter\n9\n"
+expect_stderr_contains = ["name=SemanticDiag::ExitInUnusedBranch", "This 'return' gives the value of the 'if' it is in"]

@@ -181,7 +181,7 @@ func sign(x: int): string {
 }
 ```
 
-- 没有 `else` 的 `if` 没有值：它只能作语句，臂里做带副作用的事，并且通常要写在同步块里。这时臂必须是以 `return null` 结束的块：`if c then sync { println('x'); return null }`；臂有值时（`if c then println('x')`，`println` 的调用有值）是 `SemanticDiag::IfArmValueWithoutElse`。
+- **没有 `else` 的 `if` 本身没有值。** 它只能作语句；它的臂可以是任何类型，臂给出的值被丢弃：`if debug then println('checking')` 合法，不必再为了凑类型在臂里写 `return null`。把它用作值（`let x = if debug then 1`、作实参、作 `return` 的操作数）是编译期错误 `SemanticDiag::IfWithoutElseAsValue`。图上不变：一个分支加两条臂，没写的 `else` 是一条空臂，汇合处不取值；臂照常求值，所以臂里做带副作用的事时通常要写在同步块里。写了而留空的 `else {}` 与不写相同。
 - 条件的类型是 `bool`；没有“真值”转换。
 
 > **块里的 `return` 给出的是这个块的值，不是离开函数。**
@@ -223,7 +223,7 @@ warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 
 note: the value of this 'if' is not used
 ```
 
-所以 Camel 里没有“提前返回”：把分支写成函数体的最后一个表达式，或在它前面写 `return`。多个条件依次判断时，把 `if ... else if ... else ...` 连成一个表达式。警告可用 `-Wno-exit-in-unused-branch` 关闭；`return null` 与不带值的 `return` 不报。
+所以 Camel 里没有“提前返回”：把分支写成函数体的最后一个表达式，或在它前面写 `return`。多个条件依次判断时，把 `if ... else if ... else ...` 连成一个表达式。警告可用 `-Wno-exit-in-unused-branch` 关闭。`return null` 与不带值的 `return` 同样会报：臂不需要靠它来凑类型，写了多半是以为它能提前离开函数。
 
 ### 6.8.2 `match`
 

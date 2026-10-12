@@ -4416,7 +4416,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
         const auto &caseNode = gct->at(i);
         const auto caseType  = caseNode->loadAs<GCT::CaseLoad>()->caseType();
         if (caseType == CaseType::Else) {
-            return false;
+            return;
         }
         if (caseType != CaseType::Value) {
             continue;
@@ -4512,7 +4512,13 @@ node_handle_t Builder::buildBranch(
             .tail = nodeIdOf(funcNode),
         });
 
-        if (joinType == nullptr) {
+        if (absentElse) {
+            // Design principles 2.10: an `if` without `else` has no value. Its arm may be of
+            // any type and what the arm gives is dropped: the join takes nothing. The arm
+            // written is evaluated as any arm is; the one not written is an empty arm.
+            joinType = Type::Void();
+            setNodeType(joinNode, joinType);
+        } else if (joinType == nullptr) {
             joinType = exitType;
             setNodeType(joinNode, joinType);
         } else {
@@ -4522,17 +4528,6 @@ node_handle_t Builder::buildBranch(
             if (unified != nullptr && unified != joinType) {
                 joinType = unified;
                 setNodeType(joinNode, joinType);
-            }
-            if (unified == nullptr && absentElse) {
-                // `if c then println('x')`: without `else` the `if` gives nothing when the
-                // condition is false, and the arm gives a value. The message used to be
-                // "expected 'string', found 'void'", with types the program does not show.
-                diags_->of(SemanticDiag::IfArmValueWithoutElse)
-                    .atOrigin(gct->load()->origin())
-                    .commit(
-                        joinType->toString(),
-                        currGraph_->name() + ": " + currGraph_->funcType()->toString());
-                throw BuildAbortException();
             }
             if (unified == nullptr) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)

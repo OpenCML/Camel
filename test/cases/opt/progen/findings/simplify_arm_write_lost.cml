@@ -11,11 +11,11 @@ module simplify_arm_write_lost
 func main(): int sync {
     var v51 = '';
     if [false]->reduce<(p63: bool, p64: bool): bool => false, false> then sync {
-        return null;
+        null;
     } else sync {
         let n71 = ('r:{}>{} '->format<'' + '', -0.5>, 0);
         v51 = 'a';
-        return null;
+        null;
     };
     println(v51);
     return 0;

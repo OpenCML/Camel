@@ -17,9 +17,9 @@ func e9(): (string, int) sync {
 func main(): int sync {
     if false then sync {
         let n23 = e9();
-        return null;
+        null;
     } else sync {
-        return null;
+        null;
     };
     return 0;
 }

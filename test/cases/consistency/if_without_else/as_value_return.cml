@@ -1,0 +1,8 @@
+func pick(c: bool): int {
+    return if c then 1
+}
+
+func main(): int sync {
+    println(pick(true))
+    return 0
+}

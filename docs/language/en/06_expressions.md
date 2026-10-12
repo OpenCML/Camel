@@ -181,7 +181,7 @@ func sign(x: int): string {
 }
 ```
 
-- An `if` without `else` has no value: it can only be a statement whose arm does something with side effects, and it usually has to be written in a sync block. In this case the arm must be a block ending with `return null`: `if c then sync { println('x'); return null }`; an arm with a value (`if c then println('x')`: the call of `println` has a value) is `SemanticDiag::IfArmValueWithoutElse`.
+- **An `if` without `else` has no value.** It can only be a statement; its arm may be of any type, and what the arm gives is dropped: `if debug then println('checking')` is legal, and an arm no longer needs `return null` to make the types fit. Using it as a value (`let x = if debug then 1`, as an argument, as the operand of `return`) is the compile-time error `SemanticDiag::IfWithoutElseAsValue`. Nothing changes on the graph: a branch with two arms, the `else` not written being an empty arm, and a join that takes no value; the arm is evaluated as usual, so an arm that does something with side effects usually has to be written in a sync block. An `else {}` written and left empty is the same as none.
 - The type of the condition is `bool`; there is no "truthiness" conversion.
 
 > **A `return` in a block gives the value of that block; it does not leave the function.**
@@ -223,7 +223,7 @@ warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 
 note: the value of this 'if' is not used
 ```
 
-So there is no "early return" in Camel: write the branch as the last expression of the function body, or write `return` before it. When several conditions are tested in turn, join `if ... else if ... else ...` into one expression. The warning can be turned off with `-Wno-exit-in-unused-branch`; `return null` and a `return` without a value are not reported.
+So there is no "early return" in Camel: write the branch as the last expression of the function body, or write `return` before it. When several conditions are tested in turn, join `if ... else if ... else ...` into one expression. The warning can be turned off with `-Wno-exit-in-unused-branch`. `return null` and a `return` without a value are reported too: an arm does not need one to make the types fit, so one written there was most likely meant to leave the function.
 
 ### 6.8.2 `match`
 

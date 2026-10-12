@@ -64,7 +64,6 @@ enum class SemanticDiag : uint32_t {
     ArgumentNeedsConversion      = 0x000021,
     ReturnNeedsConversion        = 0x000022,
     LiteralOutOfRange            = 0x000023,
-    IfArmValueWithoutElse        = 0x000024,
     ImportCycle                  = 0x000025,
     ImportedFunctionUsesModuleValue = 0x000026,
     ImportNameConflict           = 0x000027,

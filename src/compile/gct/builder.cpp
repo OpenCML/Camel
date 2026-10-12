@@ -987,23 +987,9 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
     if (ctrl == nullptr) {
         return;
     }
-    if (!isThrow) {
-        // `return null` (and a bare `return`) is how an arm is given no value: an `if`
-        // without `else`, or one whose arms end in values of different types, compiles only
-        // when its arms end that way. It is not a value somebody meant to hand to a caller.
-        const auto &values = exit->atAs<AST::RepeatedLoad>(0);
-        if (values->size() == 0) {
-            return;
-        }
-        if (values->size() == 1) {
-            const auto &value = values->front();
-            if (value->type() == AST::LoadType::Data &&
-                value->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Literal &&
-                value->loadAs<AST::LiteralLoad>()->value().type() == LiteralType::Null) {
-                return;
-            }
-        }
-    }
+    // `return null` and a bare `return` are reported like any other: an arm needs no value
+    // to compile (design principles 2.10: an `if` without `else` has none, and its arm may
+    // be of any type), so one written there was most likely meant to leave the function.
     // One report per statement: the arm of `case a | b` is lowered once for each pattern.
     const auto range = exit->load()->tokenRange();
     if (!reportedExits_.insert({range.start, range.end}).second) {
@@ -1067,6 +1053,9 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
         const auto stmtType   = stmt->loadAs<AST::StmtLoad>()->stmtType();
         valueUse_.unusedCtrl  = nullptr;
         valueUse_.blockUnused = false;
+        valueUse_.stmtExpr    = stmtType == AST::StmtType::Expr && stmt->size() > 0
+                                    ? stmt->at(0).get()
+                                    : nullptr;
         if (stmtUnused && stmtType == AST::StmtType::Expr && stmt->size() > 0) {
             // An `if` / `match` written as a statement whose value nothing takes.
             const auto &expr = stmt->at(0);
@@ -1807,6 +1796,17 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     // Whether this `if` is a statement whose value nothing takes: its arms are then lowered
     // as arms of an unused branch (see ValueUse).
     const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
+    // Design principles 2.10: an `if` without `else` has no value, so it can only stand as
+    // a statement. (As the last statement of a block it gives the block no value either;
+    // what then expects one reports the missing value by the type.)
+    const bool isStatement = std::exchange(valueUse_.stmtExpr, nullptr) == ast.get();
+    // The AST gives an `if` without `else` an empty block in its place, so an `else` that
+    // is written and empty is the same thing here and in the GIR builder (buildBranch).
+    const auto &elseBlock = ast->optAtAs<AST::StmtBlockLoad>(2);
+    if (!isStatement && (!elseBlock || elseBlock->atAs<AST::RepeatedLoad>(0)->size() == 0)) {
+        diags_->of(SemanticDiag::IfWithoutElseAsValue).at(ast->load()->tokenRange()).commit();
+        throw BuildAbortException();
+    }
     const ValueUseScope valueUseScope(*this);
 
     // condition

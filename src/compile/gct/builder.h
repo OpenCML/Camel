@@ -108,6 +108,9 @@ class Builder {
         // takes (not the last statement of its block, or the last one of a block whose own
         // value nothing takes).
         const AST::Node *unusedCtrl = nullptr;
+        // The expression of the expression statement about to be lowered (an `if` without
+        // `else` is allowed there only).
+        const AST::Node *stmtExpr = nullptr;
         // Set for the block about to be lowered: nothing takes its value.
         bool blockUnused = false;
         // The unused `if` / `match` whose arm is being lowered: exits written here are its.

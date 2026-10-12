@@ -60,19 +60,16 @@ expect_output_contains = ["2 functions of that name [(x: i64) => i64; (x: f64) =
 
 [[tests]]
 name = "surface.if_without_else"
-desc = "`if c then println(...)`: the diagnostic says that the `if` has no `else` and its arm has a value, and how to write it (it named the types string and void, which the program does not show)."
-kind = "negative"
+desc = "`if c then println(...)` compiles and runs: an if without else has no value and its arm may be of any type (design principles 2.10). It used to be an error."
+kind = "behavior"
 case = "../../../cases/compile/surface/if_without_else.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::IfArmValueWithoutElse"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 5
-expect_output_contains = ["has no 'else' arm with a value", "return null"]
+expect_exit = 0
+expect_stdout_starts_with = "lt\n"
 
 [[tests]]
 name = "surface.if_without_else_ok"
-desc = "The rule is unchanged: an `if` without `else` whose arm ends with `return null` is a statement; the arm of the false one does not run."
+desc = "An arm that ends in nothing stays legal; the arm of the false one does not run."
 kind = "behavior"
 case = "../../../cases/compile/surface/if_without_else_ok.cml"
 args = ["-E", "short", "${case}"]

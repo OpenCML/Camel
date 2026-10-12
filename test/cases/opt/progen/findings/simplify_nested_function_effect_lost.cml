@@ -18,9 +18,9 @@ func main(): int sync {
     var v35 = -1;
     if (v35 <= 31) then sync {
         let n50 = g29(['']->join<'-'>);
-        return null;
+        null;
     } else sync {
-        return null;
+        null;
     };
     return 0;
 }

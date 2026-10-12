@@ -50,7 +50,6 @@ func lambda_in_arm(x: int): int sync {
         let dbl = (y: int) => { return y * 2 }
         func thrice(y: int): int { return y * 3 }
         total = dbl(x) + thrice(x)
-        return null
     }
     return total
 }
@@ -61,7 +60,6 @@ func used_inside_unused(x: int): int sync {
     if x > 0 then sync {
         let k = if x > 5 then { return 2 } else { return 1 }
         total = k
-        return null
     }
     return total
 }

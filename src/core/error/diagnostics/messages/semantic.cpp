@@ -338,19 +338,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::IfArmValueWithoutElse,
-            {
-                "IfArmValueWithoutElse",
-                "This 'if' has no 'else' arm with a value, but its 'then' arm gives a value of "
-                "type '{0}' (in function '{1}').",
-                "An 'if' without 'else' gives nothing when its condition is false, so its arm "
-                "must give nothing either. A call such as 'println(...)' has a value. When the "
-                "'if' is a statement run for its effect, end the arm with 'return null': 'if c "
-                "then sync {{ println(x); return null }}'. When its value is wanted, add an "
-                "'else' arm of the same type.",
-            },
-        },
-        {
             SemanticDiag::ImportCycle,
             {
                 "ImportCycle",
