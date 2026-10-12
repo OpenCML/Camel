@@ -926,6 +926,25 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             }
         }
     }
+    // A JOIN that reads the call as the result of an arm is a user of another kind: the arms it
+    // reads from, by position.
+    std::vector<std::pair<gc_node_ref_t, std::vector<size_t>>> joinArms;
+    for (const auto &[user, missing] : callUsers) {
+        const auto *userHeader = draft.header(user);
+        if (missing.empty() || !userHeader || userHeader->kind != GCNodeKind::Join) {
+            continue;
+        }
+        std::vector<size_t> arms;
+        const auto results = draft.withInputsOf(user);
+        for (size_t arm = 0; arm < results.size(); ++arm) {
+            if (results[arm] == funcNodeId) {
+                arms.push_back(arm);
+            }
+        }
+        if (!arms.empty()) {
+            joinArms.emplace_back(user, std::move(arms));
+        }
+    }
     const auto inlineResult = camel::runtime::inlineCallableInDraft(session, draft, funcNodeId);
     if (!inlineResult) {
         return inlineResult;
@@ -934,9 +953,56 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         if (!draft.alive(user)) {
             continue;
         }
+        std::vector<gc_node_ref_t> sources;
         for (gc_node_ref_t source : missing) {
+            if (draft.alive(source) && std::ranges::find(sources, source) == sources.end()) {
+                sources.push_back(source);
+            }
+        }
+        if (sources.empty()) {
+            continue;
+        }
+        const auto asArm = std::ranges::find(joinArms, user, &decltype(joinArms)::value_type::first);
+        if (asArm != joinArms.end()) {
+            // The call was the tail of an arm of this JOIN. What the call ran after is code
+            // of that arm, and an arm is what its tail depends on: the wait belongs on the
+            // tail. Put on the JOIN itself, it left the argument's code (which the inlined
+            // body may not read at all) between the BRCH and the JOIN in no arm; the back
+            // ends lay such code out behind the last arm and enter it by accident or never.
+            const gc_node_ref_t brch = draft.normInputsOf(user).empty()
+                                           ? kInvalidNodeRef
+                                           : draft.normInputsOf(user).front();
+            for (size_t arm : asArm->second) {
+                std::vector<gc_node_ref_t> results(
+                    draft.withInputsOf(user).begin(),
+                    draft.withInputsOf(user).end());
+                const gc_node_ref_t tail  = results[arm];
+                const auto *tailHeader    = draft.header(tail);
+                const gc_node_ref_t gated = draft.addNode(
+                    camel::runtime::DraftNodeInit{
+                        .dataIndex    = tailHeader->dataIndex,
+                        .dataType     = tailHeader->dataType,
+                        .kind         = GCNodeKind::Gate,
+                        .runtimeFlags = 0,
+                        .normInputs   = std::span<const gc_node_ref_t>(&tail, 1),
+                        .ctrlInputs   = sources,
+                    });
+                results[arm] = gated;
+                draft.setWithInputs(user, results);
+                const auto *brchHeader = brch != kInvalidNodeRef ? draft.header(brch) : nullptr;
+                if (brchHeader && brchHeader->kind == GCNodeKind::Brch &&
+                    arm < draft.branchArmsOf(brch).size()) {
+                    auto *arms = reinterpret_cast<camel::runtime::GCBranchArm *>(
+                        draft.mutablePayloadOf(brch).data() +
+                        sizeof(camel::runtime::DraftBrchPayload));
+                    arms[arm].tail = gated;
+                }
+            }
+            continue;
+        }
+        for (gc_node_ref_t source : sources) {
             const auto existing = draft.ctrlInputsOf(user);
-            if (draft.alive(source) && std::ranges::find(existing, source) == existing.end()) {
+            if (std::ranges::find(existing, source) == existing.end()) {
                 draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, source);
             }
         }

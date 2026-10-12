@@ -1,0 +1,28 @@
+/**
+ * progen finding F41 (branch arm). The lambda passed to `f15` ignores its arguments. When its
+ *   call is inlined, what used the call is made to wait on what the arguments were computed
+ *   from (`0 % 997`, the inner `if`). The call was the tail of the `case 5` arm, so its user
+ *   was the JOIN of the `match`: the JOIN itself waited on code of that arm, which no arm's
+ *   tail depended on any more.
+ * Pipeline: std::opt std::nvm (also std::opt::simplify)
+ * Expected output: (nothing)
+ * Actual: PassInternalError of the branch-arm check ("BRCH ... belongs to no arm") since that
+ *   check exists; before it the program happened to run (the stray code was laid out behind
+ *   the last arm, and entered or skipped depending on which arm was taken).
+ * Reduced by test/tools/progen from seed 7347 (generator version 2, all features).
+ */
+module opt_argument_wait_on_join
+
+func f15(a16: string, a17: string, a18: (a0: int, a1: string) => string): string {
+    return a18(0 % 997, if false then '' else '');
+}
+
+func main(): int sync {
+    let n62 = 0;
+    let n72 = match n62 {
+        case 10 => ''
+        case 5 => f15('', 'x', (p68: int, p69: string): string => '')
+        case _ => ''
+    };
+    return 0;
+}
