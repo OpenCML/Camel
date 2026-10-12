@@ -4402,13 +4402,14 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
         }
-        node = buildBranch(gct, condNode, nullptr, matchNeedsFaultArm(gct, condNode));
+        requireMatchDefault(gct, condNode);
+        node = buildBranch(gct, condNode);
     }
     LEAVE("BRCH");
     return node;
 }
 
-bool Builder::matchNeedsFaultArm(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
+void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
     using CaseType = GCT::CaseLoad::CaseType;
     bool hasValueCase = false, hasTrue = false, hasFalse = false;
     for (size_t i = 1; i < gct->size(); ++i) {
@@ -4430,25 +4431,24 @@ bool Builder::matchNeedsFaultArm(const GCT::node_ptr_t &gct, node_handle_t scrut
         }
     }
     if (!hasValueCase) {
-        return false; // an `if`
+        return; // an `if`
     }
     Type *type = valueTypeOf(nodeTypeOf(scrutinee));
     if (type == Type::Bool() && hasTrue && hasFalse) {
-        return false; // every value of the type has a case
+        return; // every value of the type has a case
     }
-    // DESIGN-QUESTION(match-default): must a `match` have `case _`? Not decided. Until it
-    // is, a `match` without one compiles with this warning and gets an arm that faults
-    // (buildBranch). Should the answer be "yes", make the warning an error here; the arm then
-    // goes away with it.
+    // Design principles 2.10: a `match` must have a default case, and the compiler adds no
+    // arm the program does not show. A `match` without `case _` is therefore refused here
+    // (the fixed patterns over `T?` / `T!` never reach this function).
     diags_->of(SemanticDiag::MatchWithoutDefault)
         .atOrigin(gct->load()->origin())
         .commit(type->toString());
-    return true;
+    throw BuildAbortException();
 }
 
 node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode,
-    const std::vector<compile_graph_ptr_t> *arms, bool faultArm) {
+    const std::vector<compile_graph_ptr_t> *arms) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, {}, nullptr);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
@@ -4591,23 +4591,6 @@ node_handle_t Builder::buildBranch(
         }
         addArm(subGraph);
     }
-    if (faultArm) {
-        // DESIGN-QUESTION(match-default): a `match` without `case _`. A branch takes its
-        // last arm when no case value equals the scrutinee, and without `case _` that arm
-        // did not exist: the schedulers read past the arms and the match gave whatever was
-        // there (0, or a crash). The last arm is now one that stops the program with the
-        // value no case matched. It claims the type of the other arms; it never returns.
-        const std::string name = bindTemporary(condNode);
-        Type *resultType       = joinType;
-        addArm(buildArmGraph(gct, [&] {
-            node_handle_t fail = applyTagOperator("__match_fail__", name, gct);
-            if (resultType != nullptr) {
-                setNodeType(fail, resultType);
-            }
-            return fail;
-        }));
-    }
-
     runtime::DraftBrchPayload payload{
         .join       = nodeIdOf(joinNode),
         .armCount   = static_cast<runtime::gc_cnt_t>(branchArms.size()),

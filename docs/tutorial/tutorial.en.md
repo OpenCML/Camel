@@ -205,7 +205,7 @@ A B D
 ```
 
 - `if ... then ... else ...` is an expression and has a value; the two arms must have the same type.
-- `match` matches on a **name** (which is why `grade` first writes `let band = ...`). A pattern is a literal or `_`, and one `case` can list several patterns with `|`. Always write `case _`: without it, if no branch matches at run time, the program terminates with a fault (the compiler gives a warning).
+- `match` matches on a **name** (which is why `grade` first writes `let band = ...`). A pattern is a literal or `_`, and one `case` can list several patterns with `|`. `case _` is required: a `match` without a default case is a compile-time error (except on a `bool` that lists both `true` and `false`).
 
 ### The easiest trap to fall into: `return` in a block
 

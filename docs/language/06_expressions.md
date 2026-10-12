@@ -302,7 +302,7 @@ func main(): int sync {
 
 缺分支、多分支或混入字面量分支是 `SemanticDiag::TaggedMatchCases`。
 
-**没有 `case _` 的 `match`（当前实现的行为，尚待确定）。** 是否必须写 `case _` 还没有裁定。目前可以不写，编译器给出警告 `SemanticDiag::MatchWithoutDefault`；运行时遇到没有任何分支匹配的值是故障 `RuntimeDiag::MatchNotExhaustive`，消息里带上那个值。对 `bool` 写全了 `case true` 与 `case false` 的 `match` 是完整的，不警告。
+**`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。两种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
 
 元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）保留，尚未实现（`SemanticDiag::ConstructNotSupported`）；用 `if` 链或先取成员再匹配。
 

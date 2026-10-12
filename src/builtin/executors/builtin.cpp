@@ -268,7 +268,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/tag_error_value", __error_value__},
         {"op/tag_error_info", __error_info__},
         {"op/tag_throw", __throw__},
-        {"op/match_fail", __match_fail__},
         {"op/error_new", __error_new__},
         {"op/parse_int", __parse_int__},
         {"op/parse_float", __parse_float__},

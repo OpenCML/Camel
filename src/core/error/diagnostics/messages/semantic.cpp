@@ -625,15 +625,25 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::IfWithoutElseAsValue,
+            {
+                "IfWithoutElseAsValue",
+                "This 'if' has no 'else' and is used as a value.",
+                "An 'if' without 'else' has no value: its arm may be of any type and what the "
+                "arm gives is dropped. It can only stand as a statement. Where a value is "
+                "wanted, add an 'else' arm of the same type ('if c then 1 else 0'), or make "
+                "the result nullable ('if c then 1 else null').",
+            },
+        },
+        {
             SemanticDiag::MatchWithoutDefault,
             {
                 "MatchWithoutDefault",
-                "This 'match' on a value of type '{0}' has no 'case _': a value that none of "
-                "its cases matches stops the program.",
-                "Add 'case _ => ...' for the values the cases do not list. Without it, meeting "
-                "such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A "
-                "'match' on a bool that has both 'case true' and 'case false' is complete and "
-                "is not reported.",
+                "This 'match' on a value of type '{0}' has no 'case _'.",
+                "A 'match' must have a default case: add 'case _ => ...' for the values the "
+                "cases do not list. A 'match' on a bool that has both 'case true' and "
+                "'case false' is complete, and so is one over 'T?' or 'T!' with its two fixed "
+                "patterns.",
             },
         },
         {

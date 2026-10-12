@@ -28,9 +28,8 @@ timeout_ms = 30000
 
 [[tests]]
 name = "attempt.kinds"
-desc = "Division and modulo by zero (int and float), an index out of range, a match no case of which matches, a failed conversion: each gives an error value with the fault's name, message and position. DESIGN-QUESTION(attempt-fault-set)."
+desc = "Division and modulo by zero (int and float), an index out of range, a failed conversion: each gives an error value with the fault's name, message and position. DESIGN-QUESTION(attempt-fault-set)."
 case = "../../../cases/consistency/attempt/kinds.cml"
-args = ["-Wno-match-without-default", "${case}", "${backend}"]
 golden = "golden/attempt_kinds.txt"
 
 [[tests]]

@@ -118,7 +118,7 @@ format `error(kind, message)` records; the file name without its directory).
 
 | Fault | Isolated | Why |
 |---|---|---|
-| `DivisionByZero`, `IndexOutOfRange`, `KeyNotFound`, `FieldNotFound`, `MatchNotExhaustive` | yes | faults of the program's own computation |
+| `DivisionByZero`, `IndexOutOfRange`, `KeyNotFound`, `FieldNotFound` | yes | faults of the program's own computation |
 | `InvalidNumberText`, `FormatFailed`, `InvalidArgument`, `OperandTypeUnsupported`, `TensorDimensionMismatch` | yes | an operator refused its operands (includes failed conversions) |
 | `FileOpenFailed`, `FileSystemError`, `JsonDecodeFailed`, `JsonEncodeUnsupported`, `RegexInvalid`, `TimeFormatFailed` | yes | a library operator that is not declared `T!` failed |
 | `RuntimeError` | yes | the generic fault of module operators (e.g. an exception raised in Python) |

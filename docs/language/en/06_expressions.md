@@ -302,7 +302,7 @@ func main(): int sync {
 
 A missing case, an extra case or a literal case mixed in is `SemanticDiag::TaggedMatchCases`.
 
-**A `match` without `case _` (behaviour of the current implementation, not yet decided).** There is no ruling yet on whether `case _` must be written. At present it may be left out, and the compiler gives the warning `SemanticDiag::MatchWithoutDefault`; at run time, meeting a value that no case matches is the fault `RuntimeDiag::MatchNotExhaustive`, whose message carries that value. A `match` on a `bool` that writes out both `case true` and `case false` is complete and gets no warning.
+**A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Two shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, and a `match` on a `T?` or `T!` with the fixed patterns above. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
 
 Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are reserved, not implemented (`SemanticDiag::ConstructNotSupported`); use an `if` chain, or take the members first and then match.
 
