@@ -1,0 +1,15 @@
+// test/cases/para/core/monte_carlo_pi.cml at a size that runs in seconds: 16 map elements, each
+// one call of the module operator sim::pi_hits (2e6 samples). Coarse elements, no allocation.
+module mc_pi
+
+import { pi_hits } from sim
+
+func main(): int sync {
+    let repeat = 16
+    let samples_per_worker = 2000000
+    let total_hits = range(0, repeat)
+        ->map<(i: int): int => pi_hits(samples_per_worker, i * 7919)>
+        ->reduce<(acc: int, cur: int): int => acc + cur, 0>
+    println(format<total_hits>('Total hits = {}'))
+    return 0
+}
