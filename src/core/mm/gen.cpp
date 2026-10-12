@@ -911,6 +911,14 @@ GenerationalAllocatorWithGC::forwardYoungRef(rtdata::Object *ref, const type::Ty
         return nullptr;
     }
     ObjectHeader *refHeader = headerOf(ref);
+    // Everything the To space holds was copied there by this collection and is final. A slot
+    // can be visited more than once (the static area of a graph is traced as a graph root and
+    // again through every active frame of that graph): copying the copy would leave the first
+    // one behind as a forwarded husk in the To space, and the next collection would follow
+    // its forwarding pointer into the space it is evacuating.
+    if (havenSpace_.contains(refHeader)) {
+        return ref;
+    }
     if (inYoungGenSpace(refHeader)) {
         return forward(ref, refType);
     }
