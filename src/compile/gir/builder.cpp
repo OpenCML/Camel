@@ -2307,6 +2307,10 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
     node_handle_t bound = isVar ? newVariable(node) : node;
+    if (isVar) {
+        // The cell is created by its declaration: that is its place in the source.
+        registerNodeOrigin(context_, bound, gct, "gir.var");
+    }
     bool success        = insertNode(ident, bound);
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
