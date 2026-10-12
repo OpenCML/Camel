@@ -95,6 +95,8 @@ enum class SemanticDiag : uint32_t {
     IgnoredSideEffect       = 0x100002,
     CapturedWriteInAsyncFunction = 0x100003,
     EffectNotExecuted            = 0x100004,
+    // 0x90 and up, clear of what other work adds after EffectNotExecuted.
+    ExitInUnusedBranch           = 0x100090,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

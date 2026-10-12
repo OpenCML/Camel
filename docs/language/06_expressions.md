@@ -385,6 +385,32 @@ let res = if len(arr) <= 1e5 then sorted(arr) else {
 }
 ```
 
+**分支臂里的 `return` / `throw`。** 分支臂是自己的子图：臂里的 `return`（或 `throw`）结束的是这条臂，
+给出的是这个 `if`／`match` 的值，**不是离开函数**（设计原则 2.1、2.4）。所以当 `if`／`match` 只是一条
+语句、它的值没有被使用时，臂里的 `return v` 什么都没做，函数继续执行后面的语句：
+
+```cml
+func safe_div(a: int, b: int): int! {
+    if b == 0 then sync { throw error('DivByZero', '...') } else sync { return a / b }
+    return 0            // 两条臂里的 throw / return 都没有效果：总是返回 0
+}
+```
+
+编译器对这种写法给出警告 `SemanticDiag::ExitInUnusedBranch`（定位在臂里的 `return`／`throw`，次要位置
+指向那个值未被使用的 `if`／`match`；可用 `-Wno-exit-in-unused-branch` 关闭）。程序的行为不变。正确的
+写法是让分支成为函数体的最后一个表达式，或在它前面写 `return`：
+
+```cml
+func safe_div(a: int, b: int): int! {
+    return if b == 0 then sync { throw error('DivByZero', '...') } else sync { return a / b }
+}
+```
+
+判定条件：`if`／`match` 是一条表达式语句，且不是所在块的最后一条语句，或者所在块本身的值没有被使用
+（例如它又是另一个未被使用的分支的臂）；值被绑定、作实参、作操作数、作 `return` 的操作数、作函数体的
+最后一个表达式时都不报。`return null`（以及不带值的 `return`）不报：没有 `else` 的 `if`、或两臂的值
+类型不同的 `if`，要靠它让臂没有值才能通过编译。臂里的 lambda 与嵌套函数有自己的函数体，不受影响。
+
 **块形式**
 
 ```cml

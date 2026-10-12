@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-108 diagnostics: 101 errors, 7 warnings.
+109 diagnostics: 101 errors, 8 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -93,6 +93,7 @@ prints one entry.
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
+| `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -2088,6 +2089,24 @@ func main(): int sync {
     return 0
 }
 ```
+
+### ExitInUnusedBranch
+
+`0x03100090` · Warn · `SemanticDiag::ExitInUnusedBranch`
+
+**Message**
+
+```text
+This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function.
+```
+
+**Help**
+
+```text
+An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the '{0}' has no effect and the function goes on with the next statement. To return from the function through a branch, make the '{1}' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
+```
+
+*No example: no test small enough to show raises it.*
 
 ## Run time and passes (`RuntimeDiag`)
 

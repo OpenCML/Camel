@@ -1,0 +1,71 @@
+/**
+ * `return` and `throw` in an arm of an `if` / `match` whose value nothing uses. An arm is a
+ * graph of its own: the exit ends the arm and gives the value of the branch, and when the
+ * branch is a statement that value goes nowhere. Each such exit gets the warning
+ * ExitInUnusedBranch; what the program does is unchanged (every function here goes on to its
+ * last statement).
+ */
+module unused_arm_exit
+
+// The exits of both arms are lost: the function returns 0 for every b.
+func safe_div(a: int, b: int): int! {
+    if b == 0 then sync { throw error('DivByZero', 'the divisor is zero') } else sync { return a / b }
+    return 0
+}
+
+// An "early return" that does not return.
+func clamp(x: int): int {
+    if x < 0 then { return 0 } else { return x }
+    return 100
+}
+
+// The same in a match.
+func name_of(k: int): string {
+    match k {
+        case 1 => { return 'one' }
+        case 2 | 3 => { return 'few' }
+        case _ => { return 'many' }
+    }
+    return 'unknown'
+}
+
+// The inner `if` is the last statement of an arm, and the outer `if` is the statement whose
+// value is not used: the inner exits give a value to the outer one, which drops it.
+func nested(a: int, b: int): int {
+    if a > 0 then {
+        if b > 0 then { return 1 } else { return 2 }
+    } else {
+        let c = a + b
+        return c
+    }
+    return 7
+}
+
+// A block written as a statement belongs to the body around it: an exit in it, inside an
+// arm, is an exit of that arm.
+func in_block(a: int): int {
+    if a > 0 then {
+        { return 1 }
+    } else 0
+    return 2
+}
+
+// `return null` is how an arm is given no value (an `if` without `else` needs it after an
+// expression statement). It is not reported.
+func no_value(a: int): int sync {
+    var total = 0
+    if a > 0 then sync {
+        total = a
+        return null
+    }
+    return total
+}
+
+func main(): int sync {
+    println(safe_div(6, 3) !! -1, safe_div(6, 0) !! -1)
+    println(clamp(-5), clamp(5))
+    println(name_of(1), name_of(3), name_of(9))
+    println(nested(1, 1), nested(-1, 0))
+    println(in_block(1), no_value(500))
+    return 0
+}

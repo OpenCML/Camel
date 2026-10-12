@@ -33,6 +33,8 @@ seed(s)
 
 - **retStmt**：**`(return | raise | throw) dataList?`**。
 - **`throw e`** 返回一个错误值，与 `return` 同构：它是所在函数（或所在分支臂）的值，不是跳转。
+  写在一个值未被使用的 `if`／`match` 的臂里时，`return v` 与 `throw e` 没有效果，编译器给出警告
+  `SemanticDiag::ExitInUnusedBranch`（见 [6.9.1](06_expressions.md)）。
   - 所在函数必须把返回类型声明为 `T!`，否则是编译期错误 `SemanticDiag::ThrowOutsideFallible`。
   - `e` 必须是错误值：用内建的 `error(kind, message)` 构造（它记下这次调用的源码位置），或是
     `case error e` 绑定的那个；否则是 `SemanticDiag::ThrowNotAnError`。

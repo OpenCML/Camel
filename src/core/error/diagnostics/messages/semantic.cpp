@@ -536,6 +536,20 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ExitInUnusedBranch,
+            {
+                "ExitInUnusedBranch",
+                "This '{0}' gives the value of the '{1}' it is in, and nothing uses that "
+                "value: it does not leave the function.",
+                "An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the "
+                "arm and gives the value of the branch, as it does in any block. Here the "
+                "branch is a statement whose value nothing takes, so the '{0}' has no effect "
+                "and the function goes on with the next statement. To return from the function "
+                "through a branch, make the '{1}' the last expression of the function body, or "
+                "write 'return' in front of it ('return if ... then ... else ...').",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

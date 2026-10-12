@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <set>
 #include <unordered_set>
 #include <iostream>
 #include <regex>
@@ -96,6 +97,34 @@ class Builder {
     bool inDeclReturnType_ = false;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
+
+    // Where the value of what is being lowered goes, as far as the warning
+    // ExitInUnusedBranch needs it. A `return` / `throw` in a branch arm ends the arm and
+    // gives the value of the `if` / `match` (an arm is a graph of its own); when nothing
+    // takes that value the statement has no effect at all, and the program most likely
+    // meant to leave the function.
+    struct ValueUse {
+        // The `if` / `match` about to be lowered that is a statement whose value nothing
+        // takes (not the last statement of its block, or the last one of a block whose own
+        // value nothing takes).
+        const AST::Node *unusedCtrl = nullptr;
+        // Set for the block about to be lowered: nothing takes its value.
+        bool blockUnused = false;
+        // The unused `if` / `match` whose arm is being lowered: exits written here are its.
+        AST::node_ptr_t unusedArmOf = nullptr;
+    };
+    ValueUse valueUse_;
+    // Restores valueUse_ when a construct with bodies of its own is left, also by an error.
+    struct ValueUseScope {
+        Builder &self;
+        ValueUse saved;
+        explicit ValueUseScope(Builder &b) : self(b), saved(b.valueUse_) {}
+        ~ValueUseScope() { self.valueUse_ = saved; }
+    };
+    std::set<std::pair<size_t, size_t>> reportedExits_;
+    // The next block lowered is an arm of `ctrl`, whose value is unused or not.
+    void enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused);
+    void reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow);
 
     void pushScope() { typeScope_ = std::make_shared<Scope<Reference, Type *>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?

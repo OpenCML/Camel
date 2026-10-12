@@ -893,6 +893,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     const bool isThrow = ast->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Throw;
     node_ptr_t exitNode =
         createNodeAs<ExitLoad>(isThrow ? ExitType::Throw : ExitType::Return);
+    reportExitInUnusedArm(ast, isThrow);
 
     // Retrieve the data nodes associated with the exit statement
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
@@ -933,6 +934,51 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     return exitNode;
 }
 
+void Builder::enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused) {
+    valueUse_.unusedCtrl  = nullptr;
+    valueUse_.blockUnused = valueUnused;
+    valueUse_.unusedArmOf = valueUnused ? ctrl : nullptr;
+}
+
+void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
+    const AST::node_ptr_t &ctrl = valueUse_.unusedArmOf;
+    if (ctrl == nullptr) {
+        return;
+    }
+    if (!isThrow) {
+        // `return null` (and a bare `return`) is how an arm is given no value: an `if`
+        // without `else`, or one whose arms end in values of different types, compiles only
+        // when its arms end that way. It is not a value somebody meant to hand to a caller.
+        const auto &values = exit->atAs<AST::RepeatedLoad>(0);
+        if (values->size() == 0) {
+            return;
+        }
+        if (values->size() == 1) {
+            const auto &value = values->front();
+            if (value->type() == AST::LoadType::Data &&
+                value->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Literal &&
+                value->loadAs<AST::LiteralLoad>()->value().type() == LiteralType::Null) {
+                return;
+            }
+        }
+    }
+    // One report per statement: the arm of `case a | b` is lowered once for each pattern.
+    const auto range = exit->load()->tokenRange();
+    if (!reportedExits_.insert({range.start, range.end}).second) {
+        return;
+    }
+    const bool isMatch =
+        ctrl->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
+    const char *keyword = isThrow ? "throw" : "return";
+    const char *branch  = isMatch ? "match" : "if";
+    diags_->of(SemanticDiag::ExitInUnusedBranch)
+        .at(range)
+        .relatedOrigin(
+            ctrl->load()->origin(),
+            std::format("the value of this '{}' is not used", branch))
+        .commit(keyword, branch);
+}
+
 /*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
@@ -960,12 +1006,44 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
     // Push a new scope for the statement block
     pushScope();
 
-    for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
+    // Whether anything takes the value of this block (see ValueUse). The value of a block is
+    // that of its last statement; the value of any other statement nothing takes.
+    // (A function or type declaration is not a statement with a value.)
+    const bool blockUnused = std::exchange(valueUse_.blockUnused, false);
+    const auto &stmts      = ast->atAs<AST::RepeatedLoad>(0);
+    const AST::Node *last  = nullptr;
+    for (const auto &stmt : *stmts) {
+        const auto stmtType = stmt->loadAs<AST::StmtLoad>()->stmtType();
+        if (stmtType != AST::StmtType::Func && stmtType != AST::StmtType::Type) {
+            last = stmt.get();
+        }
+    }
+    for (const auto &stmt : *stmts) {
         // Ensure each item in the block is a statement
         ASSERT(stmt->type() == AST::LoadType::Stmt, "Expected a statement in StmtBlock");
+        const bool stmtUnused = blockUnused || stmt.get() != last;
+        const auto stmtType   = stmt->loadAs<AST::StmtLoad>()->stmtType();
+        valueUse_.unusedCtrl  = nullptr;
+        valueUse_.blockUnused = false;
+        if (stmtUnused && stmtType == AST::StmtType::Expr && stmt->size() > 0) {
+            // An `if` / `match` written as a statement whose value nothing takes.
+            const auto &expr = stmt->at(0);
+            const auto kind  = expr->type() == AST::LoadType::Data
+                                   ? expr->loadAs<AST::DataLoad>()->dataType()
+                                   : AST::DataType::Literal;
+            if (kind == AST::DataType::IfExpr || kind == AST::DataType::MatchExpr) {
+                valueUse_.unusedCtrl = expr.get();
+            }
+        } else if (stmtType == AST::StmtType::Block) {
+            // A block written as a statement is part of this body: its exits are exits of
+            // the enclosing arm, and its value is used when the statement's is.
+            valueUse_.blockUnused = stmtUnused;
+        }
         // Process the statement and attach it to the ExecLoad node
         *execNode << visitStmt(stmt);
     }
+    valueUse_.unusedCtrl  = nullptr;
+    valueUse_.blockUnused = false;
 
     // Pop the scope after processing the block
     popScope();
@@ -1673,6 +1751,11 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     node_ptr_t brchNode = createNodeAs<BrchLoad>();
     setOriginFromAst(context_, brchNode, ast, camel::source::OriginKind::GctNode, "gct.if");
 
+    // Whether this `if` is a statement whose value nothing takes: its arms are then lowered
+    // as arms of an unused branch (see ValueUse).
+    const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
+    const ValueUseScope valueUseScope(*this);
+
     // condition
     // Process the condition expression and attach it to the branch node
     node_ptr_t condNode = visitData(ast->atAs<AST::DataLoad>(0));
@@ -1680,6 +1763,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 
     // Process the "then" block and attach it as the "True" case
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
+    enterArmOf(ast, valueUnused);
     node_ptr_t thenNode   = visitStmtBlock(thenBlock);
     node_ptr_t trueCase   = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
     setOriginFromOrigin(
@@ -1709,6 +1793,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     *brchNode << elseCase;
     if (elseNode) {
         // If an "else" block exists, process and attach it
+        enterArmOf(ast, valueUnused);
         node_ptr_t elseBlock = visitStmtBlock(elseNode);
         *elseCase << elseBlock;
     } else {
@@ -1754,6 +1839,9 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     const auto &matchExprLoad = ast->loadAs<AST::MatchExprLoad>();
     const Reference &matchRef = matchExprLoad->ref();
 
+    const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
+    const ValueUseScope valueUseScope(*this);
+
     // Create a reference node for the condition and a branch node for the match expression
     node_ptr_t dRefNode = createNodeAs<DRefLoad>(matchRef); // condition node
     node_ptr_t brchNode = createNodeAs<BrchLoad>();
@@ -1794,11 +1882,13 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
             gCaseNode = createNodeAs<CaseLoad>(
                 isError ? CaseLoad::CaseType::Error : CaseLoad::CaseType::Bind,
                 name);
+            enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseExprNode;
         } else if (caseLoadType != AST::LoadType::Null) {
             gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Value);
             node_ptr_t caseDataNode = visitData(aCaseNode->atAs<AST::DataLoad>(0));
+            enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseDataNode << caseExprNode;
             mergedInputs.push_back(nodeOrigin(caseDataNode));
@@ -1810,6 +1900,7 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
         } else {
             // Handle the "else" case
             gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+            enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseExprNode;
         }
@@ -2069,6 +2160,10 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
     }
     node_ptr_t typeNode  = createNodeAs<TypeLoad>(funcType, funcType->implMark());
+    // The body of a function or lambda is a body of its own: its value is the function's
+    // result, and its exits are the function's, wherever the function is written.
+    const ValueUseScope valueUseScope(*this);
+    valueUse_            = {};
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().toString());
     *funcNode << typeNode << stmtsNode;
