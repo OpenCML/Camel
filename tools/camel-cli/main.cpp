@@ -26,6 +26,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/module/introspect.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/core/type.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
@@ -211,6 +212,12 @@ int main(int argc, char *argv[]) {
             .maxMacroDepth     = Run::maxMacroDepth,
         },
         compileDiagsConfig);
+    // However the run ends (main returns, a fault, exit(n)), it ends by returning from here:
+    // the external resources the program still holds are released first, before the context
+    // and the modules that own their release code go away (design principles 2.9).
+    struct ReleaseExternalResources {
+        ~ReleaseExternalResources() { camel::core::rtdata::disposeAllForeignResources(); }
+    } releaseExternalResources;
     ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig);
 
     parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);

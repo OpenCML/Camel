@@ -19,9 +19,12 @@
 
 #include "camel/core/rtdata/foreign.h"
 
+#include <algorithm>
 #include <new>
 #include <ostream>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace camel::core::rtdata {
 
@@ -45,6 +48,19 @@ ForeignResourceCounters &counters() {
     return value;
 }
 
+// Every control block that exists, so that the resources still held when a run ends can be
+// released (disposeAllForeignResources). Never destroyed: blocks are released by finalizers
+// that may run while statics are torn down.
+struct LiveControlBlocks {
+    std::mutex mutex;
+    std::unordered_set<ForeignResourceControlBlock *> blocks;
+};
+
+LiveControlBlocks &liveControlBlocks() {
+    static auto *value = new LiveControlBlocks();
+    return *value;
+}
+
 uint64_t loadCounter(const std::atomic<uint64_t> &value) {
     return value.load(std::memory_order_acquire);
 }
@@ -57,6 +73,9 @@ ForeignResourceControlBlock::ForeignResourceControlBlock(
       debugId_(counters().nextDebugId.fetch_add(1, std::memory_order_acq_rel)) {
     counters().createdControlBlocks.fetch_add(1, std::memory_order_acq_rel);
     counters().liveControlBlocks.fetch_add(1, std::memory_order_acq_rel);
+    auto &live = liveControlBlocks();
+    std::lock_guard<std::mutex> lock(live.mutex);
+    live.blocks.insert(this);
 }
 
 void ForeignResourceControlBlock::retain() noexcept {
@@ -71,9 +90,16 @@ void ForeignResourceControlBlock::releaseFromWrapperFinalizer() noexcept {
 }
 
 void ForeignResourceControlBlock::release() noexcept {
-    size_t oldCount = refCount_.fetch_sub(1, std::memory_order_acq_rel);
-    if (oldCount != 1) {
-        return;
+    {
+        // Under the registry's lock, so that disposeAllForeignResources never retains a block
+        // whose last reference is being dropped.
+        auto &live = liveControlBlocks();
+        std::lock_guard<std::mutex> lock(live.mutex);
+        size_t oldCount = refCount_.fetch_sub(1, std::memory_order_acq_rel);
+        if (oldCount != 1) {
+            return;
+        }
+        live.blocks.erase(this);
     }
 
     dispose();
@@ -252,6 +278,30 @@ void ForeignResourceObject::updateRefs(
     if (control_) {
         control_->trace(relocate, type);
     }
+}
+
+size_t disposeAllForeignResources() noexcept {
+    std::vector<ForeignResourceControlBlock *> held;
+    {
+        auto &live = liveControlBlocks();
+        std::lock_guard<std::mutex> lock(live.mutex);
+        held.reserve(live.blocks.size());
+        for (ForeignResourceControlBlock *block : live.blocks) {
+            if (!block->disposed()) {
+                block->retain();
+                held.push_back(block);
+            }
+        }
+    }
+    // Newest first: a resource acquired later may depend on one acquired earlier.
+    std::sort(held.begin(), held.end(), [](const auto *a, const auto *b) {
+        return a->debugId() > b->debugId();
+    });
+    for (ForeignResourceControlBlock *block : held) {
+        block->dispose();
+        block->releaseReference();
+    }
+    return held.size();
 }
 
 ForeignResourceStats foreignResourceStats() {
