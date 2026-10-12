@@ -901,9 +901,10 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     if (dataNodes->size() > 0) {
         // Case 1: Single data node
         if (dataNodes->size() == 1) {
-            const auto &dataNode = dataNodes->front();
-            node_ptr_t d         = visitData(dataNode);
-            *exitNode << visitData(dataNode);
+            // Lowered once. It used to be lowered twice and the first result dropped: every
+            // `return` nested in the returned expression doubled the work (2^n lowerings at
+            // depth n) and repeated the diagnostics of the expression.
+            *exitNode << visitData(dataNodes->front());
         } else {
             // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
             TupleDataFactory tupleFactory;

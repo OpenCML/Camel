@@ -93,11 +93,11 @@ timeout_ms = 120000
 
 [[tests]]
 name = "capacity.perm_limit_diagnostic"
-desc = "With the permanent space limited to 2 MB, the types of 2000 functions with a lambda do not fit (about 1.7 KB each). The program is refused with RuntimeDiag::MemoryExhausted at the function that was being compiled, naming the space, the limit and CAMEL_PERM_SPACE_LIMIT_MB."
+desc = "With the permanent space limited to 2 MB, the types of 3000 functions with a lambda do not fit (about 1.4 KB each; 2000 fitted once a returned lambda was no longer lowered twice). The program is refused with RuntimeDiag::MemoryExhausted at the function that was being compiled, naming the space, the limit and CAMEL_PERM_SPACE_LIMIT_MB."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}", "limit", "perm", "2", "lambda", "2000"]
+args = ["${case}", "limit", "perm", "2", "lambda", "3000"]
 expect_exit = 0
 expect_stdout_contains = ["\"code\":\"0x04000014\"", "\"stage\":\"compile\"", "Out of memory: The permanent space (types and layouts) is exhausted while compiling function 'f", "of the limit of 2.0 MB are in use", "set CAMEL_PERM_SPACE_LIMIT_MB=<megabytes> to raise the limit (it is 2 now)", "camel exit=1"]
 expect_output_not_contains = ["bad_alloc", "UnknownInternalError", "scale total="]
