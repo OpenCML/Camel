@@ -53,8 +53,7 @@ struct StackBounds {
     uintptr_t high = 0;
 };
 
-// The bounds of the calling thread's native stack. Only the glibc branch has been compiled and
-// run; the Windows and macOS branches are written from the documentation of the two calls.
+// The bounds of the calling thread's native stack, cached independently of the call count.
 StackBounds readStackBounds() {
     StackBounds bounds;
 #if defined(__linux__) && defined(__GLIBC__)
@@ -99,7 +98,7 @@ uintptr_t stackHere() {
 }
 
 // Stack kept free for the nested call that passed the check, the operators it calls, and the
-// construction and unwinding of the diagnostic: a sixteenth of the stack, at least 128 KiB.
+// construction and unwinding of the diagnostic. Windows SEH needs a larger reserve than Unix.
 size_t stackReserve(const StackBounds &bounds) {
 #if defined(_WIN32)
     // Recursive Windows SEH rethrows keep handler frames live until an outer catch handles

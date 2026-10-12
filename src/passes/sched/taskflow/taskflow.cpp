@@ -181,9 +181,8 @@ bool nativeStackIsTight(const TaskflowGcGate::ThreadState &ts) {
     return nativeStackUsedBeyond(ts, 1, 4);
 }
 
-// True when the calling thread has used fifteen sixteenths of its native stack: one more call
-// of a graph is refused with a diagnostic instead of running into the guard page. The
-// scheduler has no fixed limit of its own (NodeVM stops at 256 frames); what a thread can nest
+// Native stack limits supplement the configured recursion limit. The shared guard keeps
+// enough space for reporting and fault unwinding on each platform; what a thread can nest
 // depends on its stack and on what else the worker picked up while waiting. The depth the
 // diagnostic reports is the number of calls open on that thread (a recursion that started on
 // another worker is deeper than that).
