@@ -19,8 +19,10 @@ and only the comparison between the two collectors within one row means anything
 
 ## 1. Summary
 
-- Both collectors pass the default test set (3,754 tests, 10 skipped). The default set runs
-  1,221 tests of the other plans a second time under safepoint poisoning, and they pass.
+- Every test of the default set (3,754 tests, 10 skipped) passes with each collector; in
+  single runs on the loaded machine three tests failed for reasons that do not depend on the
+  collector (section 4.1). The default set runs 1,221 tests of the other plans a second time
+  under safepoint poisoning, and they pass.
 - Programs that make many short-lived small values run in 0.2 to 0.8 of the time and a fifth
   to two thirds of the memory with the generational collector on `std::nvm`, `std::fvm` and
   `std::jit`; the gain is smaller on `std::prl` (0.35 to 0.95 of the time).
@@ -94,21 +96,33 @@ names mark-sweep, as `gc_jit_constants.mark_sweep` does. It was not a defect.
 ### 4.1 The default test set
 
 `node scripts/test.js` (the `smoke` and `feat` plans), once with no collector setting and once
-with `CAMEL_GC=generational` in the environment, both runs at the same time on the loaded
-machine, before this file existed:
+with `CAMEL_GC=generational` in the environment, the two runs side by side on the loaded
+machine. The pair was run twice: before this file existed, and on the final state of the
+branch.
 
 | Run | Tests | Passed | Skipped | Failed |
 |---|---|---|---|---|
-| no setting (mark-sweep) | 3,754 | 3,743 | 10 | 1: `docs.links.reader_facing` |
-| `CAMEL_GC=generational` | 3,754 | 3,742 | 10 | 2: `docs.links.reader_facing`, `gc_pacing.growth_25_prl` |
+| first pair, no setting (mark-sweep) | 3,754 | 3,743 | 10 | 1: `docs.links.reader_facing` |
+| first pair, `CAMEL_GC=generational` | 3,754 | 3,742 | 10 | 2: `docs.links.reader_facing`, `gc_pacing.growth_25_prl` |
+| final pair, no setting (mark-sweep) | 3,754 | 3,743 | 10 | 1: `unordered_foreach_smoke.nvm`, by its time limit |
+| final pair, `CAMEL_GC=generational` | 3,754 | 3,744 | 10 | 0 |
 
-`docs.links.reader_facing` failed because two documents link to this file; it passes now. The
-ten skipped tests are the `grammar.scopes.*` tests of the editor grammar.
+`docs.links.reader_facing` failed because two documents link to this file. The ten skipped
+tests are the `grammar.scopes.*` tests of the editor grammar. The other two failures come
+from the load of the machine, not from a collector:
+
+- `unordered_foreach_smoke.nvm` has a time limit of 4 s and was stopped by it while the load
+  was 41 on 18 threads. Its plan directory, run three times afterwards with the default
+  collector at a load of 13, passed each time (31 tests; this test in 1.1 to 1.2 s).
+- `gc_pacing.growth_25_prl`: see below. Its plan, run again in both modes, passed.
+
+So every test has passed with each collector, but the run with the default collector was not
+free of failures in a single pass on this machine.
 
 `gc_pacing.growth_25_prl` is a test of the main branch that expects exactly 16 major
 collections of a program under `std::prl`. Under that scheduler a collection that has been
-asked for runs when the workers reach the gate, and on a loaded machine one is sometimes late,
-so two requests become one. Repeated 30 times with each collector at a load of 35: 16
+asked for runs when the workers reach the gate; on a loaded machine the statistics show more
+requests deferred and one collection fewer. Repeated 30 times with each collector at a load of 35: 16
 collections in 27 runs with mark-sweep and in 29 with the generational collector, 15 in the
 others (the run above saw 14). It depends on the load, not on the collector, and was left as
 it is; an assertion on a range would remove it.
@@ -125,7 +139,7 @@ with the address of an unreadable page, so a C++ pointer kept across a safepoint
 report. The plan `mm.gc_poison_sweep` of the default set runs the tests of the `smoke`,
 `modules` (without `autodiff` and `onnx`), `compile`, `linear`, `para` and `trans` plans and
 of five `consistency` plans again in this mode with all their assertions: **1,221 tests, all
-passed** in both runs of 4.1.
+passed** in all four runs of 4.1.
 
 Not covered by the sweep: the model tests of `autodiff` and `onnx`, the `opt` plans, tests
 that choose their own collector settings, and tests marked `sweep = false` (wall-clock
@@ -149,10 +163,11 @@ expected output; the other two were not run to the end.
 
 ### 4.4 Soak and scale
 
-Part of the default set (`mm.gc_soak`, 22 tests, passed in both runs): a steady live set
+Part of the default set (`mm.gc_soak`, 22 tests): a steady live set
 under continuous allocation on three back ends, whose old spaces must not depend on the length
 of the run; tens of megabytes of live small objects; a parallel map with one worker asleep in
-an operator; programs that exceed a heap limit and must end with `MemoryExhausted`.
+an operator; programs that exceed a heap limit and must end with `MemoryExhausted`. Passed in
+all four runs.
 
 Not part of the default set (`test/plans/perf/gc.plan.toml`, 4 tests, passed). The numbers
 are of one run each with `CAMEL_GC_STATS=1`, `std::fvm`, load 17 to 28:
