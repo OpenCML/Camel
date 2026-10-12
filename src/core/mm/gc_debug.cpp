@@ -20,6 +20,7 @@
 #include "camel/core/mm/gen.h"
 
 #include "camel/core/mm/poison.h"
+#include "camel/core/mm/root_handle.h"
 
 #include <algorithm>
 #include <format>
@@ -89,6 +90,9 @@ std::vector<std::string> GenerationalAllocatorWithGC::rootSourceDescriptions() c
     for (const auto &entry : externalRootTracers_) {
         sources.push_back(entry.name);
     }
+    for (RootHandle *handle = rootHandles_; handle != nullptr; handle = handle->next_) {
+        sources.push_back(handle->name());
+    }
     return sources;
 }
 
@@ -104,7 +108,7 @@ void GenerationalAllocatorWithGC::verifyHeapOrThrow(std::string_view where) {
 }
 
 size_t GenerationalAllocatorWithGC::rootSourceCountUnlocked() const {
-    return (rootObjectSet_ ? 1 : 0) + externalRootTracers_.size();
+    return (rootObjectSet_ ? 1 : 0) + externalRootTracers_.size() + rootHandleCount_;
 }
 
 std::string
@@ -512,20 +516,21 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
         }
     }
 
-    for (const auto &entry : externalRootTracers_) {
-        entry.tracer(
-            [&](rtdata::Object *ref,
-                const type::Type *refType,
-                const rtdata::RefTraceInfo &info) -> rtdata::Object * {
-                std::string path = entry.name;
-                std::string edge = info.describe();
-                if (!edge.empty()) {
-                    path += " -> ";
-                    path += edge;
-                }
-                return validateRef(ref, refType, info, std::move(path));
-            });
-    }
+    forEachRootSourceUnlocked(
+        [&](std::string_view name, const std::function<void(const RefRelocator &)> &trace) {
+            trace(
+                [&](rtdata::Object *ref,
+                    const type::Type *refType,
+                    const rtdata::RefTraceInfo &info) -> rtdata::Object * {
+                    std::string path(name);
+                    std::string edge = info.describe();
+                    if (!edge.empty()) {
+                        path += " -> ";
+                        path += edge;
+                    }
+                    return validateRef(ref, refType, info, std::move(path));
+                });
+        });
 
     while (!stack.empty()) {
         PendingTrace current = std::move(stack.back());
@@ -562,7 +567,12 @@ void GenerationalAllocatorWithGC::verifyRememberedSetUnlocked(
     }
 
     auto verifyOldRegion = [&](const auto &allocator, std::string_view regionName) {
-        allocator.iterateAllocated([&](ObjectHeader *header) {
+        // The space is walked first and its objects examined afterwards: the walk holds the
+        // lock of the space, and examining an object asks the spaces which of them holds what
+        // it refers to (for the large-object space that is the same lock).
+        std::vector<ObjectHeader *> headers;
+        allocator.iterateAllocated([&](ObjectHeader *header) { headers.push_back(header); });
+        const auto examine = [&](ObjectHeader *header) {
             if (!header || !header->isValid()) {
                 return;
             }
@@ -590,7 +600,10 @@ void GenerationalAllocatorWithGC::verifyRememberedSetUnlocked(
                         reinterpret_cast<uintptr_t>(edge.target)));
                 }
             }
-        });
+        };
+        for (ObjectHeader *header : headers) {
+            examine(header);
+        }
     };
 
     verifyOldRegion(elderGenSpace_, "auto.elder");

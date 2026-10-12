@@ -145,6 +145,43 @@ void GenerationalAllocatorWithGC::registerExternalRootTracer(
         ExternalRootTracerEntry{owner, std::move(name), std::move(tracer)});
 }
 
+void GenerationalAllocatorWithGC::linkRootHandle(RootHandle *handle) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    handle->prev_ = nullptr;
+    handle->next_ = rootHandles_;
+    if (rootHandles_) {
+        rootHandles_->prev_ = handle;
+    }
+    rootHandles_ = handle;
+    ++rootHandleCount_;
+}
+
+void GenerationalAllocatorWithGC::unlinkRootHandle(RootHandle *handle) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (handle->prev_) {
+        handle->prev_->next_ = handle->next_;
+    } else {
+        rootHandles_ = handle->next_;
+    }
+    if (handle->next_) {
+        handle->next_->prev_ = handle->prev_;
+    }
+    handle->prev_ = handle->next_ = nullptr;
+    --rootHandleCount_;
+}
+
+void GenerationalAllocatorWithGC::forEachRootSourceUnlocked(
+    const std::function<
+        void(std::string_view name, const std::function<void(const RefRelocator &)> &trace)>
+        &visit) {
+    for (const auto &entry : externalRootTracers_) {
+        visit(entry.name, entry.tracer);
+    }
+    for (RootHandle *handle = rootHandles_; handle != nullptr; handle = handle->next_) {
+        visit(handle->name_, [handle](const RefRelocator &relocate) { handle->trace(relocate); });
+    }
+}
+
 void GenerationalAllocatorWithGC::unregisterExternalRootTracer(const void *owner) {
     std::lock_guard<std::mutex> lock(mutex_);
     std::erase_if(externalRootTracers_, [owner](const auto &entry) {
@@ -182,6 +219,21 @@ void GenerationalAllocatorWithGC::writeBarrier(
     const type::Type *storedType) {
     if (!enableYoungGenCopying_ || !ownerObject || !storedObject || !storedType ||
         !storedType->isGCTraced()) {
+        return;
+    }
+    // The common cases are decided without the lock. The bounds of the young spaces change
+    // only inside a collection, when no other thread runs a barrier.
+    //  - A young owner needs no entry: the collector reaches it by copying it.
+    //  - A target that is neither young nor born old since the last minor collection is not
+    //    something a minor collection moves or has to scan.
+    const auto isYoungAddress = [this](rtdata::Object *object) {
+        return birthSpace_.contains(object) || havenSpace_.contains(object) ||
+               cacheSpace_.contains(object);
+    };
+    if (isYoungAddress(ownerObject)) {
+        return;
+    }
+    if (!isYoungAddress(storedObject) && !anyFreshOld_.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -541,6 +593,7 @@ void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t
     objectTypes_.erase(header);
     if (enableYoungGenCopying_) {
         freshOld_.insert(header);
+        anyFreshOld_.store(true, std::memory_order_release);
     }
     // Large objects never exhaust a space, so pace their reclamation by volume:
     // once the budget is spent, ask for a major collection at the next safepoint.
@@ -574,6 +627,7 @@ void *GenerationalAllocatorWithGC::allocElderUnlocked(size_t payloadSize, size_t
     objectTypes_.erase(header);
     if (enableYoungGenCopying_) {
         freshOld_.insert(header);
+        anyFreshOld_.store(true, std::memory_order_release);
     }
     if (UNLIKELY(elderBytesSinceSweep_ >= elderBudget_) &&
         pendingSafepointCollection_ != CollectionKind::Major &&
@@ -739,6 +793,9 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
         for (const auto &entry : externalRootTracers_) {
             entry.tracer(relocateYoung);
         }
+        for (RootHandle *handle = rootHandles_; handle != nullptr; handle = handle->next_) {
+            handle->trace(relocateYoung);
+        }
 
         // 3. Process old-to-young references. Entries are retained after relocation while the
         // old object still points into the young generation; clearing them blindly would lose the
@@ -767,6 +824,7 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
         scanRelocatedObjects();
         // From here on "young" means young only: nothing is fresh any more.
         freshOld_.clear();
+        anyFreshOld_.store(false, std::memory_order_release);
         // Keep the remembered owners that still point at a young object (the scan above may
         // have promoted their targets), and remember the promoted and born-old objects that do.
         rememberedSet_.clear();
@@ -1136,15 +1194,19 @@ void GenerationalAllocatorWithGC::markPhase() {
             }
         }
     }
+    const RefRelocator markRef =
+        [this](rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &)
+        -> rtdata::Object * {
+        if (ref) {
+            markObject(ref, refType);
+        }
+        return ref;
+    };
     for (const auto &entry : externalRootTracers_) {
-        entry.tracer(
-            [this](rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &)
-                -> rtdata::Object * {
-                if (ref) {
-                    markObject(ref, refType);
-                }
-                return ref;
-            });
+        entry.tracer(markRef);
+    }
+    for (RootHandle *handle = rootHandles_; handle != nullptr; handle = handle->next_) {
+        handle->trace(markRef);
     }
 }
 

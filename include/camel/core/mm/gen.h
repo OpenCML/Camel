@@ -205,6 +205,8 @@ extern std::atomic<uint32_t> nativeCodeDepth;
 GrowableFreeListAllocator &graphSpace();
 GrowableBumpAllocator &permSpace();
 
+class RootHandle;
+
 class GenerationalAllocatorWithGC : public IAllocator {
   public:
     using RefRelocator       = rtdata::Object::RefRelocator;
@@ -326,6 +328,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void registerExternalRootTracer(const void *owner, std::string name, ExternalRootTracer tracer);
 
     void unregisterExternalRootTracer(const void *owner);
+
+    // RootHandle registration (root_handle.h): constant time, no allocation.
+    void linkRootHandle(RootHandle *handle);
+    void unlinkRootHandle(RootHandle *handle);
 
     void configureDebug(DebugConfig config);
 
@@ -507,6 +513,14 @@ class GenerationalAllocatorWithGC : public IAllocator {
         ExternalRootTracer tracer;
     };
     std::vector<ExternalRootTracerEntry> externalRootTracers_;
+    RootHandle *rootHandles_ = nullptr; // Intrusive list, newest first
+    size_t rootHandleCount_  = 0;
+    // Calls every registered root source: the external tracers and the root handles. `visit`
+    // receives the name of the source and a function that traces it with a relocator.
+    void forEachRootSourceUnlocked(
+        const std::function<
+            void(std::string_view name, const std::function<void(const RefRelocator &)> &trace)>
+            &visit);
     struct RememberedSetEntry {
         rtdata::Object *object = nullptr;
         const type::Type *type = nullptr;
@@ -523,6 +537,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // object), which is every way such an object can be reached: a store of it into an older
     // object goes through the barrier, which remembers the owner.
     std::unordered_set<ObjectHeader *> freshOld_;
+    std::atomic<bool> anyFreshOld_{false}; // freshOld_ is not empty (read by the barrier)
     // Young objects with a finalizer (noteFinalizable). A minor collection frees dead young
     // objects by resetting their spaces, without visiting them: these are the ones it must
     // visit. Old objects are visited by the sweep.
