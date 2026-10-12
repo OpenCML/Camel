@@ -22,6 +22,7 @@
 #include "camel/core/mm/poison.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
@@ -97,6 +98,13 @@ void *GenerationalAllocatorWithGC::alloc(size_t payloadSize, size_t align) {
 void GenerationalAllocatorWithGC::free(void *ptr) {
     (void)ptr;
     ASSERT(false, "GenerationalAllocatorWithGC does not support manual free");
+}
+
+void GenerationalAllocatorWithGC::noteFinalizable(void *payload) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (enableYoungGenCopying_ && payload && inYoungGenSpace(headerOf(payload))) {
+        youngFinalizables_.push_back(static_cast<rtdata::Object *>(payload));
+    }
 }
 
 bool GenerationalAllocatorWithGC::isObjectAddressStable(rtdata::Object *object) const {
@@ -232,48 +240,69 @@ class SafepointScope {
 } // namespace
 
 void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    SafepointScope atSafepoint(atSafepoint_);
-    ++stats_.safepoints;
-    if (debugConfig_.stressEveryNSafepoints != 0 &&
-        stats_.safepoints % debugConfig_.stressEveryNSafepoints == 0) {
-        requestStressCollectionUnlocked("safepoint interval");
-    }
-    if (debugConfig_.poisonAtSafepoints) {
-        // Every safepoint moves every young object (minorGCUnlocked poisons what they leave).
-        requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "safepoint poisoning");
-    }
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        SafepointScope atSafepoint(atSafepoint_);
+        ++stats_.safepoints;
+        if (debugConfig_.stressEveryNSafepoints != 0 &&
+            stats_.safepoints % debugConfig_.stressEveryNSafepoints == 0) {
+            requestStressCollectionUnlocked("safepoint interval");
+        }
+        if (collectionInhibit_.load() != 0) {
+            // A NoCollectionScope is open: native code holds raw pointers across this
+            // safepoint. Whatever was asked for stays pending.
+            ++stats_.inhibitedSafepoints;
+            return;
+        }
+        if (debugConfig_.poisonAtSafepoints) {
+            // Every safepoint moves every young object (minorGCUnlocked poisons what they leave).
+            requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "safepoint poisoning");
+        }
 
-    CollectionKind requested        = pendingSafepointCollection_;
-    pendingSafepointCollection_     = CollectionKind::None;
-    const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
-    collectAtSafepointUnlocked(requested, gcReason);
-    pendingCause_ = {};
-    publishSafepointSlowPathUnlocked();
+        CollectionKind requested        = pendingSafepointCollection_;
+        pendingSafepointCollection_     = CollectionKind::None;
+        const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
+        collectAtSafepointUnlocked(requested, gcReason);
+        pendingCause_ = {};
+        publishSafepointSlowPathUnlocked();
+    }
+    // The collection is over and the allocator unlocked: release what the wrappers it
+    // found dead were holding (see ForeignResourceObject::finalize).
+    rtdata::runDeferredForeignReleases();
 }
 
 void GenerationalAllocatorWithGC::minorGC() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    SafepointScope atSafepoint(atSafepoint_);
-    ++stats_.safepoints;
-    requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "manual minor GC");
-    CollectionKind requested    = pendingSafepointCollection_;
-    pendingSafepointCollection_ = CollectionKind::None;
-    collectAtSafepointUnlocked(requested, "manual minor GC");
-    pendingCause_ = {};
-    publishSafepointSlowPathUnlocked();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        SafepointScope atSafepoint(atSafepoint_);
+        ++stats_.safepoints;
+        requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "manual minor GC");
+        CollectionKind requested    = pendingSafepointCollection_;
+        pendingSafepointCollection_ = CollectionKind::None;
+        collectAtSafepointUnlocked(requested, "manual minor GC");
+        pendingCause_ = {};
+        publishSafepointSlowPathUnlocked();
+    }
+    // The collection is over and the allocator unlocked: release what the wrappers it
+    // found dead were holding (see ForeignResourceObject::finalize).
+    rtdata::runDeferredForeignReleases();
 }
 
 void GenerationalAllocatorWithGC::majorGC() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    SafepointScope atSafepoint(atSafepoint_);
-    ++stats_.safepoints;
-    requestCollectionAtSafepointUnlocked(CollectionKind::Major, "manual major GC");
-    CollectionKind requested    = pendingSafepointCollection_;
-    pendingSafepointCollection_ = CollectionKind::None;
-    collectAtSafepointUnlocked(requested, "manual major GC");
-    pendingCause_ = {};
-    publishSafepointSlowPathUnlocked();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        SafepointScope atSafepoint(atSafepoint_);
+        ++stats_.safepoints;
+        requestCollectionAtSafepointUnlocked(CollectionKind::Major, "manual major GC");
+        CollectionKind requested    = pendingSafepointCollection_;
+        pendingSafepointCollection_ = CollectionKind::None;
+        collectAtSafepointUnlocked(requested, "manual major GC");
+        pendingCause_ = {};
+        publishSafepointSlowPathUnlocked();
+    }
+    // The collection is over and the allocator unlocked: release what the wrappers it
+    // found dead were holding (see ForeignResourceObject::finalize).
+    rtdata::runDeferredForeignReleases();
 }
 
 bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
@@ -748,8 +777,7 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
         // 5. Finalize dead young wrappers, then reset Birth and Cache. Forwarded source objects
         // still have a live copy in Haven/Elder, so finalizing only unforwarded payloads preserves
         // the "moving the wrapper does not retain/release the native resource" contract.
-        finalizeUnforwardedObjectsIn(birthSpace_);
-        finalizeUnforwardedObjectsIn(cacheSpace_);
+        finalizeDeadYoungUnlocked();
         if (debugConfig_.poisonAtSafepoints) {
             // Whatever still points at the objects that were here reads the poison word from
             // now on, and the addresses are not handed out again while a quarter of the space
@@ -829,7 +857,14 @@ bool GenerationalAllocatorWithGC::isPreciseGCType(const type::Type *objectType) 
 
 void GenerationalAllocatorWithGC::recordObjectTypeUnlocked(
     rtdata::Object *object, const type::Type *objectType) {
-    if (!isPreciseGCType(objectType)) {
+    if (!isPreciseGCType(objectType) || !object) {
+        return;
+    }
+    // Layouts are kept for old objects only (the remembered set and the verifier ask for
+    // them). A young object is always reached with its layout, and keeping one entry per
+    // young object made every minor collection pay for the dead ones too.
+    if (birthSpace_.contains(object) || havenSpace_.contains(object) ||
+        cacheSpace_.contains(object)) {
         return;
     }
     if (ObjectHeader *header = autoHeaderForPayload(object)) {
@@ -887,15 +922,23 @@ void GenerationalAllocatorWithGC::rememberOldObjectIfYoungRefsUnlocked(
     }
 }
 
-void GenerationalAllocatorWithGC::finalizeUnforwardedObjectsIn(BumpPointerAllocator &allocator) {
-    std::vector<ObjectHeader *> deadObjects;
-    allocator.iterateAllocated([&](ObjectHeader *header) {
-        objectTypes_.erase(header);
+void GenerationalAllocatorWithGC::finalizeDeadYoungUnlocked() {
+    // Before the From spaces are reset: their headers still say what was copied. A copied
+    // wrapper is the same wrapper (the copy owns the resource; nothing is retained or
+    // released by the move) and stays on the list while it is young.
+    std::vector<rtdata::Object *> stillYoung;
+    for (rtdata::Object *object : youngFinalizables_) {
+        ObjectHeader *header = headerOf(object);
         if (!header->forwarded()) {
-            deadObjects.push_back(header);
+            object->finalize();
+            continue;
         }
-    });
-    finalizeObjects(deadObjects);
+        auto *moved = static_cast<rtdata::Object *>(header->forwardedAddr());
+        if (inYoungGenSpace(headerOf(moved))) {
+            stillYoung.push_back(moved);
+        }
+    }
+    youngFinalizables_.swap(stillYoung);
 }
 
 void GenerationalAllocatorWithGC::finalizeObjects(const std::vector<ObjectHeader *> &objects) {

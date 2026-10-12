@@ -37,6 +37,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
@@ -79,6 +80,12 @@ slot_t exportKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         }
     }
     try {
+        // The export simplifies the function with the passes of the pipeline, macro expansion
+        // included, and the macro evaluator reaches safepoints. This kernel and the exporter
+        // hold the function, the examples, the path and every constant they translate as raw
+        // slots (and key tables by their addresses), so nothing may move until it is done.
+        // Its allocation is bounded by the size of the exported graph.
+        camel::core::mm::NoCollectionScope noCollection;
         const camel::onnx::Model model = camel::onnx::exportFunction(ctx, fn, examples, options);
         camel::onnx::writeModelFile(model, path->toString());
     } catch (const camel::onnx::ExportError &e) {

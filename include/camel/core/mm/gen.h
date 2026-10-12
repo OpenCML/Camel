@@ -254,6 +254,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     struct RuntimeStats {
         uint64_t allocations                  = 0;
         uint64_t safepoints                   = 0;
+        uint64_t inhibitedSafepoints          = 0; // Reached inside a NoCollectionScope
         uint64_t deferredCollections          = 0;
         uint64_t requestedCollections         = 0;
         uint64_t elderOverflowAllocations     = 0;
@@ -311,6 +312,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void *alloc(size_t payloadSize, size_t align = alignof(slot_t)) override;
 
     void free(void *ptr) override;
+
+    void noteFinalizable(void *payload) override;
 
     bool isObjectAddressStable(rtdata::Object *object) const;
 
@@ -378,6 +381,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void majorGC();
 
     bool youngGenCopyingEnabled() const { return enableYoungGenCopying_; }
+
+    // See NoCollectionScope.
+    void inhibitCollections() noexcept { collectionInhibit_.fetch_add(1); }
+    void allowCollections() noexcept { collectionInhibit_.fetch_sub(1); }
 
   private:
     void *allocUnlocked(size_t payloadSize, size_t align = alignof(slot_t));
@@ -484,6 +491,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // else (an allocation, a barrier) would move or free objects under C++ code that holds
     // them; it is refused with a logic error instead.
     bool atSafepoint_ = false;
+    // Open NoCollectionScopes. While it is not zero a safepoint collects nothing; what was
+    // asked for stays pending.
+    std::atomic<uint32_t> collectionInhibit_{0};
     // Untyped roots are reserved for graph carriers whose updateRefs implementation owns its
     // layout. Runtime frames and temporary values must register typed external tracers instead.
     std::vector<rtdata::Object *> *rootObjectSet_{};
@@ -509,6 +519,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // object), which is every way such an object can be reached: a store of it into an older
     // object goes through the barrier, which remembers the owner.
     std::unordered_set<ObjectHeader *> freshOld_;
+    // Young objects with a finalizer (noteFinalizable). A minor collection frees dead young
+    // objects by resetting their spaces, without visiting them: these are the ones it must
+    // visit. Old objects are visited by the sweep.
+    std::vector<rtdata::Object *> youngFinalizables_;
     // Graph carriers whose static area this minor collection has traced. Program graphs are
     // roots; a graph created while the program runs is reached through a Function value.
     std::unordered_set<rtdata::Object *> minorTracedGraphs_;
@@ -555,7 +569,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void rememberOldObjectIfYoungRefsUnlocked(rtdata::Object *object, const type::Type *objectType);
 
-    void finalizeUnforwardedObjectsIn(BumpPointerAllocator &allocator);
+    // Runs the finalizers of the young objects this minor collection did not copy.
+    void finalizeDeadYoungUnlocked();
 
     void finalizeObjects(const std::vector<ObjectHeader *> &objects);
 
@@ -635,6 +650,26 @@ class GenerationalAllocatorWithGC : public IAllocator {
 };
 
 GenerationalAllocatorWithGC &autoSpace();
+
+/// While one is alive, safepoints do not collect: requests stay pending and are served by the
+/// first safepoint after the last scope has closed.
+///
+/// For native code that holds raw object pointers and, in the same call, runs something that
+/// reaches safepoints which it cannot make hold handles instead: an operator that runs passes
+/// or the macro evaluator over values it was given (onnx.export_model). It bounds nothing:
+/// what is allocated inside the scope is not reclaimed before it closes, so it must not be
+/// held around work whose allocation is not bounded by the size of its input, and never
+/// around the execution of a program. It is not a substitute for RootHandle.
+class NoCollectionScope final {
+  public:
+    NoCollectionScope() : allocator_(autoSpace()) { allocator_.inhibitCollections(); }
+    ~NoCollectionScope() { allocator_.allowCollections(); }
+    NoCollectionScope(const NoCollectionScope &)            = delete;
+    NoCollectionScope &operator=(const NoCollectionScope &) = delete;
+
+  private:
+    GenerationalAllocatorWithGC &allocator_;
+};
 
 inline bool autoSpaceSafepointSlowPathEnabled() noexcept {
     return detail::autoSpaceSafepointSlowPath.load(std::memory_order_acquire);
