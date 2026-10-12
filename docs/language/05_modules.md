@@ -47,7 +47,9 @@ func main(): int sync {
 
 | 模块 | 内容 |
 |---|---|
-| `math` | `abs`、`sqrt`、`exp`、`floor`、`ceil`、`round`、`hex`、`bin`、`oct` |
+| `str` | 字符串：按字节的切分、修剪、大小写、替换、查找、截取；按码点的计数、读取、编解码 |
+| `array` | 数组：`reverse`、`take`、`drop`、`unique`、`find`、`sum`、`min`、`max`、`sort_by`、`flat_map` 等（用 Camel 写的泛型函数） |
+| `math` | 常量 `pi()`、`e()`；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
 | `random` | `seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle` |
 | `time` | `now`、`strftime`、`strptime` |
 | `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk` |
@@ -55,10 +57,12 @@ func main(): int sync {
 | `os`、`sys` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
 | `re` | `test` |
 | `algo` | `sort`、`sorted`、`merge_sorted_arrays` 等排序函数 |
-| `statistics` | `mean`、`stdev` |
+| `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
 | `para` | `unordered_foreach`、`unordered_reduce` |
 | `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出 |
 | `python` | 嵌入 Python（需要构建时启用） |
+
+前十三个模块的每个函数见 [标准库参考](../stdlib-reference.md)，约定见 [5.6](#56-标准库)。
 
 ## 5.3 导出
 
@@ -131,7 +135,11 @@ func main(): int sync {
 
 ## 5.5 `use`
 
-`use 名字 = 限定名` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。要给一个函数起短名字，用 `let`：`let sq = math::sqrt` 不适用于代表一组重载的名字，此时写一个 lambda：`let sq = (x: float): float => math::sqrt(x)`。
+`use 名字 = 限定名` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。替代写法：
+
+- 直接引入这个名字：`import { sqrt } from math`。
+- 要换一个名字时用 `let`：`let sq = math::sqrt`。
+- 代表一组重载的名字没有单一的函数值，不能用 `let` 绑定；这时写一个 lambda：`let sq = (x: float): float => math::sqrt(x)`。
 
 ## 5.6 标准库
 

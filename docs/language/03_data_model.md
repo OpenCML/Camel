@@ -86,6 +86,7 @@ println(xs[0], len(xs), grid[0][1])
   | `zip(xs, ys)` | `(x, y)` 元组的数组 |
   | `strs->join<sep>` | 把 `string[]` 连成一个字符串 |
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
+  | `array` 模块 | `reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`any`、`all`、`count`、`sum`、`min`、`max`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md) |
   | `xs->append<v>`、`xs->extend<ys>` | **原地修改**，`xs` 必须是 `var`（见 3.6） |
 
 ### 3.3.2 元组
@@ -120,7 +121,7 @@ println(p, q.x)
 
 ### 3.3.4 字符串
 
-字符串是不可变的字节序列。现有的操作：
+字符串是不可变的字节序列，长度与下标都按字节。内建的操作：
 
 | 写法 | 结果 |
 |---|---|
@@ -130,8 +131,26 @@ println(p, q.x)
 | `string(x)`、`int(s)`、`float(s)`、`parse_int(s)`、`parse_float(s)` | 转换，见 3.2 |
 | `fmt->format<a, b, ...>` | 格式化：`{}` 依次取实参，`{:.2f}`、`{:5d}`、`{:.17g}` 等指定格式；实参不够是故障 |
 | `strs->join<sep>` | 连接字符串数组 |
+| `s[i]` | 第 `i` 个字节，结果是只含这一个字节的字符串；越界是故障 |
 
-按字节取下标 `s[i]` 目前不可用：它能通过编译，运行时得到故障 `RuntimeDiag::OperandTypeUnsupported`。切分、截取、查找、大小写转换以及按码点读写的算子尚未提供。
+其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：按字节的 `split`、`trim`、`to_upper`、`to_lower`、`replace`、`find`、`substr`、`starts_with`、`ends_with`、`repeat`、`bytes`；按码点的 `char_count`、`char_at`、`char_substr`、`codepoints`、`from_codepoints`。
+
+```cml
+import { split, trim, to_upper, char_count } from str
+
+func main(): int sync {
+    println('a, b ,c'->split<','>->map<(w: string): string => trim(w)>)
+    println('héllo'->to_upper, len('héllo'), char_count('héllo'), 'hello'[1])
+    return 0
+}
+```
+
+```text
+[a, b, c]
+HéLLO 6 5 e
+```
+
+`s[i]` 的结果是单字节字符串还是数值，是当前实现的行为，尚待确定。
 
 ### 3.3.5 不能比较的值
 
@@ -173,7 +192,7 @@ error DivByZero: the divisor is zero
 
 规则：
 
-- `T?`、`T!` 与 `T` 是不同的类型。这两种值可以保存、传递、返回、打印，但**不能当作 `T` 使用**：没有运算符或算子接受它们，也不能取成员。只能用 `??`、`!!`、`?->`（[6.6](06_expressions.md#66-空值与错误的运算符)）或 `match` 的固定模式（[6.8.2](06_expressions.md#682-match)）拆开。
+- `T?`、`T!` 与 `T` 是不同的类型。这两种值可以保存、传递、返回、打印，但**不能当作 `T` 使用**：算术、比较等运算符与接受 `T` 的函数都不接受它们，也不能对它们取成员。只能用 `??`、`!!`、`?->`（[6.6](06_expressions.md#66-空值与错误的运算符)）或 `match` 的固定模式（[6.8.2](06_expressions.md#682-match)）拆开。
 - **`T` 不会自己变成 `T?`/`T!`。** 进入这两种形式的写法只有：
   - `v as T?`、`v as T!`；
   - 带类型的声明 `let x: T? = v`；

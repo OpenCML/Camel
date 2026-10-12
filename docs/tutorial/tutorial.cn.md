@@ -20,7 +20,7 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 [9 错误处理](#9-错误处理) ·
 [10 可空的值](#10-可空的值) ·
 [11 映射与集合](#11-映射与集合) ·
-[12 模块](#12-模块) ·
+[12 模块与标准库](#12-模块与标准库) ·
 [13 看图](#13-看图) ·
 [14 换遍](#14-换遍) ·
 [15 张量与模型的导出](#15-张量与模型的导出) ·
@@ -109,7 +109,7 @@ func main(): int sync {
 - **数值类型之间不做隐式转换。** `n * ratio` 是编译期错误，要写 `float(n) * ratio`。
 - `let` 是不可变的名字，`var` 是可变的变量。Camel 崇尚不可变：大多数程序几乎用不到 `var`。
 - **字段与元素不能赋值**（`p.x = 5`、`xs[0] = 5` 是错误）。要“修改”就造一个新值：`{ x: 5, y: p.y }`、`concat(xs, [4])`。
-- 字符串用单引号或双引号都行。字符串按字节：`len('中文')` 是 6。
+- 字符串用单引号或双引号都行。字符串按字节：`len('中文')` 是 6。切分、修剪、查找等函数在 `str` 模块里（第 12 节）。
 - 两个书写上的细节：调用的括号要紧贴函数名（`f(1)`，不是 `f (1)`）；减号两边留空格（`n - 1`，`n-1` 会被读成 `n` 和字面量 `-1`）。
 
 ## 3. 函数
@@ -292,6 +292,45 @@ item c
 - `(x: int): int => x * x` 是 lambda。传给 `map` 的函数写在尖括号里，因为它是 `map` 的 `with` 参数：数组是流过的数据，函数是配置。
 - `map`、`filter` 的各个元素之间没有先后，并行的后端可以同时算它们，结果仍按位置排列；`reduce`、`foreach` 按元素顺序执行。
 - `foreach` 里的 lambda 写的是 `=> sync { ... }`：要产生效应的函数体必须是同步块。下一节解释。
+
+### 反例：`map` 的元素函数里不要放有状态的调用
+
+`map` 的各个元素之间**没有执行顺序的约定**。元素函数是纯的时候这无关紧要；一旦它调用了有状态的东西，结果就取决于哪个元素先算。[`examples/05_map_order.cml`](examples/05_map_order.cml) 用随机数发生器演示（`randint` 每调用一次，隐藏的状态前进一步）：
+
+```cml
+module map_order
+
+import { seed, randint } from random
+
+func main(): int sync {
+    seed(42)
+    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
+    let drawn = range(0, 8)->map<(i: int): int => randint(0, 99)>
+    println(drawn)
+
+    seed(42)
+    // reduce runs in element order on every back end.
+    let ordered = range(0, 8)->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    println(ordered)
+    return 0
+}
+```
+
+在顺序执行的后端上（默认的 `std::nvm`，以及 `std::fvm`、`std::jit`），两行相同，每次运行都一样：
+
+```text
+[75, 63, 75, 13, 90, 9, 57, 37]
+[75, 63, 75, 13, 90, 9, 57, 37]
+```
+
+换成并行调度 `camel docs/tutorial/examples/05_map_order.cml std::prl`，第一行的顺序就不再有保证，每次运行可能不同；下面是其中一次的输出：
+
+```text
+[37, 57, 9, 90, 13, 75, 63, 75]
+[75, 63, 75, 13, 90, 9, 57, 37]
+```
+
+这是语言规定的行为（设计原则 2.7），不是缺陷：正因为元素之间没有顺序，`map` 才能并行。第二行用的 `reduce` 按元素顺序执行，在所有后端上结果相同。规则很简单：**传给 `map`、`filter` 的函数保持纯；必须按顺序做的事用 `foreach`、`reduce` 或尾递归。**
 
 ## 6. 按依赖求值、sync 与 wait
 
@@ -689,7 +728,7 @@ func main(): int sync {
 - `m[k]` 是查找，结果是 `V?`，所以后面跟 `?? 默认值`。
 - 遍历：先 `keys(m)`、`items(m)` 取出数组，再用 `map`、`reduce`、`foreach`。
 
-## 12. 模块
+## 12. 模块与标准库
 
 [`examples/shapes.cml`](examples/shapes.cml) 是一个库模块，用 `export` 标出对外可见的名字：
 
@@ -734,7 +773,70 @@ func main(): int sync {
 ```
 
 - `import { a, b } from m` 引入列出的名字；`import m` 只引入命名空间，用 `m::name` 访问。
-- 同目录下的 `.cml` 文件按文件名被找到。随 Camel 提供的模块有 `math`、`random`、`time`、`fs`、`json`、`os`、`sys`、`algo`、`tensor`、`nn`、`autodiff`、`onnx` 等（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。
+- 同目录下的 `.cml` 文件按文件名被找到。
+
+### 标准库
+
+随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`algo`、`random`、`time`、`fs`、`json`、`os`、`sys`、`re`、`para`，以及张量一系的 `tensor`、`nn`、`autodiff`、`onnx`。[标准库参考](../stdlib-reference.md)逐个列出它们的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
+
+```cml
+module stdlib_demo
+
+import { split, trim, to_upper, replace, find, char_count } from str
+import { sort_by, take, sum, reverse, unique } from array
+import { abs, hypot, bit_and, pi } from math
+import { mean } from statistics
+
+func main(): int sync {
+    // Strings: the value goes in on the left, what configures the call goes in angle brackets.
+    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
+    println(words)
+    println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
+    println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'), char_count('héllo'))
+
+    // A result that may not exist is a T?.
+    let at_l = 'hello'->find<'l'> ?? -1
+    let at_z = 'hello'->find<'z'> ?? -1
+    println(at_l, at_z)
+
+    // Arrays and numbers.
+    let xs = [3, -1, 4, -1, 5]
+    println(sum(xs), reverse(xs), xs->map<(x: int): int => abs(x)>)
+    println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
+    println('{:.4f}'->format<pi()>)
+    return 0
+}
+```
+
+```text
+[pear, fig, apple, fig]
+[fig, pear]
+HELLO a+b+c 6 5
+2 -1
+10 [5, -1, 4, -1, 3] [3, 1, 4, 1, 5]
+2.33333 5 2
+3.1416
+```
+
+- **调用的约定**：被处理的值是普通参数，配置这次调用的值是 `with` 参数。所以库函数都能接在管道上：`s->trim->split<','>`、`xs->unique->sort_by<key>->take<2>`。
+- 字符串按字节：`len('héllo')` 是 6；按字符计数用 `char_count`，是 5。`s[i]` 取出第 `i` 个字节。
+- 找不到的结果是 `T?`（如 `find`），用 `??` 取出；越界、不在定义域内的实参是故障。
+- 一个书写上的细节：同一个实参表里有两个带尖括号的调用时（`f<a>(x), g<b>(y)`），会被读成比较。所以上面把两次 `find` 写成了两条 `let`。
+- `array` 模块是用 Camel 写的泛型函数，在图上是看得见的子图；`str`、`math` 的函数是 C++ 算子，在图上是一个节点。
+
+想知道一个程序能用哪些算子、各自是否声明为纯，问编译器：
+
+```bash
+camel inspect --ops docs/tutorial/examples/12_stdlib.cml
+```
+
+每个重载打印一行（这个程序共 323 行），例如：
+
+```text
+OPERATOR {"module":"str","name":"split","uri":"str:split","with":1,"norm":1,"purity":"pure","signature":"<string> (string) => string[]"}
+```
+
+纯的算子可以被优化遍提前求值、合并、删除，可以被并行调度并发执行；有副作用的算子只在同步块里、或结果被用到时才执行。
 
 ## 13. 看图
 
@@ -979,5 +1081,6 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 
 - [示例集](../../examples/README.cn.md)：按任务组织的短程序——JSON、文件、词频统计、排序、命令行工具、并行、仿真、训练。
 - [语言参考](../language/README.md)：每个构造的精确规则，以及哪些写法保留而尚未实现。
+- [标准库参考](../stdlib-reference.md)：每个模块的每个函数。
 - [命令行](../cli.cn.md)：全部选项、遍、诊断格式、资源上限；`camel --explain <诊断名>` 解释一条诊断。
 - [设计原则](../design-principles.cn.md)：语言为什么是这个样子。

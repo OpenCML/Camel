@@ -117,13 +117,13 @@ func main(): int sync {
 3
 ```
 
-（另有一条 `EffectNotExecuted` 警告指向 `println(x)`。）`main` 的函数体是同步块，两次 `log` 调用按顺序执行；但 `println(x)` 属于 `log` 自己的函数体。要打印，把 `log` 写成 `func log(x: int): int sync { ... }`。
+（另有一条 `SemanticDiag::EffectNotExecuted` 警告指向 `println(x)`。）`main` 的函数体是同步块，两次 `log` 调用按顺序执行；但 `println(x)` 属于 `log` 自己的函数体。要打印，把 `log` 写成 `func log(x: int): int sync { ... }`。
 
 ### 4.3.3 `sync func`（函数修饰符）
 
 写在 `func` 之前的 `sync` 修饰的是函数：声明它有副作用、需要被同步，调用方可能需要 `wait` 它。
 
-- 带 `var` 形参的函数、写入被捕获变量（包括模块顶层变量）的函数应当这样声明；没有声明时编译器给出警告 `VarParamInAsyncFunction`、`CapturedWriteInAsyncFunction`。lambda 的写法是 `sync (x: int) => ...`。
+- 带 `var` 形参的函数、写入被捕获变量（包括模块顶层变量）的函数应当这样声明；没有声明时编译器给出警告 `SemanticDiag::VarParamInAsyncFunction`、`SemanticDiag::CapturedWriteInAsyncFunction`。lambda 的写法是 `sync (x: int) => ...`。
 - **它不会使函数体成为同步块。** 要让函数体按顺序执行，两者并用：
 
 ```cml

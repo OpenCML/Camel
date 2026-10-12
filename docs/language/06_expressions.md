@@ -28,7 +28,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 
 | 写法 | 含义 |
 |---|---|
-| `p.x` | 结构体字段。不存在的字段是编译期错误 `InvalidAccessIndex` |
+| `p.x` | 结构体字段。不存在的字段是编译期错误 `SemanticDiag::InvalidAccessIndex` |
 | `t.0` | 元组成员，下标是字面量，越界是编译期错误 |
 | `xs[i]` | 数组元素。越界（含负数）是故障 `RuntimeDiag::IndexOutOfRange` |
 | `m[k]` | 映射查找，类型是 `V?`（[3.5](03_data_model.md#35-映射与集合)） |
@@ -36,7 +36,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 
 - 对数组不能用 `.`（`xs.1` 是 `SemanticDiag::TypeNotIndexable`）。
 - 下标紧贴被访问的表达式，不能有空白。
-- 切片写法 `xs[a:b]`、`xs[a:b:c]` 保留，尚未实现（`SemanticDiag::NoMatchingFunction`）；用 `xs->slice<a, b>`。
+- 切片写法 `xs[a:b]`、`xs[a:b:c]` 保留，尚未实现：它没有专门的诊断，编译器按“下标运算符没有接受这些实参的重载”报告 `SemanticDiag::NoMatchingFunction`。用 `xs->slice<a, b>`。
 - **字符串下标按字节**：`s[i]` 是第 `i` 个字节，结果是只含这一个字节的字符串；越界同样是故障。多字节字符的单个字节本身不是合法的 UTF-8 文本，按字符读取用 `str` 模块的 `char_at`、`codepoints`（见 [标准库参考](../stdlib-reference.md)）。下标的结果是单字节字符串还是数值，是当前实现的行为，尚待确定。
 
 ## 6.4 调用
@@ -58,7 +58,7 @@ func main(): int sync {
 ```
 
 - 普通实参写在圆括号里，`with` 实参写在尖括号里；两者都必须紧贴函数名。函数没有 `with` 形参时不写尖括号。
-- 实参按位置对应形参，类型必须完全一致（不做隐式转换）。不匹配是 `SemanticDiag::NoMatchingFunction` 或 `ArgumentsMismatch`，诊断里列出可用的签名。
+- 实参按位置对应形参，类型必须完全一致（不做隐式转换）。不匹配是 `SemanticDiag::NoMatchingFunction` 或 `SemanticDiag::ArgumentsMismatch`，诊断里列出可用的签名。
 - 同名函数有多个时按重载规则选择（[7.4.3](07_statements.md#743-重载)）。
 - 关键字实参 `f(a: 1)` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。
 - 直接调用一个写在括号里的 lambda（`((x: int) => x + 1)(3)`）目前不可用；先用 `let` 绑定到名字再调用。
@@ -87,7 +87,7 @@ total = 35
 
 ## 6.6 空值与错误的运算符
 
-`T?` 与 `T!` 见 [3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。它们在图上都是一个分支，条件是值上的一位标记。
+`T?` 与 `T!` 见 [3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。下面三个运算符在图上都是一个分支，条件是值上的一位标记。
 
 | 写法 | 左侧 | 右侧 | 结果 |
 |---|---|---|---|
@@ -132,7 +132,7 @@ func main(): int sync {
 | 一元 `-` | 四种数值类型 | |
 | `~` | `int`、`i32` | 按位取反：`~5` 是 `-6` |
 
-两个操作数的类型必须相同。没有按位与、或、异或、移位运算符。
+两个操作数的类型必须相同。没有按位与、或、异或、移位运算符；用 `math` 模块的 `bit_and`、`bit_or`、`bit_xor`、`bit_not`、`shl`、`shr`。
 
 **两个容易出错的地方：**
 

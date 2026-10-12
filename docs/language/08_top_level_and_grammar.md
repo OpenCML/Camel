@@ -108,12 +108,12 @@ primaryType : 名字 | '(' 类型 ')' | '(' 类型, ... ')' | '{' 名字: 类型
 | 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |
 | 关键字实参 `f(a: 1)` | `FeatureNotSupported` | 按位置传 |
 | 形参默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参 |
-| `use 名字 = 限定名` | `FeatureNotSupported` | `import { 名字 } from 模块` |
-| 切片下标 `xs[a:b]`、`xs[a:b:c]` | `SemanticDiag::NoMatchingFunction` | `xs->slice<a, b>` |
+| `use 名字 = 限定名` | `FeatureNotSupported` | `import { 名字 } from 模块`；换名用 `let 新名 = 模块::名字`（[5.5](05_modules.md#55-use)） |
+| 切片下标 `xs[a:b]`、`xs[a:b:c]` | `SemanticDiag::NoMatchingFunction`（没有专门的诊断：按“下标运算符没有接受这些实参的重载”报告） | `xs->slice<a, b>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`T ? U`、`名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof`、`enum` | 语法错误 | 无 |
 | `for`、`while` 循环 | 语法错误（没有循环语法） | 递归；`map`/`filter`/`reduce`/`foreach` |
 | 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
 
-此外有几处“能写出来但目前用不了”：联合类型 `A | B`（成员类型的值不能进入它）、字符串下标 `s[i]`（运行时故障）、带函数类型的声明 `let f: (x: int) => int = g`、直接调用括号里的 lambda。
+此外有几处“能写出来但目前用不了”：联合类型 `A | B`（成员类型的值不能进入它）、带函数类型的声明 `let f: (x: int) => int = g`、直接调用括号里的 lambda。
