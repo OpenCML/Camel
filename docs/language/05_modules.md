@@ -1,226 +1,141 @@
-# 5. 模块与导入
+# 5. 模块
 
-本章描述 Camel 的**模块声明**、**导入**、**导出**、**命名空间**以及**模块名**的写法，并配有从测试与标准库抽取的示例。
+[English](en/05_modules.md) | 中文
+
+每个源文件是一个模块。本章描述模块声明、导入、导出与命名空间。
 
 ---
 
 ## 5.1 模块声明
 
-- **`module <名称>`**：声明当前文件的模块名。
-- 模块名为**标识符**或**点分名**（见下节）。
-
-**示例**
-
 ```cml
-module main
+module shapes
 ```
 
+`module <名字>` 写在文件开头，给模块起名。可以省略；省略时模块名取自文件名。诊断信息里括号中的名字就是模块名。
+
+## 5.2 导入
+
+三种写法：
+
 ```cml
-module fib
+import { sqrt, floor } from math     // 引入列出的名字
+import sqrt from math                // 引入一个名字
+import math                          // 只引入模块的命名空间：用 math::sqrt 访问
 ```
 
-```cml
-module arithmetic_sum
-```
+- `import 模块` 不把模块里的名字直接注入当前模块；通过 `模块::名字` 访问，或再写 `using namespace 模块` 把它导出的名字全部注入。
+- **查找顺序**：与入口文件同目录的 `.cml` 文件、`-I <目录>` 给出的目录、环境变量 `CAMEL_PACKAGES` 列出的目录，以及随 Camel 安装的模块。
 
 ```cml
-module merge_sort
-```
-
-```cml
-module snake
-```
-
-```cml
-module lambda
-```
-
-```cml
-module linear_regression
-```
-
----
-
-## 5.2 模块名（moduleName）
-
-- 文法：**(`.` | `..` | `...`)? IDENTIFIER (`.` IDENTIFIER)***。
-- 即：可选前导 **`.`** / **`..`** / **`...`**，后接一个或多个由点连接的标识符。
-
-**常见写法示例**
-
-```cml
-time
-os
-this
-tensor
-algo
-random
-math
-```
-
-- **`this`** 表示当前模块，用于自引用（如 `import { zen } from this`）。
-
----
-
-## 5.3 导入（import）
-
-- **`import (moduleName | (identDef | bracedIdents) from moduleName)`**。
-  - **bracedIdents**：**`{ identList? ','? }`**，即花括号内的标识符列表。
-
-### 5.3.1 从模块引入多个符号
-
-```cml
-import { now } from time
-```
-
-```cml
-import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from os
-```
-
-```cml
-import { zen } from this
-```
-
-```cml
-import { seed, rand, shuffle } from random
-```
-
-```cml
-import { sort, sorted, merge_sorted_arrays } from algo
-```
-
-```cml
-import {
-    Tensor,
-    ones, zeros, sum, transpose, shape, concat, random
-} from tensor
-```
-
-```cml
-import { exp } from math
-```
-
-### 5.3.2 裸模块导入
-
-- **`import moduleName`**：导入模块命名空间，不把导出符号直接注入当前模块。
-- 导入后可通过 **`moduleName::symbol`** 或 **`moduleName::Namespace::symbol`** 访问导出符号。
-- 若模块名是点分名，默认命名空间名取最后一段；例如 `import std.math` 后可按 `math::sqrt(...)` 访问。
-
-```cml
-import tensor
+import math
+using namespace math
 
 func main(): int sync {
-    let a = tensor::Tensor::ones([2, 2])
-    let b = tensor::shape(a)[0]
+    println(math::sqrt(9.0), floor(2.5))
     return 0
 }
 ```
 
-裸导入不会直接注入符号；例如 `import tensor` 后直接写 `ones([2, 2])` 不是合法引用，除非再显式使用 `using namespace tensor`。
+```text
+3 2
+```
 
-### 5.3.3 使用命名空间（using namespace）
+### 5.2.1 随 Camel 提供的模块
 
-- **`using namespace identRef`**：将已导入命名空间中的导出符号注入当前模块。
-- 可用于模块命名空间，也可用于嵌套命名空间。
+不需要导入就能用的名字（全局内建）：`print`、`println`、`input`、`format`、`join`、`len`、`range`、`zip`、`head`、`tail`、`slice`、`concat`、`append`、`extend`、`contains`、`map`、`filter`、`reduce`、`foreach`、`exit`、`sleep`、`error`、`parse_int`、`parse_float`、转换函数（`int`、`float`、`string` 等），以及映射与集合的操作（[3.5](03_data_model.md#35-映射与集合)）。
+
+| 模块 | 内容 |
+|---|---|
+| `math` | `abs`、`sqrt`、`exp`、`floor`、`ceil`、`round`、`hex`、`bin`、`oct` |
+| `random` | `seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle` |
+| `time` | `now`、`strftime`、`strptime` |
+| `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk` |
+| `json` | `encode`、`decode`、`decode_as` |
+| `os`、`sys` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
+| `re` | `test` |
+| `algo` | `sort`、`sorted`、`merge_sorted_arrays` 等排序函数 |
+| `statistics` | `mean`、`stdev` |
+| `para` | `unordered_foreach`、`unordered_reduce` |
+| `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出 |
+| `python` | 嵌入 Python（需要构建时启用） |
+
+## 5.3 导出
+
+模块里的名字默认只在模块内可见。`export` 使它可以被别的模块导入：
 
 ```cml
-import tensor
-using namespace tensor
+// shapes.cml
+module shapes
+
+import { sqrt } from math
+
+export type Vec = { x: float, y: float }
+
+export func hypot(v: Vec): float {
+    return sqrt(v.x * v.x + v.y * v.y)
+}
+
+export func area(w: float, h: float): float {
+    return w * h
+}
+```
+
+```cml
+// main.cml，与 shapes.cml 在同一目录
+import { hypot, Vec } from shapes
+import shapes
 
 func main(): int sync {
-    let a = Tensor::ones([2, 2])
-    let b = ones([2, 2])
+    let v: Vec = { x: 3.0, y: 4.0 }
+    println(hypot(v))
+    println(shapes::area(2.0, 5.0))
     return 0
 }
 ```
 
-```cml
-import mylib
-using namespace mylib::Tools
-
-func main(): int sync {
-    return inc(3)
-}
+```text
+5
+10
 ```
 
-### 5.3.4 单符号导入
+- `export` 写在 `func`、`type`、`let`/`var` 声明之前，或写成 `export { a, b }` 列出已声明的名字。
+- 泛型函数可以导出（[7.5](07_statements.md#75-泛型函数)）。既有带标注的函数又有其他重载的名字目前不能导出（`SemanticDiag::ConstructNotSupported`）。
 
-- **`import identDef from moduleName`**：将模块导出的单个符号引入当前模块。
-- **`import { a, b } from moduleName`** 是更常用的多符号形式。
+## 5.4 命名空间
 
----
-
-## 5.4 命名空间（namespace）
-
-- **`namespace Name { ... }`**：声明一个命名空间块。
-- 命名空间块内可以声明 `func`、`type`、嵌套 `namespace`、`import`、`export` 和 `using namespace`。
-- 命名空间块内声明的函数与类型会降低为限定引用，例如 `namespace Tensor { func new(...) ... }` 对应 `Tensor::new`。
-- 用户定义类型和内置类型都可以通过 **`Type::function`** 的形式访问关联构造器或静态工具函数。
+`namespace 名字 { ... }` 把一组函数与类型放在一个限定名下，块内可以写 `func`、`type`、嵌套的 `namespace`、`import`、`export`、`using namespace`：
 
 ```cml
-type Foo = {
-    x: int
-}
+type Counter = { n: int }
 
-namespace Foo {
-    func new(x: int): Foo {
-        return { x: x }
-    }
+namespace Counter {
+    func new(): Counter { return { n: 0 } }
+    func next(c: Counter): Counter { return { n: c.n + 1 } }
 }
 
 func main(): int sync {
-    let f = Foo::new(7)
-    return f.x
+    let c = Counter::next(Counter::new())
+    println(c.n)
+    return 0
 }
 ```
 
-内置模块也可以导出类型命名空间：
-
-```cml
-import { Tensor } from tensor
-import { Parameter } from nn
-
-func main(): int sync {
-    let a = Tensor::ones([2, 2])
-    let p = Parameter::new(Tensor::zeros([2, 2]))
-    return Tensor::shape(Parameter::value(p))[0]
-}
+```text
+1
 ```
 
----
+- 命名空间可以与类型同名，于是 `类型::函数` 成为这个类型的构造函数与工具函数的惯用写法（模块提供的类型也是如此：`Tensor::ones([2, 2])`）。
+- 在命名空间里导出的名字保留限定名：`namespace Tools { export func inc(...) }` 在别的模块里是 `模块::Tools::inc`。
+- `using namespace 模块::Tools` 只注入某个嵌套命名空间里的名字。
 
-## 5.5 导出（export）
+## 5.5 `use`
 
-- **`export (dataDecl | typeDecl | bracedIdents)`**：使符号可被其他模块通过 **import** 使用。
-- 可在**声明前**加 **export**，或 **export** 后跟花括号内的名字列表。
-- 在命名空间内导出的符号保留限定名，例如 `namespace Tools { export func inc(...) ... }` 导出为 `Tools::inc`。
-
-**示例（与文法对应）**
-
-```cml
-export type Point = { x: int, y: int }
-export func fib(n: int): int { ... }
-export { foo, bar }
-```
-
-```cml
-namespace Models {
-    export type Box = {
-        x: int
-    }
-
-    export func new(x: int): Models::Box sync {
-        return { x: x }
-    }
-}
-```
-
----
+`use 名字 = 限定名` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。要给一个函数起短名字，用 `let`：`let sq = math::sqrt` 不适用于代表一组重载的名字，此时写一个 lambda：`let sq = (x: float): float => math::sqrt(x)`。
 
 ## 5.6 标准库
 
-各模块导出的函数（签名、是否纯、失败时的行为、例子）见 [标准库参考](../stdlib-reference.md)，它由
-`stdlib/signatures/*.cml` 与用 Camel 写的库（`stdlib/*.cml`）生成。约定：
+各模块导出的函数（签名、是否纯、失败时的行为、例子）见 [标准库参考](../stdlib-reference.md)，它由 `stdlib/signatures/*.cml` 与用 Camel 写的库（`stdlib/*.cml`）生成。约定：
 
 - 被处理的值是普通参数，配置它的值是 `with` 参数，因此可以链式书写：
 
@@ -232,81 +147,8 @@ namespace Models {
   let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
   ```
 
-- 找不到的结果是 `T?`（`find`、`index_of`、`min`、`max`、`median`），用 `??` 处理；只有声明为可能失败的
-  操作返回 `T!`（如按码点解码一个不是合法 UTF-8 的字符串）；越界与不在定义域内的实参是故障。
-- 用 Camel 写的库（如 `array`）导出的是泛型函数，在调用它的模块里按元素类型实例化（见 7.2.5）。
+- 找不到的结果是 `T?`（`find`、`index_of`、`min`、`max`、`median`），用 `??` 处理；只有声明为可能失败的操作返回 `T!`（如按码点解码一个不是合法 UTF-8 的字符串）；越界与不在定义域内的实参是故障。
+- 用 Camel 写的库（如 `array`）导出的是泛型函数，在调用它的模块里按元素类型实例化（见 [7.5](07_statements.md#75-泛型函数)）。
 - 模块不能导出值，常量写成无参函数：`pi()`、`e()`。
-- 传给 `array` 模块高阶函数的函数用 `map` 施加：各元素上的调用之间没有顺序约定（并行调度器可以同时
-  执行），结果按位置排列；需要顺序的副作用用内建的 `foreach`、`reduce`。
-
-## 5.7 完整示例：多模块协作
-
-**主模块（入口）**
-
-```cml
-module main
-
-import { zen } from this
-
-func main() sync {
-    println(zen())
-    return 0
-}
-```
-
-**带时间与格式的脚本**
-
-```cml
-module fib
-
-import { now } from time
-
-func fib(n: int): int {
-    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
-}
-
-func main(): int sync {
-    let idx = 30
-    'Start computing fibonacci({})...'->format<idx>->println
-    let start = now()
-    let res = fib(idx)
-    let duration = now() - start
-    'Fibonacci({}) = {} (computed in {:.4f} seconds)'->format<idx, res, duration>->println
-    return 0
-}
-```
-
-**使用 OS 与时间的应用**
-
-```cml
-module snake
-
-import { now } from time
-import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from os
-
-// ... 类型与函数定义 ...
-
-func main(): int sync {
-    set_terminal_raw_mode(true)
-    let initial_snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }]
-    game_loop(initial_snake, 'w', 0)
-    return 0
-}
-```
-
-**数值与算法库**
-
-```cml
-module merge_sort
-
-import { now } from time
-import { seed, rand, shuffle } from random
-import { sort, sorted, merge_sorted_arrays } from algo
-
-func merge(lhs: int[], rhs: int[]): int[] sync {
-    return merge_sorted_arrays(lhs, rhs)
-}
-
-func mergesort(arr: int[]): int[] sync { ... }
-func main(): int sync { ... }
-```
+- 传给 `array` 模块高阶函数的函数用 `map` 施加：各元素上的调用之间没有顺序约定（并行调度器可以同时执行），结果按位置排列；需要顺序的副作用用内建的 `foreach`、`reduce`。
+- `camel inspect --ops <文件>` 列出内建模块与该程序导入的每个模块的全部算子及其声明的纯度。
