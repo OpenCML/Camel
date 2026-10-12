@@ -410,6 +410,11 @@ span_id_t SourceContext::createSpan(source_file_id_t fileId, size_t startIndex, 
         manager_.codePointToByteOffset(fileId, endIndex));
 }
 
+span_id_t
+SourceContext::createSpanAtBytes(source_file_id_t fileId, size_t startOffset, size_t endOffset) {
+    return spans_.create(fileId, startOffset, endOffset);
+}
+
 span_id_t SourceContext::spanFromTokenRange(
     source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens, const TokenRange &range) {
     auto [start, end] = tokenOffsets(tokens, range);

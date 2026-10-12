@@ -632,7 +632,7 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             return 1;
         } catch (Diagnostic &d) {
             if (invocation && invocation->parser) {
-                RangeConverter conv(invocation->parser->getTokens());
+                RangeConverter conv(invocation->parser->tokenPositions());
                 d.fetchRange(conv);
             }
             os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;

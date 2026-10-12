@@ -51,15 +51,17 @@ inline void dumpOrigin(
         os << "?";
         return;
     }
-    os << "o" << id;
+    // Not the id: the ANTLR-based builder also created origins for nodes it then dropped (one
+    // per type, in visitSpecType), so the numbering differs while every kept origin is the same.
     if (const auto *span = sc->span(rec->primarySpan)) {
         os << "[" << span->startOffset << "," << span->endOffset << ")";
     }
-    if (rec->parent != camel::source::kInvalidOriginId) {
-        os << "<o" << rec->parent;
-    }
     if (!rec->label.empty()) {
         os << ":" << rec->label;
+    }
+    if (rec->parent != camel::source::kInvalidOriginId) {
+        os << "<";
+        dumpOrigin(os, sc, rec->parent);
     }
 }
 

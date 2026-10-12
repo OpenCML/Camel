@@ -318,9 +318,7 @@ int main(int argc, char *argv[]) {
                 parser->dumpTokens(os);
             }
             if (Inspect::dumpCST) {
-                auto cst     = parser->cst();
-                auto visitor = CSTDumpVisitor(os);
-                visitor.visit(cst);
+                parser->dumpCST(os);
             }
             if (Inspect::dumpAST) {
                 auto ast = parser->ast();
@@ -565,7 +563,7 @@ int main(int argc, char *argv[]) {
         compileSummary(true);
         return 1;
     } catch (Diagnostic &d) {
-        RangeConverter conv(parser->getTokens());
+        RangeConverter conv(parser->tokenPositions());
         d.fetchRange(conv);
         os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText(os)) << endl;
         return 1;

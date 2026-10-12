@@ -560,12 +560,12 @@ class ModelBuilder {
         }
 
         // Diagnostics: the parser's and the entry module's share one container.
-        collectDiagnostics(*diagnostics, mainTokens, 0);
+        collectDiagnostics(*diagnostics, parser->tokenPositions(), 0);
         for (size_t i = 0; i < modules.size(); ++i) {
             if (modules[i]->diagnostics()) {
                 collectDiagnostics(
                     *modules[i]->diagnostics(),
-                    modules[i]->parser()->getTokens(),
+                    modules[i]->parser()->tokenPositions(),
                     static_cast<uint32_t>(i + 1));
             }
         }
@@ -624,7 +624,7 @@ class ModelBuilder {
     }
 
     void collectDiagnostics(
-        Diagnostics &diags, const std::vector<antlr4::Token *> &tokens, uint32_t file) {
+        Diagnostics &diags, const camel::core::error::TokenPositions &tokens, uint32_t file) {
         diags.fetchAll(tokens);
         std::set<std::string> seen;
         const auto add = [&](const Diagnostic &d) {

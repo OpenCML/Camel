@@ -47,7 +47,7 @@ CharRange RangeConverter::conv(const TokenRange &tr) const {
     size_t startIdx = tr.start;
     size_t endIdx   = tr.end;
 
-    if (tokens_.empty())
+    if (tokens_.size() == 0)
         return {{0, 0}, {0, 0}};
     if (startIdx >= endIdx)
         return {{0, 0}, {0, 0}};
@@ -58,7 +58,7 @@ CharRange RangeConverter::conv(const TokenRange &tr) const {
         startIdx = tokens_.size() - 1;
     endIdx = std::max(std::min(endIdx, tokens_.size()) - 1, startIdx);
 
-    return CharRange::fromTokens(tokens_[startIdx], tokens_[endIdx]);
+    return tokens_.charRange(startIdx, endIdx);
 }
 
 } // namespace camel::core::error

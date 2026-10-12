@@ -185,7 +185,7 @@ class Diagnostics {
     const DiagsConfig &getConfig() const { return config_; }
 
     Diagnostic &add(Diagnostic &&d);
-    void fetchAll(const std::vector<antlr4::Token *> &tokens);
+    void fetchAll(const TokenPositions &tokens);
     /// When wrapInArray is false, emit only the joined items (no brackets) for merging.
     void dump(std::ostream &os, bool json = false, bool wrapInArray = true) const;
     void clear();

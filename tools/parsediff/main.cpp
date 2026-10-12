@@ -34,6 +34,8 @@
 #include "modes.h"
 
 #include "camel/parse/parse.h"
+#include "camel/parse/syntax/dump.h"
+#include "camel/parse/syntax/parser.h"
 
 #include <fstream>
 #include <iostream>
@@ -65,13 +67,17 @@ std::vector<std::string> readList(const std::string &path) {
     return files;
 }
 
-ParseOutcome parseWith(ParserChoice which, const std::string &path, const std::string &text) {
+ParseOutcome parseWith(
+    ParserChoice which, const std::string &path, const std::string &text, bool lineBreaks) {
     ParseOutcome outcome;
     auto sourceContext = std::make_shared<camel::source::SourceContext>();
     auto diagnostics   = std::make_shared<Diagnostics>("main", path, sourceContext);
     camel::parse::CamelParser parser(diagnostics);
     parser.setSourceContext(sourceContext);
-    (void)which;
+    parser.setBackend(
+        which == ParserChoice::Hand ? camel::parse::CamelParser::Backend::Hand
+                                    : camel::parse::CamelParser::Backend::Antlr);
+    parser.setParseOptions({.lineBreaksEndStatements = lineBreaks});
     std::istringstream input(text);
     try {
         outcome.accepted = parser.parse(input);
@@ -80,6 +86,7 @@ ParseOutcome parseWith(ParserChoice which, const std::string &path, const std::s
         outcome.dump    = std::string("EXCEPTION ") + e.what() + "\n";
         return outcome;
     }
+    outcome.syntaxOk = parser.parsed();
     std::ostringstream diagText;
     parser.dumpDiagnostics(diagText, true);
     outcome.diagnostics = diagText.str();
@@ -113,6 +120,35 @@ int main(int argc, char **argv) {
     }
     if (mode == "stats" && args.size() == 2) {
         return parsediff::runAntlrStats(parsediff::readList(args[1]));
+    }
+    if ((mode == "cst" || mode == "tok") && args.size() == 2) {
+        using namespace camel::parse::syntax;
+        const Tree tree = Parser::parse(parsediff::readFile(args[1]));
+        if (mode == "tok") {
+            dumpTokens(std::cout, tree.tokens());
+        } else {
+            dumpTree(std::cout, tree);
+        }
+        for (const SyntaxError &error : tree.errors()) {
+            const Token &token = tree.tokens()[error.token];
+            std::cout << "ERROR kind=" << static_cast<int>(error.kind) << " at "
+                      << tree.tokens().lineOf(token.begin) + 1 << ":"
+                      << tree.tokens().columnOf(token.begin) + 1 << " '"
+                      << tree.tokens().text(token) << "'\n";
+        }
+        return tree.hasErrors() ? 1 : 0;
+    }
+    if (mode == "diff" && (args.size() == 2 || (args.size() == 4 && args[2] == "--expect"))) {
+        return parsediff::runDiff(
+            parsediff::readList(args[1]),
+            args.size() == 4 ? args[3] : std::string());
+    }
+    if (mode == "fuzz" && args.size() == 5) {
+        return parsediff::runFuzz(
+            parsediff::readList(args[1]),
+            std::stoull(args[2]),
+            std::stoull(args[3]),
+            args[4]);
     }
     if (mode == "lexdiff" && args.size() == 2) {
         return parsediff::runLexDiff(parsediff::readList(args[1]));

@@ -251,6 +251,8 @@ class SourceContext {
     /// `startIndex` / `endIndex` are character indices as ANTLR reports them (code points);
     /// the span stores the corresponding byte offsets.
     span_id_t createSpan(source_file_id_t fileId, size_t startIndex, size_t endIndex);
+    /// The same from byte offsets into the file's text, which is what a span stores.
+    span_id_t createSpanAtBytes(source_file_id_t fileId, size_t startOffset, size_t endOffset);
     span_id_t spanFromTokenRange(
         source_file_id_t fileId, const std::vector<antlr4::Token *> &tokens,
         const camel::core::error::TokenRange &range);

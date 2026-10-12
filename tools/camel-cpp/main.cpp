@@ -220,7 +220,7 @@ int main(int argc, char *argv[]) {
         return runCompile(projRoot, cppPath, stem);
 
     } catch (Diagnostic &d) {
-        RangeConverter conv(parser->getTokens());
+        RangeConverter conv(parser->tokenPositions());
         d.fetchRange(conv);
         std::cerr << "Uncaught diagnostic: " << d.toText() << std::endl;
         return 1;

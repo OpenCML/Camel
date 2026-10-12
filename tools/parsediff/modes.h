@@ -33,7 +33,8 @@ namespace parsediff {
 enum class ParserChoice { Antlr, Hand };
 
 struct ParseOutcome {
-    bool accepted = false;
+    bool syntaxOk = false; // no lexical and no syntax error
+    bool accepted = false; // and the AST was built
     bool crashed  = false;
     std::string dump;        // normalized AST and diagnostics (ast_dump.h)
     std::string diagnostics; // the diagnostics alone, as JSON
@@ -41,10 +42,22 @@ struct ParseOutcome {
 
 std::string readFile(const std::string &path);
 std::vector<std::string> readList(const std::string &path);
-ParseOutcome parseWith(ParserChoice which, const std::string &path, const std::string &text);
+/// `lineBreaks`: rule 2 of the hand-written parser (on, except to attribute a difference).
+ParseOutcome parseWith(
+    ParserChoice which, const std::string &path, const std::string &text, bool lineBreaks = true);
 
 /// `stats`: the places of a corpus that the two new rules touch, found on the ANTLR parse.
 int runAntlrStats(const std::vector<std::string> &files);
+
+/// `diff`: the ASTs the two parsers build, file by file.
+int runDiff(const std::vector<std::string> &files, const std::string &expectFile);
+/// The class of a pair of outcomes: same, both-reject, ast-diff, hand-rejects, hand-accepts.
+std::string classify(const ParseOutcome &antlr, const ParseOutcome &hand);
+
+/// `fuzz`: the same on mutated programs; differences are attributed and written to `outDir`.
+int runFuzz(
+    const std::vector<std::string> &files, size_t iterations, uint64_t seed,
+    const std::string &outDir);
 
 /// `lexdiff`: the hand-written lexer against the ANTLR lexer.
 int runLexDiff(const std::vector<std::string> &files);

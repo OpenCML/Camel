@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     } catch (Diagnostic &d) {
-        RangeConverter conv(parser->getTokens());
+        RangeConverter conv(parser->tokenPositions());
         d.fetchRange(conv);
         std::cerr << "Uncaught diagnostic: " << d.toText() << "\n";
         return 1;

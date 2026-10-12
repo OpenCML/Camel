@@ -59,14 +59,24 @@ struct DiagLabel {
     std::string path;
 };
 
+/// Where the tokens of a file are: what turns a TokenRange into lines and columns. The parser
+/// that produced the tokens provides it (camel/parse/parse.h).
+class TokenPositions {
+  public:
+    virtual ~TokenPositions() = default;
+    virtual size_t size() const = 0;
+    /// From the first character of token `first` to the end of token `last`.
+    virtual CharRange charRange(size_t first, size_t last) const = 0;
+};
+
 // ---- RangeConverter ----
 class RangeConverter {
   public:
-    RangeConverter(const std::vector<antlr4::Token *> &toks) : tokens_(toks) {}
+    RangeConverter(const TokenPositions &tokens) : tokens_(tokens) {}
     CharRange conv(const TokenRange &tr) const;
 
   private:
-    const std::vector<antlr4::Token *> &tokens_;
+    const TokenPositions &tokens_;
 };
 
 } // namespace camel::core::error
