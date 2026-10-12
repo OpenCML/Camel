@@ -27,6 +27,9 @@
 #include "dispatcher.h"
 
 #include "camel/core/debug_breakpoint.h"
+#include "core/debug_core.h"
+
+#include <httplib.h>
 #include "camel/utils/log.h"
 #include "spawn.h"
 #include "state.h"
@@ -242,7 +245,10 @@ class ContinueCommand final : public Command {
     CommandResult execute(const std::string &argsJson) override {
         auto &srv = getServer();
         if (srv.isWorkerProcess()) {
+            // Whichever pause the worker is in ends: one of the debug core (a node or line
+            // stop), or an allocation / pipeline-stage pause of a Debug build.
             srv.requestContinue();
+            core::DebugCore::instance().command("continue", json::object());
             return CommandResult::ok("continue", "Continue.");
         }
         json args          = json::parse(argsJson, nullptr, false);
@@ -275,11 +281,16 @@ class StepCommand final : public Command {
     CommandResult execute(const std::string &argsJson) override {
         auto &srv = getServer();
         if (srv.isWorkerProcess()) {
-            json args = json::parse(argsJson, nullptr, false);
-            // Arm step mode before resuming so the very next node fire consumes it; the
-            // execution thread is blocked in the pause condvar, so it must be woken explicitly.
-            srv.requestGirStep(args.value("graphId", ""));
-            srv.requestContinue();
+            // A node step; with a graph id, only nodes of that graph are stops. Before a run
+            // it arms a stop at the first node.
+            json args                 = json::parse(argsJson, nullptr, false);
+            const std::string graphId = args.is_object() ? args.value("graphId", "") : "";
+            auto &dbg                 = core::DebugCore::instance();
+            json answer =
+                dbg.command("step", json{{"unit", "node"}, {"mode", "in"}, {"graph", graphId}});
+            if (!answer.value("ok", false)) {
+                dbg.command("configure", json{{"stopOnEntryOnce", true}});
+            }
             return CommandResult::ok("step", "Step.");
         }
         json args          = json::parse(argsJson, nullptr, false);
@@ -303,6 +314,45 @@ class StepCommand final : public Command {
 // restart — 父进程：杀掉目标任务子进程并重新 spawn，实现解释器状态彻底刷新；子进程：原地
 // requestRestart
 // ---------------------------------------------------------------------------
+/// A command of the debug core for a task (POST /api/debug/<command> at the gateway): the
+/// gateway echoes it and forwards it to the worker, whose answer is the answer.
+class DebugCommand final : public Command {
+  public:
+    const char *name() const override { return "debug"; }
+    const char *description() const override {
+        return "Send a debug command (breakpoints, steps, stack, variables) to a task";
+    }
+
+    CommandResult execute(const std::string &argsJson) override {
+        json args = json::parse(argsJson, nullptr, false);
+        if (!args.is_object())
+            return CommandResult::error("debug", "The body is not a JSON object.");
+        const std::string command = args.value("command", "");
+        // Queries are not echoed into the log: an editor asks them at every stop.
+        const bool query = command == "status" || command == "stackTrace" || command == "scopes" ||
+                           command == "variables" || command == "evaluate" ||
+                           command == "graph" || command == "exceptionInfo";
+        const std::string display = query ? std::string() : "debug " + command;
+        if (getServer().isWorkerProcess())
+            return CommandResult::error(display, "Not available in a worker process.");
+        const std::string target = args.value("target", "");
+        int port                 = resolveTargetToPort(target);
+        if (port <= 0)
+            return CommandResult::error(
+                display,
+                "No task selected or target invalid. Select a task or pass target.");
+        httplib::Client cli("127.0.0.1", port);
+        cli.set_connection_timeout(0, 300000);
+        cli.set_read_timeout(310, 0); // load waits for a compilation
+        auto r = cli.Post("/api/debug/" + command, argsJson, "application/json");
+        if (!r)
+            return CommandResult::error(
+                display,
+                "Target unreachable (connection failed or timeout).");
+        return CommandResult::ok(display, "", r->body);
+    }
+};
+
 class RestartCommand final : public Command {
   public:
     const char *name() const override { return "restart"; }
@@ -315,6 +365,7 @@ class RestartCommand final : public Command {
         if (srv.isWorkerProcess()) {
             srv.clearLastRunError();
             srv.requestRestart();
+            core::DebugCore::instance().command("restart", json::object());
             return CommandResult::ok("restart", "Restart.");
         }
         // 父进程：按 target 终止对应 worker（若未退出）并重新 spawn；支持已 exited 任务（直接
@@ -378,6 +429,7 @@ class TerminateCommand final : public Command {
         auto &srv = getServer();
         if (srv.isWorkerProcess()) {
             srv.requestTerminate();
+            core::DebugCore::instance().command("terminate", json::object());
             return CommandResult::ok("terminate", "Terminate requested.");
         }
         json args          = json::parse(argsJson, nullptr, false);
@@ -655,6 +707,7 @@ void registerAllCommands(CommandDispatcher &dispatcher) {
     dispatcher.registerCommand(std::make_shared<StartServerCommand>());
     dispatcher.registerCommand(std::make_shared<ContinueCommand>());
     dispatcher.registerCommand(std::make_shared<StepCommand>());
+    dispatcher.registerCommand(std::make_shared<DebugCommand>());
     dispatcher.registerCommand(std::make_shared<RestartCommand>());
     dispatcher.registerCommand(std::make_shared<TerminateCommand>());
     dispatcher.registerCommand(std::make_shared<ConfigureCommand>());

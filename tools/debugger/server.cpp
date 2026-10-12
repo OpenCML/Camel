@@ -33,7 +33,10 @@
 #include "nlohmann/json.hpp"
 // state.h 必须在任何会拉入 Windows 的头之前，避免 minwindef/wingdi 的 TRUE/FALSE/ERROR/IN/CONST
 // 与解析器冲突
+#include "core/debug_core.h"
 #include "state.h"
+
+#include <algorithm>
 
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/mm/profiler.h"
@@ -251,28 +254,18 @@ void DebuggerServer::requestContinue() {
     }
 }
 
-void DebuggerServer::requestGirStep(std::string graphId) {
+void DebuggerServer::notePaused(const std::string &pauseJson) {
     {
-        std::lock_guard<std::mutex> lock(girStepMutex_);
-        girStepGraphId_ = std::move(graphId);
+        std::lock_guard<std::mutex> lock(jsonMutex_);
+        lastAllocJson_ = pauseJson;
     }
-    girStepRequested_.store(true, std::memory_order_release);
+    paused_.store(true);
 }
 
-bool DebuggerServer::consumeGirStepRequest(const std::string &currentGraphId) {
-    if (!girStepRequested_.load(std::memory_order_acquire))
-        return false;
-    {
-        std::lock_guard<std::mutex> lock(girStepMutex_);
-        if (!girStepRequested_.load(std::memory_order_acquire))
-            return false;
-        // Empty constraint = step in (any graph); otherwise only the paused-in graph.
-        if (!girStepGraphId_.empty() && girStepGraphId_ != currentGraphId)
-            return false;
-        girStepGraphId_.clear();
-    }
-    girStepRequested_.store(false, std::memory_order_release);
-    return true;
+void DebuggerServer::noteResumed() { paused_.store(false); }
+
+void DebuggerServer::setWorkerDebugHandler(WorkerDebugHandlerFn fn) {
+    workerDebugHandler_ = std::move(fn);
 }
 
 void DebuggerServer::requestRestart() {
@@ -309,41 +302,6 @@ void DebuggerServer::setAllocBreakSpaces(std::unordered_set<std::string> spaces)
 std::unordered_set<std::string> DebuggerServer::getAllocBreakSpaces() {
     std::lock_guard<std::mutex> lock(allocBreakSpacesMutex_);
     return allocBreakSpaces_;
-}
-
-void DebuggerServer::pauseAndWaitForGirBreakpoint(
-    const std::string &nodeId, const std::string &graphId, uint64_t origin, uint64_t ref) {
-    assert(isWorkerProcess() && "pauseAndWaitForGirBreakpoint() called in non-worker process");
-    if (!running_)
-        return;
-    try {
-        json j;
-        j["phase"]   = "gir_node";
-        j["nodeId"]  = nodeId;
-        j["graphId"] = graphId;
-        j["origin"]  = origin;
-        j["ref"]     = ref;
-        {
-            std::lock_guard<std::mutex> lock(jsonMutex_);
-            lastAllocJson_ = j.dump();
-        }
-    } catch (const std::exception &e) {
-        std::cerr << "[debugger] GIR pause exception: " << e.what() << std::endl;
-    }
-    paused_.store(true);
-    {
-        std::unique_lock<std::mutex> lock(continueMutex_);
-        const uint64_t epochAtEntry = continueEpoch_.load(std::memory_order_acquire);
-        continueCond_.wait(lock, [this, epochAtEntry] {
-            return continueEpoch_.load(std::memory_order_acquire) != epochAtEntry ||
-                   restartRequested_.load() || terminateRequested_.load() || !running_;
-        });
-    }
-    paused_.store(false);
-    if (restartRequested_.exchange(false))
-        throw RestartRequestedException();
-    if (terminateRequested_.exchange(false))
-        throw TerminateRequestedException();
 }
 
 void DebuggerServer::pauseAndWaitForPipelineStage(const char *stageId) {
@@ -1202,6 +1160,9 @@ void DebuggerServer::httpServerLoop() {
             try {
                 setGirBreakpointNodeIdsFromStrings(ids);
                 setGirBreakpointOrigins(origins);
+                // Node breakpoints are origins: the debug core stops before every node of
+                // the running graph that has one of them.
+                core::DebugCore::instance().command("setNodeBreakpoints", json{{"origins", origins}});
                 res.set_content("{\"ok\":true}", "application/json");
             } catch (const std::exception &e) {
                 json j;
@@ -1424,7 +1385,75 @@ void DebuggerServer::httpServerLoop() {
         dispatchAndRespond("setBreakpointTypes", req, res);
     });
 
-    svr.set_payload_max_length(1024);
+    // ---- the debug core (docs/technical/34_debugger.md, 7) ----------------------------
+    // A worker answers these itself. The gateway forwards the event poll like any query;
+    // commands go through its command layer ("debug"), which forwards them to the task.
+    svr.Get(
+        "/api/debug/events",
+        [this, tryForwardToTarget](const httplib::Request &req, httplib::Response &res) {
+            if (!isWorkerProcess()) {
+                if (tryForwardToTarget(req, res) == 0) {
+                    res.status = 400;
+                    res.set_content(
+                        "{\"ok\":false,\"error\":\"No target specified.\"}",
+                        "application/json");
+                }
+                return;
+            }
+            uint64_t after = 0;
+            int timeoutMs  = 0;
+            if (auto v = req.get_param_value("after"); !v.empty())
+                after = std::strtoull(v.c_str(), nullptr, 10);
+            if (auto v = req.get_param_value("timeout"); !v.empty())
+                timeoutMs = std::atoi(v.c_str());
+            timeoutMs = std::clamp(timeoutMs, 0, 30000);
+            res.set_content(
+                core::DebugCore::instance().events(after, timeoutMs).dump(),
+                "application/json");
+        });
+
+    svr.Post(
+        R"(/api/debug/([A-Za-z]+))",
+        [this](const httplib::Request &req, httplib::Response &res) {
+            const std::string command = req.matches[1];
+            if (!isWorkerProcess()) {
+                // The gateway executes its "debug" command, which echoes and forwards.
+                json wrapped = json::parse(req.body.empty() ? "{}" : req.body, nullptr, false);
+                if (wrapped.is_discarded() || !wrapped.is_object()) {
+                    res.status = 400;
+                    res.set_content(
+                        "{\"ok\":false,\"error\":\"The body is not a JSON object.\"}",
+                        "application/json");
+                    return;
+                }
+                wrapped["command"] = command;
+                httplib::Request inner = req;
+                inner.body             = wrapped.dump();
+                dispatchAndRespond("debug", inner, res);
+                return;
+            }
+            if (workerDebugHandler_) {
+                std::string handled = workerDebugHandler_(command, req.body);
+                if (!handled.empty()) {
+                    res.set_content(handled, "application/json");
+                    return;
+                }
+            }
+            json args = json::parse(req.body.empty() ? "{}" : req.body, nullptr, false);
+            if (args.is_discarded() || !args.is_object()) {
+                res.status = 400;
+                res.set_content(
+                    "{\"ok\":false,\"error\":\"The body is not a JSON object.\"}",
+                    "application/json");
+                return;
+            }
+            res.set_content(
+                core::DebugCore::instance().command(command, args).dump(),
+                "application/json");
+        });
+
+    // Breakpoint lists and launch options do not fit in a kilobyte.
+    svr.set_payload_max_length(1024 * 1024);
     svr.set_keep_alive_timeout(1);
 
     if (!svr.listen("127.0.0.1", port_)) {

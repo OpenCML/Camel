@@ -70,6 +70,13 @@ struct DebuggerState {
     std::shared_ptr<camel::parse::CamelParser> parser;
     /// Pass 列表：与 CLI 的 Run::targetFiles[1:] 一致，空时 applyPasses 使用 std::default
     std::vector<std::string> runPasses;
+    /// Values for the parameters of `main`, as on the command line (`name=value`).
+    std::vector<std::string> runArgs;
+    /// Only the program writes to standard output: no "Running ..." / "Run completed." lines
+    /// (the debug adapter forwards the output to an editor as the program's).
+    bool quiet = false;
+    /// The compilation in ctx/parser/mainModule succeeded and has not been run yet.
+    bool compiledPending = false;
 
     bool hasFile() const { return !targetFile.empty(); }
 };

@@ -16,6 +16,9 @@ add_executable(camel-debugger
     src/repl.cpp
     src/command/dispatcher.cpp
     src/command/commands.cpp
+    src/core/debug_core.cpp
+    src/core/program_index.cpp
+    src/core/values.cpp
 )
 target_include_directories(camel-debugger PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
