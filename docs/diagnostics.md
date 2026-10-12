@@ -3135,7 +3135,7 @@ Out of memory{0}: {1}.
 **Help**
 
 ```text
-The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values and is bounded only by the memory of the host.
+The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
 **Example** (`test/cases/opt/generic/specialize_growing_shape.cml`, run as `CAMEL_OPT_GROWTH_BUDGET=100000000 CAMEL_PERM_SPACE_LIMIT_MB=32 camel --output-format json test/cases/opt/generic/specialize_growing_shape.cml std::opt::simplify std::nvm`)

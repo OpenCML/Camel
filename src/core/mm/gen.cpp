@@ -724,9 +724,17 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
             stats_.majorPauseMaxNs = std::max(stats_.majorPauseMaxNs, pause);
         }
     }
-    if (heapLimitExceeded_ && kind != CollectionKind::Minor) {
-        // The collection an allocation over the limit asked for has run. What is still held
-        // is alive; if that alone exceeds the limit the program does not fit.
+    if (heapLimitBytes_ != 0 && kind == CollectionKind::Minor &&
+        oldBytesHeldUnlocked() > heapLimitBytes_ && !heapLimitExceeded_) {
+        // Promotion took the old spaces over the limit (it cannot be refused in the middle of
+        // a collection). Part of what they hold may be garbage: a major collection decides.
+        heapLimitExceeded_ = true;
+        heapLimitRequest_  = oldBytesHeldUnlocked() - heapLimitBytes_;
+        requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseHeapLimit);
+    }
+    if (heapLimitBytes_ != 0 && kind != CollectionKind::Minor) {
+        // A major collection has run. What the old spaces still hold is alive; if that alone
+        // exceeds the limit the program does not fit.
         heapLimitExceeded_ = false;
         if (const size_t held = oldBytesHeldUnlocked(); held > heapLimitBytes_) {
             throw MemoryExhausted(
