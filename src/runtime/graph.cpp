@@ -1172,7 +1172,11 @@ void emitDraftNativePayload(
     emitDraftPayload(draft, planDraftPayload(draft), payload, resolveRuntimeGraph);
 }
 
-void validateRuntimeGraphPayload(const GCGraph *graph) { validateRuntimeGraphPayloadImpl(graph); }
+void validateRuntimeGraphPayload(const GCGraph *graph) {
+    validateRuntimeGraphPayloadImpl(graph);
+    // The references are sound; now what the back ends assume about branches.
+    validateRuntimeBranchArms(graph);
+}
 
 void validateRuntimeGraphCalls(const GCGraph *graph) {
     if (!graph || !graph->hasNodePayload()) {
