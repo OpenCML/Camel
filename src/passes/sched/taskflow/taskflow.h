@@ -50,6 +50,8 @@ namespace camel::core::context {
 // Taskflow-specific concurrent frame allocator.
 // Unlike the generic FramePool, this allocator tolerates concurrent
 // acquire/release operations and out-of-order recycling across workers.
+// Frames are kept per graph; every thread has its own short list of free frames of the graphs
+// it runs, so a call takes and returns its frame without a lock (taskflow_frame_pool.cpp).
 class TaskflowFramePool {
   public:
     explicit TaskflowFramePool(
@@ -71,12 +73,25 @@ class TaskflowFramePool {
         ::Tuple *staticArea{nullptr};
         size_t chunkFrames{0};     // Frames of a full chunk.
         size_t nextChunkFrames{0}; // Frames of the next chunk: doubles up to chunkFrames.
+        // Guards the two lists below. Taken when a thread's own list of the graph runs empty
+        // or over (LocalArena), not per call.
         std::mutex mutex;
+        // Free frames that are in no thread's list.
         std::vector<Frame *> freeFrames;
-        std::unordered_set<Frame *> activeFrames;
-        std::vector<std::byte *> chunks;
+        struct Chunk {
+            std::byte *base = nullptr;
+            size_t frames   = 0;
+        };
+        std::vector<Chunk> chunks;
     };
+    struct LocalArena;
+    struct ThreadCache;
 
+    static ThreadCache &threadCache();
+    static void giveBack(LocalArena &local);
+    static bool isActive(Frame *frame);
+    static void setActive(Frame *frame, bool active);
+    LocalArena &localArena(camel::runtime::GCGraph *graph);
     GraphArena &getOrCreateArena(camel::runtime::GCGraph *graph);
     void allocateChunk(GraphArena &arena, size_t minFrameCount);
     void clearGcSlots(Frame *frame) const;
@@ -88,7 +103,7 @@ class TaskflowFramePool {
 
     size_t chunkBytes_;
     size_t minChunkFrames_;
-    // Distinguishes this pool in the per-thread arena caches (getOrCreateArena); never 0.
+    // Distinguishes this pool in the per-thread frame lists (localArena); never 0.
     uint64_t poolId_;
     std::mutex arenasMutex_;
     std::unordered_map<uintptr_t, std::unique_ptr<GraphArena>> arenas_;
@@ -162,6 +177,12 @@ class TaskflowGcGate {
             ts.active.store(false, std::memory_order_release);
         }
     }
+    // True when a collection is pending or a collector is waiting for the regions to empty:
+    // a thread inside a region should leave it at its next safepoint. Two plain loads.
+    bool collectorWanted() const {
+        return stopRequested_.load(std::memory_order_relaxed) ||
+               camel::core::mm::detail::autoSpaceSafepointSlowPath.load(std::memory_order_relaxed);
+    }
     // Safepoint poll; the calling thread must be outside every region.
     void poll(ThreadState &ts, std::string_view reason) {
         if (camel::core::mm::detail::autoSpaceSafepointSlowPath.load(std::memory_order_acquire))
@@ -233,6 +254,19 @@ class TaskflowGcRegion {
     void poll(std::string_view reason) {
         if (!held_ && ts_.depth == 0) {
             gate_.poll(ts_, reason);
+        }
+    }
+    // A safepoint between two pieces of leaf work, where every live value is in a frame. The
+    // region stays held unless a collector wants in: entering and leaving it are sequentially
+    // consistent stores, and a graph that does a few built-in operators between two
+    // safepoints paid for them at every call and every branch. The collector waits no longer
+    // than before for a thread that runs calls and branches (it gives up after 500 ms).
+    void safepoint(std::string_view reason) {
+        if (!held_) {
+            poll(reason);
+        } else if (gate_.collectorWanted()) [[unlikely]] {
+            leave();
+            poll(reason);
         }
     }
     TaskflowGcGate::ThreadState &thread() { return ts_; }
@@ -319,6 +353,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         // Comes after the tail value in the linear order (forwarding GATEs), or is the tail
         // JOIN: skipped once a tail call has replaced the rest of the graph.
         bool afterTail = false;
+        // An operator of a module (not one of the built-in `:...` operators): it can run for
+        // long or block, so the region is left after it and a waiting collector gets in. After
+        // a built-in operator the region stays held until the next safepoint.
+        bool leaveAfter = false;
     };
     struct FlowInstance {
         tf::Taskflow flow;
@@ -382,6 +420,11 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         std::vector<PreparedOper> opers;
         std::vector<camel::runtime::gc_data_idx_t> operArgs;
         std::unique_ptr<std::atomic<operator_t>[]> resolvedOpers;
+        // As an element function of a higher-order operator: 1 when everything the graph can
+        // reach is built-in operators and direct calls without recursion (the work of an
+        // element is then bounded by the size of the graphs), 0 when not, -1 until asked
+        // (boundedLight).
+        std::atomic<int8_t> boundedLightState{-1};
         bool isTailCall(camel::runtime::gc_node_ref_t ref) const {
             return std::binary_search(tailCalls.begin(), tailCalls.end(), ref);
         }
@@ -389,6 +432,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
 
     std::shared_mutex plansMutex_;
     std::unordered_map<camel::runtime::GCGraph *, std::unique_ptr<GraphPlan>> plans_;
+    // Tells the plans of this run apart from those of an earlier run (or another pass) in the
+    // per-thread plan caches of planFor; never 0.
+    uint64_t planEpoch_ = nextPlanEpoch();
+    static uint64_t nextPlanEpoch();
     // The fault domain of everything outside a fault-isolation boundary. A failure in it ends
     // the run.
     TaskflowFaultDomain rootDomain_;
@@ -448,6 +495,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     std::mutex heavyMutex_;
     std::unordered_map<camel::runtime::GCGraph *, bool> heavyGraphs_;
     bool graphIsHeavy(camel::runtime::GCGraph *graph);
+    bool boundedLight(GraphPlan &plan);
     // Scopes run as task graphs since the pass started (reported with CAMEL_TF_GC_STATS).
     std::atomic<uint64_t> taskGraphsRun_{0};
 
@@ -458,7 +506,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     slot_t evalGraphTF(camel::runtime::GCGraph *graph, ctx::Frame *frame);
     // Evaluates `graph` on `frame`, tail calls included. May be entered inside `region`;
     // returns inside it, so the caller stores the result before a collection can run.
-    slot_t evalGraph(camel::runtime::GCGraph *graph, ctx::Frame *frame, TaskflowGcRegion &region);
+    // `plan`: the plan of `graph` when the caller has it.
+    slot_t evalGraph(
+        camel::runtime::GCGraph *graph, ctx::Frame *frame, TaskflowGcRegion &region,
+        GraphPlan *plan = nullptr);
     // The three below take the calling thread's region in whatever state it is and leave it in
     // whatever state their last step needed. `tailNode` receives the FUNC node of a tail call.
     void runScope(
@@ -483,14 +534,23 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         TaskflowFaultDomain *domain         = nullptr;
     };
     // Calls the function value held in slot `funcIdx` of `funcFrame` (its graph is
-    // `targetGraph`): `fillArgs(span)` reads the arguments and `sink(result)` stores the
-    // result, both inside one region of the calling thread. The call is an open call like any
-    // other.
+    // `targetGraph`, with plan `targetPlan`) on the calling thread: `fillArgs(span)` reads the
+    // arguments and `sink(result)` stores the result, both inside `region`, which is held on
+    // return. The call is an open call like any other. The thread must already count from
+    // `site.depth` in `site.domain` (the thread that started the operator does; a task of the
+    // operator sets them with InheritedDepth).
     template <typename FillArgs, typename Sink>
     void callClosure(
-        const ElementCallSite &site, camel::runtime::GCGraph *targetGraph, ctx::Frame *funcFrame,
+        TaskflowGcRegion &region, const ElementCallSite &site,
+        camel::runtime::GCGraph *targetGraph, GraphPlan *targetPlan, ctx::Frame *funcFrame,
         camel::runtime::gc_data_idx_t funcIdx, size_t argCount, FillArgs &&fillArgs,
         Sink &&sink);
+    // Runs `body(region, i)` once for every i in [0, n), in no particular order: the element
+    // calls of an unordered higher-order operator (see "Higher-order operators" in
+    // taskflow.cpp for how the elements are grouped and when other workers are asked to help).
+    template <typename Body>
+    void runElements(
+        const ElementCallSite &site, GraphPlan *targetPlan, size_t n, Body &&body);
     camel::runtime::gc_node_ref_t branchArmEntryForLinear(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
         std::span<const camel::runtime::gc_node_ref_t> topoNodes);
@@ -588,26 +648,19 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         std::vector<uint8_t> &taskBuilt, camel::runtime::gc_node_ref_t brchRuntimeIndex);
 
     void mark_map_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
-        tf::Subflow &sf);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     void mark_apply_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
-        tf::Subflow &sf);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     void mark_filter_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
-        tf::Subflow &sf);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     void mark_reduce_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
-        tf::Subflow &sf);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     void mark_foreach_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
-        tf::Subflow &sf);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     void mark_unordered_foreach_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
-        tf::Subflow &sf);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     void mark_unordered_reduce_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
-        tf::Subflow &sf);
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     // The fault-isolation node: calls the function value given first on the calling thread, in
     // a fault domain of its own, and turns a fault raised in it into the node's error value.
     slot_t executeIsolateNode(
