@@ -1023,7 +1023,7 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
     currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);
 }
 
-// The fault-isolation node (docs/technical/32_fault_isolation.md): a call of the function value
+// The fault-isolation node (docs/technical/33_fault_isolation.md): a call of the function value
 // given first, in which a fault of the program becomes the failed form of the node's `T!`.
 void NodeVMSchedPass::evalMarkedOperator_isolate(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {

@@ -146,10 +146,10 @@ located diagnostic.
   not start, and the thread that started the flow waits for all that started (so some of the
   other elements of a `map` run, a different number each run, each of them completely). The
   linear back ends run the elements in order and none after the one that faults. This policy
-  is a recommendation awaiting a ruling: `32_fault_isolation.md`, 3.6 and section 9.
+  is a recommendation awaiting a ruling: `33_fault_isolation.md`, 3.6 and section 9.
 - A fault raised inside the call made by the fault-isolation operator (`attempt`) does not end
   the program: at the operator it becomes an error value. How each back end gets back to
-  that boundary, and what is restored there, is in `32_fault_isolation.md`.
+  that boundary, and what is restored there, is in `33_fault_isolation.md`.
 - Integer division: a zero divisor is `DivisionByZero` (for `/`, `%`, `/=`, `%=`, and for
   floats too). The one quotient that does not fit, the smallest integer divided by -1, wraps
   like the other integer arithmetic (`camel/utils/int_div.h`); it used to be a hardware trap
@@ -179,7 +179,7 @@ interpreter is never finalized; its standard output is put in line mode when the
 and flushed at process exit (`modules/python/module.cpp`), so Python's `print` output arrives
 and stays in order. External resources still held when the run ends (a Python object is one)
 are released by the command line before it returns, newest first
-(`disposeAllForeignResources`, `32_fault_isolation.md` 4.2); before, a wrapper alive at the end
+(`disposeAllForeignResources`, `33_fault_isolation.md` 4.2); before, a wrapper alive at the end
 was never finalized, so a file a Python object held open was not flushed.
 
 ## 5. 算子与类型分发

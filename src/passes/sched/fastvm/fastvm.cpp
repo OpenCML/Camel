@@ -620,7 +620,7 @@ void FastVMSchedPass::evalMarkedOperator_foreach_arr(
     currFrame.set(self, NullSlot);
 }
 
-// The fault-isolation node (docs/technical/32_fault_isolation.md): a call of the function value
+// The fault-isolation node (docs/technical/33_fault_isolation.md): a call of the function value
 // given first, in which a fault of the program becomes the failed form of the node's `T!`.
 //
 // The callee runs in a nested activation of call() (or in compiled code entered through

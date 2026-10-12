@@ -443,7 +443,7 @@ Replaces every element of the variable xs by f of it, in place.
 
 A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
 the program with a located diagnostic. `attempt` isolates it at the boundary of one call
-(design principles 2.9; docs/technical/32_fault_isolation.md). The name is provisional.
+(design principles 2.9; docs/technical/33_fault_isolation.md). The name is provisional.
 
 #### `attempt`
 

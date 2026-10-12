@@ -2,7 +2,7 @@ id = "consistency.attempt"
 order = 355
 tier = "feat"
 tags = ["feat", "consistency", "runtime", "faults", "isolation"]
-desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of external resources when a run ends (design principles 2.9; docs/technical/32_fault_isolation.md)"
+desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of external resources when a run ends (design principles 2.9; docs/technical/33_fault_isolation.md)"
 
 # A fault raised inside the call `attempt` makes becomes, at the `attempt`, an error value
 # (kind: the name of the fault's diagnostic; message; location). Unless an entry says otherwise
@@ -10,7 +10,7 @@ desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of e
 # standard output, and the output is the golden file's.
 #
 # Choices the design principles do not make are marked DESIGN-QUESTION(<label>) here, in the
-# cases and in the code; docs/technical/32_fault_isolation.md section 9 lists them.
+# cases and in the code; docs/technical/33_fault_isolation.md section 9 lists them.
 
 [defaults]
 kind = "snapshot"

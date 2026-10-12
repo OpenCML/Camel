@@ -237,7 +237,7 @@ untouched (undecided, design principles section 6).
 Only an operation declared `T!` yields an error value. Division by zero, an index out of
 range and deep recursion remain faults: nothing in this work turns a fault into an error
 value, and `!!` does not catch one. Fault isolation (`attempt`) turns a fault
-into an error value at the boundary of one call; it is described in `32_fault_isolation.md`.
+into an error value at the boundary of one call; it is described in `33_fault_isolation.md`.
 
 ## 7. Passes, inlining, exporters
 

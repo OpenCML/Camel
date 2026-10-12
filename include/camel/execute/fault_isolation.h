@@ -18,7 +18,7 @@
  */
 
 /*
- * The fault-isolation operator (design principles 2.9; docs/technical/32_fault_isolation.md).
+ * The fault-isolation operator (design principles 2.9; docs/technical/33_fault_isolation.md).
  *
  * On the graph it is one OPER node with the URI kFaultIsolationUri whose first input is a
  * function value and whose other inputs are the arguments: a marked call of the subgraph of

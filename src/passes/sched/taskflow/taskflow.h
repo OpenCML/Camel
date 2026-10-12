@@ -110,7 +110,7 @@ namespace ctx = camel::core::context;
 //
 // Not covered (as before graphs ran as tasks): the collection the allocator runs inside an
 // allocation that finds the heap full; it does not go through a poll.
-// The part of a run that one fault ends (docs/technical/32_fault_isolation.md, 3.6). The run has
+// The part of a run that one fault ends (docs/technical/33_fault_isolation.md, 3.6). The run has
 // a root domain; every fault-isolation node opens one for the call it makes. A domain holds the
 // first fault raised in it. Tasks belong to the domain of the thread that started them
 // (ThreadState::faultDomain).

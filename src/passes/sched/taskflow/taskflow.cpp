@@ -2585,7 +2585,7 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     frame->set(dataIndexOf(graph, nodeRef), NullSlot);
 }
 
-// The fault-isolation node (docs/technical/32_fault_isolation.md, 3.6).
+// The fault-isolation node (docs/technical/33_fault_isolation.md, 3.6).
 //
 // The callee runs on the calling thread, like any call, in a fault domain of its own. Tasks it
 // starts inherit the domain. Every flow is joined by the thread that started it, so when a
