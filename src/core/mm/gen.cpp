@@ -69,8 +69,9 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
               .maxSegmentBytes = 256 * MB,
               // No limit of its own: the heap limit, when one is set, covers the elder and
               // the large-object space together (checkHeapLimitUnlocked).
-              .limitBytes = static_cast<size_t>(1) << 46,
-              .limitEnv   = "",
+              .limitBytes       = static_cast<size_t>(1) << 46,
+              .limitEnv         = "",
+              .sizesFromHeaders = true,
           }),
       largeObjSpace_("auto.large"),
       promotionAgeThreshold_(config.promotionAgeThreshold),

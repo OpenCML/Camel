@@ -42,8 +42,9 @@ namespace camel::core::mm {
 
 class FreeListAllocator : public IAllocator {
   public:
-    explicit FreeListAllocator(size_t capacity, const char *debugRegion = nullptr)
-        : capacity_(capacity), debugRegion_(debugRegion) {
+    explicit FreeListAllocator(
+        size_t capacity, const char *debugRegion = nullptr, bool sizesFromHeaders = false)
+        : capacity_(capacity), debugRegion_(debugRegion), sizesFromHeaders_(sizesFromHeaders) {
         size_t aligned_capacity = alignUp(capacity, alignof(slot_t));
         size_t num_units        = aligned_capacity / sizeof(slot_t);
 
@@ -99,7 +100,9 @@ class FreeListAllocator : public IAllocator {
                 }
                 void *payloadPtr = blockStart + sizeof(ObjectHeader);
                 size_t allocSize = (remaining >= sizeof(FreeBlock)) ? total_size : blockSize;
-                allocatedSizes_[payloadPtr] = allocSize;
+                if (!sizesFromHeaders_) {
+                    allocatedSizes_[payloadPtr] = allocSize;
+                }
                 EXEC_WHEN_DEBUG({
                     if (debugRegion_) {
                         invokePostAllocHook(
@@ -137,12 +140,17 @@ class FreeListAllocator : public IAllocator {
         if (UNLIKELY(!ptr))
             return;
 
-        auto allocIt = allocatedSizes_.find(ptr);
-        ASSERT(
-            allocIt != allocatedSizes_.end(),
-            "Free pointer was not allocated by this allocator.");
-        size_t total_size = allocIt->second;
-        allocatedSizes_.erase(allocIt);
+        size_t total_size = 0;
+        if (sizesFromHeaders_) {
+            total_size = headerOf(ptr)->size();
+        } else {
+            auto allocIt = allocatedSizes_.find(ptr);
+            ASSERT(
+                allocIt != allocatedSizes_.end(),
+                "Free pointer was not allocated by this allocator.");
+            total_size = allocIt->second;
+            allocatedSizes_.erase(allocIt);
+        }
 
         ASSERT(total_size % alignof(slot_t) == 0, "Object size not aligned");
         ASSERT(total_size >= sizeof(ObjectHeader), "Invalid object size");
@@ -185,12 +193,17 @@ class FreeListAllocator : public IAllocator {
 
         for (auto *hdr : objects) {
             void *payload = reinterpret_cast<std::byte *>(hdr) + sizeof(ObjectHeader);
-            auto allocIt  = allocatedSizes_.find(payload);
-            ASSERT(
-                allocIt != allocatedSizes_.end(),
-                "Bulk free pointer was not allocated by this allocator.");
-            size_t obj_size = allocIt->second;
-            allocatedSizes_.erase(allocIt);
+            size_t obj_size = 0;
+            if (sizesFromHeaders_) {
+                obj_size = hdr->size();
+            } else {
+                auto allocIt = allocatedSizes_.find(payload);
+                ASSERT(
+                    allocIt != allocatedSizes_.end(),
+                    "Bulk free pointer was not allocated by this allocator.");
+                obj_size = allocIt->second;
+                allocatedSizes_.erase(allocIt);
+            }
             ASSERT(obj_size % alignof(slot_t) == 0, "Object size not aligned");
             ASSERT(obj_size >= sizeof(ObjectHeader), "Invalid object size");
             std::byte *addr = reinterpret_cast<std::byte *>(hdr);
@@ -455,6 +468,11 @@ class FreeListAllocator : public IAllocator {
     FreeBlock *freeList_;
     mutable std::mutex mutex_;
     std::unordered_map<void *, size_t> allocatedSizes_;
+    // The size of a block being freed is read from its header instead of from allocatedSizes_,
+    // which is then not kept: one hash insertion less per allocation. For a space whose blocks
+    // are freed only by a collector that walks the headers anyway (the elder space). The
+    // manually freed spaces keep the table, which also catches a pointer freed twice.
+    bool sizesFromHeaders_ = false;
 
     // Helper: get the object header from a user pointer.
     ObjectHeader *headerOf(void *ptr) const {

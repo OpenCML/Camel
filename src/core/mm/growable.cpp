@@ -193,7 +193,7 @@ void *GrowableFreeListAllocator::allocSlow(size_t size, size_t align, size_t see
     const size_t segmentBytes  = nextSegmentBytes(blockBytes, count);
     FreeListAllocator *segment = nullptr;
     try {
-        segment = new FreeListAllocator(segmentBytes, config_.name);
+        segment = new FreeListAllocator(segmentBytes, config_.name, config_.sizesFromHeaders);
     } catch (const std::bad_alloc &) {
         throwHostExhausted(blockBytes);
     }

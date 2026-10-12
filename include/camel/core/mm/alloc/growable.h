@@ -109,6 +109,9 @@ struct GrowableSpaceConfig {
     size_t maxSegmentBytes = 256 * MB;
     size_t limitBytes      = 1 * GB; // Total over all segments.
     const char *limitEnv   = "";     // Environment variable that sets limitBytes, in MB.
+    // Free-list spaces only: read the size of a freed block from its header and keep no table
+    // of sizes (see FreeListAllocator). For spaces that only a collector frees.
+    bool sizesFromHeaders = false;
 };
 
 /// Occupancy of a growable space. `usedBytes` counts object headers.
