@@ -2466,9 +2466,13 @@ void TaskflowExecSchedPass::runElements(
     const size_t workers  = executor_.num_workers();
     const size_t maxGrain = std::max<size_t>(1, n / (workers * 8));
 
-    // What the calling thread measured while it worked alone.
-    int64_t probedNs   = 0;
-    size_t probedCount = 0;
+    // What the calling thread measured while it worked alone: the time and the chunks so far,
+    // and how long the rest would take at the pace of the last chunk. The first chunk is not
+    // taken as the pace (it pays for whatever the element function does once: resolving its
+    // operators, building the plans of the graphs it calls) unless it took milliseconds.
+    int64_t probedNs    = 0;
+    size_t probedChunks = 0;
+    int64_t probedLeft  = 0;
 
     // Claims and runs chunks on the calling thread until none is left. With `probing`,
     // returns false as soon as the rest is worth helpers.
@@ -2496,13 +2500,16 @@ void TaskflowExecSchedPass::runElements(
                 std::clamp<size_t>(fits, 1, std::min(maxGrain, grain * 4)),
                 std::memory_order_relaxed);
             if (probing) {
-                probedNs    += took;
-                probedCount += count;
+                probedNs += took;
+                ++probedChunks;
                 const size_t claimed = shared.next.load(std::memory_order_relaxed);
-                if (claimed < n && probedNs >= kProbeNs &&
-                    probedNs / static_cast<int64_t>(probedCount) *
-                            static_cast<int64_t>(n - claimed) >=
-                        kSpawnNs) {
+                if (claimed >= n) {
+                    return true;
+                }
+                probedLeft =
+                    took * static_cast<int64_t>(n - claimed) / static_cast<int64_t>(count);
+                if (probedLeft >= kSpawnNs && probedNs >= kProbeNs &&
+                    (probedChunks >= 2 || took >= 10 * kSpawnNs)) {
                     return false;
                 }
             }
@@ -2518,11 +2525,11 @@ void TaskflowExecSchedPass::runElements(
     if (!done) {
         const size_t claimed = std::min(n, shared.next.load(std::memory_order_relaxed));
         size_t helpers       = std::min(workers, n - claimed);
-        if (probedCount != 0) {
+        if (probedChunks != 0) {
             // As many as the work left can keep busy for kSpawnNs each.
-            const int64_t leftNs = probedNs / static_cast<int64_t>(probedCount) *
-                                   static_cast<int64_t>(n - claimed);
-            helpers = std::min(helpers, static_cast<size_t>(std::max<int64_t>(2, leftNs / kSpawnNs)));
+            helpers = std::min(
+                helpers,
+                static_cast<size_t>(std::max<int64_t>(2, probedLeft / kSpawnNs)));
         }
         tf::Taskflow flow;
         for (size_t helper = 0; helper < helpers; ++helper) {
