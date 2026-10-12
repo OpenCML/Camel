@@ -2136,7 +2136,8 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     if (const auto &operand = gct->at(0);
         operand->type() == GCT::LoadType::DATA &&
         containsTypeVar(gct->loadAs<GCT::CastLoad>()->targetType()) &&
-        asTagged(gct->loadAs<GCT::CastLoad>()->targetType()) == nullptr) {
+        asTagged(gct->loadAs<GCT::CastLoad>()->targetType()) == nullptr &&
+        asCollectionTypeOrPrototype(gct->loadAs<GCT::CastLoad>()->targetType()) == nullptr) {
         // A literal converted to a type written with a type variable (`let zero: T = 0`,
         // `0 as T`). The GCT converts a literal to a concrete type itself; here the type is
         // only known now, so the same conversion is applied now.
