@@ -1,0 +1,39 @@
+/**
+ * The callee of `attempt` runs as compiled code under std::jit. `quot` is straight-line integer
+ * arithmetic, which the JIT compiles; its division by zero leaves the native code through the
+ * fault stub and the wrapper, and is thrown as a C++ exception only from the wrapper's caller.
+ * `depth`, after std::inline has merged its branch arms into it, recurses natively and exceeds
+ * the recursion limit inside compiled code. Both become error values at the `attempt`, the
+ * compiled code runs again afterwards, and the graph that contains the `attempt` (an OPER) is
+ * itself never compiled.
+ */
+module compiled
+
+func quot(a: int, b: int): int { return (a * 3 + 1) / (b - 2) }
+func depth(n: int): int { return if n == 0 then 0 else 1 + depth(n - 1) }
+
+func kind(r: int!): string {
+    return match r {
+        case error e => e.kind + ' at ' + e.location
+        case v => format<v>('{}')
+    }
+}
+
+func warm(i: int, acc: int): int {
+    return if i == 0 then acc else warm(i - 1, acc + quot(i, 0) + depth(5))
+}
+
+func main(): int sync {
+    // Make both callees hot first, so that an on-demand JIT has compiled them.
+    println(warm(200, 0))
+    println(kind(attempt(quot, 9, 4)))
+    println(kind(attempt(quot, 9, 2)))
+    println(kind(attempt(quot, 9, 4)))
+    println(kind(attempt(depth, 40)))
+    println(kind(attempt(depth, 1000000)))
+    println(kind(attempt(depth, 40)))
+    println(kind(attempt(() => quot(1, 2) + depth(3))))
+    println(warm(200, 0))
+    println('end')
+    return 0
+}

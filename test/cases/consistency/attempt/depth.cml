@@ -1,0 +1,53 @@
+/**
+ * A recursion that is too deep, isolated. The limit is checked before the call that does not
+ * fit, and unwinding to the boundary gives back every frame and the call depth: afterwards the
+ * same recursion to a depth that fits runs, again and again, also through a function value and
+ * inside a map element. A recursion that reaches the limit *at* the call `attempt` makes is a
+ * fault of the caller, outside that boundary: the enclosing `attempt` isolates it.
+ */
+module depth
+
+func depth(n: int): int { return if n == 0 then 0 else 1 + depth(n - 1) }
+
+func via(f: (n: int) => int, n: int): int {
+    return if n == 0 then 0 else 1 + f(n - 1)
+}
+func step(n: int): int { return 0 + via(step, n) }
+
+func each(n: int): int { return range(0, 3)->map<depth>->reduce<(a: int, x: int): int => a + x, n> }
+
+// Every level is a boundary: the fault of the innermost call is taken by the boundary below it.
+func tower(n: int): int {
+    return 1 + (attempt(tower, n + 1) !! 0)
+}
+
+func kind(r: int!): string {
+    return match r {
+        case error e => e.kind + ' at ' + e.location
+        case v => format<v>('{}')
+    }
+}
+
+// Without the position: in a mutual recursion, which of the two calls meets the limit depends on
+// what bounds the recursion (a count, or the native stack of the thread on std::prl).
+func kind_only(r: int!): string {
+    return match r {
+        case error e => e.kind
+        case v => format<v>('{}')
+    }
+}
+
+func main(): int sync {
+    println(kind(attempt(depth, 50)))
+    println(kind(attempt(depth, 1000000)))
+    println(kind(attempt(depth, 50)))
+    println(kind_only(attempt(step, 1000000)))
+    println(kind(attempt(step, 20)))
+    println(kind(attempt(depth, 1000000)))
+    println(kind(attempt(each, 40)))
+    println(depth(60))
+    println((attempt(tower, 0) !! -1) > 10)
+    println(depth(60))
+    println('end')
+    return 0
+}

@@ -1,0 +1,47 @@
+/**
+ * One element of a map inside a boundary faults while the scheduler may be running the others.
+ *
+ * DESIGN-QUESTION(attempt-parallel-siblings): elements that have started run to their end,
+ * elements that have not started do not start, and `attempt` gives its error value only after
+ * every element that started has ended. So every 'start' line has its 'end' line (but the one
+ * of the faulting element), and no line of an element comes after 'isolated'. How many of the
+ * other elements run is not laid down: none on a linear back end (element 0 faults first),
+ * some on a parallel one.
+ *
+ * The second map faults in every element.
+ * DESIGN-QUESTION(attempt-parallel-first-fault): which fault becomes the error value is not
+ * laid down; it is one of them.
+ */
+module siblings
+
+func work(x: int): int sync {
+    println(format<x>('start {}'))
+    let d = if x == 0 then 0 else 1
+    let q = 100 / d
+    sleep(30)
+    println(format<x>('end {}'))
+    return q + x
+}
+
+func bad(x: int): int {
+    return if x % 2 == 0
+        then 10 / (x - x)
+        else 20 % (x - x)
+}
+
+func main(): int sync {
+    println('before')
+    let ys = attempt(() => range(0, 48)->map<work>) !! [-1]
+    println('isolated')
+    println(ys)
+    let r = attempt(() => range(0, 64)->map<bad>)
+    let text = match r {
+        case error e => e.kind
+        case v => 'no fault'
+    }
+    println(text)
+    // The schedulers are as they were: a map of the same size, with no fault.
+    println(range(1, 49)->map<work>->reduce<(a: int, x: int): int => a + x, 0>)
+    println('after')
+    return 0
+}

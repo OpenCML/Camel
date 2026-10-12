@@ -1,0 +1,16 @@
+/**
+ * A boundary isolates what is inside it and nothing else. After one fault was isolated, a fault
+ * outside every boundary ends the program with its located diagnostic as always, and it is the
+ * only diagnostic of the run: the isolated fault left none behind.
+ */
+module fault_outside
+
+func risky(d: int): int { return 100 / d }
+
+func main(): int sync {
+    println(attempt(risky, 0) !! -1)
+    println(attempt(risky, 4) !! -1)
+    println(risky(0))
+    println('not reached')
+    return 0
+}

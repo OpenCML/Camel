@@ -2264,17 +2264,17 @@ Attempted division by zero.
 Ensure the denominator is not zero before performing division.
 ```
 
-**Example** (`test/cases/consistency/cleanup/unflushed_print_fault.cml`, run as `camel `)
+**Example** (`test/cases/consistency/attempt/fault_outside.cml`, run as `camel `)
 
 ```camel
-module unflushed_print_fault
+module fault_outside
+
+func risky(d: int): int { return 100 / d }
 
 func main(): int sync {
-    let z = 0
-    println('line')
-    print('pending')
-    print(' text')
-    println(8 / z)
+    println(attempt(risky, 0) !! -1)
+    println(attempt(risky, 4) !! -1)
+    println(risky(0))
     println('not reached')
     return 0
 }

@@ -1,0 +1,449 @@
+id = "consistency.attempt"
+order = 355
+tier = "feat"
+tags = ["feat", "consistency", "runtime", "faults", "isolation"]
+desc = "Fault isolation (`attempt`) on the four back ends, and the clean-up of external resources when a run ends (design principles 2.9; docs/technical/32_fault_isolation.md)"
+
+# A fault raised inside the call `attempt` makes becomes, at the `attempt`, an error value
+# (kind: the name of the fault's diagnostic; message; location). Unless an entry says otherwise
+# a case runs on std::nvm, std::fvm, std::jit and std::prl, the four agree on exit code and
+# standard output, and the output is the golden file's.
+#
+# Choices the design principles do not make are marked DESIGN-QUESTION(<label>) here, in the
+# cases and in the code; docs/technical/32_fault_isolation.md section 9 lists them.
+
+[defaults]
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Floating point exception", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+# --- every fault that can be isolated, every place it can be raised ---------------------------
+
+[[tests]]
+name = "attempt.kinds"
+desc = "Division and modulo by zero (int and float), an index out of range, a match no case of which matches, a failed conversion: each gives an error value with the fault's name, message and position. DESIGN-QUESTION(attempt-fault-set)."
+case = "../../../cases/consistency/attempt/kinds.cml"
+args = ["-Wno-match-without-default", "${case}", "${backend}"]
+golden = "golden/attempt_kinds.txt"
+
+[[tests]]
+name = "attempt.places"
+desc = "The fault three calls deep, in a branch arm, in a closure, in the element function of map, filter and reduce, in round 501 of a tail-recursive loop."
+case = "../../../cases/consistency/attempt/places.cml"
+golden = "golden/attempt_places.txt"
+
+[[tests]]
+name = "attempt.nested"
+desc = "Nested boundaries: the inner one takes its fault and the outer one sees a normal return; a fault after the inner boundary belongs to the outer one; seven boundaries deep."
+case = "../../../cases/consistency/attempt/nested.cml"
+golden = "golden/attempt_nested.txt"
+
+[[tests]]
+name = "attempt.forms"
+desc = "The result with `!!`, `?->`, `match ... case error e` and println; a callee that returns `U!` gives `U!` and its own errors pass unchanged (DESIGN-QUESTION(attempt-fallible-target)); a callee that returns `U?` gives `U?!`."
+case = "../../../cases/consistency/attempt/forms.cml"
+golden = "golden/attempt_forms.txt"
+
+[[tests]]
+name = "attempt.effects"
+desc = "Effects inside the boundary before the fault stay: lines printed are printed, a var written keeps the value written (nothing is rolled back), what came after the fault did not run."
+case = "../../../cases/consistency/attempt/effects.cml"
+golden = "golden/attempt_effects.txt"
+
+[[tests]]
+name = "attempt.depth"
+desc = "A recursion that is too deep (direct, through a function value, 250 nested boundaries) is isolated; afterwards the same recursion to a depth that fits runs: frames and the call depth were given back. std::prl has no limit of its own and stops at the native stack, so only kind and position are printed."
+case = "../../../cases/consistency/attempt/depth.cml"
+golden = "golden/attempt_depth.txt"
+timeout_ms = 60000
+
+[[tests]]
+name = "attempt.depth.limit"
+desc = "The same with --max-recursion-depth 64 on all four."
+case = "../../../cases/consistency/attempt/depth.cml"
+args = ["--max-recursion-depth", "64", "${case}", "${backend}"]
+golden = "golden/attempt_depth_limit.txt"
+timeout_ms = 60000
+
+[[tests]]
+name = "attempt.concurrent"
+desc = "Forty boundaries side by side in the elements of a map, every second one isolating a fault of its own inner map: a boundary does not disturb its siblings."
+case = "../../../cases/consistency/attempt/concurrent.cml"
+golden = "golden/attempt_concurrent.txt"
+
+[[tests]]
+name = "attempt.compiled"
+desc = "The callee runs as compiled code under std::jit: a division by zero and a native recursion that is too deep leave the compiled code through its fault exit and are isolated; the compiled code runs again afterwards."
+case = "../../../cases/consistency/attempt/compiled.cml"
+golden = "golden/attempt_compiled.txt"
+
+[[tests]]
+name = "attempt.compiled.inline_jit"
+desc = "With std::inline before std::jit the recursive callee is compiled as a native self-recursion; the log shows that it was compiled."
+kind = "behavior"
+backends = false
+case = "../../../cases/consistency/attempt/compiled.cml"
+args = ["-vv", "${case}", "std::inline", "std::jit"]
+expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:13:65", "DivisionByZero at compiled.cml:12:53"]
+verify_script = """
+assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify(input.normalized.stdout.slice(-200)))
+"""
+
+[[tests]]
+name = "attempt.compiled.jit_log"
+desc = "Under std::jit the straight-line callee is compiled, and the graphs that contain the `attempt` node (an OPER) are not."
+kind = "behavior"
+backends = false
+case = "../../../cases/consistency/attempt/compiled.cml"
+args = ["-vv", "${case}", "std::jit"]
+expect_output_contains = ["compiled & cached graph 'quot'", "contains OPER"]
+
+[[tests]]
+name = "attempt.library"
+desc = "`attempt` around library functions written in Camel (array: find, any, all, count, flat_map, sort_by, zip_with, all built on map) and around C++ operators that fault (zip, int): the fault of an element function inside a library function is isolated, and the library function works afterwards."
+case = "../../../cases/consistency/attempt/library.cml"
+golden = "golden/attempt_library.txt"
+
+[[tests]]
+name = "attempt.library.inline_opt"
+desc = "The same through std::inline std::opt: the library functions are inlined into the closures, the boundary stays."
+case = "../../../cases/consistency/attempt/library.cml"
+args = ["${case}", "std::inline", "std::opt", "${backend}"]
+golden = "golden/attempt_library.txt"
+
+# --- the program goes on -------------------------------------------------------------------
+
+[[tests]]
+name = "attempt.many"
+desc = "200000 rounds of fault-and-isolate (one isolated fault a round, three calls deep or in a closure) and 2000 rounds with the fault in a map element, in tail-recursive loops: no frame and no call depth is lost, or the loop would not reach its end."
+kind = "behavior"
+backends = ["nvm", "fvm", "jit"]
+case = "../../../cases/consistency/attempt/many.cml"
+envs = ["N=200000"]
+timeout_ms = 120000
+verify_script = """
+assert(input.normalized.stdout === '34200000\n1999000\n42\nend\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "attempt.many.prl"
+desc = "The same on the parallel scheduler, 20000 rounds."
+kind = "behavior"
+backends = ["prl"]
+case = "../../../cases/consistency/attempt/many.cml"
+envs = ["N=20000"]
+timeout_ms = 120000
+verify_script = """
+assert(input.normalized.stdout === '3420000\n19900\n42\nend\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "attempt.collector.stress"
+desc = "Isolated faults under allocation pressure, with heap verification around every collection and a major collection every 5 allocations and at every safepoint: what a boundary dropped is collectable, what is used after it survived."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/collector.cml"
+envs = ["N=300", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+timeout_ms = 120000
+verify_script = """
+assert(input.normalized.stdout === '8328\nerror DivisionByZero: Attempted division by zero.\nitem 20 / 20\nend\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "attempt.collector.stress_both"
+desc = "The same with minor and major collections requested."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/collector.cml"
+envs = ["N=300", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=5", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+timeout_ms = 120000
+verify_script = """
+assert(input.normalized.stdout === '8328\nerror DivisionByZero: Attempted division by zero.\nitem 20 / 20\nend\n', JSON.stringify(input.normalized.stdout))
+"""
+
+# --- the parallel scheduler ---------------------------------------------------------------
+
+[[tests]]
+name = "attempt.siblings"
+desc = "DESIGN-QUESTION(attempt-parallel-siblings): one element of a map inside a boundary faults. Elements that started run to their end, elements that did not start do not start, and the error value is given only after all that started have ended: every 'start' but the faulting element's has its 'end' before 'isolated'. DESIGN-QUESTION(attempt-parallel-first-fault): when every element faults, the error is one of the faults."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/siblings.cml"
+backends_agree = ["exit_code"]
+timeout_ms = 60000
+verify_script = """
+const lines = input.normalized.stdout.trimEnd().split('\n')
+const at = lines.indexOf('isolated')
+assert(lines[0] === 'before' && at > 0, 'no isolated line: ' + JSON.stringify(lines.slice(0, 6)))
+const inside = lines.slice(1, at)
+const started = inside.filter((l) => l.startsWith('start ')).map((l) => l.slice(6))
+const ended = inside.filter((l) => l.startsWith('end ')).map((l) => l.slice(4))
+assert(started.includes('0'), 'the faulting element did not start')
+assert(!ended.includes('0'), 'the faulting element ended')
+assert(started.length === ended.length + 1, `started ${started.length}, ended ${ended.length}`)
+for (const x of started) assert(x === '0' || ended.includes(x), `element ${x} started inside the boundary and did not end before the boundary was left`)
+assert(lines[at + 1] === '[-1]', lines[at + 1])
+assert(lines[at + 2] === 'DivisionByZero', lines[at + 2])
+const after = lines.slice(at + 3)
+assert(after.filter((l) => l.startsWith('start ')).length === 48 && after.filter((l) => l.startsWith('end ')).length === 48, 'the map after the boundary did not run in full')
+assert(lines[lines.length - 2] === '5976' && lines[lines.length - 1] === 'after', JSON.stringify(lines.slice(-2)))
+"""
+
+# --- what is not isolated ------------------------------------------------------------------
+
+[[tests]]
+name = "attempt.not_isolated.exit"
+desc = "exit(7) inside a boundary is not a fault: the program ends with code 7 and the fallback of `!!` is not taken."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/not_isolated_exit.cml"
+expect_exit = 7
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+verify_script = """
+assert(input.normalized.stdout === 'before\nleaving\n1\nleaving\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "attempt.not_isolated.fault_outside"
+desc = "After a fault was isolated, a fault outside every boundary ends the program with its one located diagnostic: the isolated fault left none behind."
+kind = "negative"
+case = "../../../cases/consistency/attempt/fault_outside.cml"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 38
+expect_stdout_starts_with = "-1\n25\n"
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+verify_script = """
+assert(input.diagnostics.length === 1, `one diagnostic expected, got ${input.diagnostics.length}`)
+"""
+
+[[tests]]
+name = "attempt.not_isolated.fault_in_argument"
+desc = "A fault raised while an argument of `attempt` is evaluated is outside the boundary and ends the program."
+kind = "negative"
+case = "../../../cases/consistency/attempt/fault_in_argument.cml"
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 31
+expect_stdout_starts_with = "20\n"
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "attempt.bad_calls"
+desc = "The type rule: no function, too few or too many arguments, an argument of the wrong type, a function with a `with` parameter. Five compile-time errors, each at its call."
+kind = "negative"
+backends = false
+case = "../../../cases/consistency/attempt/bad_calls.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+verify_script = """
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.split('name=SemanticDiag::NoMatchingFunction').length === 6, 'five NoMatchingFunction diagnostics expected: ' + out)
+for (const line of [13, 14, 15, 16, 17]) assert(out.includes(`bad_calls.cml:${line}:20: `), `no diagnostic at line ${line}`)
+"""
+
+# --- optimisation pipelines ---------------------------------------------------------------
+# The callee of `attempt` is an operand, not a call node: no pass copies its body into the
+# enclosing graph, so the boundary stays a graph boundary. The output is the same as without
+# the passes.
+
+[[tests]]
+name = "attempt.pipeline.none"
+desc = "The pipelines program without a pass."
+case = "../../../cases/consistency/attempt/pipelines.cml"
+golden = "golden/attempt_pipelines.txt"
+
+[[tests]]
+name = "attempt.pipeline.inline"
+desc = "std::inline: the callees are small and called once; the fault stays inside the boundary."
+case = "../../../cases/consistency/attempt/pipelines.cml"
+args = ["${case}", "std::inline", "${backend}"]
+golden = "golden/attempt_pipelines.txt"
+
+[[tests]]
+name = "attempt.pipeline.opt"
+desc = "std::opt."
+case = "../../../cases/consistency/attempt/pipelines.cml"
+args = ["${case}", "std::opt", "${backend}"]
+golden = "golden/attempt_pipelines.txt"
+
+[[tests]]
+name = "attempt.pipeline.simplify"
+desc = "std::opt::simplify. It specialises a callee on the constant 0 and warns that the division always faults (not folded, 2.9); the warning is switched off here, the output is the same."
+case = "../../../cases/consistency/attempt/pipelines.cml"
+args = ["-Wno-constant-expression-faults", "${case}", "std::opt::simplify", "${backend}"]
+golden = "golden/attempt_pipelines.txt"
+
+[[tests]]
+name = "attempt.pipeline.fold"
+desc = "std::opt::fold: an `attempt` of constants is not folded."
+case = "../../../cases/consistency/attempt/pipelines.cml"
+args = ["${case}", "std::opt::fold", "${backend}"]
+golden = "golden/attempt_pipelines.txt"
+
+[[tests]]
+name = "attempt.pipeline.cse_dce"
+desc = "std::opt::cse std::opt::dce: two identical `attempt` calls are not merged."
+case = "../../../cases/consistency/attempt/pipelines.cml"
+args = ["${case}", "std::opt::cse", "std::opt::dce", "${backend}"]
+golden = "golden/attempt_pipelines.txt"
+
+[[tests]]
+name = "attempt.pipeline.macro_opt"
+desc = "std::macro std::opt."
+case = "../../../cases/consistency/attempt/pipelines.cml"
+args = ["${case}", "std::macro", "std::opt", "${backend}"]
+golden = "golden/attempt_pipelines.txt"
+
+[[tests]]
+name = "attempt.pipeline.inline_opt"
+desc = "std::inline std::opt."
+case = "../../../cases/consistency/attempt/pipelines.cml"
+args = ["${case}", "std::inline", "std::opt", "${backend}"]
+golden = "golden/attempt_pipelines.txt"
+
+[[tests]]
+name = "attempt.pipeline.places_opt"
+desc = "The places program (closures, higher-order operators, a tail-recursive loop) through std::inline std::opt."
+case = "../../../cases/consistency/attempt/places.cml"
+args = ["${case}", "std::inline", "std::opt", "${backend}"]
+golden = "golden/attempt_places.txt"
+
+[[tests]]
+name = "attempt.pipeline.nested_opt"
+desc = "The nested program through std::inline std::opt."
+case = "../../../cases/consistency/attempt/nested.cml"
+args = ["${case}", "std::inline", "std::opt", "${backend}"]
+golden = "golden/attempt_nested.txt"
+
+# --- other libraries ----------------------------------------------------------------------
+
+[[tests]]
+name = "attempt.refuse.cpp"
+desc = "std::cpp refuses a graph with a fault boundary, at the `attempt`."
+kind = "negative"
+backends = false
+case = "../../../cases/consistency/attempt/refuse_translate.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 11
+expect_output_contains = ["std::cpp"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "attempt.refuse.onnx"
+desc = "onnx::export refuses the operator, at the `attempt`, and names it."
+kind = "negative"
+backends = false
+case = "../../../cases/consistency/attempt/refuse_translate.cml"
+args = ["${case}", "onnx::export"]
+envs = ["CAMEL_ONNX_OUT=tmp/test/consistency/attempt_refused.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 12
+expect_output_contains = [":mark/isolate"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "attempt.refuse.grad"
+desc = "autodiff: a function whose value flows through a boundary is refused at the `grad`, the operator named."
+kind = "negative"
+backends = false
+case = "../../../cases/consistency/attempt/refuse_grad.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 16
+expect_output_contains = ["no derivative rule for operator ':mark/isolate'"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "attempt.macro.ordinary"
+desc = "A macro function that uses `attempt`, without std::macro: an ordinary function."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/in_macro.cml"
+verify_script = """
+assert(input.normalized.stdout === '-1\n25\n', JSON.stringify(input.normalized.stdout))
+"""
+
+[[tests]]
+name = "attempt.macro.evaluated"
+desc = "With std::macro the call is evaluated ahead of time; the macro evaluator runs none of the operators the schedulers run themselves (map, filter, ..., attempt), so it is a compile-time error at the call."
+kind = "negative"
+backends = false
+case = "../../../cases/consistency/attempt/in_macro.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
+expect_diagnostic_line = 16
+expect_output_contains = ["':mark/isolate' is unavailable in macro execution"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+
+# --- external resources when a run ends ---------------------------------------------------
+# A Python object that announces its release stands for an external resource. However the run
+# ends, each resource is released exactly once before the process ends, after its last use.
+
+[[tests]]
+name = "attempt.resources.isolated"
+desc = "The holder of a resource faults inside a boundary and the program goes on: the resource is released (by a collection, or at the latest when the run ends; DESIGN-QUESTION(attempt-finalizers))."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/resource_release.cml"
+envs = ["END=isolated"]
+verify_script = """
+const out = input.normalized.stdout
+assert(out.startsWith('acquire a\nuse a\nacquire b\nuse b\n-1\ntouch a\n1\nlast line of main\n'), JSON.stringify(out))
+for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length === 2, `release ${name}: ` + JSON.stringify(out))
+"""
+
+[[tests]]
+name = "attempt.resources.normal"
+desc = "main returns: both resources are released before the process ends."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/resource_release.cml"
+envs = ["END=normal"]
+verify_script = """
+const out = input.normalized.stdout
+assert(out.startsWith('acquire a\nuse a\nacquire b\nuse b\ntouch b\n25\ntouch a\n1\nlast line of main\n'), JSON.stringify(out))
+for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length === 2, `release ${name}: ` + JSON.stringify(out))
+"""
+
+[[tests]]
+name = "attempt.resources.fault"
+desc = "A fault ends the program: both resources are released before the process ends."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/resource_release.cml"
+envs = ["END=fault"]
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+backends_agree = ["exit_code"]
+verify_script = """
+const out = input.normalized.stdout
+assert(out.startsWith('acquire a\nuse a\nacquire b\nuse b\ntouch b\n25\ntouch a\n'), JSON.stringify(out))
+assert(out.includes('RuntimeDiag::DivisionByZero'), JSON.stringify(out))
+assert(!out.includes('last line of main'), JSON.stringify(out))
+for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length === 2, `release ${name}: ` + JSON.stringify(out))
+"""
+
+[[tests]]
+name = "attempt.resources.exit"
+desc = "exit(5): both resources are released before the process ends."
+kind = "behavior"
+case = "../../../cases/consistency/attempt/resource_release.cml"
+envs = ["END=exit"]
+expect_exit = 5
+verify_script = """
+const out = input.normalized.stdout
+assert(out.startsWith('acquire a\nuse a\nacquire b\nuse b\ntouch b\n25\ntouch a\n1\n'), JSON.stringify(out))
+assert(!out.includes('last line of main'), JSON.stringify(out))
+for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length === 2, `release ${name}: ` + JSON.stringify(out))
+"""

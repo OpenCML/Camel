@@ -1,0 +1,56 @@
+/**
+ * Where the fault is raised relative to the boundary: in a function called several levels below
+ * the one `attempt` calls, in a branch arm, in a closure that captured the divisor, in the
+ * element function of map / filter / reduce, and in round 501 of a tail-recursive loop. Every
+ * one becomes the error value of the `attempt` that encloses it, and the program goes on.
+ */
+module places
+
+func leaf(d: int): int { return 100 / d }
+func mid(d: int): int { return leaf(d) + 1 }
+func top(d: int): int { return mid(d) * 2 }
+
+func arm(d: int): int { return if d > 5 then d else 30 / d }
+
+func divider(d: int): (x: int) => int {
+    return (x: int): int => x / d
+}
+
+func inv(x: int): int { return 60 / (x - 3) }
+func keep(x: int): bool { return 12 / (x - 2) > 0 }
+func step(acc: int, x: int): int { return acc + 12 / (3 - x) }
+
+func loop(i: int, n: int, acc: int): int {
+    return if i > n then acc else loop(i + 1, n, acc + 1000 / (500 - i))
+}
+
+func kind(r: int!): string {
+    return match r {
+        case error e => e.kind + ' at ' + e.location
+        case v => format<v>('{}')
+    }
+}
+
+func main(): int sync {
+    println(kind(attempt(top, 4)))
+    println(kind(attempt(top, 0)))
+    println(kind(attempt(arm, 9)))
+    println(kind(attempt(arm, 0)))
+    let by2 = divider(2)
+    let by0 = divider(0)
+    println(kind(attempt(by2, 10)))
+    println(kind(attempt(by0, 10)))
+    println(kind(attempt((x: int): int => x / (x - x), 5)))
+
+    println(attempt(() => range(4, 8)->map<inv>) !! [-1])
+    println(attempt(() => range(0, 8)->map<inv>) !! [-1])
+    println(attempt(() => range(3, 8)->filter<keep>) !! [-2])
+    println(attempt(() => range(0, 8)->filter<keep>) !! [-2])
+    println(attempt(() => range(4, 8)->reduce<step, 0>) !! -3)
+    println(attempt(() => range(0, 8)->reduce<step, 0>) !! -3)
+
+    println(kind(attempt(loop, 0, 400, 0)))
+    println(kind(attempt(loop, 0, 1000, 0)))
+    println('end')
+    return 0
+}
