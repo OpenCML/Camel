@@ -178,12 +178,16 @@ enum class JitFaultKind : uint32_t {
     None                      = 0,
     DivisionByZero            = 1,
     MaxRecursionDepthExceeded = 2,
+    // A native call refused because the machine stack of the thread is nearly full, before the
+    // count reached the limit: the same diagnostic the interpreters give for their nested calls.
+    NativeStackExhausted = 3,
 };
 
 // Where compiled code finds the fields of JitContext (runtime/trampoline.h asserts them).
 constexpr int32_t kJitCtxFaultKindOffset   = 16;
 constexpr int32_t kJitCtxFaultPcOffset     = 20;
 constexpr int32_t kJitCtxDepthBudgetOffset = 24;
+constexpr int32_t kJitCtxStackLimitOffset  = 32;
 
 // A native self call puts a frame of the graph on the machine stack, up to the interpreter's
 // recursion limit deep. A graph whose frame is larger than this is left to the interpreter, so

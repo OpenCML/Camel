@@ -39,8 +39,15 @@ struct JitContext {
     uint32_t faultPc   = 0;
     // Set by the C++ caller before it enters compiled code: how many calls the code may still
     // nest before the interpreter's recursion limit is reached. Kept in r15 while it runs.
+    // A fault exit taken for a nearly full machine stack stores what was left of it here.
     uint64_t depthBudget = 0;
+    // Set by the C++ caller with the budget: the lowest stack pointer at which compiled code may
+    // still make a native call on the calling thread (execute::nativeStackFloor; 0 where the
+    // bounds of the stack are unknown or the guard is switched off, which no stack pointer is
+    // below). Compiled code compares rsp with it before every native call.
+    uint64_t stackLimit = 0;
 };
+static_assert(offsetof(JitContext, stackLimit) == x64::kJitCtxStackLimitOffset);
 static_assert(offsetof(JitContext, depthBudget) == x64::kJitCtxDepthBudgetOffset);
 static_assert(offsetof(JitContext, faultKind) == x64::kJitCtxFaultKindOffset);
 static_assert(offsetof(JitContext, faultPc) == x64::kJitCtxFaultPcOffset);

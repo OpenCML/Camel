@@ -1,0 +1,31 @@
+/**
+ * A recursion to the depth N of the environment inside `attempt`, twice, between two shallow
+ * runs of the same function. Whether the deep recursion finishes or is refused (by the count or
+ * because the native stack of the thread is nearly full) depends on the back end and the limit;
+ * either way it ends at the boundary, and the function runs again afterwards.
+ */
+module depth_isolated
+
+import { get_env } from sys
+
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
+
+func kind(r: int!): string {
+    return match r {
+        case error e => e.kind
+        case v => format<v>('{}')
+    }
+}
+
+func main(): int sync {
+    let n = int(get_env('N'))
+    println('start')
+    println(depth(200))
+    println(kind(attempt(depth, n)))
+    println(kind(attempt(depth, n)))
+    println(depth(200))
+    println('done')
+    return 0
+}

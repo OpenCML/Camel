@@ -569,6 +569,13 @@ void encodeMirBuffer(
             // than its limit, and so does this one, at the same call.
             enc.takeDepthBudget();
             emitFaultIf(Encoder::kCondB, p->pc, JitFaultKind::MaxRecursionDepthExceeded);
+            // The count alone does not promise that the machine stack holds the recursion (the
+            // limit can be set far above what the stack of this thread takes): like every
+            // nested call of the interpreters, the call is refused when the stack is nearly
+            // full. The reserve behind the limit covers the callee's frame, and the fault exit
+            // itself uses no stack.
+            enc.cmpRspCtxField(static_cast<int8_t>(kJitCtxStackLimitOffset));
+            emitFaultIf(Encoder::kCondB, p->pc, JitFaultKind::NativeStackExhausted);
 
             // The callee's frame is built below the saved slot base, with rdi still on the
             // caller's frame; arguments already in registers are not disturbed (r11 is not
@@ -849,6 +856,9 @@ void encodeMirBuffer(
                 static_cast<int8_t>(kJitCtxFaultKindOffset),
                 static_cast<uint32_t>(stub.kind));
             enc.movCtxFieldImm32(static_cast<int8_t>(kJitCtxFaultPcOffset), stub.pc);
+            // How many calls were open is part of this diagnostic: hand back the budget left.
+            if (stub.kind == JitFaultKind::NativeStackExhausted)
+                enc.movCtxFieldR15(static_cast<int8_t>(kJitCtxDepthBudgetOffset));
             exitRels.push_back(enc.jmpRel32Patchable());
         }
         for (const size_t rel : exitRels)

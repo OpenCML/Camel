@@ -284,6 +284,8 @@ struct NativeJitCallParams {
 ```asm
 sub r15, 1                   ; 递归深度余量
 jb  .fault_depth             ; 用尽 → 故障桩（第 16 节）
+cmp rsp, [ctx + stackLimit]  ; 机器栈的余量（16.4；ctx 在 SysV 下是 r13，Win64 下是 rsi）
+jb  .fault_stack             ; 不足 → 故障桩
 push rdi                     ; 保存调用方 slot 基址
 sub rsp, N                   ; 被调方的帧
 mov [rsp + dst_i], reg_i     ; 已在寄存器里的实参
@@ -560,7 +562,7 @@ jg  .recurse
 |------|------|------|
 | Frame 池图匹配失败 → 慢路径 | Frame-based 调用 | 池顶 Frame 的 graph_ 与目标不匹配时走 C++ 分配 |
 | rbx 必须始终保持有效 | 所有 Frame-based 操作 | 任何使用 rbx 作为 scratch 的代码必须 push/pop 保护 |
-| 递归深度上限 | 原生自调用 | 与解释器相同的 256，由 r15 计数，超限给出 `MaxRecursionDepthExceeded`（第 16 节） |
+| 递归深度上限 | 原生自调用 | 与解释器相同的上限（默认 256，`--max-recursion-depth`），由 r15 计数；另外每次调用检查机器栈余量。两者超限都给出 `MaxRecursionDepthExceeded`（第 16 节） |
 | `fastop[1] == 0` 语义 | 跨图 JIT 状态检查 | 利用"第一条字节码的 targetPC 不会是 0"的不变量作为 JIT 编译标记 |
 | 静态常量内联以数值热点为主 | 编译期常量折叠 | 更复杂的引用/对象语义仍需后续更强类型约束 |
 
@@ -656,6 +658,7 @@ JIT 代码没有展开信息，C++ 异常穿不过它的栈帧。但编译出的
 | 整数除数为零（IDIV / LDIV） | 除法之前 | `RuntimeDiag::DivisionByZero`，位置是该除法 |
 | 浮点除数等于零（FDIV / DDIV，±0.0） | 除法之前 | 同上（解释器对浮点除零同样报故障） |
 | 原生自调用超过递归深度上限 | 调用之前 | `RuntimeDiag::MaxRecursionDepthExceeded`，位置是该调用，图名与上限同解释器 |
+| 原生自调用时机器栈将满 | 调用之前 | 同一个 `MaxRecursionDepthExceeded`，消息与解释器的嵌套调用相同（`N open calls: the native stack of the thread, K KiB, is full`） |
 
 最小整数除以 -1 不是故障：结果回绕（各后端一致）。整数取模是 `OPER`，含它的图不编译，由解释器检查。
 
@@ -666,6 +669,8 @@ JIT 代码没有展开信息，C++ 异常穿不过它的栈帧。但编译出的
 - 解释器从字节码 `FUNC` 进入 JIT 代码时照常 `push` / `pop`（`gotovm.cpp` / `casevm.cpp`）。
 - `invokeOwnedJitFrame` 进入前把 `maxRecursionDepth_ - stackDepth_` 写入 `JitContext::depthBudget`，包装器装入 r15。
 - 每次原生自调用 `sub r15, 1`，借位即故障；返回后 `inc r15`。尾调用不计数。
+
+**机器栈的余量。** 上限可以设到一百万，而原生自调用每层都占机器栈（`depth` 每层 112 字节，8 MiB 的栈大约放七万层），所以只计数不够。`invokeOwnedJitFrame` 在写入 `depthBudget` 的同时把 `execute::nativeStackFloor()` 写入 `JitContext::stackLimit`：当前线程栈的下界加保留量（栈的十六分之一，至少 128 KiB，与解释器 `nativeStackNearlyExhausted` 用的是同一个保留量；栈界读不到或 `CAMEL_NATIVE_STACK_GUARD=0` 时为 0，任何栈指针都不低于它）。栈界按线程读取（`thread_local`），所以由哪个线程进入原生代码就用哪个线程的栈。每次原生自调用在计数之后执行 `cmp rsp, [ctx + stackLimit]; jb .fault_stack`。故障桩除了记录种类与 pc，还把 r15 存回 `depthBudget`，`raiseJitFault` 据此算出"已有多少次调用未返回"。故障出口本身不使用栈；保留量留给之后 C++ 一侧构造诊断。对不递归或浅递归的路径，代价是每次原生调用多一条比较和一条不跳转的条件跳转（fib(35)：改动前后在测量噪声之内）。
 
 ### 16.5 扩展时的注意事项
 

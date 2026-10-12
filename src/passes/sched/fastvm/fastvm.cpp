@@ -737,6 +737,9 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     // Compiled code counts its own nested calls against what the interpreter's stack has left,
     // so that a recursion ends at the same call whichever of the two runs it.
     jc->depthBudget = maxRecursionDepth_ - std::min(stackDepth_, maxRecursionDepth_);
+    // The count does not bound the machine stack its native calls use: they also stop above
+    // the reserve of the stack of the thread that runs them, as the interpreters' nested calls.
+    jc->stackLimit = camel::execute::nativeStackFloor();
     slot_t result;
     // No safepoint may be reached until the compiled code returns (see mm::detail).
     camel::core::mm::detail::nativeCodeDepth.fetch_add(1, std::memory_order_relaxed);
@@ -761,6 +764,8 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
     auto *jc          = static_cast<JitContext *>(jitCtx);
     const auto kind   = static_cast<x64::JitFaultKind>(jc->faultKind);
     const size_t pc   = jc->faultPc;
+    // Only meaningful for NativeStackExhausted: the refused call had taken its unit already.
+    const size_t budgetLeft = jc->depthBudget;
     jc->faultKind     = 0;
     jc->faultPc       = 0;
     // The fault is in the graph the frame belongs to (compiled code calls only itself), at the
@@ -783,6 +788,13 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
                   RuntimeDiag::MaxRecursionDepthExceeded,
                   graphName,
                   maxRecursionDepth_)
+        : kind == x64::JitFaultKind::NativeStackExhausted
+            ? RuntimeFault::make(
+                  RuntimeDiag::MaxRecursionDepthExceeded,
+                  graphName,
+                  camel::execute::nativeStackExhaustedDetail(
+                      maxRecursionDepth_ - std::min(budgetLeft + 1, maxRecursionDepth_) +
+                      nestedCalls_))
             : RuntimeFault::make(
                   RuntimeDiag::RuntimeError,
                   std::format(

@@ -304,3 +304,178 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 43
+
+# --- native code under a raised limit --------------------------------------------------------
+#
+# Compiled code counts its native calls and, before each of them, compares its stack pointer
+# with the reserve of the stack of the thread (JitContext::stackLimit). So under any limit the
+# option accepts a native recursion either finishes or stops with MaxRecursionDepthExceeded.
+# Where the count is reached first, all back ends give the diagnostic of the count; where the
+# stack fills first, the back ends that nest on the native stack (std::nvm, std::prl, and
+# std::jit for the code it compiled) stop there and the others may finish.
+
+[[tests]]
+name = "limit.10000.fits"
+desc = "Limit 10000: depth(9999) runs on every back end and under std::inline std::jit."
+args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
+envs = ["N=9999"]
+timeout_ms = 60000
+expect_exit = 0
+expect_stdout_starts_with = "start\n9999\ndone\n"
+
+[[tests]]
+name = "limit.10000.exceeds"
+desc = "Limit 10000: depth(10000) and depth(100000) stop at the count on every back end."
+args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
+envs = ["N=10000"]
+timeout_ms = 60000
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 43
+expect_output_contains = ["Maximum recursion depth (10000) exceeded"]
+
+[[tests]]
+name = "limit.10000.exceeds.native"
+desc = "The same in native code (std::inline std::jit), at the same call."
+args = ["--max-recursion-depth", "10000", "${case}", "${backend}"]
+backends = ["inline_jit"]
+envs = ["N=100000"]
+timeout_ms = 60000
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 43
+expect_output_contains = ["Maximum recursion depth (10000) exceeded"]
+
+[[tests]]
+name = "limit.raised.native.no_crash.100000.50000"
+desc = "Limits of 100000 and 1000000 with recursions of 50000, 100000 and 900000 levels in native code and under std::jit: each ends with the result or with MaxRecursionDepthExceeded at the recursive call, never by a signal. (A native recursion of 100000 levels under a limit of 1000000 was a segmentation fault: issue 21 of docs/issues/2026-10-12-language-surface-findings.md.)"
+backends = ["jit", "inline_jit"]
+backends_agree = []
+timeout_ms = 120000
+args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
+envs = ["N=50000"]
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
+const stopped = input.exit_code === 1 && fault !== undefined
+const finished = input.exit_code === 0 && /^start\n\d+\ndone\n/.test(input.normalized.stdout)
+assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.slice(0, 300)}`)
+"""
+
+[[tests]]
+name = "limit.raised.native.no_crash.100000.100000"
+desc = "Limit 100000, 100000 levels."
+backends = ["jit", "inline_jit"]
+backends_agree = []
+timeout_ms = 120000
+args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
+envs = ["N=100000"]
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
+const stopped = input.exit_code === 1 && fault !== undefined
+const finished = input.exit_code === 0 && /^start\n\d+\ndone\n/.test(input.normalized.stdout)
+assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.slice(0, 300)}`)
+"""
+
+[[tests]]
+name = "limit.raised.native.no_crash.100000.900000"
+desc = "Limit 100000, 900000 levels."
+backends = ["jit", "inline_jit"]
+backends_agree = []
+timeout_ms = 120000
+args = ["--max-recursion-depth", "100000", "${case}", "${backend}"]
+envs = ["N=900000"]
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
+const stopped = input.exit_code === 1 && fault !== undefined
+const finished = input.exit_code === 0 && /^start\n\d+\ndone\n/.test(input.normalized.stdout)
+assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.slice(0, 300)}`)
+"""
+
+[[tests]]
+name = "limit.raised.native.no_crash.1000000.50000"
+desc = "Limit 1000000, 50000 levels."
+backends = ["jit", "inline_jit"]
+backends_agree = []
+timeout_ms = 120000
+args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
+envs = ["N=50000"]
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
+const stopped = input.exit_code === 1 && fault !== undefined
+const finished = input.exit_code === 0 && /^start\n\d+\ndone\n/.test(input.normalized.stdout)
+assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.slice(0, 300)}`)
+"""
+
+[[tests]]
+name = "limit.raised.native.no_crash.1000000.100000"
+desc = "Limit 1000000, 100000 levels."
+backends = ["jit", "inline_jit"]
+backends_agree = []
+timeout_ms = 120000
+args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
+envs = ["N=100000"]
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
+const stopped = input.exit_code === 1 && fault !== undefined
+const finished = input.exit_code === 0 && /^start\n\d+\ndone\n/.test(input.normalized.stdout)
+assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.slice(0, 300)}`)
+"""
+
+[[tests]]
+name = "limit.raised.native.no_crash.1000000.900000"
+desc = "Limit 1000000, 900000 levels."
+backends = ["jit", "inline_jit"]
+backends_agree = []
+timeout_ms = 120000
+args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
+envs = ["N=900000"]
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+const fault = input.diagnostics.find((d) => d.name === 'RuntimeDiag::MaxRecursionDepthExceeded')
+const stopped = input.exit_code === 1 && fault !== undefined
+const finished = input.exit_code === 0 && /^start\n\d+\ndone\n/.test(input.normalized.stdout)
+assert(stopped || finished, `exit ${input.exit_code}: ${input.normalized.stdout.slice(0, 300)}`)
+"""
+
+[[tests]]
+name = "limit.raised.native.stack_full"
+desc = "Limit 1000000, a native recursion of 900000 levels: the 8 MiB stack of the main thread does not hold it, and the diagnostic says so, at the recursive call."
+args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
+backends = ["inline_jit"]
+envs = ["N=900000"]
+timeout_ms = 120000
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 43
+expect_output_contains = ["open calls: the native stack of the thread"]
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "limit.raised.isolated"
+desc = "The deep recursion inside `attempt`, twice, under a limit of 1000000: whether it finishes or is refused, it ends at the boundary, the stack is back where it was and the function runs again, on every back end and in native code."
+case = "../../../cases/consistency/limits/depth_isolated.cml"
+args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
+backends_agree = []
+envs = ["N=900000"]
+timeout_ms = 120000
+verify_script = """
+assert(input.signal === null, `ended by signal ${input.signal}`)
+assert(input.exit_code === 0, `exit ${input.exit_code}`)
+const lines = input.normalized.stdout.trimEnd().split('\n')
+assert(lines.length === 6, JSON.stringify(lines))
+assert(lines[0] === 'start' && lines[1] === '200' && lines[4] === '200' && lines[5] === 'done', JSON.stringify(lines))
+for (const line of [lines[2], lines[3]]) {
+    assert(line === '900000' || line === 'MaxRecursionDepthExceeded', JSON.stringify(lines))
+}
+assert(lines[2] === lines[3], JSON.stringify(lines))
+"""
