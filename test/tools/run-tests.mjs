@@ -47,6 +47,14 @@ function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true })
 }
 
+// CAMEL_TEST_TIMEOUT_SCALE=<n> multiplies every test and verification timeout. For running
+// the plans under a diagnostic mode that slows every program down (collection stress,
+// safepoint poisoning, a sanitizer build), where the timeouts would otherwise decide.
+const TIMEOUT_SCALE = (() => {
+    const scale = Number(process.env.CAMEL_TEST_TIMEOUT_SCALE)
+    return Number.isFinite(scale) && scale > 0 ? scale : 1
+})()
+
 function walkPlans(entryPath, files = []) {
     const stats = fs.statSync(entryPath)
     if (stats.isFile()) {
@@ -495,7 +503,7 @@ function runVerification(test, result) {
         cwd: REPO_ROOT,
         env: process.env,
         encoding: 'utf8',
-        timeout: test.verify_timeout_ms || 5000,
+        timeout: (test.verify_timeout_ms || 5000) * TIMEOUT_SCALE,
     })
     fs.rmSync(tempDir, { recursive: true, force: true })
 
@@ -705,7 +713,7 @@ function runOneTest(test, sharedVars, logContext) {
         cwd: REPO_ROOT,
         env,
         encoding: 'utf8',
-        timeout: test.timeout_ms || 10000,
+        timeout: (test.timeout_ms || 10000) * TIMEOUT_SCALE,
     })
     const ended = performance.now()
     const raw = {
