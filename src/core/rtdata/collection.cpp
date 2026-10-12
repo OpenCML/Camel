@@ -246,6 +246,9 @@ void Table::updateRefs(const RefRelocator &relocate, const type::Type *type) {
 
 // ---- Order and equality ----
 
+// DESIGN-QUESTION(map-order): a collection is ordered by its keys, and this function is that
+// order. Everything that shows an order (keys, values, items, printing) and equality follow
+// it, so a collection is determined by its entries and by nothing else.
 int compareKeys(slot_t a, slot_t b, const type::Type *keyType) {
     const auto three = [](auto x, auto y) { return x < y ? -1 : (y < x ? 1 : 0); };
     switch (keyType->code()) {
