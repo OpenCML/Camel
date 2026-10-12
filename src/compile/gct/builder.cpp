@@ -944,6 +944,17 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
     // Extract the statement block load and create an ExecLoad node
     // The ExecLoad node represents the execution of the statement block
     const auto &stmtBlock = ast->loadAs<AST::StmtBlockLoad>();
+    if (stmtBlock->waited()) {
+        // `wait { ... }`: the grammar takes it and the mark was dropped. `wait` is defined
+        // for one expression (design principles 2.6); what it means for a block is not.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit(
+                "wait",
+                "it is not implemented before a block and would be ignored; write 'sync { ... }' "
+                "to run the statements of a block in order");
+        throw BuildAbortException();
+    }
     node_ptr_t execNode   = createNodeAs<ExecLoad>(stmtBlock->synced());
 
     // Push a new scope for the statement block
@@ -1011,6 +1022,20 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
         break;
     default:
         throw std::runtime_error("Unknown data type");
+    }
+    if (data->waited() && data->dataType() != AST::DataType::BinaryExpr &&
+        data->dataType() != AST::DataType::ReservedExpr) {
+        // `wait` orders the one expression after it (design principles 2.6). Only an operator
+        // expression, an assignment, a call, an access or a binding is lowered with the mark;
+        // on anything else (a name, a literal, a unary operator, a lambda) the mark was
+        // dropped without a word. What it should order there has not been decided.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit(
+                "wait",
+                "it is implemented before a call, an assignment or a binary operator "
+                "expression only, and would be ignored before this expression");
+        throw BuildAbortException();
     }
 
     LEAVE("Data");
