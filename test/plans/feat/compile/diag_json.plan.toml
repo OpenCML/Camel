@@ -19,7 +19,7 @@ assert(diags.length === 1, 'one diagnostic')
 const d = diags[0]
 assert(d.severity === 'Error', 'severity is a JSON string')
 assert(d.data.stage === 'parse', 'stage is parse, got ' + d.data.stage)
-assert(d.data.name === 'SyntaxDiag::UnknownSyntaxError', 'name is SyntaxDiag::UnknownSyntaxError, got ' + d.data.name)
+assert(d.data.name === 'SyntaxDiag::MissingThen', 'name is SyntaxDiag::MissingThen, got ' + d.data.name)
 assert(d.range.end.line > 0 || d.range.end.character > 0, 'diagnostic has a source range')
 assert(d.data.modulePath.length > 0, 'diagnostic names its file')
 """
