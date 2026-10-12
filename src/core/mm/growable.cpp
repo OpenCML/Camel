@@ -233,6 +233,36 @@ void GrowableFreeListAllocator::free(void *ptr) {
     noteFreed(blockBytes);
 }
 
+void GrowableFreeListAllocator::freeBulk(const std::vector<ObjectHeader *> &objects) {
+    const size_t count = segmentCount_.load(std::memory_order_acquire);
+    if (count == 1) {
+        size_t bytes = 0;
+        for (ObjectHeader *header : objects) {
+            bytes += header->size();
+        }
+        segments_[0].load(std::memory_order_acquire)->freeBulk(objects);
+        noteFreed(bytes);
+        return;
+    }
+    std::vector<std::vector<ObjectHeader *>> perSegment(count);
+    size_t bytes = 0;
+    for (ObjectHeader *header : objects) {
+        for (size_t i = count; i-- > 0;) {
+            if (segments_[i].load(std::memory_order_acquire)->contains(header)) {
+                perSegment[i].push_back(header);
+                bytes += header->size();
+                break;
+            }
+        }
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (!perSegment[i].empty()) {
+            segments_[i].load(std::memory_order_acquire)->freeBulk(perSegment[i]);
+        }
+    }
+    noteFreed(bytes);
+}
+
 size_t GrowableFreeListAllocator::available() const {
     const size_t reserved = reservedBytes_.load(std::memory_order_relaxed);
     const size_t used     = usedBytes_.load(std::memory_order_relaxed);

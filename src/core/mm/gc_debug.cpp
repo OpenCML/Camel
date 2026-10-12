@@ -68,6 +68,13 @@ GenerationalAllocatorWithGC::RuntimeStats GenerationalAllocatorWithGC::stats() c
     result.largeLiveBytes     = largeLiveBytes_;
     result.largeBudgetBytes   = largeObjBudget_;
     result.largeGrowthPercent = largeObjGrowthPercent_;
+    result.elderLiveBytes     = elderLiveBytes_;
+    result.elderBudgetBytes   = elderBudget_;
+    {
+        const SpaceUsage elder    = elderGenSpace_.usage();
+        result.elderReservedBytes = elder.reservedBytes;
+        result.elderSegments      = elder.segments;
+    }
     result.rememberedSetSize  = rememberedSet_.size();
     result.rootSourceCount    = rootSourceCountUnlocked();
     return result;
@@ -220,7 +227,8 @@ bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
 }
 
 bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
-    const FreeListAllocator &allocator, rtdata::Object *object, std::string_view regionName,
+    const GrowableFreeListAllocator &allocator, rtdata::Object *object,
+    std::string_view regionName,
     AllocRegion expectedRegion, std::vector<HeapVerificationIssue> &issues,
     std::string_view path) const {
     if (!allocator.contains(object)) {
@@ -366,7 +374,7 @@ void GenerationalAllocatorWithGC::validateAllocatedHeaders(
 }
 
 void GenerationalAllocatorWithGC::validateAllocatedHeaders(
-    std::vector<HeapVerificationIssue> &issues, const FreeListAllocator &allocator,
+    std::vector<HeapVerificationIssue> &issues, const GrowableFreeListAllocator &allocator,
     std::string_view regionName, AllocRegion expectedRegion) const {
     allocator.iterateAllocated([&](ObjectHeader *header) {
         if (!header->isValid()) {
@@ -560,6 +568,11 @@ void GenerationalAllocatorWithGC::verifyRememberedSetUnlocked(
             }
             const type::Type *objectType = knownObjectTypeUnlocked(header);
             if (!objectType) {
+                return;
+            }
+            // An object born old since the last minor collection is filled by its creator
+            // without barriers; that collection scans it (see freshOld_).
+            if (freshOld_.contains(header)) {
                 return;
             }
             rtdata::Object *object = payloadOf<rtdata::Object>(header);

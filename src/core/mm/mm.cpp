@@ -180,8 +180,8 @@ GenerationalAllocatorWithGC &autoSpace() {
             // Large-object bytes between collections (CAMEL_GC_LARGE_BUDGET_MB overrides).
             .largeObjCollectionBudget = largeObjectBudgetFromEnv(),
             .largeObjGrowthPercent    = largeObjectGrowthPercentFromEnv(),
-            .minorGCTriggerRatio      = 0.9f, // Minor GC trigger ratio.
-            .majorGCTriggerRatio      = 0.8f, // Major GC trigger ratio.
+            .minorGCTriggerRatio      = 0.9f,
+            .heapLimitBytes           = envSize("CAMEL_GC_HEAP_LIMIT_MB") * MB,
             // Production remains address-stable by default; Phase 3 tests can opt into the
             // copying path explicitly to exercise remembered-set behavior.
             .enableYoungGenCopying = youngCopying});

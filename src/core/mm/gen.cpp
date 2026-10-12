@@ -31,6 +31,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <format>
 #include <iostream>
@@ -48,7 +49,9 @@ namespace camel::core::mm {
 namespace {
 
 constexpr std::string_view kCauseLargeBudget    = "large object budget";
-constexpr std::string_view kCauseElderExhausted = "elder space exhausted";
+constexpr std::string_view kCauseElderExhausted = "elder space budget";
+constexpr std::string_view kCauseHeapLimit      = "heap limit";
+constexpr const char *kHeapLimitEnv             = "CAMEL_GC_HEAP_LIMIT_MB";
 
 double megabytes(uint64_t bytes) { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
 
@@ -57,16 +60,34 @@ double megabytes(uint64_t bytes) { return static_cast<double>(bytes) / (1024.0 *
 GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
     : birthSpace_(config.birthSize, "auto.birth"), havenSpace_(config.havenSize, "auto.haven"),
       cacheSpace_(config.havenSize, "auto.cache"),
-      elderGenSpace_(config.elderGenSize, "auto.elder"), largeObjSpace_("auto.large"),
+      elderGenSpace_(
+          GrowableSpaceConfig{
+              .name            = "auto.elder",
+              .holds           = "run-time values",
+              .segmentBytes    = config.elderGenSize,
+              .maxSegmentBytes = 256 * MB,
+              // No limit of its own: the heap limit, when one is set, covers the elder and
+              // the large-object space together (checkHeapLimitUnlocked).
+              .limitBytes = static_cast<size_t>(1) << 46,
+              .limitEnv   = "",
+          }),
+      largeObjSpace_("auto.large"),
       promotionAgeThreshold_(config.promotionAgeThreshold),
       largeObjThreshold_(config.largeObjThreshold),
       largeObjMinBudget_(config.largeObjCollectionBudget),
       largeObjGrowthPercent_(config.largeObjGrowthPercent),
       largeObjBudget_(config.largeObjCollectionBudget),
-      elderRefillThreshold_(config.elderGenSize / 4),
-      minorGCTriggerRatio_(config.minorGCTriggerRatio),
-      majorGCTriggerRatio_(config.majorGCTriggerRatio),
-      enableYoungGenCopying_(config.enableYoungGenCopying) {}
+      elderMinBudget_(config.elderGenSize), elderBudget_(config.elderGenSize),
+      minorTriggerBytes_(
+          static_cast<size_t>(
+              static_cast<double>(config.birthSize) *
+              std::clamp(static_cast<double>(config.minorGCTriggerRatio), 0.1, 1.0))),
+      heapLimitBytes_(config.heapLimitBytes),
+      enableYoungGenCopying_(config.enableYoungGenCopying) {
+    // Reserve the first elder segment now (untouched pages cost nothing), so the space shows
+    // up in snapshots from the start as it did when it was a single block.
+    elderGenSpace_.free(elderGenSpace_.alloc(sizeof(slot_t)));
+}
 
 void *GenerationalAllocatorWithGC::alloc(size_t payloadSize, size_t align) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -161,8 +182,10 @@ void GenerationalAllocatorWithGC::writeBarrier(
     recordObjectTypeUnlocked(ownerObject, ownerType);
     recordObjectTypeUnlocked(storedObject, storedType);
 
+    // A reference to an object born old since the last minor collection counts like one to
+    // a young object: that collection finds the object through its owner (see freshOld_).
     ObjectHeader *storedHeader = autoHeaderForPayload(storedObject);
-    if (!inYoungGenSpace(storedHeader)) {
+    if (!youngOrFreshUnlocked(storedHeader)) {
         return;
     }
 
@@ -410,19 +433,61 @@ void *GenerationalAllocatorWithGC::allocUnlocked(size_t payloadSize, size_t alig
 
     // Try allocating in the birth space first.
     void *ptr = birthSpace_.alloc(payloadSize, align);
+    const bool minorPending = pendingSafepointCollection_ == CollectionKind::Minor ||
+                              pendingSafepointCollection_ == CollectionKind::MinorAndMajor;
     if (UNLIKELY(!ptr)) {
-        requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "birth allocation failure");
+        // No room, and an allocation site is no safepoint: the object is born old (and
+        // tracked as such until the minor collection that the next safepoint runs).
+        if (!minorPending) {
+            requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "birth space full");
+        }
         return allocElderUnlocked(payloadSize, align);
     }
 
     stats_.youngBytesAllocated += payloadSize;
-    auto *header = headerOf(ptr);
-    header->setRegion(AllocRegion::YoungGen);
-    objectTypes_.erase(header);
+    headerOf(ptr)->setRegion(AllocRegion::YoungGen);
+    if (UNLIKELY(!minorPending && birthSpace_.used() >= minorTriggerBytes_)) {
+        requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "birth space nearly full");
+    }
     return ptr;
 }
 
+size_t GenerationalAllocatorWithGC::oldBytesHeldUnlocked() const {
+    return elderGenSpace_.usage().usedBytes + largeLiveBytes_ + largeBytesSinceSweep_;
+}
+
+void GenerationalAllocatorWithGC::checkHeapLimitUnlocked(size_t requestBytes) {
+    if (LIKELY(heapLimitBytes_ == 0)) {
+        return;
+    }
+    const size_t held = oldBytesHeldUnlocked();
+    if (LIKELY(held + requestBytes <= heapLimitBytes_)) {
+        return;
+    }
+    // Over the limit. Part of what is held may be garbage, but nothing can be collected here
+    // (an allocation site is no safepoint), so the allocation is let through and a major
+    // collection is asked for; the safepoint that runs it fails if the limit is still
+    // exceeded afterwards. What is refused on the spot is what no collection can make fit (a
+    // request larger than the limit) and a run past one and a half times the limit before any
+    // safepoint is reached.
+    if (requestBytes > heapLimitBytes_ || held + requestBytes > heapLimitBytes_ + heapLimitBytes_ / 2) {
+        throw MemoryExhausted(
+            "auto",
+            "run-time values",
+            requestBytes,
+            held,
+            heapLimitBytes_,
+            kHeapLimitEnv);
+    }
+    if (!heapLimitExceeded_) {
+        heapLimitExceeded_ = true;
+        heapLimitRequest_  = requestBytes;
+        requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseHeapLimit);
+    }
+}
+
 void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t align) {
+    checkHeapLimitUnlocked(payloadSize);
     // The large-object space takes its blocks from the host and has no limit of its own: a
     // failure here is the host running out of memory. It is told as such, with the volume the
     // space holds, instead of as a bare std::bad_alloc.
@@ -433,17 +498,14 @@ void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t
         ptr = nullptr;
     }
     if (UNLIKELY(!ptr)) {
-        throw MemoryExhausted(
-            "auto",
-            "run-time values",
-            payloadSize,
-            largeLiveBytes_ + largeBytesSinceSweep_,
-            0,
-            {});
+        throw MemoryExhausted("auto", "run-time values", payloadSize, oldBytesHeldUnlocked(), 0, {});
     }
     auto *header = headerOf(ptr);
     header->setRegion(AllocRegion::LargeObj);
     objectTypes_.erase(header);
+    if (enableYoungGenCopying_) {
+        freshOld_.insert(header);
+    }
     // Large objects never exhaust a space, so pace their reclamation by volume:
     // once the budget is spent, ask for a major collection at the next safepoint.
     largeBytesSinceSweep_ += payloadSize;
@@ -457,37 +519,32 @@ void *GenerationalAllocatorWithGC::allocLargeUnlocked(size_t payloadSize, size_t
 }
 
 void *GenerationalAllocatorWithGC::allocElderUnlocked(size_t payloadSize, size_t align) {
-    // Nothing is freed between two sweeps, so a size that found no block will find none until
-    // the next sweep: skip the walk over the free list for it and for anything larger.
-    if (LIKELY(payloadSize < elderFullFromSize_)) {
-        if (void *ptr = elderGenSpace_.alloc(payloadSize, align)) {
-            elderBytesSinceSweep_ += payloadSize;
-            stats_.elderBytesAllocated += payloadSize;
-            auto *header = headerOf(ptr);
-            header->setRegion(AllocRegion::ElderGen);
-            objectTypes_.erase(header);
-            return ptr;
-        }
-        // The elder space has no room for this size. Nothing may be collected here: an
-        // allocation site is not a safepoint, and the caller can hold objects that no root
-        // reaches yet. Array::create, for one, allocates the Array and then its backing store;
-        // a sweep during the second allocation freed the first, which was then stored into a
-        // frame and traced by the next collection. The collection is requested for the next
-        // safepoint instead, and the object goes to the large-object space (below).
-        //
-        // The request is made only when the elder space has taken a fair amount since the last
-        // sweep. When it is full of live objects a sweep frees next to nothing, and asking again
-        // as soon as that little is used up would run a full mark at almost every safepoint;
-        // the overflow is then paced by the large-object budget alone, which grows with the
-        // surviving volume.
-        if (elderFullFromSize_ == kElderNotFull && elderBytesSinceSweep_ >= elderRefillThreshold_) {
-            requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
-        }
-        elderFullFromSize_ = payloadSize;
+    checkHeapLimitUnlocked(payloadSize);
+    // The elder space grows by segments when no block fits, so this neither fails (short of
+    // the host refusing memory, which the space reports as MemoryExhausted) nor collects:
+    // an allocation site is not a safepoint, and the caller can hold objects that no root
+    // reaches yet. Array::create, for one, allocates the Array and then its backing store; a
+    // sweep during the second allocation would free the first.
+    //
+    // Collections are paced by volume instead, as for large objects: once the space took its
+    // budget since the last sweep, a major collection is asked for at the next safepoint. The
+    // budget follows what the sweep left alive (sweepOldGen), so a program whose elder space
+    // is full of live objects is not marked again and again for nothing.
+    void *ptr = elderGenSpace_.alloc(payloadSize, align);
+    elderBytesSinceSweep_ += payloadSize;
+    stats_.elderBytesAllocated += payloadSize;
+    auto *header = headerOf(ptr);
+    header->setRegion(AllocRegion::ElderGen);
+    objectTypes_.erase(header);
+    if (enableYoungGenCopying_) {
+        freshOld_.insert(header);
     }
-    ++stats_.elderOverflowAllocations;
-    stats_.elderOverflowBytes += payloadSize;
-    return allocLargeUnlocked(payloadSize, align);
+    if (UNLIKELY(elderBytesSinceSweep_ >= elderBudget_) &&
+        pendingSafepointCollection_ != CollectionKind::Major &&
+        pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
+        requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
+    }
+    return ptr;
 }
 
 GenerationalAllocatorWithGC::CollectionKind
@@ -548,6 +605,7 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
         throwIfVerificationFailed(verifyHeapUnlocked(), std::format("before {}", reason));
     }
 
+    const auto begin = std::chrono::steady_clock::now();
     switch (kind) {
     case CollectionKind::Minor:
         minorGCUnlocked();
@@ -561,6 +619,33 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
         break;
     case CollectionKind::None:
         break;
+    }
+    {
+        const auto pause = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - begin)
+                .count());
+        if (kind == CollectionKind::Minor) {
+            stats_.minorPauseNs += pause;
+            stats_.minorPauseMaxNs = std::max(stats_.minorPauseMaxNs, pause);
+        } else {
+            stats_.majorPauseNs += pause;
+            stats_.majorPauseMaxNs = std::max(stats_.majorPauseMaxNs, pause);
+        }
+    }
+    if (heapLimitExceeded_ && kind != CollectionKind::Minor) {
+        // The collection an allocation over the limit asked for has run. What is still held
+        // is alive; if that alone exceeds the limit the program does not fit.
+        heapLimitExceeded_ = false;
+        if (const size_t held = oldBytesHeldUnlocked(); held > heapLimitBytes_) {
+            throw MemoryExhausted(
+                "auto",
+                "run-time values",
+                heapLimitRequest_,
+                held,
+                heapLimitBytes_,
+                kHeapLimitEnv);
+        }
     }
 
     if (debugConfig_.verifyAfterGC) {
@@ -591,9 +676,14 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
             havenSpace_.reset(); // Clear the new Haven (To) space
         }
 
-        auto relocateYoung =
-            [this](rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &)
-            -> rtdata::Object * { return forwardYoungRef(ref, refType); };
+        minorTracedGraphs_.clear();
+        minorGraphScan_.clear();
+        auto relocateYoung = [this](
+                                 rtdata::Object *ref,
+                                 const type::Type *refType,
+                                 const rtdata::RefTraceInfo &info) -> rtdata::Object * {
+            return relocateForMinor(ref, refType, info);
+        };
 
         // 2. Forward young-gen objects referenced from roots. The root set currently stores
         // runtime GCGraph carriers, which live in graphSpace rather than autoSpace; tracing the
@@ -605,7 +695,9 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
                 }
 
                 rootObj = forwardYoungRef(rootObj, nullptr);
-                rootObj->updateRefs(relocateYoung, nullptr);
+                if (minorTracedGraphs_.insert(rootObj).second) {
+                    rootObj->updateRefs(relocateYoung, nullptr);
+                }
             }
         }
         for (const auto &entry : externalRootTracers_) {
@@ -628,20 +720,30 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
             // Walk and update refs in old-gen objects (layout is per Object / allocator contract).
             oldObj->updateRefs(relocateYoung, oldType);
             recordObjectTypeUnlocked(oldObj, oldType);
-            if (!collectYoungReferenceEdges(oldObj, oldType).empty()) {
-                retainedRememberedSet[oldHeader] = RememberedSetEntry{
-                    .object = oldObj,
-                    .type   = oldType,
-                };
+            retainedRememberedSet[oldHeader] = RememberedSetEntry{
+                .object = oldObj,
+                .type   = oldType,
+            };
+        }
+
+        // 4. Scan copied/promoted objects, objects born old and late-found graphs with their
+        // static layouts.
+        scanRelocatedObjects();
+        // From here on "young" means young only: nothing is fresh any more.
+        freshOld_.clear();
+        // Keep the remembered owners that still point at a young object (the scan above may
+        // have promoted their targets), and remember the promoted and born-old objects that do.
+        rememberedSet_.clear();
+        for (const auto &[oldHeader, entry] : retainedRememberedSet) {
+            if (!collectYoungReferenceEdges(entry.object, entry.type).empty()) {
+                rememberedSet_[oldHeader] = entry;
             }
         }
-        rememberedSet_ = std::move(retainedRememberedSet);
-
-        // 4. Scan copied/promoted objects with their static layouts.
-        scanRelocatedObjects();
         for (const TraceEntry &entry : relocationScan_) {
             rememberOldObjectIfYoungRefsUnlocked(entry.object, entry.type);
         }
+        minorTracedGraphs_.clear();
+        minorGraphScan_.clear();
 
         // 5. Finalize dead young wrappers, then reset Birth and Cache. Forwarded source objects
         // still have a live copy in Haven/Elder, so finalizing only unforwarded payloads preserves
@@ -753,7 +855,7 @@ GenerationalAllocatorWithGC::collectYoungReferenceEdges(
         [&](rtdata::Object *ref,
             const type::Type *refType,
             const rtdata::RefTraceInfo &info) -> rtdata::Object * {
-            if (ref && inYoungGenSpace(autoHeaderForPayload(ref))) {
+            if (ref && youngOrFreshUnlocked(autoHeaderForPayload(ref))) {
                 edges.push_back(
                     RememberedEdge{
                         .ownerHeader = ownerHeader,
@@ -826,49 +928,32 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
     void *newObj            = nullptr;
     ObjectHeader *newHeader = nullptr;
 
-    bool promoted = false;
-    if (UNLIKELY(age >= promotionAgeThreshold_)) {
-        // Promote to old generation.
+    // Promotion cannot fail short of the host refusing memory (the elder space grows), and
+    // must not collect: a collection is already running. What it takes counts against the
+    // elder budget, so a major collection follows at a later safepoint.
+    const auto promote = [&]() {
         newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-        if (!newObj) {
-            if (inGC_) {
-                // Re-entering major GC while forwarding would invalidate the active relocation
-                // state. Surface allocation pressure instead of corrupting forwarding metadata.
-                throw std::bad_alloc();
-            }
-            // Old gen full outside an active relocation pass: run full collection and retry.
-            majorGCUnlocked();
-            newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-            if (!newObj)
-                throw std::bad_alloc();
+        elderBytesSinceSweep_ += objSize;
+        if (UNLIKELY(elderBytesSinceSweep_ >= elderBudget_) &&
+            pendingSafepointCollection_ != CollectionKind::Major &&
+            pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
+            requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
         }
-
         newHeader = headerOf(newObj);
         newHeader->setAge(age);
         newHeader->setRegion(AllocRegion::ElderGen);
+        objectTypes_.erase(newHeader);
+    };
+
+    bool promoted = false;
+    if (UNLIKELY(age >= promotionAgeThreshold_)) {
+        promote();
         promoted = true;
     } else {
-        // Copy into survivor To.
+        // Copy into survivor To; when it is full, promote instead.
         newObj = havenSpace_.alloc(objSize, alignof(slot_t));
         if (UNLIKELY(!newObj)) {
-            // To space full: promote instead.
-            newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-            if (UNLIKELY(!newObj)) {
-                if (inGC_) {
-                    // Already in GC; cannot recurse into another major pass here.
-                    throw std::bad_alloc();
-                }
-
-                majorGCUnlocked();
-                newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
-
-                if (!newObj)
-                    throw std::bad_alloc();
-            }
-
-            newHeader = headerOf(newObj);
-            newHeader->setAge(age);
-            newHeader->setRegion(AllocRegion::ElderGen);
+            promote();
             promoted = true;
         } else {
             newHeader = headerOf(newObj);
@@ -905,6 +990,29 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
     return static_cast<rtdata::Object *>(newObj);
 }
 
+bool GenerationalAllocatorWithGC::youngOrFreshUnlocked(ObjectHeader *header) const {
+    return header && (inYoungGenSpace(header) || (!freshOld_.empty() && freshOld_.contains(header)));
+}
+
+rtdata::Object *GenerationalAllocatorWithGC::relocateForMinor(
+    rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &info) {
+    if (!ref) {
+        return nullptr;
+    }
+    if (refType == nullptr && (info.slotName == "graph" || info.slotName == "graph-edge")) {
+        // A graph carrier (graph space, never moved). Program graphs are roots and were
+        // traced at the start; a graph created while the program runs (an autodiff gradient
+        // graph, an attached rule) is reached only here, through the Function that owns it or
+        // through another graph. Its static area can hold young constants, so it is traced
+        // once per collection like a root.
+        if (minorTracedGraphs_.insert(ref).second) {
+            minorGraphScan_.push_back(ref);
+        }
+        return ref;
+    }
+    return forwardYoungRef(ref, refType);
+}
+
 rtdata::Object *
 GenerationalAllocatorWithGC::forwardYoungRef(rtdata::Object *ref, const type::Type *refType) {
     if (!ref) {
@@ -922,19 +1030,49 @@ GenerationalAllocatorWithGC::forwardYoungRef(rtdata::Object *ref, const type::Ty
     if (inYoungGenSpace(refHeader)) {
         return forward(ref, refType);
     }
+    if (UNLIKELY(!freshOld_.empty())) {
+        // Born old since the last minor collection: it does not move, but nothing recorded
+        // what it points at. Scan it. With a precise layout once is enough; without one (a
+        // self-describing object, or an untyped reference) it is scanned through every
+        // reference that reaches it, and a later typed one still finds it here.
+        if (auto it = freshOld_.find(refHeader); it != freshOld_.end()) {
+            const type::Type *type = isPreciseGCType(refType) ? refType : knownObjectTypeUnlocked(refHeader);
+            if (isPreciseGCType(type)) {
+                freshOld_.erase(it);
+                recordObjectTypeUnlocked(ref, type);
+            }
+            relocationScan_.push_back(TraceEntry{ref, type ? type : refType});
+        }
+    }
     return ref;
 }
 
 void GenerationalAllocatorWithGC::scanRelocatedObjects() {
-    while (relocationScanIndex_ < relocationScan_.size()) {
-        TraceEntry entry = relocationScan_[relocationScanIndex_++];
-        if (!entry.object || !entry.type) {
+    const auto relocate = [this](
+                              rtdata::Object *ref,
+                              const type::Type *refType,
+                              const rtdata::RefTraceInfo &info) -> rtdata::Object * {
+        return relocateForMinor(ref, refType, info);
+    };
+    for (;;) {
+        if (relocationScanIndex_ < relocationScan_.size()) {
+            TraceEntry entry = relocationScan_[relocationScanIndex_++];
+            if (!entry.object) {
+                continue;
+            }
+            // Without a layout the composite values trace nothing, but objects that describe
+            // themselves (a Function, a tensor view, an optimizer state) do, and must: they
+            // were just copied and still point at where their referents were.
+            entry.object->updateRefs(relocate, entry.type);
             continue;
         }
-        entry.object->updateRefs(
-            [this](rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &)
-                -> rtdata::Object * { return forwardYoungRef(ref, refType); },
-            entry.type);
+        if (!minorGraphScan_.empty()) {
+            rtdata::Object *graph = minorGraphScan_.back();
+            minorGraphScan_.pop_back();
+            graph->updateRefs(relocate, nullptr);
+            continue;
+        }
+        break;
     }
 }
 
@@ -1044,8 +1182,13 @@ void GenerationalAllocatorWithGC::sweepOldGen() {
         objectTypes_.erase(header);
     }
     elderGenSpace_.freeBulk(unreachable);
-    elderFullFromSize_    = kElderNotFull;
+    // The next budget: the floor, or the growth percentage of what is left alive (the rule
+    // of the large-object space, see sweepLargeObjects).
     elderBytesSinceSweep_ = 0;
+    elderLiveBytes_       = elderGenSpace_.usage().usedBytes;
+    const size_t growth   = elderLiveBytes_ / 100 * largeObjGrowthPercent_ +
+                            elderLiveBytes_ % 100 * largeObjGrowthPercent_ / 100;
+    elderBudget_          = std::max(elderMinBudget_, growth);
 }
 
 void GenerationalAllocatorWithGC::sweepLargeObjects() {
@@ -1112,7 +1255,10 @@ void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
         "[camel] gc: major={} requested={} deferred={} by_large_budget={} by_elder_exhausted={} "
         "by_other={} alloc_young_mb={:.1f} alloc_elder_mb={:.1f} alloc_large_mb={:.1f} "
         "elder_overflow_objects={} elder_overflow_mb={:.1f} large_live_mb={:.1f} "
-        "large_high_water_mb={:.1f} budget_mb={:.1f} growth_percent={}\n",
+        "large_high_water_mb={:.1f} budget_mb={:.1f} growth_percent={} minor={} moved={} "
+        "promoted={} elder_live_mb={:.1f} elder_reserved_mb={:.1f} elder_segments={} "
+        "minor_pause_ms={:.2f} minor_pause_max_ms={:.3f} major_pause_ms={:.2f} "
+        "major_pause_max_ms={:.3f}\n",
         s.majorCollections,
         s.requestedCollections,
         s.deferredCollections,
@@ -1127,7 +1273,17 @@ void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
         megabytes(s.largeLiveBytes),
         megabytes(s.largeHighWaterMark),
         megabytes(s.largeBudgetBytes),
-        s.largeGrowthPercent);
+        s.largeGrowthPercent,
+        s.minorCollections,
+        s.movedObjects,
+        s.promotedObjects,
+        megabytes(s.elderLiveBytes),
+        megabytes(s.elderReservedBytes),
+        s.elderSegments,
+        static_cast<double>(s.minorPauseNs) / 1e6,
+        static_cast<double>(s.minorPauseMaxNs) / 1e6,
+        static_cast<double>(s.majorPauseNs) / 1e6,
+        static_cast<double>(s.majorPauseMaxNs) / 1e6);
 }
 
 } // namespace camel::core::mm

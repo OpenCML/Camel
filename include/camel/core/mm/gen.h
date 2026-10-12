@@ -33,6 +33,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // ============================================================================
@@ -226,8 +227,13 @@ class GenerationalAllocatorWithGC : public IAllocator {
         // last sweep left: the budget is the larger of largeObjCollectionBudget and
         // live * percent / 100. 100 lets the space double before it is collected again.
         size_t largeObjGrowthPercent;
+        // Share of the birth space that, once in use, makes the allocator ask for a minor
+        // collection at the next safepoint (moving collector only). Asking before the space
+        // is full keeps what is allocated up to that safepoint out of the elder space.
         float minorGCTriggerRatio;
-        float majorGCTriggerRatio;
+        // Old-space bytes (elder + large) the heap may hold; 0: no limit but the host's
+        // memory (CAMEL_GC_HEAP_LIMIT_MB). See allocation and safepoint for how it is enforced.
+        size_t heapLimitBytes;
         bool enableYoungGenCopying;
     };
 
@@ -278,6 +284,16 @@ class GenerationalAllocatorWithGC : public IAllocator {
         size_t largeBudgetBytes   = 0;
         size_t largeHighWaterMark = 0;
         size_t largeGrowthPercent = 0;
+        // Elder space: what the last sweep left, the budget in force, what is reserved.
+        size_t elderLiveBytes     = 0;
+        size_t elderBudgetBytes   = 0;
+        size_t elderReservedBytes = 0;
+        size_t elderSegments      = 0;
+        // Time the program was stopped for collections (verification excluded).
+        uint64_t minorPauseNs    = 0;
+        uint64_t minorPauseMaxNs = 0;
+        uint64_t majorPauseNs    = 0;
+        uint64_t majorPauseMaxNs = 0;
     };
 
     struct HeapVerificationIssue {
@@ -355,7 +371,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     const BumpPointerAllocator &birthSpace() const { return birthSpace_; }
     const BumpPointerAllocator &havenSpace() const { return havenSpace_; }
     const BumpPointerAllocator &cacheSpace() const { return cacheSpace_; }
-    const FreeListAllocator &elderGenSpace() const { return elderGenSpace_; }
+    const GrowableFreeListAllocator &elderGenSpace() const { return elderGenSpace_; }
     const LargeObjectAllocator &largeObjSpace() const { return largeObjSpace_; }
 
     // Major GC: collect the entire heap.
@@ -368,10 +384,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void *allocLargeUnlocked(size_t payloadSize, size_t align);
 
-    // Small-object allocation in the elder space, or in the large-object space when the elder
-    // space is full. It never collects: collection happens at safepoints only (see the
-    // definition).
+    // Small-object allocation in the elder space, which grows by segments. It never
+    // collects: collection happens at safepoints only (see the definition).
     void *allocElderUnlocked(size_t payloadSize, size_t align);
+
+    // Old-space bytes in use: elder blocks plus large objects.
+    size_t oldBytesHeldUnlocked() const;
+
+    // Enforces heapLimitBytes for an old-space allocation of `requestBytes` (see definition).
+    void checkHeapLimitUnlocked(size_t requestBytes);
 
     static CollectionKind combineCollectionKinds(CollectionKind lhs, CollectionKind rhs);
 
@@ -421,7 +442,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // FreeList manages fragmentation; good density, slower allocation than bump.
     // Major GC runs mark-sweep over this region.
     // ============================================================================
-    FreeListAllocator elderGenSpace_;
+    GrowableFreeListAllocator elderGenSpace_;
 
     // ============================================================================
     // Large object space — separate region
@@ -441,15 +462,19 @@ class GenerationalAllocatorWithGC : public IAllocator {
     size_t largeObjBudget_;           // Large-object bytes allowed before requesting a major GC
     size_t largeBytesSinceSweep_ = 0; // Large-object bytes allocated since the last sweep
     size_t largeLiveBytes_       = 0; // Large-object bytes the last sweep left
-    // Elder-space overflow (allocElderUnlocked). Payloads of elderFullFromSize_ bytes or more
-    // found no block since the last sweep and go straight to the large-object space.
-    static constexpr size_t kElderNotFull = static_cast<size_t>(-1);
-    size_t elderFullFromSize_             = kElderNotFull;
-    size_t elderBytesSinceSweep_          = 0; // Bytes the elder space took since the last sweep
-    size_t elderRefillThreshold_;              // ...of which this many justify a collection
-    float minorGCTriggerRatio_;       // Reserved: minor GC trigger ratio (e.g. when birth is full)
-    float majorGCTriggerRatio_;       // Major GC trigger ratio (old-gen utilization)
-    bool enableYoungGenCopying_;      // The runtime currently assumes stable raw object pointers.
+    // Elder-space pacing, the same rule as for large objects: a major collection is asked for
+    // once the space took elderBudget_ bytes since the last sweep, and after a sweep the
+    // budget is the larger of the floor (the first segment) and the growth percentage of what
+    // the sweep left alive.
+    size_t elderMinBudget_;
+    size_t elderBudget_;
+    size_t elderBytesSinceSweep_ = 0; // Bytes the elder space took since the last sweep
+    size_t elderLiveBytes_       = 0; // Elder bytes the last sweep left
+    size_t minorTriggerBytes_;        // Birth-space occupancy that asks for a minor collection
+    size_t heapLimitBytes_;           // 0: none
+    bool heapLimitExceeded_ = false;  // Set by an allocation; resolved at the next safepoint
+    size_t heapLimitRequest_ = 0;     // ...the allocation that crossed the limit
+    bool enableYoungGenCopying_;      // Young objects are copied (and so move) when set.
 
     // ============================================================================
     // GC state and roots
@@ -476,6 +501,18 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // layout is required because composite objects do not carry their own runtime type metadata.
     std::unordered_map<ObjectHeader *, RememberedSetEntry> rememberedSet_;
     std::unordered_map<ObjectHeader *, const type::Type *> objectTypes_;
+    // Moving collector: objects that were born old (a large object, or a small one allocated
+    // while the birth space was full) since the last minor collection. Their creator fills
+    // them through plain stores, with no write barrier, so they may point at young objects
+    // without being remembered. The next minor collection scans each one it reaches through a
+    // typed reference (from a root, a young object, a remembered owner or another fresh
+    // object), which is every way such an object can be reached: a store of it into an older
+    // object goes through the barrier, which remembers the owner.
+    std::unordered_set<ObjectHeader *> freshOld_;
+    // Graph carriers whose static area this minor collection has traced. Program graphs are
+    // roots; a graph created while the program runs is reached through a Function value.
+    std::unordered_set<rtdata::Object *> minorTracedGraphs_;
+    std::vector<rtdata::Object *> minorGraphScan_;
     DebugConfig debugConfig_{};
     RuntimeStats stats_{};
     CollectionKind pendingSafepointCollection_ = CollectionKind::None;
@@ -526,7 +563,16 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     rtdata::Object *forwardYoungRef(rtdata::Object *ref, const type::Type *refType);
 
+    // Whether a minor collection must look at `header`'s object to keep it or what it points
+    // at alive and up to date: a young object, or one born old since the last one.
+    bool youngOrFreshUnlocked(ObjectHeader *header) const;
+
     void scanRelocatedObjects();
+
+    // The relocation callback of a minor collection: forwards young objects, queues objects
+    // born old and graph carriers for a scan of their own.
+    rtdata::Object *relocateForMinor(
+        rtdata::Object *ref, const type::Type *refType, const rtdata::RefTraceInfo &info);
 
     size_t rootSourceCountUnlocked() const;
 
@@ -546,7 +592,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
         std::string_view path) const;
 
     bool autoRegionContainsPayload(
-        const FreeListAllocator &allocator, rtdata::Object *object, std::string_view regionName,
+        const GrowableFreeListAllocator &allocator, rtdata::Object *object,
+        std::string_view regionName,
         AllocRegion expectedRegion, std::vector<HeapVerificationIssue> &issues,
         std::string_view path) const;
 
@@ -563,7 +610,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         std::string_view regionName, AllocRegion expectedRegion) const;
 
     void validateAllocatedHeaders(
-        std::vector<HeapVerificationIssue> &issues, const FreeListAllocator &allocator,
+        std::vector<HeapVerificationIssue> &issues, const GrowableFreeListAllocator &allocator,
         std::string_view regionName, AllocRegion expectedRegion) const;
 
     void validateAllocatedHeaders(
