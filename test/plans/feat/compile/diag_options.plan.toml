@@ -348,8 +348,9 @@ args = ["-Wno-constant-expression-faults", "${case}", "std::opt::fold", "std::nv
 expect_exit = 0
 verify_script = """
 assert(input.stderr === '', 'no warning: ' + input.stderr)
-assert(input.stdout === '7\n', input.stdout)
+assert(input.normalized.stdout === '7\n', input.normalized.stdout)
 """
+normalizers = ["normalize_newlines"]
 timeout_ms = 8000
 
 [[tests]]

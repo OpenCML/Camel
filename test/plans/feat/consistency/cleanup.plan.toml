@@ -46,7 +46,7 @@ expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_stdout_starts_with = "28\n"
 verify_script = """
 const file = input.repo_root + '/tmp/test/consistency/before_fault.txt'
-const text = fs.readFileSync(file, 'utf8')
+const text = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 assert(text === 'complete content, 28 bytes.\n', JSON.stringify(text))
 fs.rmSync(file)
 """
@@ -59,7 +59,7 @@ envs = ["CAMEL_TEST_DIR=tmp/test/consistency", "CAMEL_TEST_FILE=before_exit.txt"
 expect_exit = 5
 verify_script = """
 const file = input.repo_root + '/tmp/test/consistency/before_exit.txt'
-const text = fs.readFileSync(file, 'utf8')
+const text = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 assert(text === 'complete content, 28 bytes.\n', JSON.stringify(text))
 assert(input.normalized.stdout === '28\n', JSON.stringify(input.normalized.stdout))
 fs.rmSync(file)

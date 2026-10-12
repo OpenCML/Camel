@@ -118,6 +118,10 @@ test set (`test/plans/feat/consistency/runner.plan.toml`).
   carries an absolute path (for example the `srcfile` attribute of `std::rgir` / `std::argir`),
   otherwise the golden only matches the checkout it was recorded in.
 - `normalize_addresses`
+- `normalize_platform_error_messages`
+  Maps equivalent Windows and Unix standard-library messages for missing files and unmatched
+  regex parentheses to one spelling. Use it only on those diagnostic snapshots; the operation,
+  path, pattern and source locations remain part of the comparison.
 - `normalize_duration_seconds`
 
 Normalizers affect:
