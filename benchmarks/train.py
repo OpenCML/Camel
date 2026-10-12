@@ -162,6 +162,7 @@ def run_camel(model: str, passes: Tuple[str, ...], env: Dict[str, str], timeout:
 
 
 def camel_gradients(model: str, config: str = "camel_nvm") -> Dict[str, np.ndarray]:
+    load(model)  # the Camel program reads the benchmark artifacts; generate them on first use
     with tempfile.TemporaryDirectory() as tmp:
         run_camel(model, CAMEL_CONFIGS[config], {"CAMEL_BENCH_GRADS": tmp})
         return {p.stem: np.load(p) for p in Path(tmp).glob("*.npy")}
