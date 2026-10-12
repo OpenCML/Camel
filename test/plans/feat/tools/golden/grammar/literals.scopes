@@ -83,36 +83,42 @@
 #                 ^ keyword.operator.assignment.camel
 #                   ^^^^ constant.numeric.float.camel
 >
->// a sign directly before the digits belongs to the token
+>// a number carries no sign: '-' and '+' are operator tokens (the parser reads a sign before a
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>// number, where an operand is expected, as the sign of the literal)
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >let neg = -1
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^ meta.declaration.let.camel variable.other.constant.camel
 #        ^ keyword.operator.assignment.camel
-#          ^^ constant.numeric.integer.decimal.camel
+#          ^ keyword.operator.arithmetic.camel
+#           ^ constant.numeric.integer.decimal.camel
 >let pos = +2.5
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^ meta.declaration.let.camel variable.other.constant.camel
 #        ^ keyword.operator.assignment.camel
-#          ^^^^ constant.numeric.float.camel
+#          ^ keyword.operator.arithmetic.camel
+#           ^^^ constant.numeric.float.camel
 >let diff = dec - 1
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^^ meta.declaration.let.camel variable.other.constant.camel
 #         ^ keyword.operator.assignment.camel
 #               ^ keyword.operator.arithmetic.camel
 #                 ^ constant.numeric.integer.decimal.camel
->// the same after a name: the lexer still makes the sign part of the number (a syntax error)
+>// after a name the sign is the binary operator, whatever the spacing
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >let tight = dec -1
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^^^ meta.declaration.let.camel variable.other.constant.camel
 #          ^ keyword.operator.assignment.camel
-#                ^^ constant.numeric.integer.decimal.camel
->// '.0.1' is a REAL to the lexer, not two tuple elements (a syntax error)
+#                ^ keyword.operator.arithmetic.camel
+#                 ^ constant.numeric.integer.decimal.camel
+>// '.0.1' is a REAL to the lexer; the parser splits it into the two tuple indices
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >let nested = (pair.0).1 + deep.0.1
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^^^^ meta.declaration.let.camel variable.other.constant.camel

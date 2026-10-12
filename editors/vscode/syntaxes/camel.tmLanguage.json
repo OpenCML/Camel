@@ -445,23 +445,23 @@
       "patterns": [
         {
           "name": "constant.numeric.float.camel",
-          "match": "[+-]?\\b[0-9]+\\.[0-9]+(?:[eE][+-]?[0-9]+)?\\b"
+          "match": "\\b[0-9]+\\.[0-9]+(?:[eE][+-]?[0-9]+)?\\b"
         },
         {
           "name": "constant.numeric.integer.hexadecimal.camel",
-          "match": "[+-]?\\b0x(?:[0-9a-fA-F]+?[eE][+-][0-9]+|[0-9a-fA-F]+)\\b"
+          "match": "\\b0x(?:[0-9a-fA-F]+?[eE][+-][0-9]+|[0-9a-fA-F]+)\\b"
         },
         {
           "name": "constant.numeric.integer.binary.camel",
-          "match": "[+-]?\\b0b[01]+(?:[eE][+-]?[0-9]+)?\\b"
+          "match": "\\b0b[01]+(?:[eE][+-]?[0-9]+)?\\b"
         },
         {
           "name": "constant.numeric.integer.octal.camel",
-          "match": "[+-]?\\b0[0-7]+(?:[eE][+-]?[0-9]+)?\\b"
+          "match": "\\b0[0-7]+(?:[eE][+-]?[0-9]+)?\\b"
         },
         {
           "name": "constant.numeric.integer.decimal.camel",
-          "match": "[+-]?\\b(?:0|[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?\\b"
+          "match": "\\b(?:0|[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?\\b"
         }
       ]
     },

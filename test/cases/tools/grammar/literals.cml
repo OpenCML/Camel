@@ -19,13 +19,14 @@ let real_exp = 6.02e23
 let real_neg_exp = 1.5E-10
 let leading_zero = 00.5
 
-// a sign directly before the digits belongs to the token
+// a number carries no sign: '-' and '+' are operator tokens (the parser reads a sign before a
+// number, where an operand is expected, as the sign of the literal)
 let neg = -1
 let pos = +2.5
 let diff = dec - 1
-// the same after a name: the lexer still makes the sign part of the number (a syntax error)
+// after a name the sign is the binary operator, whatever the spacing
 let tight = dec -1
-// '.0.1' is a REAL to the lexer, not two tuple elements (a syntax error)
+// '.0.1' is a REAL to the lexer; the parser splits it into the two tuple indices
 let nested = (pair.0).1 + deep.0.1
 
 // STRING
