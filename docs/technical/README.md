@@ -13,7 +13,7 @@
 | [04_compilation_pipeline.md](04_compilation_pipeline.md) | 编译流水线：从源码到图与字节码 |
 | [05_graph_ir.md](05_graph_ir.md) | 图中间表示（GIR）详解 |
 | [06_runtime_and_execution.md](06_runtime_and_execution.md) | 运行时、虚拟机与调度器 |
-| [07_jit_architecture.md](07_jit_architecture.md) | FastVM JIT 模块架构设计（原稿见 [../design/JIT_ARCHITECTURE.md](../design/JIT_ARCHITECTURE.md)） |
+| [07_jit_architecture.md](07_jit_architecture.md) | FastVM JIT 模块架构设计 |
 | [08_fastvm_bytecode_semantics.md](08_fastvm_bytecode_semantics.md) | FastVM 字节码执行语义（BRCH/JOIN 等与解释器一致约定） |
 | [09_gir_cpp_fib_lowering.md](09_gir_cpp_fib_lowering.md) | GIR 到 C++ 的 `fib` 特化 lowering 契约：适用的节点子集、逻辑帧与物理帧、节点到 C++ 的映射、何时回退到运行时路径 |
 | [09_operator_registration.md](09_operator_registration.md) | 算子注册：OperatorGroup 与类型解析器、URI 格式与 Executor 分派、纯度等语义性质登记、全局内置模块与 `.cmo` 模块的注册流程 |
