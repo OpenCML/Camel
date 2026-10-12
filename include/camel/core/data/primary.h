@@ -22,7 +22,10 @@
 #include "camel/core/data/base.h"
 #include "camel/utils/assert.h"
 
+#include <cmath>
 #include <iomanip>
+#include <limits>
+#include <memory>
 #include <sstream>
 #include <type_traits>
 
@@ -111,6 +114,58 @@ using DoubleData = PrimaryData<double>;
 using BoolData   = PrimaryData<bool>;
 using ByteData   = PrimaryData<std::byte>;
 
+// Whether the value of a literal can be held by the narrower primitive type `to`: an int64 in
+// an i32, a finite double in an f32 (it would become an infinity).
+template <typename T> bool primaryFitsType(T value, type::TypeCode to) {
+    if constexpr (std::is_same_v<T, int64_t>) {
+        if (to == type::TypeCode::Int32) {
+            return value >= std::numeric_limits<int32_t>::min() &&
+                   value <= std::numeric_limits<int32_t>::max();
+        }
+    } else if constexpr (std::is_same_v<T, double>) {
+        if (to == type::TypeCode::Float32) {
+            return !std::isfinite(value) ||
+                   std::abs(value) <= static_cast<double>(std::numeric_limits<float>::max());
+        }
+    }
+    return true;
+}
+
+// The range of a narrower primitive type, for the diagnostic of a literal it cannot hold; empty
+// when `data` converted to `type` is not such a case.
+inline std::string literalRangeViolation(const data_ptr_t &data, type::Type *type) {
+    if (!data || !type || !type->isPrimitive() || !data->type()->isPrimitive()) {
+        return {};
+    }
+    const type::TypeCode from = data->type()->code(), to = type->code();
+    if (from == type::TypeCode::Int64 && to == type::TypeCode::Int32) {
+        const auto value = std::dynamic_pointer_cast<PrimaryData<int64_t>>(data);
+        if (value && !primaryFitsType(value->data(), to)) {
+            return "-2147483648 to 2147483647";
+        }
+    } else if (from == type::TypeCode::Float64 && to == type::TypeCode::Float32) {
+        const auto value = std::dynamic_pointer_cast<PrimaryData<double>>(data);
+        if (value && !primaryFitsType(value->data(), to)) {
+            return "at most about 3.4e38 in magnitude";
+        }
+    }
+    return {};
+}
+
+// The text of a numeric literal as the user wrote such a value (no `L` suffix).
+inline std::string literalValueText(const data_ptr_t &data) {
+    if (const auto real = std::dynamic_pointer_cast<PrimaryData<double>>(data)) {
+        std::ostringstream oss;
+        oss << std::setprecision(15) << real->data();
+        return oss.str();
+    }
+    std::string text = data->toString();
+    if (!text.empty() && text.back() == 'L') {
+        text.pop_back();
+    }
+    return text;
+}
+
 template <typename T> data_ptr_t PrimaryData<T>::convertTo(type::Type *type) {
     if (type->equals(type_)) {
         return shared_from_this();
@@ -120,10 +175,18 @@ template <typename T> data_ptr_t PrimaryData<T>::convertTo(type::Type *type) {
         if (from == type::TypeCode::Int32 && to == type::TypeCode::Int64) {
             return std::make_shared<LongData>(static_cast<int64_t>(data_));
         } else if (from == type::TypeCode::Int64 && to == type::TypeCode::Int32) {
+            // A literal an i32 cannot hold is not converted (it used to be cut to 32 bits:
+            // `let b: i32 = 3000000000` was -1294967296). The caller reports it.
+            if (!primaryFitsType(data_, to)) {
+                return nullptr;
+            }
             return std::make_shared<IntData>(static_cast<int32_t>(data_));
         } else if (from == type::TypeCode::Float32 && to == type::TypeCode::Float64) {
             return std::make_shared<DoubleData>(static_cast<double>(data_));
         } else if (from == type::TypeCode::Float64 && to == type::TypeCode::Float32) {
+            if (!primaryFitsType(data_, to)) {
+                return nullptr;
+            }
             return std::make_shared<FloatData>(static_cast<float>(data_));
         }
     }

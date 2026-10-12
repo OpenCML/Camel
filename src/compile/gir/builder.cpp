@@ -2336,6 +2336,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 converted = data->convertTo(targetType);
             }
             if (!converted) {
+                if (const std::string limits = literalRangeViolation(data, targetType);
+                    !limits.empty()) {
+                    diags_->of(SemanticDiag::LiteralOutOfRange)
+                        .atOrigin(gct->load()->origin())
+                        .commit(literalValueText(data), targetType->toString(), limits);
+                    throw BuildAbortException();
+                }
                 diags_->of(SemanticDiag::LiteralStaticCastFailed)
                     .atOrigin(gct->load()->origin())
                     .commit(data->toString(), targetType->toString());
@@ -2371,6 +2378,12 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             if (data_ptr_t converted = data->convertTo(payload)) {
                 valueNode = currGraph_->addStaticDataNode(converted);
                 registerNodeOrigin(context_, valueNode, gct->at(0), "gir.data");
+            } else if (const std::string limits = literalRangeViolation(data, payload);
+                       !limits.empty()) {
+                diags_->of(SemanticDiag::LiteralOutOfRange)
+                    .atOrigin(gct->load()->origin())
+                    .commit(literalValueText(data), payload->toString(), limits);
+                throw BuildAbortException();
             }
         }
     }

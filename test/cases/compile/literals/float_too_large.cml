@@ -1,0 +1,4 @@
+func main(): int sync {
+    println(1.0e400)
+    return 0
+}

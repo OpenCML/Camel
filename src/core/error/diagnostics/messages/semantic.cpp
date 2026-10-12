@@ -329,6 +329,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::LiteralOutOfRange,
+            {
+                "LiteralOutOfRange",
+                "The literal '{0}' is out of the range of type '{1}' ({2}).",
+                "A literal that its type cannot hold is not wrapped around or cut off. Write a "
+                "value in the range, or give the literal a wider type.",
+            },
+        },
+        {
             SemanticDiag::ImmutablePassedToVarParam,
             {
                 "ImmutablePassedToVarParam",
@@ -579,6 +588,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A "
                 "'match' on a bool that has both 'case true' and 'case false' is complete and "
                 "is not reported.",
+            },
+        },
+        {
+            SemanticDiag::IntegerLiteralTruncated,
+            {
+                "IntegerLiteralTruncated",
+                "The integer literal '{0}' is not a whole number: its value is {1}, the "
+                "fraction is dropped.",
+                "A number written without a decimal point is an 'int', with an exponent too. "
+                "For the floating-point number write the decimal point: '{2}'.",
             },
         },
         {

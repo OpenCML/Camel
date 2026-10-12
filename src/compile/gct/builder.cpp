@@ -287,6 +287,22 @@ void Builder::initInnerTypes() {
 /*
 Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
+// A literal that could not be converted to the type its position asks for: out of the range
+// of a narrower numeric type (`let b: i32 = 3000000000`), or not convertible at all.
+template <typename Diags, typename Range>
+static void reportLiteralCastFailure(
+    Diags &diags, const Range &range, const data_ptr_t &data, Type *type) {
+    if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
+        diags->of(SemanticDiag::LiteralOutOfRange)
+            .at(range)
+            .commit(literalValueText(data), type->toString(), limits);
+        return;
+    }
+    diags->of(SemanticDiag::LiteralStaticCastFailed)
+        .at(range)
+        .commit(data->toString(), type->toString());
+}
+
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     ENTER("Module");
     // Ensure the AST node is of the expected type
@@ -616,9 +632,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                         if (convertedData) {
                             dataNode = createNodeAs<DataLoad>(convertedData);
                         } else {
-                            diags_->of(SemanticDiag::LiteralStaticCastFailed)
-                                .at(ast->load()->tokenRange())
-                                .commit(data->toString(), type->toString());
+                            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, type);
                             throw BuildAbortException();
                         }
                     } else {
@@ -680,9 +694,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                         if (convertedData) {
                             dataNode = createNodeAs<DataLoad>(convertedData);
                         } else {
-                            diags_->of(SemanticDiag::LiteralStaticCastFailed)
-                                .at(ast->load()->tokenRange())
-                                .commit(data->toString(), type->toString());
+                            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, type);
                             throw BuildAbortException();
                         }
                     } else {
@@ -1657,18 +1669,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             const auto &dataLoad = dataNode->loadAs<DataLoad>();
             const auto &data     = dataLoad->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
-                diags_->of(SemanticDiag::LiteralStaticCastFailed)
-                    .at(ast->load()->tokenRange())
-                    .commit(data->toString(), dstType->toString());
+                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, dstType);
                 throw BuildAbortException();
             }
             auto convertedData = data->convertTo(dstType);
             if (convertedData) {
                 res = createNodeAs<DataLoad>(convertedData);
             } else {
-                diags_->of(SemanticDiag::LiteralStaticCastFailed)
-                    .at(ast->load()->tokenRange())
-                    .commit(data->toString(), dstType->toString());
+                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, dstType);
                 throw BuildAbortException();
             }
         } else {
@@ -2007,12 +2015,50 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {
-        // Parse the string as an integer and create a data object
-        data = makeDataFromLiteral(parseNumber<int64_t>(str));
+        // Exact arithmetic. A literal that an int cannot hold used to wrap around
+        // (`9223372036854775808` was the smallest int, as was `1e400`).
+        const IntegerLiteral parsed = parseIntegerLiteral(str);
+        if (parsed.status == IntegerLiteralStatus::OutOfRange) {
+            diags_->of(SemanticDiag::LiteralOutOfRange)
+                .at(ast->load()->tokenRange())
+                .commit(str, "int", "-9223372036854775808 to 9223372036854775807");
+            throw BuildAbortException();
+        }
+        if (parsed.status == IntegerLiteralStatus::Invalid) {
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(ast->load()->tokenRange())
+                .commit("integer", str);
+            throw BuildAbortException();
+        }
+        if (parsed.inexact) {
+            // `1e-2` is the int 0. Whether such a literal should be a float or an error is
+            // not decided; until then the dropped fraction is at least said.
+            std::string asReal = str;
+            if (const size_t e = asReal.find_first_of("eE"); e != std::string::npos) {
+                asReal.insert(e, ".0");
+            }
+            diags_->of(SemanticDiag::IntegerLiteralTruncated)
+                .at(ast->load()->tokenRange())
+                .commit(str, std::to_string(parsed.value), asReal);
+        }
+        data = makeDataFromLiteral(parsed.value);
     } break;
     case LiteralType::Real: {
-        // Parse the string as a floating-point number and create a data object
-        data = makeDataFromLiteral(parseNumber<double>(str));
+        // The double nearest to the number written. One too large for a double was an
+        // exception that reached the user as bare text.
+        try {
+            data = makeDataFromLiteral(parseNumber<double>(str));
+        } catch (const std::overflow_error &) {
+            diags_->of(SemanticDiag::LiteralOutOfRange)
+                .at(ast->load()->tokenRange())
+                .commit(str, "float", "at most about 1.8e308 in magnitude");
+            throw BuildAbortException();
+        } catch (const std::invalid_argument &) {
+            diags_->of(SemanticDiag::InvalidLiteral)
+                .at(ast->load()->tokenRange())
+                .commit("real", str);
+            throw BuildAbortException();
+        }
     } break;
     case LiteralType::Boolean: {
         // Handle boolean literals ("true" or "false")

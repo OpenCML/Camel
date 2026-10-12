@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-113 diagnostics: 104 errors, 9 warnings.
+115 diagnostics: 105 errors, 10 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -71,6 +71,7 @@ prints one entry.
 | `0x03000020` | [SemanticDiag::InvalidTypeArgument](#invalidtypeargument) | Error |
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
+| `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error |
@@ -97,6 +98,7 @@ prints one entry.
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
 | `0x03100091` | [SemanticDiag::MatchWithoutDefault](#matchwithoutdefault) | Warn |
+| `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -613,7 +615,14 @@ Invalid {0} literal: '{1}'.
 Ensure the literal '{1}' is valid and supported by the language.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/literals/int_base_with_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_base_with_exponent.cml`)
+
+```camel
+func main(): int sync {
+    println(0b1e5)
+    return 0
+}
+```
 
 ### DuplicateDictKey
 
@@ -1386,6 +1395,31 @@ func tree(x: Tensor<f32, const [-1]>, n: int): Tensor<f32, const [1]> {
 }
 func main(): int sync {
     println(sum(tree(reshape([1.0, 2.0, 3.0, 4.0, 5.0], [5]), 5)))
+    return 0
+}
+```
+
+### LiteralOutOfRange
+
+`0x03000023` · Error · `SemanticDiag::LiteralOutOfRange`
+
+**Message**
+
+```text
+The literal '{0}' is out of the range of type '{1}' ({2}).
+```
+
+**Help**
+
+```text
+A literal that its type cannot hold is not wrapped around or cut off. Write a value in the range, or give the literal a wider type.
+```
+
+**Example** (`test/cases/compile/literals/int_too_large.cml`, run as `camel -E short test/cases/compile/literals/int_too_large.cml`)
+
+```camel
+func main(): int sync {
+    println(9223372036854775808)
     return 0
 }
 ```
@@ -2198,6 +2232,31 @@ func main(): int sync {
     println(f('a'), f('b'))
     println(f('zzz'))
     println('not reached')
+    return 0
+}
+```
+
+### IntegerLiteralTruncated
+
+`0x031000A0` · Warn · `SemanticDiag::IntegerLiteralTruncated`
+
+**Message**
+
+```text
+The integer literal '{0}' is not a whole number: its value is {1}, the fraction is dropped.
+```
+
+**Help**
+
+```text
+A number written without a decimal point is an 'int', with an exponent too. For the floating-point number write the decimal point: '{2}'.
+```
+
+**Example** (`test/cases/compile/literals/int_negative_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_negative_exponent.cml`)
+
+```camel
+func main(): int sync {
+    println(1e-2, 15e-1, 1500e-2)
     return 0
 }
 ```

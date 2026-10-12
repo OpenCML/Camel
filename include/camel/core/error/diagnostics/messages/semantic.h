@@ -63,6 +63,7 @@ enum class SemanticDiag : uint32_t {
     InvalidTypeArgument          = 0x000020,
     ArgumentNeedsConversion      = 0x000021,
     ReturnNeedsConversion        = 0x000022,
+    LiteralOutOfRange            = 0x000023,
     // An error: the construct it reports is not compiled, so a program that uses it must not
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
     // dropped while the rest of the program went on.
@@ -101,6 +102,7 @@ enum class SemanticDiag : uint32_t {
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
     ExitInUnusedBranch           = 0x100090,
     MatchWithoutDefault          = 0x100091,
+    IntegerLiteralTruncated      = 0x1000A0,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }
