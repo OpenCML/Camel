@@ -5,9 +5,13 @@ operator,forward_lowering_min_opset,gradient_lowering_min_opset
 :op/or,1,
 autodiff:stop_gradient,,1
 math:sqrt,1,
+nn:adam,,7
+nn:adam_state,,8
 nn:avg_pool2d,1,
 nn:avg_pool2d_grad,,
 nn:batch_norm,15,
+nn:batch_norm_train,13,
+nn:batch_norm_train_grad,,13
 nn:conv2d,1,
 nn:conv2d_bias_grad,,1
 nn:conv2d_input_grad,,1
@@ -26,7 +30,7 @@ tensor:broadcast_like,,8
 tensor:cast,1,
 tensor:cast_like,,1
 tensor:concat,1,
-tensor:dim,,
+tensor:dim,1,
 tensor:divide,1,
 tensor:empty,,
 tensor:eq,1,
@@ -68,7 +72,7 @@ tensor:ne,1,
 tensor:neg,1,
 tensor:new,,
 tensor:num_threads,,
-tensor:numel,,
+tensor:numel,1,
 tensor:ones,9,
 tensor:ones_like,,1
 tensor:permute,1,
