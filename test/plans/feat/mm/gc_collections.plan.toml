@@ -90,3 +90,27 @@ name = "gc.collections_both_young_prl"
 desc = "Maps and sets on std::prl with the moving young-generation collector, stress mode both, heap verification before and after every collection."
 args = ["${case}", "std::gc::verify", "${run_prl}"]
 envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+
+[[tests]]
+name = "gc.collection_constants_nvm"
+desc = "Maps and sets stored in the static area of a graph by std::macro, with string, array, map and function values, on std::nvm under heap verification and a collection at every allocation (the non-moving collector): what the constants hold is carried over with them and stays alive."
+case = "../../../cases/compile/collections/macro_constants.cml"
+args = ["${case}", "std::macro", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "{1: one, 2: two, 4: more} two 3", "{alpha, beta, gamma} true false", "{1: one, 2: two, 4: more, 9: nine} {1: one, 2: two, 4: more}", "{outer: {xs: [1, 2, 3]}} 3", "42 -21 21 [double, negate]"]
+
+[[tests]]
+name = "gc.collection_constants_fvm"
+desc = "Maps and sets stored in the static area of a graph by std::macro, with string, array, map and function values, on std::fvm under heap verification and a collection at every allocation (the non-moving collector): what the constants hold is carried over with them and stays alive."
+case = "../../../cases/compile/collections/macro_constants.cml"
+args = ["${case}", "std::macro", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "{1: one, 2: two, 4: more} two 3", "{alpha, beta, gamma} true false", "{1: one, 2: two, 4: more, 9: nine} {1: one, 2: two, 4: more}", "{outer: {xs: [1, 2, 3]}} 3", "42 -21 21 [double, negate]"]
+
+[[tests]]
+name = "gc.collection_constants_prl"
+desc = "Maps and sets stored in the static area of a graph by std::macro, with string, array, map and function values, on std::prl under heap verification and a collection at every allocation (the non-moving collector): what the constants hold is carried over with them and stays alive."
+case = "../../../cases/compile/collections/macro_constants.cml"
+args = ["${case}", "std::macro", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_stdout_contains = ["\"ok\":true", "{1: one, 2: two, 4: more} two 3", "{alpha, beta, gamma} true false", "{1: one, 2: two, 4: more, 9: nine} {1: one, 2: two, 4: more}", "{outer: {xs: [1, 2, 3]}} 3", "42 -21 21 [double, negate]"]
