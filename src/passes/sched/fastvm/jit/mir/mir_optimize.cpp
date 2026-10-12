@@ -76,6 +76,9 @@ static bool isBarrierOp(MirOp op) {
     case MirOp::NativeJitFuncCall:
     case MirOp::CallRax:
     case MirOp::CallRel32:
+    case MirOp::CallHelper:
+    case MirOp::ExitToDriver:
+    case MirOp::SafepointPoll:
     case MirOp::PushRdi:
     case MirOp::PopRdi:
     case MirOp::PushFrameSlot:
@@ -135,11 +138,12 @@ void optimizePeephole(MirBuffer &buf, bool forwardStores) {
     for (size_t i = 0; i < n; ++i) {
         Mir &m = buf[i];
 
-        if (m.op == MirOp::Nop || m.op == MirOp::DebugTrace)
-            continue;
-
+        // Before anything is skipped: the first instruction of a jump target can be a Nop.
         if (m.hasPc() && jumpTargets.count(m.pc))
             pendingStore.clear();
+
+        if (m.op == MirOp::Nop || m.op == MirOp::DebugTrace)
+            continue;
 
         if (isBarrierOp(m.op)) {
             // Calls and explicit control-flow transfers may clobber registers or
@@ -209,27 +213,19 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
     // INT32_MIN is a safe sentinel that never collides with a real disp.
     constexpr int32_t kAllSlotsLive = INT32_MIN;
 
-    for (size_t i = n; i > 0; --i) {
-        Mir &m = buf[i - 1];
-
+    // What one instruction does to the set, going backwards: the set after it becomes the set
+    // before it.
+    auto transfer = [&](Mir &m) {
         if (m.op == MirOp::Nop || m.op == MirOp::DebugTrace)
-            continue;
-
-        // At jump targets, save current liveness for merge when we encounter the jump source.
-        if (m.hasPc() && jumpTargets.count(m.pc))
-            targetLiveness[m.pc] = liveSlots;
+            return;
 
         // Function exit: no frame slots are live after return.
-        if (m.op == MirOp::Ret || m.op == MirOp::JmpRax) {
+        if (m.op == MirOp::Ret || m.op == MirOp::JmpRax || m.op == MirOp::VRet) {
             liveSlots.clear();
-            continue;
-        }
-        if (m.op == MirOp::VRet) {
-            liveSlots.clear();
-            continue;
+            return;
         }
 
-        // Jump source: merge liveness from the target (already saved above). A target not seen
+        // Jump source: merge liveness from the target (already saved below). A target not seen
         // yet lies before the jump (the self tail call jumps back to the entry): what it reads
         // is not known at this point of a single backward pass, so every slot stays live.
         if (isJumpOp(m.op)) {
@@ -238,18 +234,18 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
                 liveSlots.insert(it->second.begin(), it->second.end());
             else
                 liveSlots.insert(kAllSlotsLive);
-            continue;
+            return;
         }
 
         // Stack-staged tail-call arguments: the push reads its slot; the pop writes one but is
         // never removed (it balances the push).
         if (m.op == MirOp::PushFrameSlot) {
             liveSlots.insert(m.disp);
-            continue;
+            return;
         }
         if (m.op == MirOp::PopFrameSlot) {
             liveSlots.erase(m.disp);
-            continue;
+            return;
         }
 
         // NativeJitFuncCall: reads the caller slots of the arguments it copies itself, writes
@@ -264,23 +260,23 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
                         liveSlots.insert(arg.srcDisp);
                 }
             }
-            continue;
+            return;
         }
 
-        // Opaque calls through rax or a relative target: the callee receives
-        // rdi=slot_base and may implicitly read any frame slot (e.g., trampoline
-        // functions resolve argument slots via bytecode operand indices at
-        // runtime). We cannot statically enumerate which slots are accessed, so
-        // we insert the sentinel kAllSlotsLive to prevent any preceding
-        // VStoreToFrame from being declared dead.
-        if (m.op == MirOp::CallRax || m.op == MirOp::CallRel32) {
+        // Opaque calls through rax or a relative target: the callee receives rdi=slot_base and
+        // may implicitly read any frame slot. Framed code: a helper reads its operands from
+        // the frame, and at an exit to the driver the frame is all there is of the activation
+        // (the driver, the argument copy of the callee and the collector read it). Every slot
+        // is live at these: the sentinel keeps any preceding store from being declared dead.
+        if (m.op == MirOp::CallRax || m.op == MirOp::CallRel32 || m.op == MirOp::CallHelper ||
+            m.op == MirOp::ExitToDriver || m.op == MirOp::SafepointPoll) {
             liveSlots.insert(kAllSlotsLive);
-            continue;
+            return;
         }
 
         if (readsFrameSlot(m.op)) {
             liveSlots.insert(m.disp);
-            continue;
+            return;
         }
 
         if (writesFrameSlot(m.op)) {
@@ -290,8 +286,18 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
                 m.op = MirOp::Nop;
             else
                 liveSlots.erase(m.disp); // sentinel is never erased (disp != INT32_MIN)
-            continue;
+            return;
         }
+    };
+
+    for (size_t i = n; i > 0; --i) {
+        Mir &m = buf[i - 1];
+        transfer(m);
+        // A jump lands before the first instruction of its target bytecode, so the set saved
+        // for a target is the one before that instruction: it includes what the instruction
+        // itself reads (a JOIN reads the value of its first arm first).
+        if (m.hasPc() && jumpTargets.count(m.pc))
+            targetLiveness[m.pc] = liveSlots;
     }
 }
 

@@ -103,17 +103,17 @@ assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify
 [[tests]]
 name = "attempt.compiled.jit_log"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-# Asserts which graphs std::jit compiles and why it leaves the others: with a collector that moves
-# objects the graphs that hold the `attempt` node are refused earlier, for their object constants,
-# and the log never says "contains OPER". The test therefore names the default collector.
+# Asserts which graphs std::jit compiles and as which kind of code. What is compiled depends on
+# the collector (see docs/technical/07_jit_architecture.md, 17.4), so the test names the default
+# one.
 sweep = false
-desc = "Under std::jit the straight-line callee is compiled, and the graphs that contain the `attempt` node (an OPER) are not."
+desc = "Under std::jit the straight-line callee is compiled as frameless code, and the recursive callee, whose arms are graphs of their own, as framed code."
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
 args = ["-vv", "${case}", "std::jit"]
 envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
-expect_output_contains = ["compiled & cached graph 'quot'", "contains OPER"]
+expect_output_contains = ["compiled & cached graph 'quot' as frameless code", "compiled & cached graph 'depth' as framed code"]
 
 [[tests]]
 name = "attempt.library"

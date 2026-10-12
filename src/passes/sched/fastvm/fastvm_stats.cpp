@@ -22,14 +22,20 @@
 //
 //   {"jit": true, "graphs": [{"name": ..., "pc": ..., "ops": ..., "executed": ...,
 //     "status": "compiled" | "compilable" | "rejected" | "interpreter",
-//     "reason": ..., "refSlots": ..., "blockers": [{"kind": ..., "detail": ..., "count": ...}]}]}
+//     "mode": "frameless" | "framed" | "",
+//     "reason": ..., "refSlots": ..., "blockers": [{"kind": ..., "detail": ..., "count": ...}],
+//     "runtime": [{"kind": ..., "detail": ..., "count": ...}]}]}
 //
 // - `ops` is the number of bytecodes of the graph; `executed` how many bytecodes of it the
-//   interpreter ran (bytecodes run as native code are not counted: the share of a program that
-//   ran natively is 1 - executed(std::jit) / executed(std::fvm) for the same pipeline).
+//   interpreter ran. Bytecodes run by compiled code are not counted, nor are the calls its
+//   driver makes for it: the share of a program that ran outside the interpreter is
+//   1 - executed(std::jit) / executed(std::fvm) for the same pipeline.
 // - `status`: under std::jit, `compiled` (compiled and entered), `compilable` (the back end
 //   compiles it, but it never became hot) or `rejected` with the reason of the compile log and
 //   every construct that blocks it; under std::fvm always `interpreter`.
+// - `mode`: which of its two kinds of code the back end makes of the graph (x64::JitExitKind);
+//   `runtime` lists the constructs that need the runtime, i.e. why it is framed code. Before
+//   framed code existed these were the constructs that kept a graph from being compiled.
 // - `refSlots`: how many slots of the graph's frame hold references the collector traces.
 //
 // test/tools/jitcov/jitcov.py runs programs with it and tabulates the result.
@@ -60,6 +66,7 @@ struct FastVMSchedPass::Stats {
         bool compiled   = false;
         std::string reason;
         std::vector<Blocker> blockers;
+        std::vector<Blocker> runtime; // constructs that make it framed code
     };
     std::string path;
     // Indexed by bytecode pc; sized to the capacity of the bytecode vector, which never moves.
@@ -128,23 +135,29 @@ void FastVMSchedPass::statsNoteGraph(camel::runtime::GCGraph *graph, size_t pc) 
 #if ENABLE_FASTVM_JIT
     if (jitBackend_) {
         const jit::CompilationUnit unit = jitUnitFor(graph, pc, nullptr);
-        std::map<std::pair<std::string, std::string>, size_t> byKind;
-        for (const jit::JitBlocker &blocker : jitBackend_->blockers(unit)) {
-            std::string detail;
-            if (blocker.kind == "OPER") {
-                detail = context_->execMgr().getNameOfAnOperator(
-                    bytecodes_[blocker.pc].extra()->func);
-            } else if (blocker.kind == "SCHD") {
-                detail = to_string(bytecodes_[blocker.pc].extra()->mark);
+        auto grouped = [&](const std::vector<jit::JitBlocker> &list, std::string *firstText) {
+            std::map<std::pair<std::string, std::string>, size_t> byKind;
+            for (const jit::JitBlocker &blocker : list) {
+                std::string detail;
+                if (blocker.kind == "OPER") {
+                    detail = context_->execMgr().getNameOfAnOperator(
+                        bytecodes_[blocker.pc].extra()->func);
+                } else if (blocker.kind == "SCHD") {
+                    detail = to_string(bytecodes_[blocker.pc].extra()->mark);
+                }
+                if (firstText != nullptr && firstText->empty()) {
+                    *firstText = blocker.text;
+                }
+                ++byKind[{blocker.kind, detail}];
             }
-            if (record.reason.empty()) {
-                record.reason = blocker.text;
+            std::vector<Stats::Blocker> out;
+            for (const auto &[key, count] : byKind) {
+                out.push_back({key.first, key.second, count});
             }
-            ++byKind[{blocker.kind, detail}];
-        }
-        for (const auto &[key, count] : byKind) {
-            record.blockers.push_back({key.first, key.second, count});
-        }
+            return out;
+        };
+        record.blockers = grouped(jitBackend_->blockers(unit), &record.reason);
+        record.runtime  = grouped(jitBackend_->runtimeConstructs(unit), nullptr);
         if (record.blockers.empty()) {
             // Nothing the back end lists: what the compiler itself says is the answer.
             std::string failure;
@@ -191,26 +204,36 @@ void FastVMSchedPass::statsWrite() {
                                                   : "rejected";
         out += first ? "" : ", ";
         first = false;
+        const char *mode = !jit || !(record.compiled || record.compilable) ? ""
+                           : record.runtime.empty()                         ? "frameless"
+                                                                            : "framed";
         out += std::format(
             "{{\"name\": {}, \"pc\": {}, \"ops\": {}, \"executed\": {}, \"status\": \"{}\", "
-            "\"refSlots\": {}, \"reason\": {}, \"blockers\": [",
+            "\"mode\": \"{}\", \"refSlots\": {}, \"reason\": {}, ",
             jsonString(record.name),
             record.pc,
             record.ops,
             executed,
             status,
+            mode,
             record.refSlots,
             jsonString(record.reason));
-        for (size_t i = 0; i < record.blockers.size(); ++i) {
-            const auto &blocker = record.blockers[i];
-            out += std::format(
-                "{}{{\"kind\": {}, \"detail\": {}, \"count\": {}}}",
-                i == 0 ? "" : ", ",
-                jsonString(blocker.kind),
-                jsonString(blocker.detail),
-                blocker.count);
-        }
-        out += "]}";
+        auto listOf = [&](const char *key, const std::vector<Stats::Blocker> &list) {
+            out += std::format("\"{}\": [", key);
+            for (size_t i = 0; i < list.size(); ++i) {
+                out += std::format(
+                    "{}{{\"kind\": {}, \"detail\": {}, \"count\": {}}}",
+                    i == 0 ? "" : ", ",
+                    jsonString(list[i].kind),
+                    jsonString(list[i].detail),
+                    list[i].count);
+            }
+            out += "]";
+        };
+        listOf("blockers", record.blockers);
+        out += ", ";
+        listOf("runtime", record.runtime);
+        out += "}";
     }
     out += "]}\n";
     std::ofstream file(stats_->path, std::ios::app);

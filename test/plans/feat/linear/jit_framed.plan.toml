@@ -1,0 +1,152 @@
+id = "linear.jit_framed"
+order = 356
+tier = "feat"
+tags = ["feat", "linear", "jit", "codegen"]
+desc = "Graphs that need the runtime, compiled by std::jit as framed code (docs/technical/07_jit_architecture.md, section 17): operators, casts, struct and tuple access, match, calls of other graphs, calls through function values and higher-order operators"
+
+# Framed code calls C++ helpers for operators and leaves to its driver for calls of Camel
+# functions. Every test runs the same program on the four back ends and under std::inline
+# std::jit, which must agree; the `.compiled` tests then check in the -vv log that the functions
+# were compiled, and as which kind of code, so that an agreement reached because everything fell
+# back to the interpreter does not pass.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/linear/jit/framed_operators.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl", "inline_jit"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "GC invariant violated"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+# --- values -----------------------------------------------------------------------------------
+
+[[tests]]
+name = "framed.operators"
+desc = "Operators in tail loops, match on int and string, struct and tuple values, mutual recursion, a call through a function value, map and reduce in a loop: the same values on every back end."
+expect_exit = 0
+expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmean 3.875\nweigh 3210\nwalk 5050 -100\nswap_sum 1\nparity true false\nfib 6765\ntwice 284626\ntotals 14415\n"
+
+[[tests]]
+name = "framed.operators.compiled"
+desc = "Under std::jit those functions are compiled as framed code, and the values are the same."
+backends = false
+args = ["-vv", "${case}", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'sum_at' as framed code", "compiled & cached graph 'mean' as framed code", "compiled & cached graph 'name_of' as framed code", "compiled & cached graph 'weight' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'walk' as framed code", "compiled & cached graph 'swap_sum' as framed code", "compiled & cached graph 'is_even' as framed code", "compiled & cached graph 'is_odd' as framed code", "compiled & cached graph 'fib' as framed code", "compiled & cached graph 'twice' as framed code", "compiled & cached graph 'scaled_total' as framed code", "compiled & cached graph 'totals' as framed code", "collatz 111 118", "weigh 3210", "twice 284626", "totals 14415"]
+expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "framed.operators.inline.compiled"
+desc = "The same after std::inline, where the branch arms are part of the functions: nothing is left to the interpreter for a construct of the bytecode."
+backends = false
+args = ["-vv", "${case}", "std::inline", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'fib' as frameless code", "collatz 111 118", "weigh 3210", "totals 14415"]
+expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "framed.operators.gc_stress"
+desc = "The same with a collection at every safepoint (CAMEL_GC_STRESS_SAFEPOINT=1, heap verified before and after): framed code keeps every reference in its pool frame, where the collector finds it."
+backends = ["fvm", "jit", "inline_jit"]
+envs = ["CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_VERIFY=1"]
+timeout_ms = 120000
+expect_exit = 0
+expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmean 3.875\nweigh 3210\nwalk 5050 -100\nswap_sum 1\nparity true false\nfib 6765\ntwice 284626\ntotals 14415\n"
+
+# --- faults -----------------------------------------------------------------------------------
+
+[[tests]]
+name = "framed.faults.isolated"
+desc = "An index out of range, a remainder by zero, a division by zero and a recursion past the limit, raised from compiled functions inside `attempt`: each is an error value at the boundary, and the functions run again afterwards."
+case = "../../../cases/linear/jit/framed_faults.cml"
+envs = ["FAULT=none"]
+expect_exit = 0
+expect_stdout_starts_with = "62\n14\n14\n58\nIndexOutOfRange\nDivisionByZero\nDivisionByZero\nMaxRecursionDepthExceeded\n62\n58\nisolated\ndone\n"
+
+[[tests]]
+name = "framed.faults.index"
+desc = "An operator's fault (index out of range) raised from a helper of compiled code: the located diagnostic of the interpreters."
+case = "../../../cases/linear/jit/framed_faults.cml"
+envs = ["FAULT=index"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 14
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "framed.faults.rem"
+desc = "A remainder by zero (an operator) in compiled code."
+case = "../../../cases/linear/jit/framed_faults.cml"
+envs = ["FAULT=rem"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 23
+expect_diagnostic_column = 14
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "framed.faults.div"
+desc = "A division by zero, which compiled code checks itself, in a graph that also calls an operator."
+case = "../../../cases/linear/jit/framed_faults.cml"
+envs = ["FAULT=div"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 31
+expect_diagnostic_column = 20
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "framed.faults.depth"
+desc = "A non-tail recursion of framed code past the limit: refused at the same call as in the interpreter (its calls are counted on the interpreter's stack)."
+case = "../../../cases/linear/jit/framed_faults.cml"
+envs = ["FAULT=depth"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 39
+expect_diagnostic_column = 49
+expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
+
+[[tests]]
+name = "framed.faults.compiled"
+desc = "The faulting functions were compiled before they faulted."
+case = "../../../cases/linear/jit/framed_faults.cml"
+backends = false
+args = ["-vv", "${case}", "std::jit"]
+envs = ["FAULT=none"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'pick' as framed code", "compiled & cached graph 'picks' as framed code", "compiled & cached graph 'rem' as framed code", "compiled & cached graph 'quot' as framed code", "compiled & cached graph 'depth' as framed code", "isolated", "done"]
+
+# --- loops ------------------------------------------------------------------------------------
+
+[[tests]]
+name = "framed.loops"
+desc = "Tail loops of 300000 rounds in framed code (allocating, mutually recursive, with a call in the body): neither the machine stack nor the recursion limit is used per round."
+case = "../../../cases/linear/jit/framed_loops.cml"
+envs = ["N=300000"]
+timeout_ms = 60000
+expect_exit = 0
+expect_stdout_starts_with = "1988895\n600001\n13500\n1688895\ndone\n"
+
+[[tests]]
+name = "framed.loops.gc_stress"
+desc = "The allocating loops with a collection at every safepoint and the heap verified: the self tail call of compiled code polls the collector as the interpreter's does."
+case = "../../../cases/linear/jit/framed_loops.cml"
+backends = ["fvm", "jit", "inline_jit"]
+envs = ["N=20000", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_VERIFY=1"]
+timeout_ms = 120000
+expect_exit = 0
+expect_stdout_starts_with = "108894\n40001\n900\n88894\ndone\n"
+
+[[tests]]
+name = "framed.loops.compiled"
+desc = "The loops were compiled, and ran as compiled code although each is entered only once and then tail-calls itself: the interpreter hands a tail call of compiled code over to the code."
+case = "../../../cases/linear/jit/framed_loops.cml"
+backends = false
+args = ["-vv", "${case}", "std::jit"]
+envs = ["N=5000"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'churn' as framed code", "compiled & cached graph 'ping' as framed code", "compiled & cached graph 'pong' as framed code", "compiled & cached graph 'build' as framed code", "compiled & cached graph 'total' as framed code", "compiled & cached graph 'digit_sum' as framed code", "done"]

@@ -1,0 +1,134 @@
+/**
+ * Workloads for comparing std::fvm with std::jit (test/tools/jitcov/bench.py), one per value
+ * of the environment variable MODE, N rounds each:
+ *
+ *   fib      non-tail recursion (N is the argument)
+ *   collatz  a tail loop with an integer remainder in it, over the numbers below N
+ *   strings  a tail loop that builds and measures a string in every round
+ *   arrays   a tail loop over an array of N / 100 elements, built by another loop
+ *   mutual   two graphs that tail-call each other
+ *   structs  a tail loop that rebuilds a struct in every round
+ *   calls    a tail loop whose body calls two small functions
+ *   hof      map and reduce over a small array, N / 10 times
+ *   float    a tail loop of float arithmetic with an int-to-float conversion
+ *
+ * Each prints one number, the same on every back end.
+ */
+module jitcov_workloads
+
+import { get_env } from sys
+
+type Point = {
+    x: int,
+    y: int
+}
+
+func fib(n: int): int {
+    return if n < 2 then n else fib(n - 1) + fib(n - 2)
+}
+
+func collatz(n: int, steps: int): int {
+    return if n == 1 then steps
+        else if n % 2 == 0 then collatz(n / 2, steps + 1)
+        else collatz(3 * n + 1, steps + 1)
+}
+
+func collatz_total(n: int, acc: int): int {
+    return if n == 0 then acc else collatz_total(n - 1, acc + collatz(n, 0))
+}
+
+func strings(n: int, acc: int): int {
+    return if n == 0 then acc else strings(n - 1, acc + len(string(n) + 'x'))
+}
+
+func build(n: int, acc: int[]): int[] {
+    return if n == 0 then acc else build(n - 1, concat(acc, [n % 10]))
+}
+
+func total(xs: int[], i: int, acc: int): int {
+    return if i == len(xs) then acc else total(xs, i + 1, acc + xs[i])
+}
+
+func totals(xs: int[], rounds: int, acc: int): int {
+    return if rounds == 0 then acc else totals(xs, rounds - 1, acc + total(xs, 0, 0))
+}
+
+func ping(n: int, acc: int): int {
+    return if n == 0 then acc else pong(n - 1, acc + n % 7)
+}
+
+func pong(n: int, acc: int): int {
+    return if n == 0 then acc else ping(n - 1, acc + 1)
+}
+
+func walk(p: Point, n: int): Point {
+    return if n == 0 then p else walk({ x: p.x + n, y: p.y - 1 }, n - 1)
+}
+
+func square(x: int): int {
+    return x * x
+}
+
+func clamp(x: int): int {
+    return if x > 1000 then x - 1000 else x
+}
+
+func calls(n: int, acc: int): int {
+    return if n == 0 then acc else calls(n - 1, clamp(acc + square(n % 31)))
+}
+
+func scaled(xs: int[], k: int): int {
+    return xs->map<(x: int): int => x * k>->reduce<(a: int, b: int): int => a + b, 0>
+}
+
+func hof(xs: int[], k: int, acc: int): int {
+    return if k == 0 then acc else hof(xs, k - 1, acc + scaled(xs, k) % 1000)
+}
+
+func floats(n: int, acc: float): float {
+    return if n == 0 then acc else floats(n - 1, acc * 0.5 + float(n) / 4.0)
+}
+
+func main(): int sync {
+    let mode = get_env('MODE')
+    let n = int(get_env('N'))
+    let xs = [3, 1, 4, 1, 5, 9, 2, 6]
+    if mode == 'fib' then sync {
+        println(fib(n))
+        return null
+    }
+    if mode == 'collatz' then sync {
+        println(collatz_total(n, 0))
+        return null
+    }
+    if mode == 'strings' then sync {
+        println(strings(n, 0))
+        return null
+    }
+    if mode == 'arrays' then sync {
+        println(totals(build(n / 100, [0]), 100, 0))
+        return null
+    }
+    if mode == 'mutual' then sync {
+        println(ping(n, 0))
+        return null
+    }
+    if mode == 'structs' then sync {
+        let p = walk({ x: 0, y: 0 }, n)
+        println(p.x + p.y)
+        return null
+    }
+    if mode == 'calls' then sync {
+        println(calls(n, 0))
+        return null
+    }
+    if mode == 'hof' then sync {
+        println(hof(xs, n / 10, 0))
+        return null
+    }
+    if mode == 'float' then sync {
+        println(floats(n, 0.0))
+        return null
+    }
+    return 0
+}

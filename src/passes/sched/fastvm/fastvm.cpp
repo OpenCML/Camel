@@ -47,6 +47,9 @@ using namespace camel::jit;
 
 namespace {
 
+// Framed code reads the collector's request for a safepoint as one byte.
+static_assert(sizeof(camel::core::mm::detail::autoSpaceSafepointSlowPath) == 1);
+
 constexpr size_t kFastVmEntryPcSlot            = 1;
 constexpr size_t kFastVmJitEntrySlot           = 2;
 constexpr size_t kFastVmFlagsSlot              = 3;
@@ -54,6 +57,7 @@ constexpr size_t kFastVmIndirectCallCountSlot  = 5;
 constexpr size_t kFastVmGraphLengthSlot        = 6;
 constexpr uintptr_t kFastVmFlagCompileFailed   = 1u << 0;
 constexpr uintptr_t kFastVmFlagFailureReported = 1u << 1;
+constexpr uintptr_t kFastVmFlagJitFramed       = 1u << 2; // the JIT entry is framed code
 
 inline std::optional<size_t> fastVmEntryPcOf(camel::runtime::GCGraph *graph) {
     if (!graph)
@@ -120,6 +124,18 @@ inline void setFastVmJitFailureReportedOf(camel::runtime::GCGraph *graph, bool r
         return;
     uintptr_t flags = fastVmFlagsOf(graph);
     flags = reported ? (flags | kFastVmFlagFailureReported) : (flags & ~kFastVmFlagFailureReported);
+    graph->setExtraSlot(kFastVmFlagsSlot, flags);
+}
+
+inline bool fastVmJitFramedOf(camel::runtime::GCGraph *graph) {
+    return (fastVmFlagsOf(graph) & kFastVmFlagJitFramed) != 0;
+}
+
+inline void setFastVmJitFramedOf(camel::runtime::GCGraph *graph, bool framed) {
+    if (!graph)
+        return;
+    uintptr_t flags = fastVmFlagsOf(graph);
+    flags           = framed ? (flags | kFastVmFlagJitFramed) : (flags & ~kFastVmFlagJitFramed);
     graph->setExtraSlot(kFastVmFlagsSlot, flags);
 }
 
@@ -740,6 +756,12 @@ __declspec(noinline)
 __attribute__((noinline))
 #endif
 slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *jitCtx) {
+    // Framed code has a driver of its own. What follows is for frameless code only: code that
+    // calls nothing, keeps frames on the machine stack, and so must not have a safepoint of the
+    // collector under it.
+    if (fastVmJitFramedOf(frame->graph())) {
+        return runFramedJit(fn, frame, jitCtx);
+    }
     slot_t *slots = frame->slotBase();
     slots[0]      = reinterpret_cast<slot_t>(frame);
     auto *jc      = static_cast<JitContext *>(jitCtx);
@@ -777,6 +799,14 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
     const size_t budgetLeft = jc->depthBudget;
     jc->faultKind     = 0;
     jc->faultPc       = 0;
+    if (kind == x64::JitFaultKind::PendingException) {
+        // What a helper of framed code caught: located already where it is a fault.
+        std::exception_ptr pending = std::move(jc->pending);
+        jc->pending                = nullptr;
+        if (framePool_.isActive(frame))
+            framePool_.release(frame);
+        std::rethrow_exception(pending);
+    }
     // The fault is in the graph the frame belongs to (compiled code calls only itself), at the
     // bytecode it recorded: the position the interpreter reports for the same fault.
     const ExecutionSite site = makePcExecutionSite(
@@ -810,6 +840,190 @@ void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
                       "compiled code reported an unknown fault ({})",
                       static_cast<uint32_t>(kind)));
     throw reportRuntimeFault(*context_, fault, site);
+}
+
+bool FastVMSchedPass::jitFramedOf(camel::runtime::GCGraph *graph) const {
+    return fastVmJitFramedOf(graph);
+}
+
+slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) {
+    auto *jc                = static_cast<JitContext *>(jitCtx);
+    const size_t depthBase  = stackDepth_;
+    const size_t nestedBase = nestedCalls_;
+    // The activation that runs, its code, and where in the code it continues (0: its entry).
+    Frame *cur       = frame;
+    JitEntryFn curFn = fn;
+    uint64_t resume  = 0;
+    // The bytecode the driver is at, for the position of a fault raised here.
+    size_t pc = fastVmEntryPcOf(frame->graph()).value_or(0);
+
+    // Starts `callee` (a frame filled with its arguments) as the next activation. If its graph
+    // has framed code, that code becomes `cur` and nothing is returned: the loop enters it.
+    // Otherwise the callee runs to its end here, in frameless code or in the interpreter, and
+    // its result is returned.
+    auto startCallee = [&](camel::runtime::GCGraph *target, Frame *callee) -> std::optional<slot_t> {
+        for (;;) {
+            JitEntryFn targetFn = jitFnOf(target);
+            if (targetFn != nullptr && fastVmJitFramedOf(target)) {
+                cur    = callee;
+                curFn  = targetFn;
+                resume = 0;
+                return std::nullopt;
+            }
+            cur = callee;
+            if (targetFn != nullptr) {
+                return invokeOwnedJitFrame(targetFn, callee, jitCtx);
+            }
+            // The interpreter nests on the native stack here; like its own nested calls it
+            // is refused when the stack is nearly full.
+            if (camel::execute::nativeStackNearlyExhausted()) [[unlikely]] {
+                camel::execute::throwNativeStackExhausted(
+                    callee->graphName(),
+                    stackDepth_ + nestedCalls_);
+            }
+            CallResult interpreted = callBorrowed(graphEntryPc(target), callee);
+            if (interpreted.tailFn == nullptr) {
+                if (interpreted.rootFrame)
+                    framePool_.release(interpreted.rootFrame);
+                return interpreted.result;
+            }
+            // It ended in a tail call of compiled code: that code is the callee now.
+            callee = interpreted.rootFrame;
+            target = callee->graph();
+        }
+    };
+
+    try {
+        for (;;) {
+            slot_t *slots  = cur->slotBase();
+            slots[0]       = reinterpret_cast<slot_t>(cur);
+            jc->exitKind   = static_cast<uint32_t>(x64::JitExitKind::Return);
+            jc->resumeAddr = resume;
+            slot_t result  = curFn(slots, jitCtx);
+            if (jc->faultKind != 0) [[unlikely]] {
+                pc = jc->faultPc;
+                raiseJitFault(jitCtx, cur);
+            }
+            const auto exitKind = static_cast<x64::JitExitKind>(jc->exitKind);
+            bool activationEnded = false;
+            if (exitKind == x64::JitExitKind::Return) {
+                framePool_.release(cur);
+                activationEnded = true;
+            } else {
+                pc             = jc->exitPc;
+                resume         = jc->resumeAddr;
+                Bytecode *bc   = &bytecodes_[pc];
+                switch (exitKind) {
+                case x64::JitExitKind::Call: {
+                    fastVmCallBoundarySafepoint();
+                    bc           = materializeCallTarget(pc, bc);
+                    auto *target = getFuncExtraRuntimeGraph(bc);
+                    const size_t depth = stackDepth_;
+                    push(pc, cur);
+                    if (resumeStack_.size() < pcStack_.size())
+                        resumeStack_.resize(pcStack_.size());
+                    resumeStack_[depth] = resume;
+                    Frame *caller       = cur;
+                    Frame *callee       = framePool_.acquire(target);
+                    cur                 = callee;
+                    populateDirectCallFrame(
+                        caller,
+                        callee,
+                        bc->directCallSrcArgs(),
+                        bc->directCallDstSlots());
+                    if (auto value = startCallee(target, callee)) {
+                        result          = *value;
+                        activationEnded = true;
+                    }
+                    break;
+                }
+                case x64::JitExitKind::Tail: {
+                    fastVmCallBoundarySafepoint();
+                    bc           = materializeCallTarget(pc, bc);
+                    auto *target = getFuncExtraRuntimeGraph(bc);
+                    captureCallArgValues(cur, bc->directCallSrcArgs(), tailArgValuesScratch_);
+                    framePool_.release(cur);
+                    Frame *callee = framePool_.acquire(target);
+                    cur           = callee;
+                    populateDirectCallFrameFromValues(
+                        callee,
+                        bc->directCallDstSlots(),
+                        tailArgValuesScratch_);
+                    if (auto value = startCallee(target, callee)) {
+                        result          = *value;
+                        activationEnded = true;
+                    }
+                    break;
+                }
+                case x64::JitExitKind::Interp: {
+                    const data_arr_t nargs = bc->nargs();
+                    const data_arr_t wargs = bc->wargs();
+                    if (bc->opcode == OpCode::SCHD) {
+                        evalMarkedOperator(bc->extra()->mark, bc->result, nargs, wargs, *cur);
+                    } else {
+                        ASSERT(bc->opcode == OpCode::CALL, "Unexpected bytecode at a JIT exit.");
+                        // A call through a function value, as the interpreters make it: nested
+                        // on the native stack and counted.
+                        fastVmCallBoundarySafepoint();
+                        auto *function = cur->get<Function *>(wargs[0]);
+                        ASSERT(function != nullptr, "JIT CALL resolved a null Function callee.");
+                        auto *target = function->graph();
+                        ASSERT(target != nullptr, "JIT CALL target has no runtime graph.");
+                        const uint32_t callCount = noteIndirectCall(target);
+                        requireNestedCallRoom(cur);
+                        Frame *callee = framePool_.acquire(target);
+                        populateIndirectCallFrame(cur, callee, function, nargs, wargs);
+                        ++nestedCalls_;
+                        const slot_t value =
+                            invokeCallOrJit(graphEntryPc(target), target, callee, jitCtx, callCount);
+                        --nestedCalls_;
+                        cur->set(bc->result, value);
+                    }
+                    break;
+                }
+                default:
+                    ASSERT(false, "Unknown exit kind of framed JIT code.");
+                }
+            }
+            if (!activationEnded) {
+                continue;
+            }
+            // `result` is the value of an activation whose frame is released. Either it was
+            // the one this driver was entered for, or its caller is a framed activation that
+            // left for the call: store the result and continue behind the call.
+            if (stackDepth_ == depthBase) {
+                return result;
+            }
+            auto [callPc, caller] = pop();
+            pc                    = callPc;
+            writeCallSlot(caller, bytecodes_[callPc].result, result);
+            cur    = caller;
+            curFn  = jitFnOf(caller->graph());
+            resume = resumeStack_[stackDepth_];
+        }
+    } catch (...) {
+        // As the interpreters: release what this driver holds, bring the call stack back to
+        // where it was entered, and pass the fault on; a fault that has no position yet gets
+        // the one of the bytecode the driver was at.
+        Frame *siteFrame = cur;
+        if (framePool_.isActive(cur))
+            framePool_.release(cur);
+        nestedCalls_ = nestedBase;
+        while (stackDepth_ > depthBase) {
+            Frame *held = frameStack_[stackDepth_ - 1];
+            if (framePool_.isActive(held))
+                framePool_.release(held);
+            --stackDepth_;
+        }
+        try {
+            throw;
+        } catch (const RuntimeFault &fault) {
+            throw reportRuntimeFault(
+                *context_,
+                fault,
+                makePcExecutionSite(context_->sourceContext(), siteFrame, pc));
+        }
+    }
 }
 
 camel::runtime::GCGraph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
@@ -873,6 +1087,7 @@ CompilationUnit FastVMSchedPass::jitUnitFor(
         .trampolineBytecode       = reinterpret_cast<void *>(&trampolineBytecode),
         .poolTopAddr              = const_cast<ctx::FramePool &>(framePool_).topAddr(),
         .directSelfFuncInvokeAddr = reinterpret_cast<void *>(&directSelfFuncInvoke),
+        .safepointFlagAddr        = &camel::core::mm::detail::autoSpaceSafepointSlowPath,
         .debug                    = debug,
     };
 }
@@ -933,8 +1148,10 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
             }
         }
     }
-    auto fn = jitBackend_->load(std::move(compiled));
+    const bool framed = compiled->framed;
+    auto fn           = jitBackend_->load(std::move(compiled));
     if (fn) {
+        setFastVmJitFramedOf(graph, framed);
         setJitFnOf(graph, fn);
         jitFnToGraph_[fn] = graph;
         statsNoteCompiled(entryPc);
@@ -948,7 +1165,11 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
             }
             pc += bc.opsize;
         }
-        CAMEL_LOG_INFO_S("JIT", "OnDemand: compiled & cached graph '{}'", graph->name());
+        CAMEL_LOG_INFO_S(
+            "JIT",
+            "OnDemand: compiled & cached graph '{}' as {} code",
+            graph->name(),
+            framed ? "framed" : "frameless");
     } else {
         setJitCompileFailedOf(graph, true);
         if (!jitFailureReportedOf(graph)) {
@@ -996,6 +1217,16 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     }
 #endif
     CallResult result = callBorrowed(pc, rootFrame);
+#if ENABLE_FASTVM_JIT
+    if (result.tailFn != nullptr) {
+        // The interpreted activation ended in a tail call of compiled code (it has returned
+        // from the native stack by now).
+        return invokeOwnedJitFrame(
+            reinterpret_cast<JitEntryFn>(result.tailFn),
+            result.rootFrame,
+            currentJitCtx_);
+    }
+#endif
     if (result.rootFrame)
         framePool_.release(result.rootFrame);
     return result.result;

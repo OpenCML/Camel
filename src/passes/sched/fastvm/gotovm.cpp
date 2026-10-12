@@ -664,12 +664,24 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 framePool_._resetTop();
                 return frame;
             }();
+            // The target is compiled: its code takes over. A tail call replaces the current
+            // activation, so the result of the code is the result of that activation.
+            JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
             if (currFrame == rootActiveFrame) {
-                rootActiveFrame = newFrame;
+                // It was the activation call() was entered for: the caller of the interpreter
+                // runs the code (CallResult::tailFn), once this function is off the native
+                // stack. A loop of tail calls between compiled and interpreted graphs therefore
+                // does not grow that stack.
+                return CallResult{NullSlot, newFrame, reinterpret_cast<void *>(fn)};
             }
-            pc        = getFuncExtraTargetPc(bc);
-            currFrame = newFrame;
-            JUMP();
+            currFrame     = newFrame;
+            slot_t result = invokeOwnedJitFrame(fn, newFrame, currentJitCtx_);
+            auto [lastPC, lastFrame] = pop();
+            pc                       = lastPC;
+            bc                       = &bytecodes_[pc];
+            currFrame                = lastFrame;
+            fastFrameSetSlot(currFrame, bc->result, result);
+            NEXT();
         }
         size_t targetPc = getFuncExtraTargetPc(bc);
         slot_t tailArg0 = NullSlot;

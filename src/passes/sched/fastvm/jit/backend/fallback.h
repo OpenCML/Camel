@@ -34,6 +34,9 @@ class FallbackBackend : public IJitBackend {
     std::vector<JitBlocker> blockers(const CompilationUnit &) const override {
         return {{0, "no-backend", "JIT disabled (fallback backend)"}};
     }
+    std::vector<JitBlocker> runtimeConstructs(const CompilationUnit &) const override {
+        return {};
+    }
     void registerTrampoline(const char *, void *) override {}
     JitEntryFn load(std::unique_ptr<CompiledCode>) override { return nullptr; }
     void unload(JitEntryFn) override {}

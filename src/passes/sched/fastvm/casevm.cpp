@@ -346,11 +346,18 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                         framePool_._resetTop();
                         return frame;
                     }();
+                    // The target is compiled: its code takes over (see gotovm.cpp).
+                    JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(tailBc));
                     if (currFrame == rootActiveFrame) {
-                        rootActiveFrame = newFrame;
+                        return CallResult{NullSlot, newFrame, reinterpret_cast<void *>(fn)};
                     }
-                    pc        = getFuncExtraTargetPc(tailBc);
-                    currFrame = newFrame;
+                    currFrame     = newFrame;
+                    slot_t result = invokeOwnedJitFrame(fn, newFrame, currentJitCtx_);
+                    auto [lastPC, lastFrame] = pop();
+                    pc                       = lastPC;
+                    currFrame                = lastFrame;
+                    currFrame->set(bytecodes_[pc].result, result);
+                    pc += bytecodes_[pc].opsize;
                     continue;
                 }
                 size_t targetPc = getFuncExtraTargetPc(tailBc);

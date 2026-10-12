@@ -2895,12 +2895,12 @@ timeout_ms = 20000
 [[tests]]
 name = "var_param_jit"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-desc = "std::inline std::jit compiles a function that passes its var parameter on (200000-deep tail recursion); a function that reads the variable stays in the interpreter because :var/get is a generic operator (current limit, update when it is lowered)."
+desc = "std::inline std::jit compiles a function that passes its var parameter on (200000-deep tail recursion) as frameless code, and a function that reads the variable as framed code: :var/get is a generic operator, called through a helper."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_jit.cml"
 args = ["-vv", "${case}", "std::inline", "std::jit"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'down'", "compiled & cached graph 'plain'", "compile skipped for graph 'read'"]
+expect_output_contains = ["compiled & cached graph 'down' as frameless code", "compiled & cached graph 'plain' as frameless code", "compiled & cached graph 'read' as framed code"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {

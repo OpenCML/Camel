@@ -80,6 +80,11 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     struct CallResult {
         slot_t result;
         ctx::Frame *rootFrame;
+        // Not null when the activation ended in a tail call of compiled code instead of
+        // returning: `rootFrame` is then the frame prepared for that code (this entry point of
+        // it), and running it yields the result. The interpreter hands the call back rather
+        // than making it, so that a tail call never nests on the native stack.
+        void *tailFn = nullptr;
     };
 
   private:
@@ -162,6 +167,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     std::vector<ctx::Frame *> frameStack_ = std::vector<ctx::Frame *>(
         camel::execute::kDefaultMaxRecursionDepth + camel::execute::kEntryCalls);
     size_t stackDepth_ = 0;
+    // For an entry of pcStack_ pushed by the driver of framed code: where the caller's code
+    // continues (JitContext::resumeAddr). Grown with pcStack_ by the driver.
+    std::vector<uint64_t> resumeStack_;
     // Calls that do nest on the native stack: a call through a function value (CALL) and each
     // element call of a higher-order operator run in a nested call(). They are open calls like
     // the ones on pcStack_, and the limit is on the sum.
@@ -276,6 +284,12 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     }
 #if ENABLE_FASTVM_JIT
     slot_t invokeOwnedJitFrame(jit::JitEntryFn fn, ctx::Frame *frame, void *jitCtx);
+    /// The driver of framed code (x64::JitExitKind): runs `fn` on `frame` and does, for every
+    /// exit the code takes, what the interpreter does for that bytecode, until the activation
+    /// entered here has returned. Calls between framed graphs stay in this loop, on the
+    /// interpreter's call stack (push / pop), and do not nest on the native stack.
+    slot_t runFramedJit(jit::JitEntryFn fn, ctx::Frame *frame, void *jitCtx);
+    bool jitFramedOf(camel::runtime::GCGraph *graph) const;
     /// Raises the located diagnostic of the fault compiled code recorded in the JitContext
     /// before it returned (`frame` is the frame it was entered on).
     [[noreturn]] void raiseJitFault(void *jitCtx, ctx::Frame *frame);

@@ -45,8 +45,11 @@ using namespace camel::core::context;
 #if ENABLE_FASTVM_JIT
 #include "../../bytecode.h"
 #include "../../fastvm.h"
+#include "../../runtime_support.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/global_config.h"
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
 #include "camel/execute/graph_runtime_support.h"
@@ -581,6 +584,166 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Helpers of framed code (trampoline.h). Each does for one bytecode what the interpreters do
+// (gotovm.cpp / casevm.cpp), on the pool frame of the activation.
+
+extern "C++" {
+namespace {
+
+// An exception must not leave a helper: the frame above it is compiled code, which has no
+// unwind information. It is kept for the driver, and the compiled code, which checks faultKind
+// after every helper call, leaves through its fault exit.
+template <typename Body> inline slot_t runJitHelper(void *ctx, Body &&body) noexcept {
+    try {
+        return body();
+    } catch (...) {
+        auto *jc      = static_cast<JitContext *>(ctx);
+        jc->pending   = std::current_exception();
+        jc->faultKind = static_cast<uint32_t>(x64::JitFaultKind::PendingException);
+        return NullSlot;
+    }
+}
+
+inline void syncHelperOrigin(FastVMSchedPass *vm, size_t pc) {
+    if (InternalGlobalConfig::IsInspectionMode()) [[unlikely]] {
+        if (auto sourceContext = vm->context().sourceContext()) {
+            sourceContext->setCurrentRuntimeOrigin(sourceContext->debugMap().pcOrigin(pc));
+        }
+    }
+}
+
+} // namespace
+} // extern "C++"
+
+slot_t jitHelperOper(slot_t *slots, void *ctx, size_t pc) {
+    return runJitHelper(ctx, [&]() -> slot_t {
+        auto *jc     = static_cast<JitContext *>(ctx);
+        auto *vm     = jc->vm;
+        Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
+        Frame *frame = reinterpret_cast<Frame *>(slots[0]);
+        syncHelperOrigin(vm, pc);
+        // The views keep references to the operand lists.
+        const data_arr_t nargs = bc.nargs();
+        const data_arr_t wargs = bc.wargs();
+        FrameArgsView withView(*frame, wargs);
+        FrameArgsView normView(*frame, nargs);
+        if (camel::core::effect_trace::enabled()) [[unlikely]] {
+            if (auto sourceContext = vm->context().sourceContext()) {
+                camel::core::effect_trace::setSite(sourceContext->debugMap().pcOrigin(pc));
+            }
+        }
+        slot_t result;
+        try {
+            result = bc.extra()->func(withView, normView, vm->context());
+        } catch (const RuntimeFault &fault) {
+            // The fault of the operator, at this bytecode: what the interpreter reports.
+            throw reportRuntimeFault(
+                vm->context(),
+                fault,
+                makePcExecutionSite(vm->context().sourceContext(), frame, pc));
+        }
+        frame->set(bc.result, result);
+        return result;
+    });
+}
+
+slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc) {
+    return runJitHelper(ctx, [&]() -> slot_t {
+        auto *jc     = static_cast<JitContext *>(ctx);
+        auto *vm     = jc->vm;
+        Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
+        Frame *frame = reinterpret_cast<Frame *>(slots[0]);
+        syncHelperOrigin(vm, pc);
+        slot_t result = NullSlot;
+        try {
+            switch (bc.opcode) {
+            case OpCode::CAST: {
+                Type *targetType        = bc.extra()->pType;
+                const data_idx_t srcIdx = bc.fastop[0];
+                Type *srcType           = frame->typeAt<Type>(srcIdx);
+                result = targetType->castSlotFrom(frame->get<slot_t>(srcIdx), srcType);
+                break;
+            }
+            case OpCode::COPY: {
+                const data_idx_t srcIdx = bc.fastop[0];
+                if (isGCTraced(frame->codeAt(srcIdx))) {
+                    Object *source = frame->get<Object *>(srcIdx);
+                    result         = reinterpret_cast<slot_t>(source->clone(
+                        camel::core::mm::autoSpace(),
+                        frame->typeAt<Type>(srcIdx),
+                        false));
+                } else {
+                    result = frame->get<slot_t>(srcIdx);
+                }
+                break;
+            }
+            case OpCode::ACCS: {
+                const TypeCode srcCode = frame->codeAt(bc.fastop[0]);
+                const auto index       = static_cast<size_t>(bc.fastop[1]);
+                if (srcCode == TypeCode::Tuple) {
+                    result = frame->get<Tuple *>(bc.fastop[0])->get<slot_t>(index);
+                } else if (srcCode == TypeCode::Struct) {
+                    result = frame->get<Struct *>(bc.fastop[0])->get<slot_t>(index);
+                } else {
+                    ASSERT(false, "ACCS opcode unsupported source type in JIT helper.");
+                }
+                break;
+            }
+            case OpCode::FILL: {
+                const data_arr_t nargs = bc.nargs();
+                const data_arr_t wargs = bc.wargs();
+                Type *type             = bc.extra()->pType;
+                auto *fillBody =
+                    *reinterpret_cast<const camel::runtime::GCFillBody *const *>(bc.extra2());
+                Object *source = frame->get<Object *>(nargs[0]);
+                ASSERT(source != nullptr, "FILL source object is null in JIT helper.");
+                Object *target = source->clone(camel::core::mm::autoSpace(), type, false);
+                std::vector<slot_t> fillValues;
+                fillValues.reserve(wargs.size());
+                for (const data_idx_t arg : wargs) {
+                    fillValues.push_back(frame->get<slot_t>(arg));
+                }
+                camel::execute::writeRuntimeFillSlots(target, type, fillBody, fillValues);
+                result = reinterpret_cast<slot_t>(target);
+                break;
+            }
+            case OpCode::JOIN: {
+                // Reached for a JOIN of more than two arms only; a void JOIN yields null.
+                if (bc.extra()->pType != Type::Void()) {
+                    const auto arm = static_cast<size_t>(frame->get<int32_t>(bc.nargs()[0]));
+                    ASSERT(arm < bc.withCnt(), "JOIN arm index out of range in JIT helper.");
+                    result = frame->get<slot_t>(bc.wargs()[arm]);
+                }
+                break;
+            }
+            default:
+                ASSERT(false, "Unsupported opcode in jitHelperBytecode.");
+            }
+        } catch (const RuntimeFault &fault) {
+            throw reportRuntimeFault(
+                vm->context(),
+                fault,
+                makePcExecutionSite(vm->context().sourceContext(), frame, pc));
+        }
+        if (bc.result != 0) {
+            frame->set(bc.result, result);
+        }
+        return result;
+    });
+}
+
+slot_t jitHelperBranchArm(slot_t *slots, void *ctx, size_t pc) {
+    return runJitHelper(ctx, [&]() -> slot_t {
+        auto *jc         = static_cast<JitContext *>(ctx);
+        Bytecode &bc     = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
+        Frame *frame     = reinterpret_cast<Frame *>(slots[0]);
+        const size_t arm = camel::passes::sched::fastvm::selectBranchArm(bc, frame);
+        frame->set(bc.result, fromSlot<Int32>(arm));
+        return static_cast<slot_t>(arm);
+    });
+}
+
 #else
 // Comment normalized during runtime-graph refactor.
 slot_t trampolineFunc(slot_t *, void *, size_t) { return {}; }
@@ -591,6 +754,9 @@ slot_t trampolineBytecode(slot_t *, void *, size_t) { return {}; }
 slot_t *prepareDirectJitCall(slot_t *, void *, const Bytecode *) { return nullptr; }
 slot_t *prepareDirectJitTailCall(slot_t *, void *, const Bytecode *) { return nullptr; }
 slot_t finishDirectJitCall(slot_t, slot_t *, void *) { return {}; }
+slot_t jitHelperOper(slot_t *, void *, size_t) { return {}; }
+slot_t jitHelperBytecode(slot_t *, void *, size_t) { return {}; }
+slot_t jitHelperBranchArm(slot_t *, void *, size_t) { return {}; }
 #endif
 
 } // extern "C"

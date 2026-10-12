@@ -25,6 +25,7 @@
 #include "camel/core/rtdata.h"
 
 #include <cstddef>
+#include <exception>
 
 class FastVMSchedPass;
 
@@ -46,7 +47,20 @@ struct JitContext {
     // bounds of the stack are unknown or the guard is switched off, which no stack pointer is
     // below). Compiled code compares rsp with it before every native call.
     uint64_t stackLimit = 0;
+    // Framed code (see x64::JitExitKind). Written by the code when it leaves to its driver:
+    // why, and the pc of the bytecode it left at.
+    uint32_t exitKind = 0;
+    uint32_t exitPc   = 0;
+    // Set by the driver before it enters framed code: null to start at the entry of the graph,
+    // or the address behind the exit the activation stopped at. The code writes that address
+    // here when it leaves.
+    uint64_t resumeAddr = 0;
+    // The exception a helper caught (faultKind == PendingException), for the driver to throw.
+    std::exception_ptr pending;
 };
+static_assert(offsetof(JitContext, resumeAddr) == x64::kJitCtxResumeAddrOffset);
+static_assert(offsetof(JitContext, exitPc) == x64::kJitCtxExitPcOffset);
+static_assert(offsetof(JitContext, exitKind) == x64::kJitCtxExitKindOffset);
 static_assert(offsetof(JitContext, stackLimit) == x64::kJitCtxStackLimitOffset);
 static_assert(offsetof(JitContext, depthBudget) == x64::kJitCtxDepthBudgetOffset);
 static_assert(offsetof(JitContext, faultKind) == x64::kJitCtxFaultKindOffset);
@@ -71,6 +85,18 @@ extern "C" slot_t *prepareDirectJitTailCall(slot_t *callerSlots, void *ctx, cons
 extern "C" slot_t finishDirectJitCall(slot_t result, slot_t *calleeSlots, void *ctx);
 extern "C" slot_t finishDirectJitCallFast(slot_t *calleeSlots, void *ctx, slot_t result);
 extern "C" slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Bytecode *bc);
+
+// Helpers framed code calls (MirOp::CallHelper). `slots` is the slot base of the activation's
+// pool frame, slots[0] its Frame*. None of them throws: an exception is stored in
+// JitContext::pending with faultKind = PendingException, and the code that called leaves through
+// its fault exit. None of them reaches a safepoint of the collector or calls a Camel function
+// (those bytecodes are left to the driver).
+// OPER: calls the operator, stores and returns its result.
+extern "C" slot_t jitHelperOper(slot_t *slots, void *ctx, size_t pc);
+// CAST, COPY, ACCS, FILL, and a JOIN of more than two arms: runs the bytecode on the frame.
+extern "C" slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc);
+// BRCH with case values (match): the index of the arm taken, also stored in the result slot.
+extern "C" slot_t jitHelperBranchArm(slot_t *slots, void *ctx, size_t pc);
 
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
 /** Win64 asm trampoline: call fn(slots,ctx), store result, jmp to return_addr (avoids Release

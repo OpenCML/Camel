@@ -69,6 +69,9 @@ struct CompilationUnit {
     void *trampolineBytecode             = nullptr; // slow-path bytecode trampoline
     void *poolTopAddr                    = nullptr; // &FramePool::top_ for inline frame mgmt
     void *directSelfFuncInvokeAddr       = nullptr; // slow path fallback
+    // The byte that is not zero while the collector waits for a safepoint: framed code polls
+    // it where the interpreter polls (a self tail call, which is a jump in compiled code).
+    const void *safepointFlagAddr = nullptr;
     const CompilationDebugOptions *debug = nullptr;
 };
 
@@ -82,14 +85,16 @@ struct CompiledCode {
     std::vector<uint8_t> code;
     size_t entryOffset;
     size_t jitEntryOffset = 0; // offset to JIT-internal entry (skips C++ ABI wrapper)
+    // Framed code (x64::JitExitKind): it leaves to a driver for calls and must be run by one.
+    bool framed = false;
     std::vector<RelocInfo> relocs;
 };
 
 using JitEntryFn = slot_t (*)(slot_t *slots, void *ctx);
 
-// One construct of a graph's bytecode that keeps the graph from being compiled. `kind` is a
-// stable short name for counting (OPER, CAST, COPY, FILL, CALL, ACCS, FUNC-other-graph,
-// TAIL-other-graph, BRCH-match, JOIN-match, SCHD, opcode:<name>, frame-too-large,
+// One construct of a graph's bytecode that keeps the graph from being compiled, or from being
+// compiled as frameless code. `kind` is a stable short name for counting (OPER, CAST, COPY, FILL,
+// CALL, ACCS, FUNC-other-graph, TAIL-other-graph, BRCH-match, JOIN-match, SCHD, frame-too-large,
 // no-static-area, ...); `text` is the sentence the compile log gives.
 struct JitBlocker {
     size_t pc = 0;
@@ -107,6 +112,9 @@ class IJitBackend {
     /// coverage statistics count (FastVMSchedPass::writeStats). compile() fails with the first
     /// of them; it can also fail later (register allocation) with an empty list here.
     virtual std::vector<JitBlocker> blockers(const CompilationUnit &unit) const = 0;
+    /// Every construct of the unit that needs the runtime, in bytecode order. With none the
+    /// unit is compiled as frameless code, otherwise as framed code (x64::JitExitKind).
+    virtual std::vector<JitBlocker> runtimeConstructs(const CompilationUnit &unit) const = 0;
     virtual void registerTrampoline(const char *name, void *addr)              = 0;
     virtual JitEntryFn load(std::unique_ptr<CompiledCode> code)                = 0;
     virtual void unload(JitEntryFn fn)                                         = 0;

@@ -1,0 +1,48 @@
+/**
+ * Long tail loops in code std::jit compiled as framed code, N rounds of the environment each:
+ * a loop that allocates a string in every round (the collector runs many times under it, more
+ * so with CAMEL_GC_STRESS_SAFEPOINT), two graphs that tail-call each other, a loop that builds
+ * an array, and a loop whose body calls a function that is not a tail call. None of them may
+ * use the machine stack or the recursion limit per round: N is far above both.
+ */
+module jit_framed_loops
+
+import { get_env } from sys
+
+func churn(n: int, acc: int): int {
+    return if n == 0 then acc else churn(n - 1, acc + len(string(n) + 'x'))
+}
+
+func ping(n: int, acc: int): int {
+    return if n == 0 then acc else pong(n - 1, acc + n % 7)
+}
+
+func pong(n: int, acc: int): int {
+    return if n == 0 then acc else ping(n - 1, acc + 1)
+}
+
+func build(n: int, acc: int[]): int[] {
+    return if n == 0 then acc else build(n - 1, concat(acc, [n % 10]))
+}
+
+func total(xs: int[], i: int, acc: int): int {
+    return if i == len(xs) then acc else total(xs, i + 1, acc + xs[i])
+}
+
+func digits(n: int): int {
+    return len(string(n))
+}
+
+func digit_sum(n: int, acc: int): int {
+    return if n == 0 then acc else digit_sum(n - 1, acc + digits(n))
+}
+
+func main(): int sync {
+    let n = int(get_env('N'))
+    println(churn(n, 0))
+    println(ping(n, 0))
+    println(total(build(n / 100, [0]), 0, 0))
+    println(digit_sum(n, 0))
+    println('done')
+    return 0
+}

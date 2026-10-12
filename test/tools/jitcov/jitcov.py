@@ -11,14 +11,16 @@ JIT compiled it, every construct that keeps it from being compiled, and how many
 bytecodes the interpreter ran.
 
 Reported per corpus and pipeline:
-- graphs, and how many were compiled (entered as native code), compilable (the back end takes
-  them, they never became hot) or rejected;
-- the share of executed bytecodes that ran as native code: 1 - interpreted(std::jit) /
-  interpreted(std::fvm) over the programs both runs finished;
-- rejected graphs by blocking construct: `any` counts a graph under every kind it contains,
-  `sole` under the kind that is its only one (what lifting that one kind alone would gain);
-  `weight` is the share of all executed bytecodes (of the std::fvm run) spent in those graphs;
-- the operators (OPER) of rejected graphs, by graphs and by weight.
+- graphs, and how many were compiled (entered as native code; as frameless and as framed code),
+  compilable (the back end takes them, they never became hot) or rejected;
+- the share of executed bytecodes that did not run in the interpreter: 1 - interpreted(std::jit)
+  / interpreted(std::fvm) over the programs both runs finished;
+- graphs by construct that needs the runtime: for a rejected graph the constructs that block
+  it, for a graph compiled as framed code the constructs that make it framed (a record written
+  before framed code existed has only the first). `any` counts a graph under every kind it
+  contains, `sole` under the kind that is its only one; `weight` is the share of all executed
+  bytecodes (of the std::fvm run) spent in those graphs;
+- the operators (OPER) of those graphs, by graphs and by weight.
 
 Without --corpus the default corpora are test/cases, examples, docs/tutorial/examples and
 benchmarks. A program that does not compile, needs input it does not get, or runs longer than
@@ -110,6 +112,8 @@ class Tally:
         self.crashed = []
         self.graphs = 0
         self.status = collections.Counter()
+        self.mode = collections.Counter()
+        self.mode_weight = collections.Counter()
         self.ref_slots = collections.Counter()
         self.any_kind = collections.Counter()
         self.sole_kind = collections.Counter()
@@ -122,6 +126,7 @@ class Tally:
         self.status_weight = collections.Counter()
         self.fvm_executed = 0
         self.jit_interpreted = 0
+        self.needing = 0
 
     def add(self, path, result):
         self.programs += 1
@@ -143,16 +148,24 @@ class Tally:
                 self.status_weight[g['status']] += weight
                 if g['refSlots']:
                     self.ref_slots[g['status']] += 1
-                if g['status'] != 'rejected':
+                if g['status'] == 'compiled':
+                    mode = g.get('mode') or 'frameless'
+                    self.mode[mode] += 1
+                    self.mode_weight[mode] += weight
+                # What needs the runtime: the blockers of a rejected graph, the constructs that
+                # make a compiled or compilable one framed.
+                needs = g['blockers'] if g['status'] == 'rejected' else g.get('runtime', [])
+                if not needs:
                     continue
-                kinds = sorted({b['kind'] for b in g['blockers']})
+                self.needing += 1
+                kinds = sorted({b['kind'] for b in needs})
                 for kind in kinds:
                     self.any_kind[kind] += 1
                     self.any_weight[kind] += weight
                 if len(kinds) == 1:
                     self.sole_kind[kinds[0]] += 1
                     self.sole_weight[kinds[0]] += weight
-                opers = sorted({b['detail'] for b in g['blockers'] if b['kind'] == 'OPER'})
+                opers = sorted({b['detail'] for b in needs if b['kind'] == 'OPER'})
                 for oper in opers:
                     self.oper_graphs[oper] += 1
                     self.oper_weight[oper] += weight
@@ -171,6 +184,9 @@ class Tally:
             'graphs': self.graphs,
             'status': dict(self.status),
             'status_weight': dict(self.status_weight),
+            'compiled_by_mode': dict(self.mode),
+            'compiled_by_mode_weight': dict(self.mode_weight),
+            'graphs_needing_runtime': self.needing,
             'graphs_with_reference_slots': dict(self.ref_slots),
             'bytecodes_fvm': self.fvm_executed,
             'bytecodes_interpreted_under_jit': self.jit_interpreted,
@@ -194,25 +210,30 @@ def render(summaries, pipelines):
     lines = []
     lines.append('## Graphs compiled')
     lines.append('')
-    lines.append('| corpus | pipeline | programs (no record) | graphs | compiled | compilable, cold '
-                 '| rejected | bytecodes run natively |')
+    lines.append('| corpus | pipeline | programs (no record) | graphs | compiled (frameless + framed) '
+                 '| compilable, cold | rejected | bytecodes not interpreted |')
     lines.append('|---|---|---|---|---|---|---|---|')
     for (corpus, pipeline), s in summaries.items():
         st = s['status']
+        by_mode = s['compiled_by_mode']
         lines.append(
             f"| {corpus} | {pipeline} | {s['programs']} ({s['programs_without_record']}) "
-            f"| {s['graphs']} | {st.get('compiled', 0)} ({pct(st.get('compiled', 0), s['graphs'])}) "
+            f"| {s['graphs']} | {st.get('compiled', 0)} ({pct(st.get('compiled', 0), s['graphs'])}; "
+            f"{by_mode.get('frameless', 0)} + {by_mode.get('framed', 0)}) "
             f"| {st.get('compilable', 0)} | {st.get('rejected', 0)} "
             f"| {pct(s['bytecodes_fvm'] - s['bytecodes_interpreted_under_jit'], s['bytecodes_fvm'])} "
             f"of {s['bytecodes_fvm']} |")
     for (corpus, pipeline), s in summaries.items():
         total = s['bytecodes_fvm']
-        rejected = s['status'].get('rejected', 0)
+        rejected = s['graphs_needing_runtime']
         lines.append('')
-        lines.append(f'## Rejected graphs by construct: {corpus}, {pipeline}')
+        lines.append(f'## Graphs by construct that needs the runtime: {corpus}, {pipeline}')
         lines.append('')
-        lines.append('| construct | graphs containing it | of rejected | weight | graphs where it '
-                     'is the only one | weight |')
+        lines.append(f"{rejected} graphs need the runtime ({s['status'].get('rejected', 0)} of them "
+                     'rejected).')
+        lines.append('')
+        lines.append('| construct | graphs containing it | of those graphs | weight | graphs where '
+                     'it is the only one | weight |')
         lines.append('|---|---|---|---|---|---|')
         for kind, count in sorted(s['blockers_any'].items(), key=lambda kv: -kv[1]):
             lines.append(
@@ -221,8 +242,8 @@ def render(summaries, pipelines):
                 f"| {s['blockers_sole'].get(kind, 0)} "
                 f"| {pct(s['blockers_sole_weight'].get(kind, 0), total)} |")
         lines.append('')
-        lines.append('| operator (OPER) | rejected graphs containing it | weight | graphs where it '
-                     'is the only blocker | weight |')
+        lines.append('| operator (OPER) | graphs containing it | weight | graphs where it is the '
+                     'only such construct | weight |')
         lines.append('|---|---|---|---|---|')
         top = sorted(s['operators'].items(), key=lambda kv: -kv[1])[:20]
         for oper, count in top:
