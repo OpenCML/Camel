@@ -22,6 +22,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "operators.h"
 
@@ -85,6 +86,14 @@ bool JsonModule::load() {
     context_->registerExecutorFactory("json", [ctx = context_]() {
         return createJsonExecutor(ctx);
     });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "json",
+        {
+            // Functions of their argument: the same text or value gives the same result.
+            {"encode", true},
+            {"decode", true},
+        });
     loaded_ = true;
     return true;
 }

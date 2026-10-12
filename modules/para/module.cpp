@@ -24,6 +24,7 @@
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 
 #include <optional>
@@ -115,6 +116,18 @@ bool ParaModule::load() {
         return true;
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("para", [ctx]() { return createParaExecutor(ctx); });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "para",
+        {
+            // Blocks until other calls arrive.
+            {"rendezvous", false},
+        });
+    // The unordered counterparts of foreach and reduce run a function the program passes in;
+    // what they do is what that function does.
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "",
+        {{"mark/unordered_foreach_arr", false}, {"mark/unordered_reduce_arr", false}});
     loaded_ = true;
     return true;
 }

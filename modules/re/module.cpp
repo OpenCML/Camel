@@ -21,6 +21,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 
 using namespace camel::core::context;
@@ -45,6 +46,12 @@ bool ReModule::load() {
     if (loaded_)
         return true;
     context_->registerExecutorFactory("re", [ctx = context_]() { return createReExecutor(ctx); });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "re",
+        {
+            {"test", true},
+        });
     loaded_ = true;
     return true;
 }

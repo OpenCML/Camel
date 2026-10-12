@@ -319,10 +319,21 @@ void registerBuiltinOperatorTraits() {
         // Every operator over Map and Set (coll/) returns a new value and changes nothing.
         const bool pure = (key.starts_with("op/") && !key.starts_with("op/assn")) ||
                           key.starts_with("coll/") || kPureHelpers.contains(key);
-        if (pure) {
-            registry.set(":" + name, {.pure = true, .elementwise = false});
-        }
+        // Declared either way: an operator without a declaration is treated the same as one
+        // declared to have effects, but only a declaration says that somebody looked.
+        registry.set(":" + name, {.pure = pure, .elementwise = false});
     }
+    // The higher-order operators and function composition run a function the program passes
+    // in: what they do is what that function does, and the passes that look at them look at
+    // that function. exit and sleep are the os module's and are built in as well.
+    registry.declare(
+        "",
+        {{"mark/map_arr", false},
+         {"mark/apply_arr", false},
+         {"mark/filter_arr", false},
+         {"mark/reduce_arr", false},
+         {"mark/foreach_arr", false}});
+    registry.declare("os", {{"exit", false}, {"sleep", false}});
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});

@@ -23,6 +23,7 @@
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "camel/utils/type.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "operators.h"
 #include "sequence.h"
@@ -213,6 +214,25 @@ bool AlgoModule::load() {
     context_->registerExecutorFactory("algo", [ctx = context_]() {
         return createAlgoExecutor(ctx);
     });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "algo",
+        {
+            // Return a new array.
+            {"sorted", true},
+            {"insert_sorted", true},
+            {"quick_sorted", true},
+            {"merge_sorted", true},
+            {"merge_sorted_arrays", true},
+            {"flatten", true},
+            {"unique", true},
+            {"argsort", true},
+            // Sort the array they are given, in place.
+            {"sort", false},
+            {"insert_sort", false},
+            {"quick_sort", false},
+            {"merge_sort", false},
+        });
     loaded_ = true;
     return true;
 }

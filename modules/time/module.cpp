@@ -22,6 +22,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "operators.h"
 
@@ -66,6 +67,16 @@ bool TimeModule::load() {
         return true;
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("time", [ctx]() { return createTimeExecutor(ctx); });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "time",
+        {
+            // The clock.
+            {"now", false},
+            // Formatting and parsing a time may consult the time zone of the process.
+            {"strftime", false},
+            {"strptime", false},
+        });
     loaded_ = true;
     return true;
 }

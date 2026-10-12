@@ -22,6 +22,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/operator_traits.h"
 #include "executor.h"
 #include "operators.h"
 
@@ -76,6 +77,21 @@ bool OSModule::load() {
         return true;
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("os", [ctx]() { return createOSExecutor(ctx); });
+    // The purity of every operator (design principles 2.9).
+    camel::core::OperatorTraitsRegistry::instance().declare(
+        "os",
+        {
+            // The terminal, the process and the machine it runs on.
+            {"exit", false},
+            {"sleep", false},
+            {"whoami", false},
+            {"cpu_count", false},
+            {"set_terminal_raw_mode", false},
+            {"has_input", false},
+            {"get_char", false},
+            {"get_chars", false},
+            {"clear_input_buffer", false},
+        });
     loaded_ = true;
     return true;
 }
