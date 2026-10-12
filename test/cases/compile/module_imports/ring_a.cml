@@ -1,0 +1,6 @@
+module ring_a
+import { g } from ring_b
+
+export func f(n: int): int {
+    return g(n) + 1
+}

@@ -1,0 +1,6 @@
+import { count } from mi_values
+
+func main(): int sync {
+    println(count())
+    return 0
+}

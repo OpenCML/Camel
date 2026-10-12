@@ -1,0 +1,38 @@
+module mi_values
+
+let base = 10
+var cnt = 0
+
+func helper(x: int): int {
+    return x * base
+}
+
+export func bump(x: int): int {
+    return x + base
+}
+
+export func indirect(x: int): int {
+    return helper(x) + 1
+}
+
+export func count(): int {
+    return cnt + 1
+}
+
+export func pure(x: int): int {
+    return x + 1
+}
+
+export func scaled(x: int, by: int): int {
+    return x * by
+}
+
+export func ten(): int {
+    return 10
+}
+
+export func viaTen(x: int): int {
+    return x + ten()
+}
+
+export let pi = 3.14159
