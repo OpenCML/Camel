@@ -264,6 +264,9 @@ class Builder {
     void registerGenericTemplates(const GCT::node_ptr_t &exec);
     // The instance of `tmpl` that the arguments of `call` ask for: binds the type variables,
     // checks every argument against its parameter, and builds the instance unless it exists.
+    /// An error at `at` when `type` holds a Map or a Set whose key type is not allowed, which
+    /// replacing a type variable can produce.
+    void rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at);
     compile_graph_ptr_t resolveGenericCall(
         const template_ptr_t &tmpl, const camel::core::type::type_vec_t &withTypes,
         const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);

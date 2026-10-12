@@ -173,6 +173,9 @@ class Builder {
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
+    /// `[...] as Map<K, V>`: an error when two constant keys of the literal are equal.
+    void rejectDuplicateLiteralKeys(
+        const data_ptr_t &data, Type *targetType, const AST::node_ptr_t &ast);
 };
 
 } // namespace camel::compile::gct

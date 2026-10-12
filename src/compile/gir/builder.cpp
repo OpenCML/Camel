@@ -29,6 +29,7 @@
 #include "core/module/entity_internal.h"
 
 #include "camel/core/operator_traits.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
 
 #include <atomic>
@@ -1338,7 +1339,21 @@ compile_graph_ptr_t Builder::resolveGenericCall(
                 asTagged(repeated->payloadType())->payloadType()->toString());
         throw BuildAbortException();
     }
+    // Likewise a key type: `Set<T>` with `T = float` (DESIGN-QUESTION(map-key-types)).
+    rejectInvalidCollectionKey(substituteTypeVars(signature, bindings), call);
     return instantiateGeneric(tmpl, bindings, call);
+}
+
+void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) {
+    OtherType *invalid = findInvalidCollectionKey(type);
+    if (invalid == nullptr) {
+        return;
+    }
+    Type *keyType = invalid->params()[0];
+    diags_->of(SemanticDiag::CollectionKeyNotAllowed)
+        .atOrigin(at->load()->origin())
+        .commit(keyType->toString(), invalid->toString(), collectionKeyProblem(keyType));
+    throw BuildAbortException();
 }
 
 compile_graph_ptr_t Builder::instantiateGeneric(
@@ -2155,6 +2170,8 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     const auto &castLoad = gct->loadAs<GCT::CastLoad>();
     Type *targetType     = boundType(castLoad->targetType());
+    // A collection type written with a type variable is only checked now that it is replaced.
+    rejectInvalidCollectionKey(targetType, gct);
     node_handle_t valueNode{};
     if (TupleType *tagged = asTagged(targetType);
         tagged != nullptr && gct->at(0)->type() == GCT::LoadType::DATA) {

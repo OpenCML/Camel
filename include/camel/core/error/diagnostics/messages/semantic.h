@@ -89,6 +89,9 @@ enum class SemanticDiag : uint32_t {
     TaggedMatchCases             = 0x000076,
     // Reporting several errors (0x80 and up, clear of the blocks above).
     ImportedModuleHasErrors      = 0x000080,
+    // Map and Set (design principles 2.9; docs/technical/31_map_and_set.md).
+    CollectionKeyNotAllowed      = 0x0000A0,
+    DuplicateCollectionKey       = 0x0000A1,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

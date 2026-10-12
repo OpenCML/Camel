@@ -524,6 +524,26 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::CollectionKeyNotAllowed,
+            {
+                "CollectionKeyNotAllowed",
+                "The type '{0}' cannot be a key of '{1}': {2}.",
+                "A key of a Map and an element of a Set must have an order and an equality "
+                "that cannot change: 'int', 'i32', 'bool', 'string', and tuples of those. The "
+                "value type of a Map is not restricted.",
+            },
+        },
+        {
+            SemanticDiag::DuplicateCollectionKey,
+            {
+                "DuplicateCollectionKey",
+                "The key '{0}' is written twice in this literal converted to '{1}'.",
+                "A map holds one value per key. In an array computed when the program runs "
+                "the later entry replaces the earlier one; in a literal a repeated key is "
+                "taken for a mistake. Remove one of the two entries.",
+            },
+        },
+        {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",

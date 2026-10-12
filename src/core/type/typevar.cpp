@@ -163,6 +163,16 @@ rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &c
     return factory.build();
 }
 
+/// A module type whose arguments are plain types (OtherType::typeArguments): the algebra
+/// descends through them. Any other module type is opaque.
+OtherType *asTypeApplication(Type *type) {
+    if (type == nullptr || !type->isOtherType()) {
+        return nullptr;
+    }
+    auto *other = static_cast<OtherType *>(type);
+    return other->typeArguments() && other->paramCount() > 0 ? other : nullptr;
+}
+
 } // namespace
 
 TupleType *findRepeatedMark(Type *type) {
@@ -204,8 +214,12 @@ TupleType *findRepeatedMark(Type *type) {
         return func->hasExitType() ? findRepeatedMark(func->exitType()) : nullptr;
     }
     default:
-        return nullptr;
+        break;
     }
+    if (OtherType *applied = asTypeApplication(type)) {
+        return among(applied->paramsSpan());
+    }
+    return nullptr;
 }
 
 bool containsTypeVar(Type *type) {
@@ -310,10 +324,24 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         return changed ? UnionType::create(types) : type;
     }
     default:
-        // Primitive types, and module types: what the arguments of a module type mean is the
-        // type's own business, so variables are not accepted among them in the first place.
-        return type;
+        break;
     }
+    if (OtherType *applied = asTypeApplication(type)) {
+        bool changed = false;
+        std::vector<Type *> params;
+        params.reserve(applied->paramCount());
+        for (Type *param : applied->paramsSpan()) {
+            params.push_back(substituteTypeVars(param, bindings));
+            changed |= params.back() != param;
+        }
+        return changed
+                   ? applied->cloneWithParams(std::span<Type *const>(params.data(), params.size()))
+                   : type;
+    }
+    // Primitive types, and module types whose arguments are not plain types: what those
+    // arguments mean is the type's own business, so variables are not accepted among them in
+    // the first place.
+    return type;
 }
 
 FunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t &bindings) {
@@ -399,8 +427,22 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return true;
     }
     default:
-        return true;
+        break;
     }
+    if (OtherType *want = asTypeApplication(pattern)) {
+        // The same type code was checked above; an argument list of another length is the
+        // prototype of the name (`Map` written without arguments).
+        auto *have = static_cast<OtherType *>(actual);
+        if (have->paramCount() != want->paramCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < want->paramCount(); ++i) {
+            if (!bindTypeVars(want->params()[i], have->params()[i], bindings)) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names) {
@@ -442,7 +484,12 @@ void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names) {
         return;
     }
     default:
-        return;
+        break;
+    }
+    if (OtherType *applied = asTypeApplication(pattern)) {
+        for (Type *param : applied->paramsSpan()) {
+            collectBindableTypeVars(param, names);
+        }
     }
 }
 

@@ -131,8 +131,9 @@ FunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t 
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings);
 
 /// The names of the variables `pattern` can bind (see bindTypeVars), appended to `names`
-/// without duplicates. A `typeas` inside a union or among the arguments of a module type is
-/// not among them: there is no position of the argument type to take it from.
+/// without duplicates. A `typeas` inside a union is not among them: there is no position of
+/// the argument type to take it from. Among the arguments of a module type it is, when those
+/// arguments are plain types (OtherType::typeArguments, e.g. `Map<typeas K, typeas V>`).
 void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names);
 
 /// A `T??` or `T!!` anywhere in `type`, or nullptr: the same mark twice, which a type

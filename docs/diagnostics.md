@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-111 diagnostics: 102 errors, 9 warnings.
+110 diagnostics: 103 errors, 7 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -89,12 +89,12 @@ prints one entry.
 | `0x03000075` | [SemanticDiag::TaggedOperandMismatch](#taggedoperandmismatch) | Error |
 | `0x03000076` | [SemanticDiag::TaggedMatchCases](#taggedmatchcases) | Error |
 | `0x03000080` | [SemanticDiag::ImportedModuleHasErrors](#importedmodulehaserrors) | Error |
+| `0x030000A0` | [SemanticDiag::CollectionKeyNotAllowed](#collectionkeynotallowed) | Error |
+| `0x030000A1` | [SemanticDiag::DuplicateCollectionKey](#duplicatecollectionkey) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
-| `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
-| `0x03100091` | [SemanticDiag::MatchWithoutDefault](#matchwithoutdefault) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -126,7 +126,6 @@ prints one entry.
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error |
 | `0x0400003B` | [RuntimeDiag::OperatorNotImplemented](#operatornotimplemented) | Error |
-| `0x04000090` | [RuntimeDiag::MatchNotExhaustive](#matchnotexhaustive) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 
@@ -1693,20 +1692,17 @@ func main(): int sync {
 Only a name that stands for exactly one function has a function value. Wrap the call in a function whose parameter types are written out, e.g. '(x: int) => {0}(x)'.
 ```
 
-**Example** (`test/cases/compile/function_values/literal_operator_name.cml`, run as `camel test/cases/compile/function_values/literal_operator_name.cml`)
+**Example** (`test/cases/compile/function_values/return_operator_name.cml`, run as `camel test/cases/compile/function_values/return_operator_name.cml`)
 
 ```camel
-module literal_operator_name
+module return_operator_name
 
-func inc(x: int): int { return x + 1 }
-func over(x: int): int { return x }
-func over(x: float): float { return x }
+func pick() {
+    return println
+}
 
 func main(): int sync {
-    let c = true
-    let fs = [println, inc]
-    let t = (over, 1)
-    let k = if c then println else inc
+    pick()
     println('never printed')
     return 0
 }
@@ -1955,6 +1951,42 @@ The errors are reported for that module. This one follows from them and goes awa
 
 *No example: no test small enough to show raises it.*
 
+### CollectionKeyNotAllowed
+
+`0x030000A0` · Error · `SemanticDiag::CollectionKeyNotAllowed`
+
+**Message**
+
+```text
+The type '{0}' cannot be a key of '{1}': {2}.
+```
+
+**Help**
+
+```text
+A key of a Map and an element of a Set must have an order and an equality that cannot change: 'int', 'i32', 'bool', 'string', and tuples of those. The value type of a Map is not restricted.
+```
+
+*No example: no test small enough to show raises it.*
+
+### DuplicateCollectionKey
+
+`0x030000A1` · Error · `SemanticDiag::DuplicateCollectionKey`
+
+**Message**
+
+```text
+The key '{0}' is written twice in this literal converted to '{1}'.
+```
+
+**Help**
+
+```text
+A map holds one value per key. In an array computed when the program runs the later entry replaces the earlier one; in a literal a repeated key is taken for a mistake. Remove one of the two entries.
+```
+
+*No example: no test small enough to show raises it.*
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -2088,60 +2120,6 @@ func earlier_dropped(x: int): int sync {
 
 func main(): int sync {
     println(caller(1))
-    return 0
-}
-```
-
-### ExitInUnusedBranch
-
-`0x03100090` · Warn · `SemanticDiag::ExitInUnusedBranch`
-
-**Message**
-
-```text
-This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function.
-```
-
-**Help**
-
-```text
-An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the '{0}' has no effect and the function goes on with the next statement. To return from the function through a branch, make the '{1}' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
-```
-
-*No example: no test small enough to show raises it.*
-
-### MatchWithoutDefault
-
-`0x03100091` · Warn · `SemanticDiag::MatchWithoutDefault`
-
-**Message**
-
-```text
-This 'match' on a value of type '{0}' has no 'case _': a value that none of its cases matches stops the program.
-```
-
-**Help**
-
-```text
-Add 'case _ => ...' for the values the cases do not list. Without it, meeting such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A 'match' on a bool that has both 'case true' and 'case false' is complete and is not reported.
-```
-
-**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
-
-```camel
-module no_case_matches_string
-
-func f(s: string): int {
-    return match s {
-        case 'a' => 1
-        case 'b' => 2
-    }
-}
-
-func main(): int sync {
-    println(f('a'), f('b'))
-    println(f('zzz'))
-    println('not reached')
     return 0
 }
 ```
@@ -2902,42 +2880,6 @@ The name exists so that programs using it are recognised; calling it is not poss
 ```
 
 *No example: no test small enough to show raises it.*
-
-### MatchNotExhaustive
-
-`0x04000090` · Error · `RuntimeDiag::MatchNotExhaustive`
-
-**Message**
-
-```text
-No case of this 'match' matches the value {0}.
-```
-
-**Help**
-
-```text
-A 'match' takes the first case whose pattern equals the value, and this one has no 'case _' for the values it does not list. Add 'case _ => ...'.
-```
-
-**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
-
-```camel
-module no_case_matches_string
-
-func f(s: string): int {
-    return match s {
-        case 'a' => 1
-        case 'b' => 2
-    }
-}
-
-func main(): int sync {
-    println(f('a'), f('b'))
-    println(f('zzz'))
-    println('not reached')
-    return 0
-}
-```
 
 ### PassesNeverRun
 

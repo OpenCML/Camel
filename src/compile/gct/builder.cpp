@@ -23,6 +23,7 @@
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
@@ -267,6 +268,9 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("string"), Type::String());
     typeScope_->insert(Reference("any"), Type::Any());
     typeScope_->insert(Reference("void"), Type::Void());
+    // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 2.9).
+    typeScope_->insert(Reference("Map"), MapType::prototype());
+    typeScope_->insert(Reference("Set"), SetType::prototype());
 }
 
 /*
@@ -1625,8 +1629,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // function is instantiated, for a literal as for any other value.
         // A conversion into `T?` / `T!` is a CAST node for a literal too: the value is put
         // into the form when the program runs.
+        // A conversion into a Map or a Set builds the collection when the program runs (a
+        // CAST), for a literal too; what can be said about the literal is said here.
+        const bool intoCollection = asCollectionTypeOrPrototype(dstType) != nullptr;
+        if (intoCollection && dataNode->type() == LoadType::DATA) {
+            rejectDuplicateLiteralKeys(dataNode->loadAs<DataLoad>()->data(), dstType, ast);
+        }
         if (dataNode->type() == LoadType::DATA && !containsTypeVar(dstType) &&
-            asTagged(dstType) == nullptr) {
+            asTagged(dstType) == nullptr && !intoCollection) {
             const auto &dataLoad = dataNode->loadAs<DataLoad>();
             const auto &data     = dataLoad->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
@@ -2260,6 +2270,18 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         throw std::runtime_error("Unknown type type");
     }
 
+    // `Map` and `Set` are always written with their arguments.
+    if (const CollectionType *coll = res ? asCollectionTypeOrPrototype(res) : nullptr;
+        coll != nullptr && !coll->complete() && !asTypeFunctionBase) {
+        diags_->of(SemanticDiag::InvalidTypeArgument)
+            .at(ast->load()->tokenRange())
+            .commit(
+                coll->toString(),
+                coll->isMap() ? "it is written Map<K, V>, with a key type and a value type"
+                              : "it is written Set<T>, with an element type");
+        throw BuildAbortException();
+    }
+
     if (res != nullptr && res->code() == TypeCode::TypeFunc && !asTypeFunctionBase) {
         const auto *typeFunc = static_cast<TypeFunctionType *>(res);
         diags_->of(SemanticDiag::TypeFunctionArguments)
@@ -2651,6 +2673,41 @@ Type *Builder::visitDataType(const AST::node_ptr_t &ast) {
     return nullptr;
 }
 
+// DESIGN-QUESTION(map-duplicate-keys): in an array literal written under `as Map<...>`, two
+// equal constant keys are an error. Entries that are not constants (they refer to a name) are
+// not looked at; at run time the later entry of two equal keys wins. A set takes duplicates.
+void Builder::rejectDuplicateLiteralKeys(
+    const data_ptr_t &data, Type *targetType, const AST::node_ptr_t &ast) {
+    const CollectionType *coll = asCollectionTypeOrPrototype(targetType);
+    const auto array           = std::dynamic_pointer_cast<ArrayData>(data);
+    if (coll == nullptr || !coll->isMap() || !array) {
+        return;
+    }
+    const auto holes = array->holes();
+    // Candidates by their text, so that a long literal is not compared pair by pair.
+    std::unordered_map<std::string, std::vector<data_ptr_t>> seen;
+    for (size_t i = 0; i < array->raw().size(); ++i) {
+        if (std::find(holes.begin(), holes.end(), i) != holes.end()) {
+            continue;
+        }
+        const auto entry = std::dynamic_pointer_cast<TupleData>(array->raw()[i]);
+        if (!entry || !entry->resolved() || entry->raw().size() != 2 || !entry->raw()[0]) {
+            continue;
+        }
+        const data_ptr_t &key = entry->raw()[0];
+        std::vector<data_ptr_t> &sameText = seen[key->toString()];
+        for (const data_ptr_t &earlier : sameText) {
+            if (earlier->equals(key)) {
+                diags_->of(SemanticDiag::DuplicateCollectionKey)
+                    .at(ast->load()->tokenRange())
+                    .commit(key->toString(), targetType->toString());
+                throw BuildAbortException();
+            }
+        }
+        sameText.push_back(key);
+    }
+}
+
 /*
 SpecType : Type base, RepeatedLoad typeOrData ;
 */
@@ -2716,9 +2773,21 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         LEAVE("SpecType");
         return base;
     }
-    if (base->isOtherType()) {
+    if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
+        coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {
+        // The key of a map, the element of a set (DESIGN-QUESTION(map-key-types)).
+        Type *keyType = arguments.front().type;
+        if (std::string problem = collectionKeyProblem(keyType); !problem.empty()) {
+            diags_->of(SemanticDiag::CollectionKeyNotAllowed)
+                .at(ast->load()->tokenRange())
+                .commit(keyType->toString(), coll->toString(), problem);
+            throw BuildAbortException();
+        }
+    }
+    if (base->isOtherType() && !static_cast<OtherType *>(base)->typeArguments()) {
         // What the arguments of a module type mean is defined by the type, which sees
-        // concrete types only.
+        // concrete types only. A type whose arguments are plain types (Map, Set) takes
+        // variables like an array or a tuple does.
         for (const TypeArgument &argument : arguments) {
             if (argument.type != nullptr && containsTypeVar(argument.type)) {
                 diags_->of(SemanticDiag::InvalidTypeArgument)
