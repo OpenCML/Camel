@@ -28,7 +28,7 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 
 | Form | Meaning |
 |---|---|
-| `p.x` | Struct field. A field that does not exist is the compile-time error `InvalidAccessIndex` |
+| `p.x` | Struct field. A field that does not exist is the compile-time error `SemanticDiag::InvalidAccessIndex` |
 | `t.0` | Tuple member; the index is a literal, and out of range is a compile-time error |
 | `xs[i]` | Array element. Out of range (including negative) is the fault `RuntimeDiag::IndexOutOfRange` |
 | `m[k]` | Map lookup; the type is `V?` ([3.5](03_data_model.md#35-maps-and-sets)) |
@@ -36,8 +36,8 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 
 - `.` cannot be used on an array (`xs.1` is `SemanticDiag::TypeNotIndexable`).
 - A subscript directly follows the expression being accessed, with no whitespace.
-- The slice forms `xs[a:b]` and `xs[a:b:c]` are reserved, not implemented (`SemanticDiag::NoMatchingFunction`); use `xs->slice<a, b>`.
-- String subscripts are currently unavailable ([3.3.4](03_data_model.md#334-strings)).
+- The slice forms `xs[a:b]` and `xs[a:b:c]` are reserved, not implemented: there is no dedicated diagnostic for them, and the compiler reports `SemanticDiag::NoMatchingFunction`, as "the subscript operator has no overload that accepts these arguments". Use `xs->slice<a, b>`.
+- **String subscripts are by byte**: `s[i]` is the `i`-th byte, and the result is a string containing just that one byte; an out-of-range subscript is likewise a fault. A single byte of a multi-byte character is not valid UTF-8 text by itself; to read by character use `char_at` and `codepoints` of the `str` module (see the [standard library reference](../../stdlib-reference.md)). Whether the result of a subscript is a one-byte string or a number is behaviour of the current implementation, not yet decided.
 
 ## 6.4 Calls
 
@@ -58,7 +58,7 @@ func main(): int sync {
 ```
 
 - Ordinary arguments are written in parentheses, `with` arguments in angle brackets; both must directly follow the function name. When the function has no `with` parameters, no angle brackets are written.
-- Arguments correspond to parameters by position, and the types must match exactly (no implicit conversions). A mismatch is `SemanticDiag::NoMatchingFunction` or `ArgumentsMismatch`, and the diagnostic lists the available signatures.
+- Arguments correspond to parameters by position, and the types must match exactly (no implicit conversions). A mismatch is `SemanticDiag::NoMatchingFunction` or `SemanticDiag::ArgumentsMismatch`, and the diagnostic lists the available signatures.
 - When there are several functions of the same name, one is selected by the overloading rules ([7.4.3](07_statements.md#743-overloading)).
 - Keyword arguments `f(a: 1)` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`).
 - Directly calling a lambda written in parentheses (`((x: int) => x + 1)(3)`) is currently unavailable; first bind it to a name with `let`, then call it.
@@ -87,7 +87,7 @@ total = 35
 
 ## 6.6 Operators for null and errors
 
-For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). On the graph each of them is a branch whose condition is a one-bit tag on the value.
+For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). On the graph each of the three operators below is a branch whose condition is a one-bit tag on the value.
 
 | Form | Left side | Right side | Result |
 |---|---|---|---|
@@ -132,7 +132,7 @@ func main(): int sync {
 | Unary `-` | The four numeric types | |
 | `~` | `int`, `i32` | Bitwise not: `~5` is `-6` |
 
-The two operands must have the same type. There are no bitwise and, or, xor or shift operators.
+The two operands must have the same type. There are no bitwise and, or, xor or shift operators; use `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl` and `shr` of the `math` module.
 
 **Two places where mistakes are easy:**
 

@@ -777,7 +777,7 @@ func main(): int sync {
 
 ### 标准库
 
-随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`algo`、`random`、`time`、`fs`、`json`、`os`、`sys`、`re`、`para`，以及张量一系的 `tensor`、`nn`、`autodiff`、`onnx`。[标准库参考](../stdlib-reference.md)逐个列出它们的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
+随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`algo`、`random`、`time`、`fs`、`json`、`os`、`sys`、`re`、`crypto`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十五个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
 
 ```cml
 module stdlib_demo
@@ -818,9 +818,9 @@ HELLO a+b+c 6 5
 3.1416
 ```
 
-- **调用的约定**：被处理的值是普通参数，配置这次调用的值是 `with` 参数。所以库函数都能接在管道上：`s->trim->split<','>`、`xs->unique->sort_by<key>->take<2>`。
+- **调用的约定**：函数要处理的值是它的普通参数，配置这次调用的值是 `with` 参数。所以库函数都能接在管道上：`s->trim->split<','>`、`xs->unique->sort_by<key>->take<2>`。
 - 字符串按字节：`len('héllo')` 是 6；按字符计数用 `char_count`，是 5。`s[i]` 取出第 `i` 个字节。
-- 找不到的结果是 `T?`（如 `find`），用 `??` 取出；越界、不在定义域内的实参是故障。
+- 可能没有结果的函数返回 `T?`（如 `find` 找不到时），用 `??` 取出；越界、不在定义域内的实参是故障。
 - 一个书写上的细节：同一个实参表里有两个带尖括号的调用时（`f<a>(x), g<b>(y)`），会被读成比较。所以上面把两次 `find` 写成了两条 `let`。
 - `array` 模块是用 Camel 写的泛型函数，在图上是看得见的子图；`str`、`math` 的函数是 C++ 算子，在图上是一个节点。
 
@@ -830,7 +830,7 @@ HELLO a+b+c 6 5
 camel inspect --ops docs/tutorial/examples/12_stdlib.cml
 ```
 
-每个重载打印一行（这个程序共 323 行），例如：
+每个重载打印一行，例如：
 
 ```text
 OPERATOR {"module":"str","name":"split","uri":"str:split","with":1,"norm":1,"purity":"pure","signature":"<string> (string) => string[]"}

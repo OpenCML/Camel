@@ -117,13 +117,13 @@ func main(): int sync {
 3
 ```
 
-(There is also an `EffectNotExecuted` warning pointing at `println(x)`.) The body of `main` is a sync block, and the two calls of `log` execute in order; but `println(x)` belongs to `log`'s own function body. To print, write `log` as `func log(x: int): int sync { ... }`.
+(There is also a `SemanticDiag::EffectNotExecuted` warning pointing at `println(x)`.) The body of `main` is a sync block, and the two calls of `log` execute in order; but `println(x)` belongs to `log`'s own function body. To print, write `log` as `func log(x: int): int sync { ... }`.
 
 ### 4.3.3 `sync func` (function modifier)
 
 A `sync` written before `func` modifies the function: it declares that the function has side effects and needs to be synchronised, and that callers may need to `wait` it.
 
-- Functions with `var` parameters and functions that write captured variables (including module top-level variables) should be declared this way; when they are not, the compiler gives the warnings `VarParamInAsyncFunction` and `CapturedWriteInAsyncFunction`. For a lambda the form is `sync (x: int) => ...`.
+- Functions with `var` parameters and functions that write captured variables (including module top-level variables) should be declared this way; when they are not, the compiler gives the warnings `SemanticDiag::VarParamInAsyncFunction` and `SemanticDiag::CapturedWriteInAsyncFunction`. For a lambda the form is `sync (x: int) => ...`.
 - **It does not make the function body a sync block.** To make the function body execute in order, use both:
 
 ```cml

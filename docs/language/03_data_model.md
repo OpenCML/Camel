@@ -86,8 +86,9 @@ println(xs[0], len(xs), grid[0][1])
   | `zip(xs, ys)` | `(x, y)` 元组的数组 |
   | `strs->join<sep>` | 把 `string[]` 连成一个字符串 |
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
-  | `array` 模块 | `reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`any`、`all`、`count`、`sum`、`min`、`max`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md) |
   | `xs->append<v>`、`xs->extend<ys>` | **原地修改**，`xs` 必须是 `var`（见 3.6） |
+
+- 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`any`、`all`、`count`、`sum`、`min`、`max`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
 
 ### 3.3.2 元组
 

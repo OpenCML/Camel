@@ -56,13 +56,15 @@ func main(): int sync {
 | `json` | `encode`、`decode`、`decode_as` |
 | `os`、`sys` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
 | `re` | `test` |
+| `crypto` | `sha256`、`sha256_rounds` |
+| `this` | `zen` |
 | `algo` | `sort`、`sorted`、`merge_sorted_arrays` 等排序函数 |
 | `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
 | `para` | `unordered_foreach`、`unordered_reduce` |
 | `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出 |
 | `python` | 嵌入 Python（需要构建时启用） |
 
-前十三个模块的每个函数见 [标准库参考](../stdlib-reference.md)，约定见 [5.6](#56-标准库)。
+除 `tensor`、`nn`、`autodiff`、`onnx` 与 `python` 之外，表中各模块的每个函数见 [标准库参考](../stdlib-reference.md)，约定见 [5.6](#56-标准库)。
 
 ## 5.3 导出
 
@@ -145,7 +147,7 @@ func main(): int sync {
 
 各模块导出的函数（签名、是否纯、失败时的行为、例子）见 [标准库参考](../stdlib-reference.md)，它由 `stdlib/signatures/*.cml` 与用 Camel 写的库（`stdlib/*.cml`）生成。约定：
 
-- 被处理的值是普通参数，配置它的值是 `with` 参数，因此可以链式书写：
+- 函数要处理的值是它的普通形参，配置这次调用的值是 `with` 形参，因此可以链式书写：
 
   ```cml
   import { trim, split, to_upper } from str
@@ -155,7 +157,7 @@ func main(): int sync {
   let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
   ```
 
-- 找不到的结果是 `T?`（`find`、`index_of`、`min`、`max`、`median`），用 `??` 处理；只有声明为可能失败的操作返回 `T!`（如按码点解码一个不是合法 UTF-8 的字符串）；越界与不在定义域内的实参是故障。
+- 可能没有结果的函数返回 `T?`（`find`、`index_of` 找不到，`min`、`max`、`median` 遇到空数组），用 `??` 处理；只有声明为可能失败的操作返回 `T!`（如按码点解码一个不是合法 UTF-8 的字符串）；越界与不在定义域内的实参是故障。
 - 用 Camel 写的库（如 `array`）导出的是泛型函数，在调用它的模块里按元素类型实例化（见 [7.5](07_statements.md#75-泛型函数)）。
 - 模块不能导出值，常量写成无参函数：`pi()`、`e()`。
 - 传给 `array` 模块高阶函数的函数用 `map` 施加：各元素上的调用之间没有顺序约定（并行调度器可以同时执行），结果按位置排列；需要顺序的副作用用内建的 `foreach`、`reduce`。

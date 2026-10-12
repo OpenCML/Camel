@@ -108,12 +108,12 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Struct destructuring `let { x, y } = p`, array destructuring `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring is available) |
 | Keyword arguments `f(a: 1)` | `FeatureNotSupported` | Pass by position |
 | Parameter default values `b: int = 5` | `FeatureNotSupported` | Overloading; `with` parameters |
-| `use name = qualified-name` | `FeatureNotSupported` | `import { name } from module` |
-| Slice subscripts `xs[a:b]`, `xs[a:b:c]` | `SemanticDiag::NoMatchingFunction` | `xs->slice<a, b>` |
+| `use name = qualified-name` | `FeatureNotSupported` | `import { name } from module`; to rename, use `let new-name = module::name` ([5.5](05_modules.md#55-use)) |
+| Slice subscripts `xs[a:b]`, `xs[a:b:c]` | `SemanticDiag::NoMatchingFunction` (there is no dedicated diagnostic: it is reported as "the subscript operator has no overload that accepts these arguments") | `xs->slice<a, b>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
 | `typeof e`, `T ? U`, `name of T` | `FeatureNotSupported` | None |
 | `keyof`, `enum` | Syntax error | None |
 | `for`, `while` loops | Syntax error (there is no loop syntax) | Recursion; `map`/`filter`/`reduce`/`foreach` |
 | Modifiers `atomic`, `shared`, `inner`, `outer` | No diagnostic; no semantics | Do not write them |
 
-In addition there are a few things that "can be written but cannot be used at present": the union type `A | B` (values of the member types cannot enter it), the string subscript `s[i]` (run-time fault), a declaration with a function type `let f: (x: int) => int = g`, and directly calling a lambda in parentheses.
+In addition there are a few things that "can be written but cannot be used at present": the union type `A | B` (values of the member types cannot enter it), a declaration with a function type `let f: (x: int) => int = g`, and directly calling a lambda in parentheses.

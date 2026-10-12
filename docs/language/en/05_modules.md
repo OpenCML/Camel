@@ -47,18 +47,24 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 
 | Module | Contents |
 |---|---|
-| `math` | `abs`, `sqrt`, `exp`, `floor`, `ceil`, `round`, `hex`, `bin`, `oct` |
+| `str` | Strings: by byte, splitting, trimming, case conversion, replacing, searching, taking substrings; by code point, counting, reading, encoding and decoding |
+| `array` | Arrays: `reverse`, `take`, `drop`, `unique`, `find`, `sum`, `min`, `max`, `sort_by`, `flat_map` and others (generic functions written in Camel) |
+| `math` | The constants `pi()`, `e()`; elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
 | `random` | `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle` |
 | `time` | `now`, `strftime`, `strptime` |
 | `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `read_text`, `try_read_text`, `write_text`, `file_size`, `read_chunk` |
 | `json` | `encode`, `decode`, `decode_as` |
 | `os`, `sys` | `whoami`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
 | `re` | `test` |
+| `crypto` | `sha256`, `sha256_rounds` |
+| `this` | `zen` |
 | `algo` | `sort`, `sorted`, `merge_sorted_arrays` and other sorting functions |
-| `statistics` | `mean`, `stdev` |
+| `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
 | `para` | `unordered_foreach`, `unordered_reduce` |
 | `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export |
 | `python` | Embedded Python (must be enabled at build time) |
+
+For every function of the modules in the table other than `tensor`, `nn`, `autodiff`, `onnx` and `python`, see the [standard library reference](../../stdlib-reference.md); for the conventions see [5.6](#56-standard-library).
 
 ## 5.3 Exports
 
@@ -100,7 +106,7 @@ func main(): int sync {
 ```
 
 - `export` is written before a `func`, `type` or `let`/`var` declaration, or in the form `export { a, b }` listing names already declared.
-- Generic functions currently cannot be exported; a name that has both an annotated function and other overloads currently cannot be exported (`SemanticDiag::ConstructNotSupported`).
+- Generic functions can be exported ([7.5](07_statements.md#75-generic-functions)). A name that has both an annotated function and other overloads currently cannot be exported (`SemanticDiag::ConstructNotSupported`).
 
 ## 5.4 Namespaces
 
@@ -131,4 +137,28 @@ func main(): int sync {
 
 ## 5.5 `use`
 
-`use name = qualified-name` is reserved, not implemented (`SemanticDiag::FeatureNotSupported`). To give a function a short name, use `let`: `let sq = math::sqrt` does not work for a name that stands for a group of overloads; in that case write a lambda: `let sq = (x: float): float => math::sqrt(x)`.
+`use name = qualified-name` is reserved, not implemented (`SemanticDiag::FeatureNotSupported`). Alternatives:
+
+- Bring the name in directly: `import { sqrt } from math`.
+- To give it another name, use `let`: `let sq = math::sqrt`.
+- A name that stands for a group of overloads has no single function value and cannot be bound with `let`; in that case write a lambda: `let sq = (x: float): float => math::sqrt(x)`.
+
+## 5.6 Standard library
+
+For the functions each module exports (signature, whether it is pure, behaviour on failure, examples) see the [standard library reference](../../stdlib-reference.md), which is generated from `stdlib/signatures/*.cml` and the libraries written in Camel (`stdlib/*.cml`). Conventions:
+
+- The value a function works on is its ordinary parameter and the values that configure the call are `with` parameters, so calls can be chained:
+
+  ```cml
+  import { trim, split, to_upper } from str
+  import { sort_by, take } from array
+
+  let words = '  pear, fig ,apple '->trim->split<','>->map<(w: string) => trim(w)>
+  let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
+  ```
+
+- A function that may have no result returns `T?` (`find` and `index_of` when nothing is found, `min`, `max` and `median` of an empty array), handled with `??`; only operations declared as fallible return `T!` (such as decoding by code point a string that is not valid UTF-8); out-of-range arguments and arguments outside the domain are faults.
+- A library written in Camel (such as `array`) exports generic functions, which are instantiated by element type in the module that calls them (see [7.5](07_statements.md#75-generic-functions)).
+- A module cannot export values; constants are written as functions without parameters: `pi()`, `e()`.
+- A function passed to a higher-order function of the `array` module is applied with `map`: there is no agreed order between the calls on the elements (a parallel scheduler may execute them at the same time), and the results are arranged by position; for side effects that need an order use the built-in `foreach` and `reduce`.
+- `camel inspect --ops <file>` lists all the operators of the built-in modules and of every module the program imports, together with their declared purity.

@@ -88,6 +88,8 @@ println(xs[0], len(xs), grid[0][1])
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
   | `xs->append<v>`, `xs->extend<ys>` | **Modify in place**; `xs` must be a `var` (see 3.6) |
 
+- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `any`, `all`, `count`, `sum`, `min`, `max`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
+
 ### 3.3.2 Tuples
 
 ```cml
@@ -120,7 +122,7 @@ Struct types are compared by the names and types of their fields; `type` only gi
 
 ### 3.3.4 Strings
 
-A string is an immutable sequence of bytes. The operations that exist:
+A string is an immutable sequence of bytes; both length and subscripts are by byte. The built-in operations:
 
 | Form | Result |
 |---|---|
@@ -130,8 +132,26 @@ A string is an immutable sequence of bytes. The operations that exist:
 | `string(x)`, `int(s)`, `float(s)`, `parse_int(s)`, `parse_float(s)` | Conversion, see 3.2 |
 | `fmt->format<a, b, ...>` | Formatting: `{}` takes the arguments in order; `{:.2f}`, `{:5d}`, `{:.17g}` and the like specify a format; too few arguments is a fault |
 | `strs->join<sep>` | Joins an array of strings |
+| `s[i]` | The `i`-th byte; the result is a string containing just that one byte; an out-of-range subscript is a fault |
 
-Subscripting by byte, `s[i]`, is currently unavailable: it compiles, and at run time gives the fault `RuntimeDiag::OperandTypeUnsupported`. Operators for splitting, taking substrings, searching, case conversion and reading or writing by code point are not provided yet.
+The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): by byte, `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr`, `starts_with`, `ends_with`, `repeat`, `bytes`; by code point, `char_count`, `char_at`, `char_substr`, `codepoints`, `from_codepoints`.
+
+```cml
+import { split, trim, to_upper, char_count } from str
+
+func main(): int sync {
+    println('a, b ,c'->split<','>->map<(w: string): string => trim(w)>)
+    println('héllo'->to_upper, len('héllo'), char_count('héllo'), 'hello'[1])
+    return 0
+}
+```
+
+```text
+[a, b, c]
+HéLLO 6 5 e
+```
+
+Whether the result of `s[i]` is a one-byte string or a number is behaviour of the current implementation, not yet decided.
 
 ### 3.3.5 Values that cannot be compared
 
@@ -173,7 +193,7 @@ error DivByZero: the divisor is zero
 
 Rules:
 
-- `T?`, `T!` and `T` are different types. Values of these two kinds can be stored, passed, returned and printed, but **cannot be used as a `T`**: no operator, symbolic or named, accepts them, and their members cannot be accessed. They can only be unwrapped with `??`, `!!`, `?->` ([6.6](06_expressions.md#66-operators-for-null-and-errors)) or with the fixed patterns of `match` ([6.8.2](06_expressions.md#682-match)).
+- `T?`, `T!` and `T` are different types. Values of these two kinds can be stored, passed, returned and printed, but **cannot be used as a `T`**: operators such as arithmetic and comparison, and functions that accept a `T`, do not accept them, and their members cannot be accessed. They can only be unwrapped with `??`, `!!`, `?->` ([6.6](06_expressions.md#66-operators-for-null-and-errors)) or with the fixed patterns of `match` ([6.8.2](06_expressions.md#682-match)).
 - **A `T` does not become a `T?`/`T!` by itself.** The only ways into these two forms are:
   - `v as T?`, `v as T!`;
   - a typed declaration `let x: T? = v`;

@@ -2,7 +2,7 @@
 
 English | [中文](tutorial.cn.md)
 
-This tutorial is for readers who know one mainstream programming language and have never seen Camel. When you have finished it you will be able to write and run general-purpose Camel programs, you will know where Camel differs most from other languages, and you will be able to use passes on the command line to look at the graph, optimise it, change the backend, export it and take gradients.
+This tutorial is for readers who know one mainstream programming language and have never seen Camel. When you have finished it you will be able to write and run general-purpose Camel programs, you will know where Camel differs most from other languages, and you will be able to use passes on the command line to look at the graph, optimise it, change the back end, export it and take gradients.
 
 The program in every section is in the [`examples/`](examples/) directory, and the outputs shown are their real outputs. All commands are run from the repository root.
 
@@ -20,7 +20,7 @@ Contents:
 [9 Error handling](#9-error-handling) ·
 [10 Nullable values](#10-nullable-values) ·
 [11 Maps and sets](#11-maps-and-sets) ·
-[12 Modules](#12-modules) ·
+[12 Modules and the standard library](#12-modules-and-the-standard-library) ·
 [13 Looking at the graph](#13-looking-at-the-graph) ·
 [14 Changing the passes](#14-changing-the-passes) ·
 [15 Tensors and exporting a model](#15-tensors-and-exporting-a-model) ·
@@ -109,7 +109,7 @@ Key points:
 - **There is no implicit conversion between numeric types.** `n * ratio` is a compile-time error; write `float(n) * ratio`.
 - `let` is an immutable name, and `var` is a mutable variable. Camel favours immutability: most programs hardly ever need `var`.
 - **Fields and elements cannot be assigned to** (`p.x = 5` and `xs[0] = 5` are errors). To "modify" something, build a new value: `{ x: 5, y: p.y }`, `concat(xs, [4])`.
-- Strings can use either single or double quotes. Strings are measured in bytes: `len('中文')` is 6.
+- Strings can use either single or double quotes. Strings are measured in bytes: `len('中文')` is 6. Functions for splitting, trimming, searching and so on are in the `str` module (section 12).
 - Two details of how code is written: the parenthesis of a call must directly follow the function name (`f(1)`, not `f (1)`); put spaces on both sides of a minus sign (`n - 1`; `n-1` is read as `n` followed by the literal `-1`).
 
 ## 3. Functions
@@ -290,8 +290,47 @@ item c
 ```
 
 - `(x: int): int => x * x` is a lambda. The function passed to `map` is written in angle brackets because it is a `with` parameter of `map`: the array is the data flowing through, and the function is the configuration.
-- The elements of a `map` or a `filter` have no order among themselves, so a parallel backend can compute them at the same time, and the results are still arranged by position; `reduce` and `foreach` run in element order.
+- The elements of a `map` or a `filter` have no order among themselves, so a parallel back end can compute them at the same time, and the results are still arranged by position; `reduce` and `foreach` run in element order.
 - The lambda in `foreach` is written `=> sync { ... }`: a function body that is to produce an effect must be a sync block. The next section explains.
+
+### Counter-example: do not put stateful calls in the element function of `map`
+
+There is **no agreed order of execution** between the elements of a `map`. When the element function is pure this does not matter; once it calls something stateful, the result depends on which element is computed first. [`examples/05_map_order.cml`](examples/05_map_order.cml) demonstrates this with the random number generator (each call of `randint` advances the hidden state by one step):
+
+```cml
+module map_order
+
+import { seed, randint } from random
+
+func main(): int sync {
+    seed(42)
+    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
+    let drawn = range(0, 8)->map<(i: int): int => randint(0, 99)>
+    println(drawn)
+
+    seed(42)
+    // reduce runs in element order on every back end.
+    let ordered = range(0, 8)->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    println(ordered)
+    return 0
+}
+```
+
+On the sequential back ends (the default `std::nvm`, and also `std::fvm` and `std::jit`), the two lines are the same, and the same on every run:
+
+```text
+[75, 63, 75, 13, 90, 9, 57, 37]
+[75, 63, 75, 13, 90, 9, 57, 37]
+```
+
+Switch to parallel scheduling, `camel docs/tutorial/examples/05_map_order.cml std::prl`, and the order of the first line is no longer guaranteed and may differ from run to run; below is the output of one such run:
+
+```text
+[37, 57, 9, 90, 13, 75, 63, 75]
+[75, 63, 75, 13, 90, 9, 57, 37]
+```
+
+This is behaviour laid down by the language (design principles, 2.7), not a defect: it is precisely because there is no order between the elements that `map` can run in parallel. The `reduce` used for the second line runs in element order, and its result is the same on all back ends. The rule is simple: **keep the functions passed to `map` and `filter` pure; do what must be done in order with `foreach`, `reduce` or tail recursion.**
 
 ## 6. Evaluation by dependency, sync and wait
 
@@ -689,7 +728,7 @@ func main(): int sync {
 - `m[k]` is a lookup and its result is a `V?`, so it is followed by `?? default`.
 - Iteration: first take out an array with `keys(m)` or `items(m)`, then use `map`, `reduce` or `foreach`.
 
-## 12. Modules
+## 12. Modules and the standard library
 
 [`examples/shapes.cml`](examples/shapes.cml) is a library module; it marks the names visible from outside with `export`:
 
@@ -734,7 +773,70 @@ func main(): int sync {
 ```
 
 - `import { a, b } from m` brings in the listed names; `import m` brings in only the namespace, and names are accessed as `m::name`.
-- `.cml` files in the same directory are found by file name. The modules that come with Camel include `math`, `random`, `time`, `fs`, `json`, `os`, `sys`, `algo`, `tensor`, `nn`, `autodiff`, `onnx` and others ([language reference 5.2.1](../language/en/05_modules.md#521-modules-that-come-with-camel)).
+- `.cml` files in the same directory are found by file name.
+
+### The standard library
+
+The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `algo`, `random`, `time`, `fs`, `json`, `os`, `sys`, `re`, `crypto`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fifteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
+
+```cml
+module stdlib_demo
+
+import { split, trim, to_upper, replace, find, char_count } from str
+import { sort_by, take, sum, reverse, unique } from array
+import { abs, hypot, bit_and, pi } from math
+import { mean } from statistics
+
+func main(): int sync {
+    // Strings: the value goes in on the left, what configures the call goes in angle brackets.
+    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
+    println(words)
+    println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
+    println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'), char_count('héllo'))
+
+    // A result that may not exist is a T?.
+    let at_l = 'hello'->find<'l'> ?? -1
+    let at_z = 'hello'->find<'z'> ?? -1
+    println(at_l, at_z)
+
+    // Arrays and numbers.
+    let xs = [3, -1, 4, -1, 5]
+    println(sum(xs), reverse(xs), xs->map<(x: int): int => abs(x)>)
+    println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
+    println('{:.4f}'->format<pi()>)
+    return 0
+}
+```
+
+```text
+[pear, fig, apple, fig]
+[fig, pear]
+HELLO a+b+c 6 5
+2 -1
+10 [5, -1, 4, -1, 3] [3, 1, 4, 1, 5]
+2.33333 5 2
+3.1416
+```
+
+- **The calling convention**: the value a function works on is its ordinary parameter, and the values that configure the call are `with` parameters. So every library function can be attached to a pipe: `s->trim->split<','>`, `xs->unique->sort_by<key>->take<2>`.
+- Strings are measured in bytes: `len('héllo')` is 6; to count by character use `char_count`, which gives 5. `s[i]` takes out the `i`-th byte.
+- A function that may have no result returns `T?` (such as `find` when nothing is found), taken out with `??`; out-of-range arguments and arguments outside the domain are faults.
+- A detail of writing: when one argument list contains two calls with angle brackets (`f<a>(x), g<b>(y)`), it is read as a comparison. That is why the two calls of `find` above are written as two `let`s.
+- The `array` module consists of generic functions written in Camel, which are visible subgraphs on the graph; the functions of `str` and `math` are C++ operators, each a single node on the graph.
+
+To find out which operators a program can use, and whether each is declared pure, ask the compiler:
+
+```bash
+camel inspect --ops docs/tutorial/examples/12_stdlib.cml
+```
+
+Each overload prints one line, for example:
+
+```text
+OPERATOR {"module":"str","name":"split","uri":"str:split","with":1,"norm":1,"purity":"pure","signature":"<string> (string) => string[]"}
+```
+
+Pure operators can be evaluated ahead of time, merged and removed by optimisation passes, and can be executed concurrently by parallel scheduling; operators with side effects execute only in a sync block, or when their result is used.
 
 ## 13. Looking at the graph
 
@@ -979,5 +1081,6 @@ camel docs/tutorial/examples/16_grad.cml std::macro
 
 - [Examples](../../examples/README.md): short programs organised by task — JSON, files, word-frequency counting, sorting, command-line tools, parallelism, simulation, training.
 - [Language reference](../language/en/README.md): the precise rules for every construct, and which forms are reserved and not yet implemented.
+- [Standard library reference](../stdlib-reference.md): every function of every module.
 - [Command line](../cli.md): all options, passes, diagnostic formats, resource limits; `camel --explain <diagnostic name>` explains one diagnostic.
 - [Design principles](../design-principles.en.md): why the language is the way it is.

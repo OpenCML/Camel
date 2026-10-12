@@ -181,6 +181,7 @@ func main(): int sync {
 - **The function body is checked at instantiation.** Type errors in the function body are reported at instantiation; the diagnostic gives the position of the error in the function body and states which instance it is and which call instantiated it. A generic function that is never called is not checked.
 - Recursive generic functions can be used (the return type must be written out). A function that switches to a larger type at every recursion cannot terminate instantiation, and an error is reported when the nesting reaches 8 levels.
 - `T` can be used in the function body: the parameter types of a lambda, `let z: T = 0`, `e as T`.
+- **Export**: a generic function can be `export`ed, and after an `import` another module calls it as usual (the qualified name `lib::f(x)` can also be written). What is exported is the template; instances are built by the module that calls it, and every module that imports it has its own instances. Names in the function body are resolved in the module that declares it, so it can use functions of that module that are not exported, other generic functions and its own imports. There is one restriction: a function body instantiated by another module cannot use top-level values (`let`/`var`) of the declaring module; write the constants it needs as functions. "In which module an instance is built" is behaviour of the current implementation, not yet decided.
 
 Binding is equally possible in `with` parameters:
 
@@ -200,7 +201,7 @@ func main(): int sync {
 3
 ```
 
-**Current restrictions**: a generic function can only be called directly; it cannot be used as a value (where needed, wrap it in a lambda that spells out the parameter types: `xs->map<(x: int) => id(x)>`), cannot be annotated and cannot be exported; type arguments cannot be given explicitly in a call (whether to allow this is not yet decided).
+**Current restrictions**: a generic function can only be called directly; it cannot be used as a value (where needed, wrap it in a lambda that spells out the parameter types: `xs->map<(x: int) => id(x)>`) and cannot be annotated; type arguments cannot be given explicitly in a call (whether to allow this is not yet decided).
 
 ## 7.6 Annotations
 
