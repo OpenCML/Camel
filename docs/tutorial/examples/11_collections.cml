@@ -1,0 +1,19 @@
+// Map<K, V> and Set<T> are built in; they are made from an array with `as`.
+// Run: camel docs/tutorial/examples/11_collections.cml
+module collections
+
+func main(): int sync {
+    let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
+    println(ages)                              // printed in key order
+    println(ages['alice'] ?? 0, ages['carol'] ?? 0)
+
+    let more = ages->put<'carol', 45>->remove<'bob'>
+    println(more, len(more))
+    println(ages)                              // unchanged: every operation returns a new value
+    println(keys(more), values(more))
+
+    let seen = [3, 1, 2, 3, 1] as Set<int>
+    println(seen, seen->contains<2>, seen->contains<9>)
+    println(union(seen, [9] as Set<int>), intersect(seen, [1, 9] as Set<int>))
+    return 0
+}

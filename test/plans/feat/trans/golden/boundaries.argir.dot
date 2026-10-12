@@ -20,7 +20,7 @@ digraph GraphIR {
                 N02 [label="PORT", type="PORT"];
                 N03 [label="1", type="DATA", origin=204, span="12:50-12:51", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
                 N04 [label="tensor:idx", type="OPER", role="scalar-boundary", origin=205, span="12:49-12:50", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
-                N05 [label="2", type="DATA", origin=206, span="12:55-12:58", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
+                N05 [label="2.0", type="DATA", origin=206, span="12:55-12:58", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
                 N06 [label=":op/mul_d", type="OPER", origin=207, span="12:53-12:54", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
                 N07 [label="tensor:multiply", type="OPER", role="scalar-boundary", origin=208, span="12:45-12:46", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
                 F04 -> N02 [label="0", type="WITH_PORT"];
@@ -60,7 +60,7 @@ digraph GraphIR {
             N0E -> N10 [label="1|0", type="CTRL"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N11 [label="[1, -2, 3, 0.5]", type="DATA", origin=212, span="16:25-16:46", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
+        N11 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=212, span="16:25-16:46", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
         N12 [label="[4]", type="DATA", origin=213, span="16:48-16:51", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
         N13 [label="tensor:reshape", type="OPER", origin=214, span="16:17-16:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
         N14 [label="gate", type="FUNC", origin=215, span="16:16-16:53", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];

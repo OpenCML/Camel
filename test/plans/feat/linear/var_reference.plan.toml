@@ -126,7 +126,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -142,7 +142,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -158,7 +158,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -174,7 +174,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -190,7 +190,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -206,7 +206,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -222,7 +222,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -238,7 +238,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -254,7 +254,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -270,7 +270,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -286,7 +286,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -302,7 +302,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -318,7 +318,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -334,7 +334,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -350,7 +350,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -366,7 +366,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -382,7 +382,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -398,7 +398,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -414,7 +414,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -430,7 +430,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -446,7 +446,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -462,7 +462,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -478,7 +478,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -494,7 +494,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -510,7 +510,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -526,7 +526,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -542,7 +542,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -558,7 +558,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -574,7 +574,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -590,7 +590,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -606,7 +606,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -622,7 +622,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -638,7 +638,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '2 | 10 10 | 20 20', `unexpected output: ${out}`)
+assert(out === '2.0 | 10.0 10.0 | 20.0 20.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1847,7 +1847,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1863,7 +1863,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1879,7 +1879,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1895,7 +1895,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1911,7 +1911,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1927,7 +1927,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1943,7 +1943,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1959,7 +1959,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1975,7 +1975,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -1991,7 +1991,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2007,7 +2007,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2023,7 +2023,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2039,7 +2039,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2055,7 +2055,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2071,7 +2071,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2087,7 +2087,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2103,7 +2103,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2119,7 +2119,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2135,7 +2135,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2151,7 +2151,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2167,7 +2167,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2183,7 +2183,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2199,7 +2199,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2215,7 +2215,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2231,7 +2231,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2247,7 +2247,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2263,7 +2263,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2279,7 +2279,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2295,7 +2295,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2311,7 +2311,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2327,7 +2327,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2343,7 +2343,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2359,7 +2359,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === 'plain call: value 1 cnt 1 | value_and_grad: value 2 cnt 2 | value_and_grad: value 3 cnt 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 cnt 1 | value_and_grad: value 2.0 cnt 2 | value_and_grad: value 3.0 cnt 3', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2920,7 +2920,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'plain call: value 1 sum(acc) 3 | value_and_grad: value 4 sum(acc) 4.5 grad 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 sum(acc) 3.0 | value_and_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2936,7 +2936,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'plain call: value 1 sum(acc) 3 | value_and_grad: value 4 sum(acc) 4.5 grad 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 sum(acc) 3.0 | value_and_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2952,7 +2952,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'plain call: value 1 sum(acc) 3 | value_and_grad: value 4 sum(acc) 4.5 grad 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 sum(acc) 3.0 | value_and_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2968,7 +2968,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'plain call: value 1 sum(acc) 3 | value_and_grad: value 4 sum(acc) 4.5 grad 3', `unexpected output: ${out}`)
+assert(out === 'plain call: value 1.0 sum(acc) 3.0 | value_and_grad: value 4.0 sum(acc) 4.5 grad 3.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -3224,7 +3224,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+assert(out === 'f: 101 counter 6 | g: 101.0 counter 4', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -3240,7 +3240,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+assert(out === 'f: 101 counter 6 | g: 101.0 counter 4', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -3256,7 +3256,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+assert(out === 'f: 101 counter 6 | g: 101.0 counter 4', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -3272,7 +3272,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+assert(out === 'f: 101 counter 6 | g: 101.0 counter 4', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -3288,7 +3288,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'f: 101 counter 6 | g: 101 counter 4', `unexpected output: ${out}`)
+assert(out === 'f: 101 counter 6 | g: 101.0 counter 4', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000

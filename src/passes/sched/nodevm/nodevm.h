@@ -108,4 +108,7 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     void evalMarkedOperator_foreach_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
+    void evalMarkedOperator_isolate(
+        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
+        ctx::Frame &currFrame);
 };

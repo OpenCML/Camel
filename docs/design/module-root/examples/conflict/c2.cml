@@ -1,0 +1,4 @@
+module c2
+export func f(x: string): string {
+    return x + '!'
+}

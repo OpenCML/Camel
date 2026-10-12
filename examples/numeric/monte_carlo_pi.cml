@@ -1,0 +1,28 @@
+// Estimates pi by Monte Carlo sampling with a seeded generator, so every run prints the
+// same numbers; the batches are summarised with `statistics`, `min` and `max` of `array`,
+// and compared with `pi()` of `math`.
+// Run: camel examples/numeric/monte_carlo_pi.cml
+module monte_carlo_pi
+
+import { pi_hits } from sim
+import { mean, stdev, median } from statistics
+import { min, max } from array
+import { abs, pi } from math
+
+func show(estimate: float): string {
+    return format<estimate>('{:.4f}')
+}
+
+func main(): int sync {
+    let samples = 20000
+    let seeds = [11, 23, 37, 41, 53, 67, 79, 97]
+
+    // pi_hits(n, seed) draws n points in the unit square and counts those inside the circle.
+    let estimates = seeds->map<(s: int): float => 4.0 * float(pi_hits(samples, s)) / float(samples)>
+
+    println(estimates->map<show>->join<' '>)
+    println(format<mean(estimates), stdev(estimates)>('mean {:.4f}  stdev {:.4f}'))
+    println(format<min(estimates) ?? 0.0, median(estimates) ?? 0.0, max(estimates) ?? 0.0>('lowest {:.4f}  median {:.4f}  highest {:.4f}'))
+    println(format<abs(mean(estimates) - pi())>('distance of the mean from pi: {:.4f}'))
+    return 0
+}

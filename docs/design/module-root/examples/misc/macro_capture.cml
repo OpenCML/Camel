@@ -1,0 +1,16 @@
+func noisy(tag: string): int sync {
+    println(tag)
+    return 7
+}
+
+let base = noisy('evaluating base')
+
+macro func plus_base(x: int): int {
+    return x + base
+}
+
+func main(): int sync {
+    println('main starts')
+    println(plus_base(1))
+    return 0
+}

@@ -1,0 +1,3 @@
+func main() sync {
+    println('printed by the program')
+}

@@ -1,0 +1,13 @@
+// A sync body runs its statements in the order written.
+// Run: camel docs/tutorial/examples/06_sync_block.cml
+module sync_block
+
+func greet(): int sync {
+    println('hello from greet')
+    return 1
+}
+
+func main(): int sync {
+    println(greet())
+    return 0
+}

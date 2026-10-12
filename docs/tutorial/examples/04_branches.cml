@@ -1,0 +1,32 @@
+// if is an expression; match compares a name with literal patterns.
+// Run: camel docs/tutorial/examples/04_branches.cml
+module branches
+
+func sign(x: int): string {
+    return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
+}
+
+func kind(c: string): string {
+    return match c {
+        case 'a' | 'e' | 'i' | 'o' | 'u' => 'vowel'
+        case ' ' => 'space'
+        case _ => 'other'
+    }
+}
+
+func grade(score: int): string {
+    let band = score / 10
+    return match band {
+        case 10 | 9 => 'A'
+        case 8 => 'B'
+        case 7 => 'C'
+        case _ => 'D'
+    }
+}
+
+func main(): int sync {
+    println(sign(5), sign(-2), sign(0))
+    println(kind('e'), kind(' '), kind('x'))
+    println(grade(95), grade(81), grade(42))
+    return 0
+}

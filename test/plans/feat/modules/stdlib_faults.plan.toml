@@ -39,7 +39,7 @@ expect_diagnostic_line = 7
 
 [[tests]]
 name = "stdlib.fault.substr_length"
-desc = "substr whose range runs past the end: a fault, not a shorter result (DESIGN-QUESTION(slice-bounds))."
+desc = "substr whose range runs past the end: a fault, not a shorter result (design principles 2.10: a range out of bounds is a fault, as for slice)."
 case = "../../../cases/modules/stdlib/fault_substr_length.cml"
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 8

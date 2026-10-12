@@ -1,0 +1,30 @@
+// Functions are values; lambdas capture variables by reference.
+// Run: camel docs/tutorial/examples/07_closures.cml
+module closures
+
+func inc(x: int): int { return x + 1 }
+func dbl(x: int): int { return x * 2 }
+
+func apply_twice(f: (x: int) => int, x: int): int {
+    return f(f(x))
+}
+
+func adder(n: int): (x: int) => int {
+    return (x: int): int => x + n
+}
+
+func main(): int sync {
+    let g = inc                              // a function name is a value
+    println(g(1), apply_twice(dbl, 3))
+
+    let add5 = adder(5)                      // a closure that captured n
+    println(add5(10))
+
+    let ops = [inc, dbl]                     // functions in an array
+    println(ops->map<(f: (x: int) => int): int => f(10)>)
+
+    var total = 0                            // captured by reference
+    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    println(total)
+    return 0
+}

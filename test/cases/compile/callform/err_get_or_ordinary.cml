@@ -1,0 +1,10 @@
+module err_get_or_ordinary
+
+func lookup(m: Map<string, int>, key: string): int {
+    return get_or(m, key, 0 - 1)
+}
+
+func main(): int sync {
+    println(lookup([('a', 1)] as Map<string, int>, 'a'))
+    return 0
+}

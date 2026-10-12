@@ -1,70 +1,25 @@
-# Camel 语言参考（详细版）
+# Camel 语言参考
 
-> **先读 [`../design-principles.cn.md`](../design-principles.cn.md)。** 它是语言作者对 Camel 根本定位与执行模型的规范性说明：与实现或其他文档冲突时以它为准；它没有覆盖或标为“未定”的问题，向语言作者提问，不要自行选择。
+[English](en/README.md) | 中文
 
-本目录是 Camel 语言的**详细语言参考**，按主题分章撰写，每章配有语法说明与可运行示例。概要版见 [../technical/00_language_reference.md](../technical/00_language_reference.md)。
+> 语言的根本定位与执行模型由 [设计原则](../design-principles.cn.md) 规定，它是规范性的；本参考与它冲突时以它为准。
 
----
+本目录是 Camel 的语言参考，按主题分章。文中的示例都在当前实现上运行过，`text` 代码块是真实输出。初次接触 Camel 请先读[入门教程](../tutorial/tutorial.cn.md)。
 
-## 文档目录
-
-### 第一部分：基础
-
-| 章节 | 文档 | 内容概要 |
-|------|------|----------|
-| **1** | [01_introduction.md](01_introduction.md) | 引言、设计定位、记法约定、其它实现 |
-
-### 第二部分：词法与类型
-
-| 章节 | 文档 | 内容概要 |
-|------|------|----------|
-| **2** | [02_lexical.md](02_lexical.md) | 行结构、注释、标识符与关键字、字面量、运算符与分隔符（含示例） |
-| **3** | [03_data_model.md](03_data_model.md) | 对象/值/类型、类型层次、let/var、算子与特殊方法（含类型与数据示例） |
-
-### 第三部分：执行与模块
-
-| 章节 | 文档 | 内容概要 |
-|------|------|----------|
-| **4** | [04_execution_model.md](04_execution_model.md) | 程序结构、命名与绑定、异常、sync 与 wait（含控制流与同步示例） |
-| **5** | [05_modules.md](05_modules.md) | 模块声明、import、export、namespace、using namespace、模块名与路径（含多文件示例） |
-
-### 第四部分：表达式与语句
-
-| 章节 | 文档 | 内容概要 |
-|------|------|----------|
-| **6** | [06_expressions.md](06_expressions.md) | 原子、访问/下标/调用/泛型、管道、一元与类型断言、运算优先级、if/match/try、Lambda（含大量表达式示例） |
-| **7** | [07_statements.md](07_statements.md) | 简单语句（表达式、return、let/var、use）、复合语句（块、if、match、try、函数定义、类型定义）（含完整程序片段） |
-
-### 第五部分：程序与文法
-
-| 章节 | 文档 | 内容概要 |
-|------|------|----------|
-| **8** | [08_top_level_and_grammar.md](08_top_level_and_grammar.md) | 顶层组成、完整程序、文件输入、文法概要与 ANTLR 对应关系 |
-
----
-
-## 示例代码来源
-
-文档中的示例多来自项目内可运行用例：
-
-- **test/cases/linear/nvm/**：hello.cml、fib.cml、var.cml、lambda.cml、snake.cml、index.cml、acc.cml、neuro.cml、zen.cml、render.cml 等
-- **test/cases/para/core/**：msort.cml（归并排序、管道与 slice）
-- **test/cases/modules/nn/**：lr.cml、mlp.cml、svm.cml（张量、with 参数、sync 函数）
-- **stdlib/**：标准库签名与用法
-
-运行示例（在项目根目录）：
-
-```bash
-camel run test/cases/linear/nvm/hello.cml
-camel run test/cases/linear/nvm/fib.cml
-```
-
----
+| 章 | 文档 | 内容 |
+|---|---|---|
+| 1 | [引言](01_introduction.md) | Camel 是什么、记法约定 |
+| 2 | [词法](02_lexical.md) | 注释、标识符、关键字、字面量（范围与舍入）、运算符 |
+| 3 | [数据模型](03_data_model.md) | 类型、数值与转换、数组、元组、结构体、字符串、`T?` 与 `T!`、`Map` 与 `Set`、`let`/`var` |
+| 4 | [执行模型](04_execution_model.md) | 入口、按依赖求值、`sync`、`var` 与 `wait`、`macro`、故障与 `exit`、递归上限、遍 |
+| 5 | [模块](05_modules.md) | `module`、`import`、`export`、`namespace`、随附的模块 |
+| 6 | [表达式](06_expressions.md) | 访问、调用、管道、运算符、`??`/`!!`/`?->`、`if`、`match`、lambda、高阶算子、优先级 |
+| 7 | [语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、函数、`with` 形参、重载、泛型、标注、类型声明 |
+| 8 | [程序与文法](08_top_level_and_grammar.md) | 顶层结构、文法概要、保留但尚未实现的写法一览 |
 
 ## 相关文档
 
-- [技术文档索引](../technical/README.md)：编译流水线、GIR、运行时、JIT 等
-- [语言规范摘要](../technical/02_language_spec.md)：简短语法与语义归纳
-- [ANTLR 文法](../../antlr/)：OpenCML.g4、OpenCMLLex.g4
-- [AST 定义](../Camel.asdl)：抽象语法树结构
-
+- [入门教程](../tutorial/tutorial.cn.md) 与 [示例集](../../examples/README.cn.md)
+- [命令行](../cli.cn.md)、[诊断目录](../diagnostics.md)
+- [技术文档](../technical/README.md)：编译流水线、图的中间表示、运行时
+- 文法：[`antlr/OpenCML.g4`](../../antlr/OpenCML.g4)、[`antlr/OpenCMLLex.g4`](../../antlr/OpenCMLLex.g4)

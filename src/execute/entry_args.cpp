@@ -22,12 +22,15 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/core/module/module.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/source/manager.h"
+#include "camel/utils/number_text.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -285,9 +288,9 @@ void saveValue(slot_t value, Type *valueType, const std::string &path, const std
     case TypeCode::Int64:
         return writeText(std::to_string(rtdata::fromSlot<int64_t>(value)));
     case TypeCode::Float32:
-        return writeText(std::format("{}", rtdata::fromSlot<float>(value)));
+        return writeText(camel::utils::floatText(rtdata::fromSlot<float>(value)));
     case TypeCode::Float64:
-        return writeText(std::format("{}", rtdata::fromSlot<double>(value)));
+        return writeText(camel::utils::floatText(rtdata::fromSlot<double>(value)));
     case TypeCode::Bool:
         return writeText(rtdata::fromSlot<bool>(value) ? "true" : "false");
     case TypeCode::String:
@@ -372,16 +375,113 @@ void registerEntryResultSaver(TypeCode code, EntryResultSaver saver) {
     registry.savers.insert_or_assign(static_cast<uint32_t>(code), std::move(saver));
 }
 
-void writeEntryResultTo(const core::context::context_ptr_t &context, std::string path) {
+namespace {
+
+/// An error value nobody handled reached the exit of `main` (design principles 2.10): it is
+/// reported on standard error as a diagnostic, in the format the command line chose, located
+/// where the error value says it was made (`file:line:column`, the file name without its
+/// directory; an error made by an operator names the operator instead and has no position).
+void reportUnhandledError(core::context::Context &ctx, slot_t fallible, bool json) {
+    const auto *info = rtdata::fromSlot<const ::Struct *>(rtdata::fallibleError(fallible));
+    const auto text  = [&](std::string_view field) {
+        const auto *str = info->get<const ::String *>(type::errorFieldIndex(field));
+        return str ? str->toString() : std::string();
+    };
+    const std::string location = text("location");
+
+    // `file:line:column`, read from the right: a file name may contain a colon.
+    std::string file;
+    size_t line = 0, column = 0;
+    bool located = false;
+    if (const size_t c2 = location.rfind(':'); c2 != std::string::npos && c2 > 0) {
+        if (const size_t c1 = location.rfind(':', c2 - 1); c1 != std::string::npos) {
+            const auto number = [&](size_t from, size_t to, size_t &out) {
+                const char *first = location.data() + from, *last = location.data() + to;
+                const auto parsed = std::from_chars(first, last, out);
+                return first != last && parsed.ec == std::errc() && parsed.ptr == last && out > 0;
+            };
+            if (number(c1 + 1, c2, line) && number(c2 + 1, location.size(), column)) {
+                file    = location.substr(0, c1);
+                located = true;
+            }
+        }
+    }
+
+    auto builder = core::error::DiagnosticBuilder::of(RuntimeDiag::UnhandledError);
+    if (located) {
+        const core::error::CharPos at{line - 1, column - 1};
+        builder.at(core::error::CharRange{at, at});
+    } else {
+        // An error made by an operator names the operator and has no position of its own:
+        // the report is then located at `main`, whose exit it reached.
+        if (const uint64_t origin = entryFunctionOrigin(ctx);
+            origin != camel::source::kInvalidOriginId) {
+            builder.atOrigin(origin);
+        }
+        if (!location.empty()) {
+            builder.note("the error was made by " + location + ", which records no position");
+        }
+    }
+    // The message of an error made from a fault is a sentence; the catalog entry ends it.
+    std::string message = text("message");
+    while (!message.empty() && message.back() == '.') {
+        message.pop_back();
+    }
+    core::error::Diagnostic diagnostic = builder.commit(text("kind"), message);
+    diagnostic.sourceContext           = ctx.sourceContext();
+    if (located) {
+        // The error value names the file without its directory; the modules of the program
+        // know where it is.
+        diagnostic.modulePath = file;
+        for (const auto &module : ctx.allUserModules()) {
+            if (module && std::filesystem::path(module->path()).filename().string() == file) {
+                diagnostic.modulePath = module->path();
+                break;
+            }
+        }
+        diagnostic.moduleName = std::filesystem::path(file).stem().string();
+    }
+    diagnostic.stage = "run";
+
+    std::cout.flush();
+    if (json) {
+        std::cerr << "[\n" << diagnostic.toJson() << "\n]\n";
+    } else {
+        const bool rich = core::error::diagnosticFormat() == core::error::DiagFormat::Rich;
+        std::cerr << diagnostic.toText(std::cerr) << (rich ? "\n\n" : "\n");
+    }
+    std::cerr.flush();
+}
+
+} // namespace
+
+void writeEntryResultTo(
+    const core::context::context_ptr_t &context, std::string path, bool jsonDiagnostics) {
     // The context owns the handler: it must not own the context in turn.
     core::context::Context *ctx = context.get();
-    context->setEntryResultHandler([ctx, path = std::move(path)](GCGraph *graph, slot_t value) {
+    context->setEntryResultHandler([ctx, path = std::move(path), jsonDiagnostics](
+                                       GCGraph *graph, slot_t value) {
         std::string why;
         try {
+            // Only a `main` that declares its return type has a result (design principles
+            // 2.10). The value an undeclared one happens to end with (that of its last
+            // statement, `println('a')` giving 'a') is neither printed nor written.
+            // DESIGN-QUESTION(main-undeclared-error): an error value such a body ends with
+            // is not reported either.
+            const bool declared = ctx->entryResultDeclared();
             Type *resultType =
-                graph && graph->funcType() && graph->funcType()->hasExitType()
+                declared && graph && graph->funcType() && graph->funcType()->hasExitType()
                     ? graph->funcType()->exitType()
                     : nullptr;
+            if (type::TupleType *fallible = type::asFallible(resultType)) {
+                if (rtdata::isErrorValue(value)) {
+                    // The exit code is non-zero (Context::captureProcessExitCode).
+                    reportUnhandledError(*ctx, value, jsonDiagnostics);
+                    return;
+                }
+                value      = rtdata::falliblePayload(value);
+                resultType = fallible->payloadType();
+            }
             const bool none = !resultType || resultType->code() == TypeCode::Void;
             // The types the process exit code is derived from (Context::captureProcessExitCode).
             const bool exitCode =
@@ -400,7 +500,9 @@ void writeEntryResultTo(const core::context::context_ptr_t &context, std::string
                 return;
             }
             if (none) {
-                why = "'main' returns no value";
+                why = declared ? "'main' returns no value"
+                               : "'main' declares no return type, so the value of its body is "
+                                 "not the result of the program";
             } else {
                 saveValue(value, resultType, path, "");
                 return;

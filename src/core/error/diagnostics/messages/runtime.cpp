@@ -238,9 +238,42 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "InvalidNumberText",
                 "Cannot convert the string '{0}' to {1}.",
-                "The string must hold {2} and nothing else that the conversion cannot skip. "
-                "Check the value before converting it; a conversion that fails is a fault and "
-                "ends the program.",
+                "The whole string must be {2}: no blanks before or after it and nothing else. "
+                "A conversion that fails is a fault and ends the program; parse_int and "
+                "parse_float return an error value (T!) instead.",
+            },
+        },
+        {
+            RuntimeDiag::ConversionOutOfRange,
+            {
+                "ConversionOutOfRange",
+                "Cannot convert {0} to {1}: {2}.",
+                "A conversion whose value does not fit the target type is a fault (design "
+                "principles 2.10): a float that is NaN, infinite or beyond the integer's range, "
+                "or an integer beyond the range of a narrower integer type. Check the value "
+                "before converting it, or clamp it (min, max) to the range of the target.",
+            },
+        },
+        {
+            RuntimeDiag::UnhandledError,
+            {
+                "UnhandledError",
+                "An error value reached the exit of 'main' without being handled: {0}: {1}.",
+                "A value of type T! that has failed must be opened before the program ends: "
+                "give a replacement with '!!', pass it on with '?->', or take it apart with "
+                "'match ... case error e'. The position is where the error was made (the "
+                "definition of 'main' when the error records none).",
+            },
+        },
+        {
+            RuntimeDiag::SliceOutOfRange,
+            {
+                "SliceOutOfRange",
+                "The range {0} to {1} is out of range for {2} of length {3}.",
+                "A bound of 'slice' is a position from 0 to the length; the end is one past "
+                "the last element taken. A range that leaves the sequence is a fault, as an "
+                "index out of range is. To take or leave out at most n elements, use 'take' "
+                "and 'drop' of the module 'array', which cut by definition.",
             },
         },
         {

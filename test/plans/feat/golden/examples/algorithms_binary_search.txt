@@ -1,0 +1,7 @@
+[3, 7, 19, 23, 41, 54, 60, 88]
+54 is at index 5
+3 is at index 0
+88 is at index 7
+20 is not in the array
+index_of gives: 5 -1
+668665 -1

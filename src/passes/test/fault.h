@@ -26,6 +26,13 @@
  * tests use it to check that the structural validation run when a rewrite is committed rejects
  * such a graph in every build mode, as an internal error naming the pass.
  *
+ * `test::leak_branch_arm` and `test::share_branch_arm` commit a graph that breaks the branch-arm
+ * invariant (docs/technical/17_graph_rewrite_api_contracts.md, 4.1) on purpose, in the first
+ * branch of `main`: the first adds a node that waits on the BRCH and that only the JOIN waits
+ * on (it belongs to no arm), the second makes the second arm wait on the first (the first arm's
+ * tail then belongs to two arms). Both graphs are otherwise well formed; before the invariant
+ * was checked at commit, the back ends ran them and computed something else.
+ *
  * `test::overgrow_graph` commits a graph too large for the runtime representation on purpose:
  * it adds unconnected COPY nodes to `main` until its node blocks exceed what 16 bits address.
  * The passes of the standard pipeline stay below that size (the inliner's owner cap), so this
@@ -39,6 +46,8 @@
 inline constexpr const char *kTestPassesEnvVar     = "CAMEL_ENABLE_TEST_PASSES";
 inline constexpr const char *kDropCallArgumentPass = "test::drop_call_argument";
 inline constexpr const char *kOvergrowGraphPass    = "test::overgrow_graph";
+inline constexpr const char *kLeakBranchArmPass    = "test::leak_branch_arm";
+inline constexpr const char *kShareBranchArmPass   = "test::share_branch_arm";
 
 class DropCallArgumentTestPass : public RuntimeGraphRewritePass {
   public:
@@ -47,6 +56,18 @@ class DropCallArgumentTestPass : public RuntimeGraphRewritePass {
 };
 
 class OvergrowGraphTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+};
+
+class LeakBranchArmTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+};
+
+class ShareBranchArmTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;

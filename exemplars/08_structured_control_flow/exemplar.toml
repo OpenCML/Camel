@@ -5,7 +5,7 @@ summary = "A branch on an input-dependent condition exports as an ONNX If with o
 name = "export"
 env = ["ONNX_OUT={tmp}/gate.onnx"]
 exit = 0
-output_contains = ["camel gate=2 0 6 1", "exported"]
+output_contains = ["camel gate=2.0 0.0 6.0 1.0", "exported"]
 onnx = "{tmp}/gate.onnx"
 onnx_ops = "Gather,Greater,If,Identity"
 

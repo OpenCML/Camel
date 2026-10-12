@@ -1,0 +1,37 @@
+/**
+ * progen finding F39 (branch arm). `f1` ignores its arguments, so after inlining the `if`
+ *   that computed one of them is dead: nothing the exit depends on uses it. It still hangs off
+ *   live nodes of the arm it was in. The execution order visited what such dead users read and
+ *   laid out a dead BRCH without its JOIN; every scheduler then lost its way at it. The graph
+ *   is right (it satisfies the branch-arm invariant): the back ends misread it.
+ * Pipeline: std::opt std::nvm (also std::inline)
+ * Expected output: an empty line
+ * Actual: nothing (node VM, parallel scheduler); on the bytecode VM and the JIT the unreduced
+ *   program printed its first lines over and over until the permanent space was exhausted.
+ * Reduced by test/tools/progen from seed 5321 (generator version 2, all features).
+ */
+module opt_dead_branch_laid_out
+
+func f1(a2: string, a3: (a0: int) => int): string {
+    return 'a';
+}
+
+func r10(a11: int, a12: string): string {
+    return if false then 'm' else {
+        return f1(if false then a12 else '', (p14: int): int => {
+            return 0;
+        });
+    };
+}
+
+func main(): int sync {
+    let n41 = (p39: string, p40: float): int => 0;
+    println('');
+    let n57 = if false then sync {
+        let n56 = n41(r10(5, 'yz'), 2.0);
+        return { x: 0, y: 0 };
+    } else sync {
+        return { x: 0, y: 0 };
+    };
+    return 0;
+}

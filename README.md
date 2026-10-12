@@ -1,4 +1,4 @@
-# Camel: A Graph-Native Programming Language for Unified AI Development
+# Camel: A Graph-Native Programming Language
 
 [中文简体](docs/README.cn.md) | English
 
@@ -9,196 +9,128 @@
   <img src='https://www.github.com/OpenCML/ImagesHosting/raw/main/GetDefaultLogger()o_text.png' width=800>
 </p>
 
-Camel is a **graph-native**, **multi-stage**, and **type-driven** domain-specific language (DSL) designed to bridge the gap between AI research and production deployment. It combines the elegance of **functional programming** with the expressiveness of **declarative programming**. It provides **born-async semantics** and highly **customizable graph manipulations**, enabling developers to write **high-level code** that compiles to **near-native performance**.
+Camel is a **graph-native general-purpose programming language**; AI is its primary application domain.
 
-## 🚀 Why Camel?
+A Camel program expresses computational intent only: what is to be computed, and what depends on what. The graph is not captured or recovered from code written in some other language; what the source says *is* the graph. Every element of the language corresponds directly to a piece of that graph, and compiling, optimizing, differentiating, exporting and running a program are all transformations of the graph, called passes, which you compose on the command line.
 
-The AI community already knows that computation graphs are the right model. PyTorch builds them dynamically at runtime; TensorFlow compiles them statically; JAX traces Python functions to reconstruct them. Every major framework ends up with a graph—because that's what the hardware and the math actually need.
+## The language and the graph
 
-The problem is that these graphs are **library artifacts built on top of a language that knows nothing about them**. Python remains the host: a dynamically typed, GIL-bound, sequentially-ordered language whose semantics work against the very structure these frameworks are trying to express. The result is a permanent tension—escape hatches like `torch.compile`, `@tf.function`, and `jax.jit` exist precisely to paper over the mismatch between what Python says and what the runtime needs to do.
+| In the source | On the graph | What follows |
+|---|---|---|
+| An expression, an operator call | Nodes and data edges | Evaluation follows dependencies; nodes that do not depend on each other may run in any order or in parallel |
+| A function | A subgraph; a call is a node | A function's behaviour is decided by the function itself |
+| A `sync` block | Control edges between adjacent expressions | Statements run in the order written |
+| `wait e` | Control edges around one expression | Local order where a variable is modified |
+| `if`, `match`, `a ?? b`, `a !! b` | A branch | Errors and nulls are values, handled by branches |
+| A generic function | A subgraph template, instantiated per set of concrete types | Only concrete types are on the graph |
+| A pass | A program that turns one graph into another, or consumes it | An open pipeline |
 
-Camel takes a different approach: **make the graph the program**. Every function compiles to a Graph IR whose nodes are operations and whose edges are data dependencies. There is no mismatch to paper over, because the language and the execution model speak the same language from the start.
+The rules behind this table are in the [design principles](docs/design-principles.en.md).
 
-This has concrete consequences for three problems that Python-based frameworks cannot fully solve at the language level:
-
-1. **The Ordering Problem**
-   In Python, every statement implies an order—even when no dependency exists. Frameworks recover parallelism after the fact, through tracing or graph construction APIs. In Camel, order emerges from dependencies: statements without a dependency between them can execute simultaneously, and the scheduler discovers parallelism automatically. You write `sync` only when you explicitly need sequential behavior.
-
-2. **The Execution Coupling Problem**
-   In Python, switching from eager to compiled execution requires annotating functions, managing trace caches, and reasoning about what the tracer can and cannot capture. In Camel, the same source program can run on the bytecode interpreter (FastVM), be traversed directly as a graph (NodeVM), compiled to native code via JIT, or dispatched to a thread pool as a parallel DAG (Taskflow)—without changing a line of source code.
-
-3. **The Transformation Problem**
-   Frameworks that want to rewrite computation graphs must build their own IR and transformation passes on top of Python—`torch.fx`, XLA HLO, StableHLO. In Camel, the Graph IR *is* the program. Compiler passes inspect and rewrite across function boundaries natively, and macros operate on graphs at compile time, making transformations like automatic differentiation or operator fusion expressible as first-class language constructs.
-
-## ✨ Key Features
-
-### 1. Graph-Based Syntaxes
+## A first look
 
 ```camel
-// Build graph with intuitive operators
-func forward(x: Tensor) {
-    let layer1 = dense<w1, b1>..relu..dropout
-    let layer2 = dense<w2, b2>..relu..dropout
-    let layer3 = dense<w3, b3>..softmax
-    return x->layer1->layer2->layer3
+module stats
+
+func mean(xs: float[]): float {
+    return xs->reduce<(acc: float, x: float): float => acc + x, 0.0> / float(len(xs))
 }
-```
 
-### 2. Multi-Stage Programming
-
-```camel
-import { grad } from autodiff
-import { sgd } from nn
-
-// grad is a macro: std::macro rewrites the loss graph into its gradient graph
-// at compile time, branches and recursion included.
-with <model: Mlp>
-func loss(x: Tensor, y: Tensor): float { ... }
-
-let step = sgd(model, grad(loss)<model>(x, y), 0.01)
-```
-
-### 3. Born-async Semantics
-
-```camel
-with <var w: Tensor, var b: Tensor, lr: float>
-sync func train(x: Tensor, y: Tensor): Tensor {
-    let y_hat = forward<w, b>(x)
-    let pl_py = y_hat - y
-    wait b = b - lr * pl_py
-    wait w = w - lr * pl_py * x
-    return loss(y_hat, y)
+func parse_all(texts: string[]): int[] {
+    return texts->map<(t: string): int => parse_int(t) !! 0>   // a text that is not a number counts as 0
 }
-```
 
-
-## ⚙️ Getting Started
-
-> [!WARNING]
-> Camel is now WIP. It only supports some basic commands, the features are unstable and may change frequently, the documentation is also not complete.
-
-### Installation
-
-```bash
-# Install via pip (Python toolchain required)
-pip install camel-lang
-```
-
-### Hello World
-
-```camel
-// hello.cml
-module main
-
-import { whoami } from os
-
-func main() sync {
-    let i = whoami()
-    println(format<i>('Hello, {}!'))
+func main(): int sync {
+    let xs = parse_all(['3', '4', 'five', '6'])
+    println(xs)
+    println('mean = {:.2f}'->format<mean(xs->map<(x: int): float => float(x)>)>)
     return 0
 }
 ```
 
-Run it:
+```text
+[3, 4, 0, 6]
+mean = 3.25
+```
+
+- `->` pipes a value into a function; the function given to `map` and `reduce` is written in angle brackets because it configures the operator, while the array is the data that flows through it.
+- `parse_int` returns an `int!`, a value that is either an `int` or an error; `!!` supplies a substitute. There are no exceptions.
+- The body of `main` is a `sync` block, so its statements run in the order written. Elsewhere evaluation follows dependencies: outside a sync block, an effect whose result nothing uses does not run (the compiler warns about it).
+- There is no loop syntax yet; repetition is recursion (tail calls take no stack) and the higher-order operators `map`, `filter`, `reduce`, `foreach`.
+
+## One source, different passes
+
+What comes after the file name on the command line is the sequence of passes to run:
+
+```bash
+camel prog.cml                          # run on the node VM (the default)
+camel prog.cml std::fvm                 # run on the bytecode VM
+camel prog.cml std::jit                 # run with JIT compilation
+camel prog.cml std::prl                 # run with parallel scheduling
+camel prog.cml std::opt std::fvm        # optimize, then run
+camel prog.cml std::rgir                # print the graph (Graphviz DOT) instead of running
+camel prog.cml std::macro std::opt::simplify onnx::export    # translate `main` to an ONNX model
+```
+
+Automatic differentiation (`grad` from the `autodiff` module) and ONNX export are libraries built on the same pass mechanism. The [tutorial](docs/tutorial/tutorial.en.md) walks through looking at the graph, changing the pipeline, exporting a small model and taking a gradient.
+
+## Getting started
+
+> [!WARNING]
+> Camel is a work in progress. The language and the command line still change, and parts of the grammar are reserved but not implemented; the [language reference](docs/language/en/README.md) says which.
+
+### Build
+
+Camel is built from source; see [docs/setup.en.md](docs/setup.en.md) for the toolchain.
+
+```bash
+npm install
+npm run build        # the executable is out/latest/bin/camel
+```
+
+Put `out/latest/bin` on your `PATH` (and set `CAMEL_HOME` to `out/latest`). A Python wheel named `camel-lang` can be built from the same tree; see [docs/pypi-packaging.md](docs/pypi-packaging.md).
+
+### Hello, Camel
+
+```camel
+// hello.cml
+module hello
+
+func main(): int sync {
+    println('Hello, Camel!')
+    return 0
+}
+```
 
 ```bash
 camel hello.cml
 ```
 
----
-
-### Advanced Usage
-
-Calculate the sum of an arithmetic sequence and measure execution time:
-
-```camel
-module arithmetic_sum
-
-import { now } from time
-
-func sum(n: int, a: int, d: int, acc: int): int {
-    return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)
-}
-
-func main(): int sync {
-    let n = 100000  // number of terms
-    let a = 1       // first term
-    let d = 3       // common difference
-    'Start computing arithmetic_sum(n={}, a={}, d={})...'->format<n, a, d>->println
-    let start = now()
-    let res = sum(n, a, d, 0)
-    let duration = now() - start
-    'Sum of arithmetic series = {} (computed in {} seconds)'->format<res, duration>->println
-    return 0
-}
+```text
+Hello, Camel!
 ```
 
-## 🧠 Design Philosophy
+## Learn more
 
-### For AI Researchers
+- [Tutorial](docs/tutorial/tutorial.en.md) ([中文](docs/tutorial/tutorial.cn.md)): from the first program to graphs, passes, export and gradients, with runnable examples
+- [Examples](examples/README.md): short task-oriented programs (JSON, files, maps, sorting, a command-line tool, parallel `map`, a simulation, a training step)
+- [Language reference](docs/language/en/README.md) ([中文](docs/language/README.md))
+- [Command line](docs/cli.md) and the [catalog of diagnostics](docs/diagnostics.md) (`camel --explain <name>`)
+- [Design principles](docs/design-principles.en.md) ([中文, authoritative](docs/design-principles.cn.md)): what Camel is and why
+- [Technical documentation](docs/technical/README.md): the compilation pipeline, the graph IR, the runtime
+- [Build from source](docs/setup.en.md) and [CMake build options](docs/build-options.en.md)
+- [Python integration](modules/python/README.md): embedding Python through the `python` module
+- [Roadmap](ROADMAP.md) (Chinese)
 
-- **Python-like prototyping**: Build graphs using intuitive operators and natural syntax
-- **What-you-see-is-what-runs**: Code is the computation graph—no JIT magic or hidden control flow
-- **Self-documenting architecture**: Explicit graph structure reduces legacy code complexity
+## Contributing
 
-### For AI Engineers
+- [Contributing Guide](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
+- [Issue Tracker](https://github.com/OpenCML/Camel/issues)
 
-- **Compile-time optimization**: Static graph analysis enables memory reuse and operator fusion
-- **Single-source deployment**: Write once, run optimized—from server CPUs to edge TPUs without code changes
-- **Maintainability by design**: Strong typing eliminates tensor shape errors, while explicit graph structure reduces technical debt
+## License
 
-### For Framework Developers
-
-- **No more tracing hacks**: First-class graph IR captures user intent directly through language semantics
-- **Pluggable optimization**: Extend compiler passes via composable functors instead of fragile AST manipulation
-- **Unified backend support**: Generate optimized code for multiple targets from shared graph representation
-
-## Modules & Extensions
-
-### Python Integration
-
-Use the `python` module to embed Python. Supports `py_call`, `py_eval`, `py_run`, `py_wrap`/`py_unwrap`, and more. See [modules/python/README.md](modules/python/README.md) for API reference.
-
-**Type conversion** — `py_unwrap` converts Python objects back to Camel. Because `py_eval`/`py_call` return bare `PyObject`, you must use `as PyObject<T>` to specify the target type before `py_unwrap`:
-
-```camel
-import { PyObject, py_eval, py_unwrap } from python
-
-func main(): int sync {
-    let res = py_eval("1 + 1") as PyObject<int>
-    println(py_unwrap(res))
-    return 0
-}
-```
-
-## 📚 Learn More
-
-- [Build Yourself](docs/setup.en.md) - Environment setup and installation guide
-- [CMake build options](docs/build-options.en.md) - FastVM, Python embedding, `npm run config`, `CAMEL_SKIP_PYTHON`
-- [WIP] [Documentation](https://docs.opencml.com/) - Language specs and API reference
-- [WIP] [Examples](examples/) - From MNIST training to distributed pipelines
-- [WIP] [Whitepaper](https://arxiv.org/abs/xxxx.xxxx) - Deep dive into the compiler architecture
-
-## 🤝 Contributing
-
-We welcome contributions! Check out our:
-
-- [Contributing Guide](CONTRIBUTING.md) - How to contribute, development setup, and style guide
-- [Code of Conduct](CODE_OF_CONDUCT.md) - Community standards and behavior
-- [Security Policy](SECURITY.md) - How to report security vulnerabilities
-- [Issue Tracker](https://github.com/OpenCML/Camel/issues) - Good first issues labeled `beginner-friendly`
-- [Roadmap](ROADMAP.md) - Planned features (WIP)
-
-## 📜 License
-
-Code written by this project’s contributors is licensed under the [MIT License](LICENSE).
+Code written by this project's contributors is licensed under the [MIT License](LICENSE).
 
 Third-party code from antlr4 is licensed under the BSD-3-Clause License.
-
----
-
-**Join the Herd** 🌍🐪 – Build the future of AI infrastructure with us!
-
----
-
-**Enjoy! 🐪Camel Riders!**

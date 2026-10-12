@@ -1,0 +1,21 @@
+// Removes duplicates with `unique` of `array`, which keeps the order, or by converting to a
+// Set<T>; compares two groups with union, intersection and difference.
+// Run: camel examples/data/dedup_sets.cml
+module dedup_sets
+
+import { unique } from array
+
+func main(): int sync {
+    let readings = [7, 3, 7, 9, 3, 1, 9, 7]
+    println('first occurrences:', unique(readings))    // in the order of the array
+    println('as a set:', readings as Set<int>)          // a set prints in element order
+
+    let monday = ['ann', 'bob', 'cy', 'dee'] as Set<string>
+    let tuesday = ['bob', 'dee', 'eve'] as Set<string>
+    println('either day:', union(monday, tuesday))
+    println('both days:', intersect(monday, tuesday))
+    println('monday only:', difference(monday, tuesday))
+    println('eve came on monday:', monday->contains<'eve'>)
+    println('people seen:', len(union(monday, tuesday)))
+    return 0
+}

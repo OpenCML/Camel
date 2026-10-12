@@ -1,0 +1,16 @@
+// Gradients: `grad` turns the graph of a function into the graph of its derivative.
+// Run: camel docs/tutorial/examples/16_grad.cml std::macro
+module grad_demo
+
+import { grad, value_and_grad } from autodiff
+
+func f(x: float, y: float): float {
+    return x * x * y + y
+}
+
+func main(): int sync {
+    println(f(3.0, 2.0))
+    println(grad(f)(3.0, 2.0))                 // (df/dx, df/dy) = (2xy, x^2 + 1)
+    println(value_and_grad(f)(3.0, 2.0))
+    return 0
+}

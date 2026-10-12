@@ -1,0 +1,20 @@
+/**
+ * Documentation block comment
+ * with 'quotes' and // slashes inside.
+ */
+module comments
+
+// line comment with "a string" and /* a block opener
+let a = 1 // trailing comment
+/* block comment on one line */
+let b = /* inline */ 2
+/*
+ * multi-line block comment
+ * let c = 3
+ */
+let s = '// not a comment'
+let t = "/* not a comment */"
+# command line: to the end of the line, on its own channel
+let d = 4 # trailing command
+/**/
+let e = 5

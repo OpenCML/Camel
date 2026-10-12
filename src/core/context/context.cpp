@@ -28,6 +28,7 @@
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
@@ -45,11 +46,24 @@ namespace camel::core::context {
 
 namespace {
 
-int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
-    if (!graph || !graph->funcType() || !graph->funcType()->hasExitType())
+/// The exit code the value returned by the entry graph stands for. Only a declared return
+/// type makes the value the program's result (design principles 2.10). Under `T!` a value
+/// that has not failed counts as its `T`; a failed one is an error nobody handled, and the
+/// program ends with a non-zero code (who reports it: camel/execute/entry_args.h).
+int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool declared) {
+    if (!declared || !graph || !graph->funcType() || !graph->funcType()->hasExitType())
         return 0;
 
-    switch (graph->funcType()->exitType()->code()) {
+    Type *resultType = graph->funcType()->exitType();
+    if (TupleType *fallible = asFallible(resultType)) {
+        if (camel::core::rtdata::isErrorValue(result)) {
+            return 1;
+        }
+        result     = camel::core::rtdata::falliblePayload(result);
+        resultType = fallible->payloadType();
+    }
+
+    switch (resultType->code()) {
     case TypeCode::Int32:
         return static_cast<int>(static_cast<int32_t>(result));
     case TypeCode::Int64:
@@ -267,7 +281,7 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
 }
 
 void Context::captureProcessExitCode(camel::runtime::GCGraph *graph, slot_t result) {
-    processExitCode_ = deriveProcessExitCode(graph, result);
+    processExitCode_ = deriveProcessExitCode(graph, result, entryResultDeclared_);
     if (entryResultHandler_) {
         entryResultHandler_(graph, result);
     }
@@ -328,6 +342,25 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         auto it = modules_.find(name);
         if (it != modules_.end()) {
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in cache.", name));
+            // The module being loaded names itself (a file `m.cml` with `import m`): it is
+            // in the cache, registered before its load, and not yet a module. Handing it out
+            // gave the importer a module without graphs, and the compiler crashed.
+            if (name == currentModuleName && !it->second->loaded() &&
+                std::dynamic_pointer_cast<UserDefinedModule>(it->second)) {
+                throw DiagnosticBuilder::of(SemanticDiag::ImportCycle)
+                    .commit(name, "file " + it->second->path());
+            }
+            // A module still being loaded is imported again by a module it imports
+            // (a imports b, b imports a; or a longer ring). It has no graphs yet, and handing
+            // it out crashed the compiler. Mutual import is not supported: say which ring.
+            if (auto at = std::find(loadingModules_.begin(), loadingModules_.end(), name);
+                at != loadingModules_.end()) {
+                std::string chain = "import cycle: ";
+                for (auto m = at; m != loadingModules_.end(); ++m) {
+                    chain += *m + " -> ";
+                }
+                throw DiagnosticBuilder::of(SemanticDiag::ImportCycle).commit(name, chain + name);
+            }
             return it->second;
         }
 
@@ -341,7 +374,16 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             // Register before load so compile failures remain visible to dumpAllModuleDiagnostics.
             modules_[name] = module;
             if (!module->loaded()) {
-                if (!module->load()) {
+                loadingModules_.push_back(name);
+                bool loadedOk = false;
+                try {
+                    loadedOk = module->load();
+                } catch (...) {
+                    loadingModules_.pop_back();
+                    throw;
+                }
+                loadingModules_.pop_back();
+                if (!loadedOk) {
                     // A module that was found and is in error is not a module that was not
                     // found: its own diagnostics say what is wrong with it.
                     auto ud = std::dynamic_pointer_cast<UserDefinedModule>(module);

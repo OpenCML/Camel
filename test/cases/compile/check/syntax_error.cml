@@ -1,0 +1,6 @@
+module my_module
+
+func main(): int sync {
+    let x =
+    return 0
+}

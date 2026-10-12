@@ -1,0 +1,74 @@
+>/**
+#^^^ comment.block.documentation.camel punctuation.definition.comment.begin.camel
+> * Documentation block comment
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block.documentation.camel
+> * with 'quotes' and // slashes inside.
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block.documentation.camel
+> */
+# ^^ comment.block.documentation.camel punctuation.definition.comment.end.camel
+>module comments
+#^^^^^^ keyword.control.import.module.camel
+#       ^^^^^^^^ entity.name.namespace.module.camel
+>
+>// line comment with "a string" and /* a block opener
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>let a = 1 // trailing comment
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^ meta.declaration.let.camel variable.other.constant.camel
+#      ^ keyword.operator.assignment.camel
+#        ^ constant.numeric.integer.decimal.camel
+#          ^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#            ^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>/* block comment on one line */
+#^^ comment.block.camel punctuation.definition.comment.begin.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block.camel
+#                             ^^ comment.block.camel punctuation.definition.comment.end.camel
+>let b = /* inline */ 2
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^ meta.declaration.let.camel variable.other.constant.camel
+#      ^ keyword.operator.assignment.camel
+#        ^^ comment.block.camel punctuation.definition.comment.begin.camel
+#          ^^^^^^^^ comment.block.camel
+#                  ^^ comment.block.camel punctuation.definition.comment.end.camel
+#                     ^ constant.numeric.integer.decimal.camel
+>/*
+#^^ comment.block.camel punctuation.definition.comment.begin.camel
+> * multi-line block comment
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block.camel
+> * let c = 3
+#^^^^^^^^^^^^^ comment.block.camel
+> */
+# ^^ comment.block.camel punctuation.definition.comment.end.camel
+>let s = '// not a comment'
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^ meta.declaration.let.camel variable.other.constant.camel
+#      ^ keyword.operator.assignment.camel
+#        ^ string.quoted.single.camel punctuation.definition.string.begin.camel
+#         ^^^^^^^^^^^^^^^^ string.quoted.single.camel
+#                         ^ string.quoted.single.camel punctuation.definition.string.end.camel
+>let t = "/* not a comment */"
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^ meta.declaration.let.camel variable.other.constant.camel
+#      ^ keyword.operator.assignment.camel
+#        ^ string.quoted.double.camel punctuation.definition.string.begin.camel
+#         ^^^^^^^^^^^^^^^^^^^ string.quoted.double.camel
+#                            ^ string.quoted.double.camel punctuation.definition.string.end.camel
+># command line: to the end of the line, on its own channel
+#^ meta.preprocessor.command.camel punctuation.definition.directive.camel
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ meta.preprocessor.command.camel
+>let d = 4 # trailing command
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^ meta.declaration.let.camel variable.other.constant.camel
+#      ^ keyword.operator.assignment.camel
+#        ^ constant.numeric.integer.decimal.camel
+#          ^ meta.preprocessor.command.camel punctuation.definition.directive.camel
+#           ^^^^^^^^^^^^^^^^^ meta.preprocessor.command.camel
+>/**/
+#^^ comment.block.camel punctuation.definition.comment.begin.camel
+#  ^^ comment.block.camel punctuation.definition.comment.end.camel
+>let e = 5
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^ meta.declaration.let.camel variable.other.constant.camel
+#      ^ keyword.operator.assignment.camel
+#        ^ constant.numeric.integer.decimal.camel

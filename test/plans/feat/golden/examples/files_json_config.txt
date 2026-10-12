@@ -1,0 +1,3 @@
+from file:     example.org:443 verbose=true
+wrong shape:   localhost:8080 verbose=false
+missing file:  localhost:8080 verbose=false

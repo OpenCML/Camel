@@ -141,6 +141,30 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
     std::vector<gc_node_ref_t> stack;
     stack.reserve(graph->nodeCount());
 
+    // Only what the exit depends on is laid out. A rewrite may leave nodes nothing uses (the
+    // inner branch of an inlined callee whose result the caller's body ignores); they still
+    // hang off live nodes as users. The branch handling below walks users, so it has to know
+    // which of them are part of the execution.
+    const gc_node_ref_t startRef = graph->exitNodeRef() != camel::runtime::kInvalidNodeRef
+                                       ? graph->exitNodeRef()
+                                       : graph->returnNodeRef();
+    std::vector<uint8_t> live(graph->nodeBlockCount(), 0);
+    {
+        std::vector<gc_node_ref_t> work{startRef};
+        while (!work.empty()) {
+            const gc_node_ref_t n = work.back();
+            work.pop_back();
+            if (!graph->containsNodeRef(n) || live[n]) {
+                continue;
+            }
+            live[n] = 1;
+            for (auto inputs :
+                 {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
+                work.insert(work.end(), inputs.begin(), inputs.end());
+            }
+        }
+    }
+
     std::function<void(gc_node_ref_t)> visit = [&](gc_node_ref_t index) {
         if (!graph->containsNodeRef(index)) {
             return;
@@ -206,7 +230,10 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
             while (!work.empty()) {
                 const gc_node_ref_t n = work.back();
                 work.pop_back();
-                if (n == index || n == brch || !graph->containsNodeRef(n) ||
+                // A dead user is not part of the branch: visiting its inputs would lay out
+                // code that must not run (a dead BRCH without its JOIN sent every back end
+                // astray: nothing after it ran, or the order was entered again and again).
+                if (n == index || n == brch || !graph->containsNodeRef(n) || !live[n] ||
                     !inBranch.insert(n).second) {
                     continue;
                 }
@@ -264,10 +291,8 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
     // encodes the side-effect chain. Starting from returnNodeRef alone drops
     // that control suffix and causes schedulers to compile only the returned
     // constant while silently skipping the observable work.
-    if (graph->exitNodeRef() != camel::runtime::kInvalidNodeRef) {
-        visit(graph->exitNodeRef());
-    } else if (graph->returnNodeRef() != camel::runtime::kInvalidNodeRef) {
-        visit(graph->returnNodeRef());
+    if (startRef != camel::runtime::kInvalidNodeRef) {
+        visit(startRef);
     }
     return order;
 }
@@ -555,13 +580,26 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
         collectPreBranchDeps(inputRef);
     }
 
+    // Nodes outside the execution order are dead (nothing the exit depends on uses them). They
+    // are no part of an arm, and what they read need not be either: followed, a dead user of
+    // this arm that also reads another arm would pull that arm's code into this one's region.
+    std::vector<uint8_t> ordered(graph->nodeBlockCount(), 0);
+    for (gc_node_ref_t nodeRef : topoOrder) {
+        if (nodeRef < ordered.size()) {
+            ordered[nodeRef] = 1;
+        }
+    }
+    const auto isDead = [&](gc_node_ref_t nodeRef) {
+        return nodeRef >= ordered.size() || !ordered[nodeRef];
+    };
+
     std::unordered_set<gc_node_ref_t> armRegion;
     std::vector<gc_node_ref_t> worklist{branchArms[armIndex].head};
     while (!worklist.empty()) {
         const auto nodeRef = worklist.back();
         worklist.pop_back();
         if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
-            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) ||
+            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) || isDead(nodeRef) ||
             !armRegion.insert(nodeRef).second) {
             continue;
         }
@@ -834,15 +872,6 @@ void fillFrameForDirectInvoke(
                 targetGraph->name(),
                 targetNormPorts.size()));
     }
-    for (size_t i = 0; i < callerNormInputs.size(); ++i) {
-        const auto *argRecord  = callerGraph->node(callerNormInputs[i]);
-        const auto *portRecord = targetGraph->node(targetNormPorts[i]);
-        if (argRecord == nullptr || portRecord == nullptr) {
-            throw std::runtime_error("Runtime direct invoke norm argument/port record is null.");
-        }
-        dest->set(portRecord->dataIndex, from->get<slot_t>(argRecord->dataIndex));
-    }
-
     const auto callerWithInputs = callerGraph->withInputsOf(callNodeIndex);
     const auto targetWithPorts  = targetGraph->withPorts();
     if (callerWithInputs.size() != targetWithPorts.size()) {
@@ -856,13 +885,46 @@ void fillFrameForDirectInvoke(
                 targetGraph->name(),
                 targetWithPorts.size()));
     }
-    for (size_t i = 0; i < callerWithInputs.size(); ++i) {
-        const auto *argRecord  = callerGraph->node(callerWithInputs[i]);
-        const auto *portRecord = targetGraph->node(targetWithPorts[i]);
-        if (argRecord == nullptr || portRecord == nullptr) {
-            throw std::runtime_error("Runtime direct invoke with argument/port record is null.");
+
+    // All arguments are read before the first parameter is written. A self tail call refills
+    // the frame it runs in (from == dest), and an argument may be a parameter of that frame, or
+    // a GATE forwarding one, which shares the parameter's slot: `r(a, b) = ... r(0, a)` binds
+    // b to the old a. Writing in argument order stored 0 into a first and then read it for b.
+    static constexpr size_t kInlineArgs = 16;
+    const size_t argCount               = callerNormInputs.size() + callerWithInputs.size();
+    using Staged = std::pair<decltype(camel::runtime::GCNode::dataIndex), slot_t>;
+    std::array<Staged, kInlineArgs> inlineStaged;
+    std::vector<Staged> heapStaged;
+    Staged *staged = inlineStaged.data();
+    if (argCount > kInlineArgs) {
+        heapStaged.resize(argCount);
+        staged = heapStaged.data();
+    }
+    size_t stagedCount = 0;
+    const auto stage   = [&](std::span<const gc_node_ref_t> args,
+                           std::span<const gc_node_ref_t> ports,
+                           const char *what) {
+        for (size_t i = 0; i < args.size(); ++i) {
+            const auto *argRecord  = callerGraph->node(args[i]);
+            const auto *portRecord = targetGraph->node(ports[i]);
+            if (argRecord == nullptr || portRecord == nullptr) {
+                throw std::runtime_error(what);
+            }
+            staged[stagedCount++] = {
+                portRecord->dataIndex,
+                from->get<slot_t>(argRecord->dataIndex)};
         }
-        dest->set(portRecord->dataIndex, from->get<slot_t>(argRecord->dataIndex));
+    };
+    stage(
+        callerNormInputs,
+        targetNormPorts,
+        "Runtime direct invoke norm argument/port record is null.");
+    stage(
+        callerWithInputs,
+        targetWithPorts,
+        "Runtime direct invoke with argument/port record is null.");
+    for (size_t i = 0; i < stagedCount; ++i) {
+        dest->set(staged[i].first, staged[i].second);
     }
 }
 

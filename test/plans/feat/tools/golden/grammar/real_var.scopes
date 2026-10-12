@@ -1,0 +1,60 @@
+>/**
+#^^^ comment.block.documentation.camel punctuation.definition.comment.begin.camel
+> * Verifies mutable variables passed by reference through sync calls are updated in place and observed by the caller.
+#^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block.documentation.camel
+> */
+# ^^ comment.block.documentation.camel punctuation.definition.comment.end.camel
+>// variables and sync for explicit
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>sync func update(var target: int) {
+#^^^^ storage.modifier.sync.camel
+#     ^^^^ meta.function.definition.camel storage.type.function.camel
+#          ^^^^^^ meta.function.definition.camel entity.name.function.camel
+#                ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                 ^^^ meta.parens.camel storage.modifier.var.camel
+#                     ^^^^^^ meta.parens.camel variable.parameter.camel
+#                           ^ meta.parens.camel punctuation.separator.colon.camel
+#                             ^^^ meta.parens.camel support.type.primitive.camel
+#                                ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                  ^ meta.block.camel punctuation.section.block.begin.camel
+>    wait target += 1
+#    ^^^^ meta.block.camel keyword.control.flow.camel
+#                ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#                   ^ meta.block.camel constant.numeric.integer.decimal.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func main(): int sync {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^ meta.function.definition.camel entity.name.function.camel
+#         ^ meta.parens.camel punctuation.section.parens.begin.camel
+#          ^ meta.parens.camel punctuation.section.parens.end.camel
+#           ^ punctuation.separator.colon.camel
+#             ^^^ support.type.primitive.camel
+#                 ^^^^ storage.modifier.sync.camel
+#                      ^ meta.block.camel punctuation.section.block.begin.camel
+>    var c = 0
+#    ^^^ meta.block.camel meta.declaration.var.camel storage.type.var.camel
+#        ^ meta.block.camel meta.declaration.var.camel variable.other.readwrite.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#            ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    println(c)
+#    ^^^^^^^ meta.block.camel entity.name.function.call.camel
+#           ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#             ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    wait update(c)
+#    ^^^^ meta.block.camel keyword.control.flow.camel
+#         ^^^^^^ meta.block.camel entity.name.function.call.camel
+#               ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    println(c)
+#    ^^^^^^^ meta.block.camel entity.name.function.call.camel
+#           ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#             ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    return 0
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#           ^ meta.block.camel constant.numeric.integer.decimal.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>

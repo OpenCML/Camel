@@ -173,6 +173,8 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
     void evalMarkedOperator_foreach_arr(
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
+    void evalMarkedOperator_isolate(
+        data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
 
   public:
     FastVMSchedPass(const ctx::context_ptr_t &ctx, const FastVMConfig &config = {})

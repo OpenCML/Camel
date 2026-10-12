@@ -14,16 +14,16 @@ func shuffled(n: int): int[] {
 
 func main(): int sync {
     let e = [] as Map<string, int>
-    println(e, len(e), keys(e), values(e), items(e), e['a'] ?? -1, has(e, 'a'))
-    println(e == e, remove(e, 'a'), merge(e, e), put(e, 'a', 1))
+    println(e, len(e), keys(e), values(e), items(e), e['a'] ?? -1, e->has<'a'>)
+    println(e == e, e->remove<'a'>, merge(e, e), e->put<'a', 1>)
     let es = [] as Set<string>
-    println(es, len(es), items(es), contains(es, 'a'), union(es, es), add(es, 'q'))
+    println(es, len(es), items(es), es->contains<'a'>, union(es, es), es->add<'q'>)
     let one = [(7, 'seven')] as Map<int, string>
-    println(one, remove(one, 7), one[7] ?? '?', len(remove(one, 7)))
+    println(one, one->remove<7>, one[7] ?? '?', len(one->remove<7>))
 
     let n = [('a', 1 as int?), ('b', null as int?)] as Map<string, int?>
     println(n)
-    println(n['a'] ?? -1, n['b'] ?? -2, n['c'] ?? -3, has(n, 'b'), has(n, 'c'))
+    println(n['a'] ?? -1, n['b'] ?? -2, n['c'] ?? -3, n->has<'b'>, n->has<'c'>)
 
     println(repeated(7) as Map<string, int>)
     println(shuffled(20) as Set<int>)

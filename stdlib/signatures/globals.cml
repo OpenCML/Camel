@@ -16,7 +16,7 @@
 
 /// x as a 64-bit integer.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not an integer; use parse_int to handle that in the program
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
 /// @example int(2.9)    // 2
 inner func int(x: i32 | int | f32 | float | string): int {
     return ':op/*tol'
@@ -24,7 +24,7 @@ inner func int(x: i32 | int | f32 | float | string): int {
 
 /// The same as int.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not an integer
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN
 /// @example i64('42')    // 42
 inner func i64(x: i32 | int | f32 | float | string): int {
     return ':op/*tol'
@@ -32,7 +32,7 @@ inner func i64(x: i32 | int | f32 | float | string): int {
 
 /// x as a 32-bit integer.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not an integer
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN
 /// @example i32(7)    // 7
 inner func i32(x: i32 | int | f32 | float | string): i32 {
     return ':op/*toi'
@@ -40,7 +40,7 @@ inner func i32(x: i32 | int | f32 | float | string): i32 {
 
 /// x as a 64-bit float.
 /// @pure
-/// @fails fault `InvalidNumberText` when x is a string that is not a number; use parse_float to handle that in the program
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one number; use parse_float to handle that in the program
 /// @example float(3)    // 3
 inner func float(x: i32 | int | f32 | float | string): float {
     return ':op/*tod'
@@ -62,7 +62,8 @@ inner func f32(x: i32 | int | f32 | float | string): f32 {
     return ':op/*tof'
 }
 
-/// x as text. A float is written with six decimals: string(2.5) is '2.500000'.
+/// x as text, as println writes it. A float is written as the shortest text that reads back as
+/// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 /// @pure
 /// @example string(42)    // '42'
 inner func string(x: any): string {
@@ -71,7 +72,7 @@ inner func string(x: any): string {
 
 /// The integer a text spells, or an error value.
 /// @pure
-/// @fails error `ParseError` when the text is not an integer
+/// @fails error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped)
 /// @example parse_int('42') !! 0    // 42
 inner func parse_int(text: string): int! {
     return ':op/parse_int'
@@ -169,6 +170,7 @@ inner func range(start: int, end: int): int[] {
 
 /// The first element. An empty array has none: check len first.
 /// @pure
+/// @fails fault `IndexOutOfRange` when the array is empty
 /// @example head([1, 2, 3])    // 1
 inner func head(xs: T[]): T {
     return ':struct/head_arr'
@@ -181,8 +183,9 @@ inner func tail(xs: T[]): T[] {
     return ':struct/tail_arr'
 }
 
-/// The elements from index start up to, not including, end. A negative index counts from the
-/// end, and a range reaching outside the array is cut to it: this never faults.
+/// The elements from index start up to, not including, end. Both are positions from 0 to the
+/// length; a bound outside the array (a negative one included) is a fault, as an index out of
+/// range is. `take` and `drop` of the module `array` cut to the array instead.
 /// @pure
 /// @example [1, 2, 3, 4]->slice<1, 3>    // [2, 3]
 with <start: int, end: int>
@@ -197,7 +200,8 @@ inner func concat(xs: T[], ys: T[]): T[] {
     return ':struct/concat_arr'
 }
 
-/// Whether an element of xs equals value.
+/// Whether an element of xs equals value, by the `==` of the element type (by content for
+/// arrays, tuples and structs).
 /// @pure
 /// @example [1, 2, 3]->contains<2>    // true
 with <value: T>
@@ -205,7 +209,17 @@ inner func contains(xs: T[]): bool {
     return ':struct/contains_arr'
 }
 
+/// Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
+/// string.
+/// @pure
+/// @example 'hello'->contains<'ell'>    // true
+with <sub: string>
+inner func contains(s: string): bool {
+    return ':struct/contains_str'
+}
+
 /// Two arrays combined element by element into pairs. They must have the same length.
+/// Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
 /// @pure
 /// @fails fault `InvalidArgument` when the lengths differ
 /// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]
@@ -276,9 +290,28 @@ inner func apply(var xs: T[]): T[] {
     return ':mark/apply_arr'
 }
 
+// ---- fault isolation ----
+//
+// A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
+// the program with a located diagnostic. `attempt` isolates it at the boundary of one call
+// (design principles 2.9; docs/technical/33_fault_isolation.md). The name is provisional.
+
+/// Calls f with the arguments. A fault raised inside the call becomes an error value whose kind
+/// is the name of the fault (`DivisionByZero`, ...), with the fault's message and position;
+/// otherwise the result of f. When f itself returns `U!`, so does attempt. What the call did
+/// before the fault is not undone; exit() and the failures of the compiler itself are not
+/// isolated.
+/// @effect what f does
+/// @example attempt(risky, 0) !! -1
+/// @example attempt(() => xs->map<risky>) !! [-1]
+inner func attempt(f: (...args: A) => T, ...args: A): T! {
+    return ':mark/isolate'
+}
+
 // ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
 // Built-in collection types (docs/technical/31_map_and_set.md). Every operator returns a new
-// value. Each also takes its with-parameters as ordinary arguments: put(m, k, v) is m->put<k, v>.
+// value. One calling form: the collection is the ordinary argument, the rest are
+// with-arguments, put<k, v>(m) or m->put<k, v>; put(m, k, v) is refused with a hint.
 
 /// The number of entries of a map or of elements of a set.
 /// @pure
@@ -289,7 +322,7 @@ inner func len(c: Map<K, V> | Set<T>): int {
 
 /// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 /// @pure
-/// @example get(m, 'z') ?? 0    // 0 when m has no 'z'
+/// @example m->get<'z'> ?? 0    // 0 when m has no 'z'
 with <key: K>
 inner func get(m: Map<K, V>): V? {
     return ':coll/map_get'
@@ -297,7 +330,7 @@ inner func get(m: Map<K, V>): V? {
 
 /// The value stored under key, or fallback when the map has no such key.
 /// @pure
-/// @example get_or(m, 'z', -1)    // -1 when m has no 'z'
+/// @example m->get_or<'z', -1>    // -1 when m has no 'z'
 with <key: K, fallback: V>
 inner func get_or(m: Map<K, V>): V {
     return ':coll/map_get_or'
@@ -305,7 +338,7 @@ inner func get_or(m: Map<K, V>): V {
 
 /// A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
 /// @pure
-/// @example put([('a', 1), ('b', 2)] as Map<string, int>, 'c', 3)    // {a: 1, b: 2, c: 3}
+/// @example ([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>    // {a: 1, b: 2, c: 3}
 with <key: K, value: V>
 inner func put(m: Map<K, V>): Map<K, V> {
     return ':coll/map_put'
@@ -313,7 +346,7 @@ inner func put(m: Map<K, V>): Map<K, V> {
 
 /// A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
 /// @pure
-/// @example remove([('a', 1), ('b', 2)] as Map<string, int>, 'a')    // {b: 2}
+/// @example ([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>    // {b: 2}
 with <key: K>
 inner func remove(c: Map<K, V> | Set<K>): Map<K, V> | Set<K> {
     return ':coll/remove'
@@ -321,7 +354,7 @@ inner func remove(c: Map<K, V> | Set<K>): Map<K, V> | Set<K> {
 
 /// Whether a map has an entry of key, or a set has the element.
 /// @pure
-/// @example has([('a', 1)] as Map<string, int>, 'a')    // true
+/// @example ([('a', 1)] as Map<string, int>)->has<'a'>    // true
 with <key: K>
 inner func has(c: Map<K, V> | Set<K>): bool {
     return ':coll/has'
@@ -372,7 +405,7 @@ inner func contains(s: Set<T>): bool {
 
 /// A set with value added; s is unchanged.
 /// @pure
-/// @example add([1, 2, 3] as Set<int>, 9)    // {1, 2, 3, 9}
+/// @example ([1, 2, 3] as Set<int>)->add<9>    // {1, 2, 3, 9}
 with <value: T>
 inner func add(s: Set<T>): Set<T> {
     return ':coll/set_add'

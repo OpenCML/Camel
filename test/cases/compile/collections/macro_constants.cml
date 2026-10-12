@@ -6,11 +6,11 @@ module main
 // must be carried over with the table.
 
 macro func table(n: int): Map<int, string> {
-    return put([(1, 'one'), (2, 'two')] as Map<int, string>, n, 'more')
+    return ([(1, 'one'), (2, 'two')] as Map<int, string>)->put<n, 'more'>
 }
 
 macro func names(): Set<string> {
-    return add(['beta', 'alpha'] as Set<string>, 'gamma')
+    return (['beta', 'alpha'] as Set<string>)->add<'gamma'>
 }
 
 macro func nested(): Map<string, Map<string, int[]>> {
@@ -31,8 +31,8 @@ func apply(ops: Map<string, (x: int) => int>, name: string, x: int): int {
 func main(): int sync {
     let t = table(4)
     println(t, t[2] ?? '?', len(t))
-    println(names(), contains(names(), 'alpha'), contains(names(), 'delta'))
-    println(put(t, 9, 'nine'), t)
+    println(names(), names()->contains<'alpha'>, names()->contains<'delta'>)
+    println(t->put<9, 'nine'>, t)
     let n = nested()
     println(n, len((n['outer'] ?? ([] as Map<string, int[]>))['xs'] ?? [0]))
     let ops = operations()

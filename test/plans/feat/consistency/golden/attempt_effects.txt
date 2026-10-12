@@ -1,0 +1,16 @@
+before
+work begins
+total is 11
+work ends
+25
+1011
+work begins
+total is 1021
+-1
+1021
+4
+10
+22
+-1
+22
+after

@@ -167,7 +167,7 @@ verify_script = """
 const out = input.normalized.stdout.trim()
 const want = [
   "3 2.5",
-  "18 3",
+  "18 3.0",
   "3 4.5",
   "21 21 21 21",
 ].join('\n')

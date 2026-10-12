@@ -24,6 +24,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/type.h"
 
+#include "float_format.h"
 #include "fmt/args.h"
 #include "fmt/core.h"
 
@@ -53,10 +54,10 @@ slot_t __format__(ArgsView &with, ArgsView &norm, Context &ctx) {
             store.push_back(with.get<Int64>(i));
             break;
         case TypeCode::Float32:
-            store.push_back(with.get<Float32>(i));
+            store.push_back(camel::builtin::LanguageFloat<Float32>{with.get<Float32>(i)});
             break;
         case TypeCode::Float64:
-            store.push_back(with.get<Float64>(i));
+            store.push_back(camel::builtin::LanguageFloat<Float64>{with.get<Float64>(i)});
             break;
         default:
             // fallback to string

@@ -1059,7 +1059,7 @@ any Formatter::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
 
 /*
 accessExpr
-    : primaryData ('.' (IDENTIFIER | INTEGER))*
+    : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
     ;
 */
 any Formatter::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
@@ -1079,7 +1079,7 @@ any Formatter::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
 
 /*
 memberAccess
-    : '.' (IDENTIFIER | INTEGER)
+    : '.' (IDENTIFIER | INTEGER | REAL)
     ;
 */
 any Formatter::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
@@ -1170,8 +1170,8 @@ any Formatter::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
 
 /*
 literal
-    : INTEGER
-    | REAL
+    : ('+' | '-')? INTEGER
+    | ('+' | '-')? REAL
     | STRING
     | MULTI_STR
     | FSTRING

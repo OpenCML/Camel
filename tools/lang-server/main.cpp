@@ -13,333 +13,49 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 01, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  *
  */
 
+/*
+ * camel-ls: the entry point. The server is in server.h, the transport in protocol.h, and
+ * everything it knows about a program comes from camel/service/semantic.
+ *
+ *   camel-ls [--stdio]            serve the language server protocol on the standard streams
+ *   camel-ls --dump-model <file>  print the semantic model of a file and exit (for debugging)
+ *   camel-ls --time <file>        print how long building the model of a file takes
+ */
+
 #include "camel/utils/windows_parser_guard.h"
-// nlohmann/json 使用标准 C 的 EOF 宏；ANTLR 在 antlr4-common.h 里会 #undef EOF，
-// 故须先包含 nlohmann/json.hpp（并保证 EOF 可见），再包含会拉入 ANTLR 的头文件。
-#include "nlohmann/json.hpp"
-#include <cstdio>
+#include "server.h"
 
-#include "camel/core/context/context.h"
-#include "camel/core/error/diagnostics.h"
-#include "camel/core/error/diagnostics/range.h"
 #include "camel/core/mm.h"
-#include "camel/core/module/userdef.h"
 #include "camel/init.h"
-#include "camel/parse/parse.h"
-#include "camel/utils/install_layout.h"
-
-#include "../format/fmt.h"
 
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
 #endif
 
+#include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
-#include <map>
-#include <optional>
-#include <set>
 #include <sstream>
-#include <string>
 
-using namespace std;
-using json   = nlohmann::json;
 namespace mm = camel::core::mm;
-using namespace camel::core::context;
-using namespace camel::core::module;
-using namespace camel::core::error;
-using namespace camel::parse;
 
-namespace fs = std::filesystem;
-
-// LSP 诊断严重程度: Error=1, Warning=2, Information=3, Hint=4
-static int severityToLsp(Severity s) {
-    switch (s) {
-    case Severity::Error:
-        return 1;
-    case Severity::Warn:
-        return 2;
-    case Severity::Info:
-        return 3;
-    case Severity::Hint:
-        return 4;
-    default:
-        return 1;
-    }
-}
-
-static json positionJson(size_t line, size_t character) {
-    json pos         = json::object();
-    pos["line"]      = line;
-    pos["character"] = character;
-    return pos;
-}
-
-static json rangeJson(const json &start, const json &end) {
-    json r     = json::object();
-    r["start"] = start;
-    r["end"]   = end;
-    return r;
-}
-
-// 读取 Content-Length 协议的消息
-static bool readLspMessage(istream &in, string &out) {
-    string header;
-    int contentLength = -1;
-    while (getline(in, header)) {
-        // binary mode keeps the CR of CRLF line endings; strip it
-        if (!header.empty() && header.back() == '\r')
-            header.pop_back();
-        if (header.empty())
-            break;
-        if (header.compare(0, 16, "Content-Length: ") == 0) {
-            contentLength = stoi(header.substr(16));
-        }
-    }
-    if (contentLength <= 0)
+static bool readFile(const std::string &path, std::string &text) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        std::cerr << "camel-ls: cannot read " << path << "\n";
         return false;
-    out.resize(static_cast<size_t>(contentLength));
-    in.read(&out[0], contentLength);
-    return in.good();
-}
-
-// 发送 LSP 消息
-static void sendLspMessage(ostream &out, const json &msg) {
-    string body = msg.dump();
-    out << "Content-Length: " << body.size() << "\r\n\r\n" << body;
-    out.flush();
-}
-
-// 发送 JSON-RPC 响应
-static void sendResponse(ostream &out, const json &id, const json &result, const json &error) {
-    json resp;
-    resp["jsonrpc"] = "2.0";
-    resp["id"]      = id;
-    if (!error.is_null())
-        resp["error"] = error;
-    else
-        resp["result"] = result;
-    sendLspMessage(out, resp);
-}
-
-// 发送 JSON-RPC 通知
-static void sendNotification(ostream &out, const string &method, const json &params) {
-    json notif;
-    notif["jsonrpc"] = "2.0";
-    notif["method"]  = method;
-    notif["params"]  = params;
-    sendLspMessage(out, notif);
-}
-
-// URI 转为本地路径 (file:///...)
-static string uriToPath(const string &uri) {
-    if (uri.compare(0, 7, "file://") != 0)
-        return uri;
-    string path = uri.substr(7);
-#ifdef _WIN32
-    if (path.size() >= 3 && path[0] == '/' && path[2] == ':')
-        path = path.substr(1); // /C:/... -> C:/...
-#endif
-    for (char &c : path) {
-        if (c == '/')
-            c = fs::path::preferred_separator;
     }
-    return path;
-}
-
-// 本地路径转为 URI (file:///...)，用于 relatedInformation 的 location
-static string pathToUri(const string &path) {
-    if (path.compare(0, 7, "file://") == 0)
-        return path;
-    string p = fs::absolute(fs::path(path)).generic_string();
-    string uri = "file://";
-    if (p.empty() || p[0] != '/')
-        uri += '/'; // C:/... -> file:///C:/...
-    static const char *hex = "0123456789ABCDEF";
-    for (unsigned char c : p) {
-        if (isalnum(c) || c == '/' || c == '-' || c == '_' || c == '.' || c == '~' || c == ':') {
-            uri += static_cast<char>(c);
-        } else {
-            uri += '%';
-            uri += hex[c >> 4];
-            uri += hex[c & 0xF];
-        }
-    }
-    return uri;
-}
-
-// 解析并编译 Camel 源码（与 `camel check` 相同的管线），返回 parser 与所有
-// 用户模块的 LSP 诊断数组（语法 + 语义：未解析引用、类型错误等）。
-static json buildDiagnosticsArray(const string &uri, const string &content) {
-    string path      = uriToPath(uri);
-    auto diagnostics = make_shared<Diagnostics>("lsp", path);
-    diagnostics->setConfig(DiagsConfig{.total_limit = -1});
-
-    // 语义诊断所需的编译上下文（与 camel-cli check 分支一致）
-    std::string entryDir = fs::absolute(fs::path(path)).parent_path().string();
-    auto searchPaths     = camel::utils::buildModuleSearchPaths(
-        entryDir,
-        camel::utils::ModuleSearchPathOptions{.stdlibOverride = ""});
-    auto ctx = Context::create(
-        EntryConfig{
-            .entryDir    = entryDir,
-            .entryFile   = path,
-            .searchPaths = std::move(searchPaths),
-        },
-        // 导入的模块与主模块一样收集全部编译错误（编辑器需要一次看到所有问题）；
-        // 语言服务器不执行程序，运行期诊断池保持“首个即止”。
-        DiagsConfig{.total_limit = -1});
-    ctx->runtimeDiagSink()->setConfig(
-        DiagsConfig{
-            .total_limit         = -1,
-            .per_severity_limits = {{Severity::Error, 0}},
-        });
-
-    istringstream iss(content);
-    auto parser     = make_shared<CamelParser>(diagnostics);
-    auto mainModule = make_shared<UserDefinedModule>("main", path, ctx, parser);
-    ctx->setMainModule(mainModule);
-    try {
-        parser->parse(iss);
-    } catch (...) {
-        // 解析失败时 diagnostics 已包含错误
-    }
-    try {
-        mainModule->compile(CompileStage::Done);
-    } catch (...) {
-        // 编译失败时模块 diagnostics 已包含错误
-    }
-
-    json lspDiags = json::array();
-    std::set<std::string> seen;
-    auto addDiag = [&](const Diagnostic &d) {
-        json diag = json::object();
-        if (holds_alternative<CharRange>(d.range)) {
-            CharRange r   = get<CharRange>(d.range);
-            diag["range"] = rangeJson(
-                positionJson(r.start.line, r.start.character),
-                positionJson(r.end.line, r.end.character));
-        } else {
-            diag["range"] = rangeJson(positionJson(0, 0), positionJson(0, 0));
-        }
-        diag["severity"] = severityToLsp(d.severity);
-        diag["source"]   = "Camel";
-        diag["message"]  = d.message;
-        // code: the catalog code, the same string as in `camel --output-format json`
-        // (`camel --explain <code>` describes it). The suggestion and the notes are not part
-        // of the message; they travel in `data` (LSP hands it back with code action requests).
-        diag["code"]         = "0x" + Diagnostic::hex8(d.diagCode());
-        json data            = json::object();
-        data["name"]         = d.name;
-        if (!d.suggestion.empty())
-            data["suggestion"] = d.suggestion;
-        if (!d.notes.empty())
-            data["notes"] = d.notes;
-        diag["data"] = data;
-        // Secondary locations -> relatedInformation.
-        if (!d.related.empty()) {
-            json related = json::array();
-            for (const DiagLabel &label : d.related) {
-                json info        = json::object();
-                json location    = json::object();
-                location["uri"]  = label.path.empty() || label.path == d.modulePath
-                                       ? (d.modulePath.empty() || d.modulePath == path
-                                              ? uri
-                                              : pathToUri(d.modulePath))
-                                       : pathToUri(label.path);
-                if (holds_alternative<CharRange>(label.range)) {
-                    CharRange r       = get<CharRange>(label.range);
-                    location["range"] = rangeJson(
-                        positionJson(r.start.line, r.start.character),
-                        positionJson(r.end.line, r.end.character));
-                } else {
-                    location["range"] = rangeJson(positionJson(0, 0), positionJson(0, 0));
-                }
-                info["location"] = location;
-                info["message"]  = label.message;
-                related.push_back(info);
-            }
-            diag["relatedInformation"] = related;
-        }
-        // parser 与模块诊断可能重复（共享编译产物），按键去重
-        const json &r   = diag["range"];
-        std::string key = std::to_string(r["start"]["line"].get<int>()) + ":" +
-                          std::to_string(r["start"]["character"].get<int>()) + "-" +
-                          std::to_string(r["end"]["line"].get<int>()) + ":" +
-                          std::to_string(r["end"]["character"].get<int>()) + "|" +
-                          std::to_string(diag["severity"].get<int>()) + "|" + d.message;
-        if (seen.insert(key).second)
-            lspDiags.push_back(diag);
-    };
-    auto collectFrom = [&](const Diagnostics &diags) {
-        for (const Diagnostic *d : diags.errors())
-            addDiag(*d);
-        for (const Diagnostic *d : diags.warnings())
-            addDiag(*d);
-        for (const Diagnostic *d : diags.infos())
-            addDiag(*d);
-        for (const Diagnostic *d : diags.hints())
-            addDiag(*d);
-    };
-
-    // parser 诊断：TokenRange -> CharRange
-    RangeConverter conv(parser->getTokens());
-    diagnostics->fetchAll(parser->getTokens());
-    collectFrom(*diagnostics);
-
-    // 各模块（含 main）的语义诊断
-    for (const auto &mod : ctx->allUserModules()) {
-        auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
-        if (!ud || !ud->diagnostics())
-            continue;
-        ud->diagnostics()->fetchAll(ud->parser()->getTokens());
-        collectFrom(*ud->diagnostics());
-    }
-
-    return lspDiags;
-}
-
-// 用 Formatter 格式化源码；解析失败时返回空 optional。
-static std::optional<std::string>
-formatSource(const std::string &path, const std::string &content) {
-    auto diagnostics = std::make_shared<Diagnostics>("lsp-format", path);
-    auto parser      = std::make_shared<CamelParser>(diagnostics);
-    istringstream iss(content);
-    try {
-        if (!parser->parseCST(iss)) {
-            return std::nullopt;
-        }
-    } catch (...) {
-        return std::nullopt;
-    }
-
-    Formatter::Options options;
-    Formatter formatter(parser->getTokens(), options);
-    try {
-        return std::any_cast<std::string>(formatter.visit(parser->cst()));
-    } catch (const std::exception &) {
-        return std::nullopt;
-    }
-}
-
-// 计算文档末位位置（全量替换 edit 的 range 终点）
-static json documentEndPosition(const string &content) {
-    size_t line   = 0;
-    size_t lastNl = string::npos;
-    for (size_t i = 0; i < content.size(); ++i) {
-        if (content[i] == '\n') {
-            ++line;
-            lastNl = i;
-        }
-    }
-    size_t character = content.size() - (lastNl == string::npos ? 0 : lastNl + 1);
-    return positionJson(line, character);
+    std::stringstream buffer;
+    buffer << in.rdbuf();
+    text = buffer.str();
+    return true;
 }
 
 int main(int argc, char *argv[]) {
@@ -356,141 +72,63 @@ int main(int argc, char *argv[]) {
     (void)mm::metaSpace();
     (void)mm::permSpace();
 
-    // 目前唯一传输方式是 stdio；显式接受 --stdio 以便调用方稳定 spawn。
     for (int i = 1; i < argc; ++i) {
-        string arg = argv[i];
+        const std::string arg = argv[i];
         if (arg == "--stdio") {
-            continue;
+            continue; // the only transport
         }
-        cerr << "camel-ls: ignoring unknown argument: " << arg << "\n";
+        if ((arg == "--dump-model" || arg == "--time") && i + 1 < argc) {
+            camel::service::semantic::AnalysisOptions options;
+            options.path = argv[i + 1];
+            if (!readFile(options.path, options.text)) {
+                return 1;
+            }
+            if (arg == "--dump-model") {
+                std::cout << camel::service::semantic::analyze(options)->dump();
+                return 0;
+            }
+            // Three ways, several times (the first run also loads the modules): the whole
+            // model; the same compilation without a recorder, which is what `camel check`
+            // does; the syntactic index alone.
+            const auto timed = [&](bool compile, bool record) {
+                options.compile  = compile;
+                options.record   = record;
+                const auto start = std::chrono::steady_clock::now();
+                auto model       = camel::service::semantic::analyze(options);
+                return std::chrono::duration<double, std::milli>(
+                           std::chrono::steady_clock::now() - start)
+                    .count();
+            };
+            for (int run = 0; run < 7; ++run) {
+                const double model   = timed(true, true);
+                const double compile = timed(true, false);
+                const double syntax  = timed(false, false);
+                std::cout << "model " << model << " ms  compile-only " << compile
+                          << " ms  syntax-only " << syntax << " ms\n";
+            }
+            return 0;
+        }
+        std::cerr << "camel-ls: ignoring unknown argument: " << arg << "\n";
     }
 
-    bool shutdownReceived = false;
-    map<string, string> openDocuments;
-
-    istream &in  = cin;
-    ostream &out = cout;
-
-    while (true) {
-        string raw;
-        if (!readLspMessage(in, raw))
-            break;
-
-        json msg;
-        try {
-            msg = json::parse(raw);
-        } catch (...) {
-            continue;
+    std::error_code ec;
+    std::string executableDir;
+    if (argc > 0) {
+        auto self = std::filesystem::weakly_canonical(std::filesystem::path(argv[0]), ec);
+        if (!ec && self.has_parent_path() && std::filesystem::exists(self, ec)) {
+            executableDir = self.parent_path().string();
         }
-
-        string method = msg.value("method", "");
-        json id       = msg.contains("id") ? msg["id"] : json(nullptr);
-        json params   = msg.contains("params") ? msg["params"] : json::object();
-
-        // ---- 生命周期 ----
-        if (method == "initialize") {
-            json textDocumentSync         = json::object();
-            textDocumentSync["openClose"] = true;
-            textDocumentSync["change"]    = 1;
-            textDocumentSync["save"]      = json::object();
-
-            json diagnosticProvider                     = json::object();
-            diagnosticProvider["interFileDependencies"] = false;
-            diagnosticProvider["workspaceDiagnostics"]  = false;
-
-            json capabilities                          = json::object();
-            capabilities["textDocumentSync"]           = textDocumentSync;
-            capabilities["documentFormattingProvider"] = true;
-            capabilities["diagnosticProvider"]         = diagnosticProvider;
-
-            json serverInfo       = json::object();
-            serverInfo["name"]    = "camel-ls";
-            serverInfo["version"] = "0.2.0";
-
-            json result            = json::object();
-            result["capabilities"] = capabilities;
-            result["serverInfo"]   = serverInfo;
-            sendResponse(out, id, result, nullptr);
-            continue;
-        }
-        if (method == "initialized") {
-            continue;
-        }
-        if (method == "shutdown") {
-            shutdownReceived = true;
-            sendResponse(out, id, nullptr, nullptr);
-            continue;
-        }
-        if (method == "exit") {
-            break;
-        }
-
-        // ---- 文档同步 ----
-        // camel-ls 声明 diagnosticProvider，诊断统一走 pull（textDocument/diagnostic），
-        // 这里只维护文档缓存，不做 push，避免客户端侧重复。
-        if (method == "textDocument/didOpen") {
-            string uri         = params["textDocument"]["uri"];
-            string content     = params["textDocument"]["text"];
-            openDocuments[uri] = content;
-            continue;
-        }
-        if (method == "textDocument/didChange") {
-            string uri    = params["textDocument"]["uri"];
-            auto &changes = params["contentChanges"];
-            if (!changes.empty() && changes[0].contains("text")) {
-                openDocuments[uri] = changes[0]["text"];
-            }
-            continue;
-        }
-        if (method == "textDocument/didClose") {
-            string uri = params["textDocument"]["uri"];
-            openDocuments.erase(uri);
-            continue;
-        }
-
-        // ---- Pull 诊断 ----
-        if (method == "textDocument/diagnostic") {
-            string uri = params["textDocument"]["uri"];
-            json items;
-            auto it = openDocuments.find(uri);
-            if (it != openDocuments.end()) {
-                items = buildDiagnosticsArray(uri, it->second);
-            } else {
-                items = json::array();
-            }
-            json report;
-            report["kind"]  = "full";
-            report["items"] = items;
-            sendResponse(out, id, report, nullptr);
-            continue;
-        }
-
-        // ---- 格式化 ----
-        if (method == "textDocument/formatting") {
-            string uri = params["textDocument"]["uri"];
-            json edits = json::array();
-            auto it    = openDocuments.find(uri);
-            if (it != openDocuments.end()) {
-                auto formatted = formatSource(uriToPath(uri), it->second);
-                if (formatted.has_value()) {
-                    json edit     = json::object();
-                    edit["range"] = rangeJson(positionJson(0, 0), documentEndPosition(it->second));
-                    edit["newText"] = *formatted;
-                    edits.push_back(edit);
-                }
-            }
-            sendResponse(out, id, edits, nullptr);
-            continue;
-        }
-
-        // 未知方法：若是请求则回复方法未找到
-        if (!id.is_null()) {
-            json err;
-            err["code"]    = -32601;
-            err["message"] = "Method not found: " + method;
-            sendResponse(out, id, nullptr, err);
+    }
+    if (executableDir.empty()) {
+        if (const char *home = std::getenv("CAMEL_HOME")) {
+            executableDir = (std::filesystem::path(home) / "bin").string();
         }
     }
 
-    return shutdownReceived ? 0 : 1;
+    camel::ls::Transport transport(std::cin, std::cout);
+    camel::ls::Server server(transport, executableDir);
+    const int code = server.run();
+    // The reader thread may still be blocked in a read: leave without waiting for it.
+    std::cout.flush();
+    std::_Exit(code);
 }

@@ -727,6 +727,9 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     genericDrefs_.clear();
     instantiationDepth_   = 0;
     genericCalleeAllowed_ = false;
+    recorder_             = context_ ? context_->semanticRecorder() : nullptr;
+    declOrigins_.clear();
+    importedUseOrigins_.clear();
 
     nodeScope_      = node_scope_t::create();
     graphScope_     = graph_scope_t::create();
@@ -740,6 +743,7 @@ compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags
     currGraph_ = rootGraph_;
 
     try {
+        reportImportNameConflicts();
         visit(gct);
         reportIgnoredCapturedWrites();
         reportUndeclaredCapturedWrites();
@@ -999,14 +1003,9 @@ node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::strin
             auto origin        = (sourceContext && currGraph_)
                                      ? sourceContext->debugMap().graphOrigin(currGraph_->stableId())
                                      : camel::source::kInvalidOriginId;
-            diags_->of(SemanticDiag::GenericFunctionUnsupported)
+            diags_->of(SemanticDiag::ImportedFunctionUsesModuleValue)
                 .atOrigin(origin)
-                .commit(
-                    foreignInstanceOf_,
-                    std::format(
-                        "instantiated in another module while its body uses '{}', a value of "
-                        "the top level of its own module",
-                        name));
+                .commit(foreignInstanceOf_, name);
             throw BuildAbortException();
         }
     }
@@ -1089,7 +1088,67 @@ bool Builder::isPoisonedName(const std::string &name) const {
     return false;
 }
 
+namespace {
+// Reports that the name at `gct` stands for the functions `graphs`.
+void reportFunctionReference(
+    camel::compile::SemanticRecorder *recorder, const GCT::node_ptr_t &gct, const std::string &name,
+    const std::optional<graph_set_ptr_t> &graphs) {
+    std::vector<std::string> ids;
+    if (graphs.has_value() && *graphs) {
+        for (const auto &g : **graphs) {
+            if (g) {
+                ids.push_back(g->stableId());
+            }
+        }
+    }
+    recorder->functionReferenced(gct->load()->origin(), name, std::move(ids));
+}
+} // namespace
+
+void Builder::recordDeclaration(
+    const std::string &name, node_handle_t node, const GCT::node_ptr_t &decl) {
+    const auto origin                    = decl->load()->origin();
+    declOrigins_[nodeScope_.get()][name] = origin;
+    recorder_->valueDeclared(origin, name, valueTypeOf(nodeTypeOf(node)), isVariable(node));
+}
+
+camel::source::origin_id_t Builder::declarationOf(const std::string &name) const {
+    // A capture port is entered into the scopes between the reference and the declaration
+    // without a record: the first scope that has one is the scope of the declaration.
+    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
+        if (!scope->has(name, false)) {
+            continue;
+        }
+        if (auto it = declOrigins_.find(scope.get()); it != declOrigins_.end()) {
+            if (auto found = it->second.find(name); found != it->second.end()) {
+                return found->second;
+            }
+        }
+    }
+    return camel::source::kInvalidOriginId;
+}
+
+void Builder::recordResult(const GCT::node_ptr_t &gct, const std::any &res) {
+    if (res.type() != typeid(node_handle_t)) {
+        return;
+    }
+    node_handle_t node = any_cast<node_handle_t>(res);
+    if (node == nullptr || nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        return;
+    }
+    recorder_->expressionTyped(gct->load()->origin(), valueTypeOf(nodeTypeOf(node)));
+}
+
 any Builder::visit(const GCT::node_ptr_t &node) {
+    if (recorder_ == nullptr) [[likely]] {
+        return dispatch(node);
+    }
+    any res = dispatch(node);
+    recordResult(node, res);
+    return res;
+}
+
+any Builder::dispatch(const GCT::node_ptr_t &node) {
     switch (node->type()) {
     case GCT::LoadType::DECL:
         return visitDeclNode(node);
@@ -1208,6 +1267,9 @@ void Builder::buildFuncBody(
             if (i < funcType->withTypesCount() && funcType->withIsVarAt(i)) {
                 variables_.insert(port);
             }
+            if (recorder_) {
+                recordDeclaration(graph->nodePortName(port), port, gct);
+            }
         }
         const auto normPorts = graph->draft().normPorts();
         for (size_t i = 0; i < normPorts.size(); ++i) {
@@ -1216,12 +1278,18 @@ void Builder::buildFuncBody(
             if (i < funcType->normTypesCount() && funcType->normIsVarAt(i)) {
                 variables_.insert(port);
             }
+            if (recorder_) {
+                recordDeclaration(graph->nodePortName(port), port, gct);
+            }
         }
         bodyStates_[graph.get()] = BodyState::Open;
         setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
         bodyStates_[graph.get()] = BodyState::Built;
         builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
         builtBodies_.push_back(graph);
+        if (recorder_) {
+            recorder_->functionBuilt(gct->load()->origin(), name, graph->stableId(), funcType);
+        }
     } catch (const camel::core::mm::MemoryExhausted &e) {
         // Say which function was being compiled; the allocator does not know.
         bodyStates_[graph.get()] = BodyState::Built;
@@ -1310,6 +1378,27 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     const size_t withCount = signature->withTypesCount();
     const size_t normCount = signature->normTypesCount();
     if (withCount != withTypes.size()) {
+        // Every argument written in the parentheses (`take(xs, 2)`): say which parameters
+        // are with-parameters and how the call is written.
+        if (withTypes.empty() && normCount > 0 && withCount + normCount == normTypes.size() &&
+            signature->argNamesCount() >= withCount + normCount) {
+            const auto names = [&](size_t from, size_t count) {
+                std::string out;
+                for (size_t i = 0; i < count; ++i) {
+                    out += (i == 0 ? "" : ", ") + std::string(signature->argNameAt(from + i));
+                }
+                return out;
+            };
+            const std::string withs = names(0, withCount), norms = names(withCount, normCount);
+            reject(std::format(
+                "it takes '{}' in angle brackets, not in the parentheses: write {}<{}>({}){}",
+                withs,
+                tmpl->name,
+                withs,
+                norms,
+                normCount == 1 ? std::format(" or {}->{}<{}>", norms, tmpl->name, withs)
+                               : std::string()));
+        }
         reject(std::format(
             "it takes {} with-argument(s) and {} were given",
             withCount,
@@ -1694,10 +1783,14 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     declaresVariable_ = isVar;
     // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
-    bool success = insertNode(ident, isVar ? newVariable(node) : node);
+    node_handle_t bound = isVar ? newVariable(node) : node;
+    bool success        = insertNode(ident, bound);
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
         throw BuildAbortException();
+    }
+    if (recorder_ && !nodeIsKind(bound, runtime::GCNodeKind::Dref)) {
+        recordDeclaration(ident, bound, gct);
     }
     LEAVE("NREF");
     return node;
@@ -2098,6 +2191,13 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             node = resolveCrossGraphRef(node, name);
             ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
         }
+        if (recorder_ && !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+            recorder_->valueReferenced(
+                gct->load()->origin(),
+                name,
+                declarationOf(name),
+                valueTypeOf(nodeTypeOf(node)));
+        }
         LEAVE("DREF");
         return valueOf(node);
     }
@@ -2116,6 +2216,12 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
                 std::make_shared<graph_set_t>()});
         genericDrefs_[drefNode] = optTemplate.value();
         registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
+        if (recorder_) {
+            recorder_->genericReferenced(
+                gct->load()->origin(),
+                name,
+                optTemplate.value()->func->load()->origin());
+        }
         LEAVE("DREF");
         return drefNode;
     }
@@ -2129,6 +2235,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         node_handle_t drefNode = graph->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{optDecorated.value()});
         registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
+        if (recorder_) {
+            reportFunctionReference(recorder_, gct, name, graphsAt(name));
+        }
         LEAVE("DREF");
         return drefNode;
     }
@@ -2139,6 +2248,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+            if (recorder_) {
+                reportFunctionReference(recorder_, gct, name, graphs);
+            }
             LEAVE("DREF");
             return drefNode;
         }
@@ -2156,10 +2268,17 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         const auto &e = opt.value();
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
-            ASSERT(false, "Cannot import a data node directly.");
-            const auto node = asCompileNode(camel::core::module::detail::EntityAccess::node(e));
-            LEAVE("DREF");
-            return node;
+            // The node is on the root graph of the module that exports it, which is not a
+            // graph of this program (the roots of modules are not merged yet). Using it as a
+            // node of the current graph crashed the compiler.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .atOrigin(gct->load()->origin())
+                .commit(
+                    name,
+                    "a value exported by another module cannot be used yet; only functions, "
+                    "operators and types can be imported. Export a function without parameters "
+                    "that returns the value");
+            throw BuildAbortException();
         } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(e)) {
             // A generic function of another module: like a local one it can only be called;
             // the call builds the instance in this module (instantiateGeneric).
@@ -2179,9 +2298,15 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isGraphSet(e)) {
             auto graphs = asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(e));
+            for (const auto &imported : *graphs) {
+                importedUseOrigins_[imported.get()] = gct->load()->origin();
+            }
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+            if (recorder_) {
+                reportFunctionReference(recorder_, gct, name, graphs);
+            }
             LEAVE("DREF");
             return drefNode;
         } else if (e.isOperGroup()) {
@@ -2189,13 +2314,24 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{ops})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+            if (recorder_) {
+                std::vector<std::string> signatures;
+                for (const auto &[uri, resolver] : ops->resolvers()) {
+                    signatures.push_back(resolver->signature());
+                }
+                recorder_->operatorReferenced(gct->load()->origin(), name, std::move(signatures));
+            }
             LEAVE("DREF");
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isDecoratedGraph(e)) {
             auto decorated = camel::core::module::detail::EntityAccess::decoratedGraph(e);
+            importedUseOrigins_[decorated.get()] = gct->load()->origin();
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{decorated})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
+            if (recorder_) {
+                recorder_->functionReferenced(gct->load()->origin(), name, {});
+            }
             LEAVE("DREF");
             return drefNode;
         }
@@ -2229,6 +2365,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 converted = data->convertTo(targetType);
             }
             if (!converted) {
+                if (const std::string limits = literalRangeViolation(data, targetType);
+                    !limits.empty()) {
+                    diags_->of(SemanticDiag::LiteralOutOfRange)
+                        .atOrigin(gct->load()->origin())
+                        .commit(literalValueText(data), targetType->toString(), limits);
+                    throw BuildAbortException();
+                }
                 diags_->of(SemanticDiag::LiteralStaticCastFailed)
                     .atOrigin(gct->load()->origin())
                     .commit(data->toString(), targetType->toString());
@@ -2264,6 +2407,12 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             if (data_ptr_t converted = data->convertTo(payload)) {
                 valueNode = currGraph_->addStaticDataNode(converted);
                 registerNodeOrigin(context_, valueNode, gct->at(0), "gir.data");
+            } else if (const std::string limits = literalRangeViolation(data, payload);
+                       !limits.empty()) {
+                diags_->of(SemanticDiag::LiteralOutOfRange)
+                    .atOrigin(gct->load()->origin())
+                    .commit(literalValueText(data), payload->toString(), limits);
+                throw BuildAbortException();
             }
         }
     }
@@ -2385,7 +2534,158 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
             return createFuncDataNode(graphs->front(), true, false);
         }
     }
+    if (std::holds_alternative<oper_group_ptr_t>(target)) {
+        // A library operator with one signature that does not depend on its arguments
+        // (`trim: (s: string) => string`) is one function, like a user function of that
+        // name: its value is a function that calls it.
+        const auto &ops = std::get<oper_group_ptr_t>(target);
+        if (ops->resolvers().size() == 1) {
+            const auto &[uri, resolver] = ops->resolvers().front();
+            if (auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver)) {
+                auto op = std::make_shared<OperatorIndex>(ops->name(), fixed->funcType(), uri);
+                if (compile_graph_ptr_t graph = operatorValueGraphOf(op, origin)) {
+                    return createFuncDataNode(graph, true, false);
+                }
+            }
+        }
+    }
     return node;
+}
+
+compile_graph_ptr_t
+Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin) {
+    FunctionType *opType = op->funcType();
+    if (opType == nullptr || !opType->hasExitType()) {
+        return nullptr;
+    }
+    for (size_t i = 0; i < opType->withTypesCount(); ++i) {
+        if (opType->withIsVarAt(i)) {
+            return nullptr;
+        }
+    }
+    for (size_t i = 0; i < opType->normTypesCount(); ++i) {
+        if (opType->normIsVarAt(i)) {
+            return nullptr;
+        }
+    }
+    // One per place that names the operator: the function is built where it is used.
+    const std::string key = std::format(
+        "{}|{}|{}",
+        static_cast<const void *>(currGraph_.get()),
+        op->uri(),
+        opType->toString());
+    if (auto known = operatorValueGraphs_.find(key); known != operatorValueGraphs_.end()) {
+        return known->second;
+    }
+    // Its own type object (a graph completes its function type in place).
+    FunctionTypeFactory factory;
+    factory.setModifiers(opType->modifiers());
+    factory.setExitType(opType->exitType());
+    const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
+        return argIndex < opType->argNamesCount() && !opType->argNameAt(argIndex).empty()
+                   ? std::string(opType->argNameAt(argIndex))
+                   : std::format("{}{}", prefix, i);
+    };
+    for (size_t i = 0; i < opType->withTypesCount(); ++i) {
+        factory.addWithArg(nameAt(i, "__w", i), opType->withTypeAt(i), false);
+    }
+    for (size_t i = 0; i < opType->normTypesCount(); ++i) {
+        factory.addNormArg(
+            nameAt(opType->withTypesCount() + i, "__n", i),
+            opType->normTypeAt(i),
+            false);
+    }
+    FunctionType *type = factory.build();
+
+    compile_graph_ptr_t graph = enterScope(type);
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        node_handle_t call       = graph->addOperNode(op, 0);
+        if (opType->modifiers().macro()) {
+            setNodeMacro(call, true);
+        }
+        registerNodeOrigin(context_, call, origin, "gir.link.oper");
+        for (draft_node_ref_t port : graph->draft().withPorts()) {
+            linkNodes(LinkType::With, graph->draft().node(port), call);
+        }
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            linkNodes(LinkType::Norm, graph->draft().node(port), call);
+        }
+        setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
+        bodyStates_[graph.get()] = BodyState::Built;
+        builtBodies_.push_back(graph);
+    } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    operatorValueGraphs_[key] = graph;
+    return graph;
+}
+
+node_handle_t Builder::overloadValueFor(
+    node_handle_t node, FunctionType *expected, const GCT::node_ptr_t &origin) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Dref) || expected == nullptr ||
+        !expected->hasExitType()) {
+        return nullptr;
+    }
+    const type_vec_t withTypes(expected->withTypesSpan().begin(), expected->withTypesSpan().end());
+    const type_vec_t normTypes(expected->normTypesSpan().begin(), expected->normTypesSpan().end());
+    const auto &target = nodeGraphOf(node)->drefTarget(node);
+    if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+        auto graphs = asCompileGraphVec(target);
+        compile_graph_ptr_t chosen;
+        if (!graphs) {
+            return nullptr;
+        }
+        for (const auto &g : *graphs) {
+            FunctionType *type = g->funcType();
+            if (decoratedOf_.contains(g.get()) || !type->hasExitType() ||
+                type->withTypesCount() != withTypes.size() ||
+                type->normTypesCount() != normTypes.size() ||
+                !type->exitType()->equals(expected->exitType())) {
+                continue;
+            }
+            bool same = true;
+            for (size_t i = 0; same && i < withTypes.size(); ++i) {
+                same = type->withTypeAt(i)->equals(withTypes[i]) && !type->withIsVarAt(i);
+            }
+            for (size_t i = 0; same && i < normTypes.size(); ++i) {
+                same = type->normTypeAt(i)->equals(normTypes[i]) &&
+                       type->normIsVarAt(i) == expected->normIsVarAt(i);
+            }
+            if (!same) {
+                continue;
+            }
+            if (chosen) {
+                return nullptr;
+            }
+            chosen = g;
+        }
+        return chosen ? createFuncDataNode(chosen, true, false) : nullptr;
+    }
+    if (std::holds_alternative<oper_group_ptr_t>(target)) {
+        const auto &ops = std::get<oper_group_ptr_t>(target);
+        oper_idx_ptr_t chosen;
+        for (const auto &[uri, resolver] : ops->resolvers()) {
+            auto type = resolver->resolve(withTypes, normTypes, Modifier::None);
+            if (!type || !(*type)->hasExitType() ||
+                !(*type)->exitType()->equals(expected->exitType())) {
+                continue;
+            }
+            if (chosen) {
+                return nullptr;
+            }
+            chosen = std::make_shared<OperatorIndex>(ops->name(), *type, uri);
+        }
+        if (chosen) {
+            if (compile_graph_ptr_t graph = operatorValueGraphOf(chosen, origin)) {
+                return createFuncDataNode(graph, true, false);
+            }
+        }
+    }
+    return nullptr;
 }
 
 void Builder::rejectNameWithoutValue(
@@ -2398,10 +2698,180 @@ void Builder::rejectNameWithoutValue(
     if (std::holds_alternative<graph_vec_ptr_t>(target)) {
         auto graphs = asCompileGraphVec(target);
         what        = std::format("{} functions of that name", graphs ? graphs->size() : 0);
+        if (graphs && !graphs->empty()) {
+            what += " [" + strutil::join(*graphs, "; ", [](const graph_ptr_t &g) {
+                return g->funcType()->toString();
+            }) + "]";
+        }
+    } else if (std::holds_alternative<oper_group_ptr_t>(target)) {
+        // The candidates, so that the reader can write the wrapper the message asks for.
+        const auto &ops         = std::get<oper_group_ptr_t>(target);
+        const std::string sigs = strutil::join(
+            ops->resolvers(),
+            "; ",
+            [](const std::pair<std::string, resolver_ptr_t> &p) { return p.second->signature(); });
+        if (ops->resolvers().size() == 1) {
+            const bool fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(
+                                   ops->resolvers().front().second) != nullptr;
+            what = fixed ? std::format(
+                               "an operator that changes its argument in place [{}]",
+                               sigs)
+                         : std::format(
+                               "an operator whose signature depends on its arguments [{}]",
+                               sigs);
+        } else {
+            what = std::format(
+                "an operator with {} signatures [{}]",
+                ops->resolvers().size(),
+                sigs);
+        }
     }
     diags_->of(SemanticDiag::FunctionNameAsValue)
         .atOrigin(origin->load()->origin())
         .commit(name, what);
+    throw BuildAbortException();
+}
+
+void Builder::reportImportNameConflicts() {
+    // Two imports by name that bring functions of the same name and the same parameter types
+    // (design principles 2.10): the call used to take the function of the import written
+    // first, silently. Functions of different parameter types form a set of overloads, as
+    // before; whether that stays is undecided.
+    if (!module_) {
+        return;
+    }
+    const auto sameSignature = [](FunctionType *a, FunctionType *b) {
+        if (!a || !b || a->withTypesCount() != b->withTypesCount() ||
+            a->normTypesCount() != b->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < a->withTypesCount(); ++i) {
+            if (!a->withTypeAt(i)->equals(b->withTypeAt(i))) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < a->normTypesCount(); ++i) {
+            if (!a->normTypeAt(i)->equals(b->normTypeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const auto signatureOf = [](FunctionType *type) {
+        std::string text;
+        if (type->withTypesCount() > 0) {
+            text += "<";
+            for (size_t i = 0; i < type->withTypesCount(); ++i) {
+                text += (i ? ", " : "") + type->withTypeAt(i)->toString();
+            }
+            text += "> ";
+        }
+        text += "(";
+        for (size_t i = 0; i < type->normTypesCount(); ++i) {
+            text += (i ? ", " : "") + type->normTypeAt(i)->toString();
+        }
+        return text + ")";
+    };
+    bool found = false;
+    for (const auto &[ref, imports] : module_->namesImportedMoreThanOnce()) {
+        for (size_t later = 1; later < imports.size(); ++later) {
+            bool reported = false;
+            for (size_t earlier = 0; earlier < later && !reported; ++earlier) {
+                const auto first  = imports[earlier].mod->getExportedEntity(ref);
+                const auto second = imports[later].mod->getExportedEntity(ref);
+                if (!first || !second ||
+                    !camel::core::module::detail::EntityAccess::isGraphSet(*first) ||
+                    !camel::core::module::detail::EntityAccess::isGraphSet(*second)) {
+                    continue;
+                }
+                const auto firstSet =
+                    asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(*first));
+                const auto secondSet =
+                    asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(*second));
+                for (const auto &f : *firstSet) {
+                    for (const auto &g : *secondSet) {
+                        if (reported || f == g || !sameSignature(f->funcType(), g->funcType())) {
+                            continue;
+                        }
+                        auto diag = diags_->of(SemanticDiag::ImportNameConflict);
+                        const auto &here  = imports[later];
+                        const auto &there = imports[earlier];
+                        if (here.origin != camel::source::kInvalidOriginId) {
+                            diag.atOrigin(here.origin);
+                        } else {
+                            diag.at(TokenRange{here.tokenStart, here.tokenEnd});
+                        }
+                        if (there.origin != camel::source::kInvalidOriginId) {
+                            diag.relatedOrigin(there.origin, "also imported here");
+                        } else {
+                            diag.related(
+                                TokenRange{there.tokenStart, there.tokenEnd},
+                                "also imported here");
+                        }
+                        diag.commit(
+                                ref.toString(),
+                                imports[earlier].mod->name(),
+                                imports[later].mod->name(),
+                                signatureOf(f->funcType()));
+                        reported = true;
+                        found    = true;
+                    }
+                }
+            }
+        }
+    }
+    if (found) {
+        throw BuildAbortException();
+    }
+}
+
+void Builder::rejectImportedFunctionWithCaptures(const compile_graph_ptr_t &graph) {
+    // A function of the top level of another module that captures: what it captures are values
+    // of the top level of its own module. A capture is bound by name where the function is
+    // used, so here the name would be looked up in this module: not found, or, worse, found as
+    // a value of this module that happens to have the name (the program then silently computed
+    // with the wrong value). Until the roots of modules are merged this is refused.
+    compile_graph_ptr_t home = graph;
+    while (home->outerGraph()) {
+        home = home->outerGraph();
+    }
+    if (!rootGraph_ || home == rootGraph_ || home == graph) {
+        return;
+    }
+    std::vector<std::string> names = closureRefNames(graph);
+    if (graph->funcType()) {
+        for (const auto &ref : graph->funcType()->closureRefs()) {
+            if (std::find(names.begin(), names.end(), ref) == names.end()) {
+                names.emplace_back(ref);
+            }
+        }
+    }
+    if (names.empty()) {
+        return;
+    }
+    std::string list;
+    for (const auto &captured : names) {
+        list += (list.empty() ? "" : "', '") + captured;
+    }
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    auto declOrigin    = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
+                                       : camel::source::kInvalidOriginId;
+    camel::source::origin_id_t useOrigin = camel::source::kInvalidOriginId;
+    if (auto it = importedUseOrigins_.find(graph.get()); it != importedUseOrigins_.end()) {
+        useOrigin = it->second;
+    } else if (sourceContext && currGraph_) {
+        useOrigin = sourceContext->debugMap().graphOrigin(currGraph_->stableId());
+    }
+    if (declOrigin == camel::source::kInvalidOriginId) {
+        std::swap(declOrigin, useOrigin);
+    }
+    const size_t diagsBefore = diags_->count();
+    diags_->of(SemanticDiag::ImportedFunctionUsesModuleValue)
+        .atOrigin(declOrigin)
+        .relatedOrigin(useOrigin, "used from another module here")
+        .commit(graph->name(), list);
+    // The declaration is in the other module's file.
+    diags_->locateByOriginFrom(diagsBefore);
     throw BuildAbortException();
 }
 
@@ -2412,6 +2882,8 @@ node_handle_t Builder::createFuncDataNode(
         "Cannot enable both callableAsResult and allowParameterization options.");
     ASSERT(currGraph_ != nullptr, "Current owner graph is null when creating a function node.");
     ASSERT(graph != nullptr, "Target graph is null when creating a function node.");
+
+    rejectImportedFunctionWithCaptures(graph);
 
     // Centralize dependency bookkeeping here so every FUNC node and static Function value obeys
     // the same graph-reference invariant. Self-dependency is intentional: recursive graphs are
@@ -2740,6 +3212,41 @@ StaticArg Builder::staticArgOf(node_handle_t node) const {
     return arg;
 }
 
+// The part of a "no matching function" message for a call that wrote every argument in the
+// parentheses although `name` takes all but the first `normCount` in angle brackets: the
+// standard library's convention is that the value worked on is an ordinary argument and what
+// configures the operation a with-argument (design principles 2.10). Names the misplaced
+// arguments and gives the call as it should be written.
+std::string Builder::withArgumentsHint(
+    const std::string &name, const std::vector<Argument> &arguments, size_t normCount) const {
+    std::vector<std::string> texts;
+    texts.reserve(arguments.size());
+    for (size_t i = 0; i < arguments.size(); ++i) {
+        std::string text = sourceTextOf(arguments[i].expr);
+        texts.push_back(text.empty() ? std::format("arg{}", i + 1) : std::move(text));
+    }
+    const auto joined = [&](size_t from, size_t to) {
+        std::string out;
+        for (size_t i = from; i < to; ++i) {
+            out += (i == from ? "" : ", ") + texts[i];
+        }
+        return out;
+    };
+    const std::string withs = joined(normCount, texts.size());
+    const std::string norms = joined(0, normCount);
+    std::string hint        = std::format(
+        "; '{}' takes {} in angle brackets, not in the parentheses: write {}<{}>({})",
+        name,
+        "'" + withs + "'",
+        name,
+        withs,
+        norms);
+    if (normCount == 1) {
+        hint += std::format(" or {}->{}<{}>", norms, name, withs);
+    }
+    return hint;
+}
+
 std::string Builder::sourceTextOf(const GCT::node_ptr_t &expr) const {
     const auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr;
     if (sourceContext == nullptr || expr == nullptr) {
@@ -2838,6 +3345,13 @@ node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node
         const std::string name = expr->loadAs<GCT::DRefLoad>()->ref().toString();
         if (nodeAt(name).has_value()) {
             if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                if (recorder_) {
+                    recorder_->valueReferenced(
+                        expr->load()->origin(),
+                        name,
+                        declarationOf(name),
+                        valueTypeOf(nodeTypeOf(node)));
+                }
                 return node;
             }
         }
@@ -2877,10 +3391,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             gct->at(0)->type() == GCT::LoadType::WITH;
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
-    ASSERT(
-        targetNodeRes.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of LINK node.");
-    node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
+    // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
+    // `v ?-> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
+    // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
+    node_handle_t targetNode = valueNodeOf(targetNodeRes);
 
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
@@ -2937,6 +3451,72 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputs.push_back({location, gct});
             normInputTypes.push_back(Type::String());
         }
+    }
+
+    // An argument that is still a name without a single function value (several overloads, or
+    // an operator whose signature is not one function type). Where the callee has one known
+    // signature and its parameter there is a function type, the overload with exactly that
+    // type is the argument. Anywhere else the name has no value: it used to be passed on as
+    // a value of type void, which ended in "No matching function ... <void>" or, when the
+    // callee takes anything (`println(println)`), in an internal error about a live DREF.
+    {
+        FunctionType *knownCalleeType = nullptr;
+        if (!genericDrefs_.contains(targetNode)) {
+            if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+                const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
+                if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
+                    auto graphs = asCompileGraphVec(drefTarget);
+                    if (graphs && graphs->size() == 1 &&
+                        !decoratedOf_.contains(graphs->front().get())) {
+                        knownCalleeType = graphs->front()->funcType();
+                    }
+                }
+            } else if (Type *type = nodeTypeOf(targetNode);
+                       type != nullptr && type->code() == TypeCode::Function) {
+                knownCalleeType = tt::as_ptr<FunctionType>(type);
+            }
+        }
+        const auto nameOf = [](const GCT::node_ptr_t &expr) -> std::string {
+            GCT::node_ptr_t at = expr;
+            while (at && at->type() == GCT::LoadType::WITH && at->size() > 0) {
+                at = at->at(0);
+            }
+            return at && at->type() == GCT::LoadType::DREF
+                       ? at->loadAs<GCT::DRefLoad>()->ref().toString()
+                       : std::string("the name");
+        };
+        const auto settle = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                node_handle_t node = inputs[i].node;
+                if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref) ||
+                    genericDrefs_.contains(node)) {
+                    continue;
+                }
+                Type *expected = nullptr;
+                if (knownCalleeType != nullptr) {
+                    const size_t count = with ? knownCalleeType->withTypesCount()
+                                              : knownCalleeType->normTypesCount();
+                    if (i < count) {
+                        expected = with ? knownCalleeType->withTypeAt(i)
+                                        : knownCalleeType->normTypeAt(i);
+                    }
+                }
+                node_handle_t chosen{};
+                if (expected != nullptr && expected->code() == TypeCode::Function) {
+                    chosen = overloadValueFor(
+                        node,
+                        tt::as_ptr<FunctionType>(expected),
+                        inputs[i].expr);
+                }
+                if (chosen == nullptr) {
+                    rejectNameWithoutValue(node, nameOf(inputs[i].expr), inputs[i].expr);
+                }
+                inputs[i].node = chosen;
+                types[i]       = valueTypeOf(nodeTypeOf(chosen));
+            }
+        };
+        settle(withInputs, withInputTypes, true);
+        settle(normInputs, normInputTypes, false);
     }
 
     // A call of a decorated function calls the function its decorators returned, so the
@@ -3039,6 +3619,27 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     "<{}> ({})",
                     strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
                     strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
+                // Every argument written in the parentheses of a function that takes some of
+                // them in angle brackets: say which, and how the call is written.
+                if (withInputTypes.empty()) {
+                    for (const auto &g : *graphs) {
+                        FunctionType *type     = signatureOf(g);
+                        const size_t normCount = type->normTypesCount();
+                        const size_t withCount = type->withTypesCount();
+                        bool fits = withCount > 0 && normCount > 0 &&
+                                    withCount + normCount == normInputTypes.size();
+                        for (size_t i = 0; fits && i < normInputTypes.size(); ++i) {
+                            Type *param = i < normCount ? type->normTypeAt(i)
+                                                        : type->withTypeAt(i - normCount);
+                            fits = containsTypeVar(param) || param->equals(normInputTypes[i]) ||
+                                   param->assignableFrom(normInputTypes[i]);
+                        }
+                        if (fits) {
+                            argTypesStr += withArgumentsHint(g->name(), normInputs, normCount);
+                            break;
+                        }
+                    }
+                }
                 std::string overloadsStr =
                     "\n    " +
                     strutil::join(
@@ -3101,6 +3702,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     argTypesStr += std::format(
                         "; operator '{}' is not defined for these operand types",
                         symbol);
+                }
+                // Every argument written in the parentheses of an operator that takes some of
+                // them in angle brackets (`split('a,b', ',')`, `put(m, k, v)`): if the call
+                // resolves with the trailing arguments moved there, say so.
+                if (withInputTypes.empty() && operatorSymbolOf(ops->name()) == nullptr) {
+                    for (size_t normCount = 1; normCount < normInputTypes.size(); ++normCount) {
+                        const type_vec_t asNorm(
+                            normInputTypes.begin(),
+                            normInputTypes.begin() + static_cast<std::ptrdiff_t>(normCount));
+                        const type_vec_t asWith(
+                            normInputTypes.begin() + static_cast<std::ptrdiff_t>(normCount),
+                            normInputTypes.end());
+                        const std::vector<StaticArg> statics(
+                            normStatics.begin(),
+                            normStatics.begin() + static_cast<std::ptrdiff_t>(normCount));
+                        if (ops->resolve(asWith, asNorm, statics, Modifier::None).has_value()) {
+                            argTypesStr += withArgumentsHint(ops->name(), normInputs, normCount);
+                            break;
+                        }
+                    }
                 }
                 std::string overloadsStr =
                     "\n    " +
@@ -3232,6 +3853,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
 
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
+    if (recorder_) {
+        recorder_->callResolved(
+            gct->load()->origin(),
+            gct->at(0)->load()->origin(),
+            targetGraph ? targetGraph->stableId() : std::string(),
+            targetOperator ? targetOperator->uri() : std::string(),
+            targetFuncType);
+    }
     // A direct call is located at the call expression, not at the callee's definition.
     if (targetGraph && targetNode && targetNode->header.kind == camel::runtime::GCNodeKind::Func) {
         registerNodeOrigin(context_, targetNode, gct, "gir.link.func");
@@ -3359,10 +3988,8 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                             gct->at(0)->type() == GCT::LoadType::DREF;
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
-    ASSERT(
-        targetNodeRes.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of WITH node.");
-    node_handle_t targetNode = any_cast<node_handle_t>(targetNodeRes);
+    // As in visitLinkNode: a lambda written in place gives its graph.
+    node_handle_t targetNode = valueNodeOf(targetNodeRes);
     vector<Argument> inputs;
     for (size_t i = 1; i < gct->size(); i++) {
         inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
@@ -3838,6 +4465,9 @@ node_handle_t Builder::buildBranch(
         {});
 
     Type *joinType = nullptr;
+    // The arm being added is the one an `if` without `else` has in its place.
+    bool absentElse = false;
+    bool ifArmSeen  = false;
 
     linkNodes(LinkType::Norm, condNode, brchNode);
     std::vector<runtime::GCBranchArm> branchArms;
@@ -3893,6 +4523,17 @@ node_handle_t Builder::buildBranch(
                 joinType = unified;
                 setNodeType(joinNode, joinType);
             }
+            if (unified == nullptr && absentElse) {
+                // `if c then println('x')`: without `else` the `if` gives nothing when the
+                // condition is false, and the arm gives a value. The message used to be
+                // "expected 'string', found 'void'", with types the program does not show.
+                diags_->of(SemanticDiag::IfArmValueWithoutElse)
+                    .atOrigin(gct->load()->origin())
+                    .commit(
+                        joinType->toString(),
+                        currGraph_->name() + ": " + currGraph_->funcType()->toString());
+                throw BuildAbortException();
+            }
             if (unified == nullptr) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
                     .atOrigin(gct->load()->origin())
@@ -3923,11 +4564,13 @@ node_handle_t Builder::buildBranch(
             case GCT::CaseLoad::CaseType::True:
                 ASSERT(caseNode->size() == 1, "True case should have only one child.");
                 caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                ifArmSeen    = true;
                 break;
             case GCT::CaseLoad::CaseType::Else:
                 ASSERT(i == gct->size() - 1, "Else case should be the last case.");
                 ASSERT(caseNode->size() == 1, "Else case should have only one child.");
                 caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                absentElse   = ifArmSeen && caseExecNode->size() == 0;
                 break;
             case GCT::CaseLoad::CaseType::Value: {
                 ASSERT(caseNode->size() == 2, "Value case should have two children.");

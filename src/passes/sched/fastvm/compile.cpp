@@ -18,6 +18,7 @@
  */
 
 #include "compile.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
@@ -506,6 +507,8 @@ static bytecode_vec_t compileRuntimeGraph(
                     markOp = MarkOpCode::FilterArr;
                 } else if (uri == ":mark/foreach_arr" || uri == ":mark/unordered_foreach_arr") {
                     markOp = MarkOpCode::ForeachArr;
+                } else if (camel::execute::isFaultIsolationUri(uri)) {
+                    markOp = MarkOpCode::Isolate;
                 } else {
                     ctx->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
                     break;

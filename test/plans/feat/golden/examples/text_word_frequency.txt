@@ -1,0 +1,7 @@
+lines: 3 words: 19
+distinct: 9
+{and: 1, dog: 3, fox: 3, lazy: 1, quick: 1, runs: 1, sees: 2, sleeps: 1, the: 6}
+top 3:
+  the    6
+  dog    3
+  fox    3

@@ -209,7 +209,8 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
   - `camel-cpp`：`.cml` → C++ 转译并自动编译，产物到 `tmp/`
   - `format`：代码格式化工具 `camel-format`
   - `codegen`：从 AST 生成代码 `camel-codegen`
-  - `profiler`：性能分析工具 `camel-profiler`
+  - `profiler`：性能分析工具 `camel-pr`
+  - `lang-server`：语言服务器 `camel-ls`（见 3.7）
 
 构建产物位于 `build/tools/<tool>/<Config>/`，`camel` 可执行文件会复制到项目根目录。
 
@@ -236,6 +237,19 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
    ```
 
 5. CMake 编译选项（FastVM JIT、computed goto、Python 嵌入模块等）与 `CAMEL_SKIP_PYTHON` 环境变量说明，见 [编译选项说明](build-options.cn.md)。
+
+### 3.7 编辑器支持
+
+构建还会产出语言服务器 `camel-ls`（`out/latest/bin/camel-ls`）。带语法高亮和服务器客户端的 VS Code 扩展位于 `editors/vscode`：
+
+```bash
+cd editors/vscode
+npm install
+npm run package
+code --install-extension camel-lang-0.1.0.vsix
+```
+
+服务器支持的功能、扩展的命令与设置项，以及 Neovim、Emacs、Helix 的配置，见[编辑器支持](editor-support.cn.md)。
 
 ---
 

@@ -53,6 +53,16 @@ slot_t __builtin__assn_pow_i__(ArgsView &with, ArgsView &norm, camel::core::cont
 slot_t __builtin__assn_pow_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_pow_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+/// Equality of two values of one type by content (design principles 2.10): arrays, tuples and
+/// structs element by element, recursively; `T?` / `T!` by their tag and then their content;
+/// maps and sets by their entries; floats as numbers (a NaN equals nothing, itself included);
+/// strings by their bytes. `type` is the static type of both.
+bool valuesEqualByContent(slot_t a, slot_t b, const camel::core::type::Type *type);
+/// Whether `==` / `!=` are defined for two values of `type`: every part must itself be
+/// comparable. A function value, a tensor or another module type, `any` and a variable cell
+/// are not.
+bool isContentComparable(const camel::core::type::Type *type);
+
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_or__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 

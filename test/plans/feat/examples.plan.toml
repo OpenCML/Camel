@@ -1,0 +1,227 @@
+id = "examples"
+order = 910
+tier = "feat"
+tags = ["feat", "examples"]
+desc = "Every program of examples/ runs as its header says and prints the recorded output, on the four back ends"
+
+# One entry per program under examples/ (examples/perf prints timings and examples/tty is
+# interactive: neither is run here). Each entry runs on std::nvm, std::fvm, std::jit and
+# std::prl; the four agree on exit code and standard output, and the output is the golden
+# file's. The entries at the end run the other command lines the headers give.
+#
+# The programs under examples/files and examples/ml, and examples/text/log_filter.cml, write to
+# tmp/examples (not tracked).
+# After an intended change of an example's output:
+#   node test/tools/run-tests.mjs --update-golden test/plans/feat/examples.plan.toml
+
+[defaults]
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "error[", "warning[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000
+
+[[tests]]
+name = "examples.algorithms.binary_search"
+desc = "Binary search by tail recursion with an int? result, next to array.index_of."
+case = "../../../examples/algorithms/binary_search.cml"
+golden = "golden/examples/algorithms_binary_search.txt"
+
+[[tests]]
+name = "examples.algorithms.merge_sort"
+desc = "Merge sort by recursion, compared with algo.sorted and array.sort_by."
+case = "../../../examples/algorithms/merge_sort.cml"
+golden = "golden/examples/algorithms_merge_sort.txt"
+
+[[tests]]
+name = "examples.cli.exit_status"
+desc = "main's int result is the exit code: usage over the limit exits with 1."
+case = "../../../examples/cli/exit_status.cml"
+golden = "golden/examples/cli_exit_status.txt"
+args = ["${case}", "--arg", "used=91", "--arg", "limit=80", "${backend}"]
+expect_exit = 1
+
+[[tests]]
+name = "examples.cli.temperature"
+desc = "Parameters of main bound with --arg; a table of converted temperatures."
+case = "../../../examples/cli/temperature.cml"
+golden = "golden/examples/cli_temperature.txt"
+args = ["${case}", "--arg", "value=21.5", "--arg", "unit=C", "--arg", "steps=3", "${backend}"]
+
+[[tests]]
+name = "examples.data.dedup_sets"
+desc = "array.unique and Set<T>: removing duplicates, union, intersection, difference."
+case = "../../../examples/data/dedup_sets.cml"
+golden = "golden/examples/data_dedup_sets.txt"
+
+[[tests]]
+name = "examples.data.json_roundtrip"
+desc = "json::encode and json::decode_as, with rejected input as an error value."
+case = "../../../examples/data/json_roundtrip.cml"
+golden = "golden/examples/data_json_roundtrip.txt"
+
+[[tests]]
+name = "examples.data.nullable_lookup"
+desc = "T? results of array.find, array.index_of and Map lookups, `??` and match on null."
+case = "../../../examples/data/nullable_lookup.cml"
+golden = "golden/examples/data_nullable_lookup.txt"
+
+[[tests]]
+name = "examples.data.records"
+desc = "filter, map, sort_by, sum and a Map of totals over an array of structs."
+case = "../../../examples/data/records.cml"
+golden = "golden/examples/data_records.txt"
+
+[[tests]]
+name = "examples.data.validate_input"
+desc = "T! results chained with `?->`, `!!` and match on error."
+case = "../../../examples/data/validate_input.cml"
+golden = "golden/examples/data_validate_input.txt"
+
+[[tests]]
+name = "examples.files.json_config"
+desc = "A JSON settings file written, read into a struct, with defaults on failure."
+case = "../../../examples/files/json_config.cml"
+golden = "golden/examples/files_json_config.txt"
+
+[[tests]]
+name = "examples.files.read_write"
+desc = "A text file written, read back and split into lines; a missing file handled through string!."
+case = "../../../examples/files/read_write.cml"
+golden = "golden/examples/files_read_write.txt"
+
+[[tests]]
+name = "examples.functions.closures"
+desc = "Closures, composition, with parameters and a counter with its own state."
+case = "../../../examples/functions/closures.cml"
+golden = "golden/examples/functions_closures.txt"
+
+[[tests]]
+name = "examples.functions.generic_helpers"
+desc = "Generic functions with `typeas`, built on the generic functions of array."
+case = "../../../examples/functions/generic_helpers.cml"
+golden = "golden/examples/functions_generic_helpers.txt"
+
+[[tests]]
+name = "examples.ml.export_onnx"
+desc = "A two-layer model run and exported with onnx.export_model."
+case = "../../../examples/ml/export_onnx.cml"
+golden = "golden/examples/ml_export_onnx.txt"
+
+[[tests]]
+name = "examples.ml.train_linear"
+desc = "Gradient descent on a linear model with autodiff.grad and nn.sgd."
+case = "../../../examples/ml/train_linear.cml"
+golden = "golden/examples/ml_train_linear.txt"
+
+[[tests]]
+name = "examples.numeric.monte_carlo_pi"
+desc = "Seeded Monte Carlo estimates of pi and their statistics, min, max and distance from math.pi."
+case = "../../../examples/numeric/monte_carlo_pi.cml"
+golden = "golden/examples/numeric_monte_carlo_pi.txt"
+
+[[tests]]
+name = "examples.numeric.ode_euler"
+desc = "Euler integration as a tail recursion of up to one million steps."
+case = "../../../examples/numeric/ode_euler.cml"
+golden = "golden/examples/numeric_ode_euler.txt"
+
+[[tests]]
+name = "examples.numeric.random_walk"
+desc = "Seeded random walks made one after another by tail recursion; distances with math.abs."
+case = "../../../examples/numeric/random_walk.cml"
+golden = "golden/examples/numeric_random_walk.txt"
+
+[[tests]]
+name = "examples.parallel.parallel_map"
+desc = "The same map on the sequential back ends and on std::prl."
+case = "../../../examples/parallel/parallel_map.cml"
+golden = "golden/examples/parallel_parallel_map.txt"
+
+[[tests]]
+name = "examples.text.csv_parse"
+desc = "CSV lines split and trimmed into fields; a bad line is an error value reported by line number."
+case = "../../../examples/text/csv_parse.cml"
+golden = "golden/examples/text_csv_parse.txt"
+
+[[tests]]
+name = "examples.text.log_filter"
+desc = "A log file split into lines and fields with str; lines selected by str.find and re.test, counted per level."
+case = "../../../examples/text/log_filter.cml"
+golden = "golden/examples/text_log_filter.txt"
+
+[[tests]]
+name = "examples.text.table_report"
+desc = "An aligned table: column width from array.max and str.repeat, headings with to_upper, total with sum."
+case = "../../../examples/text/table_report.cml"
+golden = "golden/examples/text_table_report.txt"
+
+[[tests]]
+name = "examples.text.word_frequency"
+desc = "A text split into lines and words with str; counts in a Map<string, int>, the top three with sort_by and take."
+case = "../../../examples/text/word_frequency.cml"
+golden = "golden/examples/text_word_frequency.txt"
+
+# Other command lines given in the headers.
+
+[[tests]]
+name = "examples.cli.exit_status_ok"
+desc = "Usage under the limit: exit code 0."
+case = "../../../examples/cli/exit_status.cml"
+golden = "golden/examples/cli_exit_status_ok.txt"
+args = ["${case}", "--arg", "used=40", "--arg", "limit=80", "${backend}"]
+
+[[tests]]
+name = "examples.cli.exit_status_bad_limit"
+desc = "A limit that is not positive: exit(2) ends the program after one line."
+case = "../../../examples/cli/exit_status.cml"
+golden = "golden/examples/cli_exit_status_bad_limit.txt"
+args = ["${case}", "--arg", "used=40", "--arg", "limit=0", "${backend}"]
+expect_exit = 2
+
+[[tests]]
+name = "examples.cli.temperature_unknown_unit"
+desc = "An unknown unit is reported through the float! result; the program still ends with 0."
+case = "../../../examples/cli/temperature.cml"
+golden = "golden/examples/cli_temperature_unknown_unit.txt"
+args = ["${case}", "--arg", "value=21.5", "--arg", "unit=K", "--arg", "steps=1", "${backend}"]
+
+[[tests]]
+name = "examples.cli.temperature_lower_case_unit"
+desc = "The unit in lower case with spaces around it is read as F."
+case = "../../../examples/cli/temperature.cml"
+golden = "golden/examples/cli_temperature_lower_case_unit.txt"
+args = ["${case}", "--arg", "value=70.7", "--arg", "unit= f ", "--arg", "steps=2", "${backend}"]
+
+[[tests]]
+name = "examples.cli.temperature_default_pipeline"
+desc = "The command of the header as written, with no pass named."
+case = "../../../examples/cli/temperature.cml"
+golden = "golden/examples/cli_temperature.txt"
+backends = false
+args = ["${case}", "--arg", "value=21.5", "--arg", "unit=C", "--arg", "steps=3"]
+
+[[tests]]
+name = "examples.cli.temperature_missing_args"
+desc = "Without --arg the program is not run: the diagnostic names the parameters of main."
+kind = "behavior"
+case = "../../../examples/cli/temperature.cml"
+backends = false
+args = ["${case}"]
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentMissing"
+expect_output_contains = ["'value', 'unit' and 'steps'", "--arg name=value"]
+
+[[tests]]
+name = "examples.ml.export_onnx_translate"
+desc = "The second command of the header: the program is translated without being run, and onnx::export writes the model."
+case = "../../../examples/ml/export_onnx.cml"
+golden = "golden/examples/ml_export_onnx_translate.txt"
+backends = false
+args = ["${case}", "std::macro", "std::opt::simplify", "onnx::export"]

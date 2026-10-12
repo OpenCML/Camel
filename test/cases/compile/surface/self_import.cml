@@ -1,0 +1,5 @@
+import self_import
+
+func main(): int sync {
+    return 0
+}

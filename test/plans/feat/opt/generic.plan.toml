@@ -750,7 +750,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
+assert(out === '[12, 2]\n36.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -768,7 +768,7 @@ verify_script = """
 const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
 assert(stats.graphs > 5 && stats.graphs <= 40, `unexpected graph count: ${stats.graphs}`)
-assert(out.endsWith('[12, 2]\n36'), `unexpected output: ${out}`)
+assert(out.endsWith('[12, 2]\n36.0'), `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -876,7 +876,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-assert(out === '[12, 2]\n36', `unexpected output: ${out}`)
+assert(out === '[12, 2]\n36.0', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
@@ -938,6 +938,57 @@ assert(out.includes('"name":"RuntimeDiag::UnrecognizedGraphPass"'), `expected an
 assert(!out.includes('main start'), `the program ran: ${out}`)
 }
 """
+timeout_ms = 8000
+
+[[tests]]
+name = "broken_branch.node_in_no_arm"
+desc = "The branch-arm invariant (docs/technical/17_graph_rewrite_api_contracts.md, 4.1) is checked when a rewrite is committed, in release builds too. The test-only pass test::leak_branch_arm (enabled by CAMEL_ENABLE_TEST_PASSES) adds a node that waits on a BRCH and that only the JOIN waits on: it runs because of the branch and belongs to no arm. The commit is rejected as PassInternalError naming the pass, the graph, the node, the BRCH and the JOIN, and nothing executes. Such a graph passed every other structural check; the back ends lay the node out behind the last arm and never run it."
+kind = "behavior"
+case = "../../../cases/opt/generic/broken_branch.cml"
+args = ["--output-format", "json", "${case}", "test::leak_branch_arm", "std::fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.includes('"stage":"pass:test::leak_branch_arm"'), `stage missing: ${out}`)
+assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
+assert(/Runtime graph 'main' breaks the branch-arm invariant: SYNC \d+ runs between BRCH \d+ and its JOIN \d+ and belongs to no arm/.test(out), `reason missing: ${out}`)
+assert(!out.includes('main start'), `the program ran: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "broken_branch.node_in_two_arms"
+desc = "The other half of the branch-arm invariant: test::share_branch_arm makes the second arm of a branch wait on the first, so the first arm's code belongs to two arms (it would run only when the first arm is taken, and the second reads it). The commit is rejected as PassInternalError naming the node and the two arms, and nothing executes."
+kind = "behavior"
+case = "../../../cases/opt/generic/broken_branch.cml"
+args = ["--output-format", "json", "${case}", "test::share_branch_arm", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.includes('"stage":"pass:test::share_branch_arm"'), `stage missing: ${out}`)
+assert(out.includes('"name":"RuntimeDiag::PassInternalError"'), `name missing: ${out}`)
+assert(/breaks the branch-arm invariant: FUNC \d+ \(calls '[^']+'\) runs between BRCH \d+ and its JOIN \d+ and belongs to two arms, 0 and 1/.test(out), `reason missing: ${out}`)
+assert(!out.includes('main start'), `the program ran: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "broken_branch.intact"
+desc = "The program of the two tests above without a fault-injection pass: it runs, and the branch-arm check accepts the graphs the front end builds and the ones std::opt::simplify commits."
+kind = "behavior"
+case = "../../../cases/opt/generic/broken_branch.cml"
+args = ["${case}", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["main start", "-1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]

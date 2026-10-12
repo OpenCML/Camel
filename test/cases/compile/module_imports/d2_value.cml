@@ -1,0 +1,6 @@
+import { pi } from mi_values
+
+func main(): int sync {
+    println(pi)
+    return 0
+}

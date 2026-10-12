@@ -193,8 +193,6 @@ Run **始终**在子进程中执行：父进程只做 API 与转发，子进程�
 
 这样 **协议即现有 HTTP API**，无需管道或自定义协议；Memory monitor、Pause on alloc、Continue/Restart/Terminate 均可用。当前仅 Windows 实现了 spawn（`CreateProcess` + Job Object）；Unix 需补全 `fork`/`exec` 并设置 `CAMEL_DB_WORKER_*` 环境变量。
 
-更详细的架构与“父进程=仅网关、子进程=运行时”的重构说明见 [REFACTOR_PLAN.md](REFACTOR_PLAN.md)。
-
 ## 故障排除
 
 - **仅有已退出任务时显示「No task」**：已修复。当所有任务均为 exited 时，前端仍会保留当前任务并显示「Task: Exited」，可点击 Run 重新运行；`/api/settings` 与 `/api/log` 对已退出任务会返回父进程设置或该任务的缓存日志，不再返回 400。

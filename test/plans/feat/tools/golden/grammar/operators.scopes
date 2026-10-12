@@ -1,0 +1,446 @@
+>// Operators and punctuation: every literal token of antlr/OpenCML.g4.
+#^^ comment.line.double-slash.camel punctuation.definition.comment.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>module operators
+#^^^^^^ keyword.control.import.module.camel
+#       ^^^^^^^^^ entity.name.namespace.module.camel
+>
+>func compare(a: int, b: int): bool {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#            ^ meta.parens.camel punctuation.section.parens.begin.camel
+#             ^ meta.parens.camel variable.parameter.camel
+#              ^ meta.parens.camel punctuation.separator.colon.camel
+#                ^^^ meta.parens.camel support.type.primitive.camel
+#                   ^ meta.parens.camel punctuation.separator.comma.camel
+#                     ^ meta.parens.camel variable.parameter.camel
+#                      ^ meta.parens.camel punctuation.separator.colon.camel
+#                        ^^^ meta.parens.camel support.type.primitive.camel
+#                           ^ meta.parens.camel punctuation.section.parens.end.camel
+#                            ^ punctuation.separator.colon.camel
+#                              ^^^^ support.type.primitive.camel
+#                                   ^ meta.block.camel punctuation.section.block.begin.camel
+>    let strict = a === b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                   ^^^ meta.block.camel keyword.operator.comparison.camel
+>    let strict_not = a !== b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                   ^ meta.block.camel keyword.operator.assignment.camel
+#                       ^^^ meta.block.camel keyword.operator.comparison.camel
+>    let eq = a == b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel keyword.operator.assignment.camel
+#               ^^ meta.block.camel keyword.operator.comparison.camel
+>    let ne = a != b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel keyword.operator.assignment.camel
+#               ^^ meta.block.camel keyword.operator.comparison.camel
+>    let lt = a < b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel keyword.operator.assignment.camel
+#               ^ meta.block.camel keyword.operator.comparison.camel
+>    let gt = a > b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel keyword.operator.assignment.camel
+#               ^ meta.block.camel keyword.operator.comparison.camel
+>    let le = a <= b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel keyword.operator.assignment.camel
+#               ^^ meta.block.camel keyword.operator.comparison.camel
+>    let ge = a >= b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#           ^ meta.block.camel keyword.operator.assignment.camel
+#               ^^ meta.block.camel keyword.operator.comparison.camel
+>    return strict && eq || !ne
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#                  ^^ meta.block.camel keyword.operator.logical.camel
+#                        ^^ meta.block.camel keyword.operator.logical.camel
+#                           ^ meta.block.camel keyword.operator.logical.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func arithmetic(a: float, b: float, X: Tensor, w: Tensor): float {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^^^^^ meta.function.definition.camel entity.name.function.camel
+#               ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                ^ meta.parens.camel variable.parameter.camel
+#                 ^ meta.parens.camel punctuation.separator.colon.camel
+#                   ^^^^^ meta.parens.camel support.type.primitive.camel
+#                        ^ meta.parens.camel punctuation.separator.comma.camel
+#                          ^ meta.parens.camel variable.parameter.camel
+#                           ^ meta.parens.camel punctuation.separator.colon.camel
+#                             ^^^^^ meta.parens.camel support.type.primitive.camel
+#                                  ^ meta.parens.camel punctuation.separator.comma.camel
+#                                    ^ meta.parens.camel variable.parameter.camel
+#                                     ^ meta.parens.camel punctuation.separator.colon.camel
+#                                             ^ meta.parens.camel punctuation.separator.comma.camel
+#                                               ^ meta.parens.camel variable.parameter.camel
+#                                                ^ meta.parens.camel punctuation.separator.colon.camel
+#                                                        ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                                         ^ punctuation.separator.colon.camel
+#                                                           ^^^^^ support.type.primitive.camel
+#                                                                 ^ meta.block.camel punctuation.section.block.begin.camel
+>    let sum = a + b - a * b / a % b
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#            ^ meta.block.camel keyword.operator.assignment.camel
+#                ^ meta.block.camel keyword.operator.arithmetic.camel
+#                    ^ meta.block.camel keyword.operator.arithmetic.camel
+#                        ^ meta.block.camel keyword.operator.arithmetic.camel
+#                            ^ meta.block.camel keyword.operator.arithmetic.camel
+#                                ^ meta.block.camel keyword.operator.arithmetic.camel
+>    let pow = a ^ 2.0
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#            ^ meta.block.camel keyword.operator.assignment.camel
+#                ^ meta.block.camel keyword.operator.arithmetic.camel
+#                  ^^^ meta.block.camel constant.numeric.float.camel
+>    let mat = X @ w
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#            ^ meta.block.camel keyword.operator.assignment.camel
+#                ^ meta.block.camel keyword.operator.arithmetic.camel
+>    let inv = ~7
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#            ^ meta.block.camel keyword.operator.assignment.camel
+#              ^ meta.block.camel keyword.operator.bitwise.camel
+#               ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let neg = -a
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#            ^ meta.block.camel keyword.operator.assignment.camel
+#              ^ meta.block.camel keyword.operator.arithmetic.camel
+>    return sum
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>sync func assign(var x: int, var t: Tensor, u: Tensor) {
+#^^^^ storage.modifier.sync.camel
+#     ^^^^ meta.function.definition.camel storage.type.function.camel
+#          ^^^^^^ meta.function.definition.camel entity.name.function.camel
+#                ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                 ^^^ meta.parens.camel storage.modifier.var.camel
+#                     ^ meta.parens.camel variable.parameter.camel
+#                      ^ meta.parens.camel punctuation.separator.colon.camel
+#                        ^^^ meta.parens.camel support.type.primitive.camel
+#                           ^ meta.parens.camel punctuation.separator.comma.camel
+#                             ^^^ meta.parens.camel storage.modifier.var.camel
+#                                 ^ meta.parens.camel variable.parameter.camel
+#                                  ^ meta.parens.camel punctuation.separator.colon.camel
+#                                          ^ meta.parens.camel punctuation.separator.comma.camel
+#                                            ^ meta.parens.camel variable.parameter.camel
+#                                             ^ meta.parens.camel punctuation.separator.colon.camel
+#                                                     ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                                       ^ meta.block.camel punctuation.section.block.begin.camel
+>    x = 1
+#      ^ meta.block.camel keyword.operator.assignment.camel
+#        ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    x += 2
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    x -= 3
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    x *= 4
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    x /= 5
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    x %= 6
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    x ^= 7
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    t @= u
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+>    x &= 8
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    x |= 9
+#      ^^ meta.block.camel keyword.operator.assignment.compound.camel
+#         ^ meta.block.camel constant.numeric.integer.decimal.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func tagged(m: Map<string, int>, r: int!, o: int?): int {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^^ meta.function.definition.camel entity.name.function.camel
+#           ^ meta.parens.camel punctuation.section.parens.begin.camel
+#            ^ meta.parens.camel variable.parameter.camel
+#             ^ meta.parens.camel punctuation.separator.colon.camel
+#               ^^^ meta.parens.camel support.type.collection.camel
+#                  ^ meta.parens.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                   ^^^^^^ meta.parens.camel meta.angle-arguments.camel support.type.primitive.camel
+#                         ^ meta.parens.camel meta.angle-arguments.camel punctuation.separator.comma.camel
+#                           ^^^ meta.parens.camel meta.angle-arguments.camel support.type.primitive.camel
+#                              ^ meta.parens.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                               ^ meta.parens.camel punctuation.separator.comma.camel
+#                                 ^ meta.parens.camel variable.parameter.camel
+#                                  ^ meta.parens.camel punctuation.separator.colon.camel
+#                                    ^^^ meta.parens.camel support.type.primitive.camel
+#                                       ^ meta.parens.camel keyword.operator.type.camel
+#                                        ^ meta.parens.camel punctuation.separator.comma.camel
+#                                          ^ meta.parens.camel variable.parameter.camel
+#                                           ^ meta.parens.camel punctuation.separator.colon.camel
+#                                             ^^^ meta.parens.camel support.type.primitive.camel
+#                                                ^ meta.parens.camel keyword.operator.type.camel
+#                                                 ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                                  ^ punctuation.separator.colon.camel
+#                                                    ^^^ support.type.primitive.camel
+#                                                        ^ meta.block.camel punctuation.section.block.begin.camel
+>    let a = m['a'] ?? 0
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#             ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#              ^ meta.block.camel meta.brackets.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#               ^ meta.block.camel meta.brackets.camel string.quoted.single.camel
+#                ^ meta.block.camel meta.brackets.camel string.quoted.single.camel punctuation.definition.string.end.camel
+#                 ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                   ^^ meta.block.camel keyword.operator.fallback.camel
+#                      ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let b = r !! 0
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#              ^^ meta.block.camel keyword.operator.fallback.camel
+#                 ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let c = r ?-> double
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#              ^^^ meta.block.camel keyword.operator.pipe.camel
+#                  ^^^^^^ meta.block.camel entity.name.function.call.camel
+>    let d = o ?? 1
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#              ^^ meta.block.camel keyword.operator.fallback.camel
+#                 ^ meta.block.camel constant.numeric.integer.decimal.camel
+>    let e: int! = r
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#         ^ meta.block.camel punctuation.separator.colon.camel
+#           ^^^ meta.block.camel support.type.primitive.camel
+#              ^ meta.block.camel keyword.operator.type.camel
+#                ^ meta.block.camel keyword.operator.assignment.camel
+>    let not_e = !(a == b) && !flag
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#              ^ meta.block.camel keyword.operator.assignment.camel
+#                ^ meta.block.camel keyword.operator.logical.camel
+#                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                    ^^ meta.block.camel meta.parens.camel keyword.operator.comparison.camel
+#                        ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                          ^^ meta.block.camel keyword.operator.logical.camel
+#                             ^ meta.block.camel keyword.operator.logical.camel
+>    let f: (int?)[] = []
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#         ^ meta.block.camel punctuation.separator.colon.camel
+#           ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#            ^^^ meta.block.camel meta.parens.camel support.type.primitive.camel
+#               ^ meta.block.camel meta.parens.camel keyword.operator.type.camel
+#                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                 ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                  ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                    ^ meta.block.camel keyword.operator.assignment.camel
+#                      ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                       ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+>    let g: int?! = r
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#         ^ meta.block.camel punctuation.separator.colon.camel
+#           ^^^ meta.block.camel support.type.primitive.camel
+#              ^ meta.block.camel keyword.operator.type.camel
+#               ^ meta.block.camel keyword.operator.type.camel
+#                 ^ meta.block.camel keyword.operator.assignment.camel
+>    return a + b
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#             ^ meta.block.camel keyword.operator.arithmetic.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>func pipes(xs: int[], idx: int): void sync {
+#^^^^ meta.function.definition.camel storage.type.function.camel
+#     ^^^^^ meta.function.definition.camel entity.name.function.camel
+#          ^ meta.parens.camel punctuation.section.parens.begin.camel
+#           ^^ meta.parens.camel variable.parameter.camel
+#             ^ meta.parens.camel punctuation.separator.colon.camel
+#               ^^^ meta.parens.camel support.type.primitive.camel
+#                  ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                   ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                    ^ meta.parens.camel punctuation.separator.comma.camel
+#                      ^^^ meta.parens.camel variable.parameter.camel
+#                         ^ meta.parens.camel punctuation.separator.colon.camel
+#                           ^^^ meta.parens.camel support.type.primitive.camel
+#                              ^ meta.parens.camel punctuation.section.parens.end.camel
+#                               ^ punctuation.separator.colon.camel
+#                                 ^^^^ support.type.primitive.camel
+#                                      ^^^^ storage.modifier.sync.camel
+#                                           ^ meta.block.camel punctuation.section.block.begin.camel
+>    'value {}'->format<idx>->println
+#    ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#     ^^^^^^ meta.block.camel string.quoted.single.camel
+#           ^^ meta.block.camel string.quoted.single.camel constant.other.placeholder.camel
+#             ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
+#              ^^ meta.block.camel keyword.operator.pipe.camel
+#                ^^^^^^ meta.block.camel entity.name.function.call.camel
+#                      ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                          ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                           ^^ meta.block.camel keyword.operator.pipe.camel
+#                             ^^^^^^^ meta.block.camel entity.name.function.call.camel
+>    xs->map<double>->println
+#      ^^ meta.block.camel keyword.operator.pipe.camel
+#        ^^^ meta.block.camel entity.name.function.call.camel
+#           ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                  ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                   ^^ meta.block.camel keyword.operator.pipe.camel
+#                     ^^^^^^^ meta.block.camel entity.name.function.call.camel
+>    let h = double..double
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#                  ^^ meta.block.camel keyword.operator.compose.camel
+>    let k = double?..double
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#                  ^^^ meta.block.camel keyword.operator.compose.camel
+>    let part = xs[1:3]
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#             ^ meta.block.camel keyword.operator.assignment.camel
+#                 ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                  ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                   ^ meta.block.camel meta.brackets.camel punctuation.separator.colon.camel
+#                    ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                     ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+>    let stepped = xs[0:10:2]
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#                ^ meta.block.camel keyword.operator.assignment.camel
+#                    ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                     ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                      ^ meta.block.camel meta.brackets.camel punctuation.separator.colon.camel
+#                       ^^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                         ^ meta.block.camel meta.brackets.camel punctuation.separator.colon.camel
+#                          ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                           ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+>    let all = [...xs, 1]
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#            ^ meta.block.camel keyword.operator.assignment.camel
+#              ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#               ^^^ meta.block.camel meta.brackets.camel keyword.operator.spread.camel
+#                    ^ meta.block.camel meta.brackets.camel punctuation.separator.comma.camel
+#                      ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                       ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
+>    let merged = { ...base, x: 1 }
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#               ^ meta.block.camel keyword.operator.assignment.camel
+#                 ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                   ^^^ meta.block.camel meta.block.camel keyword.operator.spread.camel
+#                          ^ meta.block.camel meta.block.camel punctuation.separator.comma.camel
+#                            ^ meta.block.camel meta.block.camel variable.other.property.camel
+#                             ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
+#                               ^ meta.block.camel meta.block.camel constant.numeric.integer.decimal.camel
+#                                 ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
+>    spread(...xs)
+#    ^^^^^^ meta.block.camel entity.name.function.call.camel
+#          ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#           ^^^ meta.block.camel meta.parens.camel keyword.operator.spread.camel
+#                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>}
+#^ meta.block.camel punctuation.section.block.end.camel
+>
+>type Union = int | string
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^ meta.type.definition.camel entity.name.type.camel
+#           ^ keyword.operator.assignment.camel
+#             ^^^ support.type.primitive.camel
+#                 ^ keyword.operator.type.camel
+#                   ^^^^^^ support.type.primitive.camel
+>type Both = A & B
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^ meta.type.definition.camel entity.name.type.camel
+#          ^ keyword.operator.assignment.camel
+#              ^ keyword.operator.type.camel
+>type Diff = A \ B
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^ meta.type.definition.camel entity.name.type.camel
+#          ^ keyword.operator.assignment.camel
+#              ^ keyword.operator.type.camel
+>type Keys = A + B - C ^ D
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^ meta.type.definition.camel entity.name.type.camel
+#          ^ keyword.operator.assignment.camel
+#              ^ keyword.operator.arithmetic.camel
+#                  ^ keyword.operator.arithmetic.camel
+#                      ^ keyword.operator.arithmetic.camel
+>type Fn = (x: int, y: int) => int
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^ meta.type.definition.camel entity.name.type.camel
+#        ^ keyword.operator.assignment.camel
+#          ^ meta.parens.camel punctuation.section.parens.begin.camel
+#           ^ meta.parens.camel variable.parameter.camel
+#            ^ meta.parens.camel punctuation.separator.colon.camel
+#              ^^^ meta.parens.camel support.type.primitive.camel
+#                 ^ meta.parens.camel punctuation.separator.comma.camel
+#                   ^ meta.parens.camel variable.parameter.camel
+#                    ^ meta.parens.camel punctuation.separator.colon.camel
+#                      ^^^ meta.parens.camel support.type.primitive.camel
+#                         ^ meta.parens.camel punctuation.section.parens.end.camel
+#                           ^^ keyword.operator.arrow.camel
+#                              ^^^ support.type.primitive.camel
+>type Nullable = int?
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^^^^ meta.type.definition.camel entity.name.type.camel
+#              ^ keyword.operator.assignment.camel
+#                ^^^ support.type.primitive.camel
+#                   ^ keyword.operator.type.camel
+>type Fallible = string!
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^^^^ meta.type.definition.camel entity.name.type.camel
+#              ^ keyword.operator.assignment.camel
+#                ^^^^^^ support.type.primitive.camel
+#                      ^ keyword.operator.type.camel
+>type Nested = Map<string, Set<int>>
+#^^^^ meta.type.definition.camel storage.type.type.camel
+#     ^^^^^^ meta.type.definition.camel entity.name.type.camel
+#            ^ keyword.operator.assignment.camel
+#              ^^^ support.type.collection.camel
+#                 ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                  ^^^^^^ meta.angle-arguments.camel support.type.primitive.camel
+#                        ^ meta.angle-arguments.camel punctuation.separator.comma.camel
+#                          ^^^ meta.angle-arguments.camel support.type.collection.camel
+#                             ^ meta.angle-arguments.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
+#                              ^^^ meta.angle-arguments.camel meta.angle-arguments.camel support.type.primitive.camel
+#                                 ^ meta.angle-arguments.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                                  ^ meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+>
+>let end = 1; let after = 2;
+#^^^ meta.declaration.let.camel storage.type.let.camel
+#    ^^^ meta.declaration.let.camel variable.other.constant.camel
+#        ^ keyword.operator.assignment.camel
+#          ^ constant.numeric.integer.decimal.camel
+#           ^ punctuation.terminator.statement.camel
+#             ^^^ meta.declaration.let.camel storage.type.let.camel
+#                 ^^^^^ meta.declaration.let.camel variable.other.constant.camel
+#                       ^ keyword.operator.assignment.camel
+#                         ^ constant.numeric.integer.decimal.camel
+#                          ^ punctuation.terminator.statement.camel

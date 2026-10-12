@@ -1,0 +1,7 @@
+import { f } from b
+import { f } from c2
+
+func main(): int sync {
+    println(f(1), f('a'))
+    return 0
+}

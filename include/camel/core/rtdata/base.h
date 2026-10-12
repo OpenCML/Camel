@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "camel/utils/number_text.h"
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/slot.h"
 #include "camel/core/type.h"
@@ -209,10 +210,10 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type
         os << fromSlot<Int64>(data);
         break;
     case camel::core::type::TypeCode::Float32:
-        os << fromSlot<Float32>(data);
+        os << camel::utils::floatText(fromSlot<Float32>(data));
         break;
     case camel::core::type::TypeCode::Float64:
-        os << fromSlot<Float64>(data);
+        os << camel::utils::floatText(fromSlot<Float64>(data));
         break;
     case camel::core::type::TypeCode::Bool:
         os << (fromSlot<Bool>(data) ? "true" : "false");
@@ -232,6 +233,9 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type
     }
 }
 
+/// The text of a value as `println`, `string(x)` and a `{}` of `format` write it. A float has one
+/// text, the shortest that reads back as the same number (camel::utils::floatText; design
+/// principles 2.10), also as an element of an array, a tuple, a struct, a map or a set.
 inline void printSlot(std::ostream &os, const slot_t data, camel::core::type::Type *t) {
     ASSERT(
         data != DeadSlot,
@@ -256,10 +260,10 @@ inline void printSlot(std::ostream &os, const slot_t data, camel::core::type::Ty
             os << fromSlot<Int64>(data);
             break;
         case camel::core::type::TypeCode::Float32:
-            os << fromSlot<Float32>(data);
+            os << camel::utils::floatText(fromSlot<Float32>(data));
             break;
         case camel::core::type::TypeCode::Float64:
-            os << fromSlot<Float64>(data);
+            os << camel::utils::floatText(fromSlot<Float64>(data));
             break;
         case camel::core::type::TypeCode::Bool:
             os << (fromSlot<Bool>(data) ? "true" : "false");

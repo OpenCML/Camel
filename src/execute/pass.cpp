@@ -638,6 +638,16 @@ PassFactory lookupPassFactory(const std::string &name) {
             return std::make_unique<OvergrowGraphTestPass>(ctx);
         };
     }
+    if (resolved == kLeakBranchArmPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<LeakBranchArmTestPass>(ctx);
+        };
+    }
+    if (resolved == kShareBranchArmPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<ShareBranchArmTestPass>(ctx);
+        };
+    }
     return nullptr;
 }
 

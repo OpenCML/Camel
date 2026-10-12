@@ -22,6 +22,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 
+#include "float_format.h"
 #include "fmt/args.h"
 
 namespace mm = camel::core::mm;
@@ -70,10 +71,10 @@ slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 store.push_back(norm.get<Int64>(i));
                 break;
             case TypeCode::Float32:
-                store.push_back(norm.get<Float32>(i));
+                store.push_back(camel::builtin::LanguageFloat<Float32>{norm.get<Float32>(i)});
                 break;
             case TypeCode::Float64:
-                store.push_back(norm.get<Float64>(i));
+                store.push_back(camel::builtin::LanguageFloat<Float64>{norm.get<Float64>(i)});
                 break;
             default:
                 std::ostringstream oss;
@@ -132,10 +133,10 @@ slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
                 store.push_back(norm.get<Int64>(i));
                 break;
             case TypeCode::Float32:
-                store.push_back(norm.get<Float32>(i));
+                store.push_back(camel::builtin::LanguageFloat<Float32>{norm.get<Float32>(i)});
                 break;
             case TypeCode::Float64:
-                store.push_back(norm.get<Float64>(i));
+                store.push_back(camel::builtin::LanguageFloat<Float64>{norm.get<Float64>(i)});
                 break;
             default:
                 std::ostringstream oss;

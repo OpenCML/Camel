@@ -1,0 +1,35 @@
+
+func add_k(x: int): int {
+    return x + 10
+}
+
+// recursion that uses a module-level value
+func sum_to(n: int): int {
+    return if n == 0 then 10 else n + sum_to(n - 1)
+}
+
+// generic function that uses a module-level value
+func pad(xs: (typeas T)[]): int {
+    return len(xs) + 10
+}
+
+// with-parameter, partially applied
+with <w: int>
+func scale(x: int): int {
+    return x * w + 10
+}
+
+func apply(f: (x: int) => int, x: int): int {
+    return f(x)
+}
+
+func main(): int sync {
+    println(add_k(1))                                 // direct call
+    println(sum_to(3))                                // recursion
+    println(pad([1, 2, 3]))                           // generic instance
+    println(apply(add_k, 1))                          // function passed as a value
+    println(scale<3>(2))                              // with-argument
+    println([1, 2, 3]->map<(x: int) => x + 10>)        // element function of a higher-order operator
+    println([1, 2, 3]->map<add_k>)
+    return 0
+}

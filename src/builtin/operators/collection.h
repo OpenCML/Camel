@@ -25,7 +25,8 @@
  * flows through is the ordinary argument, what configures the operation is a `with`
  * argument (`put<k, v>(m)`, `m->put<k, v>`), as with `contains<v>(xs)` and `slice<a, b>(xs)`;
  * an operation on two collections of equal standing takes both as ordinary arguments
- * (`merge(a, b)`), as `concat(a, b)` does. DESIGN-QUESTION(map-call-form).
+ * (`merge(a, b)`), as `concat(a, b)` does. This is the one calling form (design principles
+ * 2.10); `put(m, k, v)`, once accepted as well, is refused with a hint that gives the form.
  */
 
 #pragma once

@@ -1,0 +1,19 @@
+/**
+ * Calls of `attempt` the type rule refuses: no function, too few or too many arguments, an
+ * argument of the wrong type, and a function with a `with` parameter (which is called through a
+ * closure that binds it). Each is a compile-time error at the call.
+ */
+module bad_calls
+
+func risky(d: int): int { return 100 / d }
+with <k: int>
+func scaled(d: int): int { return k / d }
+
+func main(): int sync {
+    println(attempt(5) !! -1)
+    println(attempt(risky) !! -1)
+    println(attempt(risky, 1, 2) !! -1)
+    println(attempt(risky, 'one') !! -1)
+    println(attempt(scaled, 4) !! -1)
+    return 0
+}
