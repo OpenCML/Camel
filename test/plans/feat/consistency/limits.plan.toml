@@ -259,10 +259,8 @@ expect_stderr_contains = ["Invalid --max-macro-depth value: 'many'."]
 
 [[tests]]
 name = "limit.direct.exceeds.native"
-desc = "The same limit under std::inline std::jit, where depth is compiled to native code."
+desc = "The same limit under std::inline std::jit, where depth is compiled to native code: the compiled recursion counts its depth and leaves through the fault exit with the interpreter's diagnostic."
 backends = ["inline_jit"]
-known_fail = ["inline_jit"]
-known_fail_note = "Recursion in code the JIT compiled has no depth check yet (it runs depth(100) under a limit of 100, and overflows the native stack when deep enough). The JIT work line adds the check; remove the mark when it is merged."
 envs = ["N=100"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
