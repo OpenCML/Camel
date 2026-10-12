@@ -217,13 +217,22 @@ expect_stdout_starts_with = "before\n"
 
 [[tests]]
 name = "fault.slice_out_of_range"
-desc = "A slice whose end is past the end of the array, bounds only known at run time. What it should do is not laid down (a question for the language author); the four back ends must agree."
-kind = "behavior"
+desc = "A slice whose end is past the end of the array, bounds only known at run time: a fault, as an index out of range is (design principles 2.10). It was cut to the array on all four back ends."
 case = "../../../cases/consistency/faults/slice_out_of_range.cml"
-backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
-expect_exit = false
-expect_output_not_contains = ["Segmentation fault", "dumped core"]
+expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
+expect_diagnostic_code = "0x04000052"
+expect_diagnostic_line = 6
 expect_stdout_starts_with = "[10, 20]\n"
+expect_output_contains = ["The range 0 to 7 is out of range for an array of length 3."]
+
+[[tests]]
+name = "fault.slice_negative_bound"
+desc = "A negative bound of a slice is a fault like a negative index; it used to count from the end."
+case = "../../../cases/consistency/faults/slice_negative_bound.cml"
+expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
+expect_diagnostic_line = 7
+expect_stdout_starts_with = "[20, 30]\n"
+expect_output_contains = ["The range -2 to 3 is out of range for an array of length 3."]
 
 [[tests]]
 name = "fault.tuple_index_static"
@@ -325,11 +334,16 @@ expect_stdout_starts_with = "before\nafter\n"
 
 [[tests]]
 name = "end.error_reaches_main"
-desc = "An error value nobody handled is what main returns. What the process does then (exit code, where the error is printed) is not laid down (a question for the language author); the four back ends must agree."
+desc = "An error value nobody handled is what main returns: UnhandledError on standard error at the place the error was made, exit code 1 (design principles 2.10; consistency.entry has the other forms)."
 kind = "behavior"
 case = "../../../cases/consistency/faults/error_reaches_main.cml"
-expect_exit = false
-expect_stdout_starts_with = "before\n"
+backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["DivByZero: the divisor is zero"]
+verify_script = """
+assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
+"""
 
 # --- the first element of an empty array -----------------------------------------------------
 

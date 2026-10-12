@@ -52,6 +52,12 @@ case = "../../../cases/consistency/values/float_to_int.cml"
 golden = "golden/float_to_int.txt"
 
 [[tests]]
+name = "value.slice_take_drop"
+desc = "slice within the array and at its edges; take and drop cut to the array by definition; a slice out of range inside attempt is an error value."
+case = "../../../cases/consistency/values/slice_take_drop.cml"
+golden = "golden/slice_take_drop.txt"
+
+[[tests]]
 name = "value.function_values"
 desc = "Functions that return functions, composition, a function value as the element function of a map."
 case = "../../../cases/consistency/values/function_values.cml"

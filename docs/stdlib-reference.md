@@ -316,8 +316,9 @@ The elements after the first; empty for an array of fewer than two elements.
 slice: <start: int, end: int> (xs: T[]) => T[]
 ```
 
-The elements from index start up to, not including, end. A negative index counts from the
-end, and a range reaching outside the array is cut to it: this never faults.
+The elements from index start up to, not including, end. Both are positions from 0 to the
+length; a bound outside the array (a negative one included) is a fault, as an index out of
+range is. `take` and `drop` of the module `array` cut to the array instead.
 
 - Pure.
 - Example: `[1, 2, 3, 4]->slice<1, 3>` gives `[2, 3]`

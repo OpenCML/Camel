@@ -80,7 +80,7 @@ println(xs[0], len(xs), grid[0][1])
   | `len(xs)` | Length |
   | `head(xs)`, `tail(xs)` | The first element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`, as for `xs[0]`); the array without its first element |
   | `range(a, b)` | `[a, a+1, ..., b-1]`; empty when `a >= b` |
-  | `xs->slice<a, b>` | A new array of subscripts `a` to `b-1`; the part out of range is cut off |
+  | `xs->slice<a, b>` | A new array of subscripts `a` to `b-1`. `a` and `b` are positions from 0 to the length; a bound outside the array (a negative one included) is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault. With both bounds inside the array and `b < a` the result is empty. To take "at most n" use `take` and `drop` of the `array` module, which cut by definition |
   | `concat(xs, ys)` | Concatenation into a new array |
   | `xs->contains<v>` | Whether it contains `v` |
   | `zip(xs, ys)` | An array of `(x, y)` tuples; three or more arrays give tuples of that many elements (`zip(xs, ys, zs)`); the lengths must be equal |

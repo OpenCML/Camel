@@ -36,14 +36,14 @@ export func reverse(xs: (typeas T)[]): T[] {
 /// @example [1, 2, 3, 4]->take<2>    // [1, 2]
 with <n: int>
 export func take(xs: (typeas T)[]): T[] {
-    return if n <= 0 then slice<0, 0>(xs) else slice<0, n>(xs)
+    return if n <= 0 then slice<0, 0>(xs) else if n >= len(xs) then slice<0, len(xs)>(xs) else slice<0, n>(xs)
 }
 
 /// The elements after the first n; none when there are fewer, all when n is not positive.
 /// @example [1, 2, 3, 4]->drop<1>    // [2, 3, 4]
 with <n: int>
 export func drop(xs: (typeas T)[]): T[] {
-    return if n <= 0 then xs else slice<n, len(xs)>(xs)
+    return if n <= 0 then xs else if n >= len(xs) then slice<0, 0>(xs) else slice<n, len(xs)>(xs)
 }
 
 /// Each element with its index.

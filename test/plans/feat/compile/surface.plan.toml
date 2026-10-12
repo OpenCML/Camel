@@ -151,12 +151,14 @@ expect_output_not_contains = ["Warn", "Error"]
 
 [[tests]]
 name = "surface.main_implicit_result"
-desc = "A `main` without a declared return type whose body ends in `println(...)` returns what that call returns, its text: the default pipeline writes the result of main to the output, so the line appears twice. This is the rule for undeclared return types (the value of the last statement), recorded here, not a defect of the entry."
+desc = "A `main` without a declared return type whose body ends in `println(...)`: the body has the value that call returns, but only a main that declares its return type has a result (design principles 2.10), so the line appears once. (It appeared twice: the value was written as the result of the program.)"
 kind = "behavior"
 case = "../../../cases/compile/surface/main_implicit_result.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["printed by the program\nprinted by the program"]
+verify_script = """
+assert(input.stdout === 'printed by the program\n', JSON.stringify(input.stdout))
+"""
 
 [[tests]]
 name = "surface.main_void_result"

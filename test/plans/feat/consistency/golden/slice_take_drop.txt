@@ -1,0 +1,17 @@
+[10, 20, 30, 40]
+[20, 30]
+[]
+[]
+[]
+[10, 20]
+[10, 20, 30, 40]
+[10, 20, 30, 40]
+[]
+[]
+[20, 30, 40]
+[]
+[]
+[10, 20, 30, 40]
+[10, 20, 30, 40]
+error SliceOutOfRange: The range 2 to 9 is out of range for an array of length 4.
+error SliceOutOfRange: The range 5 to 5 is out of range for an array of length 4.

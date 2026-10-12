@@ -152,13 +152,16 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 start   = with.get<Int64>(0);
     Int64 end     = with.get<Int64>(1);
 
-    Int64 size = static_cast<Int64>(arr->size());
-    if (start < 0)
-        start += size;
-    if (end < 0)
-        end += size;
-    start = std::max<Int64>(0, std::min(start, size));
-    end   = std::max<Int64>(0, std::min(end, size));
+    // A bound outside the array is a fault, as an index out of range is (design principles
+    // 2.10): a bound is a position from 0 to the length, the end one past the last element
+    // taken. It used to be cut to the array, and a negative bound counted from the end.
+    // `take` and `drop` of the `array` module are the operations that cut by definition.
+    const Int64 size = static_cast<Int64>(arr->size());
+    if (start < 0 || start > size || end < 0 || end > size) {
+        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
+    }
+    // DESIGN-QUESTION(slice-reversed-range): both bounds inside the array and the end before
+    // the start is the empty range, as before; the alternative is a fault.
     if (end < start)
         end = start;
 
