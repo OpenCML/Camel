@@ -5,7 +5,9 @@
 // ones the manifest registers; the commands and settings the extension implements are
 // contributed; the two Camel-specific semantic token modifiers ('mutable' for `var`, 'sync' for
 // `sync func`) are declared, mapped to a TextMate scope and styled by default; every repository
-// rule the grammar includes exists.
+// rule the grammar includes exists; the debugger of type 'camel' is contributed as VS Code needs it
+// (breakpoints for the language, launch attributes, snippets, activation, the adapter factory in
+// the extension) and its launch attributes are those the adapter reads.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -96,9 +98,78 @@ if (manifest && grammar && languageConfig) {
     check((manifest.activationEvents || []).includes('onLanguage:camel'), 'package.json: no activation event onLanguage:camel')
 
     const properties = (contributes.configuration || {}).properties || {}
-    for (const key of ['camel.server.path', 'camel.path', 'camel.graph.passes', 'camel.run.passes']) {
+    for (const key of ['camel.server.path', 'camel.path', 'camel.debugger.path', 'camel.graph.passes', 'camel.run.passes']) {
         check(properties[key], `package.json: setting ${key} is not contributed`)
     }
+
+    // The debugger: `camel-db --dap`, started by the factory src/extension.ts registers.
+    const debuggerEntry = (contributes.debuggers || []).find((entry) => entry.type === 'camel')
+    check(debuggerEntry, "package.json: no debugger of type 'camel'")
+    if (debuggerEntry) {
+        check(typeof debuggerEntry.label === 'string' && debuggerEntry.label, 'package.json: the debugger has no label')
+        check((debuggerEntry.languages || []).includes('camel'), "package.json: the debugger does not name the language 'camel'")
+        check(
+            debuggerEntry.program === undefined && debuggerEntry.runtime === undefined,
+            'package.json: the debugger names a program; the adapter is located by the extension (camel.debugger.path, CAMEL_HOME, PATH)'
+        )
+        const launch = (debuggerEntry.configurationAttributes || {}).launch
+        check(launch, 'package.json: the debugger has no launch attributes')
+        check(!(debuggerEntry.configurationAttributes || {}).attach, 'package.json: the debugger offers attach, which the adapter refuses')
+        if (launch) {
+            check((launch.required || []).join() === 'program', 'package.json: launch requires exactly "program"')
+            // What `camel-db --dap` reads from the arguments of launch (tools/debugger/src/dap/adapter.cpp).
+            const adapterSource = path.join(EXT_ROOT, '..', '..', 'tools', 'debugger', 'src', 'dap', 'adapter.cpp')
+            const adapterText = fs.existsSync(adapterSource) ? fs.readFileSync(adapterSource, 'utf8') : null
+            for (const [name, schema] of Object.entries(launch.properties || {})) {
+                check(schema.description || schema.markdownDescription, `package.json: launch attribute ${name} has no description`)
+                if (adapterText !== null) {
+                    check(adapterText.includes(`"${name}"`), `package.json: launch attribute ${name} is not read by the debug adapter`)
+                }
+            }
+            for (const name of ['program', 'passes', 'args', 'cwd', 'env', 'stopOnEntry']) {
+                check((launch.properties || {})[name], `package.json: launch attribute ${name} is not contributed`)
+            }
+        }
+        const configurations = [
+            ...(debuggerEntry.initialConfigurations || []).map((body) => ['initialConfigurations', body]),
+            ...(debuggerEntry.configurationSnippets || []).map((snippet) => {
+                check(snippet.label && snippet.description, 'package.json: a debug configuration snippet has no label or description')
+                return [`snippet '${snippet.label}'`, snippet.body || {}]
+            }),
+        ]
+        check((debuggerEntry.initialConfigurations || []).length > 0, 'package.json: the debugger has no initial configuration')
+        check((debuggerEntry.configurationSnippets || []).length > 0, 'package.json: the debugger has no configuration snippet')
+        for (const [where, body] of configurations) {
+            check(body.type === 'camel' && body.request === 'launch', `package.json: ${where} is not a launch configuration of type camel`)
+            check(typeof body.name === 'string' && body.name, `package.json: ${where} has no name`)
+            check(typeof body.program === 'string' && body.program, `package.json: ${where} has no program`)
+            for (const key of Object.keys(body)) {
+                check(
+                    ['type', 'request', 'name'].includes(key) || (launch && (launch.properties || {})[key]),
+                    `package.json: ${where} uses the attribute ${key}, which is not a launch attribute`
+                )
+            }
+        }
+    }
+    check(
+        (contributes.breakpoints || []).some((entry) => entry.language === 'camel'),
+        "package.json: breakpoints are not enabled for the language 'camel'"
+    )
+    check(
+        (manifest.activationEvents || []).includes('onDebugResolve:camel'),
+        'package.json: no activation event onDebugResolve:camel (the adapter factory would not be registered when a session starts)'
+    )
+    const extensionSource = fs.existsSync(path.join(EXT_ROOT, 'src', 'extension.ts'))
+        ? fs.readFileSync(path.join(EXT_ROOT, 'src', 'extension.ts'), 'utf8')
+        : ''
+    check(
+        /registerDebugAdapterDescriptorFactory\(\s*DEBUG_TYPE/.test(extensionSource) && /const DEBUG_TYPE = 'camel'/.test(extensionSource),
+        "src/extension.ts does not register a debug adapter factory for the type 'camel'"
+    )
+    check(
+        /new vscode\.DebugAdapterExecutable\([^)]*\['--dap'\]\)/.test(extensionSource),
+        'src/extension.ts does not start the adapter as `camel-db --dap`'
+    )
 
     // The custom semantic token modifiers.
     const modifiers = (contributes.semanticTokenModifiers || []).map((entry) => entry.id)
