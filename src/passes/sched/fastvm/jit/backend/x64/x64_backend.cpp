@@ -89,7 +89,8 @@ inline void storeFloatResultFromVReg(int disp, x64::VRegId v, x64::MirBuilder &b
     build.emitVXmm32StoreToFrame(disp, v);
 }
 
-// Whether the divisor (operand 1) of an integer division is a constant other than 0 and -1.
+// Whether the divisor (operand 1) of an integer division is a constant other than 0 and -1: such
+// a division needs neither the zero check nor the -1 case.
 inline bool
 isTrapFreeConstDivisor(const Bytecode &bc, const camel::runtime::GCGraph *graph, bool is32Bit) {
     if (bc.fastop[1] >= 0 || graph == nullptr || !graph->staticArea()) {
@@ -123,16 +124,6 @@ std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
             return "pc=" + std::to_string(pc) + " contains indirect CALL";
         case OpCode::ACCS:
             return "pc=" + std::to_string(pc) + " contains ACCS";
-        case OpCode::IDIV:
-        case OpCode::LDIV:
-            // `idiv` raises a hardware exception on a zero divisor (and on the most negative
-            // dividend over -1), and compiled code has no way to leave with a located
-            // diagnostic. The interpreter checks, so a division is compiled only when its
-            // divisor is a constant that cannot trap.
-            if (!isTrapFreeConstDivisor(bc, unit.runtimeGraph, bc.opcode == OpCode::IDIV)) {
-                return "pc=" + std::to_string(pc) + " divides by a value not known to be nonzero";
-            }
-            break;
         case OpCode::FUNC:
         case OpCode::TAIL:
             if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph) {
@@ -465,6 +456,7 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
             loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmmDiv(vr, v0, v1);
+            build.markDivision(static_cast<uint32_t>(pc), true);
             storeResultFromVReg(dr, vr, build);
             break;
         }
@@ -555,6 +547,9 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
             loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVIdiv32(vr, v0, v1);
+            build.markDivision(
+                static_cast<uint32_t>(pc),
+                !isTrapFreeConstDivisor(bc, unit.runtimeGraph, bc.opcode == OpCode::IDIV));
             storeResultFromVReg(dr, vr, build);
             break;
         }
@@ -645,6 +640,7 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             loadFloatOperandToVReg(bc, 0, d0, staticBase, v0, build);
             loadFloatOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVXmm32Div(vr, v0, v1);
+            build.markDivision(static_cast<uint32_t>(pc), true);
             storeFloatResultFromVReg(dr, vr, build);
             break;
         }
@@ -721,6 +717,9 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             loadOperandToVReg(bc, 0, d0, staticBase, v0, build);
             loadOperandToVReg(bc, 1, d1, staticBase, v1, build);
             build.emitVIdiv(vr, v0, v1);
+            build.markDivision(
+                static_cast<uint32_t>(pc),
+                !isTrapFreeConstDivisor(bc, unit.runtimeGraph, bc.opcode == OpCode::IDIV));
             storeResultFromVReg(dr, vr, build);
             break;
         }
@@ -1173,7 +1172,11 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     // Windows: rcx/rdx → rdi/rsi + load rbx/r12 (MIR/regalloc assume these on body entry).
     // Linux SysV: rdi/rsi already hold slots/ctx; historically only Windows emitted this prologue,
     // so Linux ran the body with garbage rbx/r12 and mis-compared / mis-loaded frame slots.
-    size_t wrapperSize = 0;
+    // A fault site in the body leaves through the wrapper: it restores the stack pointer saved
+    // in r14 (callee-saved, untouched by the body) and jumps to the wrapper's epilogue, which
+    // returns to the C++ caller. Nothing else is between the two: the body calls only itself.
+    size_t wrapperSize     = 0;
+    size_t faultExitOffset = 0;
 #if defined(_WIN32) || defined(_WIN64)
     {
         uint64_t poolAddr  = unit.poolTopAddr ? reinterpret_cast<uint64_t>(unit.poolTopAddr) : 0;
@@ -1184,6 +1187,8 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         code.push_back(0x56);                  // push rsi
         code.push_back(0x53);                  // push rbx
         code.insert(code.end(), {0x41, 0x54}); // push r12
+        code.insert(code.end(), {0x41, 0x56}); // push r14
+        code.insert(code.end(), {0x41, 0x57}); // push r15 (keeps the body's stack alignment)
         // mov rdi, rcx  (Win64 arg1 → JIT slot base)
         code.insert(code.end(), {0x48, 0x89, 0xCF});
         // mov rsi, rdx  (Win64 arg2 → JIT ctx)
@@ -1198,17 +1203,22 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         code.push_back(0xBC);
         for (int b = 0; b < 8; ++b)
             code.push_back(static_cast<uint8_t>((graphAddr >> (b * 8)) & 0xFF));
+        // mov r14, rsp  — what a fault exit restores before it continues at the epilogue
+        code.insert(code.end(), {0x49, 0x89, 0xE6});
         // call rel32(jitBody)
         code.push_back(0xE8);
         size_t callPatchPos = code.size();
         code.insert(code.end(), {0, 0, 0, 0});
-        // pop r12; pop rbx; pop rsi; pop rdi; ret
+        faultExitOffset = code.size();
+        // pop r15; pop r14; pop r12; pop rbx; pop rsi; pop rdi; ret
+        code.insert(code.end(), {0x41, 0x5F}); // pop r15
+        code.insert(code.end(), {0x41, 0x5E}); // pop r14
         code.insert(code.end(), {0x41, 0x5C}); // pop r12
         code.push_back(0x5B);                  // pop rbx
         code.push_back(0x5E);                  // pop rsi
         code.push_back(0x5F);                  // pop rdi
         code.push_back(0xC3);                  // ret
-        wrapperSize            = code.size();  // = 42 bytes
+        wrapperSize            = code.size();
         int32_t callRel        = static_cast<int32_t>(wrapperSize - (callPatchPos + 4));
         code[callPatchPos]     = static_cast<uint8_t>(callRel & 0xFF);
         code[callPatchPos + 1] = static_cast<uint8_t>((callRel >> 8) & 0xFF);
@@ -1224,6 +1234,8 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         code.push_back(0x53);                        // push rbx (callee-saved)
         code.insert(code.end(), {0x41, 0x54});       // push r12
         code.insert(code.end(), {0x41, 0x55});       // push r13
+        code.insert(code.end(), {0x41, 0x56});       // push r14
+        code.insert(code.end(), {0x41, 0x57}); // push r15 (keeps the body's stack alignment)
         code.insert(code.end(), {0x49, 0x89, 0xF5}); // mov r13, rsi
         // mov rbx, imm64(poolTopAddr)
         code.push_back(0x48);
@@ -1235,9 +1247,14 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         code.push_back(0xBC);
         for (int b = 0; b < 8; ++b)
             code.push_back(static_cast<uint8_t>((graphAddr >> (b * 8)) & 0xFF));
+        // mov r14, rsp  — what a fault exit restores before it continues at the epilogue
+        code.insert(code.end(), {0x49, 0x89, 0xE6});
         code.push_back(0xE8);
         size_t callPatchPos = code.size();
         code.insert(code.end(), {0, 0, 0, 0});
+        faultExitOffset = code.size();
+        code.insert(code.end(), {0x41, 0x5F}); // pop r15
+        code.insert(code.end(), {0x41, 0x5E}); // pop r14
         code.insert(code.end(), {0x41, 0x5D}); // pop r13
         code.insert(code.end(), {0x41, 0x5C}); // pop r12
         code.push_back(0x5B);                  // pop rbx
@@ -1259,7 +1276,8 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         0, // baseOffset=0: enc.here() already includes wrapper bytes
         &vregAlloc,
         debug ? debug->instructionBoundaries : nullptr,
-        debugTraceFn);
+        debugTraceFn,
+        faultExitOffset);
     return LowerResult::Ok;
 }
 

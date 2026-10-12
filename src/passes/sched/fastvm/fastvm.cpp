@@ -626,16 +626,49 @@ __attribute__((noinline))
 slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *jitCtx) {
     slot_t *slots = frame->slotBase();
     slots[0]      = reinterpret_cast<slot_t>(frame);
+    auto *jc      = static_cast<JitContext *>(jitCtx);
+    slot_t result;
     try {
-        slot_t result = fn(slots, jitCtx);
-        if (framePool_.isActive(frame))
-            framePool_.release(frame);
-        return result;
+        result = fn(slots, jitCtx);
     } catch (...) {
         if (framePool_.isActive(frame))
             framePool_.release(frame);
         throw;
     }
+    // Compiled code cannot throw: it reports a fault by returning with it recorded.
+    if (jc->faultKind != 0) [[unlikely]]
+        raiseJitFault(jitCtx, frame);
+    if (framePool_.isActive(frame))
+        framePool_.release(frame);
+    return result;
+}
+
+void FastVMSchedPass::raiseJitFault(void *jitCtx, Frame *frame) {
+    auto *jc          = static_cast<JitContext *>(jitCtx);
+    const auto kind   = static_cast<x64::JitFaultKind>(jc->faultKind);
+    const size_t pc   = jc->faultPc;
+    jc->faultKind     = 0;
+    jc->faultPc       = 0;
+    // The fault is in the graph the frame belongs to (compiled code calls only itself), at the
+    // bytecode it recorded: the position the interpreter reports for the same fault.
+    const ExecutionSite site = makePcExecutionSite(
+        context_->sourceContext(),
+        frame,
+        pc,
+        0,
+        "",
+        ExecutionSiteKind::JitPc);
+    if (framePool_.isActive(frame))
+        framePool_.release(frame);
+    const RuntimeFault fault =
+        kind == x64::JitFaultKind::DivisionByZero
+            ? RuntimeFault::make(RuntimeDiag::DivisionByZero)
+            : RuntimeFault::make(
+                  RuntimeDiag::RuntimeError,
+                  std::format(
+                      "compiled code reported an unknown fault ({})",
+                      static_cast<uint32_t>(kind)));
+    throw reportRuntimeFault(*context_, fault, site);
 }
 
 camel::runtime::GCGraph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {

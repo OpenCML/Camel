@@ -43,7 +43,7 @@ void encodeMirBuffer(
     const MirBuffer &buf, std::vector<uint8_t> &code, std::ostream *asmOut, size_t baseOffset,
     const VRegAllocation *vregAlloc,
     std::vector<std::tuple<size_t, size_t, std::string>> *instructionBoundaries,
-    void *debugTraceFn) {
+    void *debugTraceFn, size_t faultExitOffset) {
     // Every operand that is used has a register: linearScanVReg fails otherwise. A register of
     // kSpilled here means a value that is defined and never used; its definition is skipped.
     const bool recordAsm = asmOut != nullptr || instructionBoundaries != nullptr;
@@ -82,14 +82,50 @@ void encodeMirBuffer(
     };
     // The condition `cc` of flags already set, as 0 / 1 in dst.
     auto emitSetcc = [&](int dr, Encoder::Cond cc) { enc.setccReg(cc, u8(dr)); };
-    // 64-bit signed division: the quotient of left / right in dst. idiv takes the dividend in
+    // Fault sites. The check jumps forward to a stub emitted after the body; the stub records
+    // the fault and leaves through the common exit.
+    struct FaultStub {
+        size_t relPos; // rel32 of the jcc to patch
+        uint32_t pc;
+        JitFaultKind kind;
+    };
+    std::vector<FaultStub> faultStubs;
+    auto emitFaultIf = [&](Encoder::Cond cc, uint32_t pc, JitFaultKind kind) {
+        faultStubs.push_back({enc.jccRel32(cc, 0), pc, kind});
+    };
+    // Signed division: the quotient of left / right in dst. idiv takes the dividend in
     // rdx:rax and leaves quotient and remainder there, so whatever else lives in the two is
-    // saved around it, and the divisor is moved out of their way first.
-    auto emitIdiv = [&](int dr, int lr, int rr, bool is32) {
+    // saved around it, and the divisor is moved out of their way first. A checked division
+    // faults on a zero divisor, and computes x / -1 as -x: idiv raises the hardware's divide
+    // error for the most negative x, where the quotient wraps as every other integer overflow.
+    auto emitIdiv = [&](int dr, int lr, int rr, bool is32, bool checked, uint32_t pc) {
         if (is32)
             enc.movRegReg32(kRegR11, u8(rr));
         else
             enc.emitMovRegReg(kRegR11, u8(rr));
+        size_t skipNegRel = 0, doneRel = 0;
+        if (checked) {
+            if (is32) {
+                enc.testRegReg32(kRegR11);
+                emitFaultIf(Encoder::kCondE, pc, JitFaultKind::DivisionByZero);
+                enc.cmpReg32Imm8(kRegR11, -1);
+            } else {
+                enc.testRegReg(kRegR11);
+                emitFaultIf(Encoder::kCondE, pc, JitFaultKind::DivisionByZero);
+                enc.cmpRegImm32(kRegR11, -1);
+            }
+            skipNegRel = enc.jccRel32(Encoder::kCondNE, 0);
+            if (is32) {
+                if (dr != lr)
+                    enc.movRegReg32(u8(dr), u8(lr));
+                enc.negReg32(u8(dr));
+            } else {
+                enc.emitMovRegReg(u8(dr), u8(lr));
+                enc.negReg(u8(dr));
+            }
+            doneRel = enc.jmpRel32Patchable();
+            enc.patchRel32At(skipNegRel, static_cast<int32_t>(enc.here() - (skipNegRel + 4)));
+        }
         if (dr != static_cast<int>(kRegRax))
             enc.pushReg(kRegRax);
         if (dr != static_cast<int>(kRegRdx))
@@ -114,6 +150,20 @@ void encodeMirBuffer(
             enc.popReg(kRegRdx);
         if (dr != static_cast<int>(kRegRax))
             enc.popReg(kRegRax);
+        if (checked)
+            enc.patchRel32At(doneRel, static_cast<int32_t>(enc.here() - (doneRel + 4)));
+    };
+    // The interpreters fault on a floating-point divisor that compares equal to zero (+0.0 or
+    // -0.0): every bit but the sign is clear.
+    auto emitFloatDivisorCheck = [&](int rr, bool isDouble, uint32_t pc) {
+        if (isDouble) {
+            enc.emitMovRegReg(kRegR11, u8(rr));
+            enc.addRegReg(kRegR11, kRegR11);
+        } else {
+            enc.movRegReg32(kRegR11, u8(rr));
+            enc.addRegReg32(kRegR11, kRegR11);
+        }
+        emitFaultIf(Encoder::kCondE, pc, JitFaultKind::DivisionByZero);
     };
     // Floating-point arithmetic on the bit patterns held in general registers.
     auto emitFloatArith = [&](int dr, int lr, int rr, bool isDouble, uint8_t opcode) {
@@ -313,7 +363,7 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0)
-                emitIdiv(dr, lr, rr, false);
+                emitIdiv(dr, lr, rr, false, (m.imm64 & 1) != 0, static_cast<uint32_t>(m.imm64 >> 1));
             break;
         }
         case MirOp::VCmpSetL:
@@ -607,6 +657,8 @@ void encodeMirBuffer(
                     : (m.op == MirOp::VXmmSub || m.op == MirOp::VXmm32Sub) ? 0x5c
                     : (m.op == MirOp::VXmmMul || m.op == MirOp::VXmm32Mul) ? 0x59
                                                                            : 0x5e;
+                if (opcode == 0x5e && (m.imm64 & 1) != 0)
+                    emitFloatDivisorCheck(rr, isDouble, static_cast<uint32_t>(m.imm64 >> 1));
                 emitFloatArith(dr, lr, rr, isDouble, opcode);
             }
             break;
@@ -725,7 +777,7 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0)
-                emitIdiv(dr, lr, rr, true);
+                emitIdiv(dr, lr, rr, true, (m.imm64 & 1) != 0, static_cast<uint32_t>(m.imm64 >> 1));
             break;
         }
         case MirOp::VCmpSetL32:
@@ -772,6 +824,27 @@ void encodeMirBuffer(
             break;
         }
         }
+    }
+    // Fault stubs and the exit they share.
+    if (!faultStubs.empty()) {
+        std::vector<size_t> exitRels;
+        for (const FaultStub &stub : faultStubs) {
+            enc.patchRel32At(stub.relPos, static_cast<int32_t>(enc.here() - (stub.relPos + 4)));
+            enc.movCtxFieldImm32(
+                static_cast<int8_t>(kJitCtxFaultKindOffset),
+                static_cast<uint32_t>(stub.kind));
+            enc.movCtxFieldImm32(static_cast<int8_t>(kJitCtxFaultPcOffset), stub.pc);
+            exitRels.push_back(enc.jmpRel32Patchable());
+        }
+        for (const size_t rel : exitRels)
+            enc.patchRel32At(rel, static_cast<int32_t>(enc.here() - (rel + 4)));
+        // Whatever the activations between the wrapper and the fault pushed is dropped at once:
+        // they are frames of this function only, with nothing to release.
+        enc.movRspR14();
+        const size_t rel = enc.jmpRel32Patchable();
+        enc.patchRel32At(
+            rel,
+            static_cast<int32_t>(static_cast<int64_t>(faultExitOffset) - static_cast<int64_t>(rel + 4)));
     }
     // Patch rel32: target = startOffset[targetMirIndex], nextIp = jumpPos + instrLen (x86: rel32
     // is relative to the next byte after the instruction).

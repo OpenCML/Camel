@@ -289,6 +289,59 @@ class Encoder {
         asmLineAt(at, "pop qword [rdi+" + std::to_string(disp) + "]");
     }
 
+    // jcc rel32 (0F 80+cc cd). Returns the offset of the rel32 for patchRel32At.
+    size_t jccRel32(Cond cc, int32_t rel) {
+        size_t at = here();
+        emitBytes({0x0f, static_cast<uint8_t>(0x80 | cc)});
+        emitDisp32(rel);
+        asmLineAt(at, std::string("j") + condName(cc) + " .+" + std::to_string(rel) + "  ; rel32");
+        return at + 2;
+    }
+    // jmp rel32, returning the offset of the rel32.
+    size_t jmpRel32Patchable() {
+        size_t at = here();
+        emitByte(0xe9);
+        emitDisp32(0);
+        asmLineAt(at, "jmp .+0  ; rel32");
+        return at + 1;
+    }
+    // mov dword [ctx + disp8], imm32, where ctx is the JitContext register of the JIT's
+    // convention: r13 under SysV (rsi does not survive helper calls there), rsi under Win64.
+    void movCtxFieldImm32(int8_t disp, uint32_t imm) {
+        size_t at = here();
+#if defined(_WIN32) || defined(_WIN64)
+        emitBytes({0xc7, 0x46, static_cast<uint8_t>(disp)});
+        const char *reg = "rsi";
+#else
+        emitBytes({0x41, 0xc7, 0x45, static_cast<uint8_t>(disp)});
+        const char *reg = "r13";
+#endif
+        emitDisp32(static_cast<int>(imm));
+        asmLineAt(
+            at,
+            std::string("mov dword [") + reg + "+" + std::to_string(disp) + "], " +
+                std::to_string(imm));
+    }
+    // mov rsp, r14: back to the stack pointer the entry wrapper saved.
+    void movRspR14() {
+        size_t at = here();
+        emitBytes({0x4c, 0x89, 0xf4});
+        asmLineAt(at, "mov rsp, r14");
+    }
+    void testRegReg32(uint8_t reg) {
+        size_t at = here();
+        emitRex(false, hw(reg), hw(reg));
+        emitBytes({0x85, modRR(hw(reg), hw(reg))});
+        asmLineAt(at, std::string("test ") + regName32(reg) + ", " + regName32(reg));
+    }
+    // cmp r32, imm8 (sign-extended). 83 /7 ib
+    void cmpReg32Imm8(uint8_t reg, int8_t imm) {
+        size_t at = here();
+        emitRex(false, 0, hw(reg));
+        emitBytes({0x83, modRR(7, hw(reg)), static_cast<uint8_t>(imm)});
+        asmLineAt(at, std::string("cmp ") + regName32(reg) + ", " + std::to_string(imm));
+    }
+
     // 32-bit integer forms. Writing a 32-bit register clears the upper half of the 64-bit one.
     // op r/m32, r32 (01 = add, 29 = sub, 39 = cmp, 89 = mov)
     void emitAluRegReg32(uint8_t opcode, uint8_t rm, uint8_t reg, const char *mnemonic) {

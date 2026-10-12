@@ -235,6 +235,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
             framePool_.release(frame);
     }
     slot_t invokeOwnedJitFrame(jit::JitEntryFn fn, ctx::Frame *frame, void *jitCtx);
+    /// Raises the located diagnostic of the fault compiled code recorded in the JitContext
+    /// before it returned (`frame` is the frame it was entered on).
+    [[noreturn]] void raiseJitFault(void *jitCtx, ctx::Frame *frame);
     inline ctx::Context &context() { return *context_; }
     camel::runtime::GCGraph *jitFnToGraph(jit::JitEntryFn fn) const;
     slot_t invokeCallOrJit(

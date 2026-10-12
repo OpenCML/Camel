@@ -134,6 +134,17 @@ void collectVRegDefUse(
 
     for (size_t i = 0; i < buf.size(); ++i) {
         const Mir &m = buf[i];
+        // A division faults on a zero divisor whether or not its quotient is read: it keeps a
+        // register (and so is encoded) even when the store of its result was removed.
+        if (m.op == MirOp::VIdiv || m.op == MirOp::VIdiv32 || m.op == MirOp::VXmmDiv ||
+            m.op == MirOp::VXmm32Div) {
+            defVReg(i, static_cast<VRegId>(m.r0));
+            useVReg(i, static_cast<VRegId>(m.r1));
+            useVReg(i, static_cast<VRegId>(m.imm32));
+            if (lastUse[m.r0] == static_cast<size_t>(-1) || lastUse[m.r0] < i)
+                useVReg(i, static_cast<VRegId>(m.r0));
+            continue;
+        }
         // A native self call reads the argument vregs loaded for it and defines its result
         // vreg. These data edges live outside the normal r0/r1/imm32 encoding, so they must be
         // modeled here explicitly or the allocator will treat them as invisible.

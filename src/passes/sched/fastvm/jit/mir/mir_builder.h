@@ -138,6 +138,11 @@ class MirBuilder {
     void emitSubRsp8() { push(MirOp::SubRsp8, 0, 0); }
     void emitAddRsp8() { push(MirOp::AddRsp8, 0, 0); }
     void emitRet() { push(MirOp::Ret, 0, 0); }
+    /// For the division pushed last: its bytecode pc (the position of a DivisionByZero) and
+    /// whether the divisor has to be checked (a constant divisor other than 0 and -1 does not).
+    void markDivision(uint32_t pc, bool checked) {
+        buf_.back().imm64 = (static_cast<uint64_t>(pc) << 1) | (checked ? 1u : 0u);
+    }
     void emitPushFrameSlot(int disp) {
         Mir m;
         m.op   = MirOp::PushFrameSlot;

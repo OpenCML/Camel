@@ -170,6 +170,19 @@ enum class MirOp : uint8_t {
     Nop,
 };
 
+// Faults compiled code can leave with. Compiled code calls no C++ and has no unwind
+// information, so it cannot throw: a fault site stores the kind and its bytecode pc in the
+// JitContext, restores the stack pointer its entry wrapper saved and returns to the wrapper's
+// C++ caller, which raises the located diagnostic (FastVMSchedPass::invokeOwnedJitFrame).
+enum class JitFaultKind : uint32_t {
+    None           = 0,
+    DivisionByZero = 1,
+};
+
+// Where compiled code finds the fields of JitContext (runtime/trampoline.h asserts them).
+constexpr int32_t kJitCtxFaultKindOffset = 16;
+constexpr int32_t kJitCtxFaultPcOffset   = 20;
+
 struct Mir {
     MirOp op{MirOp::Nop};
     // Physical register ids for the fixed-register ops, virtual register ids for V* ops.
