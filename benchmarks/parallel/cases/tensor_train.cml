@@ -1,3 +1,4 @@
+// passes: std::macro
 // A training loop on tensors: a three-layer perceptron (784-256-128-10, batch 64), the
 // gradient from autodiff, one SGD step per iteration, 60 iterations as a tail recursion.
 // The time is in the tensor kernels; the scheduler runs a few dozen nodes per step.
