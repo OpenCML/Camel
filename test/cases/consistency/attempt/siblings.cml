@@ -1,16 +1,15 @@
 /**
  * One element of a map inside a boundary faults while the scheduler may be running the others.
  *
- * DESIGN-QUESTION(attempt-parallel-siblings): elements that have started run to their end,
+ * Design principles 2.10: elements that have started run to their end,
  * elements that have not started do not start, and `attempt` gives its error value only after
  * every element that started has ended. So every 'start' line has its 'end' line (but the one
  * of the faulting element), and no line of an element comes after 'isolated'. How many of the
  * other elements run is not laid down: none on a linear back end (element 0 faults first),
  * some on a parallel one.
  *
- * The second map faults in every element.
- * DESIGN-QUESTION(attempt-parallel-first-fault): which fault becomes the error value is not
- * laid down; it is one of them.
+ * The second map faults in every element: the error value is the fault of element 0
+ * (design principles 2.10: the smallest index; lowest_index.cml tells the elements apart).
  */
 module siblings
 

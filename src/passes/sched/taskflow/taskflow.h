@@ -111,15 +111,13 @@ namespace ctx = camel::core::context;
 // Not covered (as before graphs ran as tasks): the collection the allocator runs inside an
 // allocation that finds the heap full; it does not go through a poll.
 // The part of a run that one fault ends (docs/technical/33_fault_isolation.md, 3.6). The run has
-// a root domain; every fault-isolation node opens one for the call it makes. A domain holds the
-// first fault raised in it. Tasks belong to the domain of the thread that started them
-// (ThreadState::faultDomain).
+// a root domain; every fault-isolation node opens one for the call it makes. Tasks belong to
+// the domain of the thread that started them (ThreadState::faultDomain). A fault is carried
+// to the end of its domain as an exception; which of several concurrent faults that is, is
+// decided where their operator waited for them (ElementFaults in taskflow.cpp).
 struct TaskflowFaultDomain {
     // Fault-isolation boundaries open around the domain (0: the root domain).
     uint32_t isolationDepth = 0;
-    std::mutex mutex;
-    // The first fault of the domain, the only one reported for it.
-    std::exception_ptr firstFault;
 };
 
 class TaskflowGcGate {

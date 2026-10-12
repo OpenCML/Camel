@@ -88,6 +88,12 @@ case = "../../../cases/consistency/values/int_min_div.cml"
 golden = "golden/int_min_div.txt"
 
 [[tests]]
+name = "value.int_compound_wrap"
+desc = "Compound assignment wraps like the plain operators (design principles 2.10): += -= *= past the ends of int and i32, and /= and %= of the smallest value by -1 without a hardware trap."
+case = "../../../cases/consistency/values/int_compound_wrap.cml"
+golden = "golden/int_compound_wrap.txt"
+
+[[tests]]
 name = "value.int_wrap"
 desc = "64-bit integer arithmetic wraps around at the ends of the range."
 case = "../../../cases/consistency/values/int_wrap.cml"

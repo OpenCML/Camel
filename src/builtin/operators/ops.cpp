@@ -280,8 +280,9 @@ slot_t __builtin__assn_pow_d__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return assignPow<Float64>(norm);
 }
 
-// `&=` and `|=` on bool: `a = a && b` and `a = a || b`. The right side is an operand like any
-// other, evaluated before the operator runs.
+// `&=` and `|=` on bool: `a = a && b` and `a = a || b` (design principles 2.10: they are the
+// boolean and / or; bit operations are functions, `bit_and` and the like of `math`). The right
+// side is an operand like any other, evaluated before the operator runs.
 slot_t __builtin__assn_and__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     Bool lhs    = cell->get<Bool>(0) && norm.get<Bool>(1);
@@ -632,9 +633,9 @@ slot_t __builtin__idx__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
         case TypeCode::String: {
             // A string is bytes and its indices count bytes (design principles 2.9).
-            // DESIGN-QUESTION(string-index): the byte at the index is returned as a string
-            // of that one byte; the alternative is a number (there is no byte type in the
-            // language). A byte of a multi-byte character is not a valid string by itself.
+            // Design principles 2.10: `'abc'[1]` is the string of that one byte (not a
+            // number; there is no byte type in the language). A byte of a multi-byte
+            // character is not a valid string by itself.
             String *str = norm.get<String *>(0);
             Int64 raw   = norm.get<Int64>(1);
             size_t idx  = static_cast<size_t>(raw);

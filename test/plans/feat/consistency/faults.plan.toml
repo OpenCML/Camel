@@ -392,6 +392,15 @@ verify_script = """
 assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
 """
 
+[[tests]]
+name = "fault.parallel_lowest_index"
+desc = "Every element of a map faults and nothing isolates it: the program ends with the fault of element 0 (Index 10), on the four back ends alike."
+case = "../../../cases/consistency/faults/parallel_lowest_index.cml"
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 8
+expect_stdout_starts_with = "before\n"
+expect_output_contains = ["Index 10 is out of range for an array of length 3."]
+
 # --- the first element of an empty array -----------------------------------------------------
 
 [[tests]]

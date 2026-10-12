@@ -259,22 +259,24 @@ domain, each `attempt` node opens one for its callee, and the domain a thread wo
 part of its `ThreadState`, inherited by every task exactly where the call depth already is
 (`InheritedDepth`), together with the thread-local count of open boundaries of 3.1.
 
-- `raiseFault` reports the first fault *of the domain* and only that one (concurrent element
-  functions can fault together); later faults of the domain unwind with the first one's
-  exception. A fault that is not on the allow-list goes to the root domain.
+- `raiseFault` describes a fault and throws the diagnostic; it records nothing. Concurrent
+  element functions can fault together, and which of their faults is the fault is decided
+  where their operator has waited for them (below). The fault that arrives at the entry of
+  the run is recorded in the sink there (`apply`); one that is not on the allow-list passes
+  through every `attempt` node on its way.
 - The `attempt` node (`executeIsolateNode`) runs the callee on its own thread, catches the
   `Diagnostic` after the flows inside were joined, and writes the error value.
 
 Sibling work outside the boundary is in another domain and is not affected (`concurrent.cml`).
 
-**What a failure stops** (`DESIGN-QUESTION(attempt-parallel-siblings)`), for an isolated
+**What a failure stops** (ruled: design principles 2.10), for an isolated
 fault and for one that ends the run alike:
 
 - tasks that have started run to their end, with everything they start (there is no
   preemption; they may still print and write `var`s);
-- tasks *of the same flow* that have not started do not start: the executor skips the tasks
-  of a flow one of whose tasks threw, and a scope skips its remaining chains
-  (`FlowInstance::failed`);
+- tasks that have not started do not start: a scope skips its remaining chains
+  (`FlowInstance::failed`), and an unordered operator skips the elements after the smallest
+  faulting index it knows (`ElementFaults`);
 - whoever started the flow waits for all that started, so nothing of a boundary runs after
   the boundary is left.
 
@@ -288,8 +290,22 @@ after the faulting one runs; on `std::prl` some do, a different number from run 
 of them completely. *Which* effects of the other elements happen thus differs between a
 linear and a parallel run, as 2.7 already says for effects in a parallel `map`.
 
-Which of several concurrent faults becomes the error value is whichever is reported first; it
-is not defined (`DESIGN-QUESTION(attempt-parallel-first-fault)`).
+**Which of several concurrent faults is reported** (ruled: design principles 2.10): the one
+of the smallest element index; for nested operators the outer index decides first, then the
+inner one. The element tasks of `map`, `apply`, `filter`, `unordered_foreach` and the chunks
+of `unordered_reduce` do not let an exception escape into the executor (which would cancel the
+whole flow): each keeps its failure in the operator's `ElementFaults`, an element whose index
+is above the smallest faulting index known does not start, and the thread that started the
+operator rethrows the fault of the smallest index after it has waited. A nested operator has
+chosen its own smallest index before its fault arrives as the fault of the outer element.
+
+For the report not to depend on which element a worker picked first, "does not start" applies
+to the elements *after* the smallest faulting index: an element before it still runs, as it
+would have run first on a back end that takes the elements in order. So the fault reported is
+the one `std::nvm` and `std::fvm` report, on every run (`lowest_index.cml`, and
+`faults/parallel_lowest_index.cml` for a fault that ends the run).
+`DESIGN-QUESTION(parallel-fault-lower-elements)`: the alternative, starting nothing at all
+after the first fault met, makes the report differ from run to run.
 
 ## 4. Clean-up
 
@@ -437,16 +453,16 @@ Each is implemented as recommended.
 - **`attempt-memory-exhausted`.** `attempt(() => build_huge()) !! [-1]` when the heap is full.
   Implemented: not isolated, the program ends with the `MemoryExhausted` diagnostic.
   Alternative: isolate it after a collection at the boundary, when that frees enough.
-- **`attempt-parallel-siblings`.** `attempt(() => xs->map<f>)`, one element faults while
-  others run. Implemented: started tasks run to their end, tasks of the same flow not yet
-  started do not start, the error value is given after all started ones ended; the same for
-  a fault that ends the run. Alternatives: let every element run before the error value is
-  given; stop started elements at their next node (what the removed run-wide flag did).
-- **`attempt-parallel-first-fault`.** `attempt(() => range(0, 64)->map<bad>)` where every
-  element faults, at one of two places. Implemented: the error value is the fault reported
-  first, which differs from run to run on `std::prl` (on the linear back ends it is element
-  0's). Alternative: the fault of the lowest element index, which needs every started
-  element's outcome to be kept and compared.
+- *Ruled (design principles 2.10; were `attempt-parallel-siblings` and
+  `attempt-parallel-first-fault`):* started elements run to their end, elements not yet
+  started do not start, and of several faults the one of the smallest index is reported
+  (section 3.6).
+- **`parallel-fault-lower-elements`.** `range(0, 64)->map<bad>` where every element faults
+  and a worker happens to run element 40 first. Implemented: after that fault only the
+  elements above 40 do not start; 0 to 39 still run, element 0 faults, and its fault is the
+  one reported, as on the linear back ends, on every run. Alternative: start nothing at all
+  after the first fault met; the fault reported is then the smallest index among the
+  elements that happened to start, and differs from run to run.
 - **`attempt-finalizers`.** A resource acquired inside a boundary that faults.
   ```camel
   func hold(d: int): int sync { let r = open_resource('b'); return 100 / d }

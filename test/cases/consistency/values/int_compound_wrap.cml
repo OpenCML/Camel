@@ -1,0 +1,45 @@
+/**
+ * Compound assignment on integers wraps like the plain operators: `+=`, `-=`, `*=` past the
+ * ends of int and i32, and the one quotient that does not fit, the smallest value divided by
+ * -1, with `/=` and `%=` (no hardware trap).
+ */
+module int_compound_wrap
+
+func main(): int sync {
+    let half = 4611686018427387904
+    let min = 0 - half - half
+    let max = half - 1 + half
+    println('before')
+    var a = max
+    a += 1
+    println(a)
+    var b = min
+    b -= 1
+    println(b)
+    var c = max
+    c *= 2
+    println(c)
+    var d = min
+    d /= -1
+    println(d)
+    var e = min
+    e %= -1
+    println(e)
+    var f = min
+    f /= 2
+    println(f)
+    let m32: i32 = -2147483648
+    let n32: i32 = -1
+    let one32: i32 = 1
+    var g = m32
+    g /= n32
+    println(g)
+    var h = m32
+    h %= n32
+    println(h)
+    var i = m32
+    i -= one32
+    println(i)
+    println('after')
+    return 0
+}

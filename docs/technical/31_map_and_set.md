@@ -112,7 +112,7 @@ written `Map` or `Set` alone is an `InvalidTypeArgument` error.
   called with a float) is reported at the call, where the repeated-mark check of `T??`
   already runs, and at a conversion written in the body (`xs as Set<T>`).
 
-### 3.1 Key types (`DESIGN-QUESTION(map-key-types)`)
+### 3.1 Key types (ruled: design principles 2.10)
 
 A key (and a set element) must have a total order and an equality that cannot change:
 
@@ -131,7 +131,7 @@ A type that is not allowed is `SemanticDiag::CollectionKeyNotAllowed` (0xA0) at 
 expression (or at the call that produces it by substitution), with the reason. The value
 type of a map is unrestricted.
 
-## 4. Order (`DESIGN-QUESTION(map-order)`)
+## 4. Order (ruled: design principles 2.10)
 
 **A map is ordered by its keys, a set by its elements.** `keys`, `values`, `items`, printing
 and equality all follow that order: integers numerically, `false` before `true`, strings by
