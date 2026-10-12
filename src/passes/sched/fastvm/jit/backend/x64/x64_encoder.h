@@ -107,6 +107,246 @@ class Encoder {
     void rexWR() { emitByte(0x4C); }
     void rexWB() { emitByte(0x49); }
 
+    // --- Register-register forms for the V* MIR. Registers are MIR ids (0-7 = rax, rcx, rdx,
+    // rbx, r8-r11; 8 = rdi, 9 = rsi); hw() is the machine number that goes into ModRM and REX.
+    // Every form below takes any of these registers in any position.
+    static uint8_t hw(uint8_t r) {
+        static constexpr uint8_t map[] = {0, 1, 2, 3, 8, 9, 10, 11, 7, 6};
+        return map[r < 10 ? r : 0];
+    }
+    static uint8_t modRR(uint8_t regHw, uint8_t rmHw) {
+        return static_cast<uint8_t>(0xC0 | ((regHw & 7) << 3) | (rmHw & 7));
+    }
+    // REX for a form whose ModRM.reg operand is regHw and ModRM.rm (or opcode register) operand
+    // is rmHw. `always` forces a bare 0x40, which byte-register forms need for sil / dil.
+    void emitRex(bool wide, uint8_t regHw, uint8_t rmHw, bool always = false) {
+        uint8_t rex = static_cast<uint8_t>(
+            0x40 | (wide ? 8 : 0) | ((regHw & 8) ? 4 : 0) | ((rmHw & 8) ? 1 : 0));
+        if (rex != 0x40 || always)
+            emitByte(rex);
+    }
+    static const char *regName32(uint8_t r) {
+        static const char *n[] =
+            {"eax", "ecx", "edx", "ebx", "r8d", "r9d", "r10d", "r11d", "edi", "esi"};
+        return r < 10 ? n[r] : "?";
+    }
+    static const char *regName8(uint8_t r) {
+        static const char *n[] =
+            {"al", "cl", "dl", "bl", "r8b", "r9b", "r10b", "r11b", "dil", "sil"};
+        return r < 10 ? n[r] : "?";
+    }
+
+    // Condition codes of setcc / jcc / cmovcc.
+    enum Cond : uint8_t {
+        kCondB  = 0x2,
+        kCondAE = 0x3,
+        kCondE  = 0x4,
+        kCondNE = 0x5,
+        kCondBE = 0x6,
+        kCondA  = 0x7,
+        kCondP  = 0xA,
+        kCondNP = 0xB,
+        kCondL  = 0xC,
+        kCondGE = 0xD,
+        kCondLE = 0xE,
+        kCondG  = 0xF,
+    };
+    static const char *condName(Cond cc) {
+        switch (cc) {
+        case kCondB:
+            return "b";
+        case kCondAE:
+            return "ae";
+        case kCondE:
+            return "e";
+        case kCondNE:
+            return "ne";
+        case kCondBE:
+            return "be";
+        case kCondA:
+            return "a";
+        case kCondP:
+            return "p";
+        case kCondNP:
+            return "np";
+        case kCondL:
+            return "l";
+        case kCondGE:
+            return "ge";
+        case kCondLE:
+            return "le";
+        case kCondG:
+            return "g";
+        }
+        return "?";
+    }
+
+    // imul dst, src (64-bit). REX.W 0F AF /r
+    void imulRegReg(uint8_t dst, uint8_t src) {
+        size_t at = here();
+        emitRex(true, hw(dst), hw(src));
+        emitBytes({0x0f, 0xaf, modRR(hw(dst), hw(src))});
+        asmLineAt(at, std::string("imul ") + regName(dst) + ", " + regName(src));
+    }
+    // cqo; idiv reg (64-bit): rax = rdx:rax / reg, rdx = remainder. REX.W F7 /7
+    void cqoIdivReg(uint8_t reg) {
+        size_t at = here();
+        emitBytes({0x48, 0x99});
+        asmLineAt(at, "cqo");
+        at = here();
+        emitRex(true, 0, hw(reg));
+        emitBytes({0xf7, modRR(7, hw(reg))});
+        asmLineAt(at, std::string("idiv ") + regName(reg));
+    }
+    // cdq; idiv reg32: eax = edx:eax / reg32. F7 /7
+    void cdqIdivReg32(uint8_t reg) {
+        size_t at = here();
+        emitByte(0x99);
+        asmLineAt(at, "cdq");
+        at = here();
+        emitRex(false, 0, hw(reg));
+        emitBytes({0xf7, modRR(7, hw(reg))});
+        asmLineAt(at, std::string("idiv ") + regName32(reg));
+    }
+    // setcc reg8 only (the rest of the register is left as it is). 0F 90+cc /0
+    void setccReg8(Cond cc, uint8_t reg) {
+        size_t at = here();
+        emitRex(false, 0, hw(reg), true);
+        emitBytes({0x0f, static_cast<uint8_t>(0x90 | cc), modRR(0, hw(reg))});
+        asmLineAt(at, std::string("set") + condName(cc) + " " + regName8(reg));
+    }
+    // movzx reg, reg8 (REX.W 0F B6 /r): the 0 / 1 of a setcc as a full register.
+    void movzxRegReg8(uint8_t reg) {
+        size_t at = here();
+        emitRex(true, hw(reg), hw(reg));
+        emitBytes({0x0f, 0xb6, modRR(hw(reg), hw(reg))});
+        asmLineAt(at, std::string("movzx ") + regName(reg) + ", " + regName8(reg));
+    }
+    // reg := 1 if the condition holds, else 0. Flags are kept.
+    void setccReg(Cond cc, uint8_t reg) {
+        setccReg8(cc, reg);
+        movzxRegReg8(reg);
+    }
+    // and / or dst8, src8 (20 /r, 08 /r): combine two setcc results.
+    void andReg8Reg8(uint8_t dst, uint8_t src) {
+        size_t at = here();
+        emitRex(false, hw(src), hw(dst), true);
+        emitBytes({0x20, modRR(hw(src), hw(dst))});
+        asmLineAt(at, std::string("and ") + regName8(dst) + ", " + regName8(src));
+    }
+    void orReg8Reg8(uint8_t dst, uint8_t src) {
+        size_t at = here();
+        emitRex(false, hw(src), hw(dst), true);
+        emitBytes({0x08, modRR(hw(src), hw(dst))});
+        asmLineAt(at, std::string("or ") + regName8(dst) + ", " + regName8(src));
+    }
+    // push / pop reg (64-bit). 50+r / 58+r
+    void pushReg(uint8_t reg) {
+        size_t at = here();
+        emitRex(false, 0, hw(reg));
+        emitByte(static_cast<uint8_t>(0x50 | (hw(reg) & 7)));
+        asmLineAt(at, std::string("push ") + regName(reg));
+    }
+    void popReg(uint8_t reg) {
+        size_t at = here();
+        emitRex(false, 0, hw(reg));
+        emitByte(static_cast<uint8_t>(0x58 | (hw(reg) & 7)));
+        asmLineAt(at, std::string("pop ") + regName(reg));
+    }
+
+    // 32-bit integer forms. Writing a 32-bit register clears the upper half of the 64-bit one.
+    // op r/m32, r32 (01 = add, 29 = sub, 39 = cmp, 89 = mov)
+    void emitAluRegReg32(uint8_t opcode, uint8_t rm, uint8_t reg, const char *mnemonic) {
+        size_t at = here();
+        emitRex(false, hw(reg), hw(rm));
+        emitBytes({opcode, modRR(hw(reg), hw(rm))});
+        asmLineAt(at, std::string(mnemonic) + " " + regName32(rm) + ", " + regName32(reg));
+    }
+    void movRegReg32(uint8_t dst, uint8_t src) { emitAluRegReg32(0x89, dst, src, "mov"); }
+    void addRegReg32(uint8_t dst, uint8_t src) { emitAluRegReg32(0x01, dst, src, "add"); }
+    void subRegReg32(uint8_t dst, uint8_t src) { emitAluRegReg32(0x29, dst, src, "sub"); }
+    void cmpRegReg32(uint8_t left, uint8_t right) { emitAluRegReg32(0x39, left, right, "cmp"); }
+    void imulRegReg32(uint8_t dst, uint8_t src) {
+        size_t at = here();
+        emitRex(false, hw(dst), hw(src));
+        emitBytes({0x0f, 0xaf, modRR(hw(dst), hw(src))});
+        asmLineAt(at, std::string("imul ") + regName32(dst) + ", " + regName32(src));
+    }
+    void negReg32(uint8_t reg) {
+        size_t at = here();
+        emitRex(false, 0, hw(reg));
+        emitBytes({0xf7, modRR(3, hw(reg))});
+        asmLineAt(at, std::string("neg ") + regName32(reg));
+    }
+    // mov r32, [rdi + disp]: one 32-bit value of a slot, zero-extended. 8B /r
+    void movReg32FromFrame(uint8_t reg, int disp) {
+        size_t at = here();
+        emitRex(false, hw(reg), 7);
+        emitByte(0x8b);
+        emitByte(static_cast<uint8_t>((fitsDisp8(disp) ? 0x40 : 0x80) | ((hw(reg) & 7) << 3) | 7));
+        if (fitsDisp8(disp))
+            emitByte(static_cast<uint8_t>(disp & 0xff));
+        else
+            emitDisp32(disp);
+        asmLineAt(
+            at,
+            std::string("mov ") + regName32(reg) + ", [rdi+" + std::to_string(disp) + "]");
+    }
+
+    // Floating point goes through xmm0 / xmm1; values live in general registers as bit patterns.
+    // movq xmmN, reg (66 REX.W 0F 6E /r) and movq reg, xmmN (66 REX.W 0F 7E /r)
+    void movqXmmFromReg(uint8_t xmm, uint8_t reg) {
+        size_t at = here();
+        emitByte(0x66);
+        emitRex(true, xmm, hw(reg));
+        emitBytes({0x0f, 0x6e, modRR(xmm, hw(reg))});
+        asmLineAt(at, "movq xmm" + std::to_string(xmm) + ", " + regName(reg));
+    }
+    void movqRegFromXmm(uint8_t reg, uint8_t xmm) {
+        size_t at = here();
+        emitByte(0x66);
+        emitRex(true, xmm, hw(reg));
+        emitBytes({0x0f, 0x7e, modRR(xmm, hw(reg))});
+        asmLineAt(at, std::string("movq ") + regName(reg) + ", xmm" + std::to_string(xmm));
+    }
+    // movd xmmN, reg32 (66 0F 6E /r) and movd reg32, xmmN (66 0F 7E /r, clears the upper half)
+    void movdXmmFromReg(uint8_t xmm, uint8_t reg) {
+        size_t at = here();
+        emitByte(0x66);
+        emitRex(false, xmm, hw(reg));
+        emitBytes({0x0f, 0x6e, modRR(xmm, hw(reg))});
+        asmLineAt(at, "movd xmm" + std::to_string(xmm) + ", " + regName32(reg));
+    }
+    void movdRegFromXmm(uint8_t reg, uint8_t xmm) {
+        size_t at = here();
+        emitByte(0x66);
+        emitRex(false, xmm, hw(reg));
+        emitBytes({0x0f, 0x7e, modRR(xmm, hw(reg))});
+        asmLineAt(at, std::string("movd ") + regName32(reg) + ", xmm" + std::to_string(xmm));
+    }
+    // xmm0 := xmm0 <op> xmm1. opcode: 58 = add, 5C = sub, 59 = mul, 5E = div.
+    void sseArithXmm0Xmm1(bool isDouble, uint8_t opcode) {
+        size_t at        = here();
+        const char *name = opcode == 0x58   ? "add"
+                           : opcode == 0x5c ? "sub"
+                           : opcode == 0x59 ? "mul"
+                                            : "div";
+        emitBytes({static_cast<uint8_t>(isDouble ? 0xf2 : 0xf3), 0x0f, opcode, 0xc1});
+        asmLineAt(at, std::string(name) + (isDouble ? "sd" : "ss") + " xmm0, xmm1");
+    }
+    // ucomisd / ucomiss a, b: ZF, PF, CF as for an unsigned compare of a with b; all three set
+    // when either is a NaN.
+    void ucomiXmm(bool isDouble, uint8_t a, uint8_t b) {
+        size_t at = here();
+        if (isDouble)
+            emitByte(0x66);
+        emitBytes({0x0f, 0x2e, modRR(a, b)});
+        asmLineAt(
+            at,
+            std::string(isDouble ? "ucomisd" : "ucomiss") + " xmm" + std::to_string(a) + ", xmm" +
+                std::to_string(b));
+    }
+
     // --- Standard slot model: one word per slot (8 bytes). All frame/static-area accesses below
     // are 64-bit (r64/m64 or xmm double precision) ---
 
@@ -1504,18 +1744,9 @@ class Encoder {
     }
     // test reg, reg (does not clobber rax; used for JOIN's vtest followed by vcmovnz)
     void testRegReg(uint8_t reg) {
-        if (reg == 0) {
-            testRaxRax();
-            return;
-        }
-        size_t at      = here();
-        uint8_t regEnc = (reg <= 3) ? reg : (reg >= 4 && reg <= 7) ? (reg - 4) : (reg == 8) ? 7 : 6;
-        uint8_t rex    = 0x48;
-        if (reg >= 4 && reg <= 7)
-            rex |= 4;
-        emitByte(rex);
-        emitByte(0x85);
-        emitByte(0xC0 | regEnc | (regEnc << 3));
+        size_t at = here();
+        emitRex(true, hw(reg), hw(reg));
+        emitBytes({0x85, modRR(hw(reg), hw(reg))});
         asmLineAt(at, std::string("test ") + regName(reg) + ", " + regName(reg));
     }
 
@@ -1531,29 +1762,18 @@ class Encoder {
         asmLine("cmove r8, r9");
     }
 
-    // Generic two-register cmove/cmovnz (used by JOIN after VReg allocation, etc.)
+    // Generic two-register cmove/cmovnz (used by JOIN after VReg allocation, etc.):
+    // dst := src when ZF=1 / ZF=0.
     void cmoveRegFromReg(uint8_t dst, uint8_t src) {
-        size_t at   = here();
-        uint8_t rex = 0x48;
-        if (dst >= 4 && dst <= 7)
-            rex |= 1;
-        if (src >= 4 && src <= 7)
-            rex |= 4;
-        // ModRM: reg=dst, r/m=src -> cmove dst, src (dst := src when ZF=1)
-        emitByte(rex);
-        emitBytes({0x0f, 0x44, static_cast<uint8_t>(0xC0 | ((dst & 7) << 3) | (src & 7))});
+        size_t at = here();
+        emitRex(true, hw(dst), hw(src));
+        emitBytes({0x0f, 0x44, modRR(hw(dst), hw(src))});
         asmLineAt(at, std::string("cmove ") + regName(dst) + ", " + regName(src));
     }
     void cmovnzRegFromReg(uint8_t dst, uint8_t src) {
-        size_t at   = here();
-        uint8_t rex = 0x48;
-        if (dst >= 4 && dst <= 7)
-            rex |= 1;
-        if (src >= 4 && src <= 7)
-            rex |= 4;
-        emitByte(rex);
-        // ModRM: reg=dst (destination), r/m=src (source) -> cmovnz dst, src (dst := src when ZF=0)
-        emitBytes({0x0f, 0x45, static_cast<uint8_t>(0xC0 | ((dst & 7) << 3) | (src & 7))});
+        size_t at = here();
+        emitRex(true, hw(dst), hw(src));
+        emitBytes({0x0f, 0x45, modRR(hw(dst), hw(src))});
         asmLineAt(at, std::string("cmovnz ") + regName(dst) + ", " + regName(src));
     }
 
@@ -1700,31 +1920,14 @@ class Encoder {
         asmLineAt(at, std::string("neg ") + regName(reg));
     }
 
+    // mov r32, imm32: the upper half of the register is cleared, so the value is the unsigned
+    // imm32 (B8+r id).
     void emitMovRegImm32(uint8_t reg, uint32_t imm32) {
         size_t at = here();
-        if (reg == 4) { // r8d
-            emitByte(0x41);
-            emitByte(0xb8);
-        } else if (reg == 1) { // rcx
-            emitByte(0x48);
-            emitByte(0xc7);
-            emitByte(0xc1);
-        } else if (reg == 2) { // rdx
-            emitByte(0x48);
-            emitByte(0xc7);
-            emitByte(0xc2);
-        } else {
-            emitByte(0x48);
-            emitByte(0xc7);
-            emitByte(0xc0 | (reg & 7));
-        }
-        emitBytes({
-            static_cast<uint8_t>(imm32 & 0xff),
-            static_cast<uint8_t>((imm32 >> 8) & 0xff),
-            static_cast<uint8_t>((imm32 >> 16) & 0xff),
-            static_cast<uint8_t>((imm32 >> 24) & 0xff),
-        });
-        asmLineAt(at, std::string("mov ") + regName(reg) + ", " + std::to_string(imm32));
+        emitRex(false, 0, hw(reg));
+        emitByte(static_cast<uint8_t>(0xb8 | (hw(reg) & 7)));
+        emitDisp32(static_cast<int>(imm32));
+        asmLineAt(at, std::string("mov ") + regName32(reg) + ", " + std::to_string(imm32));
     }
     void emitMovRegImm64(uint8_t reg, uint64_t imm64) {
         if (reg == 0) {

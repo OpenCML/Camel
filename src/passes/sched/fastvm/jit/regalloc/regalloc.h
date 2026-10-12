@@ -34,6 +34,9 @@ inline constexpr int kNumAllocatableRegs = 8;
 inline constexpr int kSpilled            = -1;
 // rbx (index 3) is reserved for &FramePool::top_ caching in JIT internal convention
 inline constexpr int kReservedRegRbx = 3;
+// r11 (index 7) is never given to a virtual register: the MIR encoder uses it as scratch (the
+// divisor of idiv, the second flag of a float comparison, frame set-up of a call).
+inline constexpr int kReservedRegScratch = 7;
 
 /**
  * Allocation result: slot index -> physical register (0..7) or kSpilled.

@@ -111,6 +111,118 @@ void encodeMirBuffer(
 
     std::vector<JumpPatch> patches;
     SpillState spillState;
+
+    // Two-operand lowering of dst = left <op> right. The allocator frees a register at the
+    // last use of its value, so dst may be the register of either operand, and both operands
+    // may be one register. r11 is never allocated: it is the scratch register of this file.
+    auto u8 = [](int r) { return static_cast<uint8_t>(r); };
+    // Commutative: `op(a, b)` emits a := a <op> b.
+    auto emitCommutative = [&](int dr, int lr, int rr, auto &&op) {
+        if (dr == lr) {
+            op(u8(dr), u8(rr));
+        } else if (dr == rr) {
+            op(u8(dr), u8(lr));
+        } else {
+            enc.emitMovRegReg(u8(dr), u8(lr));
+            op(u8(dr), u8(rr));
+        }
+    };
+    // The condition `cc` of flags already set, as 0 / 1 in dst.
+    auto emitSetcc = [&](int dr, Encoder::Cond cc) { enc.setccReg(cc, u8(dr)); };
+    // 64-bit signed division: the quotient of left / right in dst. idiv takes the dividend in
+    // rdx:rax and leaves quotient and remainder there, so whatever else lives in the two is
+    // saved around it, and the divisor is moved out of their way first.
+    auto emitIdiv = [&](int dr, int lr, int rr, bool is32) {
+        if (is32)
+            enc.movRegReg32(kRegR11, u8(rr));
+        else
+            enc.emitMovRegReg(kRegR11, u8(rr));
+        if (dr != static_cast<int>(kRegRax))
+            enc.pushReg(kRegRax);
+        if (dr != static_cast<int>(kRegRdx))
+            enc.pushReg(kRegRdx);
+        if (lr != static_cast<int>(kRegRax)) {
+            if (is32)
+                enc.movRegReg32(kRegRax, u8(lr));
+            else
+                enc.emitMovRegReg(kRegRax, u8(lr));
+        }
+        if (is32)
+            enc.cdqIdivReg32(kRegR11);
+        else
+            enc.cqoIdivReg(kRegR11);
+        if (dr != static_cast<int>(kRegRax)) {
+            if (is32)
+                enc.movRegReg32(u8(dr), kRegRax);
+            else
+                enc.emitMovRegReg(u8(dr), kRegRax);
+        }
+        if (dr != static_cast<int>(kRegRdx))
+            enc.popReg(kRegRdx);
+        if (dr != static_cast<int>(kRegRax))
+            enc.popReg(kRegRax);
+    };
+    // Floating-point arithmetic on the bit patterns held in general registers.
+    auto emitFloatArith = [&](int dr, int lr, int rr, bool isDouble, uint8_t opcode) {
+        if (isDouble) {
+            enc.movqXmmFromReg(0, u8(lr));
+            enc.movqXmmFromReg(1, u8(rr));
+            enc.sseArithXmm0Xmm1(true, opcode);
+            enc.movqRegFromXmm(u8(dr), 0);
+        } else {
+            enc.movdXmmFromReg(0, u8(lr));
+            enc.movdXmmFromReg(1, u8(rr));
+            enc.sseArithXmm0Xmm1(false, opcode);
+            enc.movdRegFromXmm(u8(dr), 0);
+        }
+    };
+    // Floating-point comparison as 0 / 1 in dst, false whenever an operand is a NaN (true for
+    // "not equal"), as the comparison operators of the interpreters.
+    enum class FloatCmp { Lt, Le, Eq, Gt, Ge, Ne };
+    auto emitFloatCmp = [&](int dr, int lr, int rr, bool isDouble, FloatCmp cmp) {
+        if (isDouble) {
+            enc.movqXmmFromReg(0, u8(lr));
+            enc.movqXmmFromReg(1, u8(rr));
+        } else {
+            enc.movdXmmFromReg(0, u8(lr));
+            enc.movdXmmFromReg(1, u8(rr));
+        }
+        switch (cmp) {
+        // "above" needs CF = 0 and ZF = 0, "above or equal" CF = 0: both false on a NaN. The
+        // "less" comparisons are the "greater" ones with the operands exchanged.
+        case FloatCmp::Gt:
+            enc.ucomiXmm(isDouble, 0, 1);
+            enc.setccReg(Encoder::kCondA, u8(dr));
+            break;
+        case FloatCmp::Ge:
+            enc.ucomiXmm(isDouble, 0, 1);
+            enc.setccReg(Encoder::kCondAE, u8(dr));
+            break;
+        case FloatCmp::Lt:
+            enc.ucomiXmm(isDouble, 1, 0);
+            enc.setccReg(Encoder::kCondA, u8(dr));
+            break;
+        case FloatCmp::Le:
+            enc.ucomiXmm(isDouble, 1, 0);
+            enc.setccReg(Encoder::kCondAE, u8(dr));
+            break;
+        // Equal: ZF = 1 and no NaN (PF = 0). Not equal: ZF = 0 or a NaN (PF = 1).
+        case FloatCmp::Eq:
+            enc.ucomiXmm(isDouble, 0, 1);
+            enc.setccReg8(Encoder::kCondNP, kRegR11);
+            enc.setccReg8(Encoder::kCondE, u8(dr));
+            enc.andReg8Reg8(u8(dr), kRegR11);
+            enc.movzxRegReg8(u8(dr));
+            break;
+        case FloatCmp::Ne:
+            enc.ucomiXmm(isDouble, 0, 1);
+            enc.setccReg8(Encoder::kCondP, kRegR11);
+            enc.setccReg8(Encoder::kCondNE, u8(dr));
+            enc.orReg8Reg8(u8(dr), kRegR11);
+            enc.movzxRegReg8(u8(dr));
+            break;
+        }
+    };
     for (size_t i = 0; i < buf.size(); ++i) {
         const Mir &m   = buf[i];
         startOffset[i] = enc.here();
@@ -258,8 +370,7 @@ void encodeMirBuffer(
         case MirOp::VRet: {
             int r = pregFor(static_cast<VRegId>(m.r0));
             if (r >= 0) {
-                if (r != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(r));
+                enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(r));
                 enc.ret();
             }
             break;
@@ -301,30 +412,16 @@ void encodeMirBuffer(
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
-                else
-                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
-                enc.mulRaxFromReg(static_cast<uint8_t>(rr));
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
-            }
+            if (dr >= 0 && lr >= 0 && rr >= 0)
+                emitCommutative(dr, lr, rr, [&](uint8_t a, uint8_t b) { enc.imulRegReg(a, b); });
             break;
         }
         case MirOp::VIdiv: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movRaxFromReg(static_cast<uint8_t>(lr));
-                else
-                    enc.emitMovRegReg(kRegRax, static_cast<uint8_t>(lr));
-                enc.idivRaxByReg(static_cast<uint8_t>(rr));
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
-            }
+            if (dr >= 0 && lr >= 0 && rr >= 0)
+                emitIdiv(dr, lr, rr, false);
             break;
         }
         case MirOp::VCmpSetL:
@@ -338,30 +435,14 @@ void encodeMirBuffer(
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
                 enc.cmpRegReg(static_cast<uint8_t>(lr), static_cast<uint8_t>(rr));
-                switch (m.op) {
-                case MirOp::VCmpSetL:
-                    enc.setlAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetLE:
-                    enc.setleAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetG:
-                    enc.setgAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetGE:
-                    enc.setgeAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetE:
-                    enc.setzAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetNE:
-                    enc.setnzAlMovzxRax();
-                    break;
-                default:
-                    break;
-                }
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                emitSetcc(
+                    dr,
+                    m.op == MirOp::VCmpSetL    ? Encoder::kCondL
+                    : m.op == MirOp::VCmpSetLE ? Encoder::kCondLE
+                    : m.op == MirOp::VCmpSetG  ? Encoder::kCondG
+                    : m.op == MirOp::VCmpSetGE ? Encoder::kCondGE
+                    : m.op == MirOp::VCmpSetE  ? Encoder::kCondE
+                                               : Encoder::kCondNE);
             }
             break;
         }
@@ -391,30 +472,14 @@ void encodeMirBuffer(
             int32_t imm = static_cast<int32_t>(m.imm32);
             if (dr >= 0 && sr >= 0) {
                 enc.cmpRegImm32(static_cast<uint8_t>(sr), imm);
-                switch (m.op) {
-                case MirOp::VCmpSetLImm:
-                    enc.setlAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetLEImm:
-                    enc.setleAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetGImm:
-                    enc.setgAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetGEImm:
-                    enc.setgeAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetEImm:
-                    enc.setzAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetNEImm:
-                    enc.setnzAlMovzxRax();
-                    break;
-                default:
-                    break;
-                }
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                emitSetcc(
+                    dr,
+                    m.op == MirOp::VCmpSetLImm    ? Encoder::kCondL
+                    : m.op == MirOp::VCmpSetLEImm ? Encoder::kCondLE
+                    : m.op == MirOp::VCmpSetGImm  ? Encoder::kCondG
+                    : m.op == MirOp::VCmpSetGEImm ? Encoder::kCondGE
+                    : m.op == MirOp::VCmpSetEImm  ? Encoder::kCondE
+                                                  : Encoder::kCondNE);
             }
             break;
         }
@@ -739,71 +804,45 @@ void encodeMirBuffer(
         case MirOp::Nop:
             enc.nop();
             break;
+        // A double in a slot is its 64-bit pattern: loading and storing it is a plain move.
         case MirOp::VXmmLoadFromFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
-                enc.movXmm0FromFrame(m.disp);
-                enc.movRegFromXmm0(static_cast<uint8_t>(r));
-            }
+            if (r >= 0)
+                enc.movRegFromFrame(static_cast<uint8_t>(r), m.disp);
             break;
         }
         case MirOp::VXmmStoreToFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
-                enc.movXmm0FromReg(static_cast<uint8_t>(r));
-                enc.movFrameFromXmm0(m.disp);
-            }
+            if (r >= 0)
+                enc.movToFrame(m.disp, static_cast<uint8_t>(r));
             break;
         }
         case MirOp::VXmmLoadFromMemAt: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
-                enc.movXmm0FromMemAt(m.imm64);
-                enc.movRegFromXmm0(static_cast<uint8_t>(r));
-            }
+            if (r >= 0)
+                enc.movRegFromMemAt(static_cast<uint8_t>(r), m.imm64);
             break;
         }
-        case MirOp::VXmmAdd: {
+        case MirOp::VXmmAdd:
+        case MirOp::VXmmSub:
+        case MirOp::VXmmMul:
+        case MirOp::VXmmDiv:
+        case MirOp::VXmm32Add:
+        case MirOp::VXmm32Sub:
+        case MirOp::VXmm32Mul:
+        case MirOp::VXmm32Div: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.addXmm0FromReg(static_cast<uint8_t>(rr));
-                enc.movRegFromXmm0(static_cast<uint8_t>(dr));
-            }
-            break;
-        }
-        case MirOp::VXmmSub: {
-            int dr = pregFor(static_cast<VRegId>(m.r0));
-            int lr = pregFor(static_cast<VRegId>(m.r1));
-            int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.subXmm0FromReg(static_cast<uint8_t>(rr));
-                enc.movRegFromXmm0(static_cast<uint8_t>(dr));
-            }
-            break;
-        }
-        case MirOp::VXmmMul: {
-            int dr = pregFor(static_cast<VRegId>(m.r0));
-            int lr = pregFor(static_cast<VRegId>(m.r1));
-            int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.mulXmm0FromReg(static_cast<uint8_t>(rr));
-                enc.movRegFromXmm0(static_cast<uint8_t>(dr));
-            }
-            break;
-        }
-        case MirOp::VXmmDiv: {
-            int dr = pregFor(static_cast<VRegId>(m.r0));
-            int lr = pregFor(static_cast<VRegId>(m.r1));
-            int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.divXmm0FromReg(static_cast<uint8_t>(rr));
-                enc.movRegFromXmm0(static_cast<uint8_t>(dr));
+                const bool isDouble = m.op == MirOp::VXmmAdd || m.op == MirOp::VXmmSub ||
+                                      m.op == MirOp::VXmmMul || m.op == MirOp::VXmmDiv;
+                const uint8_t opcode =
+                    (m.op == MirOp::VXmmAdd || m.op == MirOp::VXmm32Add)   ? 0x58
+                    : (m.op == MirOp::VXmmSub || m.op == MirOp::VXmm32Sub) ? 0x5c
+                    : (m.op == MirOp::VXmmMul || m.op == MirOp::VXmm32Mul) ? 0x59
+                                                                           : 0x5e;
+                emitFloatArith(dr, lr, rr, isDouble, opcode);
             }
             break;
         }
@@ -812,37 +851,58 @@ void encodeMirBuffer(
         case MirOp::VXmmCmpSetE:
         case MirOp::VXmmCmpSetA:
         case MirOp::VXmmCmpSetAE:
-        case MirOp::VXmmCmpSetNZ: {
+        case MirOp::VXmmCmpSetNZ:
+        case MirOp::VXmm32CmpSetB:
+        case MirOp::VXmm32CmpSetBE:
+        case MirOp::VXmm32CmpSetE:
+        case MirOp::VXmm32CmpSetA:
+        case MirOp::VXmm32CmpSetAE:
+        case MirOp::VXmm32CmpSetNZ: {
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.comisdXmm0WithReg(static_cast<uint8_t>(rr));
+                bool isDouble = true;
+                FloatCmp cmp  = FloatCmp::Lt;
                 switch (m.op) {
+                case MirOp::VXmm32CmpSetB:
+                    isDouble = false;
+                    [[fallthrough]];
                 case MirOp::VXmmCmpSetB:
-                    enc.setbAlMovzxRax();
+                    cmp = FloatCmp::Lt;
                     break;
+                case MirOp::VXmm32CmpSetBE:
+                    isDouble = false;
+                    [[fallthrough]];
                 case MirOp::VXmmCmpSetBE:
-                    enc.setbeAlMovzxRax();
+                    cmp = FloatCmp::Le;
                     break;
+                case MirOp::VXmm32CmpSetE:
+                    isDouble = false;
+                    [[fallthrough]];
                 case MirOp::VXmmCmpSetE:
-                    enc.setzAlMovzxRax();
+                    cmp = FloatCmp::Eq;
                     break;
+                case MirOp::VXmm32CmpSetA:
+                    isDouble = false;
+                    [[fallthrough]];
                 case MirOp::VXmmCmpSetA:
-                    enc.setaAlMovzxRax();
+                    cmp = FloatCmp::Gt;
                     break;
+                case MirOp::VXmm32CmpSetAE:
+                    isDouble = false;
+                    [[fallthrough]];
                 case MirOp::VXmmCmpSetAE:
-                    enc.setaeAlMovzxRax();
+                    cmp = FloatCmp::Ge;
                     break;
-                case MirOp::VXmmCmpSetNZ:
-                    enc.setnzAlMovzxRax();
-                    break;
+                case MirOp::VXmm32CmpSetNZ:
+                    isDouble = false;
+                    [[fallthrough]];
                 default:
+                    cmp = FloatCmp::Ne;
                     break;
                 }
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                emitFloatCmp(dr, lr, rr, isDouble, cmp);
             }
             break;
         }
@@ -851,10 +911,14 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
-                enc.addEaxFromReg(static_cast<uint8_t>(rr));
-                enc.movRegFromEax(static_cast<uint8_t>(dr));
+                if (dr == lr) {
+                    enc.addRegReg32(u8(dr), u8(rr));
+                } else if (dr == rr) {
+                    enc.addRegReg32(u8(dr), u8(lr));
+                } else {
+                    enc.movRegReg32(u8(dr), u8(lr));
+                    enc.addRegReg32(u8(dr), u8(rr));
+                }
             }
             break;
         }
@@ -863,10 +927,15 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
-                enc.subEaxFromReg(static_cast<uint8_t>(rr));
-                enc.movRegFromEax(static_cast<uint8_t>(dr));
+                if (dr == lr) {
+                    enc.subRegReg32(u8(dr), u8(rr));
+                } else if (dr != rr) {
+                    enc.movRegReg32(u8(dr), u8(lr));
+                    enc.subRegReg32(u8(dr), u8(rr));
+                } else {
+                    enc.negReg32(u8(dr));
+                    enc.addRegReg32(u8(dr), u8(lr));
+                }
             }
             break;
         }
@@ -875,10 +944,14 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
-                enc.mulEaxFromReg(static_cast<uint8_t>(rr));
-                enc.movRegFromEax(static_cast<uint8_t>(dr));
+                if (dr == lr) {
+                    enc.imulRegReg32(u8(dr), u8(rr));
+                } else if (dr == rr) {
+                    enc.imulRegReg32(u8(dr), u8(lr));
+                } else {
+                    enc.movRegReg32(u8(dr), u8(lr));
+                    enc.imulRegReg32(u8(dr), u8(rr));
+                }
             }
             break;
         }
@@ -886,12 +959,8 @@ void encodeMirBuffer(
             int dr = pregFor(static_cast<VRegId>(m.r0));
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
-                enc.idivEaxByReg(static_cast<uint8_t>(rr));
-                enc.movRegFromEax(static_cast<uint8_t>(dr));
-            }
+            if (dr >= 0 && lr >= 0 && rr >= 0)
+                emitIdiv(dr, lr, rr, true);
             break;
         }
         case MirOp::VCmpSetL32:
@@ -904,140 +973,36 @@ void encodeMirBuffer(
             int lr = pregFor(static_cast<VRegId>(m.r1));
             int rr = pregFor(static_cast<VRegId>(m.imm32));
             if (dr >= 0 && lr >= 0 && rr >= 0) {
-                if (lr != static_cast<int>(kRegRax))
-                    enc.movEaxFromReg(static_cast<uint8_t>(lr));
-                enc.cmpEaxWithReg(static_cast<uint8_t>(rr));
-                switch (m.op) {
-                case MirOp::VCmpSetL32:
-                    enc.setlAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetLE32:
-                    enc.setleAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetG32:
-                    enc.setgAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetGE32:
-                    enc.setgeAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetE32:
-                    enc.setzAlMovzxRax();
-                    break;
-                case MirOp::VCmpSetNE32:
-                    enc.setnzAlMovzxRax();
-                    break;
-                default:
-                    break;
-                }
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                enc.cmpRegReg32(u8(lr), u8(rr));
+                emitSetcc(
+                    dr,
+                    m.op == MirOp::VCmpSetL32    ? Encoder::kCondL
+                    : m.op == MirOp::VCmpSetLE32 ? Encoder::kCondLE
+                    : m.op == MirOp::VCmpSetG32  ? Encoder::kCondG
+                    : m.op == MirOp::VCmpSetGE32 ? Encoder::kCondGE
+                    : m.op == MirOp::VCmpSetE32  ? Encoder::kCondE
+                                                 : Encoder::kCondNE);
             }
             break;
         }
+        // A float in a slot is its 32-bit pattern in the low half, the upper half clear.
         case MirOp::VXmm32LoadFromFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
-                enc.movSsXmm0FromFrame(m.disp);
-                enc.movSsRegFromXmm0(static_cast<uint8_t>(r));
-            }
+            if (r >= 0)
+                enc.movReg32FromFrame(static_cast<uint8_t>(r), m.disp);
             break;
         }
         case MirOp::VXmm32StoreToFrame: {
             int r = pregFor(static_cast<VRegId>(m.r0));
-            if (r >= 0) {
-                enc.movSsXmm0FromReg(static_cast<uint8_t>(r));
-                enc.movSsFrameFromXmm0(m.disp);
-            }
+            if (r >= 0)
+                enc.movToFrame(m.disp, static_cast<uint8_t>(r));
             break;
         }
         case MirOp::VXmm32LoadFromMemAt: {
             int r = pregFor(static_cast<VRegId>(m.r0));
             if (r >= 0) {
-                enc.movSsXmm0FromMemAt(m.imm64);
-                enc.movSsRegFromXmm0(static_cast<uint8_t>(r));
-            }
-            break;
-        }
-        case MirOp::VXmm32Add: {
-            int dr = pregFor(static_cast<VRegId>(m.r0));
-            int lr = pregFor(static_cast<VRegId>(m.r1));
-            int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.addSsXmm0FromReg(static_cast<uint8_t>(rr));
-                enc.movSsRegFromXmm0(static_cast<uint8_t>(dr));
-            }
-            break;
-        }
-        case MirOp::VXmm32Sub: {
-            int dr = pregFor(static_cast<VRegId>(m.r0));
-            int lr = pregFor(static_cast<VRegId>(m.r1));
-            int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.subSsXmm0FromReg(static_cast<uint8_t>(rr));
-                enc.movSsRegFromXmm0(static_cast<uint8_t>(dr));
-            }
-            break;
-        }
-        case MirOp::VXmm32Mul: {
-            int dr = pregFor(static_cast<VRegId>(m.r0));
-            int lr = pregFor(static_cast<VRegId>(m.r1));
-            int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.mulSsXmm0FromReg(static_cast<uint8_t>(rr));
-                enc.movSsRegFromXmm0(static_cast<uint8_t>(dr));
-            }
-            break;
-        }
-        case MirOp::VXmm32Div: {
-            int dr = pregFor(static_cast<VRegId>(m.r0));
-            int lr = pregFor(static_cast<VRegId>(m.r1));
-            int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.divSsXmm0FromReg(static_cast<uint8_t>(rr));
-                enc.movSsRegFromXmm0(static_cast<uint8_t>(dr));
-            }
-            break;
-        }
-        case MirOp::VXmm32CmpSetB:
-        case MirOp::VXmm32CmpSetBE:
-        case MirOp::VXmm32CmpSetE:
-        case MirOp::VXmm32CmpSetA:
-        case MirOp::VXmm32CmpSetAE:
-        case MirOp::VXmm32CmpSetNZ: {
-            int dr = pregFor(static_cast<VRegId>(m.r0));
-            int lr = pregFor(static_cast<VRegId>(m.r1));
-            int rr = pregFor(static_cast<VRegId>(m.imm32));
-            if (dr >= 0 && lr >= 0 && rr >= 0) {
-                enc.movSsXmm0FromReg(static_cast<uint8_t>(lr));
-                enc.comissXmm0WithReg(static_cast<uint8_t>(rr));
-                switch (m.op) {
-                case MirOp::VXmm32CmpSetB:
-                    enc.setbAlMovzxRax();
-                    break;
-                case MirOp::VXmm32CmpSetBE:
-                    enc.setbeAlMovzxRax();
-                    break;
-                case MirOp::VXmm32CmpSetE:
-                    enc.setzAlMovzxRax();
-                    break;
-                case MirOp::VXmm32CmpSetA:
-                    enc.setaAlMovzxRax();
-                    break;
-                case MirOp::VXmm32CmpSetAE:
-                    enc.setaeAlMovzxRax();
-                    break;
-                case MirOp::VXmm32CmpSetNZ:
-                    enc.setnzAlMovzxRax();
-                    break;
-                default:
-                    break;
-                }
-                if (dr != static_cast<int>(kRegRax))
-                    enc.movRegFromRax(static_cast<uint8_t>(dr));
+                enc.movRegFromMemAt(static_cast<uint8_t>(r), m.imm64);
+                enc.movRegReg32(static_cast<uint8_t>(r), static_cast<uint8_t>(r));
             }
             break;
         }

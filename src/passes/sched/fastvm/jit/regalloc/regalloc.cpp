@@ -557,7 +557,8 @@ bool linearScanVReg(
     int freeRegs[kNumAllocatableRegs];
     for (int i = 0; i < kNumAllocatableRegs; ++i)
         freeRegs[i] = 1;
-    freeRegs[kReservedRegRbx] = 0; // rbx reserved for poolTopAddr caching
+    freeRegs[kReservedRegRbx]     = 0; // rbx reserved for poolTopAddr caching
+    freeRegs[kReservedRegScratch] = 0; // r11 is the encoder's scratch register
 
     for (const VLiveInterval &cur : intervals) {
         for (auto it = active.begin(); it != active.end();) {
