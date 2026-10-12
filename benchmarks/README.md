@@ -198,14 +198,28 @@ and shape) instead of timing it, and prints `CAMEL_BENCH export_ms=<float>`,
 the time spent inside the exporter. `common/export.py --exporter camel` wraps
 this, so `run.py` records `export_s` for Camel as it does for torch and tf.
 
-The training models (`mlp`, `gru`, `transformer`) also export their training
-step: with `CAMEL_BENCH_WORKLOAD=train_export`, `model.cml` exports
+Every model's `model.cml` also has a training-step export: with
+`CAMEL_BENCH_WORKLOAD=train_export` it exports
 `step(m, x) = (loss, sgd(m, grad, 0.01))` to `CAMEL_BENCH_EXPORT`. The weights
 become graph inputs named after the weight files, the input is `input1`, and
 the outputs are `output_0` (the loss) and `output_1_<weight>` (the updated
-weights). `train.py --check-onnx` exports it for each model, runs
-`onnx.checker`, runs one step on ONNX Runtime, and compares the loss and the
-updated weights with one step of Camel's own execution.
+weights; `resnetbn` adds `output_2_<name>`, the updated running statistics).
+`train.py --check-onnx` exports it for each model, runs `onnx.checker`, runs
+one step on ONNX Runtime, and compares the loss and the updated weights with
+one step of Camel's own execution.
+
+The export succeeds for nine of the eleven models: `mlp`, `mlp_big`, `lenet`,
+`lenet_big`, `transformer`, `transformer4`, `transformer_big`, `resnet` and
+`resnetbn`. **The training steps of `gru` and `gru_big` do not export**:
+`onnx.export_model` refuses them. ONNX has no calls, so the exporter inlines
+every call and unrolls the 16 time steps into one graph, and the unrolled
+forward and backward pass need 86,928 edge table entries where one graph holds
+at most 65,535 (16-bit addressing, `docs/cli.md`). The refusal is a diagnostic
+at the `export_model` call that names the graph, the size it needs and the
+limit. The limit is not going to be widened (`docs/design-principles.cn.md`:
+a graph that does not fit means a pass flattened too much). The forward
+functions of `gru` and `gru_big` export and their training steps run natively;
+`train.py --check-onnx` and the `camel_export_ort` timing fail on these two.
 
 ## Running
 
