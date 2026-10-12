@@ -152,6 +152,8 @@ ForeignResourceStats foreignResourceStats();
 /// its wrapper dead, which for the wrappers alive at the end would be never. The wrappers stay
 /// valid objects; using one afterwards is the "disposed" error. Must not run while the program
 /// is still running.
+/// DESIGN-QUESTION(attempt-finalizers): a resource dropped inside a fault-isolation boundary is
+/// released by the next collection that finds its wrapper dead, at the latest by this call.
 size_t disposeAllForeignResources() noexcept;
 void resetForeignResourceStatsForTests();
 void noteForeignRootedHandleCreated() noexcept;
