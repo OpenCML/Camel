@@ -109,7 +109,7 @@ static bool isVRegOp(MirOp op) {
 void collectVRegDefUse(
     const MirBuffer &buf, std::vector<size_t> &firstDef, std::vector<size_t> &lastUse) {
     auto ensureSize = [&](VRegId v) {
-        if (v != kInvalidVReg && v < kMaxVRegs) {
+        if (v != kInvalidVReg) {
             size_t s = static_cast<size_t>(v) + 1;
             if (firstDef.size() < s) {
                 firstDef.resize(s, static_cast<size_t>(-1));
@@ -142,11 +142,11 @@ void collectVRegDefUse(
             if (p && p->frameless) {
                 uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
                 for (uint8_t ai = 0; ai < nArgs; ++ai) {
-                    if (p->argVRegs[ai] != 0xFF)
-                        useVReg(i, static_cast<VRegId>(p->argVRegs[ai]));
+                    if (p->argVRegs[ai] != kInvalidVReg)
+                        useVReg(i, p->argVRegs[ai]);
                 }
-                if (p->resultVReg != 0xFF)
-                    defVReg(i, static_cast<VRegId>(p->resultVReg));
+                if (p->resultVReg != kInvalidVReg)
+                    defVReg(i, p->resultVReg);
             }
             continue;
         }

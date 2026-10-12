@@ -31,13 +31,15 @@ std::string mirToString(const Mir &m) {
     std::ostringstream os;
     switch (m.op) {
     case MirOp::MovRegReg:
-        os << "mov " << mirRegName(m.r0) << ", " << mirRegName(m.r1);
+        os << "mov " << mirRegName(static_cast<uint8_t>(m.r0)) << ", "
+           << mirRegName(static_cast<uint8_t>(m.r1));
         break;
     case MirOp::MovRegImm32:
-        os << "mov " << mirRegName(m.r0) << "d, " << m.imm32;
+        os << "mov " << mirRegName(static_cast<uint8_t>(m.r0)) << "d, " << m.imm32;
         break;
     case MirOp::MovRegImm64: {
-        os << "mov " << mirRegName(m.r0) << ", 0x" << std::hex << m.imm64 << std::dec;
+        os << "mov " << mirRegName(static_cast<uint8_t>(m.r0)) << ", 0x" << std::hex << m.imm64
+           << std::dec;
         break;
     }
     case MirOp::VLoadFromFrame:

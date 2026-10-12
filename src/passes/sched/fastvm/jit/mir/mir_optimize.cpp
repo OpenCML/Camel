@@ -122,7 +122,7 @@ void optimizePeephole(MirBuffer &buf) {
     // linear history entry because this pass is intentionally local and
     // conservative; non-integer stores simply invalidate the slot.
     struct StoreInfo {
-        uint8_t vreg;
+        VRegId vreg;
         size_t index;
         bool read;
     };
@@ -239,13 +239,13 @@ void eliminateDeadFrameStores(MirBuffer &buf) {
             if (p) {
                 uint8_t nArgs = p->argsCnt < 7 ? p->argsCnt : 7;
                 for (uint8_t ai = 0; ai < nArgs; ++ai) {
-                    if (p->argVRegs[ai] == 0xFF)
+                    if (p->argVRegs[ai] == kInvalidVReg)
                         liveSlots.insert(p->argSrcDisps[ai]);
                 }
                 // Frameless calls can expose the result as a vreg def instead of
                 // an implicit frame write. Only the opaque path keeps resultDisp
                 // alive as a memory destination.
-                if (p->resultVReg == 0xFF)
+                if (p->resultVReg == kInvalidVReg)
                     liveSlots.erase(p->resultDisp);
             }
             continue;

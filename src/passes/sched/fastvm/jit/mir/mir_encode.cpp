@@ -235,13 +235,13 @@ void encodeMirBuffer(
             }
             break;
         case MirOp::MovRegReg:
-            enc.emitMovRegReg(m.r0, m.r1);
+            enc.emitMovRegReg(static_cast<uint8_t>(m.r0), static_cast<uint8_t>(m.r1));
             break;
         case MirOp::MovRegImm32:
-            enc.emitMovRegImm32(m.r0, m.imm32);
+            enc.emitMovRegImm32(static_cast<uint8_t>(m.r0), m.imm32);
             break;
         case MirOp::MovRegImm64:
-            enc.emitMovRegImm64(m.r0, m.imm64);
+            enc.emitMovRegImm64(static_cast<uint8_t>(m.r0), m.imm64);
             break;
         case MirOp::VLoadImm32: {
             int r = pregFor(static_cast<VRegId>(m.r0));
@@ -562,8 +562,8 @@ void encodeMirBuffer(
                 uint8_t actualArgRegs[7];
                 for (uint8_t ai = 0; ai < nArgs; ++ai) {
                     int preloadedReg = -1;
-                    if (p->argVRegs[ai] != 0xFF)
-                        preloadedReg = pregFor(static_cast<VRegId>(p->argVRegs[ai]));
+                    if (p->argVRegs[ai] != kInvalidVReg)
+                        preloadedReg = pregFor(p->argVRegs[ai]);
                     if (preloadedReg >= 0) {
                         actualArgRegs[ai] = static_cast<uint8_t>(preloadedReg);
                     } else {
@@ -604,10 +604,10 @@ void encodeMirBuffer(
 
                 enc.addRspImm(p->calleeSlotBytes);
                 enc.popRdi();
-                if (p->resultVReg != 0xFF) {
+                if (p->resultVReg != kInvalidVReg) {
                     // Result-visible mode: keep the call result in a vreg so a
                     // following VStore/VLoad pair can be optimized away upstream.
-                    int preg = pregFor(static_cast<VRegId>(p->resultVReg));
+                    int preg = pregFor(p->resultVReg);
                     if (preg >= 0 && preg != static_cast<int>(kRegRax))
                         enc.emitMovRegReg(static_cast<uint8_t>(preg), kRegRax);
                 } else {

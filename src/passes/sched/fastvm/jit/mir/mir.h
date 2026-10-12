@@ -46,7 +46,6 @@ constexpr uint8_t kRegRdi = 8, kRegRsi = 9;
 // register allocation stage.
 using VRegId                  = uint16_t;
 constexpr VRegId kInvalidVReg = 0xFFFFu;
-constexpr VRegId kMaxVRegs    = 512;
 
 inline const char *mirRegName(uint8_t r) {
     static const char *n[] = {"rax", "rcx", "rdx", "rbx", "r8", "r9", "r10", "r11", "rdi", "rsi"};
@@ -167,8 +166,9 @@ enum class MirOp : uint8_t {
 
 struct Mir {
     MirOp op{MirOp::Nop};
-    uint8_t r0{0};
-    uint8_t r1{0};
+    // Physical register ids for the fixed-register ops, virtual register ids for V* ops.
+    uint16_t r0{0};
+    uint16_t r1{0};
     int32_t disp{0};
     uint32_t imm32{0};
     uint64_t imm64{0};
@@ -190,8 +190,8 @@ struct NativeJitCallParams {
     uint8_t argsCnt;
     int32_t argSrcDisps[8];
     int32_t argDstDisps[8];
-    uint8_t argVRegs[8]; // VReg IDs for pre-loaded args (frameless path); 0xFF = not pre-loaded
-    uint8_t resultVReg = 0xFF; // VReg for call result (frameless); 0xFF = store inside call
+    VRegId argVRegs[8]; // Pre-loaded args (frameless path); kInvalidVReg = not pre-loaded
+    VRegId resultVReg = kInvalidVReg; // Call result (frameless); kInvalidVReg = store inside call
     bool isSameGraph;          // true = call rel32, false = load fn from jitFnAddr and call rax
     uint64_t jitFnAddr;        // &bc->extra3() (load JIT entry pointer at runtime for cross graph)
     bool frameless; // true = stack allocation (no Frame pool), suitable for pure self-recursive

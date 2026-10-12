@@ -32,7 +32,9 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
+#include <algorithm>
 #include <cstring>
+#include <iterator>
 #include <string>
 #include <unordered_set>
 
@@ -909,7 +911,10 @@ bool X64Backend::compileBytecode(
                     for (uint8_t ai = 0; ai < params->argsCnt; ++ai)
                         params->argSrcDisps[ai] = slotDisp(bc.operands()[ai]);
                     fillDirectCallDstDisps(bc, params->argDstDisps);
-                    std::memset(params->argVRegs, 0xFF, sizeof(params->argVRegs));
+                    std::fill(
+                        std::begin(params->argVRegs),
+                        std::end(params->argVRegs),
+                        x64::kInvalidVReg);
                     params->isSameGraph = sameGraph;
                     params->jitFnAddr   = reinterpret_cast<uint64_t>(bc.extra3());
                     params->frameless   = sameGraph && canUseFramelessSelfFunc;
@@ -941,18 +946,18 @@ bool X64Backend::compileBytecode(
                         for (uint8_t ai = 0; ai < nArgs; ++ai) {
                             x64::VRegId vArg = nextVReg++;
                             loadSlot(bc.operands()[ai], params->argSrcDisps[ai], vArg);
-                            params->argVRegs[ai] = static_cast<uint8_t>(vArg);
+                            params->argVRegs[ai] = vArg;
                         }
                         // Phase Q: externalize result store so peephole can fuse
                         // the subsequent VLoadFromFrame into a VCopy.
                         x64::VRegId vResult = nextVReg++;
-                        params->resultVReg  = static_cast<uint8_t>(vResult);
+                        params->resultVReg  = vResult;
                     }
                     build.emitNativeJitFuncCall(params);
                     if (params->frameless)
                         build.emitVStoreToFrame(
                             params->resultDisp,
-                            static_cast<x64::VRegId>(params->resultVReg));
+                            params->resultVReg);
                     // Native calls are the main cache barrier: physical registers
                     // may no longer hold the previously cached slot values.
                     slotCache.clear();
