@@ -20,8 +20,12 @@
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
+#include "operators.h"
+
+#include <optional>
 
 using namespace camel::core::context;
 using namespace camel::core::module;
@@ -45,6 +49,32 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
             "decode",
             {{"json:decode",
               StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Any())}}));
+    // DESIGN-QUESTION(json-typed-decode): decoding to a given type. A call cannot be handed a
+    // type, so the type is that of a `shape` argument whose value is not read:
+    // `decode_as<[] as Map<string, int>>(text)` or `decode_as(text, [] as Map<string, int>)`.
+    // The result is a `T!`. `decode` above is unchanged.
+    exportEntity(
+        "decode_as",
+        OperatorGroup::create(
+            "decode_as",
+            {{"json:decode_as",
+              DynamicFuncTypeResolver::create(
+                  {{-1, {}}, {-1, {}}},
+                  "<shape: T> (text: string) => T!",
+                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      Type *shape = nullptr;
+                      if (with.size() == 1 && norm.size() == 1) {
+                          shape = with[0];
+                      } else if (with.empty() && norm.size() == 2) {
+                          shape = norm[1];
+                      }
+                      if (shape == nullptr || norm[0]->code() != TypeCode::String ||
+                          !jsonTypeHasForm(shape)) {
+                          return std::nullopt;
+                      }
+                      return TupleType::fallible(shape);
+                  })}}));
 }
 
 module_ptr_t JsonModule::create(context_ptr_t ctx) { return std::make_shared<JsonModule>(ctx); }
