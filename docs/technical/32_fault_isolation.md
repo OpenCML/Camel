@@ -10,9 +10,11 @@ Choices the design principles do not make are collected in section 9 as question
 language author. Each is implemented the way section 9 recommends and marked in the code and
 in the tests with `DESIGN-QUESTION(<label>)`, so that a ruling can be applied in one place.
 
-The name `attempt` is provisional. It is written in exactly one place,
+The name `attempt` is provisional. In the C++ sources it is written in exactly one place,
 `camel::execute::kFaultIsolationName` (`include/camel/execute/fault_isolation.h`); everything
 else refers to the operator by its URI `:mark/isolate`, which does not contain the name.
+Outside C++ the name is in the signature entry (`stdlib/signatures/globals.cml`), the
+generated `docs/stdlib-reference.md`, this note, and the test programs.
 
 ## 1. Surface form and graph mapping
 
@@ -35,13 +37,16 @@ The function value may be a named function, a lambda, or any expression of a fun
 | `f` | `attempt(f, a...)` |
 |---|---|
 | `(A...) => T` | `T!` |
-| `(A...) => void` | `void!` |
 | `(A...) => U?` | `U?!` (allowed by `29`, 4.3: "may fail, and the result may be absent") |
 | `(A...) => U!` | `U!` — **not** `U!!` (`DESIGN-QUESTION(attempt-fallible-target)`) |
 
 The arguments must have exactly the parameter types of `f` (no conversion, as for every
-call). A function with `with` parameters is not accepted (wrap the call in a closure). `var`
-parameters are accepted: `attempt` hands the same references on.
+call). Not accepted, each a compile-time error at the call (`NoMatchingFunction`):
+
+- a function with `with` parameters (it is called through a closure that binds them);
+- a function with a `var` parameter: an existing rule of the front end refuses to hand such a
+  function to any operator ("an operator calls a function argument with values"). The closure
+  form captures the variable instead, by reference (2.5).
 
 When `f` itself returns `U!`, the result is `U!`: an error value `f` returned is handed on
 unchanged, and a fault inside `f` becomes an error value of the same type. `T!!` is rejected
@@ -52,17 +57,23 @@ once, with one `!!`. The kind name tells the two apart when needed.
 ### 1.3 On the graph
 
 One `OPER` node whose URI is `:mark/isolate`. Its first input is the function value, the
-others are the arguments — the inputs of a `CALL` node, on a node of another kind:
+others are the arguments — the inputs of a `CALL` node, on a node of another kind. From
+`camel x.cml std::rgir` for `let b = attempt(risky, 0) !! -1` (attributes shortened):
 
 ```
-main:
-  DATA   Function(graph=risky, tupleSlots=0)
-  DATA   0
-  OPER   :mark/isolate : int!        <- [norm] Function(risky), 0
-  ...                                   (the BRCH/JOIN of `!! -1`, as in 29 section 3.1)
-
-  CALL                 : int         <- [with] Function(risky); [norm] 0     (for comparison)
+subgraph main {
+    subgraph risky { PORT x; DATA 100; OPER :op/div_l; EXIT }
+    N1 [label="Function(graph=risky, tupleSlots=0)", type="DATA"];
+    N2 [label="0", type="DATA"];
+    N3 [label=":mark/isolate", type="OPER"];      // : int!
+    N1 -> N3 [label="0|0", type="NORM"];
+    N2 -> N3 [label="0|1", type="NORM"];
+    ...                                           // BRCH/JOIN of `!! -1` (29, section 3.1)
+}
 ```
+
+For comparison, the call `f(0)` through a function value is `CALL` with the function on a
+`WITH` edge and the argument on a `NORM` edge.
 
 "A marked call of a subgraph" (design principles, table of section 1) is this: the node
 calls the graph of the function value, exactly as `CALL` does, and the mark says that the
@@ -98,7 +109,7 @@ with everything it calls, directly or indirectly, on whatever thread.
 The error value is the fixed built-in `Error` structure (`29`, 2.3): `kind` is the name of
 the fault's diagnostic without the `RuntimeDiag::` prefix, `message` is the diagnostic's
 message, `location` is `file:line:column` of the place the diagnostic points at (the same
-format `error(kind, message)` records).
+format `error(kind, message)` records; the file name without its directory).
 
 | Fault | Isolated | Why |
 |---|---|---|
@@ -106,7 +117,7 @@ format `error(kind, message)` records).
 | `InvalidNumberText`, `FormatFailed`, `InvalidArgument`, `OperandTypeUnsupported`, `TensorDimensionMismatch` | yes | an operator refused its operands (includes failed conversions) |
 | `FileOpenFailed`, `FileSystemError`, `JsonDecodeFailed`, `JsonEncodeUnsupported`, `RegexInvalid`, `TimeFormatFailed` | yes | a library operator that is not declared `T!` failed |
 | `RuntimeError` | yes | the generic fault of module operators (e.g. an exception raised in Python) |
-| `MaxRecursionDepthExceeded` (count reached, native stack nearly full, frame pool full) | yes | the check is made before the call that would not fit, with head room left (1/16 of the stack); unwinding to the boundary returns every frame and the whole stack above it, so the state at the boundary is exactly the state before the call (section 3.5) |
+| `MaxRecursionDepthExceeded` (count reached, native stack nearly full, frame pool full) | yes | the check is made before the call that would not fit, with head room left (1/16 of the stack); unwinding to the boundary returns every frame and the whole stack above it, so the state at the boundary is the state before the call (3.5). Verified: after it, the same recursion to a depth that fits runs, on all four back ends |
 | `MemoryExhausted` | **no** | it is not a `RuntimeFault` but an exception of the allocator, raised with the heap full. Building the error value allocates; nothing guarantees the unwinding freed anything (the objects may be reachable from outside). `DESIGN-QUESTION(attempt-memory-exhausted)` |
 | `PassInternalError`, `UnrecognizedOperatorURI`, `UnsupportedBytecode`, `OperatorNotImplemented`, `GraphInliningFailed`, `GraphTooLarge`, any `InternalDiag`, a failed `ASSERT`, a C++ exception that is not a `RuntimeFault` | **no** | defects or limits of the compiler, not faults of the program. Hiding one behind `!! default` would turn a compiler bug into a wrong result |
 | `MacroEvaluationFailed`, `EntryArgument*`, `EntryResultNotWritten`, `MissingMainFunction`, `TranslationRefused`, `UnrecognizedGraphPass` | **no** | not raised while a graph runs |
@@ -124,11 +135,11 @@ unchanged. A fault outside every `attempt` ends the program as before.
 
 ### 3.1 The common part: an isolated fault is an exception that was never recorded
 
-Today a fault is a `RuntimeFault` thrown by an operator or a scheduler. The scheduler that
-catches it knows the node or pc and calls `reportRuntimeFault`, which **records** the
-diagnostic in the sink and returns it to be thrown on. Under the command line the sink stops
-at the first run-time error: recording throws `DiagnosticsLimitExceededException`, which is
-what actually unwinds the scheduler.
+A fault is a `RuntimeFault` thrown by an operator or a scheduler. The scheduler that catches
+it knows the node or pc and calls `reportRuntimeFault`, which **records** the diagnostic in
+the sink and returns it to be thrown on. Under the command line the sink stops at the first
+run-time error: recording throws `DiagnosticsLimitExceededException`, which is what actually
+unwinds the scheduler of a program that ends with a fault.
 
 Inside a boundary the fault must not be recorded (it is not a diagnostic of the run), but it
 needs its message and position. So:
@@ -136,12 +147,13 @@ needs its message and position. So:
 - `camel::core::error::FaultIsolationScope` (RAII, `camel/core/error/runtime.h`) counts, per
   thread, the boundaries open around the code that thread is running.
 - `reportRuntimeFault` asks: is a boundary open on this thread, and is the fault on the
-  allow-list? Then it builds the located `Diagnostic` exactly as before, does **not** add it
-  to the sink, and returns it. `Diagnostic::persisted` is false for it.
+  allow-list? Then it builds the located `Diagnostic` exactly as before
+  (`RuntimeErrorReporter::describe`), does **not** add it to the sink, and returns it.
+  `Diagnostic::persisted` is false for it.
 - Every scheduler already throws what `reportRuntimeFault` returns and already has unwinding
   paths for a `Diagnostic` in flight (they release frames and restore counters). The
-  `attempt` node catches `Diagnostic`, checks `!persisted` and the allow-list, and builds the
-  error value with `camel::execute::isolatedFaultToError`.
+  `attempt` node catches `Diagnostic`, asks `isIsolatedFault` (not recorded, on the
+  allow-list), and builds the error value with `camel::execute::isolatedFaultToError`.
 
 A program that does not use `attempt` never opens a scope: the only added work is one
 thread-local read on the path of a fault that is already ending the program.
@@ -161,7 +173,7 @@ call(main) -> evalMarkedOperator_isolate -> [scope] call(f) -> call(g) -> ... fa
                     ^ catch (Diagnostic)        each activation releases its frames
 ```
 
-The node handler opens the scope, acquires the callee frame, calls, and on `Diagnostic`
+The node handler acquires the callee frame, opens the scope, calls, and on `Diagnostic`
 writes the error value into the node's slot. Nothing else needs restoring: the handler
 asserts in debug builds that the recursion depth is what it was before the call.
 
@@ -169,8 +181,8 @@ asserts in debug builds that the recursion depth is what it was before the call.
 
 A direct call does not nest on the native stack: it pushes pc and frame on `pcStack_` /
 `frameStack_`. A call through a function value and every `:mark/...` element call run in a
-nested activation of `call` (`callElement`). `attempt` is a `:mark` operator, so the boundary
-always coincides with one nested activation:
+nested activation of `call` (`callElement`). `attempt` is a `:mark` operator (bytecode `SCHD`,
+`MarkOpCode::Isolate`), so the boundary always coincides with one nested activation:
 
 ```
 call#0 [pcStack: main ...] --SCHD isolate--> callElement --> call#1 [pcStack: f, g, h ...] fault
@@ -184,7 +196,8 @@ additionally restores `nestedCalls_` (incremented by `callElement`, which does n
 
 Compiled code calls no C++ and only itself (`07`, section 16). A graph that contains an
 `OPER` is not compiled, so **the graph that contains the `attempt` node always runs in the
-interpreter**. The callee and what it calls may be compiled. The possible stacks:
+interpreter** (verified: the log says "contains OPER" for those graphs). The callee and what
+it calls may be compiled. The possible stacks:
 
 ```
 (a) interp(main) -> isolate -> callElement -> invokeOwnedJitFrame -> [wrapper | f f f ...]   native self-recursion
@@ -200,13 +213,17 @@ there on it is the `std::fvm` case. `raiseJitFault` clears `faultKind`/`faultPc`
 throws, so the `JitContext` is clean at the boundary; `depthBudget` is recomputed on every
 entry into compiled code.
 
+Verified with a callee that is compiled (`compiled.cml`): shape (a) with a division by zero
+in straight-line code under `std::jit`, and with a native self-recursion that exceeds the
+limit under `std::inline std::jit`; the compiled code runs again afterwards.
+
 The case "compiled `f` calls another graph through the interpreter" does not exist today: a
 graph that calls another graph is not compiled. If trampolines are added, `07` 16.5 applies
 unchanged (the trampoline must catch and re-raise through the stub); isolation adds no
 requirement to it.
 
-Not verified: Windows x64 (calling convention, the `s_jit_save_depth` path of clang on
-Windows). Only Linux x86-64 was run.
+**Not verified: Windows x64** (calling convention, the `s_jit_save_depth` path of clang on
+Windows). Only Linux x86-64 was run. No JIT code was changed.
 
 ### 3.5 What is restored at the boundary
 
@@ -215,7 +232,7 @@ Windows). Only Linux x86-64 was run.
 | Frame pool (`FramePool`, `TaskflowFramePool`) | every activation releases its own frames while the exception passes; the handler releases the callee frame if the callee did not |
 | Call depth (`currRecursionDepth_`; `stackDepth_`/`nestedCalls_`; `ThreadState::callDepth`) | decremented by the same handlers / RAII (`OpenCall`, `InheritedDepth`) |
 | Native stack | unwound by the exception |
-| Collector roots | frames are roots only while active in a pool; `RootHandle`s and `TaskflowGcRegion`s are RAII. Temporaries of the boundary are unreachable once it is left |
+| Collector roots | frames are roots only while active in a pool; `RootHandle`s and `TaskflowGcRegion`s are RAII. Temporaries of the boundary are unreachable once it is left. No new root interface was added |
 | JIT context | `faultKind`/`faultPc` cleared when the fault is raised; `depthBudget` set on entry |
 | Scheduling state of `sync`/`wait` | none exists at run time: control edges are part of the graph, and the linear order is computed per graph, not kept in the scheduler |
 | Diagnostics sink | nothing was added (3.1) |
@@ -224,68 +241,84 @@ Windows). Only Linux x86-64 was run.
 
 ### 3.6 `std::prl` / `std::tf`
 
-Tasks may run on other worker threads. Two facts of the existing scheduler make isolation
-possible without new machinery:
+Tasks may run on other worker threads. One fact of the existing scheduler makes isolation
+possible without new machinery: **every task flow is joined by the thread that started it**
+(`runOnExecutor`: `corun` on a worker, `run(...).get()` otherwise; `Subflow::join`). An
+exception thrown in a task is kept and rethrown in the starting thread after the flow has
+finished. So when the exception arrives at the `attempt` node, on the thread that runs the
+node, no task started inside the boundary is still running.
 
-1. **Every task flow is joined by the thread that started it** (`runOnExecutor`: `corun` on a
-   worker, `run(...).get()` otherwise; `Subflow::join`). An exception thrown in a task is
-   kept and rethrown in the starting thread after the flow has finished. So when the
-   exception arrives at the `attempt` node, on the thread that runs the node, no task started
-   inside the boundary is still running.
-2. A failure already stops work that has not started (`aborting_`).
+What was global and had to become scoped is "which fault is *the* fault". The run had one
+`firstFault_`; it is now per **fault domain** (`TaskflowFaultDomain`): the run has a root
+domain, each `attempt` node opens one for its callee, and the domain a thread works in is
+part of its `ThreadState`, inherited by every task exactly where the call depth already is
+(`InheritedDepth`), together with the thread-local count of open boundaries of 3.1.
 
-What was global and had to become scoped is "which failure, and who stops". Both move into a
-**fault domain** (`TaskflowExecSchedPass::FaultDomain`): the abort flag, the first fault, a
-link to the enclosing domain. The run has a root domain; each `attempt` node opens one for
-its callee. The domain a thread works in is part of its `ThreadState` and is inherited by
-every task exactly where the call depth already is (`InheritedDepth`, now `InheritedTask`).
+- `raiseFault` reports the first fault *of the domain* and only that one (concurrent element
+  functions can fault together); later faults of the domain unwind with the first one's
+  exception. A fault that is not on the allow-list goes to the root domain.
+- The `attempt` node (`executeIsolateNode`) runs the callee on its own thread, catches the
+  `Diagnostic` after the flows inside were joined, and writes the error value.
 
-- `raiseFault` reports the first fault *of the domain* (and only that one: concurrent
-  element functions can fault together) and marks the domain aborting.
-- A task that is about to start an item, a call or an element asks whether its domain *or an
-  enclosing one* is aborting, and does not start if so. A process-wide count of aborting
-  domains keeps this at one relaxed load while no fault is in flight.
-- The `attempt` node catches the `Diagnostic` after its flows were joined, drops the domain,
-  and writes the error value.
+Sibling work outside the boundary is in another domain and is not affected (`concurrent.cml`).
 
-Sibling tasks outside the boundary are in another domain and are not affected.
+**What a failure stops** (`DESIGN-QUESTION(attempt-parallel-siblings)`), for an isolated
+fault and for one that ends the run alike:
 
-**Siblings inside the boundary** (`DESIGN-QUESTION(attempt-parallel-siblings)`). For
-`attempt(() => xs->map<f>)` where one element faults: elements already started run to their
-end (there is no preemption; they may still print and write `var`s); elements not yet started
-do not start; the node returns the error value only after all started ones have ended, so
-nothing of the boundary runs after the boundary is left. The same policy applies to a fault
-that is not isolated: the program ends after the started elements have ended. The linear back
-ends run elements in order and none after the faulting one, so *which* effects of the other
-elements happen differs between a linear and a parallel run — as 2.7 already says for effects
-in a parallel `map`.
+- tasks that have started run to their end, with everything they start (there is no
+  preemption; they may still print and write `var`s);
+- tasks *of the same flow* that have not started do not start: the executor skips the tasks
+  of a flow one of whose tasks threw, and a scope skips its remaining chains
+  (`FlowInstance::failed`);
+- whoever started the flow waits for all that started, so nothing of a boundary runs after
+  the boundary is left.
+
+Before this work the run had one abort flag (`aborting_`) that every item of every graph
+polled once a task had failed. It cut started elements short at their next node, which left
+values missing in frames still in use; that was harmless for a run about to end, and is not
+acceptable for a program that goes on. It is removed; no running code polls anything.
+
+For `attempt(() => xs->map<f>)` where one element faults: on the linear back ends no element
+after the faulting one runs; on `std::prl` some do, a different number from run to run, each
+of them completely. *Which* effects of the other elements happen thus differs between a
+linear and a parallel run, as 2.7 already says for effects in a parallel `map`.
 
 Which of several concurrent faults becomes the error value is whichever is reported first; it
 is not defined (`DESIGN-QUESTION(attempt-parallel-first-fault)`).
 
 ## 4. Clean-up
 
-### 4.1 When a fault ends the program (not isolated)
+### 4.1 Output
 
-Verified, not changed (see `06` 4.4.4 and `test/plans/feat/consistency/cleanup.plan.toml`):
-the exception unwinds the scheduler, the pass driver records the failure, the command line
-returns from `main`. C++ streams are flushed, `fs` operators have closed their files, static
-destructors run.
+Not changed, verified again (`06` 4.4.4; `test/plans/feat/consistency/cleanup.plan.toml`): a
+fault, `exit(n)` and a normal return all leave through the return of the command line's
+`main`; C++ streams are flushed, `fs` operators have closed their files, Python's standard
+output is flushed. An isolated fault flushes nothing: what was printed stays buffered, in
+order.
 
-External resources (`ForeignResourceObject`, section 23) are released by their finalizers,
-which the collector runs when it finds the object dead, and which the memory manager runs for
-every object still alive when the heap is torn down at process exit. What this work checked
-and what it found is in section 8.
+### 4.2 External resources: a gap that was found and closed
 
-### 4.2 When a fault is isolated
+An external resource is a `ForeignResourceObject` (`23`): a collected wrapper whose finalizer
+releases the resource when the collector finds the wrapper dead. **Wrappers still alive when
+the run ended were never finalized, however the run ended** — also on a normal return: a
+Python object held by `main` was never released (its `__del__` never ran, a file it held was
+not flushed; `06` 4.4.4 recorded this as a known limit).
+
+Now `camel::core::rtdata::disposeAllForeignResources()` releases every resource still held,
+newest first, and the command line calls it when it leaves `main`, on every path, before the
+context and the modules go away. It uses the existing `dispose()` of the control block
+(idempotent; a later finalizer only drops the reference), through a registry of live control
+blocks; the collector was not touched. A program that creates no foreign resource pays
+nothing. `camel-db` and the embedding API do not call it yet (they do not end a process per
+run); it is one call to add.
+
+### 4.3 When a fault is isolated
 
 Nothing is finalized at the boundary: objects created inside become unreachable and are
-finalized by the next collection that finds them, like any garbage. An external resource
-therefore outlives the boundary by an unspecified time (`DESIGN-QUESTION(attempt-finalizers)`:
-the alternative, a collection at every isolated fault, would make an isolated fault cost a
-full collection).
-
-Output is not flushed at the boundary either; it stays buffered and in order.
+finalized by the next collection that finds them, like any garbage, and at the latest by 4.2
+when the run ends. An external resource therefore outlives the boundary by an unspecified
+time (`DESIGN-QUESTION(attempt-finalizers)`: the alternative, a collection at every isolated
+fault, would make an isolated fault cost a full collection).
 
 ## 5. Passes and other libraries
 
@@ -293,34 +326,121 @@ Output is not flushed at the boundary either; it stays buffered and in order.
   `CALL` node; the inliner replaces call nodes only, so the callee's body is never copied
   into the enclosing graph and the boundary stays a graph boundary. Inlining *inside* the
   callee is unaffected (the boundary is the callee's graph, whatever was inlined into it).
-  The cost: a function called only through `attempt` keeps its call. A pass that specialises
-  higher-order operators on a constant function value must not rewrite `:mark/isolate` into
-  a call; `camel::execute::isFaultIsolationUri` is the test to use.
-- **fold / cse / dce.** `:mark/isolate` has no entry in the operator-traits registry, so it
-  is treated as effectful: never folded (its result depends on whether the callee faults,
-  which is exactly what folding must not decide at compile time, see 2.9 on `1 / 0`), never
-  merged, and removed only where an effectful unused call already is.
-- **`std::macro`.** The macro evaluator does not evaluate `:mark/...` operators ahead of
-  time; a macro function whose body uses `attempt` is left as a call.
-- **Autodiff, ONNX export, `std::cpp`.** Each refuses the node with a located diagnostic.
+  The cost: a function called only through `attempt` keeps its call. **No pass was changed.**
+  A pass that later specialises higher-order operators on a constant function value must not
+  rewrite `:mark/isolate` into a call; `camel::execute::isFaultIsolationUri` is the test.
+- **fold / cse / dce.** `:mark/isolate` is declared effectful in the operator-traits
+  registry, as `map` is: what it does is what the function does, and its result depends on
+  whether the call faults. It is never folded (2.9 on `1 / 0`: a pass must not decide a fault
+  at compile time), never merged, and removed only where an effectful unused call already is.
+  `std::opt::simplify` specialises a callee on a constant argument and then warns
+  (`ConstantExpressionFaults`) that the division in the specialised copy always faults; it
+  does not fold it, and the behaviour is unchanged.
+- **`std::macro`.** The macro evaluator runs none of the operators the schedulers run
+  themselves (`map`, `filter`, ..., `attempt`): a macro call with constant arguments whose
+  body uses one fails to evaluate, which is a compile-time error (2.7), reported at the call
+  with the operator named. Without `std::macro` the function is an ordinary one.
+- **Autodiff, ONNX export, `std::cpp`.** Each refuses with a located diagnostic, with no
+  change to them: `grad` at the `grad` call ("no derivative rule for operator
+  ':mark/isolate'"); `onnx::export` at the `attempt` ("impure operator ':mark/isolate'
+  cannot be exported"); `std::cpp` at the `attempt` (it names the `T!` type of the value, the
+  first thing it cannot express, not the operator).
 - **Safepoint.** The node is one: both entering the callee and leaving it (normally or
   through a fault) are graph boundaries, where every live value is in a frame.
 
 ## 6. Cost for programs that do not use it
 
 No node kind, no frame field, no check on a call path was added. The changed shared code is
-`reportRuntimeFault` (one thread-local read, on the fault path) and, in `std::tf`, the abort
-test (one relaxed atomic load, as before, of a different variable) and one more word copied
-when a task inherits its context. Measurements are in section 8.
+`reportRuntimeFault` (one thread-local read, on the fault path), in `std::tf` two more words
+copied when a task inherits its context and three polls of a flag *removed* from the item
+loops, and the registry insert/erase of 4.2 per foreign resource. Measurements are in
+section 8.
 
 ## 7. Tests
 
-`test/plans/feat/consistency/attempt.plan.toml`, cases under `test/cases/consistency/attempt/`.
+`test/plans/feat/consistency/attempt.plan.toml` (cases under
+`test/cases/consistency/attempt/`): every isolatable kind of fault; every place (direct, three
+calls deep, branch arm, closure, element function of `map`/`filter`/`reduce`/`foreach`, round
+501 of a tail-recursive loop); nesting; the forms of the result; effects; recursion depth;
+boundaries side by side; compiled callees; 200000 rounds of fault-and-isolate; collector
+stress with heap verification; parallel siblings; what is not isolated (`exit`, a fault
+outside, a fault in an argument); the type rule; eight optimisation pipelines; library
+functions written in Camel (`array`); refusals by `std::cpp`, `onnx::export`, `grad`; macro
+functions; release of external resources for the four ways a run ends.
 
 ## 8. Verification results
 
-(Filled in at the end of the work.)
+Linux x86-64, release build, inside the shared build container (other work was running on
+the machine; times are minima of several runs and still noisy).
+
+- **Tests.** See the final report of the work for the counts of the default set.
+- **One million isolated faults** (`many.cml`, `N=1000000`: one isolated fault a round, plus
+  10000 rounds with the fault in a `map` element). Peak resident memory:
+
+  | N | `std::nvm` | `std::fvm` | `std::jit` | `std::prl` |
+  |---|---|---|---|---|
+  | 10 000 | 20.6 MiB | 20.7 MiB | 21.1 MiB | 19.9 MiB |
+  | 100 000 | 72.7 MiB | 72.7 MiB | 73.0 MiB | 72.3 MiB |
+  | 300 000 | | | | 119.7 MiB |
+  | 1 000 000 | 108.7 MiB | 109.0 MiB | 109.4 MiB | |
+  | 3 000 000 | | 109.0 MiB | | |
+
+  The growth up to about 109 MiB is the collector's heap reaching its working size (every
+  isolated fault allocates an error value: two boxes, a struct, three strings); from one to
+  three million rounds the peak does not move. The frame pool of `std::nvm`/`std::fvm` is
+  one fixed block of about 1 MiB (256 calls x 4 KiB): a frame lost per fault would exhaust
+  it after a few thousand rounds, and the run would end with `MaxRecursionDepthExceeded`.
+  Time: about 24 µs per isolated fault on `std::fvm`, 31 µs on `std::nvm` (a C++ exception
+  through several activations, the located diagnostic, the error value); `std::prl` about
+  130 µs.
+- **Collector.** `collector.cml` with `CAMEL_GC_VERIFY=both`, `CAMEL_GC_STRESS_ALLOC=5`,
+  `CAMEL_GC_STRESS_SAFEPOINT=1`, modes `major` and `both`, on the four back ends, and with
+  `CAMEL_GC_ENABLE_YOUNG_COPYING=1` on `std::nvm`, `std::fvm`, `std::prl`: correct output, no
+  verification issue.
+- **Programs that do not use it.** See the final report for the `fib` numbers before and
+  after.
 
 ## 9. Questions for the language author
 
-(Filled in at the end of the work; the labels used above are the entries.)
+Each is implemented as recommended.
+
+- **`attempt-name`.** The name. `attempt` is used; one constant to change, plus the
+  signature entry and the tests.
+- **`attempt-fallible-target`.** `attempt(f)` with `f: () => U!`.
+  ```camel
+  func checked(x: int): int! { ... throw error('Negative', ...) ... return 100 / x }
+  attempt(checked, 0)      // int!: error DivisionByZero;  attempt(checked, -4): error Negative
+  ```
+  Implemented: the type is `U!`; errors of `f` pass unchanged. Alternatives: reject such an
+  `f` (the program writes `attempt(() => checked(x) !! d)`); a nested `U!!` (the type system
+  rejects it elsewhere).
+- **`attempt-fault-set`.** Which faults are isolated (section 2). Implemented: an allow-list
+  of the faults of the program's computation, recursion depth included; compiler defects,
+  memory exhaustion and `exit` are not. Alternatives: a deny-list (new faults isolated by
+  default); excluding recursion depth; excluding the generic `RuntimeError` of modules.
+- **`attempt-memory-exhausted`.** `attempt(() => build_huge()) !! []` when the heap is full.
+  Implemented: not isolated, the program ends with the `MemoryExhausted` diagnostic.
+  Alternative: isolate it after a collection at the boundary, when that frees enough.
+- **`attempt-parallel-siblings`.** `attempt(() => xs->map<f>)`, one element faults while
+  others run. Implemented: started tasks run to their end, tasks of the same flow not yet
+  started do not start, the error value is given after all started ones ended; the same for
+  a fault that ends the run. Alternatives: let every element run before the error value is
+  given; stop started elements at their next node (what the removed run-wide flag did).
+- **`attempt-parallel-first-fault`.** `attempt(() => range(0, 64)->map<bad>)` where every
+  element faults, at one of two places. Implemented: the error value is the fault reported
+  first, which differs from run to run on `std::prl` (on the linear back ends it is element
+  0's). Alternative: the fault of the lowest element index, which needs every started
+  element's outcome to be kept and compared.
+- **`attempt-finalizers`.** A resource acquired inside a boundary that faults.
+  ```camel
+  func hold(d: int): int sync { let r = open_resource('b'); return 100 / d }
+  attempt(hold, 0) !! -1       // when is 'b' released?
+  ```
+  Implemented: by the next collection that finds it, at the latest when the run ends.
+  Alternative: a collection at the boundary whenever a fault is isolated.
+- **Arguments and the call itself** (not marked in code; it follows from "the boundary is
+  the subgraph"). `attempt(f, 10 / z)` with `z == 0`, and an `attempt` made when the
+  recursion limit is already reached, fault outside the boundary. Alternative: treat the
+  whole call expression as the boundary.
+- **A function with a `var` parameter** cannot be given to `attempt` (existing rule for all
+  operators); the closure form is used. Should `attempt(f, v)` hand a variable on?
