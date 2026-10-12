@@ -238,8 +238,11 @@ template <typename T> T parseNumber(const std::string &input) {
         }
     }
 
-    // Apply exponent
-    result *= std::pow(10.0, exponent);
+    // Apply exponent. Only when there is one: the product goes through double, which cannot
+    // hold an integer above 2^53 (9223372036854775807 came back as the smallest int64).
+    if (exponent != 0) {
+        result *= std::pow(10.0, exponent);
+    }
 
     // Handle sign
     if (isNegative) {
