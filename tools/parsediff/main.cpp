@@ -23,6 +23,8 @@
  *   camel-parsediff dump  --parser antlr|hand <file>      the normalized AST of one file
  *   camel-parsediff stats <list>                           what rules 1 and 2 would change,
  *                                                          measured on the ANTLR parse
+ *   camel-parsediff lexdiff <list>                         the two lexers, token for token
+ *   camel-parsediff lexfuzz <list> <iterations> <seed>     the same on random character edits
  *
  * <list> is a text file with one source path per line. Every mode is in-process: a corpus of
  * some thousand files is a few seconds.
@@ -111,6 +113,15 @@ int main(int argc, char **argv) {
     }
     if (mode == "stats" && args.size() == 2) {
         return parsediff::runAntlrStats(parsediff::readList(args[1]));
+    }
+    if (mode == "lexdiff" && args.size() == 2) {
+        return parsediff::runLexDiff(parsediff::readList(args[1]));
+    }
+    if (mode == "lexfuzz" && args.size() == 4) {
+        return parsediff::runLexFuzz(
+            parsediff::readList(args[1]),
+            std::stoull(args[2]),
+            std::stoull(args[3]));
     }
     return usage();
 }

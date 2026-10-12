@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -44,5 +45,9 @@ ParseOutcome parseWith(ParserChoice which, const std::string &path, const std::s
 
 /// `stats`: the places of a corpus that the two new rules touch, found on the ANTLR parse.
 int runAntlrStats(const std::vector<std::string> &files);
+
+/// `lexdiff`: the hand-written lexer against the ANTLR lexer.
+int runLexDiff(const std::vector<std::string> &files);
+int runLexFuzz(const std::vector<std::string> &files, size_t iterations, uint64_t seed);
 
 } // namespace parsediff
