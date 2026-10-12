@@ -522,11 +522,30 @@ void deliverPassWarnings(Context &ctx, const std::string &name) {
         state.raised.begin() + static_cast<std::ptrdiff_t>(state.delivered),
         state.raised.end());
     state.delivered = state.raised.size();
-    for (Diagnostic &warning : fresh) {
-        warning.stage = "pass:" + name;
+    std::vector<Diagnostic> promoted;
+    for (auto it = fresh.begin(); it != fresh.end();) {
+        it->stage = "pass:" + name;
+        if (it->severity == Severity::Error) {
+            promoted.push_back(std::move(*it));
+            it = fresh.erase(it);
+        } else {
+            ++it;
+        }
     }
-    if (PassWarningHandler handler = passWarningHandlerSlot().load(std::memory_order_acquire)) {
-        handler(name.c_str(), fresh, passWarningUserDataSlot().load(std::memory_order_acquire));
+    if (!fresh.empty()) {
+        if (PassWarningHandler handler =
+                passWarningHandlerSlot().load(std::memory_order_acquire)) {
+            handler(
+                name.c_str(),
+                fresh,
+                passWarningUserDataSlot().load(std::memory_order_acquire));
+        }
+    }
+    // A warning made an error on the command line (-Werror) is an error of the pipeline: it
+    // goes to the run-time sink, where the driver finds it and stops before the next pass.
+    for (Diagnostic &error : promoted) {
+        error.persisted = false;
+        ctx.rtmDiags()->add(std::move(error));
     }
 }
 
@@ -541,7 +560,10 @@ void raisePassWarning(
     if (origin != camel::source::kInvalidOriginId) {
         builder.atOrigin(origin);
     }
-    Diagnostic warning            = builder.commit(detail);
+    Diagnostic warning = builder.commit(detail);
+    if (warning.suppressed) {
+        return; // switched off on the command line (-Wno-<name>)
+    }
     const PassWarningState &state = passWarningStateOf(ctx);
     const std::string text        = warning.toText();
     for (const Diagnostic &known : state.raised) {
