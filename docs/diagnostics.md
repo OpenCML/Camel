@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-107 diagnostics: 100 errors, 7 warnings.
+108 diagnostics: 101 errors, 7 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -111,6 +111,7 @@ prints one entry.
 | `0x04000011` | [RuntimeDiag::EntryArgumentInvalid](#entryargumentinvalid) | Error |
 | `0x04000012` | [RuntimeDiag::EntryResultNotWritten](#entryresultnotwritten) | Error |
 | `0x04000013` | [RuntimeDiag::GraphTooLarge](#graphtoolarge) | Error |
+| `0x04000014` | [RuntimeDiag::MemoryExhausted](#memoryexhausted) | Error |
 | `0x04000030` | [RuntimeDiag::InvalidNumberText](#invalidnumbertext) | Error |
 | `0x04000031` | [RuntimeDiag::FormatFailed](#formatfailed) | Error |
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error |
@@ -2587,6 +2588,45 @@ func twice(x: int): int {
 func main(): int sync {
     println('main start')
     println(twice(21))
+    return 0
+}
+```
+
+### MemoryExhausted
+
+`0x04000014` · Error · `RuntimeDiag::MemoryExhausted`
+
+**Message**
+
+```text
+Out of memory{0}: {1}.
+```
+
+**Help**
+
+```text
+The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values and is bounded only by the memory of the host.
+```
+
+**Example** (`test/cases/opt/generic/specialize_growing_shape.cml`, run as `CAMEL_OPT_GROWTH_BUDGET=100000000 CAMEL_PERM_SPACE_LIMIT_MB=32 camel --output-format json test/cases/opt/generic/specialize_growing_shape.cml std::opt::simplify std::nvm`)
+
+```camel
+module specialize_growing_shape
+
+import { Tensor, new, concat, sum, shape } from tensor
+
+// Every level of the recursion passes a tensor one row longer than the one it received, so the
+// type of `acc` (which carries the shape once the first argument is a constant) is different at
+// every level. Specializing the callee on that type must stop: nothing in the types says where
+// the recursion ends.
+func grow(i: int, n: int, acc: Tensor): Tensor {
+    return if i >= n then acc else grow(i + 1, n, concat(acc, new([[1.0, 2.0]]), 0))
+}
+
+func main(): int sync {
+    let t = grow(1, 12, new([[1.0, 2.0]]))
+    println(shape(t))
+    println(sum(t))
     return 0
 }
 ```
