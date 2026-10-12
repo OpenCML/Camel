@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { withServer, check, checkEq, fmtRange, marked } from '../../../tools/lsp/client.mjs'
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
-const MAIN = fs.readFileSync(path.join(FIXTURES, 'main.cml'), 'utf8')
+const MAIN = fs.readFileSync(path.join(FIXTURES, 'main.cml'), 'utf8').replace(/\r\n/g, '\n')
 const SHAPES = fs.readFileSync(path.join(FIXTURES, 'shapes.cml'), 'utf8')
 
 await withServer(async (ls) => {
