@@ -48,7 +48,37 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-n`, `--no-cache`: Disable cache modules  
 - `-I`, `--include <dir>`: Add module search path (can be used multiple times)  
 - `-L`, `--stdlib <path>`: Specify standard library path (default: `./stdlib` under current directory)  
-- `-E`, `--error-format`, `--output-format <text|json>`: Output format (default: `text`); `--timeit` reuses this, and the test harness expects `json`
+- `-E`, `--error-format`, `--output-format <text|short|json>`: Format of diagnostics (default: `text`), see "Diagnostics" below; `--timeit` reuses this for its own output
+- `--color`, `--max-errors`, `-N`/`--max-warning`, `-W...`: see "Diagnostics" below
+
+### Diagnostics
+
+A compile error or a run-time fault is printed on standard output, a warning on standard error. See [diagnostics.md](diagnostics.md) for every diagnostic and `camel --explain <name or code>` for one of them.
+
+- `-E`, `--error-format`, `--output-format <text|short|json>`: how diagnostics are written (default: `text`; `--timeit` reuses the option for its own output).
+  - `text`: the message, the source line with the range underlined, secondary locations (for example the call that instantiated a generic function) each with its own excerpt, then `note:` and `help:` lines.
+
+        error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'undefined_name'.
+          --> prog.cml:3:13
+           |
+         3 |     let x = undefined_name + 1
+           |             ^^^^^^^^^^^^^^
+        help: Make sure the name is declared and in scope.
+
+  - `short`: one line per diagnostic, `(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`. This is the form scripts match; the test runner uses it.
+  - `json`: an array of objects with `range`, `severity`, `code`, `message`, `relatedInformation` (the secondary locations: `location.path`, `location.range`, `message`) and `data` (`stage`, `name`, `moduleName`, `modulePath`, `suggestion`, `notes`).
+  - The environment variable `CAMEL_ERROR_FORMAT` gives the format when the option is absent.
+  - Lines and columns start at 1 in `text` and `short` and at 0 in `json`; a column counts characters, not bytes.
+- `--color <auto|always|never>`: colours in `text` and `short` (default `auto`: only when the stream is a terminal, and never when `NO_COLOR` is set).
+- `--max-errors <n>`: compile errors reported before the compiler gives up (default 20; 0: no limit). One run reports every independent error it finds; what follows from an error already reported is not reported again (see [technical/30_diagnostics_reporting.md](technical/30_diagnostics_reporting.md)). A run-time fault always ends the run at the first one.
+- `-N`, `--max-warning <n>`: warnings shown (default 1000); the rest are counted and the count is printed at the end.
+- Warnings are named as in [diagnostics.md](diagnostics.md), without the type prefix; case, `-` and `_` do not matter (`ignored-side-effect` is `IgnoredSideEffect`). A name that is not a warning is refused.
+  - `-Wno-<name>`: do not report the warning `<name>`.
+  - `-Wnone`: report no warnings.
+  - `-Werror`: report every warning as an error (the program is not run).
+  - `-Werror=<name>`: report the warning `<name>` as an error.
+  - `-Wno-error=<name>`: keep `<name>` a warning under `-Werror`.
+- `--explain <name or code>`: print the catalog entry of a diagnostic (`camel --explain IndexOutOfRange`, `camel --explain 0x04000002`).
 
 ### Programs whose `main` takes parameters or returns a value (`--arg`, `-o`)
 
@@ -228,6 +258,7 @@ Recursion depth counts frames, not source-level calls: a call in tail position r
 - `-d`, `--docs`: Show documentation of package or module  
 - `-a`, `--about`: Show copyright and project information  
 - `-z`, `--zen`: Show the Zen of Camel
+- `--explain <name or code>`: Describe a diagnostic (see "Diagnostics")
 
 ---
 
@@ -237,8 +268,8 @@ Recursion depth counts frames, not source-level calls: a call in tail position r
 
 - `-i`, `--lexical-only`: Perform lexical analysis only  
 - `-s`, `--syntax-only`: Perform syntax check only (excluding formatting or semantics)  
-- `-O`, `--output-format <text|json>`: Output format (default: `text`)  
-- `-N`, `--max-warning <num>`: Maximum number of allowed warnings  
+- `-O`, `--output-format <text|short|json>`: Format of diagnostics (default: `text`)  
+- `-N`, `--max-warning <num>`: Warnings shown; `--color`, `--max-errors` and the `-W...` options work as for a run (see "Diagnostics")  
 - `-c`, `--config <file>`: Path to rule definition file  
 - `-e`, `--ignore`: Ignore definition files  
 - `-o`, `--output <file>`: Output file (default: console)  

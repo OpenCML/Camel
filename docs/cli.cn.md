@@ -44,7 +44,29 @@
 - `-n`, `--no-cache`：不使用缓存模块
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次指定）
 - `-L`, `--stdlib <path>`：指定标准库路径（默认当前目录下的 `./stdlib`）
-- `-E`, `--error-format <text|json>`：错误输出格式，默认为 `text`
+- `-E`, `--error-format <text|short|json>`：诊断输出格式，默认为 `text`，见下文“诊断输出”
+- `--color`、`--max-errors`、`-N`/`--max-warning`、`-W...`：见下文“诊断输出”
+
+### 诊断输出
+
+编译错误与运行期故障写到标准输出，警告写到标准错误。全部诊断见 [diagnostics.md](diagnostics.md)，单条可用 `camel --explain <名字或码>` 查看。
+
+- `-E`, `--error-format`, `--output-format <text|short|json>`：诊断的输出格式，默认 `text`。
+  - `text`：消息、出错的源码行与指向确切范围的下划线、次要位置（例如实例化泛型函数的那次调用，各带自己的代码片段），以及 `note:` 与 `help:` 行。
+  - `short`：每条诊断一行，`(模块)路径:行:列: [Error]: 消息 建议 (name=..., code=0x...)`。脚本与测试运行器使用这种格式。
+  - `json`：对象数组，含 `range`、`severity`、`code`、`message`、`relatedInformation`（次要位置）与 `data`（`stage`、`name`、`moduleName`、`modulePath`、`suggestion`、`notes`）。
+  - 未给出该选项时取环境变量 `CAMEL_ERROR_FORMAT`。
+  - `text` 与 `short` 的行列从 1 起，`json` 从 0 起；列按字符计，不按字节计。
+- `--color <auto|always|never>`：是否输出颜色，默认 `auto`（仅当输出到终端且未设置 `NO_COLOR` 时）。
+- `--max-errors <n>`：最多报告多少个编译错误，默认 20，0 表示不限。一次编译会报告它能找到的所有相互独立的错误；由已报告错误派生出来的错误不再重复报告（见 [technical/30_diagnostics_reporting.md](technical/30_diagnostics_reporting.md)）。运行期故障仍然是遇到第一个就终止。
+- `-N`, `--max-warning <n>`：最多显示多少条警告，默认 1000；其余只计数，结束时给出数目。
+- 警告按 [diagnostics.md](diagnostics.md) 中的名字（不带类型前缀）指定，不区分大小写，`-` 与 `_` 可省略或互换；名字不存在时报错。
+  - `-Wno-<name>`：不报告该警告。
+  - `-Wnone`：不报告任何警告。
+  - `-Werror`：所有警告按错误报告（程序不运行）。
+  - `-Werror=<name>`：该警告按错误报告。
+  - `-Wno-error=<name>`：在 `-Werror` 下仍保持为警告。
+- `--explain <名字或码>`：打印一条诊断的说明。
 
 ### 常用 Passes
 
@@ -66,6 +88,7 @@
 - `-d`, `--docs`：显示包或模块文档
 - `-a`, `--about`：显示版权和项目信息
 - `-z`, `--zen`：展示 Camel 的哲学（Zen）
+- `--explain <名字或码>`：说明一条诊断（见“诊断输出”）
 
 ---
 
@@ -76,7 +99,7 @@
 - `-i`, `--lexical-only`：仅词法分析
 - `-s`, `--syntax-only`：仅语法检查（不包括格式或语义）
 - `-O`, `--output-format <text|json>`：输出格式（默认为 `text`）
-- `-N`, `--max-warning <num>`：最大允许警告数
+- `-N`, `--max-warning <num>`：最多显示的警告数；`--color`、`--max-errors` 与 `-W...` 同运行命令（见“诊断输出”）
 - `-c`, `--config <file>`：规则定义文件路径
 - `-e`, `--ignore`：忽略定义文件
 - `-o`, `--output <file>`：输出文件（默认输出到控制台）
