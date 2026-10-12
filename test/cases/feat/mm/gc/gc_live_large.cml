@@ -1,0 +1,36 @@
+/**
+ * Scale: a live set of `mb` megabytes made of small objects (rows of 12 integers, about 150
+ * bytes each with their headers), kept alive while `reps` rounds of temporaries of a hundredth
+ * of that size are built and dropped. Checks that a heap far larger than the first elder
+ * segment is collected, grown and walked correctly, and what it costs.
+ */
+module gc_live_large
+
+func row(i: int, k: int): int[] {
+    return [i, i + k, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7, i + 8, i + 9, i + 10, i + 11]
+}
+
+func block(n: int, k: int): int[][] {
+    return range(0, n)->map<(i: int): int[] => row(i, k)>
+}
+
+func blocks(count: int, n: int): int[][][] {
+    return range(0, count)->map<(b: int): int[][] => block(n, b)>
+}
+
+func probe(live: int[][][], n: int): int {
+    return live->reduce<(acc: int, b: int[][]): int => acc + b[n - 1][1] + b[0][0], 0>
+}
+
+func churn(live: int[][][], n: int, left: int, total: int): int {
+    return if left == 0 then total + probe(live, n) else churn(live, n, left - 1, total + block(n / 10 + 1, left)[n / 10][11])
+}
+
+// One block is 4096 rows: about 0.6 MB.
+func main(mb: int, reps: int): int sync {
+    let n = 4096
+    let count = mb * 10 / 6 + 1
+    let live = blocks(count, n)
+    println('gc_live_large blocks={} total={}'->format<count, churn(live, n, reps, 0)>)
+    return 0
+}

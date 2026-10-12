@@ -1,0 +1,36 @@
+/**
+ * The stop-the-world handshake of the parallel scheduler when one worker cannot stop.
+ *
+ * One element of a parallel map sits inside a long operator (`sleep`) while the others allocate
+ * far more than the birth space holds. A collector that finds a worker inside an operator waits
+ * 500 ms, gives up and tries again later, so for as long as the sleeper sleeps nothing can be
+ * collected. The allocating workers must neither fail nor wait for it: what does not fit the
+ * birth space is born in the elder space, which grows, and is reclaimed once the sleeper is
+ * back.
+ */
+module gc_prl_blocked_worker
+
+import { sleep } from os
+
+func label(i: int, k: int): string { return 'v' + string(i) + '-' + string(k) }
+
+func churn(k: int, left: int, total: int): int {
+    return if left == 0
+        then total
+        else churn(k, left - 1, total + len(range(0, 64)->map<(i: int): string => label(i, left)>) + k % 3)
+}
+
+func nap(millis: int): int sync {
+    sleep(millis)
+    return 1
+}
+
+func job(k: int, millis: int, rounds: int): int sync {
+    return if k == 0 then nap(millis) else churn(k, rounds, 0)
+}
+
+func main(millis: int, rounds: int): int sync {
+    let sums = range(0, 6)->map<(k: int): int => job(k, millis, rounds)>
+    println('gc_prl_blocked_worker sums={}'->format<sums>)
+    return 0
+}
