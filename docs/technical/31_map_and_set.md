@@ -183,28 +183,160 @@ only, like every Camel object.
   operator needs (`K[]`, `V[]`, `(K, V)[]`, `V?`) are made once, when the collection type is
   (note 23: "a question must not allocate").
 
-### 5.2 Persistence (`DESIGN-QUESTION(map-persistence)`)
+### 5.2 Persistence: candidates and the one taken
 
-Operations return new values. The implementation is the plain one: **a sorted array, copied
-by every `put`**.
+Operations return new values. The first implementation was the plain one, a sorted array
+copied whole by every `put`, which made entry-by-entry construction quadratic (section 9.1).
+This section is the design of its replacement. What may not change: every observable
+behaviour (key order, equality, printing, the operators and their purity), and the collector's
+requirements of section 5.1: nothing derived from an address, every reference between objects
+found and updated by `updateRefs` from the static type alone, no node pointer kept on the C++
+side across a safepoint.
 
-| | Sorted array (implemented) | Persistent balanced tree |
-|---|---|---|
-| `m[k]`, `has` | O(log n), no allocation | O(log n) |
-| `put`, `remove`, `add` | O(n): one allocation, two `memcpy` | O(log n) allocations of a node each |
-| `as` from an array of n | O(n log n) (O(n) when already sorted) | O(n log n) |
-| `merge`, `union`, `intersect`, `difference`, `==` | O(n + m), one pass | O(n + m) through flattening |
-| `keys`, `values`, `items` | O(n), one `memcpy` | O(n) tree walk |
-| Memory per entry | 16 bytes (map), 8 (set) | about 56 bytes and one object for the collector to visit |
+| | Persistent binary tree (AVL, red-black, treap, WBT) | **Persistent B+ tree with wide nodes (taken)** | HAMT |
+|---|---|---|---|
+| Order of traversal | by key, for free | by key, for free | by hash: key order needs a sort per traversal or a second index |
+| Needs a hash of the key | no | no | yes; of the bytes of a string or tuple (never the address), computed at every operation or cached in the key object |
+| `m[k]` | O(log2 n) objects visited | O(log_F n) objects, a binary search in each | O(log32 n), plus hashing the key |
+| `put`/`remove` | about log2 n nodes allocated (20 at 10^6) | one leaf and one node per level copied (3 to 4 objects at 10^6) | one node per level copied |
+| Objects the collector visits for n entries | n | about n / (0.7 L) | about n / 20 |
+| Bytes per entry (map of integers) | 56 (header, vtable, key, value, two children, balance) | about 23 at 70% fill, 16.5 after a bulk build | about 24 to 32 |
+| A small collection | a node per entry, or a second representation for small sizes | **one leaf, which is the previous table unchanged** | a second representation, or a root node |
+| Bulk build from sorted input | O(n), recursive | O(n), chunking | O(n) |
+| `merge` and the set operations | join/split, O(m log(n/m)), intricate | linear pass over two cursors, or m point updates when one side is small | per-node recursion |
 
-Nothing is mutated in place and passed off as a new value. Reusing the old table when
-nothing else holds it is an optimisation pass's business (it needs to prove that), not this
-type's. An operation that changes nothing (`remove` of an absent key, `add` of a present
-element, `merge` with an empty map) returns its argument, which is the same value.
+**HAMT** is the structure for a map that has no order or keeps a separate one. Under key
+order it would need either a sort at every `keys`/`items`/print/`==`, or a second ordered
+index, which is the balanced tree again. It would fit if the ruling on `map-order` became "no
+defined order", which section 4 excludes (output must not depend on a hash function).
 
-The measured cost and the point at which the tree is needed are in section 9. The choice is
-invisible to programs: the interface is the operators of section 6, and only
-`src/core/rtdata/collection.cpp` knows the layout.
+**Binary trees** have the right order and the textbook persistence, but the wrong constants
+for this runtime: every entry is an object with a header and a vtable pointer (3.5 times the
+memory), a mark phase visits n objects instead of n/22, and a `put` makes twenty small
+allocations where the wide tree makes three or four. They also need a second representation
+to keep small maps cheap, since a five-entry map as five nodes is worse than one array.
+
+**Taken: a B+ tree whose leaves are the tables of 5.1.** A collection of at most L entries
+(the leaf capacity) is one leaf: the same object, the same code and the same cost as before.
+Beyond L it is a tree of such leaves under branch nodes of at most F children. The "hybrid"
+of a flat array for small sizes and a tree for large ones is therefore not two
+representations but one, of height zero or more. L and F are chosen by measurement (section
+9.3).
+
+### 5.3 The node
+
+Leaf and branch are one class, `rtdata::Table`; the header says which:
+
+```
+Table { uint32 size; uint16 height; uint16 count; slot_t data[] }      16 bytes + slots
+
+leaf (height 0)       size entries
+  Set<T>:    data[0 .. size)            elements, ascending
+  Map<K,V>:  data[0 .. size)            keys, ascending
+             data[size .. 2*size)       values, in the order of their keys
+
+branch (height h > 0) count children, size entries below it
+             data[0 .. count)           the smallest key of each child, ascending    (typed K)
+             data[count .. 2*count)     the children, tables of height h - 1         (typed Map<K,V> / Set<T>)
+```
+
+`height` and `count` take the four bytes that were padding, so a leaf is bit for bit the
+previous table.
+
+- **Tracing.** `updateRefs(relocate, type)` is handed the collection type, as before. A leaf
+  relocates its keys with `K` and its values with `V`. A branch relocates its separator keys
+  with `K` and its children with the collection type itself: a child is a table of the same
+  `Map<K, V>`, so the collector calls the child's `updateRefs` with that type and the layout
+  is derived level by level from the static type and the two header fields, with nothing
+  recorded per object. A separator is the same key object the leaf below holds (a second
+  reference, not a copy).
+- **Invariants** (checked by `table::validate`, which the tests call through a debug
+  variable): all leaves at the same depth; keys strictly ascending across the whole tree;
+  separator i equals the smallest key under child i; `size` is the sum below; every leaf
+  holds between L/2 and L entries and every branch between F/2 and F children, the root
+  excepted (a root leaf may hold 0 to L, a root branch at least 2).
+- **No node is changed after the operation that built it returned.** Path copying builds new
+  nodes that point at unchanged old subtrees; old and new maps share them.
+- **Barriers.** Every reference stored into a new node (key, value, separator, child) goes
+  through `mm::writeBarrier` with the node's type. A node is at most 16 + 16 L bytes, far
+  below the large-object threshold (4 KB), so a new node is always young and the barrier is a
+  formality today; it is kept because the rule is "every typed store".
+
+### 5.4 Operations
+
+- **Lookup.** In a branch, a binary search for the last separator not after the key; in the
+  leaf, the binary search of 5.1. No allocation. Keys are compared by `compareKeys`, chosen
+  by the static key type (integers numerically, `false` before `true`, strings by bytes,
+  tuples element by element); it reads contents only.
+- **`put`, `add`.** Recursive path copy. The leaf is copied with the entry put in; if it now
+  holds L + 1 entries it is split into two halves and the parent, copied anyway, receives one
+  more child, splitting in turn above F. A root that splits gets a new root above it. `add`
+  of a present element returns the argument.
+- **`remove`.** Path copy with the entry left out. A node that falls below its minimum is
+  combined with a neighbour in the copied parent: the two become one node when their content
+  fits, two nodes of equal share otherwise. A root branch left with one child is replaced by
+  that child. Removing an absent key returns the argument.
+- **`as` from an array** sorts the positions (as before: stable, the later of equal keys
+  kept, a single pass when already ascending) and then builds the tree bottom-up in O(n): the
+  entries are cut into ceil(n / L) leaves of equal share, the leaves into branches of equal
+  share, until one node remains. No `put` is involved. The same builder finishes every bulk
+  operation.
+- **`merge`, `union`, `intersect`, `difference`, `is_subset`, `==`** walk two cursors (a
+  cursor is the path from the root to a leaf position, on the C++ stack for the length of the
+  call) in key order, in O(n + m); the result is collected and built bottom-up. When one side
+  is much smaller than the other, the small side is applied to the large one by point
+  operations instead, O(m log n), so `union(big, [x] as Set<int>)` does not copy `big`. Two
+  leaves take the code path of 5.1 unchanged, and its result is cut into a tree only if it
+  exceeds L. The join/split algorithms on balanced trees are asymptotically better
+  (O(m log(n/m + 1))) for sizes between these two cases; the gain did not justify them here.
+- **`keys`, `values`, `items`, print** walk the leaves left to right.
+- **Equality** compares sizes, then entries in order with two cursors: two trees of
+  different shape (different histories) with the same entries are equal. Tree shape is never
+  observable.
+
+### 5.5 Constants
+
+A collection constant (the result of a macro function under `std::macro`) is carried into
+the static area by `table::withSlots`, which builds a whole new tree in the allocator it is
+given, and `Table::clone`, which does the same: every node of a constant lies in one place,
+and no node of the copy is shared with the compile-time value. At run time `put` on a
+constant builds new nodes in the collected heap that point at unchanged subtrees of the
+constant, exactly as a new table already pointed at the constant's keys and values. The six
+walks of constant data keep using `forEachSlot`/`withSlots` and do not see the tree.
+
+### 5.6 Moving
+
+Nothing in the tree stands in the way of moving its nodes: no interior pointer, no order or
+hash derived from an address, parent-to-child references that the collector finds and
+rewrites through `updateRefs`, and no pointer to a node kept by C++ code after the operator
+returns. Within an operator the code holds node pointers across allocations, which is allowed
+because an allocation is not a safepoint (note 23).
+
+### 5.7 The switch back to the flat table
+
+`CAMEL_COLL_LEAF_CAPACITY=<n>` and `CAMEL_COLL_FANOUT=<n>` (read once, at the first
+collection operation) set L and F. `CAMEL_COLL_LEAF_CAPACITY=0` means "unbounded": every
+collection stays a single leaf, which is the previous representation with the previous code.
+The variables exist for two uses: differential tests (the same program must print the same
+bytes under the flat table, the default tree and a tree of tiny nodes, where fifty entries
+already make a tree of height three or four), and the measurements that chose L and F.
+
+### 5.8 If the order became insertion order (`map-order`)
+
+A tree ordered by key yields key order and nothing else. Insertion order would need:
+
+- a sequence number per entry and a second tree from sequence number to key (the same B+
+  tree with integer keys); the key tree would hold (sequence number, value). A root object
+  above the two trees would carry the next sequence number;
+- every `put` of a new key and every `remove` to update both trees: twice the allocation and
+  about twice the time, and about twice the memory per entry;
+- rulings on what `put` of an existing key does to its position, on the order of `merge`
+  and of the set operations, and on whether `==` looks at the order;
+- giving up that a collection is determined by its entries (section 4): two equal maps could
+  print differently, and a pass could no longer reorder independent `put`s.
+
+Lookup, the collector's contract and the bulk builder would stay. A hash trie in place of the
+key tree would become reasonable then, since the key tree would no longer provide the order.
 
 ## 6. Construction and operations
 
