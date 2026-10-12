@@ -253,12 +253,28 @@ int main(int argc, char *argv[]) {
     };
 
     try {
+        if (selectedCommand == Command::Check && Check::lexical) {
+            // `check -i`: the tokens only. Nothing is parsed, so only lexical errors (an
+            // illegal character, an unclosed string) can be reported.
+            if (!parser->lex(*input)) {
+                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+                compileSummary(false);
+                return 1;
+            }
+            return 0;
+        }
         if (!parser->parse(*input)) {
             // Syntax errors: nothing after the parser can run, and compiling the module would
             // only read and parse the file a second time.
             ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
             compileSummary(false);
-            return selectedCommand == Command::Check ? 0 : 1;
+            return 1;
+        }
+        if (selectedCommand == Command::Check && Check::syntaxOnly) {
+            // `check -s`: the file was read into a syntax tree; names, types and imports are
+            // not looked at.
+            ctx->dumpModuleWarnings(std::cerr, useJsonFormat, {});
+            return 0;
         }
         CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", targetFile);
 
@@ -333,7 +349,7 @@ int main(int argc, char *argv[]) {
         if (!mainModule->loaded()) {
             ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
             compileSummary(false);
-            return selectedCommand == Command::Check ? 0 : 1;
+            return 1;
         }
         // The program compiled. Its warnings go to stderr, before anything runs and whatever
         // the log level: stdout stays the program's output (and, on an error, the diagnostics
@@ -483,7 +499,7 @@ int main(int argc, char *argv[]) {
             } catch (DiagnosticsLimitExceededBaseException &e) {
                 const auto &diags = ctx->runtimeDiagSink();
                 diags->dump(os, useJsonFormat);
-                return selectedCommand == Command::Check ? 0 : 1;
+                return 1;
             }
 
             memperf::stop();
@@ -508,12 +524,12 @@ int main(int argc, char *argv[]) {
     } catch (DiagnosticsLimitExceededBaseException &e) {
         ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
         compileSummary(true);
-        return selectedCommand == Command::Check ? 0 : 1;
+        return 1;
     } catch (Diagnostic &d) {
         RangeConverter conv(parser->getTokens());
         d.fetchRange(conv);
         os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText(os)) << endl;
-        return selectedCommand == Command::Check ? 0 : 1;
+        return 1;
     } catch (const mm::MemoryExhausted &e) {
         // A memory space reached its limit outside any pass (while the program was compiled
         // into graphs). The pass driver and the graph builder report theirs; this is the rest.
@@ -542,10 +558,15 @@ int main(int argc, char *argv[]) {
                       .toJson()
                << "\n]" << endl;
         } else {
-            os << e.what() << endl;
+            // Not a diagnostic: a defect of the compiler. Said as such, with the text of the
+            // exception (it used to be printed bare: a line reading `bad any_cast`).
+            os << "camel: internal error: " << e.what()
+               << "\nThis is a defect of the compiler, not an error of the program. Please "
+                  "report it with the program that shows it."
+               << endl;
         }
         ASSERT(false, e.what());
-        return selectedCommand == Command::Check ? 0 : 1;
+        return 1;
     } catch (...) {
         os << "Unknown error occurred." << endl;
         ASSERT(false, "Unknown error occurred.");

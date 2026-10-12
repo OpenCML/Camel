@@ -548,8 +548,10 @@ bool parseArgs(int argc, char *argv[]) {
              "warnings shown (default 1000); further ones are counted, not printed");
 
     auto run =
-        (option("-P", "--profile").set(profile) % "profile the perf",
-         (option("-S", "--scheduler") & value("schedular type", schedular)) % "scheduler type",
+        (option("-P", "--profile").set(profile) %
+             "record a trace of the stages into profile_reports/ (debug builds only: a release "
+             "build accepts the option and writes nothing)",
+         (option("-S", "--scheduler") & value("scheduler type", schedular)) % "scheduler type",
          (option("-t", "--threads") & integer("max threads", maxThreads)) % "max threads",
          (option("--max-recursion-depth") & value("calls", maxRecursionDepthOpt)) %
              "limit on calls open at once that are not tail calls (default: 256 on std::nvm and "
@@ -598,9 +600,12 @@ bool parseArgs(int argc, char *argv[]) {
              "show the Zen of Camel");
 
     auto check =
-        (command("check").set(selectedCommand, Command::Check) % "check the code",
-         option("-i", "--lexical-only").set(lexical) % "indentation size in spaces",
-         option("-s", "--syntax-only").set(syntaxOnly) % "syntax only",
+        (command("check").set(selectedCommand, Command::Check) %
+             "check the code without running it (exit code 1 when an error is found)",
+         option("-i", "--lexical-only").set(lexical) %
+             "lexical analysis only: report lexical errors and stop before parsing",
+         option("-s", "--syntax-only").set(syntaxOnly) %
+             "lexical and syntax analysis only: stop before names and types are checked",
          (option("-O", "--output-format") & value("output format", outputFormat)) %
              "diagnostics format: text, short or json",
          diagOps,

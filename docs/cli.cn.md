@@ -300,8 +300,8 @@
 
     camel check [options] <cml file or directory>
 
-- `-i`, `--lexical-only`：只做词法分析（当前实现接受这个选项，但不改变检查范围：语义错误照常报告）  
-- `-s`, `--syntax-only`：只做语法检查（不含格式和语义；当前实现同样不改变检查范围）  
+- `-i`, `--lexical-only`：只做词法分析：只报告词法错误（非法字符、没有结束的字符串），不做语法分析  
+- `-s`, `--syntax-only`：只做词法与语法分析：文件读成语法树即止，不检查名字、类型与导入  
 - `-O`, `--output-format <text|short|json>`：诊断的格式（默认：`text`）  
 - `-N`, `--max-warning <num>`：显示的警告数；`--color`、`--max-errors` 和 `-W...` 选项的用法与运行时相同（见“诊断”）  
 - `-c`, `--config <file>`：规则定义文件的路径  
@@ -309,7 +309,7 @@
 - `-o`, `--output <file>`：输出文件（默认：控制台）  
 - 可用的通用选项：`-v` / `-vv` / `-vvv` / `-vvvv`、`--verbose`、`--log-level`、`--log-preset`、`--log-include`
 
-错误打印到标准输出，警告打印到标准错误，格式与运行时相同。`camel check` 只报告：即使发现了错误，退出码也是 0，所以脚本应当看输出（例如 `-O json` 的数组），不要看退出码。
+错误打印到标准输出，警告打印到标准错误，格式与运行时相同。`camel check` 不运行程序。发现错误时退出码是 1，没有错误（只有警告也算）时是 0。
 
 ---
 

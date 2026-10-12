@@ -143,7 +143,53 @@ class CamelParser {
         return modLoad->getModuleNameOrEmpty();
     }
 
+    /// The module name a file declares (`module name`), read from the tokens: what a file
+    /// that does not parse still says about itself. Empty if it declares none.
+    std::string declaredModuleNameInTokens() const {
+        if (!tokens_) {
+            return "";
+        }
+        const antlr4::Token *keyword = nullptr;
+        for (const antlr4::Token *token : tokens_->getTokens()) {
+            if (token->getChannel() != antlr4::Token::DEFAULT_CHANNEL) {
+                continue;
+            }
+            if (keyword != nullptr) {
+                if (token->getType() == OpenCMLLexer::IDENTIFIER) {
+                    return token->getText();
+                }
+                keyword = nullptr;
+            }
+            if (token->getType() == OpenCMLLexer::MODULE) {
+                keyword = token;
+            }
+        }
+        return "";
+    }
+
+    /// Lexical analysis only (`camel check -i`): the tokens are produced, nothing is parsed.
+    /// False when the text has a lexical error.
+    bool lex(std::istream &is) {
+        prepare(is);
+        tokens_->fill();
+        nameModuleFromTokens();
+        return !diagnostics_->hasErrors();
+    }
+
     bool parseCST(std::istream &is) {
+        prepare(is);
+        return buildCST();
+    }
+
+  private:
+    void nameModuleFromTokens() {
+        const std::string declaredName = declaredModuleNameInTokens();
+        if (!declaredName.empty() && diagnostics_) {
+            diagnostics_->setModuleName(declaredName);
+        }
+    }
+
+    void prepare(std::istream &is) {
         input_.load(is);
         if (sourceContext_) {
             // Register the full source text before parsing so later AST construction can build
@@ -161,12 +207,16 @@ class CamelParser {
         tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
         parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
         EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("CTS", this); });
-        return buildCST();
     }
 
+  public:
     bool parse(std::istream &is) {
-        if (!parseCST(is) || !buildAST())
+        if (!parseCST(is) || !buildAST()) {
+            // A file that does not parse is still named by the module it declares: its
+            // diagnostics read `(my_module)file.cml`, as the semantic ones do, not `(main)`.
+            nameModuleFromTokens();
             return false;
+        }
         // Use declared module name from source (e.g. "module mnist_json") for diagnostics
         std::string declaredName = getDeclaredModuleName();
         if (!declaredName.empty() && diagnostics_)

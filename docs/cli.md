@@ -298,8 +298,8 @@ The other limits marked "no" are compile-time constants (`generic.h`, the inline
 
     camel check [options] <cml file or directory>
 
-- `-i`, `--lexical-only`: Perform lexical analysis only (the current implementation accepts the option without changing what is checked: semantic errors are reported as usual)  
-- `-s`, `--syntax-only`: Perform syntax check only (excluding formatting or semantics; likewise without effect at present)  
+- `-i`, `--lexical-only`: Lexical analysis only: only lexical errors (an illegal character, an unclosed string) are reported, nothing is parsed  
+- `-s`, `--syntax-only`: Lexical and syntax analysis only: stops once the file is read into a syntax tree; names, types and imports are not checked  
 - `-O`, `--output-format <text|short|json>`: Format of diagnostics (default: `text`)  
 - `-N`, `--max-warning <num>`: Warnings shown; `--color`, `--max-errors` and the `-W...` options work as for a run (see "Diagnostics")  
 - `-c`, `--config <file>`: Path to rule definition file  
@@ -307,7 +307,7 @@ The other limits marked "no" are compile-time constants (`generic.h`, the inline
 - `-o`, `--output <file>`: Output file (default: console)  
 - Available global options: `-v` / `-vv` / `-vvv` / `-vvvv`, `--verbose`, `--log-level`, `--log-preset`, `--log-include`
 
-Errors are printed on standard output and warnings on standard error, in the same formats as for a run. `camel check` only reports: its exit code is 0 even when it found errors, so a script should read the output (for example the array of `-O json`), not the exit code.
+Errors are printed on standard output and warnings on standard error, in the same formats as for a run. `camel check` does not run the program. Its exit code is 1 when it found an error and 0 when it found none (warnings alone do not count).
 
 ---
 
