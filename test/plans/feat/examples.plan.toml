@@ -9,7 +9,8 @@ desc = "Every program of examples/ runs as its header says and prints the record
 # std::prl; the four agree on exit code and standard output, and the output is the golden
 # file's. The entries at the end run the other command lines the headers give.
 #
-# The programs under examples/files and examples/ml write to tmp/examples (not tracked).
+# The programs under examples/files and examples/ml, and examples/text/log_filter.cml, write to
+# tmp/examples (not tracked).
 # After an intended change of an example's output:
 #   node test/tools/run-tests.mjs --update-golden test/plans/feat/examples.plan.toml
 
@@ -27,13 +28,13 @@ timeout_ms = 60000
 
 [[tests]]
 name = "examples.algorithms.binary_search"
-desc = "Binary search by tail recursion with an int? result."
+desc = "Binary search by tail recursion with an int? result, next to array.index_of."
 case = "../../../examples/algorithms/binary_search.cml"
 golden = "golden/examples/algorithms_binary_search.txt"
 
 [[tests]]
 name = "examples.algorithms.merge_sort"
-desc = "Merge sort by recursion, compared with algo.sorted."
+desc = "Merge sort by recursion, compared with algo.sorted and array.sort_by."
 case = "../../../examples/algorithms/merge_sort.cml"
 golden = "golden/examples/algorithms_merge_sort.txt"
 
@@ -54,7 +55,7 @@ args = ["${case}", "--arg", "value=21.5", "--arg", "unit=C", "--arg", "steps=3",
 
 [[tests]]
 name = "examples.data.dedup_sets"
-desc = "Set<T>: removing duplicates, union, intersection, difference."
+desc = "array.unique and Set<T>: removing duplicates, union, intersection, difference."
 case = "../../../examples/data/dedup_sets.cml"
 golden = "golden/examples/data_dedup_sets.txt"
 
@@ -66,13 +67,13 @@ golden = "golden/examples/data_json_roundtrip.txt"
 
 [[tests]]
 name = "examples.data.nullable_lookup"
-desc = "T? results of lookups, `??` and match on null."
+desc = "T? results of array.find, array.index_of and Map lookups, `??` and match on null."
 case = "../../../examples/data/nullable_lookup.cml"
 golden = "golden/examples/data_nullable_lookup.txt"
 
 [[tests]]
 name = "examples.data.records"
-desc = "filter, map and a Map of totals over an array of structs."
+desc = "filter, map, sort_by, sum and a Map of totals over an array of structs."
 case = "../../../examples/data/records.cml"
 golden = "golden/examples/data_records.txt"
 
@@ -90,7 +91,7 @@ golden = "golden/examples/files_json_config.txt"
 
 [[tests]]
 name = "examples.files.read_write"
-desc = "A text file written and read back; a missing file handled through string!."
+desc = "A text file written, read back and split into lines; a missing file handled through string!."
 case = "../../../examples/files/read_write.cml"
 golden = "golden/examples/files_read_write.txt"
 
@@ -102,7 +103,7 @@ golden = "golden/examples/functions_closures.txt"
 
 [[tests]]
 name = "examples.functions.generic_helpers"
-desc = "Generic functions with `typeas`."
+desc = "Generic functions with `typeas`, built on the generic functions of array."
 case = "../../../examples/functions/generic_helpers.cml"
 golden = "golden/examples/functions_generic_helpers.txt"
 
@@ -120,7 +121,7 @@ golden = "golden/examples/ml_train_linear.txt"
 
 [[tests]]
 name = "examples.numeric.monte_carlo_pi"
-desc = "Seeded Monte Carlo estimates of pi and their statistics."
+desc = "Seeded Monte Carlo estimates of pi and their statistics, min, max and distance from math.pi."
 case = "../../../examples/numeric/monte_carlo_pi.cml"
 golden = "golden/examples/numeric_monte_carlo_pi.txt"
 
@@ -132,7 +133,7 @@ golden = "golden/examples/numeric_ode_euler.txt"
 
 [[tests]]
 name = "examples.numeric.random_walk"
-desc = "Seeded random walks made one after another."
+desc = "Seeded random walks made one after another by tail recursion; distances with math.abs."
 case = "../../../examples/numeric/random_walk.cml"
 golden = "golden/examples/numeric_random_walk.txt"
 
@@ -143,20 +144,26 @@ case = "../../../examples/parallel/parallel_map.cml"
 golden = "golden/examples/parallel_parallel_map.txt"
 
 [[tests]]
+name = "examples.text.csv_parse"
+desc = "CSV lines split and trimmed into fields; a bad line is an error value reported by line number."
+case = "../../../examples/text/csv_parse.cml"
+golden = "golden/examples/text_csv_parse.txt"
+
+[[tests]]
 name = "examples.text.log_filter"
-desc = "Lines filtered with re.test and counted per level."
+desc = "A log file split into lines and fields with str; lines selected by str.find and re.test, counted per level."
 case = "../../../examples/text/log_filter.cml"
 golden = "golden/examples/text_log_filter.txt"
 
 [[tests]]
 name = "examples.text.table_report"
-desc = "An aligned table built with format and join."
+desc = "An aligned table: column width from array.max and str.repeat, headings with to_upper, total with sum."
 case = "../../../examples/text/table_report.cml"
 golden = "golden/examples/text_table_report.txt"
 
 [[tests]]
 name = "examples.text.word_frequency"
-desc = "Word counts in a Map<string, int> and the three most frequent words."
+desc = "A text split into lines and words with str; counts in a Map<string, int>, the top three with sort_by and take."
 case = "../../../examples/text/word_frequency.cml"
 golden = "golden/examples/text_word_frequency.txt"
 
@@ -183,6 +190,13 @@ desc = "An unknown unit is reported through the float! result; the program still
 case = "../../../examples/cli/temperature.cml"
 golden = "golden/examples/cli_temperature_unknown_unit.txt"
 args = ["${case}", "--arg", "value=21.5", "--arg", "unit=K", "--arg", "steps=1", "${backend}"]
+
+[[tests]]
+name = "examples.cli.temperature_lower_case_unit"
+desc = "The unit in lower case with spaces around it is read as F."
+case = "../../../examples/cli/temperature.cml"
+golden = "golden/examples/cli_temperature_lower_case_unit.txt"
+args = ["${case}", "--arg", "value=70.7", "--arg", "unit= f ", "--arg", "steps=2", "${backend}"]
 
 [[tests]]
 name = "examples.cli.temperature_default_pipeline"

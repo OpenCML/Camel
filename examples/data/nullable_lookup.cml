@@ -1,14 +1,14 @@
-// Lookups that may find nothing return T?; `??` supplies a default and `match` tells the
-// two cases apart.
+// Lookups that may find nothing return T?: `find` and `index_of` of `array`, a Map lookup.
+// `??` supplies a default and `match` tells the two cases apart.
 // Run: camel examples/data/nullable_lookup.cml
 module nullable_lookup
 
+import { find, index_of } from array
+
 type Product = { id: int, name: string, price: float }
 
-func find(items: Product[], id: int, i: int): Product? {
-    return if i >= len(items) then { return null }
-        else if items[i].id == id then { return items[i] }
-        else find(items, id, i + 1)
+func by_id(items: Product[], id: int): Product? {
+    return items->find<(p: Product): bool => p.id == id>
 }
 
 func label(p: Product?): string {
@@ -24,8 +24,11 @@ func main(): int sync {
         { id: 20, name: 'desk', price: 120.0 },
         { id: 30, name: 'chair', price: 64.25 }
     ]
-    println(label(find(catalog, 20, 0)))
-    println(label(find(catalog, 99, 0)))
+    println(label(by_id(catalog, 20)))
+    println(label(by_id(catalog, 99)))
+
+    let names = catalog->map<(p: Product): string => p.name>
+    println('desk is at', names->index_of<'desk'> ?? -1, 'and sofa at', names->index_of<'sofa'> ?? -1)
 
     // A Map lookup is nullable as well.
     let stock = [('lamp', 4), ('desk', 0)] as Map<string, int>

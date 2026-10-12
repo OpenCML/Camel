@@ -1,5 +1,6 @@
 desk costs 120.00
 no such product
+desk is at 1 and sofa at -1
 lamps: 4 chairs: 0
 chair is listed: false
 null -1

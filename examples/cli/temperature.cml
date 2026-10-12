@@ -1,7 +1,9 @@
 // A command-line tool: the parameters of `main` are the program's inputs and get their
-// values from `--arg name=value`.
+// values from `--arg name=value`. The unit is accepted in either case (`to_upper` of `str`).
 // Run: camel examples/cli/temperature.cml --arg value=21.5 --arg unit=C --arg steps=3
 module temperature
+
+import { trim, to_upper } from str
 
 func convert(value: float, unit: string): float! {
     return if unit == 'C' then { return value * 9.0 / 5.0 + 32.0 }
@@ -23,7 +25,8 @@ func row(value: float, unit: string): string {
 
 // Prints `steps` rows, starting at `value` and going up by one degree per row.
 func main(value: float, unit: string, steps: int): int sync {
-    let rows = range(0, steps)->map<(i: int): string => row(value + float(i), unit)>
+    let u = unit->trim->to_upper
+    let rows = range(0, steps)->map<(i: int): string => row(value + float(i), u)>
     println(rows->join<'\n'>)
     return 0
 }

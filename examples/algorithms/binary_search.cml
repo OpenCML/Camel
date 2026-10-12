@@ -1,8 +1,11 @@
 // Binary search in a sorted array by tail recursion; a missing value gives null (int?).
+// The search is written out because it is the subject of the example: `index_of` and `find`
+// of the `array` module look a value up in an array in any order.
 // Run: camel examples/algorithms/binary_search.cml
 module binary_search
 
 import { sorted } from algo
+import { index_of } from array
 
 // Searches xs[lo, hi) for `target` and returns its index.
 func search(xs: int[], target: int, lo: int, hi: int): int? {
@@ -25,6 +28,7 @@ func main(): int sync {
     let xs = sorted([41, 7, 19, 3, 88, 54, 23, 60])
     println(xs)
     println([54, 3, 88, 20]->map<(t: int): string => describe(xs, t)>->join<'\n'>)
+    println('index_of gives:', xs->index_of<54> ?? -1, xs->index_of<20> ?? -1)
 
     // One million even numbers: at most twenty steps.
     let evens = range(0, 1000000)->map<(i: int): int => i * 2>

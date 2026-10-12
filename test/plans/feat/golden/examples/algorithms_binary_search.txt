@@ -3,4 +3,5 @@
 3 is at index 0
 88 is at index 7
 20 is not in the array
+index_of gives: 5 -1
 668665 -1

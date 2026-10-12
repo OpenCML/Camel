@@ -1,8 +1,10 @@
-// Writes a text file, reads it back, and handles a file that does not exist without
-// stopping: `try_read_text` returns a string! that is opened with `!!` or `match`.
+// Writes a text file, reads it back and splits it into lines, and handles a file that does
+// not exist without stopping: `try_read_text` returns a string! that is opened with `!!` or
+// `match`.
 // Run: camel examples/files/read_write.cml
 module read_write
 
+import { split, trim_end } from str
 import { exists, is_file, mkdirs, write_text, try_read_text, file_size } from fs
 
 func load(path: string): string {
@@ -21,6 +23,10 @@ func main(): int sync {
     write_text(path, 'first line\nsecond line\n')
     println('exists:', exists(path), 'is a file:', is_file(path), 'bytes:', file_size(path))
     print(load(path))
+
+    // Without the line feed at the end, `split` gives one piece per line.
+    let lines = load(path)->trim_end->split<'\n'>
+    println('lines:', len(lines), 'last:', lines[len(lines) - 1])
 
     let missing = dir + '/no_such_file.txt'
     println('exists:', exists(missing))

@@ -1,0 +1,74 @@
+// A small CSV reader: `split` and `trim` of `str` cut a line into fields, `parse_int` turns
+// a field into a number, and a line that does not fit becomes an error value that is
+// reported with its line number; the other lines are still used.
+// Run: camel examples/text/csv_parse.cml
+module csv_parse
+
+import { split, trim } from str
+import { enumerate, drop, sum, count } from array
+
+type Row = { city: string, year: int, people: int }
+
+// The values already read are `with` parameters, so each step is a function of the one field
+// it parses and the steps chain with `?->`.
+with <city: string, year: int>
+func add_people(people: int): Row {
+    return { city: city, year: year, people: people }
+}
+
+with <city: string, people_text: string>
+func add_year(year: int): Row! {
+    return parse_int(people_text) ?-> add_people<city, year>
+}
+
+// The first step that fails decides the result: a wrong number of fields, or a field that
+// is not an integer (the ParseError of parse_int).
+func parse_row(line: string): Row! {
+    let f = line->split<','>->map<(s: string): string => trim(s)>
+    return if len(f) != 3 then {
+        throw error('FieldCount', 'expected 3 fields, got ' + string(len(f)))
+    } else parse_int(f[1]) ?-> add_year<f[0], f[2]>
+}
+
+func describe(r: Row!): string {
+    return match r {
+        case error e => 'skipped, ' + e.kind + ': ' + e.message
+        case row => format<row.city, row.year, row.people>('{:<10} {} {:>8}')
+    }
+}
+
+func is_ok(r: Row!): bool {
+    return match r {
+        case error e => false
+        case row => true
+    }
+}
+
+func people_of(r: Row): int {
+    return r.people
+}
+
+func main(): int sync {
+    let text = 'city, year, people
+Lyon, 2020, 522250
+  Graz ,2021,  291134
+Porto, 2021
+Bergen, 2022, about 289000
+Tartu, 2022, 97435
+'
+    // The first line holds the column names; line numbers start at 1.
+    let lines = text->trim->split<'\n'>
+    let numbered = enumerate(lines)->drop<1>
+    let rows = numbered->map<(p: (int, string)): Row! => parse_row(p.1)>
+    println('data lines:', len(rows))
+    numbered->foreach<(p: (int, string)) => sync {
+        let outcome = describe(parse_row(p.1))
+        println(format<p.0 + 1, outcome>('line {}: {}'))
+    }>
+
+    // A rejected line counts as 0 people.
+    let people = rows->map<(r: Row!): int => r ?-> people_of !! 0>
+    println('rows read:', rows->count<is_ok>)
+    println('people in all:', sum(people))
+    return 0
+}

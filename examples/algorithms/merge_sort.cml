@@ -1,9 +1,11 @@
-// Merge sort written with recursion (the language has no loops), checked against the
-// library's `algo.sorted`.
+// Merge sort written with recursion (the language has no loops). The sort is written out
+// because it is the subject of the example: a program that needs sorted data calls `sorted`
+// of `algo` or `sort_by` of `array`, and the result is checked against both here.
 // Run: camel examples/algorithms/merge_sort.cml
 module merge_sort
 
 import { sorted } from algo
+import { sort_by, zip_with, all } from array
 
 // Merges two sorted arrays. The recursive call is the last thing done, so the depth of the
 // recursion is not limited.
@@ -25,7 +27,8 @@ func sort(xs: int[]): int[] {
 }
 
 func same(a: int[], b: int[]): bool {
-    return len(a) == len(b) && zip(a, b)->reduce<(ok: bool, p: (int, int)): bool => ok && p.0 == p.1, true>
+    let equal = zip_with<(x: int, y: int) => x == y>(a, b)
+    return equal->all<(e: bool) => e>
 }
 
 func main(): int sync {
@@ -34,6 +37,7 @@ func main(): int sync {
     println('input: ', data)
     println('sorted:', result)
     println('same as algo.sorted:', same(result, sorted(data)))
+    println('same as array.sort_by:', same(result, data->sort_by<(x: int) => x>))
 
     // 2000 values in descending order.
     let big = range(0, 2000)->map<(i: int): int => 2000 - i>

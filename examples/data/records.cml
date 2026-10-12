@@ -1,7 +1,10 @@
-// Transforms an array of struct records: filter, derive new records, group totals in a Map.
-// Fields cannot be assigned, so a changed record is a new value.
+// Transforms an array of struct records: filter, derive new records, order them with
+// `sort_by`, add up with `sum`, group totals in a Map. Fields cannot be assigned, so a
+// changed record is a new value.
 // Run: camel examples/data/records.cml
 module records
+
+import { sort_by, take, sum } from array
 
 type Employee = { name: string, dept: string, salary: int }
 
@@ -34,6 +37,11 @@ func main(): int sync {
     // Engineers get a 10% raise; everybody else is kept as is.
     let updated = staff->map<(e: Employee): Employee => with_raise(e, if e.dept == 'eng' then 10 else 0)>
     println(updated->map<line>->join<'\n'>)
+
+    // Descending order: the key is the negated salary.
+    let by_salary = updated->sort_by<(e: Employee) => 0 - e.salary>
+    println('two highest paid:', by_salary->take<2>->map<(e: Employee): string => e.name>)
+    println('payroll:', sum(updated->map<(e: Employee): int => e.salary>))
 
     println('before:', total_by_dept(staff))
     println('after: ', total_by_dept(updated))
