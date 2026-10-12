@@ -124,6 +124,7 @@ int main(int argc, char *argv[]) {
 
     auto diagnostics = std::make_shared<Diagnostics>("camel-format", inputPath);
     auto parser      = std::make_shared<CamelParser>(diagnostics);
+    parser->setBackend(CamelParser::Backend::Hand);
     std::ifstream file(inputPath);
     if (!file) {
         std::cerr << "camel-format: cannot open: " << inputPath << "\n";
@@ -153,8 +154,8 @@ int main(int argc, char *argv[]) {
 
     std::string out;
     try {
-        Formatter formatter(parser->getTokens(), options);
-        out = std::any_cast<std::string>(formatter.visit(parser->cst()));
+        Formatter formatter(*parser->tree(), options);
+        out = formatter.format();
     } catch (const std::exception &e) {
         std::cerr << "camel-format: failed to format: " << e.what() << "\n";
         return 1;

@@ -62,14 +62,15 @@ std::optional<std::string> formatSource(const std::string &path, const std::stri
     auto diagnostics =
         std::make_shared<camel::core::error::Diagnostics>("lsp-format", path);
     auto parser = std::make_shared<camel::parse::CamelParser>(diagnostics);
+    parser->setBackend(camel::parse::CamelParser::Backend::Hand);
     std::istringstream input(content);
     try {
         if (!parser->parseCST(input)) {
             return std::nullopt;
         }
         Formatter::Options options;
-        Formatter formatter(parser->getTokens(), options);
-        return std::any_cast<std::string>(formatter.visit(parser->cst()));
+        Formatter formatter(*parser->tree(), options);
+        return formatter.format();
     } catch (...) {
         return std::nullopt;
     }
