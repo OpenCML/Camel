@@ -406,6 +406,42 @@ slot_t FastVMSchedPass::callElement(const HigherOrderCallSite &site, Frame *fram
     return result;
 }
 
+void FastVMSchedPass::inspectInstruction(size_t pc, Frame *frame) {
+    camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    if (auto sourceContext = context_->sourceContext()) {
+        origin = sourceContext->debugMap().pcOrigin(pc);
+        sourceContext->setCurrentRuntimeOrigin(origin);
+    }
+    auto *observer = camel::execute::executionObserver();
+    if (observer == nullptr) {
+        return;
+    }
+    const Bytecode &bc = bytecodes_[pc];
+    camel::execute::InstructionSite site;
+    site.pc     = pc;
+    site.frame  = frame;
+    site.origin = origin;
+    switch (bc.opcode) {
+    case OpCode::FUNC:
+        site.effect     = camel::execute::InstructionEffect::Call;
+        site.resultSlot = bc.result;
+        break;
+    case OpCode::RETN:
+        site.effect = camel::execute::InstructionEffect::Return;
+        break;
+    case OpCode::TAIL:
+        site.effect = camel::execute::InstructionEffect::TailCall;
+        break;
+    case OpCode::JUMP:
+        site.effect = camel::execute::InstructionEffect::Jump; // its result field is no slot
+        break;
+    default:
+        site.resultSlot = bc.result;
+        break;
+    }
+    observer->beforeInstruction(site);
+}
+
 camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     (void)os;
     ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");

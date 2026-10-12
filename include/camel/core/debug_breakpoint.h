@@ -58,20 +58,8 @@ class DebugBreakpoint {
     /// zero cost.
     static void Hit(const char *type, const void *context);
 
-    // ------------------------------------------------------------------
-    // GIR node hook — always compiled, even in NDEBUG, so the debugger
-    // (camel-db) keeps full node-level breakpoints/stepping on release
-    // builds. Cost is one atomic load per node when no handler is set.
-    // ------------------------------------------------------------------
-
-    /// Context: the runtime GCGraph being executed and the node ref about to run.
-    using GirNodeHandlerFn = void (*)(const void *runtimeGraph, uint64_t nodeRef);
-
-    /// Install (or clear, with nullptr) the GIR node handler. Live in all build modes.
-    static void SetGirNodeHandler(GirNodeHandlerFn fn);
-
-    /// Fire before a GIR node executes. No-op unless a handler is installed.
-    static void HitGirNode(const void *runtimeGraph, uint64_t nodeRef);
+    // The hook of the schedulers (before each node, calls, faults), which works in every
+    // build mode, is camel::execute::ExecutionObserver (camel/execute/observer.h).
 };
 
 } // namespace camel

@@ -1111,6 +1111,13 @@ void Builder::recordDeclaration(
     const auto origin                    = decl->load()->origin();
     declOrigins_[nodeScope_.get()][name] = origin;
     recorder_->valueDeclared(origin, name, valueTypeOf(nodeTypeOf(node)), isVariable(node));
+    recorder_->valueBound(
+        origin,
+        name,
+        currGraph_ ? currGraph_->stableId() : std::string(),
+        node->header.origin,
+        nodeTypeOf(node),
+        isVariable(node));
 }
 
 camel::source::origin_id_t Builder::declarationOf(const std::string &name) const {

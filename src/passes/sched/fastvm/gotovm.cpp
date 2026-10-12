@@ -98,12 +98,12 @@ static thread_local size_t s_jit_save_depth = 0;
 #endif
 #include <unordered_set>
 
+// Inspection mode (a debugger or another inspecting tool is attached): the instruction about to
+// run is published, see FastVMSchedPass::inspectInstruction. One test of a flag otherwise.
 #define SYNC_RUNTIME_ORIGIN()                                                                      \
     do {                                                                                           \
         if (InternalGlobalConfig::IsInspectionMode() && context_) {                                \
-            if (auto _sourceContext = context_->sourceContext()) {                                 \
-                _sourceContext->setCurrentRuntimeOrigin(_sourceContext->debugMap().pcOrigin(pc));  \
-            }                                                                                      \
+            inspectInstruction(pc, currFrame);                                                     \
         }                                                                                          \
     } while (0)
 
@@ -207,6 +207,7 @@ static void writeComputedGotoFillSlots(
 } // namespace
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
+    camel::execute::ActivationScope observedActivation;
     Frame *currFrame                = rootFrame;
     Frame *rootActiveFrame          = rootFrame;
     const Bytecode *base            = bytecodes_.data();
@@ -721,6 +722,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             try {
                 result = func(withView, normView, *context_);
             } catch (const RuntimeFault &fault) {
+        // A debugger stops here, while every frame of the stack is still alive.
+        if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+            observer->faultRaised(
+                fault,
+                faultIsolationDepth() != 0 && isIsolatableFault(fault.diag()));
+        }
                 throw reportRuntimeFault(
                     *context_,
                     fault,

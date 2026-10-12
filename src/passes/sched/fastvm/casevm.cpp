@@ -69,6 +69,7 @@ using namespace camel::jit;
     } break;
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
+    camel::execute::ActivationScope observedActivation;
     Frame *currFrame                = rootFrame;
     Frame *rootActiveFrame          = rootFrame;
     const size_t stackDepthBase     = stackDepth_;
@@ -79,9 +80,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             // The switch interpreter follows the same policy as computed-goto FVM: no per-opcode
             // GC safepoint; call transitions poll fastVmCallBoundarySafepoint().
             if (InternalGlobalConfig::IsInspectionMode() && context_) {
-                if (auto sourceContext = context_->sourceContext()) {
-                    sourceContext->setCurrentRuntimeOrigin(sourceContext->debugMap().pcOrigin(pc));
-                }
+                inspectInstruction(pc, currFrame);
             }
             const Bytecode &bc = bytecodes_[pc];
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
@@ -395,6 +394,12 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 try {
                     result = func(withView, normView, *context_);
                 } catch (const RuntimeFault &fault) {
+        // A debugger stops here, while every frame of the stack is still alive.
+        if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+            observer->faultRaised(
+                fault,
+                faultIsolationDepth() != 0 && isIsolatableFault(fault.diag()));
+        }
                     throw reportRuntimeFault(
                         *context_,
                         fault,

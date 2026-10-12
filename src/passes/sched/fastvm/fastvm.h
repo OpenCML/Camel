@@ -23,6 +23,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/execute/limits.h"
+#include "camel/execute/observer.h"
 #include "camel/execute/pass/runtime_sched.h"
 #include "camel/runtime/graph.h"
 #include "compile.h"
@@ -150,6 +151,10 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     void requireNestedCallRoom(const ctx::Frame *caller) const;
     /// One element call of a higher-order operator: a nested, counted call.
     slot_t callElement(const HigherOrderCallSite &site, ctx::Frame *frame);
+
+    /// Inspection mode only: records the origin of the instruction at `pc` as the current
+    /// runtime origin and reports the instruction to the execution observer, if any.
+    void inspectInstruction(size_t pc, ctx::Frame *frame);
 
     void precompile(camel::runtime::GCGraph *runtimeRoot);
     /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).

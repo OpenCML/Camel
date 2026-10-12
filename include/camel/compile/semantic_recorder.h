@@ -61,6 +61,23 @@ class SemanticRecorder {
     virtual void
     valueDeclared(origin_id_t decl, const std::string &name, Type *type, bool variable) = 0;
 
+    /// Where the value of a name declared with valueDeclared lives when the program runs: in
+    /// the graph `graph` (stable id) the name stands for the node whose origin is `node`.
+    /// `node` is invalid for a parameter or a captured name: those are ports of the graph,
+    /// found by position (the names are in the graph's function type). A debugger reads the
+    /// value of a name from the slot of that node (docs/technical/34_debugger.md, 6.1).
+    /// Optional: the default ignores the report.
+    virtual void valueBound(
+        origin_id_t decl, const std::string &name, const std::string &graph, origin_id_t node,
+        Type *type, bool variable) {
+        (void)decl;
+        (void)name;
+        (void)graph;
+        (void)node;
+        (void)type;
+        (void)variable;
+    }
+
     /// The expression at `expr` has a value of `type`.
     virtual void expressionTyped(origin_id_t expr, Type *type) = 0;
 
