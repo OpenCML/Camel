@@ -637,22 +637,14 @@ Each is implemented as recommended here; the tag is in the code.
   for the two types). A collection that `main` returns is printed.
 - **`std::cpp`, ONNX:** collections are refused, not translated. The Python bridge was not
   tried with a collection.
-- **A defect met, not caused and not fixed:** with the experimental moving collector
-  (`CAMEL_GC_ENABLE_YOUNG_COPYING=1`, off by default) a program whose graph holds *any*
-  object constant produced by `std::macro` fails heap verification under collection stress
-  ("GC-traced slot points outside managed object regions"), and a larger program crashes or
-  prints another constant. It reproduces with arrays alone:
-
-  ```camel
-  macro func table(n: int): (int, string)[] { return concat([(1, 'one')], [(n, 'more')]) }
-  macro func names(): string[] { return concat(['beta'], ['gamma']) }
-  func main(): int sync {
-      println(table(4), names())      // CAMEL_GC_ENABLE_YOUNG_COPYING=1 CAMEL_GC_VERIFY=both
-      return 0                        // CAMEL_GC_STRESS_ALLOC=1 CAMEL_GC_STRESS_SAFEPOINT=1
-  }                                   // camel x.cml std::macro std::gc::verify std::nvm
-  ```
-
-  So collection constants are verified with the non-moving collector only; collections built
-  when the program runs are verified with both.
+- **A defect of the moving collector met here, since fixed.** With the moving collector a
+  program whose graph held any object constant produced by `std::macro` failed heap
+  verification under collection stress, and a larger program crashed or printed another
+  constant; arrays alone reproduced it. The cause was in the macro pass, not in the
+  collections: a graph draft holds plain copies of slots, and drafts were open while later
+  calls of the same round were still being evaluated, across safepoints. The pass now
+  evaluates a whole round before it rewrites (`src/execute/macro/macro.cpp`,
+  `36_gc_handle_rules.md` section 7, finding 2), and collection constants are verified with
+  both collectors (`gc.macro_constants.*`, `gc.collection_constants_*`).
 - **Not verified:** the Windows and macOS builds (the work was built and tested on Linux
   only); programs that hold more than 2^32 entries (the size field is 32 bits, as in `Tuple`).

@@ -736,13 +736,17 @@ slot_t FastVMSchedPass::invokeOwnedJitFrame(JitEntryFn fn, Frame *frame, void *j
     // so that a recursion ends at the same call whichever of the two runs it.
     jc->depthBudget = maxRecursionDepth_ - std::min(stackDepth_, maxRecursionDepth_);
     slot_t result;
+    // No safepoint may be reached until the compiled code returns (see mm::detail).
+    camel::core::mm::detail::nativeCodeDepth.fetch_add(1, std::memory_order_relaxed);
     try {
         result = fn(slots, jitCtx);
     } catch (...) {
+        camel::core::mm::detail::nativeCodeDepth.fetch_sub(1, std::memory_order_relaxed);
         if (framePool_.isActive(frame))
             framePool_.release(frame);
         throw;
     }
+    camel::core::mm::detail::nativeCodeDepth.fetch_sub(1, std::memory_order_relaxed);
     // Compiled code cannot throw: it reports a fault by returning with it recorded.
     if (jc->faultKind != 0) [[unlikely]]
         raiseJitFault(jitCtx, frame);

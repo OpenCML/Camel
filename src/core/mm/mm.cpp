@@ -30,6 +30,7 @@ namespace camel::core::mm {
 
 namespace detail {
 std::atomic_bool autoSpaceSafepointSlowPath{false};
+std::atomic<uint32_t> nativeCodeDepth{0};
 }
 
 namespace {
@@ -91,6 +92,29 @@ GenerationalAllocatorWithGC::CollectionKind envCollectionKind() {
     return GenerationalAllocatorWithGC::CollectionKind::Major;
 }
 
+// --gc: what the command line chose before the allocator existed (-1: nothing).
+std::atomic<int> selectedCollectorMode{-1};
+std::atomic<bool> autoSpaceCreated{false};
+
+// The collector the environment asks for. CAMEL_GC_ENABLE_YOUNG_COPYING=1 is the older name
+// of CAMEL_GC=generational and is still read; safepoint poisoning is a mode of the moving
+// collector and implies it.
+CollectorMode collectorModeFromEnv() {
+    if (envFlag("CAMEL_GC_POISON")) {
+        return CollectorMode::Generational;
+    }
+    if (const std::string raw = envString(kCollectorModeEnv); !raw.empty()) {
+        if (const auto mode = parseCollectorMode(lowerAscii(raw))) {
+            return *mode;
+        }
+        std::cerr << "[camel] " << kCollectorModeEnv << "=" << raw
+                  << " is not a collector (mark-sweep, generational); using mark-sweep\n";
+        return CollectorMode::MarkSweep;
+    }
+    return envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING") ? CollectorMode::Generational
+                                                   : CollectorMode::MarkSweep;
+}
+
 // The allocator whose statistics are printed at exit (CAMEL_GC_STATS).
 GenerationalAllocatorWithGC *statsInstance = nullptr;
 
@@ -112,6 +136,7 @@ GenerationalAllocatorWithGC::DebugConfig debugConfigFromEnv() {
     config.stressEveryNSafepoints  = envSize("CAMEL_GC_STRESS_SAFEPOINT");
     config.stressCollection        = envCollectionKind();
     config.logMovements            = envFlag("CAMEL_GC_LOG_MOVES");
+    config.poisonAtSafepoints      = envFlag("CAMEL_GC_POISON");
 
     std::string verifyRaw = envString("CAMEL_GC_VERIFY");
     if (!verifyRaw.empty()) {
@@ -153,29 +178,86 @@ void maybePrintDebugConfig(
               << " stressAlloc=" << config.stressEveryNAllocations
               << " stressSafepoint=" << config.stressEveryNSafepoints
               << " stressMode=" << collectionKindName(config.stressCollection)
-              << " logMoves=" << (config.logMovements ? "true" : "false") << '\n';
+              << " logMoves=" << (config.logMovements ? "true" : "false")
+              << " poison=" << (config.poisonAtSafepoints ? "true" : "false") << '\n';
 }
 
 } // namespace
 
+const char *collectorModeName(CollectorMode mode) {
+    return mode == CollectorMode::Generational ? "generational" : "mark-sweep";
+}
+
+std::optional<CollectorMode> parseCollectorMode(std::string_view text) {
+    if (text == "generational" || text == "gen" || text == "1") {
+        return CollectorMode::Generational;
+    }
+    if (text == "mark-sweep" || text == "marksweep" || text == "0") {
+        return CollectorMode::MarkSweep;
+    }
+    return std::nullopt;
+}
+
+bool selectCollectorMode(CollectorMode mode) {
+    if (autoSpaceCreated.load(std::memory_order_acquire)) {
+        return false;
+    }
+    selectedCollectorMode.store(static_cast<int>(mode), std::memory_order_release);
+    return true;
+}
+
+CollectorMode collectorMode() {
+    if (autoSpaceCreated.load(std::memory_order_acquire)) {
+        return autoSpace().youngGenCopyingEnabled() ? CollectorMode::Generational
+                                                    : CollectorMode::MarkSweep;
+    }
+    const int selected = selectedCollectorMode.load(std::memory_order_acquire);
+    if (envFlag("CAMEL_GC_POISON")) {
+        return CollectorMode::Generational;
+    }
+    return selected >= 0 ? static_cast<CollectorMode>(selected) : collectorModeFromEnv();
+}
+
 // Managed automatically by the GC system and must remain reachable from roots.
 GenerationalAllocatorWithGC &autoSpace() {
     static auto *allocator = [] {
-        const bool youngCopying = envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING");
-        const auto debugConfig  = debugConfigFromEnv();
+        const auto debugConfig = debugConfigFromEnv();
+        // Safepoint poisoning is a mode of the moving collector, so it turns it on.
+        const bool youngCopying = collectorMode() == CollectorMode::Generational;
+        autoSpaceCreated.store(true, std::memory_order_release);
+        // The birth space (CAMEL_GC_NURSERY_MB, default 4). Untouched pages cost nothing, so
+        // the mark-sweep collector, which does not use it, does not pay for it.
+        const size_t nurseryMb   = envSize("CAMEL_GC_NURSERY_MB");
+        const size_t nurseryBytes = std::clamp<size_t>(nurseryMb != 0 ? nurseryMb : 4, 1, 1024) * MB;
+        // What counts as a large object (CAMEL_GC_LARGE_THRESHOLD_KB). Large objects get a
+        // block of their own and never move. With mark-sweep the threshold is 4 KB. With the
+        // generational collector it is 64 KB: an object born outside the birth space is old
+        // from birth, and an array of a few thousand elements that dies young would keep
+        // every young element it points at alive until the next major collection.
+        const size_t thresholdKb = envSize("CAMEL_GC_LARGE_THRESHOLD_KB");
+        const size_t largeThreshold =
+            thresholdKb != 0 ? std::min(thresholdKb * KB, nurseryBytes / 8)
+                             : (youngCopying ? std::min<size_t>(64 * KB, nurseryBytes / 8) : 4 * KB);
         auto *instance = new GenerationalAllocatorWithGC(GenerationalAllocatorWithGC::Config{
-            // Keep the default process-start footprint modest. The current runtime disables
-            // young-generation copying, so large preallocated semispaces only add startup cost.
-            .birthSize             = 4 * MB,
-            .havenSize             = 1 * MB,
+            .birthSize             = nurseryBytes,
+            // Under safepoint poisoning nothing is promoted by age, so the survivor spaces
+            // must hold whatever the birth space can.
+            .havenSize = debugConfig.poisonAtSafepoints ? nurseryBytes : nurseryBytes / 4,
             .elderGenSize          = 32 * MB,
-            .promotionAgeThreshold = 4,      // Promotion threshold.
-            .largeObjThreshold     = 4 * KB, // Large-object threshold.
+            // Minor collections an object survives before it is promoted
+            // (CAMEL_GC_PROMOTION_AGE, 1 to 15; 1 promotes at the first one, which is the
+            // setting that shows missing write barriers).
+            .promotionAgeThreshold =
+                std::clamp<size_t>(
+                    envSize("CAMEL_GC_PROMOTION_AGE") != 0 ? envSize("CAMEL_GC_PROMOTION_AGE") : 4,
+                    1,
+                    15),
+            .largeObjThreshold     = largeThreshold,
             // Large-object bytes between collections (CAMEL_GC_LARGE_BUDGET_MB overrides).
             .largeObjCollectionBudget = largeObjectBudgetFromEnv(),
             .largeObjGrowthPercent    = largeObjectGrowthPercentFromEnv(),
-            .minorGCTriggerRatio      = 0.9f, // Minor GC trigger ratio.
-            .majorGCTriggerRatio      = 0.8f, // Major GC trigger ratio.
+            .minorGCTriggerRatio      = 0.9f,
+            .heapLimitBytes           = envSize("CAMEL_GC_HEAP_LIMIT_MB") * MB,
             // Production remains address-stable by default; Phase 3 tests can opt into the
             // copying path explicitly to exercise remembered-set behavior.
             .enableYoungGenCopying = youngCopying});

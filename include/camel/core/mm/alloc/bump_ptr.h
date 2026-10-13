@@ -52,6 +52,7 @@ class BumpPointerAllocator : public IAllocator {
         // Avoid value-initializing the whole arena: headers are installed explicitly on demand.
         buffer_ = std::unique_ptr<slot_t[]>(new slot_t[num_units]);
         start_  = reinterpret_cast<std::byte *>(buffer_.get());
+        begin_  = start_;
         top_.store(start_, std::memory_order_relaxed);
         end_ = start_ + aligned_capacity; // Actual usable byte count.
     }
@@ -166,7 +167,58 @@ class BumpPointerAllocator : public IAllocator {
     }
 
     void reset() override {
-        withExclusiveAccess([&] { top_.store(start_, std::memory_order_release); });
+        withExclusiveAccess([&] {
+            begin_ = start_;
+            top_.store(start_, std::memory_order_release);
+        });
+    }
+
+    // Safepoint poisoning (CAMEL_GC_POISON, see gen.h). Empties the space like reset(), but
+    // first overwrites every word of the blocks it held with `poisonWord`, and then keeps
+    // allocating above them while at least `minFreeBytes` remain, so the addresses of the
+    // objects that were just evacuated are not handed out again until the space has been
+    // walked once to its end. A pointer that still names one of them reads the poison.
+    void resetPoisoned(slot_t poisonWord, size_t minFreeBytes) {
+        withExclusiveAccess([&] {
+            std::byte *top = top_.load(std::memory_order_relaxed);
+            std::fill(
+                reinterpret_cast<slot_t *>(begin_),
+                reinterpret_cast<slot_t *>(top),
+                poisonWord);
+            if (static_cast<size_t>(end_ - top) < minFreeBytes) {
+                top = start_;
+            }
+            begin_ = top;
+            top_.store(top, std::memory_order_release);
+        });
+    }
+
+    // Before the space receives the survivors of a collection in poison mode: starts over at
+    // the base when fewer than `neededBytes` remain above the current top. The space must be
+    // empty.
+    void rewindIfShort(size_t neededBytes) {
+        withExclusiveAccess([&] {
+            std::byte *top = top_.load(std::memory_order_relaxed);
+            ASSERT(begin_ == top, "rewindIfShort() requires an empty space");
+            if (static_cast<size_t>(end_ - top) < neededBytes) {
+                begin_ = start_;
+                top_.store(start_, std::memory_order_release);
+            }
+        });
+    }
+
+    size_t capacity() const { return static_cast<size_t>(end_ - start_); }
+
+    // Bytes held by blocks (headers included).
+    size_t used() const {
+        return static_cast<size_t>(top_.load(std::memory_order_acquire) - begin_);
+    }
+
+    // Whether `ptr` lies inside the blocks the space holds now. contains() is true for the
+    // whole reservation, including what a reset left behind.
+    bool containsAllocated(void *ptr) const {
+        auto *raw = reinterpret_cast<std::byte *>(ptr);
+        return raw >= begin_ && raw < top_.load(std::memory_order_acquire);
     }
 
     size_t available() const override {
@@ -182,7 +234,7 @@ class BumpPointerAllocator : public IAllocator {
 
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override {
         withExclusiveAccess([&] {
-            std::byte *current     = start_;
+            std::byte *current     = begin_;
             std::byte *topSnapshot = top_.load(std::memory_order_relaxed);
             while (current < topSnapshot) {
                 ObjectHeader *header = reinterpret_cast<ObjectHeader *>(current);
@@ -219,6 +271,7 @@ class BumpPointerAllocator : public IAllocator {
         swap(debugRegion_, other.debugRegion_);
         swap(buffer_, other.buffer_);
         swap(start_, other.start_);
+        swap(begin_, other.begin_);
         std::byte *thisTop  = top_.load(std::memory_order_relaxed);
         std::byte *otherTop = other.top_.load(std::memory_order_relaxed);
         top_.store(otherTop, std::memory_order_relaxed);
@@ -234,6 +287,8 @@ class BumpPointerAllocator : public IAllocator {
     const char *debugRegion_{nullptr}; // Used for debug hooks; nullptr means no hook.
     std::unique_ptr<slot_t[]> buffer_;
     std::byte *start_;
+    // First block the space holds. It is start_ except in poison mode (resetPoisoned).
+    std::byte *begin_;
     std::atomic<std::byte *> top_;
     std::byte *end_;
     mutable std::atomic<bool> exclusiveMode_{false};

@@ -3,5 +3,4 @@ error[RuntimeDiag::FormatFailed]: Cannot format with the format string '{} and {
    |
  5 |     println(format<a>('{} and {}'))
    |                   ^^^
-help: A replacement field is a pair of braces, optionally holding a format specification after a
-      colon. There must be one argument per field, and a literal brace is written twice.
+help: A replacement field is a pair of braces, optionally holding a format specification after a colon. There must be one argument per field, and a literal brace is written twice.

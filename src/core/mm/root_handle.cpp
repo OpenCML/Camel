@@ -27,10 +27,7 @@ namespace camel::core::mm {
 
 RootHandle::RootHandle(GenerationalAllocatorWithGC &allocator, std::string name)
     : allocator_(&allocator), name_(name.empty() ? "RootHandle" : std::move(name)) {
-    allocator_->registerExternalRootTracer(
-        this,
-        name_,
-        [this](const GenerationalAllocatorWithGC::RefRelocator &relocate) { trace(relocate); });
+    allocator_->linkRootHandle(this);
 }
 
 RootHandle::RootHandle(
@@ -42,7 +39,7 @@ RootHandle::RootHandle(
 
 RootHandle::~RootHandle() {
     if (allocator_) {
-        allocator_->unregisterExternalRootTracer(this);
+        allocator_->unlinkRootHandle(this);
     }
 }
 

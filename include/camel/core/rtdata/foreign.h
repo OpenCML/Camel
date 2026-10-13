@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -156,6 +156,14 @@ ForeignResourceStats foreignResourceStats();
 /// released by the next collection that finds its wrapper dead, at the latest by this call.
 size_t disposeAllForeignResources() noexcept;
 void resetForeignResourceStatsForTests();
+/// Releases the resources of the wrappers the collector found dead. The collector only
+/// queues them (ForeignResourceObject::finalize runs inside the collection, with the allocator
+/// locked); the allocator calls this at the end of the safepoint, after it has unlocked, on the
+/// thread that reached the safepoint. A deleter therefore runs with no runtime lock held: it
+/// may take locks of its own (the Python GIL) without ordering them against the allocator's.
+/// Returns the number of references released.
+size_t runDeferredForeignReleases() noexcept;
+
 void noteForeignRootedHandleCreated() noexcept;
 void noteForeignRootedHandleDestroyed() noexcept;
 void noteForeignPinnedHandleCreated() noexcept;

@@ -10,17 +10,14 @@ error[SemanticDiag::ReturnTypeMismatch]: Return type 'string' does not match the
    |
  5 | func g(): int { return 'text' }
    |                 ^^^^^^^^^^^^^
-help: Ensure that the value returned from the function matches the type specified in the function
-      signature: () => int. No implicit conversion is applied: convert explicitly, for example
-      float(x) for a number or 'x as T' for a module type.
+help: Ensure that the value returned from the function matches the type specified in the function signature: () => int. No implicit conversion is applied: convert explicitly, for example float(x) for a number or 'x as T' for a module type.
 
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (int).
    --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:11:16
     |
  11 |     println(add(1))
     |                ^^^
-help: Check the number and types of arguments to ensure they match one of the available overloaded
-      function signatures. Available overloads:
+help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           add: (a: int, b: int) => int
 
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (int, string).
@@ -28,8 +25,7 @@ error[SemanticDiag::NoMatchingFunction]: No matching function found for argument
     |
  12 |     println(add(1, 'x'))
     |                ^^^^^^^^
-help: Check the number and types of arguments to ensure they match one of the available overloaded
-      function signatures. Available overloads:
+help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           add: (a: int, b: int) => int
 
 camel: 4 errors

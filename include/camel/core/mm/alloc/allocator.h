@@ -65,6 +65,11 @@ class IAllocator {
         ASSERT(false, "iterateAllocated() not implemented for this allocator");
     };
 
+    // Tells the allocator that the object at `payload`, which it has just handed out, has a
+    // finalizer (rtdata::Object::finalize) that must run when the object dies. A collector
+    // that reclaims dead objects without visiting them needs to know; the others do not.
+    virtual void noteFinalizable(void *payload) { (void)payload; }
+
     // Bulk-free the given list of object headers.
     virtual void freeBulk(const std::vector<ObjectHeader *> &objects) {
         for (auto *obj : objects) {

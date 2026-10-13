@@ -3,6 +3,4 @@ error[RuntimeDiag::InvalidNumberText]: Cannot convert the string 'abc' to int.
    |
  5 |     println(int(s))
    |             ^^^
-help: The whole string must be an integer: no blanks before or after it and nothing else. A
-      conversion that fails is a fault and ends the program; parse_int and parse_float return an
-      error value (T!) instead.
+help: The whole string must be an integer: no blanks before or after it and nothing else. A conversion that fails is a fault and ends the program; parse_int and parse_float return an error value (T!) instead.

@@ -10,7 +10,6 @@ error[SemanticDiag::ImportedModuleHasErrors]: Cannot import module 'broken_lib':
    |
  3 | import { helper } from broken_lib
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-help: The errors are reported for that module. This one follows from them and goes away when they
-      are fixed.
+help: The errors are reported for that module. This one follows from them and goes away when they are fixed.
 
 camel: 2 errors

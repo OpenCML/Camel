@@ -3135,28 +3135,40 @@ Out of memory{0}: {1}.
 **Help**
 
 ```text
-The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values and is bounded only by the memory of the host.
+The graph, permanent and meta spaces hold the compiled program (its runtime graphs, its types, the constants of the graphs being compiled) and grow with it; each has a total limit that only guards against a compiler that does not stop allocating. If the program is this large, raise the limit with the environment variable the message names. If a pass is named, the growth may be its doing (an inlining or unrolling that does not end): run the pipeline without it. The auto space holds run-time values: it is bounded by the memory of the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the values the program keeps alive do not fit the limit.
 ```
 
-**Example** (`test/cases/opt/generic/specialize_growing_shape.cml`, run as `CAMEL_OPT_GROWTH_BUDGET=100000000 CAMEL_PERM_SPACE_LIMIT_MB=32 camel --output-format json test/cases/opt/generic/specialize_growing_shape.cml std::opt::simplify std::nvm`)
+**Example** (`test/cases/feat/mm/gc/gc_live_large.cml`, run as `CAMEL_GC=generational CAMEL_GC_HEAP_LIMIT_MB=64 camel test/cases/feat/mm/gc/gc_live_large.cml --arg mb=256 --arg reps=10 std::nvm`)
 
 ```camel
-module specialize_growing_shape
+module gc_live_large
 
-import { Tensor, new, concat, sum, shape } from tensor
-
-// Every level of the recursion passes a tensor one row longer than the one it received, so the
-// type of `acc` (which carries the shape once the first argument is a constant) is different at
-// every level. Specializing the callee on that type must stop: nothing in the types says where
-// the recursion ends.
-func grow(i: int, n: int, acc: Tensor): Tensor {
-    return if i >= n then acc else grow(i + 1, n, concat(acc, new([[1.0, 2.0]]), 0))
+func row(i: int, k: int): int[] {
+    return [i, i + k, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7, i + 8, i + 9, i + 10, i + 11]
 }
 
-func main(): int sync {
-    let t = grow(1, 12, new([[1.0, 2.0]]))
-    println(shape(t))
-    println(sum(t))
+func block(n: int, k: int): int[][] {
+    return range(0, n)->map<(i: int): int[] => row(i, k)>
+}
+
+func blocks(count: int, n: int): int[][][] {
+    return range(0, count)->map<(b: int): int[][] => block(n, b)>
+}
+
+func probe(live: int[][][], n: int): int {
+    return live->reduce<(acc: int, b: int[][]): int => acc + b[n - 1][1] + b[0][0], 0>
+}
+
+func churn(live: int[][][], n: int, left: int, total: int): int {
+    return if left == 0 then total + probe(live, n) else churn(live, n, left - 1, total + block(n / 10 + 1, left)[n / 10][11])
+}
+
+// One block is 4096 rows: about 0.6 MB.
+func main(mb: int, reps: int): int sync {
+    let n = 4096
+    let count = mb * 10 / 6 + 1
+    let live = blocks(count, n)
+    println('gc_live_large blocks={} total={}'->format<count, churn(live, n, reps, 0)>)
     return 0
 }
 ```

@@ -3,8 +3,7 @@ error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'undefined_in_bo
    |
  4 |     let n = x + undefined_in_body
    |                 ^^^^^^^^^^^^^^^^^
-note: in the instance 'twice<int>' of the generic function 'twice' with T = int, instantiated by the
-      call
+note: in the instance 'twice<int>' of the generic function 'twice' with T = int, instantiated by the call
   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:9:18
    |
  9 |     println(twice(21))
@@ -16,14 +15,12 @@ error[SemanticDiag::NoMatchingFunction]: No matching function found for argument
     |
   5 |     return x + x
     |                ^
-note: in the instance 'twice<int[]>' of the generic function 'twice' with T = int[], instantiated by
-      the call
+note: in the instance 'twice<int[]>' of the generic function 'twice' with T = int[], instantiated by the call
    --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:10:18
     |
  10 |     println(twice([1]))
     |                  -----
-help: Check the number and types of arguments to ensure they match one of the available overloaded
-      function signatures. Available overloads:
+help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           <:op/add_i>: (i32, i32) => i32
           <:op/add_l>: (int, int) => int
           <:op/add_f>: (f32, f32) => f32
@@ -35,14 +32,12 @@ error[SemanticDiag::NoMatchingFunction]: No matching function found for argument
     |
   5 |     return x + x
     |                ^
-note: in the instance 'twice<bool>' of the generic function 'twice' with T = bool, instantiated by
-      the call
+note: in the instance 'twice<bool>' of the generic function 'twice' with T = bool, instantiated by the call
    --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:11:18
     |
  11 |     println(twice(true))
     |                  ------
-help: Check the number and types of arguments to ensure they match one of the available overloaded
-      function signatures. Available overloads:
+help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           <:op/add_i>: (i32, i32) => i32
           <:op/add_l>: (int, int) => int
           <:op/add_f>: (f32, f32) => f32

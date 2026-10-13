@@ -44,7 +44,9 @@
 #ifdef _WIN32
 #include <io.h>
 #include <stdio.h>
+#include <windows.h>
 #else
+#include <sys/ioctl.h>
 #include <unistd.h>
 #endif
 
@@ -61,6 +63,27 @@ bool isTerminal(int fd) {
 #else
     return isatty(fd) != 0;
 #endif
+}
+
+/// Query the visible terminal rather than the Windows scrollback buffer. Zero means that
+/// the destination has no terminal size; those diagnostics are emitted without wrapping.
+size_t terminalWidth(int fd) {
+    if (fd < 0 || !isTerminal(fd)) {
+        return 0;
+    }
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO info{};
+    const auto handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+    if (GetConsoleScreenBufferInfo(handle, &info)) {
+        return static_cast<size_t>(info.srWindow.Right - info.srWindow.Left + 1);
+    }
+#else
+    winsize size{};
+    if (ioctl(fd, TIOCGWINSZ, &size) == 0) {
+        return size.ws_col;
+    }
+#endif
+    return 0;
 }
 
 bool autoColorFor(int fd) {
@@ -482,7 +505,7 @@ void appendLabelled(
         bool firstWord = true;
         while (words >> word) {
             const size_t w = displayWidth(word);
-            if (!firstWord && column + 1 + w > width) {
+            if (width != 0 && !firstWord && column + 1 + w > width) {
                 out += "\n" + indent.substr(1) + std::string(lead, ' ');
                 column = indent.size() - 1 + lead;
             }
@@ -646,6 +669,8 @@ DiagFormat diagnosticFormat() { return g_format.load(); }
 RenderOptions renderOptionsFor(const std::ostream &os) {
     RenderOptions options;
     options.format = g_format.load();
+    const int fd = &os == &std::cout ? 1 : (&os == &std::cerr || &os == &std::clog ? 2 : -1);
+    options.wrapWidth = terminalWidth(fd);
     switch (g_color.load()) {
     case ColorMode::Always:
         options.color = true;

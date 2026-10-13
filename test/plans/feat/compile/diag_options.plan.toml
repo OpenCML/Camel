@@ -4,6 +4,25 @@ tier = "feat"
 tags = ["feat", "compile", "diagnostics"]
 
 [[tests]]
+name = "info.invalid_format"
+desc = "Informational commands validate an invalid diagnostics environment setting."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--version"]
+envs = ["CAMEL_ERROR_FORMAT=invalid"]
+expect_exit = 1
+expect_stderr_contains = ["unknown diagnostics format 'invalid'"]
+
+[[tests]]
+name = "info.invalid_warning"
+desc = "Informational commands still consult the catalog when a warning name needs validation."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--version", "-Wno-bogus"]
+expect_exit = 1
+expect_stderr_contains = ["no warning is named 'bogus'"]
+
+[[tests]]
 name = "format.short"
 desc = "--error-format short is the one-line form the tools read: one line per diagnostic with name and code, and no excerpt."
 kind = "behavior"

@@ -1,0 +1,25 @@
+/**
+ * Allocation benchmark: a data structure built by recursion and kept, then walked. `build(d)`
+ * makes a nested array with 2^d leaves (each inner node an array of two arrays); `reps` of them
+ * are built, the previous one dying as the next is built.
+ */
+module build_tree
+
+func leaf(i: int): int[][] { return [[i, i + 1, i + 2]] }
+
+func build(d: int, i: int): int[][] {
+    return if d == 0 then leaf(i) else concat(build(d - 1, i * 2), build(d - 1, i * 2 + 1))
+}
+
+func weigh(t: int[][]): int {
+    return t->reduce<(acc: int, xs: int[]): int => acc + xs[0] + xs[2], 0>
+}
+
+func run(d: int, left: int, total: int): int {
+    return if left == 0 then total else run(d, left - 1, (total + weigh(build(d, left))) % 1000000007)
+}
+
+func main(depth: int, reps: int): int sync {
+    println('build_tree total={}'->format<run(depth, reps, 0)>)
+    return 0
+}

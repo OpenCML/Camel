@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <optional>
+#include <string_view>
 #include "mm/alloc/bump_ptr.h"
 #include "mm/alloc/free_list.h"
 #include "mm/alloc/growable.h"
@@ -52,5 +54,27 @@ GrowableBumpAllocator &permSpace();
 /// bytes in use now and at the high-water mark, bytes reserved, segments, allocations, limit.
 /// Printed at exit after the collector's line when CAMEL_GC_STATS is set.
 void reportSpaceUsage(std::ostream &os);
+
+/// Which collector the auto space runs.
+enum class CollectorMode {
+    MarkSweep,    // Non-moving mark-sweep: every object keeps its address. The default.
+    Generational, // Young objects are copied (they move); old ones are marked and swept.
+};
+
+/// The environment variable that selects the collector: `generational` (or 1) or `mark-sweep`
+/// (or 0). `--gc <mode>` on the command line wins over it.
+constexpr const char *kCollectorModeEnv = "CAMEL_GC";
+
+/// Selects the collector for this process. It has to be called before the auto space is first
+/// used (the spaces are laid out once); it returns false, and changes nothing, when that has
+/// already happened.
+bool selectCollectorMode(CollectorMode mode);
+
+/// The collector the auto space runs, or will run when it is first used.
+CollectorMode collectorMode();
+
+/// "mark-sweep" / "generational", and the reverse (nullopt for anything else).
+const char *collectorModeName(CollectorMode mode);
+std::optional<CollectorMode> parseCollectorMode(std::string_view text);
 
 } // namespace camel::core::mm

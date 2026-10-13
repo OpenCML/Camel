@@ -85,3 +85,27 @@ expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
 expect_output_contains = ["(my_module)"]
 expect_output_not_contains = ["(main)"]
+
+[[tests]]
+name = "check.lexical_limit_text"
+desc = "The frontend-only path stops at --max-errors and retains the rich diagnostic summary."
+case = "../../../cases/compile/check/lexical_many_errors.cml"
+args = ["check", "-i", "--max-errors", "2", "-O", "text", "${case}"]
+expect_exit = 1
+expect_output_contains = ["camel: 2 errors; stopped at the limit of 2 errors"]
+verify_script = """
+assert((input.normalized.stdout.match(/error\[LexicalDiag::IllegalCharacter\]/g) || []).length === 2, 'exactly two lexical errors')
+"""
+
+[[tests]]
+name = "check.lexical_limit_json"
+desc = "The same limit emits a valid diagnostics array with two located errors in JSON mode."
+case = "../../../cases/compile/check/lexical_many_errors.cml"
+args = ["check", "-i", "--max-errors", "2", "-O", "json", "${case}"]
+expect_exit = 1
+verify_script = """
+const errors = JSON.parse(input.stdout)
+assert(errors.length === 2, 'exactly two JSON diagnostics')
+assert(errors.every(d => d.data.name === 'LexicalDiag::IllegalCharacter'), 'lexical diagnostic names')
+assert(errors.every(d => d.range.start.line === 1), 'source positions retained')
+"""
