@@ -4,7 +4,7 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => i64";
+        tooltip="() => int";
         subgraph cluster_F02 {
             label="gate";
             tooltip="(t: Tensor) => Tensor";
@@ -26,10 +26,10 @@ digraph GraphIR {
                 O04 [label="EXIT", type="EXIT", style=dashed, shape=circle];
                 N02 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_6__::node#1"];
                 N03 [label="1", type="DATA", shape=circle, style=solid, tooltip="1\n__g_6__::node#-1"];
-                N04 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\n__g_6__::node#2\nrole scalar-boundary: tensor -> host f64"];
+                N04 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\n__g_6__::node#2\nrole scalar-boundary: tensor -> host float"];
                 N05 [label="2.0", type="DATA", shape=circle, style=solid, tooltip="2.0\n__g_6__::node#-2"];
                 N06 [label=":op/\nmul_d", type="OPER", shape=diamond, style=solid, tooltip=":op/mul_d\n__g_6__::node#3"];
-                N07 [label="tensor:\nmult...", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:multiply\n__g_6__::node#4\nrole scalar-boundary: host f64 -> tensor"];
+                N07 [label="tensor:\nmult...", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:multiply\n__g_6__::node#4\nrole scalar-boundary: host float -> tensor"];
                 F04 -> N02 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
                 N07 -> O04 [label="0", type="EXIT", style=solid];
                 N02 -> N04 [label="0|0", type="NORM"];
@@ -43,7 +43,7 @@ digraph GraphIR {
             O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
             N08 [label="t", type="PORT", shape=circle, style=solid, tooltip="t\ngate::node#1"];
             N09 [label="0", type="DATA", shape=circle, style=solid, tooltip="0\ngate::node#-1"];
-            N0A [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\ngate::node#2\nrole scalar-boundary: tensor -> host f64"];
+            N0A [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\ngate::node#2\nrole scalar-boundary: tensor -> host float"];
             N0B [label="0.5", type="DATA", shape=circle, style=solid, tooltip="0.5\ngate::node#-2"];
             N0C [label=":op/\ngt_d", type="OPER", shape=diamond, style=solid, tooltip=":op/gt_d\ngate::node#3"];
             N0D [label="JOIN", type="JOIN", shape=diamond, style="filled,solid", fillcolor="#d9d2e9", role="branch-contract", tooltip="JOIN\ngate::node#7\nrole branch-contract: arms: Tensor"];
@@ -72,7 +72,7 @@ digraph GraphIR {
         N13 [label="tensor:\nreshape", type="OPER", shape=diamond, style=solid, tooltip="tensor:reshape\nmain::node#1"];
         N14 [label="gate", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="gate\nmain::node#2"];
         N15 [label="0", type="DATA", shape=circle, style=solid, tooltip="0\nmain::node#-3"];
-        N16 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\nmain::node#3\nrole scalar-boundary: tensor -> host f64"];
+        N16 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\nmain::node#3\nrole scalar-boundary: tensor -> host float"];
         N17 [label="gate={}", type="DATA", shape=circle, style=solid, tooltip="gate={}\nmain::node#-4"];
         N18 [label=":str/\nformat", type="OPER", shape=diamond, style="filled,solid", fillcolor="#cfe2f3", role="export-capability", tooltip=":str/format\nmain::node#4\nrole export-capability: ':str/format' has no ONNX lowering at opset 17"];
         N19 [label=":io/p\nrintln", type="OPER", shape=diamond, style="filled,solid", fillcolor="#f4cccc", role="effect;export-capability", tooltip=":io/println\nmain::node#5\nrole effect: :io/println\nrole export-capability: ':io/println' has no ONNX lowering at opset 17"];

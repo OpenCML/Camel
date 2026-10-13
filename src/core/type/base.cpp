@@ -305,7 +305,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Int32:
             return toSlot(checkedTruncate<Int32>(v, "i32"));
         case TypeCode::Int64:
-            return toSlot(checkedTruncate<Int64>(v, "i64"));
+            return toSlot(checkedTruncate<Int64>(v, "int"));
         case TypeCode::Float64:
             DO_CONV(Float32, Float64, v);
         case TypeCode::Bool:
@@ -326,7 +326,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Int32:
             return toSlot(checkedTruncate<Int32>(v, "i32"));
         case TypeCode::Int64:
-            return toSlot(checkedTruncate<Int64>(v, "i64"));
+            return toSlot(checkedTruncate<Int64>(v, "int"));
         case TypeCode::Float32:
             DO_CONV(Float64, Float32, v);
         case TypeCode::Bool:
@@ -399,11 +399,11 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Int32:
             return toSlot(integerFromText<Int32>(s->view(), "i32"));
         case TypeCode::Int64:
-            return toSlot(integerFromText<Int64>(s->view(), "i64"));
+            return toSlot(integerFromText<Int64>(s->view(), "int"));
         case TypeCode::Float32:
             return toSlot(floatFromText<Float32>(s->view(), "f32"));
         case TypeCode::Float64:
-            return toSlot(floatFromText<Float64>(s->view(), "f64"));
+            return toSlot(floatFromText<Float64>(s->view(), "float"));
         case TypeCode::String:
             return value;
         default:
