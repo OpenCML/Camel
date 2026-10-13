@@ -2789,7 +2789,30 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     }
 }
 
+namespace {
+/// The prefix of a name the compiler writes for a built-in operator it means itself (the
+/// `filter` and `map` of a list comprehension). No program can write it, and no declaration
+/// of the program is looked at when it is resolved.
+constexpr std::string_view kBuiltinPrefix = "$builtin::";
+} // namespace
+
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
+    if (const std::string written = gct->loadAs<GCT::DRefLoad>()->ref().toString();
+        written.starts_with(kBuiltinPrefix)) {
+        ENTER("DREF");
+        genericCalleeAllowed_   = false;
+        const std::string plain = written.substr(kBuiltinPrefix.size());
+        const auto entity =
+            context_->importModule("")->getExportedEntity(Reference(plain));
+        ASSERT(
+            entity.has_value() && entity->isOperGroup(),
+            "A built-in operator the compiler names does not exist: " + plain);
+        node_handle_t drefNode{currGraph_->addDrefNode(
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{entity->operGroup()})};
+        registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+        LEAVE("DREF");
+        return drefNode;
+    }
     ENTER("DREF");
     const string name = gct->loadAs<GCT::DRefLoad>()->ref().toString();
     genericCalleeAllowed_ = false;

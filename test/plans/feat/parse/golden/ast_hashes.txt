@@ -343,6 +343,11 @@ cab3302faced01db ok test/cases/compile/generics/type_import.cml
 601fed65ec23c1f8 ok test/cases/compile/generics/type_lib.cml
 ba61c070244c5f96 ok test/cases/compile/generics/unused_body.cml
 3a423094a1d9c289 ok test/cases/compile/gir/sync_ctrl_dedup.cml
+d685c612531f9d8b ok test/cases/compile/literals/convert_fits.cml
+cccd95ec8b3cccd3 ok test/cases/compile/literals/convert_float_to_int.cml
+3cf27dd300ecdf3a ok test/cases/compile/literals/convert_int_to_i32.cml
+d2e5ff1f70fd2565 ok test/cases/compile/literals/convert_text_to_float.cml
+dd122058fbbdf90e ok test/cases/compile/literals/convert_text_to_int.cml
 f2090dca344cbe23 ok test/cases/compile/literals/f32_too_large.cml
 e6044490abc2a5d4 ok test/cases/compile/literals/float_too_large.cml
 42bab9b1f2857216 ok test/cases/compile/literals/i32_nullable_too_large.cml
@@ -453,6 +458,7 @@ e5afa424ceb062fa ok test/cases/compile/surface/if_without_else_ok.cml
 65087e7ab5ed8658 ok test/cases/compile/surface/name_as_value_operator.cml
 39e0930be0ece06e ok test/cases/compile/surface/name_as_value_overloads.cml
 5481fe37dcd27a4f ok test/cases/compile/surface/name_as_value_user_overloads.cml
+238a48d64d17d4f9 ok test/cases/compile/surface/reserved_function_name.cml
 1b9660f135ace5e0 ok test/cases/compile/surface/self_import.cml
 34ddb217f8f6443f ok test/cases/compile/tagged/combined.cml
 754e8ac88b1c9ae7 ok test/cases/compile/tagged/err_argument.cml
@@ -513,6 +519,7 @@ ac58c56706f35039 ok test/cases/consistency/comprehension/err_condition_type.cml
 bfe952aab58fc622 ok test/cases/consistency/comprehension/err_not_an_array.cml
 b5415a5a0dff0ad2 ok test/cases/consistency/comprehension/graph_comprehension.cml
 c9b03fe8ec99d6da ok test/cases/consistency/comprehension/graph_written_out.cml
+f79e8ead285be9fc ok test/cases/consistency/comprehension/shadowed.cml
 4452f8cec07c8705 ok test/cases/consistency/comprehension/values.cml
 6fa20605b76648e2 ok test/cases/consistency/entering/empty_array.cml
 62e4bf813ec58f31 ok test/cases/consistency/entering/err_arg_reverse.cml
@@ -577,10 +584,12 @@ b89ebde2afe3f501 ok test/cases/consistency/faults/zip_many_lengths.cml
 ca93a059d62cf78c ok test/cases/consistency/generic_values/err_declared_type.cml
 5d04bf402fc4eed5 ok test/cases/consistency/generic_values/err_each_waits.cml
 9a490e563442502e ok test/cases/consistency/generic_values/err_no_context.cml
+33da266a488ee32b ok test/cases/consistency/generic_values/err_no_overload_fits.cml
 3a419085fd17b88d ok test/cases/consistency/generic_values/err_null_only.cml
 a65d001220bdbc22 ok test/cases/consistency/generic_values/err_operator_no_hint.cml
 e84624c0e7d8e7d0 ok test/cases/consistency/generic_values/err_wrong_result.cml
 b7701241b998d2db ok test/cases/consistency/generic_values/graph.cml
+2bc4080520074f85 ok test/cases/consistency/generic_values/overloads_to_operators.cml
 5ac9a9f4747b5bff ok test/cases/consistency/generic_values/values.cml
 47669052609b68fe ok test/cases/consistency/if_without_else/as_statement_graph.cml
 c1c4cd916184e41d ok test/cases/consistency/if_without_else/as_value_argument.cml

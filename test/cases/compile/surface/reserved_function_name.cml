@@ -1,0 +1,5 @@
+func __add__(a: int, b: int): int { return 99 }
+func main(): int sync {
+    println(1 + 2)
+    return 0
+}
