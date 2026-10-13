@@ -234,7 +234,7 @@ At present all complicated type computation is implemented directly by operators
 - **A line end ends a statement**, in the spirit of JavaScript's automatic semicolons, with intuition as the measure. In detail: a line continues while a bracket is open, when it ends in a binary operator, a comma or another token after which something must follow, and when the next line starts with an operator that can only be binary (`->`, `.`, `??`, ...); a next line that starts with a token that can begin an expression (`-`, `+`, `(`, `[`, ...) is a new statement. Semicolons may still be written.
 - **The parser** is a hand-written lexer and parser, no longer depending on ANTLR, for efficiency and determinism.
 - **`raise` is removed.** It is no longer part of the grammar and not a reserved word; an error value is returned with `throw`.
-- **A minus sign that touches a number literal and is not preceded by a value is part of that number**: `-2->f` is `(-2)->f`. `a-1` is still a subtraction.
+- (Superseded by 2.11.) **A minus sign that touches a number literal and is not preceded by a value is part of that number**: `-2->f` is `(-2)->f`. `a-1` is still a subtraction.
 - **`^` binds one level tighter than multiplication and division, and associates from right to left.** `2 * 3 ^ 2` is 18.
 - **A literal with an exponent or a decimal point is always a floating-point number.** `1e5` is `100000.0`.
 - **`===` is not supported for now.**
@@ -296,6 +296,47 @@ At present all complicated type computation is implemented directly by operators
 - The instruction-set baseline of release packages is `x86-64-v2`.
 - The graph, type and metadata spaces each have a total limit of 256 MB; an expansion that does not stop is halted by the exporter's own budget of rounds.
 
+### 2.11 Supplementary rulings (2026-10-13)
+
+#### Operators
+
+- **`&&` and `||` are reserved operators that cannot be overloaded, and they are translated into a branch.** `a && b` is `if a then b else false`, `a || b` is `if a then true else b`: the right side is an arm and is evaluated only when needed. Both sides are `bool`.
+- **`&` and `|` are ordinary logical operations that evaluate both sides, and they can be overloaded.** They are for a simple logical operation that needs no branch; the element-wise logical operations of tensors and the overloads of user types are this pair too. `a &= b` is `a = a & b`.
+- **The unary minus is always an operator and is never part of a literal**; it binds less tightly than `^` and more tightly than `->`. So `-2 ^ 2` and `-x ^ 2` are both -4, and `-2->f` and `-x->f` both negate first and then pass the value on: a literal and a variable read alike. `a-1` is still a subtraction. (This supersedes "a minus sign that touches a number literal is part of that number" in 2.10.)
+- **A symbol with two roles that stands at the start of a line takes the role that begins something new**: `@` at the start of a line is an annotation, `+` and `-` at the start of a line are unary. To write a matrix product or a sum over two lines, leave the operator at the end of the first line.
+
+#### Null and errors
+
+- **`x == null` and `x != null` may be written**; the result is a `bool`. Function values cannot be compared.
+- **In the non-null arm of `if x != null then ... else ...`, `x` is a `T`.** This is equivalent to a `match` on the nullable value: the port that enters that arm carries the opened value. It holds for `let` bindings and parameters only (a `var` may be rewritten elsewhere); only the direct forms count (`x != null`, `x == null`, and several of them joined with `&&`); it holds inside the arm only.
+- **A `T!` value that is not used in a sync block is a compile-time warning.** To drop it on purpose write `let _ = ...`. A `main` without a declared return type that ends in an error value is a special case of this.
+- **When one arm of a branch has no value (`void`) and the other is a `T`, the branch is a `T?`**, and the arm without a value gives `null`.
+
+#### Types
+
+- **`any` is only a shorthand**, an opening made for the time before the type system matures. No type should remain undetermined at run time: after compilation every value has a determined type.
+
+#### Operators and libraries
+
+- **A `slice` whose start lies after its end (`xs->slice<2, 1>`) gives the empty array**, not a fault; this is ordinary operator behaviour. A bound outside the array is still a fault.
+
+#### Modules
+
+- **How roots are merged**: the whole program has one `__root__`, the top-level nodes of every module are on it, and functions take values through capture ports; a capture is bound by "module + name", not looked up by name at the call site.
+- **Top-level values are evaluated before `main` starts, on the basis of static dependence**: every top-level value used by a function statically reachable from `main` along the call chain is evaluated, whether or not the arm that uses it is taken at run time.
+- **Modules may import each other.** Loading therefore has two phases: first the declarations of all modules are collected, then the function bodies are built. A cyclic dependence among top-level values is a compile-time error.
+- **A `var` cannot be exported**; export functions that read and write it. A `main` in an imported module is an ordinary function.
+- **A compiled module can be cached** (`.cmo`, cached module object), so that a module need not be compiled again. The cache of a module is one graph rooted at that module; it exists for convenience and speed and need not equal the final result of an actual compilation. C++ modules keep the same extension; the two are told apart by the file header.
+
+#### Directions for the implementation
+
+- **The data model of the graph is the most important design**: it is to be clearly defined, stable, and fit to be published. The module cache, passes written in Camel, compiling compute code into GPU kernels, and `std::cpp` are all built on it.
+- **The internal representations of the compiler core may be refactored thoroughly**, for speed and memory efficiency along the whole pipeline.
+- **How memory is managed is not part of the semantics of the language**: an object has no observable identity, the moment of collection is not observable, and C++ operators touch objects through handles. Each back end may choose what suits it. The constraints generational collection puts on the authors of C++ operators are acceptable.
+- **The parallel scheduler hands subgraphs with nothing to parallelize to the bytecode interpreter.**
+- **The output of a program and the text written by `fs` are the same bytes on every platform**; on Windows no `\r\n` is written.
+- **The debugger**: the arms of a branch are folded into the frame of the enclosing function by default, and the real subgraph structure can be shown on request; line stepping follows the order of execution, and when a line did not execute because nothing uses its result, an explanation is given.
+
 ---
 
 ## 3. `macro`
@@ -350,29 +391,15 @@ When you meet one of the following, ask the language author:
 - The concrete content of the type-expression language: the meaning and fate of each of the reserved type operators `&`, `\`, `+`, `-`, `^` and of `typeof`, `keyof`, `ident of T`; how conditions and matching are written in type functions.
 - How numeric parameters in types (such as the dimensions of a tensor) are bound to names, and how arithmetic is done on them.
 - The meaning of `typeof` applied to a constant value, and its use in generics.
-- The position of `any`: kept as an escape hatch, or replaced by generics; whether the currently unchecked `any as T` is tightened.
 - How failure or non-termination of the evaluation of a type function is handled.
 - The notation of the loop header (the one in 2.10 is provisional).
-- How exactly the module roots are merged (see 2.10).
 - Whether the type parameters of a generic function may be given explicitly at the call.
 - Whether generational collection is on by default.
 - The behaviour when the same mutable object is written through references in several places outside a sync block, none of them with `wait`.
 - How side-effect tracking is preserved under the various passes (see 2.7).
-- **A `main` without a declared return type whose body ends in an error value** (marked `main-undeclared-error` in the code):
-  `func main() sync { parse_int('x') }`. Implemented: a `main` that declares no return type has no result (2.10), so this error value is not reported either, and the exit code is 0.
-  Alternative: treat it as "an error value that reaches the exit of `main` unhandled", print it on standard error and exit non-zero.
-- **A `slice` whose two bounds lie inside the array, with the end before the start** (`slice-reversed-range`):
-  `[10, 20, 30]->slice<2, 1>`. Implemented: the empty array (the earlier behaviour; a bound outside the array is a fault by 2.10).
-  Alternative: a fault as well.
 - **After a fault in a parallel `map`, whether elements of smaller index that have not started still run** (`parallel-fault-lower-elements`):
   `range(0, 64)->map<bad>` where every element faults and a worker happens to run element 40 first. Implemented: only the elements with an index above 40 are not started, 0 to 39 still run, so the one reported is always element 0, as on the linear back ends and the same on every run.
   Alternative: start no element at all after a fault; "the smallest index" is then taken among the elements that happened to have started, and may differ from run to run.
-- **`!=` on a bare `T?`, `T!` or function value**: `let a: int? = 1`, `a != a`, or `f != g`. `!=` used to accept any two values of one type and compare references (a meaningless result);
-  with equality by content, `==` and `!=` are defined only for numbers, booleans, strings, maps, sets, and arrays, tuples and structs of comparable elements, and the two forms above are now compile-time errors.
-  Alternatives: keep them errors (open the value with `??`, `!!`, `match` first); or define equality by content for a bare `T?` and `T!` too.
-- **Whether an expression without a value counts as `null`** (marked `void-as-null` in the code): `null` has the type `void`, and so has a call of a function that returns nothing.
-  `if c then 1 else log()` (`log` returns nothing). Implemented: every `void` expression is treated as `null` where a value enters a form and where arms join, so this is an `int?`.
-  Alternative: accept the literal `null` only; any other `void` expression where a value is needed is a compile-time error.
 - **Whether arguments of built-in operators enter `T?` / `T!`** (`entering-operator-args`): `xs->append<5>` (with `xs: (int?)[]`), `len([])`.
   Implemented: they do not; the first needs `5 as int?`, and the `[]` of the second has no element type and is not reported. The parameter types of a built-in operator are computed from the arguments by its C++ type rule, so there is no target type before the call.
   Alternative: let a type rule name the types it accepts, so that built-in operators behave as user functions do.
