@@ -664,6 +664,17 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 framePool_._resetTop();
                 return frame;
             }();
+#ifdef CAMEL_FVM_INSPECTED_LOOP
+            // Under an execution observer the target stays on this loop, whose hooks compiled
+            // code does not have. (A debugger runs std::jit as std::fvm, so this is not
+            // reached from one; it keeps the loop correct for any other observer.)
+            if (currFrame == rootActiveFrame) {
+                rootActiveFrame = newFrame;
+            }
+            pc        = getFuncExtraTargetPc(bc);
+            currFrame = newFrame;
+            JUMP();
+#else
             // The target is compiled: its code takes over. A tail call replaces the current
             // activation, so the result of the code is the result of that activation.
             JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
@@ -682,6 +693,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             currFrame                = lastFrame;
             fastFrameSetSlot(currFrame, bc->result, result);
             NEXT();
+#endif
         }
         size_t targetPc = getFuncExtraTargetPc(bc);
         slot_t tailArg0 = NullSlot;

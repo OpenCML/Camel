@@ -881,6 +881,10 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     callee->graphName(),
                     stackDepth_ + nestedCalls_);
             }
+            if (camel::execute::executionObserver() != nullptr) [[unlikely]] {
+                // An observer wants every interpreted activation on its loop (see call()).
+                return call(graphEntryPc(target), callee);
+            }
             CallResult interpreted = callBorrowed(graphEntryPc(target), callee);
             if (interpreted.tailFn == nullptr) {
                 if (interpreted.rootFrame)

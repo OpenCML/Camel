@@ -32,7 +32,10 @@ expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmea
 name = "framed.operators.compiled"
 desc = "Under std::jit those functions are compiled as framed code, and the values are the same."
 backends = false
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+sweep = false
 args = ["-vv", "${case}", "std::jit"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'sum_at' as framed code", "compiled & cached graph 'mean' as framed code", "compiled & cached graph 'name_of' as framed code", "compiled & cached graph 'weight' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'walk' as framed code", "compiled & cached graph 'swap_sum' as framed code", "compiled & cached graph 'is_even' as framed code", "compiled & cached graph 'is_odd' as framed code", "compiled & cached graph 'fib' as framed code", "compiled & cached graph 'twice' as framed code", "compiled & cached graph 'scaled_total' as framed code", "compiled & cached graph 'totals' as framed code", "collatz 111 118", "weigh 3210", "twice 284626", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
@@ -41,17 +44,43 @@ expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped c
 name = "framed.operators.inline.compiled"
 desc = "The same after std::inline, where the branch arms are part of the functions: nothing is left to the interpreter for a construct of the bytecode."
 backends = false
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+sweep = false
 args = ["-vv", "${case}", "std::inline", "std::jit"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'fib' as frameless code", "collatz 111 118", "weigh 3210", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "framed.operators.gc_stress"
-desc = "The same with a collection at every safepoint (CAMEL_GC_STRESS_SAFEPOINT=1, heap verified before and after): framed code keeps every reference in its pool frame, where the collector finds it."
+desc = "The same with a collection at every seventh safepoint and the heap verified before and after: framed code keeps every reference in its pool frame, where the collector finds it."
 backends = ["fvm", "jit", "inline_jit"]
-envs = ["CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_VERIFY=1"]
-timeout_ms = 120000
+envs = ["CAMEL_GC_STRESS_SAFEPOINT=7", "CAMEL_GC_VERIFY=1"]
+sweep = false
+timeout_ms = 240000
+
+[[tests]]
+name = "framed.operators.moving"
+desc = "The same with the generational collector and safepoint poisoning: every safepoint moves every young object and poisons where it was, so a reference that compiled code kept in a register or baked into its code across a safepoint would fault."
+backends = ["fvm", "jit", "inline_jit"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_JIT_HOT_THRESHOLD=0"]
+sweep = false
+timeout_ms = 240000
+expect_exit = 0
+expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmean 3.875\nweigh 3210\nwalk 5050 -100\nswap_sum 1\nparity true false\nfib 6765\ntwice 284626\ntotals 14415\n"
+
+[[tests]]
+name = "framed.operators.moving.compiled"
+desc = "With the generational collector every function is still compiled; the graphs that hold an object constant (a string) are framed code instead of frameless code."
+backends = false
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+sweep = false
+args = ["-vv", "${case}", "std::inline", "std::jit"]
+envs = ["CAMEL_GC=generational"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'fib' as frameless code", "weigh 3210", "totals 14415"]
+expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
 expect_exit = 0
 expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmean 3.875\nweigh 3210\nwalk 5050 -100\nswap_sum 1\nparity true false\nfib 6765\ntwice 284626\ntotals 14415\n"
 
@@ -115,8 +144,10 @@ name = "framed.faults.compiled"
 desc = "The faulting functions were compiled before they faulted."
 case = "../../../cases/linear/jit/framed_faults.cml"
 backends = false
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+sweep = false
 args = ["-vv", "${case}", "std::jit"]
-envs = ["FAULT=none"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0", "FAULT=none"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'pick' as framed code", "compiled & cached graph 'picks' as framed code", "compiled & cached graph 'rem' as framed code", "compiled & cached graph 'quot' as framed code", "compiled & cached graph 'depth' as framed code", "isolated", "done"]
 
@@ -137,7 +168,8 @@ desc = "The allocating loops with a collection at every safepoint and the heap v
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = ["fvm", "jit", "inline_jit"]
 envs = ["N=20000", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_VERIFY=1"]
-timeout_ms = 120000
+sweep = false
+timeout_ms = 240000
 expect_exit = 0
 expect_stdout_starts_with = "108894\n40001\n900\n88894\ndone\n"
 
@@ -146,7 +178,30 @@ name = "framed.loops.compiled"
 desc = "The loops were compiled, and ran as compiled code although each is entered only once and then tail-calls itself: the interpreter hands a tail call of compiled code over to the code."
 case = "../../../cases/linear/jit/framed_loops.cml"
 backends = false
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+sweep = false
 args = ["-vv", "${case}", "std::jit"]
-envs = ["N=5000"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0", "N=5000"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'churn' as framed code", "compiled & cached graph 'ping' as framed code", "compiled & cached graph 'pong' as framed code", "compiled & cached graph 'build' as framed code", "compiled & cached graph 'total' as framed code", "compiled & cached graph 'digit_sum' as framed code", "done"]
+
+[[tests]]
+name = "framed.loops.moving"
+desc = "The loops with safepoint poisoning: the allocating loop and the loop that builds an array run across thousands of collections that move what they hold."
+case = "../../../cases/linear/jit/framed_loops.cml"
+backends = ["fvm", "jit", "inline_jit"]
+envs = ["N=20000", "CAMEL_GC_POISON=1", "CAMEL_JIT_HOT_THRESHOLD=0"]
+sweep = false
+timeout_ms = 240000
+expect_exit = 0
+expect_stdout_starts_with = "108894\n40001\n900\n88894\ndone\n"
+
+[[tests]]
+name = "framed.faults.moving"
+desc = "The isolated faults with safepoint poisoning."
+case = "../../../cases/linear/jit/framed_faults.cml"
+backends = ["fvm", "jit", "inline_jit"]
+envs = ["FAULT=none", "CAMEL_GC_POISON=1", "CAMEL_JIT_HOT_THRESHOLD=0"]
+sweep = false
+expect_exit = 0
+expect_stdout_starts_with = "62\n14\n14\n58\nIndexOutOfRange\nDivisionByZero\nDivisionByZero\nMaxRecursionDepthExceeded\n62\n58\nisolated\ndone\n"

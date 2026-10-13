@@ -177,27 +177,28 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
         add(0, "no-static-area", "graph '" + unit.runtimeGraph->name() + "' has no static area");
         return found;
     }
-    // Compiled code has no stack maps: the collector neither sees nor updates what a native
+    // Frameless code has no stack maps: the collector neither sees nor updates what a native
     // frame or a register holds. Two things keep that sound with the moving collector.
     //
-    // 1. No collection runs while a native frame exists. What passes the checks below never
-    //    calls into C++ and contains no safepoint poll, so between the entry into compiled
-    //    code and the return from it the collector cannot run (std::jit is single-threaded).
-    //    A native frame may therefore hold object references, e.g. a var parameter that a
-    //    self call passes on. The allocator refuses a safepoint reached under a native frame
-    //    (mm::detail::nativeCodeDepth), which is what keeps this from being broken silently
-    //    by a later lowering that does call out.
-    // 2. A static slot that the code reads is baked into it as an immediate
+    // 1. No collection runs while a native frame exists. Frameless code never calls into C++
+    //    and contains no safepoint poll, so between the entry into it and the return from it
+    //    the collector cannot run (std::jit is single-threaded). A native frame may therefore
+    //    hold object references, e.g. a var parameter that a self call passes on. The
+    //    allocator refuses a safepoint reached under frameless code
+    //    (mm::detail::nativeCodeDepth, counted in FastVMSchedPass::invokeOwnedJitFrame).
+    // 2. A static slot that frameless code reads is baked into it as an immediate
     //    (emitLoadStaticConst): for an object constant that is the address the object had at
-    //    compile time, and it outlives any number of collections. A graph with an object
-    //    constant in its static area is therefore not compiled when objects can move.
+    //    compile time, and the code outlives any number of collections. A graph with an object
+    //    constant in its static area is therefore not frameless code when objects can move.
+    //    It is framed code, which reads object constants from the static area, a root the
+    //    collector updates in place.
     if (camel::core::mm::autoSpace().youngGenCopyingEnabled()) {
         const auto *staticLayout = unit.runtimeGraph->staticDataType();
         if (staticLayout != nullptr && staticLayout->refCount() != 0) {
             add(0,
                 "object-constants",
-                "graph requires interpreter fallback: the graph has object constants (moving "
-                "collector)");
+                "graph needs the runtime: it has object constants and the collector moves "
+                "objects");
             return found;
         }
     }
