@@ -113,7 +113,7 @@ slot_t install() {
         struct sigaction action{};
         action.sa_sigaction = onFault;
         action.sa_flags     = SA_SIGINFO | SA_ONSTACK;
-        ::sigemptyset(&action.sa_mask);
+        sigemptyset(&action.sa_mask); // unqualified: a macro on macOS
         ::sigaction(SIGSEGV, &action, &previousSegv);
         ::sigaction(SIGBUS, &action, &previousBus);
         return poisonWord.load(std::memory_order_acquire);
