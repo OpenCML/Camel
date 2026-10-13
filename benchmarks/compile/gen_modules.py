@@ -4,9 +4,9 @@
     python3 benchmarks/compile/gen_modules.py OUT_DIR --modules 64 --shape chain --funcs 8
 
 writes OUT_DIR/main.cml and OUT_DIR/bm_0000.cml ... (N module files). `main` imports one
-function (`entry_NNNN`) of every module, calls each once and prints the sum, so the expected output is known
-without running Camel: it is printed by this script as the last line of standard output and
-written to OUT_DIR/expected.txt.
+function (`entry_NNNN`) of every module, calls each once and prints the sum, so the expected
+output is known without running Camel: it is printed by this script as the last line of
+standard output and written to OUT_DIR/expected.txt.
 
 Shapes (what a module imports besides being imported by main):
 
@@ -14,8 +14,10 @@ Shapes (what a module imports besides being imported by main):
           a file, and of importing its names into main.
   chain   module i imports module i-1 and calls into it: imports nest N deep, and every
           module after the first resolves one name of an already compiled module.
-  fan     module i imports the K modules before it (--fan K, default 4): each module is
-          asked for again by several later ones and must come from the cache.
+  fan     module i imports the K modules before it (--fan K, default 4) and calls one
+          function of each that calls no other module: each module is asked for again by
+          several later ones and must come from the cache, and running the program stays
+          cheap.
 
 Every module has --funcs exported functions of a few statements each (arithmetic, an `if`,
 a call of the function before it), so that the modules are small but not empty.
@@ -44,21 +46,30 @@ def imports_of(index: int, shape: str, fan: int) -> List[int]:
     return list(range(max(0, index - fan), index))
 
 
-def value_of(index: int, shape: str, fan: int, funcs: int, memo: dict) -> int:
-    """What `entry_NNNN(1)` of module `index` returns: the reference for the program's output."""
-    if index in memo:
-        return memo[index]
-    x = 1
-    acc = 0
-    for k in range(funcs):
-        # func f_k(x) = (if x % 2 == 0 then x * 3 else x + (index % 7) + k) + f_{k-1}(x)
-        acc = (x * 3 if x % 2 == 0 else x + (index % 7) + k) + acc
-    deps = imports_of(index, shape, fan)
-    if deps:
-        # Reduced modulo 97, so that the result stays small however deep the imports nest.
-        acc += sum(value_of(dep, shape, fan, funcs, memo) for dep in deps) % 97
-    memo[index] = acc
-    return acc
+def imported_function(dep: int, shape: str) -> str:
+    """The function of module `dep` that a module importing it calls. In a chain it is the
+    entry, which calls on into the module before; in a fan it is the local sum, or the
+    number of calls would grow as K to the power of the depth."""
+    return f"entry_{dep:04d}" if shape == "chain" else f"local_{dep:04d}"
+
+
+def local_value(index: int, funcs: int) -> int:
+    """What `local_NNNN(1)` returns: f_last(1), with
+    f_k(x) = (if x % 2 == 0 then x * 3 else x + index % 7 + k) + f_{k-1}(x)."""
+    return sum(1 + (index % 7) + k for k in range(funcs))
+
+
+def entry_values(modules: int, shape: str, fan: int, funcs: int) -> List[int]:
+    """What `entry_NNNN(1)` of each module returns: the reference for the program's output."""
+    values: List[int] = []
+    for index in range(modules):
+        value = local_value(index, funcs)
+        deps = imports_of(index, shape, fan)
+        if deps:
+            # Reduced modulo 97, so that the result stays small however deep the imports nest.
+            value += sum(values[d] if shape == "chain" else local_value(d, funcs) for d in deps) % 97
+        values.append(value)
+    return values
 
 
 def module_source(index: int, shape: str, fan: int, funcs: int) -> str:
@@ -66,7 +77,7 @@ def module_source(index: int, shape: str, fan: int, funcs: int) -> str:
     deps = imports_of(index, shape, fan)
     lines = [f"module {name}", ""]
     for dep in deps:
-        lines.append(f"import {{ entry_{dep:04d} }} from {module_name(dep)}")
+        lines.append(f"import {{ {imported_function(dep, shape)} }} from {module_name(dep)}")
     if deps:
         lines.append("")
     for k in range(funcs):
@@ -75,12 +86,16 @@ def module_source(index: int, shape: str, fan: int, funcs: int) -> str:
         lines.append(f"    return a + f_{k - 1}(x)" if k > 0 else "    return a")
         lines.append("}")
         lines.append("")
+    lines.append(f"export func local_{index:04d}(x: int): int {{")
+    lines.append(f"    return f_{funcs - 1}(x)")
+    lines.append("}")
+    lines.append("")
     lines.append(f"export func entry_{index:04d}(x: int): int {{")
     if deps:
-        imported = " + ".join(f"entry_{dep:04d}(x)" for dep in deps)
-        lines.append(f"    return f_{funcs - 1}(x) + ({imported}) % 97")
+        imported = " + ".join(f"{imported_function(dep, shape)}(x)" for dep in deps)
+        lines.append(f"    return local_{index:04d}(x) + ({imported}) % 97")
     else:
-        lines.append(f"    return f_{funcs - 1}(x)")
+        lines.append(f"    return local_{index:04d}(x)")
     lines.append("}")
     return "\n".join(lines) + "\n"
 
@@ -105,12 +120,10 @@ def generate(out_dir: Path, modules: int, shape: str, funcs: int, fan: int) -> i
     out_dir.mkdir(parents=True, exist_ok=True)
     for stale in out_dir.glob("bm_*.cml"):
         stale.unlink()
-    memo: dict = {}
-    total = 0
     for index in range(modules):
         (out_dir / f"{module_name(index)}.cml").write_text(
             module_source(index, shape, fan, funcs), encoding="utf-8", newline="\n")
-        total += value_of(index, shape, fan, funcs, memo)
+    total = sum(entry_values(modules, shape, fan, funcs))
     (out_dir / "main.cml").write_text(main_source(modules), encoding="utf-8", newline="\n")
     (out_dir / "expected.txt").write_text(f"{total}\n", encoding="utf-8", newline="\n")
     return total
@@ -126,7 +139,6 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     if args.modules < 1 or args.funcs < 1 or args.fan < 1:
         ap.error("--modules, --funcs and --fan must be positive")
-    sys.setrecursionlimit(max(1000, args.modules * 4))
     print(generate(args.out_dir, args.modules, args.shape, args.funcs, args.fan))
     return 0
 
