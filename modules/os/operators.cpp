@@ -32,6 +32,7 @@ namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
+#include <chrono>
 #include <thread>
 
 #ifdef _WIN32

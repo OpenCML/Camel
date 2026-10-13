@@ -45,6 +45,11 @@ def FN(args, ret):
     return ("fn", tuple(args), ret)
 
 
+def OPT(t):
+    """`T?`: a value of type `t`, or null (None in the reference)."""
+    return ("opt", t)
+
+
 def type_src(t) -> str:
     k = t[0]
     if k in ("int", "float", "bool", "string", "void"):
@@ -57,6 +62,9 @@ def type_src(t) -> str:
         return t[1]
     if k == "fn":
         return "(" + ", ".join(f"a{i}: {type_src(a)}" for i, a in enumerate(t[1])) + ") => " + type_src(t[2])
+    if k == "opt":
+        inner = type_src(t[1])
+        return ("(" + inner + ")" if t[1][0] == "fn" else inner) + "?"
     raise ValueError(t)
 
 
@@ -144,7 +152,7 @@ def bin_src(a: str, op: str, b: str) -> str:
 
 
 ATOMS = {"lit", "ref", "call", "conv", "arr", "tup", "rec", "idx", "fld", "range", "zip", "concat",
-         "println", "env"}
+         "println", "env", "comp", "papp", "null"}
 
 
 # Forms the grammar does not accept bare as the test of an `if` or the right side of an assignment.
@@ -174,6 +182,19 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         return s if top or not s.startswith("-") else "(" + s + ")"
     if k == "ref":
         return n.a["name"]
+    if k == "null":
+        return "null"
+    if k == "coal":
+        # `a ?? b ?? d`: every operand but the last is a `T?`; the last is a `T` (the result
+        # is a `T`) or a `T?` (the result is a `T?`). Design principles 2.10.
+        return wrap(" ?? ".join(sub(x) for x in n.c))
+    if k == "comp":
+        # `[e for x in xs if c]`: filter then map (design principles 2.10).
+        cond = "" if n.c[2] is None else " if " + arg(n.c[2])
+        return f"[{arg(n.c[1])} for {n.a['var']} in {arg(n.c[0])}{cond}]"
+    if k == "papp":
+        # `f<w>`: the function `f` with its context arguments given (a partial application).
+        return n.a["name"] + "<" + ", ".join(arg(x) for x in n.c) + ">"
     if k == "env":
         s = f"get_env({str_lit(n.a['name'])})"
         return f"int({s})" if n.t == INT else s
@@ -275,7 +296,9 @@ def st(n: N, ind: int) -> list:
     if k == "expr":
         return [pad + ex(n.c[0], ind, True)]
     if k == "ifs":
-        text = f"{pad}if {ex(n.c[0], ind, n.c[0].k not in LOW)} then {block(n.c[1], ind)}"
+        # The arm of an `if` without `else` may also be one expression of any type, whose
+        # value is dropped (design principles 2.10): `if c then println(x)`.
+        text = f"{pad}if {ex(n.c[0], ind, n.c[0].k not in LOW)} then {arm(n.c[1], ind)}"
         if n.c[2] is not None:
             text += " else " + block(n.c[2], ind)
         return [text]
@@ -288,7 +311,11 @@ def func_src(n: N, ind: int) -> list:
     pad = IND * ind
     mods = ("macro " if n.a.get("macro") else "") + ("sync " if n.a.get("syncfn") else "")
     head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}): {type_src(n.a['ret'])} "
-    return [head + block(n.c[0], ind)]
+    lines = [head + block(n.c[0], ind)]
+    if n.a.get("with"):
+        # Context parameters: `with <k: int>` on the line before the function.
+        lines.insert(0, f"{pad}with <{params_src(n.a['with'])}>")
+    return lines
 
 
 def emit(prog: N) -> str:
@@ -318,10 +345,11 @@ class Cell:
 
 
 class Closure:
-    __slots__ = ("params", "body", "env", "name")
+    __slots__ = ("params", "body", "env", "name", "wparams")
 
-    def __init__(self, params, body, env, name):
+    def __init__(self, params, body, env, name, wparams=None):
         self.params, self.body, self.env, self.name = params, body, env, name
+        self.wparams = wparams or []          # context parameters still to be given
 
 
 class Env:
@@ -377,6 +405,8 @@ def tdiv(a: int, b: int) -> int:
 
 def show(v) -> str:
     """Text of a value as `println` and a `{}` placeholder write it."""
+    if v is None:
+        return "null"
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, int):
@@ -417,14 +447,14 @@ class Evaluator:
     def run(self) -> list:
         g = Env()
         for f in prog_funcs(self.prog):
-            g.d[f.a["name"]] = Closure(f.a["params"], f.c[0], g, f.a["name"])
+            g.d[f.a["name"]] = Closure(f.a["params"], f.c[0], g, f.a["name"], f.a.get("with"))
         main = g.get("main")
         self.call(main, [])
         return self.out
 
     # -- calls ------------------------------------------------------------------------------
     def call(self, fn, args):
-        if not isinstance(fn, Closure):
+        if not isinstance(fn, Closure) or fn.wparams:
             raise Reject("call of a non-function")
         if len(args) != len(fn.params):
             raise Reject("wrong number of arguments")
@@ -476,7 +506,7 @@ class Evaluator:
             self.ev(n.c[0], env)
         elif k == "ifs":
             if self.ev(n.c[0], env):
-                self.blk(n.c[1], env)
+                self.arm(n.c[1], env)
             elif n.c[2] is not None:
                 self.blk(n.c[2], env)
         elif k == "func":
@@ -498,16 +528,50 @@ class Evaluator:
         v = env.get(n.a["name"])
         return v.v if isinstance(v, Cell) else v
 
+    def e_null(self, n, env):
+        return None
+
+    def e_coal(self, n, env):
+        # The right side is evaluated only when the left one is null.
+        v = None
+        for x in n.c:
+            v = self.ev(x, env)
+            if v is not None:
+                break
+        return v
+
+    def e_comp(self, n, env):
+        out = []
+        for x in self.ev(n.c[0], env):
+            inner = Env(env)
+            inner.d[n.a["var"]] = x
+            if n.c[2] is None or self.ev(n.c[2], inner):
+                out.append(self.ev(n.c[1], inner))
+        return out
+
+    def e_papp(self, n, env):
+        fn = env.get(n.a["name"])
+        if not isinstance(fn, Closure) or len(fn.wparams) != len(n.c):
+            raise Reject("context arguments of a function that does not take them")
+        bound = Env(fn.env)
+        for (name, _t, _v), x in zip(fn.wparams, n.c):
+            bound.d[name] = self.ev(x, env)       # evaluated once, where `f<w>` is written
+        return Closure(fn.params, fn.body, bound, fn.name)
+
     def e_env(self, n, env):
         v = self.envv[n.a["name"]]
         return int(v) if n.t == INT else v
 
     def e_bin(self, n, env):
         op = n.a["op"]
-        if op == "&&":
-            return bool(self.ev(n.c[0], env)) and bool(self.ev(n.c[1], env))
-        if op == "||":
-            return bool(self.ev(n.c[0], env)) or bool(self.ev(n.c[1], env))
+        if op in ("&&", "||"):
+            # The value is the short-circuit one. Both operands are evaluated all the same:
+            # they are pure, so that cannot be seen, except by a fault in the operand the
+            # short circuit skips. Whether that operand runs is not settled (the language
+            # reference says no, the implementation evaluates it: judgement J4), so a program
+            # where it would fault is discarded (Reject) rather than given a reference.
+            left, right = bool(self.ev(n.c[0], env)), bool(self.ev(n.c[1], env))
+            return (left and right) if op == "&&" else (left or right)
         a, b = self.ev(n.c[0], env), self.ev(n.c[1], env)
         return binop(op, a, b)
 
@@ -767,8 +831,14 @@ def effect_violations(prog: N) -> list:
             elif s.k == "ifs":
                 expr(s.c[0], False)
                 for a in s.c[1:]:
-                    if a is not None:
+                    if a is None:
+                        continue
+                    if a.k == "blk":
                         blk(a, ok and bool(a.a.get("sync")))
+                    else:
+                        # One expression as the arm: it is the value of the arm, which is
+                        # evaluated when the arm is taken, so an effect there runs.
+                        expr(a, ok)
             elif s.k == "func":
                 func(s)
         if b.c[1] is not None:
@@ -857,6 +927,11 @@ def heavy_graphs(prog: N) -> int:
             elif x.k == "match":
                 for case in x.c:
                     graph(case.c[0])
+            elif x.k == "comp":
+                stack.append(x.c[0])
+                graph(x.c[1])
+                if x.c[2] is not None:
+                    graph(x.c[2])
             else:
                 stack.extend(x.c)
         count += heavy
@@ -870,14 +945,39 @@ MAX_HEAVY = 34
 
 
 def static_faults(prog: N) -> list:
-    """Faults that are visible without running: a literal index outside a literal array, a
+    """Faults that are visible without running: an index known to be a literal outside an array
+    whose length is known (a literal, a `let` bound to one, a member of a tuple literal), a
     division by a literal zero. The design principles (2.7) make the first a compile-time
     error, so a program that has one, even in code that never runs, is not a valid test of the
     optimizer; the reducer must not shrink a program into one."""
     out = []
+    # What a `let` name stands for: the compiler knows an array or an index it can trace to a
+    # literal (through a `let`, through a member of a tuple literal), and reports an index
+    # outside the array where the access is written, also where it would never run (the
+    # right side of `||`, an arm not taken).
+    lets = {x.a["name"]: x.c[0] for x in walk(prog) if x.k == "let"}
+
+    def known(e, depth=0):
+        """The literal an expression is known to be, or None."""
+        while depth < 8:
+            depth += 1
+            if e.k == "ref" and e.a["name"] in lets:
+                e = lets[e.a["name"]]
+            elif e.k == "tix":
+                inner = known(e.c[0], depth)
+                if inner is None or inner.k != "tup" or not 0 <= e.a["i"] < len(inner.c):
+                    return None
+                e = inner.c[e.a["i"]]
+            else:
+                break
+        return e if e.k in ("arr", "tup", "lit") else None
+
     for x in walk(prog):
-        if x.k == "idx" and x.c[0].k == "arr" and x.c[1].k == "lit" and not 0 <= x.c[1].a["v"] < len(x.c[0].c):
-            out.append("index")
+        if x.k == "idx":
+            array, index = known(x.c[0]), known(x.c[1])
+            if (array is not None and array.k == "arr" and index is not None and index.k == "lit" and
+                    not 0 <= index.a["v"] < len(array.c)):
+                out.append("index")
         if x.k == "bin" and x.a["op"] in ("/", "%") and x.c[1].k == "lit" and x.c[1].a["v"] == 0:
             out.append("division")
     return out

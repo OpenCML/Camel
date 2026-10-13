@@ -1,0 +1,16 @@
+module main
+
+func fact(n: int): int {
+    return if n <= 1 then 1 else n * fact(n - 1)   // mark:fact
+}
+
+func loop(n: int, acc: int): int {
+    return if n == 0 then acc else loop(n - 1, acc + n)   // mark:loop
+}
+
+func main(): int sync {
+    let f = fact(4)         // mark:callfact
+    let s = loop(5, 0)      // mark:callloop
+    println(f + s)          // mark:print
+    return 0
+}

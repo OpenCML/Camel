@@ -23,6 +23,7 @@
 #include "camel/utils/assert.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <sstream>
 

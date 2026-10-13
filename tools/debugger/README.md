@@ -41,6 +41,7 @@ cmake --build . --config Release --target camel-debugger
 | `--verbose` | `-V` | 启动即开启详细输出（内部将 `libcamel` 日志阈值设为 **info**；关闭详细时回到 **fatal**）。 |
 | `--logfile <path>` | | 启动即把程序输出写入指定文件。 |
 | `--run-worker <path>` | | 子进程入口：启动后在本机端口（由环境变量 `CAMEL_DB_WORKER_PORT` 指定）起 HTTP 服务，执行脚本后退出；供父进程 spawn 使用，用户一般不直接调用。 |
+| `--dap` | | 在标准输入输出上提供 Debug Adapter Protocol（供编辑器启动；源码级断点、单步、栈与变量）。用法见 [docs/debugging.cn.md](../../docs/debugging.cn.md)，设计见 [docs/technical/35_debugger.md](../../docs/technical/35_debugger.md)。 |
 | `--help` | `-h` | 显示帮助并退出。 |
 | `--version` | `-v` | 显示版本并退出。 |
 

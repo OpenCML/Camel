@@ -246,8 +246,9 @@ def write_case(out: Path, name: str, prog, passes, seed, features, last, runs: i
 # seed with a known bad cell is left out, and listed here with the finding it shows
 # (test/cases/opt/progen/README.md); `progen.py findings` re-runs the findings themselves.
 CHECK_RANGE = range(1, 26)
-# With generate.VERSION 2 every seed of the range passes (seeds 1-40 were run); the seed left
-# out under VERSION 1 (5, finding F18) is another program now.
+# With generate.VERSION 3 (the features comprehension, nullable, partial and ifnoelse) every
+# seed of the range passes; the seed left out under VERSION 1 (5, finding F18) is another
+# program now.
 CHECK_EXCLUDED = {}
 CHECK_MATRIX = "cross"
 

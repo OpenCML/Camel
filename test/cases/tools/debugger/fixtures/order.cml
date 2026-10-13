@@ -1,0 +1,24 @@
+module main
+
+func double(x: int): int {
+    return x * 2
+}
+
+func next(x: int): int {
+    return x + 1
+}
+
+// Not a sync block: the statements run in the order of their dependencies.
+func work(x: int): int {
+    let a = double(x)       // mark:a
+    let b = next(x)         // mark:b
+    println(a)              // mark:unused
+    let c = a + b           // mark:c
+    return c
+}
+
+func main(): int sync {
+    let r = work(3)         // mark:call
+    println(r)              // mark:print
+    return 0
+}

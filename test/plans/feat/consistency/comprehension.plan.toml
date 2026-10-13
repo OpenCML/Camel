@@ -122,3 +122,10 @@ backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
 expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_element_type.cml:2:18", "in a list comprehension whose elements have type 'string'"]
+
+[[tests]]
+name = "comprehension.shadowed"
+desc = "A module that defines its own `map` and `filter`: a comprehension still means the built-in operators (it named them, and the functions of the module answered), while a call written with the names means the module's functions."
+kind = "behavior"
+case = "../../../cases/consistency/comprehension/shadowed.cml"
+expect_stdout_starts_with = "[4, 16] [2, 3, 4, 5]\nmy map my filter\n"

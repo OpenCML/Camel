@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "spawn.h"
+#include "child_process.h"
 #include "state.h"
 
 #include <httplib.h>
@@ -25,69 +26,53 @@
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
-#include <vector>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
-#if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#endif
 
 namespace debugger {
 
-#if defined(_WIN32)
-static std::unordered_map<int, HANDLE> g_workerProcesses; // port -> HANDLE, 支持多 worker 并发
-static std::mutex g_workerMutex;
-static HANDLE g_job = nullptr;
-
 namespace {
-/// 创建 Job 并设置 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE：关闭 Job 时所有关联进程被终止，
-/// 这样主进程异常退出（未调 terminateAllWorkers）时系统仍会回收子进程。
-void ensureJobExists() {
-    if (g_job != nullptr)
-        return;
-    g_job = CreateJobObjectA(nullptr, nullptr);
-    if (g_job == nullptr)
-        return;
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION info = {};
-    info.BasicLimitInformation.LimitFlags     = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-    SetInformationJobObject(g_job, JobObjectExtendedLimitInformation, &info, sizeof(info));
-}
-} // namespace
 
-namespace {
-/// 从子进程 stdout/stderr 管道读取内容，按行追加到该任务日志缓冲（appendTaskLogLine），不写入父进程
-/// Logger， 以便 Debugger tab 仅显示父进程输出、Task tab 仅显示该子进程输出。
-void pipeReaderThread(int workerPort, HANDLE hRead) {
+std::unordered_map<int, std::shared_ptr<ChildProcess>> g_workers; // port -> process
+std::mutex g_workerMutex;
+
+/// Splits the output of a worker into lines for that task's log buffer (the Task tab), apart
+/// from the gateway's own log.
+struct LineSplitter {
+    int port = 0;
+    std::mutex mutex;
     std::string line;
-    char buf[512];
-    DWORD n = 0;
-    while (ReadFile(hRead, buf, sizeof(buf) - 1, &n, nullptr) && n > 0) {
-        buf[n] = '\0';
-        for (char *p = buf; *p; ++p) {
-            if (*p == '\r')
+
+    void feed(std::string_view chunk) {
+        std::lock_guard<std::mutex> lock(mutex);
+        for (char c : chunk) {
+            if (c == '\r')
                 continue;
-            if (*p == '\n') {
+            if (c == '\n') {
                 if (!line.empty()) {
-                    appendTaskLogLine(workerPort, line);
+                    appendTaskLogLine(port, line);
                     line.clear();
                 }
             } else {
-                line += *p;
+                line += c;
             }
         }
     }
-    if (!line.empty())
-        appendTaskLogLine(workerPort, line);
-    CloseHandle(hRead);
-}
+    void flush() {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!line.empty()) {
+            appendTaskLogLine(port, line);
+            line.clear();
+        }
+    }
+};
+
 } // namespace
-#endif
 
 std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desiredPort) {
     auto &st = getState();
@@ -98,12 +83,12 @@ std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desi
         return {false, 0};
     if (getExePath().empty())
         return {false, 0};
-    // 传绝对路径给子进程，避免子进程工作目录与父进程不一致时 exists() 失败导致立即退出。
+    // The worker gets an absolute path: its working directory need not be the gateway's.
     std::string pathForChild = fs::absolute(scriptPath).string();
 
     int workerPort = 0;
     if (desiredPort > 0) {
-        workerPort = desiredPort; // restart：复用原端口与任务 id
+        workerPort = desiredPort; // restart: the task keeps its port and id
     } else {
         int basePort = getServer().port();
         workerPort   = basePort + 1;
@@ -115,105 +100,52 @@ std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desi
         while (usedPorts.count(workerPort))
             ++workerPort;
     }
-#if defined(_WIN32)
 
-    // 创建管道：子进程 stdout/stderr 重定向到 hChildOutW，父进程从 hChildOutR 读，pipeReaderThread
-    // 追加到该任务日志缓冲供 Task tab 显示。
-    HANDLE hChildOutR = nullptr, hChildOutW = nullptr;
-    SECURITY_ATTRIBUTES sa = {sizeof(sa), nullptr, (BOOL)1};
-    if (!CreatePipe(&hChildOutR, &hChildOutW, &sa, 0))
-        return {false, 0};
-    SetHandleInformation(hChildOutR, HANDLE_FLAG_INHERIT, 0); // 读端不继承，避免子进程持有
+    ProcessSpec spec;
+    spec.exe  = getExePath();
+    spec.args = {"--run-worker", pathForChild};
+    spec.env  = {{"CAMEL_DB_WORKER_PORT", std::to_string(workerPort)}};
 
-    std::string cmdLine;
-    cmdLine.reserve(getExePath().size() + pathForChild.size() + 32);
-    if (getExePath().find(' ') != std::string::npos)
-        cmdLine += '"';
-    cmdLine += getExePath();
-    if (getExePath().find(' ') != std::string::npos)
-        cmdLine += '"';
-    cmdLine += " --run-worker ";
-    if (pathForChild.find(' ') != std::string::npos)
-        cmdLine += '"';
-    cmdLine += pathForChild;
-    if (pathForChild.find(' ') != std::string::npos)
-        cmdLine += '"';
-
-    std::string envBlock;
-    {
-        char *cur = GetEnvironmentStringsA();
-        if (cur) {
-            const char *p = cur;
-            while (p[0] != '\0' || p[1] != '\0')
-                envBlock += *p++;
-            envBlock += '\0';
-            FreeEnvironmentStringsA(cur);
+    auto splitter  = std::make_shared<LineSplitter>();
+    splitter->port = workerPort;
+    // Set once the process is in the table; the exit callback removes exactly that entry (a
+    // restart may already have put the next worker of the same port there).
+    auto self = std::make_shared<std::weak_ptr<ChildProcess>>();
+    ProcessCallbacks callbacks;
+    callbacks.onStdout = [splitter](std::string_view chunk) { splitter->feed(chunk); };
+    callbacks.onExit   = [splitter, workerPort, self](int, int) {
+        splitter->flush();
+        bool current = false;
+        {
+            std::lock_guard<std::mutex> lock(g_workerMutex);
+            auto it = g_workers.find(workerPort);
+            if (it != g_workers.end() && it->second == self->lock()) {
+                g_workers.erase(it);
+                current = true;
+            }
         }
-    }
-    envBlock += "CAMEL_DB_WORKER_PORT=" + std::to_string(workerPort) + "\0";
-    envBlock += '\0';
+        if (current)
+            setTaskState(workerPort, "exited");
+    };
 
-    std::vector<char> cmdBuf(cmdLine.begin(), cmdLine.end());
-    cmdBuf.push_back('\0');
-    STARTUPINFOA si        = {};
-    si.cb                  = sizeof(STARTUPINFOA);
-    si.dwFlags             = STARTF_USESTDHANDLES;
-    si.hStdInput           = GetStdHandle(STD_INPUT_HANDLE);
-    si.hStdOutput          = hChildOutW; // 子进程 stdout/stderr 都进管道，便于父进程统一收集
-    si.hStdError           = hChildOutW;
-    PROCESS_INFORMATION pi = {};
-    ensureJobExists(); // 保证子进程加入 Job，主进程退出时能被系统回收
-    BOOL ok = CreateProcessA(
-        nullptr,
-        cmdBuf.data(),
-        nullptr,
-        nullptr,
-        (BOOL)1,
-        CREATE_NO_WINDOW,
-        (LPVOID)envBlock.c_str(),
-        nullptr,
-        &si,
-        &pi);
-    CloseHandle(hChildOutW);
-    hChildOutW = nullptr;
-    if (!ok) {
-        CloseHandle(hChildOutR);
-        return {false, 0};
-    }
-    CloseHandle(pi.hThread);
-    if (g_job != nullptr)
-        AssignProcessToJobObject(g_job, pi.hProcess);
+    std::string error;
     {
+        // The table entry exists before the exit callback can look for it.
         std::lock_guard<std::mutex> lock(g_workerMutex);
-        g_workerProcesses[workerPort] = pi.hProcess;
+        auto proc = ChildProcess::spawn(spec, std::move(callbacks), error);
+        if (!proc) {
+            std::cerr << "[debugger] " << error << std::endl;
+            return {false, 0};
+        }
+        *self                 = proc;
+        g_workers[workerPort] = std::move(proc);
     }
     if (desiredPort <= 0)
         registerTask(workerPort, scriptPath, sendRun ? "running" : "loaded");
-    std::thread(pipeReaderThread, workerPort, hChildOutR).detach();
-    std::thread([workerPort]() {
-        HANDLE hProc = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(g_workerMutex);
-            auto it = g_workerProcesses.find(workerPort);
-            if (it != g_workerProcesses.end())
-                hProc = it->second;
-        }
-        if (hProc) {
-            WaitForSingleObject(hProc, INFINITE);
-            DWORD code = 0;
-            GetExitCodeProcess(hProc, &code);
-            CloseHandle(hProc);
-            {
-                std::lock_guard<std::mutex> lock(g_workerMutex);
-                g_workerProcesses.erase(workerPort);
-            }
-            setTaskState(workerPort, "exited");
-        }
-    }).detach();
     if (sendRun)
         getTaskState() = "running";
-    // 等待 worker 的 HTTP 端口真正可连接再返回：否则调用方（file/run/restart）随后立即转发
-    // 会失败，父进程把刚创建的任务误标为 exited，后续带 target 的请求全部 400。
+    // Return only when the worker's HTTP port accepts connections: a caller forwards to it at
+    // once, and a failed forward would mark the new task as exited.
     {
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         bool ready    = false;
@@ -232,48 +164,24 @@ std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desi
         }
     }
     return {true, workerPort};
-#else
-    (void)path;
-    (void)sendRun;
-    (void)desiredPort;
-    return {false, 0};
-#endif
 }
 
-void terminateAllWorkers() {
-#if defined(_WIN32)
-    {
-        std::lock_guard<std::mutex> lock(g_workerMutex);
-        for (auto &[port, hProc] : g_workerProcesses) {
-            if (hProc)
-                TerminateProcess(hProc, 0);
-        }
-    }
-    if (g_job) {
-        CloseHandle(g_job);
-        g_job = nullptr;
-    }
-#endif
-}
+void terminateAllWorkers() { ChildProcess::terminateAll(); }
 
 bool terminateWorker(int port) {
-#if defined(_WIN32)
-    HANDLE hProc = nullptr;
+    std::shared_ptr<ChildProcess> proc;
     {
         std::lock_guard<std::mutex> lock(g_workerMutex);
-        auto it = g_workerProcesses.find(port);
-        if (it != g_workerProcesses.end())
-            hProc = it->second;
+        auto it = g_workers.find(port);
+        if (it != g_workers.end())
+            proc = it->second;
     }
-    if (hProc) {
-        TerminateProcess(hProc, 0);
-        return true;
-    }
-    return false;
-#else
-    (void)port;
-    return false;
-#endif
+    if (!proc)
+        return false;
+    proc->kill();
+    // The caller respawns on the same port: wait until the old worker has released it.
+    proc->waitExit(5000);
+    return true;
 }
 
 } // namespace debugger

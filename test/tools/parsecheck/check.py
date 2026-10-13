@@ -39,7 +39,13 @@ def tool():
 
 def run(args):
     proc = subprocess.run([tool(), *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
-    return proc.returncode, proc.stdout, proc.stderr
+    code, err = proc.returncode, proc.stderr
+    if not 0 <= code <= 2:
+        # Ended by a signal (negative on POSIX) or by an exception (an NTSTATUS such as
+        # 0xC00000FD on Windows): neither is an exit code this script can pass on.
+        err += f"\ncamel-parsecheck {args[0]} ended abnormally: exit code {code} ({code & 0xFFFFFFFF:#010x})\n"
+        code = 3
+    return code, proc.stdout, err
 
 
 def repository_files():

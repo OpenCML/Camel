@@ -12,8 +12,15 @@ Editor support for [Camel](https://github.com/OpenCML/Camel) source files (`.cml
 - **Camel: Run Current File with Passes…**: runs `camel <file> <pass>...` in the integrated
   terminal.
 
+- **Debugging** (type `camel`): breakpoints, stepping, call stack and variables through
+  `camel-db --dap`, a debug adapter that is built with the rest of the repository. Press F5 in a
+  `.cml` file, or add a configuration from the snippets. What stepping, the stack and variables
+  mean in Camel is explained in [`docs/debugging.en.md`](../../docs/debugging.en.md). The debugger
+  has been tested by speaking the protocol to the adapter; the VS Code user interface on top of it
+  has not been tried by hand.
+
 The extension is a thin client: everything that needs to understand a program is done by
-`camel-ls`.
+`camel-ls`, and everything that controls a running one by `camel-db`.
 
 ## Requirements
 
@@ -62,6 +69,7 @@ the bytecode VM; with no pass, or when no pass consumes the graph, `std::nvm` ru
 |---------|---------|---------|
 | `camel.server.path` | `""` | Path of `camel-ls`. Changing it restarts the server. |
 | `camel.path` | `""` | Path of `camel`, for **Run Current File with Passes…**. |
+| `camel.debugger.path` | `""` | Path of `camel-db`, started as `camel-db --dap` for a debug session of type `camel`. |
 | `camel.graph.passes` | `[]` | Passes applied before the graph is printed, for example `["std::inline"]`. |
 | `camel.run.passes` | `["std::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
 | `camel.trace.server` | `off` | Logs the protocol messages in the output channel "Camel Language Server". |

@@ -11,3 +11,7 @@
 - Command **Camel: Run Current File with Passes…**, with the settings `camel.path` and
   `camel.run.passes`.
 - Semantic token modifiers `mutable` and `sync`, with a default style (underline, italic).
+- Debugger type `camel`: starts `camel-db --dap` (setting `camel.debugger.path`, then
+  `$CAMEL_HOME/bin`, then `PATH`); launch attributes `program`, `passes`, `args`, `cwd`, `env`,
+  `stopOnEntry`, `stepBy`; breakpoints in `.cml` files; F5 debugs the current file. Not yet tried
+  in the VS Code user interface.

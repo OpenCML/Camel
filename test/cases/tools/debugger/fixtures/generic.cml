@@ -1,0 +1,14 @@
+module main
+
+func twice(x: typeas T): (T, T) {
+    let both = (x, x)                // mark:generic
+    return both
+}
+
+func main(): int sync {
+    let a = twice(1)                 // mark:int
+    let b = twice('s')               // mark:string
+    println(a)
+    println(b)
+    return 0
+}

@@ -40,7 +40,9 @@
 #include "camel/utils/log.h"
 #include "command/commands.h"
 #include "command/dispatcher.h"
+#include "camel/core/error/diagnostics/render.h"
 #include "compile.h"
+#include "core/debug_core.h"
 #include "gir_json.h"
 #include "run.h"
 #include "state.h"
@@ -54,6 +56,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -96,11 +99,18 @@ std::string getEnvValue(const char *name) {
 /// body 可含 passes（字符串数组），与 CLI 的 Run::targetFiles[1:] 一致；空则 applyPasses 用
 /// std::default。
 struct PendingRun {
-    bool hasRun = false;
+    bool hasRun  = false;
+    bool hasLoad = false; // compile only (POST /api/debug/load)
 };
 static std::mutex g_pendingMutex;
 static std::condition_variable g_pendingCond;
 static PendingRun g_pendingRun;
+/// Loads asked for and loads finished, with the result of the last one: the HTTP thread that
+/// asked waits for its load, which the main thread performs.
+static uint64_t g_loadsRequested = 0;
+static uint64_t g_loadsDone      = 0;
+static bool g_lastLoadCompiled   = false;
+static std::condition_variable g_loadCond;
 
 static void parseRunBodyAndSetPasses(const std::string &body) {
     try {
@@ -116,6 +126,55 @@ static void parseRunBodyAndSetPasses(const std::string &body) {
     } catch (...) {
         getState().runPasses.clear();
     }
+}
+
+/// The launch of a debug session: what to run and how (docs/technical/35_debugger.md, 7.3).
+static void applyLaunchOptions(const nlohmann::json &j) {
+    auto &st = getState();
+    const auto strings = [&](const char *key, std::vector<std::string> &into) {
+        into.clear();
+        if (auto it = j.find(key); it != j.end() && it->is_array()) {
+            for (const auto &e : *it)
+                if (e.is_string())
+                    into.push_back(e.get<std::string>());
+        }
+    };
+    strings("passes", st.runPasses);
+    strings("args", st.runArgs);
+    st.quiet = j.value("quiet", false);
+    if (st.quiet) {
+        // The output goes to an editor's console: diagnostics as the command line shows them
+        // (with the source excerpt), without terminal colours.
+        camel::core::error::setDiagnosticRenderConfig(
+            camel::core::error::DiagFormat::Rich,
+            camel::core::error::ColorMode::Never);
+    }
+    core::DebugCore::instance().command(
+        "configure",
+        nlohmann::json{{"stopOnEntry", j.value("stopOnEntry", false)}});
+}
+
+/// What the Web UI polls as the pause of a task (GET /api/step-paused, the lastAlloc of
+/// /api/state), from a stop of the core.
+static std::string pauseJsonOf(const nlohmann::json &stop) {
+    nlohmann::json j;
+    j["phase"]  = "gir_node";
+    j["reason"] = stop.value("reason", "");
+    if (auto f = stop.find("frame"); f != stop.end() && f->is_object()) {
+        const std::string graphId = f->value("graphId", "");
+        j["graphId"]              = graphId;
+        if (auto n = f->find("node"); n != f->end() && n->is_object()) {
+            const uint64_t ref = n->value("ref", uint64_t{0});
+            j["ref"]           = ref;
+            j["origin"]        = n->value("origin", uint64_t{0});
+            j["nodeId"]        = std::format("{}:{}", graphId, ref);
+        }
+        if (f->contains("line")) {
+            j["path"] = f->value("path", "");
+            j["line"] = f->value("line", 0);
+        }
+    }
+    return j.dump();
 }
 } // namespace
 
@@ -151,6 +210,9 @@ int runWorkerMode(int argc, char *argv[]) {
         });
     });
     getState().targetFile = path;
+    // A worker exists for one file: it is loaded from the start. (The gateway adopts the state a
+    // worker reports, and runs only tasks that are loaded, completed or terminated.)
+    getTaskState() = "loaded";
     clearRunState();
 
     registerAllCommands(getDispatcher());
@@ -193,33 +255,62 @@ int runWorkerMode(int argc, char *argv[]) {
         });
     });
 
-    // GIR node hook: registered unconditionally (release included) so node breakpoints and
-    // single-stepping work on release builds. The NodeVM fires HitGirNode() before each node;
-    // identity is resolved through the runtime graph's recorded draft origins, which is the same
-    // originId space that gir-json exposes to clients.
-    camel::DebugBreakpoint::SetGirNodeHandler([](const void *graphPtr, uint64_t ref) {
-        auto *graph               = static_cast<const camel::runtime::GCGraph *>(graphPtr);
-        auto &srv                 = getServer();
-        const std::string graphId = graph ? graph->stableId() : "";
-        const uint64_t origin =
-            graph ? graph->nodeOrigin(static_cast<camel::runtime::gc_node_ref_t>(ref)) : 0;
-        // Step mode takes precedence: a consumed step request pauses exactly once at the
-        // step target. While a step is pending (e.g. crossing other graphs on the way to a
-        // step-over target), breakpoints are deferred — an intermediate bp hit must not
-        // produce a pause the client could mistake for the completed step.
-        if (srv.consumeGirStepRequest(graphId)) {
-            std::string nodeId =
-                graph ? std::format("{}:{}", graphId, ref) : std::format("{}", ref);
-            srv.pauseAndWaitForGirBreakpoint(nodeId, graphId, origin, ref);
-            return;
-        }
-        if (srv.isGirStepPending())
-            return;
-        if (!srv.isGirBreakpointOrigin(origin))
-            return;
-        std::string nodeId = graph ? std::format("{}:{}", graphId, ref) : std::format("{}", ref);
-        srv.pauseAndWaitForGirBreakpoint(nodeId, graphId, origin, ref);
+    // The debug core controls the run (breakpoints, steps, stops) in every build mode; its
+    // stops are mirrored into the pause state the Web UI polls.
+    core::DebugCore::instance().setStopListener([](const nlohmann::json *stop) {
+        if (stop != nullptr)
+            getServer().notePaused(pauseJsonOf(*stop));
+        else
+            getServer().noteResumed();
     });
+
+    // POST /api/debug/load and /api/debug/start: a debug session compiles first, so that
+    // breakpoints are answered before anything runs, and starts when the client is ready.
+    getServer().setWorkerDebugHandler(
+        [](const std::string &command, const std::string &body) -> std::string {
+            nlohmann::json out;
+            if (command == "load") {
+                auto j = nlohmann::json::parse(body.empty() ? "{}" : body, nullptr, false);
+                if (j.is_discarded() || !j.is_object()) {
+                    out["ok"]    = false;
+                    out["error"] = "load: the body is not a JSON object";
+                    return out.dump();
+                }
+                if (getTaskState() == "running") {
+                    out["ok"]    = false;
+                    out["error"] = "the program is running";
+                    return out.dump();
+                }
+                applyLaunchOptions(j);
+                std::unique_lock<std::mutex> lock(g_pendingMutex);
+                const uint64_t mine  = ++g_loadsRequested;
+                g_pendingRun.hasLoad = true;
+                g_pendingCond.notify_one();
+                const bool done = g_loadCond.wait_for(lock, std::chrono::seconds(300), [mine] {
+                    return g_loadsDone >= mine;
+                });
+                out["ok"]       = done;
+                out["compiled"] = done && g_lastLoadCompiled;
+                if (!done)
+                    out["error"] = "the compilation did not finish in time";
+                return out.dump();
+            }
+            if (command == "start") {
+                if (getTaskState() == "running") {
+                    out["ok"]    = false;
+                    out["error"] = "the program is already running";
+                    return out.dump();
+                }
+                {
+                    std::lock_guard<std::mutex> lock(g_pendingMutex);
+                    g_pendingRun.hasRun = true;
+                }
+                g_pendingCond.notify_one();
+                out["ok"] = true;
+                return out.dump();
+            }
+            return std::string();
+        });
 
     getServer().setWorkerRunHandler([](const std::string &body, std::string &responseBody) {
         parseRunBodyAndSetPasses(body);
@@ -242,17 +333,28 @@ int runWorkerMode(int argc, char *argv[]) {
         {
             std::unique_lock<std::mutex> lock(g_pendingMutex);
             g_pendingCond.wait_for(lock, std::chrono::milliseconds(200), [] {
-                return g_pendingRun.hasRun;
+                return g_pendingRun.hasRun || g_pendingRun.hasLoad;
             });
             if (!getServer().isRunning())
                 break;
-            if (!g_pendingRun.hasRun)
+            if (!g_pendingRun.hasRun && !g_pendingRun.hasLoad)
                 continue;
-            pending             = g_pendingRun;
-            g_pendingRun.hasRun = false;
+            pending      = g_pendingRun;
+            g_pendingRun = PendingRun{};
         }
-        RunOutcome outcome = runScriptOnce(path);
-        (void)outcome;
+        if (pending.hasLoad) {
+            const bool compiled = compileScript(path);
+            {
+                std::lock_guard<std::mutex> lock(g_pendingMutex);
+                g_lastLoadCompiled = compiled;
+                g_loadsDone        = g_loadsRequested;
+            }
+            g_loadCond.notify_all();
+        }
+        if (pending.hasRun) {
+            RunOutcome outcome = runScriptOnce(path);
+            (void)outcome;
+        }
     }
 
     getServer().stop();

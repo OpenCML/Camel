@@ -150,11 +150,12 @@ class Reducer:
                     for arm in s.c[1:]:
                         if arm is None:
                             continue
-                        lst[i:i + 1] = arm.c[0]
+                        spliced = arm.c[0] if arm.k == "blk" else [N("expr", [arm])]
+                        lst[i:i + 1] = spliced
                         if self.fails(self.prog):
                             changed = True
                             break
-                        lst[i:i + len(arm.c[0])] = [s]
+                        lst[i:i + len(spliced)] = [s]
                 i += 1
         return changed
 

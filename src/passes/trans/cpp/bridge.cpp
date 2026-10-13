@@ -29,6 +29,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
 
+#include <cctype>
 #include <format>
 #include <set>
 #include <sstream>

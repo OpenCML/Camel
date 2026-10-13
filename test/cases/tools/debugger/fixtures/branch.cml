@@ -1,0 +1,17 @@
+module main
+
+func shout(s: string): string {
+    return s + '!'                   // mark:shout
+}
+
+func pick(n: int): string {
+    return if n > 2 then
+        shout('big')                 // mark:then
+    else
+        shout('small')               // mark:else
+}
+
+func main(): int sync {
+    println(pick(3))                 // mark:call
+    return 0
+}

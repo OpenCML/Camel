@@ -19,6 +19,7 @@
 
 #include "fmt.h"
 #include <algorithm>
+#include <cctype>
 #include <regex>
 
 using namespace std;

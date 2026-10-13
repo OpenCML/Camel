@@ -18,7 +18,7 @@ from __future__ import annotations
 import random
 from typing import List, Optional
 
-from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, REC, STR, TUP, Reject, effect_violations,
+from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, OPT, REC, STR, TUP, Reject, effect_violations,
                    evaluate, heavy_graphs, static_faults, walk)
 
 FEATURES = {
@@ -41,12 +41,16 @@ FEATURES = {
     "wait": "wait before writes and calls that write",
     "env": "values read from the environment (unknown to every pass)",
     "macro": "pure functions declared macro",
+    "comprehension": "list comprehensions [e for x in xs if c] with pure element and condition",
+    "nullable": "T?: null, values that enter a T? position (argument, typed let, branch arm, return), ?? chains",
+    "partial": "functions with context (with) parameters, called in place (f<w>(x)) and partially applied (f<w> as a value)",
+    "ifnoelse": "if statements without else whose arm is one expression of any type",
 }
 DEFAULT_FEATURES = frozenset(FEATURES)
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
-VERSION = 2
+VERSION = 3
 
 
 def parse_features(text: Optional[str]) -> frozenset:
@@ -216,6 +220,8 @@ class Gen:
     def expr(self, t, d: int):
         if t[0] == "fn":
             return self.fn_expr(t, d)
+        if t[0] == "opt":
+            return self.entering(t[1], d)
         if d <= 0 or self.chance(0.1):
             return self.leaf(t)
         k = t[0]
@@ -232,6 +238,11 @@ class Gen:
             o.append((3.0, lambda: self.call(self.r.choice(calls), d)))
         if self.on("builtin") and self.on("array") and t in SCALARS:
             o.append((0.9, lambda: self.reduce_expr(t, d)))
+        if self.on("nullable") and k != "rec":
+            o.append((1.1, lambda: self.coalesce(t, d)))
+        applied = self.with_functions(ret=t)
+        if applied:
+            o.append((1.4, lambda: self.applied_call(self.r.choice(applied), d)))
         if t == INT:
             o.append((4.0, lambda: self.int_arith(d)))
             if self.on("array") or self.on("string"):
@@ -328,6 +339,97 @@ class Gen:
             parts.append(spec + self.r.choice([" ", ",", "|", ">", ""]))
         return N("fmt", args, t=STR, s="".join(parts))
 
+    # -- T? (design principles 2.10) ----------------------------------------------------------
+    def null(self, t):
+        return N("null", t=OPT(t))
+
+    def nullable(self, t, d):
+        """An expression whose own type is `t?`: what may stand on the left of `??`. (A plain
+        value or a bare `null` may not: they only enter a position that expects a `t?`.)"""
+        o = [(1.5, lambda: self.branch_with_null(t, d))]
+        named = self.values(OPT(t))
+        if named:
+            o.append((3.0, lambda: ref(self.r.choice(named))))
+        makers = self.callables(OPT(t))
+        if makers and d > 0:
+            o.append((2.5, lambda: self.call(self.r.choice(makers), d)))
+        if d > 1:
+            # `a ?? b` with a nullable `b` is itself nullable.
+            o.append((0.7, lambda: N("coal", [self.nullable(t, d - 1), self.nullable(t, d - 1)], t=OPT(t))))
+        return self.pick(o)
+
+    def branch_with_null(self, t, d):
+        """`if c then e else null`: the arms join to `t?`."""
+        arms = [self.expr(t, max(d - 1, 0)), self.null(t)]
+        if self.chance(0.4):
+            arms.reverse()
+        return N("if", [self.expr(BOOL, max(d - 1, 0))] + arms, t=OPT(t))
+
+    def entering(self, t, d):
+        """What is written where a `t?` is expected (an argument, a typed `let`, `return`): a
+        plain value, which is put into the form by the compiler, `null`, or a `t?`."""
+        return self.pick([(2.0, lambda: self.expr(t, d)),
+                          (1.0, lambda: self.null(t)),
+                          (2.0, lambda: self.nullable(t, d))])
+
+    def coalesce(self, t, d):
+        """`a ?? d`, `a ?? b ?? d`: the first that is not null."""
+        parts = [self.nullable(t, d - 1) for _ in range(self.r.choice([1, 1, 2]))]
+        return N("coal", parts + [self.expr(t, d - 1)], t=t)
+
+    def nullable_let(self, d):
+        t = self.r.choice(self.scalars())
+        s = Sym(self.fresh("o"), OPT(t), "let")
+        e = self.entering(t, d)
+        self.scope.append(s)
+        s.shown = True                     # printed by itself below, not through `format`
+        return N("let", [e], name=s.name, ann=OPT(t))
+
+    def nullable_functions(self):
+        """`func m(a: T, c: bool): T? { return if c then .. else null }` and
+        `func u(x: T?, d: T): T { return x ?? .. }`: results and parameters of type `T?`."""
+        t = self.r.choice(self.scalars())
+        name = self.fresh("m")
+        params = [(self.fresh("a"), t, False), (self.fresh("a"), BOOL, False)]
+        body = self.with_params(params, lambda: N("blk", [[], self.branch_with_null(t, 2)], t=OPT(t)))
+        self.add_func(name, params, OPT(t), body, self.fn_sym(name, params, OPT(t)))
+        name = self.fresh("u")
+        params = [(self.fresh("a"), OPT(t), False), (self.fresh("a"), t, False)]
+        body = self.with_params(params, lambda: N("blk", [[], self.coalesce(t, 2)], t=t))
+        self.add_func(name, params, t, body, self.fn_sym(name, params, t))
+
+    # -- context parameters and partial application (design principles 2.10) ------------------
+    def with_functions(self, ret=None, fn=None):
+        return [s for s in self.scope if s.kind == "wfn" and (ret is None or s.ret == ret) and
+                (fn is None or FN([p[1] for p in s.params], s.ret) == fn)]
+
+    def applied(self, s: Sym, d):
+        """`f<w>`: the function with its context arguments, a function value."""
+        args = [self.expr(wt, min(max(d - 1, 0), 1)) for _n, wt, _v in s.value]
+        return N("papp", args, t=FN([p[1] for p in s.params], s.ret), name=s.name)
+
+    def applied_call(self, s: Sym, d):
+        """`f<w>(x)`."""
+        args = [self.expr(pt, min(max(d - 1, 0), 2)) for _n, pt, _v in s.params]
+        return N("call", [self.applied(s, d)] + args, t=s.ret, eff=False, vargs=[])
+
+    def with_function(self):
+        name = self.fresh("w")
+        wparams = [(self.fresh("k"), self.scalar(), False) for _ in range(self.r.choice([1, 1, 2]))]
+        params = [(self.fresh("a"), self.scalar(), False) for _ in range(self.r.choice([1, 1, 2]))]
+        ret = self.rand_type(0.2)
+        body = self.with_params(wparams + params, lambda: N("blk", [[], self.expr(ret, 3)], t=ret))
+        sym = Sym(name, ("wfn",), "wfn", params=params, ret=ret, value=wparams)
+        self.funcs.append(N("func", [body], name=name, params=params, ret=ret, **{"with": wparams}))
+        self.scope.append(sym)
+
+    def partial_let(self, d):
+        s = self.r.choice(self.with_functions())
+        e = self.applied(s, d)
+        g = Sym(self.fresh("n"), e.t, "let")
+        self.scope.append(g)
+        return N("let", [e], name=g.name)
+
     def array_options(self, t, d):
         e = t[1]
         o = [(3.0, lambda: N("arr", [self.expr(e, d - 1) for _ in range(self.r.choice([1, 2, 3, 3, 4]))], t=t)),
@@ -346,6 +448,18 @@ class Gen:
                 return N("map", [self.expr(ARR(src), d - 1), self.fn_expr(FN([src], e), d - 1)], t=t)
             o.append((2.5, map_))
             o.append((1.8, lambda: N("filter", [self.expr(t, d - 1), self.fn_expr(FN([e], BOOL), d - 1)], t=t)))
+            if self.on("comprehension"):
+                def comp_():
+                    src = self.scalar() if self.chance(0.7) else e
+                    source = self.expr(ARR(src), d - 1)
+                    mark = len(self.scope)
+                    x = Sym(self.fresh("q"), src, "let")
+                    self.scope.append(x)
+                    elem = self.expr(e, d - 1)
+                    cond = self.expr(BOOL, d - 1) if self.chance(0.6) else None
+                    del self.scope[mark:]
+                    return N("comp", [source, elem, cond], t=t, var=x.name)
+                o.append((2.4, comp_))
             if e == INT:
                 def range_():
                     lo = self.r.choice([0, 0, 1, 2, -2])
@@ -483,6 +597,9 @@ class Gen:
                  (s.kind == "let" or (s.kind == "fn" and not s.rec and not any(p[2] for p in s.params)))]
         makers = self.callables(t) if d > 0 else []
         o = [(2.0, lambda: self.lam(t, d))]
+        partial = self.with_functions(fn=t)
+        if partial:
+            o.append((2.5, lambda: self.applied(self.r.choice(partial), d)))
         if named and self.on("closure"):
             o.append((2.0, lambda: ref(self.r.choice(named))))
         if makers and self.on("closure"):
@@ -512,7 +629,7 @@ class Gen:
     def with_params(self, params, make):
         """Runs make() with only the declared functions and the parameters in scope."""
         saved = self.scope
-        self.scope = [s for s in saved if s.kind == "fn"]
+        self.scope = [s for s in saved if s.kind in ("fn", "wfn")]
         for name, t, isvar in params:
             self.scope.append(Sym(name, t, "var" if isvar else "let"))
         try:
@@ -749,7 +866,7 @@ class Gen:
 
     def println(self, d):
         self.label += 1
-        shown = [s for s in self.values() if s.t[0] != "fn"]
+        shown = [s for s in self.values() if s.t[0] not in ("fn", "opt")]
         fresh_ = [s for s in shown if not s.shown]
         picks = []
         for _ in range(self.r.choice([1, 2, 2, 3])):
@@ -817,6 +934,16 @@ class Gen:
             o.append((3.6, lambda: self.effect_call(2)))
         if self.on("closure") and self.chance(0.3):
             o.append((1.0, lambda: self.let(self.fn_type(), 2)))
+        if self.on("nullable"):
+            o.append((1.2, lambda: self.nullable_let(2)))
+            nullables = [s for s in self.scope if s.kind == "let" and s.t[0] == "opt"]
+            if nullables:
+                # A nullable value printed as it is: `null`, or the value.
+                o.append((0.8, lambda: N("expr", [N("println", [ref(self.r.choice(nullables))])])))
+        if self.with_functions():
+            o.append((1.0, lambda: self.partial_let(2)))
+        if self.on("ifnoelse") and self.on("effects"):
+            o.append((1.3, lambda: self.if_without_else(d)))
         if d > 0 and not simple:
             if self.on("if") and self.on("effects"):
                 o.append((1.4, lambda: self.if_statement(d)))
@@ -844,6 +971,23 @@ class Gen:
         then = self.effect_block(None, d)
         other = self.effect_block(None, d) if self.chance(0.6) else None
         return N("ifs", [cond, then, other])
+
+    def if_without_else(self, d):
+        """`if c then e` as a statement: the arm is one expression of any type, whose value is
+        dropped; an effect written there happens when the condition holds."""
+        cond = self.expr(BOOL, 2)
+        r = self.r.random()
+        if r < 0.65:
+            arm = self.println(1).c[0]
+        elif r < 0.85:
+            call = self.effect_call(1)
+            # effect_call may bind the result; only the call itself can be the arm
+            if call.k == "let":
+                self.scope.pop()
+            arm = call.c[0]
+        else:
+            arm = self.expr(self.rand_type(0.2), 1)
+        return N("ifs", [cond, arm, None])
 
     def if_value(self, d):
         t = self.rand_type(0.2)
@@ -947,7 +1091,13 @@ class Gen:
                         self.counter_factory()
                     else:
                         self.effect_function()
-        declared = [s for s in self.scope if s.kind == "fn"]
+            if self.on("nullable"):
+                for _ in range(self.r.choice([1, 1, 2])):
+                    self.nullable_functions()
+            if self.on("partial"):
+                for _ in range(self.r.choice([1, 2, 2])):
+                    self.with_function()
+        declared = [s for s in self.scope if s.kind in ("fn", "wfn")]
         self.scope = list(declared)
         stmts = []
         if self.on("env"):
@@ -961,7 +1111,7 @@ class Gen:
                 self.scope.append(s)
         stmts += self.stmts(self.r.randint(6, 14) * self.size, 2)
         for s in self.values():
-            if s.t[0] != "fn" and not s.shown and self.chance(0.75):
+            if s.t[0] not in ("fn", "opt") and not s.shown and self.chance(0.75):
                 self.label += 1
                 s.shown = True
                 stmts.append(N("expr", [N("println", [N("fmt", [ref(s)], t=STR, s=f"L{self.label} {{}}")])]))

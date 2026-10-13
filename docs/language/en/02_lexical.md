@@ -51,6 +51,8 @@ The following words are reserved and cannot be used as names (using one gives `S
 
 For the status of each word in the last row see [8.6](08_top_level_and_grammar.md#86-constructs-reserved-but-not-implemented).
 
+Names of the form `__x__` (two underscores on each side) are the compiler's own: the operators are functions of such names (`a + b` is `__add__(a, b)`). A variable, a parameter or a function cannot take one (`SemanticDiag::ReservedIdentifier`).
+
 ## 2.5 Literals
 
 ### 2.5.1 Integers

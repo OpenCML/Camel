@@ -530,5 +530,19 @@
   "expected": [],
   "class": "branch arm",
   "fixed": "opt: what an inlined arm tail ran after is waited on by the tail, not by the JOIN"
+ },
+ {
+  "id": "F42",
+  "file": "findings/fold_joined_arm_slot.cml",
+  "pipeline": [
+   "std::opt::fold",
+   "std::nvm"
+  ],
+  "env": {},
+  "expected": [
+   "1.0"
+  ],
+  "class": "branch arm",
+  "fixed": "gir: the node of a branch arm put into T? at its exit gets a slot of the joined type"
  }
 ]

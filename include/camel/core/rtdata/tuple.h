@@ -23,6 +23,7 @@
 #include "camel/core/type/composite/tuple.h"
 
 #include <algorithm>
+#include <new>
 
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;

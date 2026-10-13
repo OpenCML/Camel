@@ -52,6 +52,7 @@ type Pair<T> = (T, T)
   | `string(42)`, `string(true)`, `string([1, 2])` | `'42'`, `'true'`, `'[1, 2]'` |
   | `string(3.5)`, `string(2.0)` | `'3.5'`, `'2.0'`: the text `println` and a `{}` of `format` write, the shortest that reads back as the same number ([2.5.2](02_lexical.md#252-floating-point-numbers)); `float(string(x))` gives `x` back |
 
+- **A conversion whose argument is a literal is checked at compile time.** `int(1.0e30)` and `i32(5000000000)` are `SemanticDiag::LiteralOutOfRange`, `int('12abc')` is `SemanticDiag::LiteralStaticCastFailed`, as a literal declared with a type that cannot hold it is. With a computed argument the faults of the table above still happen at run time.
 - **A typed declaration gives a literal its type**: `let a: i32 = 3`, `let b: f32 = 0.1`. `as` is not used for conversions between numbers (`1 as float` is a compile-time error); use the conversion functions above.
 - There is no `bool(x)`, and no conversion from `bool` to an integer; use a comparison to get a boolean (`n != 0`), and `if` to get an integer.
 - **Integer arithmetic wraps around without an error**: `9223372036854775807 + 1` gives `-9223372036854775808`. `i32(3000000000)` and `let b: i32 = 3000000000` give `-1294967296` (truncation to 32 bits).

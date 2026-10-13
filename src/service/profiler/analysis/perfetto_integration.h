@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #ifndef NDEBUG
 
 #include <chrono>

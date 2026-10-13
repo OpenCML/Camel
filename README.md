@@ -116,6 +116,7 @@ Hello, Camel!
 - [Examples](examples/README.md): short task-oriented programs (JSON, files, maps, sorting, a command-line tool, parallel `map`, a simulation, a training step)
 - [Language reference](docs/language/en/README.md) ([中文](docs/language/README.md))
 - [Command line](docs/cli.md) and the [catalog of diagnostics](docs/diagnostics.md) (`camel --explain <name>`)
+- [Debugging](docs/debugging.en.md): breakpoints, stepping and variables in an editor through `camel-db --dap`, and what they mean in a graph language
 - [Design principles](docs/design-principles.en.md) ([中文, authoritative](docs/design-principles.cn.md)): what Camel is and why
 - [Technical documentation](docs/technical/README.md): the compilation pipeline, the graph IR, the runtime
 - [Build from source](docs/setup.en.md) and [CMake build options](docs/build-options.en.md)

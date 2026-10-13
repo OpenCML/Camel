@@ -1,0 +1,19 @@
+module main
+
+func double(x: int): int {
+    return x * 2
+}
+
+func next(x: int): int {
+    let unused = x + 100
+    return x + 1
+}
+
+func main(): int sync {
+    let x = 3
+    let a = double(x)
+    let b = next(x)
+    let c = a + b
+    println(c)
+    return 0
+}

@@ -209,16 +209,23 @@ function usually has), so that the body of an instance the operator would refuse
 built and cannot report errors for types the program does not mean. The first instance the
 operator accepts is taken. An instance that was built and then refused (its result type is
 not what the operator needs) stands for the name, so that the operator's own diagnostic says
-what does not fit. Not covered: a name with several ordinary functions (`xs->map<abs>`)
-is still `FunctionNameAsValue`, and an operator whose required result type is none of the
-usual ones may refuse a function it could take; a lambda with written types always works.
+what does not fit. A name with several ordinary functions (`xs->map<abs>`,
+`xs->reduce<max, 0>`) is settled the same way: the operator is asked about the type of each
+function of the name (for an operator with a computed signature, about its signatures for
+the candidate types), and exactly one accepted is the argument; none or several leave the
+name without a value (`FunctionNameAsValue`, listing the candidates). Not covered: an
+operator whose required result type is none of the usual ones may refuse a generic function
+it could take; a lambda with written types always works.
 
 **Functions written in place.** A `FUNC` node without a name whose type still holds a
 variable is registered where it stands (`anonymousTemplateOf`) and yields the same marker.
 Programs cannot write one (`typeas` is refused in a lambda); the list comprehension does:
 `[e for x in xs if c]` is lowered by the GCT builder (`visitComprehension`) to
 `xs->filter<F>->map<G>` with `F`, `G` taking `x` of a fresh type variable, which the two
-operators fix as above. The graph is the one the two calls written out have.
+operators fix as above. The graph is the one the two calls written out have. The two
+operators are named with a reserved prefix (`$builtin::map`) that `visitDRefNode` resolves in
+the built-in module without looking at the program's declarations, so a function of the
+program called `map` or `filter` does not change what a comprehension means.
 
 ## 7. Limits of this implementation
 

@@ -9,12 +9,17 @@ add_executable(camel-debugger
     src/state.cpp
     src/compile.cpp
     src/gir_json.cpp
+    src/process.cpp
     src/spawn.cpp
     src/run.cpp
     src/worker.cpp
     src/repl.cpp
     src/command/dispatcher.cpp
     src/command/commands.cpp
+    src/core/debug_core.cpp
+    src/core/program_index.cpp
+    src/core/values.cpp
+    src/dap/adapter.cpp
 )
 target_include_directories(camel-debugger PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
