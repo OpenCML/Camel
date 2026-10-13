@@ -89,7 +89,7 @@ class SymbolTable {
     std::unordered_map<std::string_view, SymId> ids_;
     camel::utils::AppendOnlyTable<std::string_view> entries_;
     std::vector<std::unique_ptr<char[]>> blocks_;
-    char *blockCursor_    = nullptr;
+    char *blockCursor_     = nullptr;
     size_t blockRemaining_ = 0;
 };
 

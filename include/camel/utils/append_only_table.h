@@ -91,13 +91,13 @@ class AppendOnlyTable {
     /// The entry at `index`. Lock-free; see the file comment for when this may race append().
     Entry &operator[](uint32_t index) {
         ASSERT(index < size(), "AppendOnlyTable index out of range.");
-        return segments_[index >> SegmentBits].load(std::memory_order_acquire)
-            [index & (kSegmentSize - 1)];
+        Entry *segment = segments_[index >> SegmentBits].load(std::memory_order_acquire);
+        return segment[index & (kSegmentSize - 1)];
     }
     const Entry &operator[](uint32_t index) const {
         ASSERT(index < size(), "AppendOnlyTable index out of range.");
-        return segments_[index >> SegmentBits].load(std::memory_order_acquire)
-            [index & (kSegmentSize - 1)];
+        const Entry *segment = segments_[index >> SegmentBits].load(std::memory_order_acquire);
+        return segment[index & (kSegmentSize - 1)];
     }
 
   private:
