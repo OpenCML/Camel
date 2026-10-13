@@ -107,7 +107,7 @@ bool RandomModule::load() {
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("rand", [ctx]() { return createRandomExecutor(ctx); });
     // The purity of every operator (design principles 2.9).
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "rand",
         {
             // Every one reads or advances the generator.

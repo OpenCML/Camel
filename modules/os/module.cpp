@@ -78,7 +78,7 @@ bool OSModule::load() {
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("os", [ctx]() { return createOSExecutor(ctx); });
     // The purity of every operator (design principles 2.9).
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "os",
         {
             // The terminal, the process and the machine it runs on.

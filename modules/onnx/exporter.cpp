@@ -495,7 +495,7 @@ void Evaluator::refuseEffects(GCGraph *root) {
                     ((uri == ":var/get" || assignmentKindOf(uri).isAssignment) &&
                      !g->normInputsOf(ref).empty() &&
                      isLocalVariable(g, g->normInputsOf(ref).front()));
-                if (!onLocalVariable && !core::OperatorTraitsRegistry::instance().isPure(uri)) {
+                if (!onLocalVariable && !core::OperatorTable::instance().isPure(uri)) {
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
                         uri == ":var/get" || assignmentKindOf(uri).isAssignment
@@ -2548,7 +2548,7 @@ Value Evaluator::applyOper(
 
     // Simplification has evaluated every pure operator whose arguments are constants; what is
     // left is translated. Side effects have no ONNX counterpart.
-    if (!core::OperatorTraitsRegistry::instance().isPure(uri)) {
+    if (!core::OperatorTable::instance().isPure(uri)) {
         unsupported(act, std::format("impure operator '{}' cannot be exported", uri));
     }
     if (allConstant(norm) && allConstant(with) && !std::ranges::any_of(norm, isDeferredClosure) &&

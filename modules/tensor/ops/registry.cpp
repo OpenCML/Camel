@@ -180,14 +180,14 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         byUri_.emplace(uri, entries_.size());
         // Generic graph passes and autodiff engines see the definition through the core
         // registries.
-        camel::core::OperatorTraitsRegistry::instance().set(
+        camel::core::OperatorTable::instance().set(
             uri,
             {.pure = def.traits.pure, .elementwise = def.traits.elementwise});
         if (def.vjp) {
             camel::core::DerivativeRegistry::instance().setRule(uri, def.vjp);
         }
         if (def.foldFromTypes) {
-            camel::core::OperatorTypeFolderRegistry::instance().set(
+            camel::core::OperatorTable::instance().setTypeFolder(
                 uri,
                 [fold = def.foldFromTypes](
                     std::span<Type *const> types,
@@ -214,7 +214,7 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         // loses its static shape.
         const Entry &entry = entries_.back();
         if (entry.def->exports.empty() && entry.def->infer) {
-            camel::core::OperatorResolverRegistry::instance().set(
+            camel::core::OperatorTable::instance().setResolver(
                 entry.uri,
                 std::make_shared<OpDefResolver>(entry.def));
         }

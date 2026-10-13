@@ -47,8 +47,12 @@ std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id) {
 }
 
 bool isPureOper(const GraphDraft &draft, gc_node_ref_t id) {
-    const std::string_view uri = operUriOf(draft, id);
-    return !uri.empty() && camel::core::OperatorTraitsRegistry::instance().isPure(uri);
+    const auto *h = draft.header(id);
+    if (!h || h->kind != GCNodeKind::Oper) {
+        return false;
+    }
+    const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
+    return camel::core::OperatorTable::instance().isPure(body->oper);
 }
 
 bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {

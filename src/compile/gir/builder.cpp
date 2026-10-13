@@ -2649,7 +2649,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     case runtime::GCNodeKind::Oper: {
         const auto &op = graph->operTarget(node);
         return op != nullptr &&
-               camel::core::OperatorTraitsRegistry::instance().hasExternalEffect(op->uri());
+               camel::core::OperatorTable::instance().hasExternalEffect(op->uri());
     }
     case runtime::GCNodeKind::Func: {
         const auto callee = calleeOf(node);
@@ -4960,7 +4960,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // A result that the argument types fix (the shape of a tensor whose type carries
             // it) is a constant for the operators it is passed to, as a literal would be.
             if (const auto *folder =
-                    camel::core::OperatorTypeFolderRegistry::instance().find(targetOperator->uri());
+                    camel::core::OperatorTable::instance().typeFolder(targetOperator->uri());
                 folder != nullptr && withInputs.empty()) {
                 Type *resultType = targetFuncType->exitType();
                 std::optional<slot_t> value;

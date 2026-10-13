@@ -29,5 +29,5 @@ class BasicBuiltinExecutor : public Executor {
     static executor_ptr_t create(camel::core::context::context_ptr_t ctx);
 };
 
-/// Registers the builtin operators' traits (purity) with the core OperatorTraitsRegistry.
+/// Registers the builtin operators' traits (purity) with the core OperatorTable.
 void registerBuiltinOperatorTraits();

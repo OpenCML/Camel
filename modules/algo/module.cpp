@@ -215,7 +215,7 @@ bool AlgoModule::load() {
         return createAlgoExecutor(ctx);
     });
     // The purity of every operator (design principles 2.9).
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "algo",
         {
             // Return a new array.

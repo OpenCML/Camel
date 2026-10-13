@@ -91,7 +91,7 @@ bool FsModule::load() {
         return true;
     context_->registerExecutorFactory("fs", [ctx = context_]() { return createFsExecutor(ctx); });
     // The purity of every operator (design principles 2.9).
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "fs",
         {
             // Reading depends on what is in the file system at the time.

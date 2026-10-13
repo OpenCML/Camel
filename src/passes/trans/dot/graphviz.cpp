@@ -179,10 +179,6 @@ string recordLabel(
         ASSERT(
             record.bodyBytes() >= sizeof(camel::runtime::GCOperBody),
             "GraphViz OPER payload is smaller than its fixed header.");
-        ASSERT(
-            graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uriBytes <=
-                record.bodyBytes() - sizeof(camel::runtime::GCOperBody),
-            "GraphViz OPER uri payload exceeds the node body.");
         return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
     case camel::runtime::GCNodeKind::Sync:
         return "SYNC";

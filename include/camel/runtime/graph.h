@@ -271,16 +271,19 @@ struct GCJoinBody {
 };
 static_assert(std::is_trivially_copyable_v<GCJoinBody>);
 
+// Payload of an OPER node. Fixed size: the operator is named by its index in the operator
+// table (camel/core/operator_table.h), which holds the URI and the declared traits once per
+// operator instead of once per node.
 struct GCOperBody {
-    operator_t op     = nullptr;
-    uint16_t uriBytes = 0;
-    uint16_t reserved = 0;
+    // The implementation, when a scheduler has resolved it; nullptr until then. A cache of what
+    // the executor manager answers for `oper`, not part of the node's identity.
+    operator_t op = nullptr;
+    camel::core::OperId oper = camel::core::kNoOper;
+    uint32_t reserved        = 0;
 
-    std::string_view uri() const {
-        const char *data = reinterpret_cast<const char *>(
-            reinterpret_cast<const std::byte *>(this) + sizeof(GCOperBody));
-        return {data, uriBytes};
-    }
+    /// The URI of the operator. The view is owned by the symbol table and never invalidated;
+    /// resolving it takes no lock.
+    std::string_view uri() const { return camel::core::OperatorTable::instance().uri(oper); }
 };
 static_assert(std::is_trivially_copyable_v<GCOperBody>);
 

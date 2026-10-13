@@ -178,7 +178,7 @@ bool OnnxModule::load() {
     });
     // The purity of every operator (design principles 2.9). export_model writes a file;
     // supported_operators is declared with effects until someone has checked that it is not.
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "onnx",
         {{"export_model", false}, {"supported_operators", false}});
     // Where an export would stop: an operator the ONNX backend has no lowering for.

@@ -139,15 +139,10 @@ template <typename Body> std::vector<std::byte> toPayloadBytes(const Body &body)
 std::vector<std::byte> toOperPayloadBytes(const oper_idx_ptr_t &oper) {
     GCOperBody body{
         .op       = nullptr,
-        .uriBytes = static_cast<uint16_t>(oper->uri().size()),
+        .oper     = camel::core::OperatorTable::instance().intern(oper->uri()),
         .reserved = 0,
     };
-    std::vector<std::byte> bytes(sizeof(GCOperBody) + oper->uri().size());
-    std::memcpy(bytes.data(), &body, sizeof(body));
-    if (!oper->uri().empty()) {
-        std::memcpy(bytes.data() + sizeof(GCOperBody), oper->uri().data(), oper->uri().size());
-    }
-    return bytes;
+    return toPayloadBytes(body);
 }
 
 void collectCompileStaticGraphRefsRecursive(

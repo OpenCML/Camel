@@ -147,7 +147,7 @@ class Builder {
     std::unordered_set<node_handle_t> variables_;
     // What the compiler knows about a node's value beyond static data, for operators whose
     // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
-    // operator result that its argument types fix (OperatorTypeFolderRegistry), e.g. the shape
+    // operator result that its argument types fix (its type folder), e.g. the shape
     // of a tensor whose type carries it. `arrayElementStatics_`: for an array written in place
     // with some elements computed (`[n, 3]`), the elements that are constants. The graph is not
     // changed by either: the operator and the FILL stay, std::opt folds them later.

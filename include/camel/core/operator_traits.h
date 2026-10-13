@@ -18,142 +18,23 @@
  */
 
 /*
- * Semantic properties of operators, keyed by operator URI.
+ * Hooks that modules register about the values of their own types.
  *
- * Generic graph passes (constant folding, CSE, DCE) must not know about any
- * particular module, yet they need to know whether an operator may be
- * evaluated early, merged, or dropped. Modules and the builtin operator table
- * register those properties here when they are loaded; passes only query.
- * An operator without an entry is treated conservatively (effectful).
+ * The properties of operators (purity, type rules, type folders) live in the operator table,
+ * camel/core/operator_table.h, which this header includes for the code that used to find
+ * them here.
  */
 
 #pragma once
 
-#include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
-#include "camel/core/type/resolver.h"
 
 #include <functional>
-#include <initializer_list>
-#include <optional>
-#include <span>
 #include <shared_mutex>
-#include <string>
-#include <string_view>
-#include <unordered_map>
 #include <vector>
 
 namespace camel::core {
-
-struct OperatorTraits {
-    /// No side effects and no hidden state: the result depends only on the arguments, so a call
-    /// may be evaluated at compile time, merged with an identical call, or removed if unused.
-    bool pure = false;
-    /// Output element i depends only on input elements i (after broadcasting).
-    bool elementwise = false;
-    /// Not pure, but without an effect outside the program's own variables: it creates or
-    /// reads a variable (`:var/new`, `:var/get`). Its result depends on when it runs, so it
-    /// is never folded, merged or moved across a write; it is not an effect a user can
-    /// observe, so it is not reported as one (effect trace).
-    bool stateOnly = false;
-};
-
-class OperatorTraitsRegistry {
-  public:
-    static OperatorTraitsRegistry &instance();
-
-    /// Registers (or replaces) the traits of `uri`, e.g. "tensor:matmul" or ":op/add_i".
-    void set(std::string_view uri, OperatorTraits traits);
-
-    /// Declares the purity of the operators `protocol:name`, one `{name, pure}` each. Every
-    /// operator of a module has to be declared, the ones with side effects too (design
-    /// principles 2.9): an operator nobody declared is treated as having side effects, and
-    /// its module is told so when it is loaded. `pure` means the result depends on the
-    /// arguments only: not on a clock, a random generator, the environment or a file.
-    void declare(
-        std::string_view protocol,
-        std::initializer_list<std::pair<std::string_view, bool>> operators) {
-        for (const auto &[name, pure] : operators) {
-            set(std::string(protocol) + ":" + std::string(name), {.pure = pure});
-        }
-    }
-
-    /// Traits of `uri`, or nullopt when nothing was registered.
-    std::optional<OperatorTraits> find(std::string_view uri) const;
-
-    /// True when `uri` is registered as pure.
-    bool isPure(std::string_view uri) const;
-
-    /// True when running `uri` is an effect visible outside the program's variables: it is
-    /// neither pure nor state-only.
-    bool hasExternalEffect(std::string_view uri) const;
-
-  private:
-    struct StringHash {
-        using is_transparent = void;
-        size_t operator()(std::string_view s) const { return std::hash<std::string_view>{}(s); }
-    };
-
-    mutable std::shared_mutex mutex_;
-    std::unordered_map<std::string, OperatorTraits, StringHash, std::equal_to<>> traits_;
-};
-
-/**
- * The type resolver of every operator overload, keyed by its URI. An OPER node records only the
- * URI its call resolved to; passes that change what is known about the arguments (binding input
- * shapes, folding a shape to a constant) re-run the overload's resolver through this registry.
- * Operator groups register their overloads when they are created.
- */
-class OperatorResolverRegistry {
-  public:
-    static OperatorResolverRegistry &instance();
-
-    /// Registers (or replaces) the resolver of `uri`.
-    void set(std::string_view uri, type::resolver_ptr_t resolver);
-
-    /// The resolver of `uri`, or nullptr.
-    type::resolver_ptr_t find(std::string_view uri) const;
-
-  private:
-    struct StringHash {
-        using is_transparent = void;
-        size_t operator()(std::string_view s) const { return std::hash<std::string_view>{}(s); }
-    };
-
-    mutable std::shared_mutex mutex_;
-    std::unordered_map<std::string, type::resolver_ptr_t, StringHash, std::equal_to<>> resolvers_;
-};
-
-/**
- * The value an operator's result has whenever its arguments have the given types, for operators
- * whose result a type can fix: the shape of a tensor whose type carries its shape, its element
- * count, one of its dimensions. `statics` holds the arguments that are constants (aligned with
- * `types`); `allocator` holds any object the value needs. Returns nullopt when the types do not
- * fix the result. std::opt::fold uses these to turn such results into constants once shape
- * specialization has put the facts into the types.
- */
-using TypeFolder = std::function<std::optional<slot_t>(
-    std::span<type::Type *const> types, type::static_args_t statics, mm::IAllocator &allocator)>;
-
-class OperatorTypeFolderRegistry {
-  public:
-    static OperatorTypeFolderRegistry &instance();
-
-    /// Registers (or replaces) the folder of `uri`.
-    void set(std::string_view uri, TypeFolder folder);
-
-    /// The folder of `uri`, or nullptr.
-    const TypeFolder *find(std::string_view uri) const;
-
-  private:
-    struct StringHash {
-        using is_transparent = void;
-        size_t operator()(std::string_view s) const { return std::hash<std::string_view>{}(s); }
-    };
-
-    mutable std::shared_mutex mutex_;
-    std::unordered_map<std::string, TypeFolder, StringHash, std::equal_to<>> folders_;
-};
 
 /**
  * The exact type of a constant, for types that do not fix everything about their values: a

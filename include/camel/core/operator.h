@@ -138,11 +138,11 @@ class OperatorGroup {
     }
 
   private:
-    /// Makes each overload's resolver findable by its URI (see OperatorResolverRegistry).
+    /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver).
     void publishResolvers() const {
         for (const auto &[uri, resolver] : resolvers_) {
             if (!uri.empty() && resolver) {
-                camel::core::OperatorResolverRegistry::instance().set(uri, resolver);
+                camel::core::OperatorTable::instance().setResolver(uri, resolver);
             }
         }
     }

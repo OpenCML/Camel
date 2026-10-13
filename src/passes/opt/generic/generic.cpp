@@ -610,7 +610,7 @@ bool foldStaticCast(
 bool foldFromTypes(
     GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
     const auto *folder =
-        camel::core::OperatorTypeFolderRegistry::instance().find(operUriOf(draft, id));
+        camel::core::OperatorTable::instance().typeFolder(operUriOf(draft, id));
     type::Type *resultType = draft.header(id)->dataType;
     if (!folder || !resultType || !draft.withInputsOf(id).empty()) {
         return false;

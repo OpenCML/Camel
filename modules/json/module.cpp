@@ -87,7 +87,7 @@ bool JsonModule::load() {
         return createJsonExecutor(ctx);
     });
     // The purity of every operator (design principles 2.9).
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "json",
         {
             // Functions of their argument: the same text or value gives the same result.

@@ -45,11 +45,11 @@ NodeRoleRegistry::NodeRoleRegistry() {
              if (node->kind != GCNodeKind::Oper) {
                  return std::nullopt;
              }
-             const std::string uri(graph.nodeBodyAs<GCOperBody>(ref)->uri());
-             if (camel::core::OperatorTraitsRegistry::instance().isPure(uri)) {
+             const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+             if (camel::core::OperatorTable::instance().isPure(body->oper)) {
                  return std::nullopt;
              }
-             return uri;
+             return std::string(body->uri());
          }});
     // Where branch arms meet: every arm must produce the type the JOIN carries.
     entries_.push_back(

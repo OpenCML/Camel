@@ -142,7 +142,7 @@ bool MathModule::load() {
     context_->registerExecutorFactory("math", [ctx]() { return createMathExecutor(ctx); });
     // Every math operator is a function of its arguments.
     for (const auto &[name, op] : getMathOpsMap()) {
-        camel::core::OperatorTraitsRegistry::instance().set(
+        camel::core::OperatorTable::instance().set(
             "math:" + name,
             {.pure = true, .elementwise = false});
     }

@@ -315,7 +315,17 @@ void registerBuiltinOperatorTraits() {
         "struct/contains_arr",
         "struct/contains_str",
     };
-    auto &registry = camel::core::OperatorTraitsRegistry::instance();
+    // Declared never to fault, where the implementation has no fault path at all: integer
+    // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
+    // the strict boolean operators only read their operands. Everything else keeps the
+    // default (may fault). No pass acts on this declaration yet (operator_table.h).
+    static const std::unordered_set<std::string_view> kNeverFaults = {
+        "op/add_i", "op/add_l", "op/add_f", "op/add_d", "op/sub_i", "op/sub_l", "op/sub_f",
+        "op/sub_d", "op/lt_i",  "op/lt_l",  "op/lt_f",  "op/lt_d",  "op/le_i",  "op/le_l",
+        "op/le_f",  "op/le_d",  "op/gt_i",  "op/gt_l",  "op/gt_f",  "op/gt_d",  "op/ge_i",
+        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",
+    };
+    auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
         // Every operator over Map and Set (coll/) returns a new value and changes nothing.
@@ -323,21 +333,25 @@ void registerBuiltinOperatorTraits() {
                           key.starts_with("coll/") || kPureHelpers.contains(key);
         // Declared either way: an operator without a declaration is treated the same as one
         // declared to have effects, but only a declaration says that somebody looked.
-        registry.set(":" + name, {.pure = pure, .elementwise = false});
+        registry.set(
+            ":" + name,
+            {.pure = pure, .elementwise = false, .mayFault = !kNeverFaults.contains(key)});
     }
     // The higher-order operators and function composition run a function the program passes
     // in: what they do is what that function does, and the passes that look at them look at
     // that function. exit and sleep are the os module's and are built in as well.
-    registry.declare(
-        "",
-        {{"mark/map_arr", false},
-         {"mark/apply_arr", false},
-         {"mark/filter_arr", false},
-         {"mark/reduce_arr", false},
-         {"mark/foreach_arr", false}});
+    for (const char *uri : {":mark/map_arr",
+                            ":mark/apply_arr",
+                            ":mark/filter_arr",
+                            ":mark/reduce_arr",
+                            ":mark/foreach_arr"}) {
+        registry.set(uri, {.pure = false, .callsGraphs = true});
+    }
     // The fault-isolation node calls the function it is given, and its result depends on
     // whether that call faults: never folded, merged or dropped as a pure call would be.
-    registry.set(std::string(camel::execute::kFaultIsolationUri), {.pure = false});
+    registry.set(
+        std::string(camel::execute::kFaultIsolationUri),
+        {.pure = false, .callsGraphs = true});
     registry.declare("os", {{"exit", false}, {"sleep", false}});
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});

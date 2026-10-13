@@ -85,7 +85,7 @@ std::optional<slot_t> staticSlotOf(const GraphDraft &draft, gc_node_ref_t id) {
 
 std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
-    const auto resolver = camel::core::OperatorResolverRegistry::instance().find(body->uri());
+    const auto resolver = camel::core::OperatorTable::instance().resolver(body->oper);
     if (!resolver) {
         return std::nullopt;
     }

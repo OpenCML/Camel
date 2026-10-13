@@ -316,7 +316,7 @@ Precedence, most specific first:
 Operators without a rule are an error on differentiated paths. Structurally
 non-differentiable operators (`shape`, `zeros`, comparisons, integer arithmetic)
 stop gradients silently. The builder interface and the rule registry move from
-the nn module to core, beside `OperatorTraitsRegistry`, because the transform
+the nn module to core, beside the operator table (`OperatorTable`), because the transform
 is a core pass and must not depend on nn.
 
 Correctness is checked mechanically: every rule gets a finite-difference test,

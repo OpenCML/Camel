@@ -127,7 +127,7 @@ bool mayHaveEffects(const GCGraph *graph, std::unordered_set<const GCGraph *> &s
         }
         if (node->kind == GCNodeKind::Oper) {
             const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(it.ref());
-            if (!body || !camel::core::OperatorTraitsRegistry::instance().isPure(body->uri())) {
+            if (!body || !camel::core::OperatorTable::instance().isPure(body->oper)) {
                 return true;
             }
         }

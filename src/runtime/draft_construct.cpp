@@ -54,15 +54,9 @@ std::vector<std::byte> bytesForAccsStructKey(std::string_view key) {
 
 std::vector<std::byte> bytesForOperPayload(operator_t op, std::string_view uri) {
     GCOperBody body;
-    body.op       = op;
-    body.uriBytes = static_cast<uint16_t>(uri.size());
-
-    std::vector<std::byte> bytes(sizeof(GCOperBody) + uri.size());
-    std::memcpy(bytes.data(), &body, sizeof(body));
-    if (!uri.empty()) {
-        std::memcpy(bytes.data() + sizeof(GCOperBody), uri.data(), uri.size());
-    }
-    return bytes;
+    body.op   = op;
+    body.oper = camel::core::OperatorTable::instance().intern(uri);
+    return bytesForStruct(body);
 }
 
 std::vector<std::byte> bytesForBranchPayload(

@@ -751,9 +751,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 auto *body =
                     const_cast<GCOperBody *>(currRuntimeGraph->nodeBodyAs<GCOperBody>(nodeRef));
                 validateVariableBodyBytes(n, sizeof(GCOperBody), "OPER");
-                ASSERT(
-                    body->uriBytes <= n->bodyBytes() - sizeof(GCOperBody),
-                    "NodeVM OPER uri payload exceeds the node body.");
                 operator_t opFunc = body->op;
                 if (!opFunc) {
                     const std::string uri(body->uri());

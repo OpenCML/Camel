@@ -20,7 +20,7 @@
 
 /*
  * Generic, module-agnostic graph optimizations. They consult only the core
- * OperatorTraitsRegistry, never module knowledge:
+ * OperatorTable, never module knowledge:
  *
  *   std::opt::fold  evaluates pure operators whose inputs are all static and
  *                   replaces them by static values, and replaces an element

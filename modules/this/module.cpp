@@ -45,7 +45,7 @@ bool ThisModule::load() {
         return createThisExecutor(ctx);
     });
     // The purity of every operator (design principles 2.9).
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "this",
         {
             // A constant text.

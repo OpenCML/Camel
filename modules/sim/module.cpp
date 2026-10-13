@@ -53,7 +53,7 @@ SimModule::SimModule(context_ptr_t ctx) : BuiltinModule("sim", ctx) {
     // (std::taskflow keeps the elements of a map in order unless the element function is
     // provably free of effects) and passes may fold or merge them.
     for (const char *uri : {"sim:pi_hits", "sim:asian_call_price"}) {
-        camel::core::OperatorTraitsRegistry::instance().set(uri, {.pure = true, .elementwise = false});
+        camel::core::OperatorTable::instance().set(uri, {.pure = true, .elementwise = false});
     }
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);

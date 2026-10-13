@@ -103,7 +103,7 @@ bool StrModule::load() {
     context_->registerExecutorFactory("str", [ctx = context_]() { return createStrExecutor(ctx); });
     // Every operator of this module is a function of its arguments.
     for (const auto &[name, op] : getStrOpsMap()) {
-        camel::core::OperatorTraitsRegistry::instance().set(
+        camel::core::OperatorTable::instance().set(
             "str:" + name,
             {.pure = true, .elementwise = false});
     }

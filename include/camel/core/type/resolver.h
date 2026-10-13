@@ -38,7 +38,7 @@ using ResolverFunc = std::function<std::optional<Type *>(
  * What is known at compile time about the value of one argument of a call.
  *
  * `value` is the slot of an argument that is a constant: a literal or other static data, or the
- * result of an operator whose argument types fix it (OperatorTypeFolderRegistry). `elements` is
+ * result of an operator whose argument types fix it (its type folder). `elements` is
  * set for an array written in place, such as `[n, 3]`: its length is the array's length, and
  * each element is the slot of that element when it is a constant, nullopt otherwise. Both
  * only refine a result type; they never decide whether the arguments fit.

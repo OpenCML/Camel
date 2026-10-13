@@ -103,7 +103,7 @@ type::FunctionType *operatorOverloadType(
         }
     }
     type::FunctionType *answer = nullptr;
-    if (const auto resolver = camel::core::OperatorResolverRegistry::instance().find(uri)) {
+    if (const auto resolver = camel::core::OperatorTable::instance().resolver(uri)) {
         try {
             const std::vector<type::StaticArg> statics(norm.size());
             const auto resolved = resolver->resolveWith(with, norm, statics, Modifier::None);
@@ -125,12 +125,11 @@ bool isVarArgument(const GraphDraft &draft, gc_node_ref_t user, bool isWith, siz
     }
     switch (h->kind) {
     case GCNodeKind::Oper: {
-        const std::string_view uri =
-            reinterpret_cast<const GCOperBody *>(draft.payloadOf(user).data())->uri();
-        if (camel::core::OperatorTraitsRegistry::instance().isPure(uri)) {
+        const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(user).data());
+        if (camel::core::OperatorTable::instance().isPure(body->oper)) {
             return false;
         }
-        const type::FunctionType *funcType = operFuncType(draft, user, uri);
+        const type::FunctionType *funcType = operFuncType(draft, user, body->uri());
         return funcType ? isVarParam(funcType, isWith, index) : true;
     }
     case GCNodeKind::Func: {

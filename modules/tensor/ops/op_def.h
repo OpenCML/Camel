@@ -118,11 +118,11 @@ using InferFn = std::function<std::optional<type::Type *>(const InferContext &)>
 
 /// The result as a constant when the argument types (and constant arguments) fix it, e.g. the
 /// shape of a tensor whose type carries its shape; nullopt otherwise. Mirrored into the core
-/// OperatorTypeFolderRegistry, which std::opt::fold consults.
+/// OperatorTable (setTypeFolder), which std::opt::fold consults.
 using FoldFn =
     std::function<std::optional<slot_t>(const InferContext &, core::mm::IAllocator &)>;
 
-/// Semantic properties used by exporters and, mirrored into the core OperatorTraitsRegistry on
+/// Semantic properties used by exporters and, mirrored into the core OperatorTable on
 /// registration, by generic graph passes. Operators are pure unless marked otherwise.
 struct OpTraits {
     bool pure        = true;  // no side effects; result depends only on arguments
