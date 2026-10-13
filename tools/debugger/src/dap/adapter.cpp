@@ -23,7 +23,7 @@
  * Threads:
  *  - the main thread reads requests from stdin and answers them, one at a time;
  *  - the event pump long-polls the worker's event list and sends DAP events;
- *  - the reader threads of the worker process (process.h) send `output` events and, when the
+ *  - the reader threads of the worker process (child_process.h) send `output` events and, when the
  *    worker has exited and its streams are at their end, `exited` and `terminated`.
  * Everything written to stdout goes through Adapter::send, which serialises the writers.
  *
@@ -36,7 +36,7 @@
 #include "adapter.h"
 
 #include "nlohmann/json.hpp"
-#include "process.h"
+#include "child_process.h"
 
 #include <httplib.h>
 

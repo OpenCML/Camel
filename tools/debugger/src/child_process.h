@@ -19,7 +19,7 @@
 #pragma once
 
 /**
- * @file process.h
+ * @file child_process.h
  * @brief A child process with its standard output and error read by the parent.
  *
  * Both users of worker processes go through this: the HTTP gateway (spawn.cpp), which keeps
@@ -65,7 +65,7 @@ class ChildProcess {
     static std::shared_ptr<ChildProcess>
     spawn(const ProcessSpec &spec, ProcessCallbacks callbacks, std::string &error);
 
-    virtual ~ChildProcess() = default;
+    virtual ~ChildProcess()      = default;
     virtual bool running() const = 0;
     /// Ends the process at once (SIGKILL / TerminateProcess). Returns whether it was running.
     virtual bool kill() = 0;

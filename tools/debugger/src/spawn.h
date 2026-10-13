@@ -20,8 +20,8 @@
 
 /**
  * @file spawn.h
- * @brief Worker processes of the gateway, started through ChildProcess (process.h): a worker
- * ends when the gateway does, on every platform process.h implements.
+ * @brief Worker processes of the gateway, started through ChildProcess (child_process.h): a worker
+ * ends when the gateway does, on every platform child_process.h implements.
  *
  * 设计要点：
  * - 子进程通过环境变量 CAMEL_DB_WORKER_PORT 获知自己的 HTTP 端口；run 时父进程 POST /api/run

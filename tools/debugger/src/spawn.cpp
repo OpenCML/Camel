@@ -18,7 +18,7 @@
  */
 
 #include "spawn.h"
-#include "process.h"
+#include "child_process.h"
 #include "state.h"
 
 #include <httplib.h>

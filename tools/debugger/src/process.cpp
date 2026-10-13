@@ -17,7 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "process.h"
+#include "child_process.h"
 
 #include <atomic>
 #include <chrono>

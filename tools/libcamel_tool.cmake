@@ -22,7 +22,7 @@ function(target_link_libcamel_runtime target)
   target_camel_stack_size(${target})
 endfunction()
 
-# The native stack of a tool: 8 MiB, the size the main thread has on Linux and macOS by default.
+# The native stack of a Windows tool: 32 MiB, including room for SEH fault unwinding.
 # The interpreters nest on the native stack (docs/cli.md, "Limits"), and the default recursion
 # limit of 1000 is measured against that size. The Windows default is 1 MiB, with which the
 # deepest recursion the default limit allows does not fit (it ends in the "native stack is full"
@@ -30,10 +30,10 @@ endfunction()
 # of a function of a few thousand statements. On Windows the value of the executable is also the
 # default of every thread the process creates, so the workers of the parallel scheduler get it
 # too, as on Linux, where a thread's stack has the size of the process's stack limit.
-set(CAMEL_STACK_SIZE_BYTES 8388608)
+set(CAMEL_STACK_SIZE_BYTES 33554432)
 function(target_camel_stack_size target)
   if(WIN32)
-    target_link_options(${target} PRIVATE "-Xlinker" "/STACK:${CAMEL_STACK_SIZE_BYTES}")
+    target_link_options(${target} PRIVATE "LINKER:/STACK:${CAMEL_STACK_SIZE_BYTES}")
   endif()
 endfunction()
 
