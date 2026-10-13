@@ -151,7 +151,8 @@ def run_file(path: Path, passes: List[str], env_extra: Optional[dict] = None,
             for r in readers:
                 r.join()
             proc.returncode = os.waitstatus_to_exitcode(status)
-            peak_kb = int(usage.ru_maxrss)
+            # Kilobytes on Linux, bytes on macOS.
+            peak_kb = int(usage.ru_maxrss) // (1024 if sys.platform == "darwin" else 1)
             out, err = b"".join(out_chunks), b"".join(err_chunks)
         else:
             out, err = proc.communicate(timeout=timeout)
