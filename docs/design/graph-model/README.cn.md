@@ -596,7 +596,7 @@ subgraph "abs" {
 
 状态写在循环头上，所以 k、各状态的类型、初值都在 `LOOP` 节点的入边上，与循环体里写了什么无关（R1）。循环体是独立的子图，不并入外层图：外层图保持无环，容量也不被循环体占用。
 
-`examples/nodes/loop.cml`（语法到 AST 已有另行实现，本基线的 `camel` 还不认识 `loop`【实测：`UnresolvedReference: 'loop'`】）：
+`examples/nodes/loop.cml`（本基线的 `camel` 还不认识 `loop`【实测：`UnresolvedReference: 'loop'`】）：
 
 ```camel
 func sum_to(n: int): int {
@@ -1477,7 +1477,7 @@ export func simplify(p: Program): Program! {
 
 每一步能独立合入，合入后全套测试通过。规模是净改动的估计；"验收"是这一步做完后应当看到的数字或行为。
 
-**与 AST/GCT 重构的衔接。** 那条线先行。本计划需要它交付四样东西，请在它的设计里留出：
+**与 AST/GCT 重构的衔接。** AST/GCT 的重构先行。本计划需要它交付四样东西，请在它的设计里留出：
 
 1. **声明索引**：不看任何函数体就能列出一个模块的顶层声明（种类、限定名、写出来的类型、是否导出）与它的 `import`。三步加载的第一步只读这个。
 2. **按声明取 GCT**：一个函数体、一个顶层值的初始化表达式可以单独请求，不必一次建完整个模块。
