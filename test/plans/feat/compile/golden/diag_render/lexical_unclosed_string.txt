@@ -3,7 +3,6 @@ error[LexicalDiag::UnclosedStringLiteral]: This string literal is not closed.
    |
  4 |     println('hello)
    |             ^
-help: A string ends with the quote character it starts with ('). Add the closing quote; to put a
-      quote character inside the string, write it with a backslash.
+help: A string ends with the quote character it starts with ('). Add the closing quote; to put a quote character inside the string, write it with a backslash.
 
 camel: 1 error

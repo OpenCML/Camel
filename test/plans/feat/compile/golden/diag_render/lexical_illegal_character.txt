@@ -3,7 +3,6 @@ error[LexicalDiag::IllegalCharacter]: Illegal character '$'.
    |
  4 |     let x = 1 $ 2
    |               ^
-help: No token starts with this character. Outside strings and comments a program consists of ASCII
-      characters; a name is made of letters, digits and '_'.
+help: No token starts with this character. Outside strings and comments a program consists of ASCII characters; a name is made of letters, digits and '_'.
 
 camel: 1 error

@@ -3,5 +3,4 @@ error[RuntimeDiag::TimeFormatFailed]: 'time.strptime' failed: the text 'not a da
    |
  6 |     println(strptime('not a date', '%Y-%m-%d'))
    |             ^^^^^^^^
-help: Check the format string against the strftime conversion specifiers (%Y, %m, %d, %H, %M, %S,
-      ...).
+help: Check the format string against the strftime conversion specifiers (%Y, %m, %d, %H, %M, %S, ...).

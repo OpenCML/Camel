@@ -3,5 +3,4 @@ error[RuntimeDiag::RegexInvalid]: 're.test': '(unclosed' is not a valid regular 
    |
  6 |     println(test('(unclosed', 'abc'))
    |             ^^^^
-help: Patterns use the ECMAScript syntax. A character with a special meaning is matched literally
-      when it is written with a backslash.
+help: Patterns use the ECMAScript syntax. A character with a special meaning is matched literally when it is written with a backslash.

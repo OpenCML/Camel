@@ -3,7 +3,6 @@ error[SyntaxDiag::MissingInitializer]: The declaration of 'x' has no value.
    |
  4 |     let x
    |         ^
-help: A declaration binds a name to a value: let x = <value>, or with a type: let x: <type> =
-      <value>.
+help: A declaration binds a name to a value: let x = <value>, or with a type: let x: <type> = <value>.
 
 camel: 1 error
