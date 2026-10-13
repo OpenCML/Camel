@@ -68,11 +68,16 @@ const FOLDED = {
 
 const errors = []
 
+/** A text file with LF line ends, also in a checkout that has CRLF (git's core.autocrlf). */
+function readText(file) {
+    return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
+}
+
 /** The productions of the parser sources, in order: [{name, lines, file}]. */
 function readProductions() {
     const productions = []
     for (const file of PARSER_FILES) {
-        const lines = fs.readFileSync(file, 'utf8').split('\n')
+        const lines = readText(file).split('\n')
         let current = null
         for (const line of lines) {
             const start = /^\/\/\/ ([a-z][A-Za-z]*)\s*: (.*)$/.exec(line)
@@ -109,13 +114,13 @@ for (const p of productions) {
     names.add(p.name)
 }
 
-const tokenText = fs.readFileSync(TOKENS, 'utf8')
+const tokenText = readText(TOKENS)
 const tokenLiterals = new Set()
 for (const m of tokenText.matchAll(/CAMEL_(?:KEYWORD|PUNCT)\(\w+, "((?:\\.|[^"\\])*)"/g)) {
     tokenLiterals.add(m[1].replace(/\\(.)/g, '$1'))
 }
 
-const parserText = PARSER_FILES.map((f) => fs.readFileSync(f, 'utf8')).join('\n')
+const parserText = PARSER_FILES.map((f) => readText(f)).join('\n')
 for (const p of productions) {
     const body = p.lines.join(' ')
     for (const m of body.matchAll(/'((?:\\.|[^'\\])+)'/g)) {
@@ -136,7 +141,7 @@ for (const p of productions) {
     }
 }
 
-for (const m of fs.readFileSync(NODES, 'utf8').matchAll(/^CAMEL_NODE\((\w+), \w+\)\s*\/\/\s*(.*)$/gm)) {
+for (const m of readText(NODES).matchAll(/^CAMEL_NODE\((\w+), \w+\)\s*\/\/\s*(.*)$/gm)) {
     if (m[1] === 'Error') continue
     const kind = m[1]
     const production = kind[0].toLowerCase() + kind.slice(1)
@@ -156,7 +161,7 @@ for (const m of fs.readFileSync(NODES, 'utf8').matchAll(/^CAMEL_NODE\((\w+), \w+
 const keywords = new Set([...tokenText.matchAll(/^CAMEL_KEYWORD\(\w+, "(\w+)"/gm)].map((m) => m[1]))
 for (const doc of DOCS.map((d) => d.replace('08_top_level_and_grammar.md', '02_lexical.md'))) {
     const rel = path.relative(ROOT, doc).split(path.sep).join('/')
-    const text = fs.readFileSync(doc, 'utf8')
+    const text = readText(doc)
     const from = text.indexOf('## 2.4')
     const to = text.indexOf('## 2.5')
     const listed = new Set()
@@ -184,7 +189,8 @@ for (const doc of DOCS) {
         errors.push(`${rel} does not exist`)
         continue
     }
-    const text = fs.readFileSync(doc, 'utf8')
+    const raw = fs.readFileSync(doc, 'utf8')
+    const text = raw.replace(/\r\n/g, '\n')
     const a = text.indexOf(BEGIN)
     const b = text.indexOf(END)
     if (a < 0 || b < 0) {
@@ -194,7 +200,8 @@ for (const doc of DOCS) {
     const updated = text.slice(0, a) + block + text.slice(b + END.length)
     if (mode === '--write') {
         if (updated !== text) {
-            fs.writeFileSync(doc, updated)
+            // Written with the line ends the file had.
+            fs.writeFileSync(doc, raw.includes('\r\n') ? updated.replace(/\n/g, '\r\n') : updated)
             console.log(`wrote ${rel}`)
         }
     } else if (updated !== text) {

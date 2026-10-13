@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url'
 import { withServer, check, checkEq, fmtRange, marked } from '../../../tools/lsp/client.mjs'
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
-const MAIN = fs.readFileSync(path.join(FIXTURES, 'main.cml'), 'utf8')
-const SHAPES = fs.readFileSync(path.join(FIXTURES, 'shapes.cml'), 'utf8')
+// With LF line ends also in a checkout that has CRLF: the checks below name lines and offsets.
+const fixture = (name) => fs.readFileSync(path.join(FIXTURES, name), 'utf8').replace(/\r\n/g, '\n')
+const MAIN = fixture('main.cml')
+const SHAPES = fixture('shapes.cml')
 
 await withServer(async (ls) => {
     const caps = ls.initializeResult.capabilities
