@@ -174,8 +174,6 @@ string recordLabel(
         return "JOIN";
     case camel::runtime::GCNodeKind::Call:
         return "CALL";
-    case camel::runtime::GCNodeKind::Bind:
-        return "BIND";
     case camel::runtime::GCNodeKind::Func: {
         auto *callee = graph->directCalleeGraphOf(nodeRef);
         return callee ? callee->name() : "FUNC";
@@ -193,8 +191,6 @@ string recordLabel(
         return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
-    case camel::runtime::GCNodeKind::Dref:
-        return "DREF";
     default:
         return "NODE";
     }
@@ -220,8 +216,6 @@ string recordType(const camel::runtime::GCNode &record) {
         return "JOIN";
     case camel::runtime::GCNodeKind::Call:
         return "CALL";
-    case camel::runtime::GCNodeKind::Bind:
-        return "BIND";
     case camel::runtime::GCNodeKind::Func:
         return "FUNC";
     case camel::runtime::GCNodeKind::Oper:
@@ -230,8 +224,6 @@ string recordType(const camel::runtime::GCNode &record) {
         return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
-    case camel::runtime::GCNodeKind::Dref:
-        return "DREF";
     default:
         return "NODE";
     }
@@ -246,7 +238,6 @@ string recordShape(const camel::runtime::GCNode &record) {
     case camel::runtime::GCNodeKind::Brch:
     case camel::runtime::GCNodeKind::Join:
     case camel::runtime::GCNodeKind::Call:
-    case camel::runtime::GCNodeKind::Bind:
     case camel::runtime::GCNodeKind::Oper:
     case camel::runtime::GCNodeKind::Sync:
     case camel::runtime::GCNodeKind::Gate:
@@ -584,8 +575,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const auto nodeRef = it.ref();
         const auto *node   = *it;
-        if (!node || node->kind == camel::runtime::GCNodeKind::Port ||
-            node->kind == camel::runtime::GCNodeKind::Dref) {
+        if (!node || node->kind == camel::runtime::GCNodeKind::Port) {
             continue;
         }
         string label   = recordLabel(graph, nodeRef, *node);

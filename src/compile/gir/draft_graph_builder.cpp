@@ -200,10 +200,6 @@ DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCC
     return draft_->node(draft_->addCallNode(type, body));
 }
 
-runtime::DraftNode *DraftGraphBuilder::addBindNode(camel::core::type::Type *type) {
-    return draft_->node(draft_->addBindNode(type));
-}
-
 runtime::DraftNode *
 DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");

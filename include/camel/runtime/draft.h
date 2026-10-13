@@ -298,7 +298,6 @@ class GraphDraft {
         gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addCallNode(
         camel::core::type::Type *type, const GCCallBody &body = {}, gc_slot_idx_t dataIndex = 0);
-    gc_node_ref_t addBindNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addFuncNode(
         GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0);

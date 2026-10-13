@@ -52,8 +52,6 @@ const char *kindName(GCNodeKind kind) {
         return "JOIN";
     case GCNodeKind::Call:
         return "CALL";
-    case GCNodeKind::Bind:
-        return "BIND";
     case GCNodeKind::Func:
         return "FUNC";
     case GCNodeKind::Oper:
@@ -62,8 +60,10 @@ const char *kindName(GCNodeKind kind) {
         return "SYNC";
     case GCNodeKind::Gate:
         return "GATE";
+    case GCNodeKind::Bind:
     case GCNodeKind::Dref:
-        return "DREF";
+        // Reserved kinds: never part of a frozen graph (see GCNodeKind).
+        break;
     }
     return "NODE";
 }
@@ -80,8 +80,6 @@ bool executesKind(GCNodeKind kind) {
     case GCNodeKind::Port:
     case GCNodeKind::Sync:
     case GCNodeKind::Gate:
-    case GCNodeKind::Dref:
-    case GCNodeKind::Bind:
         return false;
     default:
         return true;

@@ -40,31 +40,12 @@ namespace camel::compile::gir {
 // Enum and string-conversion declarations
 // =============================================================================
 
-enum class NodeType {
-    DATA,
-    PORT,
-    CAST,
-    COPY,
-    FILL,
-    ACCS,
-    BRCH,
-    JOIN,
-    CALL,
-    BIND,
-    FUNC,
-    OPER,
-    SYNC,
-    GATE,
-    DREF,
-};
-
 enum class LinkType {
     Norm,
     With,
     Ctrl,
 };
 
-std::string to_string(NodeType type);
 std::string to_string(LinkType type);
 
 // =============================================================================

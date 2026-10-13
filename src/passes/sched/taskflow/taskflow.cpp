@@ -692,8 +692,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
         plan.anchorOk && plan.lastNode < blocks ? pos[plan.lastNode] : kNo;
 
     const auto isElided = [](GCNodeKind kind) {
-        return kind == GCNodeKind::Data || kind == GCNodeKind::Port || kind == GCNodeKind::Sync ||
-               kind == GCNodeKind::Bind || kind == GCNodeKind::Dref;
+        return kind == GCNodeKind::Data || kind == GCNodeKind::Port || kind == GCNodeKind::Sync;
     };
 
     // Where each executable node lives: its scope and its item there. BRCH and JOIN map to the
@@ -1405,8 +1404,6 @@ void TaskflowExecSchedPass::runLinearBody(
         case GCNodeKind::Data:
         case GCNodeKind::Port:
         case GCNodeKind::Sync:
-        case GCNodeKind::Bind:
-        case GCNodeKind::Dref:
             break;
         case GCNodeKind::Oper:
             if (graph->nodeBodyAs<GCOperBody>(nodeRef)->uri().starts_with(":mark/")) {
@@ -1729,10 +1726,6 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
     }
 
     case GCNodeKind::Brch:
-        return NullSlot;
-
-    case GCNodeKind::Bind:
-    case GCNodeKind::Dref:
         return NullSlot;
 
     default: {
@@ -2069,6 +2062,8 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Bind:
     case GCNodeKind::Dref:
+        // Reserved kinds: never part of a frozen graph (see GCNodeKind). Listed only to keep
+        // this switch exhaustive.
         return NullSlot;
     }
 
@@ -2105,9 +2100,6 @@ void TaskflowExecSchedPass::buildRuntimeNodeTasks(
             continue;
         }
         if (nodeRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[nodeRef] != 0) {
-            continue;
-        }
-        if (node->kind == GCNodeKind::Bind || node->kind == GCNodeKind::Dref) {
             continue;
         }
 

@@ -268,12 +268,6 @@ gc_node_ref_t GraphDraft::addCallNode(
         });
 }
 
-gc_node_ref_t GraphDraft::addBindNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
-    dataIndex = ensureValueSlot(*this, type, dataIndex);
-    return addNode(
-        DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Bind});
-}
-
 gc_node_ref_t GraphDraft::addFuncNode(
     GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
     gc_slot_idx_t dataIndex) {

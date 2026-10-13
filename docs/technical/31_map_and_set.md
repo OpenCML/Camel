@@ -75,7 +75,7 @@ data** by its static type: a collection can be a constant of a graph (the result
 function under `std::macro`), and a constant is copied, searched for function values and
 validated by six `switch`es over `Array`/`Tuple`/`Struct`/`Function` (two in
 `compile/gir/graph_encode.cpp`, two in `runtime/draft_session.cpp`, one each in
-`runtime/graph.cpp` and `compile/gir/validate.cpp`). Their `default` treated a module object
+`runtime/graph.cpp` and the since-removed `compile/gir/validate.cpp`). Their `default` treated a module object
 as a leaf, which is right for a tensor and wrong for a container of Camel values: the copy
 kept pointing into the compile-time data. Each now handles a collection through
 `rtdata::table::forEachSlot` / `withSlots`. A module type that holds Camel references has no

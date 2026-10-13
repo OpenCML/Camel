@@ -73,22 +73,31 @@ inline constexpr gc_cnt_t blocksForBytes(size_t bytes) {
     return static_cast<gc_cnt_t>((bytes + kGCBlockBytes - 1) / kGCBlockBytes);
 }
 
+// The kinds of node. The numeric values are part of the graph model (docs/design/graph-model,
+// section 3.5) and must not be renumbered.
+//
+// Two values are reserved and never appear in a frozen graph (GCGraph):
+//  - Bind: nothing creates it; partial application is a closure (a FILL of a function value).
+//  - Dref: the front end's placeholder for a name whose target is not settled yet. It lives in
+//    build-time drafts only; encoding a graph that still holds one is an error
+//    (graph_encode.cpp, validateRuntimeGraphPayload).
+// Consumers of frozen graphs therefore do not handle either.
 enum class GCNodeKind : uint8_t {
-    Data,
-    Port,
-    Cast,
-    Copy,
-    Fill,
-    Accs,
-    Brch,
-    Join,
-    Call,
-    Bind,
-    Func,
-    Oper,
-    Sync,
-    Gate,
-    Dref,
+    Data = 0,
+    Port = 1,
+    Cast = 2,
+    Copy = 3,
+    Fill = 4,
+    Accs = 5,
+    Brch = 6,
+    Join = 7,
+    Call = 8,
+    Bind = 9, // reserved, see above
+    Func = 10,
+    Oper = 11,
+    Sync = 12,
+    Gate = 13,
+    Dref = 14, // build-time only, see above
 };
 
 enum class GCReturnKind : uint8_t {

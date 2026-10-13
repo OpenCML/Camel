@@ -431,10 +431,6 @@ static bytecode_vec_t compileRuntimeGraph(
             appendBytecode(bytecodes, OpCode::CALL, record->dataIndex, {}, normOps, withOps);
             break;
 
-        case camel::runtime::GCNodeKind::Bind:
-            ASSERT(false, "BIND node not implemented.");
-            break;
-
         case camel::runtime::GCNodeKind::Func: {
             bool isTail = runtimeNodeIndex == tailValueNode && hasOnlyTrivialSuffixAfter(i);
             auto *targetRuntimeGraph = graph->directCalleeGraphOf(runtimeNodeIndex);
@@ -564,8 +560,6 @@ static bytecode_vec_t compileRuntimeGraph(
         case camel::runtime::GCNodeKind::Port:
             [[fallthrough]];
         case camel::runtime::GCNodeKind::Sync:
-            [[fallthrough]];
-        case camel::runtime::GCNodeKind::Dref:
             continue;
 
         default:

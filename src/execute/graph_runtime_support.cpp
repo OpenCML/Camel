@@ -696,8 +696,7 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
         if (node && node->kind != camel::runtime::GCNodeKind::Data &&
             node->kind != camel::runtime::GCNodeKind::Port &&
             node->kind != camel::runtime::GCNodeKind::Sync &&
-            node->kind != camel::runtime::GCNodeKind::Gate &&
-            node->kind != camel::runtime::GCNodeKind::Dref) {
+            node->kind != camel::runtime::GCNodeKind::Gate) {
             return nodeRef;
         }
     }

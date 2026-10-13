@@ -3149,8 +3149,7 @@ node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
 //
 // This helper is the canonical point where compile-time graph references become IR-level
 // dependencies. Every emitted FUNC node or static Function object must be backed by an explicit
-// dependency edge, except the self-recursive case which is encoded by the owner graph's
-// `looped` bit.
+// dependency edge; a self-recursive graph lists itself as a dependency.
 //
 // When `allowParameterization=true`, unresolved closure captures may be rewritten into explicit
 // with-ports on the target graph. That mutation is only valid during the build phase.
@@ -3569,8 +3568,8 @@ node_handle_t Builder::createFuncDataNode(
     rejectImportedFunctionWithCaptures(graph);
 
     // Centralize dependency bookkeeping here so every FUNC node and static Function value obeys
-    // the same graph-reference invariant. Self-dependency is intentional: recursive graphs are
-    // represented by the owner's `looped` flag.
+    // the same graph-reference invariant. Self-dependency is intentional: a recursive graph lists
+    // itself as a dependency.
     currGraph_->addDependencyGraph(graph);
 
     bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();

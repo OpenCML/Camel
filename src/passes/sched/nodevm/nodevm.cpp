@@ -804,7 +804,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             case GCNodeKind::Sync:
                 [[fallthrough]];
             case GCNodeKind::Gate:
-            case GCNodeKind::Dref:
                 break;
 
             default: {

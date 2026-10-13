@@ -67,8 +67,6 @@ std::string_view kindName(GCNodeKind kind) {
         return "JOIN";
     case GCNodeKind::Call:
         return "CALL";
-    case GCNodeKind::Bind:
-        return "BIND";
     case GCNodeKind::Func:
         return "FUNC";
     case GCNodeKind::Oper:

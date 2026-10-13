@@ -507,17 +507,13 @@ RuntimeCppGraphPlan RuntimeCppEmitter::analyzeGraph(GCGraph *graph) const {
         case GCNodeKind::Call:
         case GCNodeKind::Fill:
         case GCNodeKind::Accs:
-        case GCNodeKind::Bind:
-        case GCNodeKind::Sync:
-        case GCNodeKind::Dref: {
+        case GCNodeKind::Sync: {
             const char *construct =
                 node->kind == GCNodeKind::Call   ? "a call of a function value"
                 : node->kind == GCNodeKind::Fill ? "the construction of a struct, tuple, array or "
                                                    "closure value"
                 : node->kind == GCNodeKind::Accs ? "an access to an element or a field"
-                : node->kind == GCNodeKind::Bind ? "a function bound to its 'with' arguments"
-                : node->kind == GCNodeKind::Sync ? "a sync block"
-                                                 : "a read through a reference";
+                                                 : "a sync block";
             refuse(
                 nodeRef,
                 std::format(

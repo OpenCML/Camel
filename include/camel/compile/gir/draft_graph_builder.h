@@ -72,12 +72,10 @@ class DraftGraphBuilder {
     bool hasFrameLayout() const { return draft_->hasFrameLayout(); }
     size_t frameSize() const { return draft_->frameSize(); }
     bool parameterized() const { return parameterized_; }
-    bool looped() const { return looped_; }
     void setName(std::string name) { name_ = std::move(name); }
     void setStableId(std::string stableId) { stableId_ = std::move(stableId); }
     void setOuterGraph(const graph_ptr_t &graph) { outerGraph_ = graph; }
     const graph_ptr_t &outerGraph() const { return outerGraph_; }
-    void setLooped(bool looped) { looped_ = looped; }
     void setParameterized(bool parameterized) { parameterized_ = parameterized; }
     template <typename T, std::size_t Index> T *getExtra() const { return extras_.get<T, Index>(); }
     template <typename T, std::size_t Index> void setExtra(T *ptr) const {
@@ -113,7 +111,6 @@ class DraftGraphBuilder {
         camel::core::type::Type *type, runtime::DraftNode *brchNode, runtime::gc_cnt_t armCount);
     runtime::DraftNode *
     addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body = {});
-    runtime::DraftNode *addBindNode(camel::core::type::Type *type);
     runtime::DraftNode *addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
     runtime::DraftNode *addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);
     runtime::DraftNode *addSyncNode();
@@ -208,7 +205,6 @@ class DraftGraphBuilder {
     std::string name_;
     std::string stableId_;
     graph_ptr_t outerGraph_;
-    bool looped_        = false;
     bool parameterized_ = false;
 
     std::unordered_map<const runtime::DraftNode *, std::string> nodeDebugIds_;
