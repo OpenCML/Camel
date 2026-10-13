@@ -142,7 +142,7 @@
 - `std::specialize`：运行时原生的特化遍
 - `std::opt`：聚合的运行时原生优化流水线（`devirtualize` + `specialize` + `inline`）
 - `std::fvm`：高性能字节码虚拟机调度器
-- `std::jit`：启用即时编译的字节码虚拟机调度器
+- `std::jit`：启用即时编译的字节码虚拟机调度器。即时编译器只为 x86-64 生成代码；在其他处理器的构建中（arm64 macOS；`ENABLE_FASTVM_JIT` 关闭）`std::jit` 仍被接受，程序在字节码解释器上运行，与 `std::fvm` 相同，结果一致；该构建在日志里说明一次（`-v`：`std::jit: this build has no native code generator ...`）。这是一条日志而不是警告，所以同一条命令在所有平台上都能运行，`-Werror` 下也一样
 - `std::gir`：转储当前的图中间表示并停止
 - `tensor::fuse`、`onnx::export`：由模块贡献的遍。在命令行上写 `<module>::<pass>` 时，如果程序没有导入模块 `<module>`，就加载它，所以程序不必仅仅为了让某个模块的遍来翻译它而导入该模块。找不到模块，或模块里没有这个遍，名字就仍是未知的（`RuntimeDiag::UnrecognizedGraphPass`）
 
@@ -258,7 +258,7 @@
 | 同一个递归函数的仅类型特化（张量实参的形状在递归的每一层都变化） | 8 | 否 | 这次调用保留它的被调用者 |
 | 非尾递归，在每个调度器上相同：`std::nvm`、`std::fvm`、`std::jit`（解释执行的和编译为原生代码的调用一样计数）和 `std::tf` / `std::prl`（计数随元素转到运行它的工作线程上） | 1000 个打开的调用 | `--max-recursion-depth <n>`、`CAMEL_MAX_RECURSION_DEPTH=<n>`（1 到 1000000） | 程序停止，诊断为 `RuntimeDiag::MaxRecursionDepthExceeded`（`0x04000004`，阶段 `run`，退出码 1），定位在将成为第 1001 个打开调用的调用表达式；在它之前运行的已经运行，其输出已经写出。消息给出上限（`Maximum recursion depth (1000) exceeded when evaluating graph '...'.`），建议给出选项和变量 |
 | `std::jit` 编译为原生代码的代码中的递归（分支臂已被内联的自递归函数，例如在 `std::inline` 之后）占用的原生栈 | 无单独的上限：递归深度按上一行计数 | 上一行的选项和变量 | 默认上限下与解释执行给出同一条诊断（`camel f.cml std::inline std::jit`：`depth(999)` 运行，`depth(1000)` 是 `MaxRecursionDepthExceeded`）。原生栈将满的检查不覆盖已编译的代码：上限调得很高而递归确实很深时，进程以段错误结束，没有诊断（上限为 1000000 时，20000 层的递归能运行，100000 层的递归崩溃） |
-| `std::tf` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈大小取进程的栈上限） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
+| `std::tf` 上线程的原生栈 | 与下一行相同：计数之外，线程的栈用掉十六分之十五时拒绝再嵌套一次调用 | `ulimit -s` 等（工作线程的栈至少 8 MiB：Unix 上进程的栈上限、Windows 上可执行文件的栈大小更大时取后者） | 在该调用处给出 `MaxRecursionDepthExceeded`；此时消息给出打开的调用数和栈的大小。默认上限（1000）在 Linux 默认的 8 MiB 栈下远够不到这里（见下文的实测） |
 | 线程的原生栈，所有执行后端 | 线程的栈（Linux 上主线程默认 8 MiB） | `ulimit -s` 之类 | 在原生栈将满（Unix 上剩余不足十六分之一，且至少保留 128 KiB；Windows 为 SEH 故障展开保留十六分之十五）时还要嵌套的调用，在到达上面的上限之前就被拒绝，诊断为 `MaxRecursionDepthExceeded`；消息说明原生栈已满。正是这一点使调高的上限不至于以段错误告终。栈的边界在 Linux（glibc）、Windows 和 macOS 上读取（Windows 也已验证；macOS 已实现，但没有编译或运行过）；在其他平台上，上限不能调高到默认值以上 |
 | `std::macro` 对 `macro` 函数的提前求值 | 64 个求值器帧（32 层的自递归：`count(31)` 被求值，`count(32)` 不被求值） | `--max-macro-depth <n>`、`CAMEL_MAX_MACRO_DEPTH=<n>`（1 到 1000000） | 求值失败：在该调用处给出错误 `RuntimeDiag::MacroEvaluationFailed`，流水线停止（见“`std::macro` 报告什么”）。求值器在原生栈上嵌套（每帧约 630 字节），栈将满时以同样的方式停下 |
 | 一张图的节点、节点块和边表项（一个节点占若干个 8 字节的块，即它的头部和它携带的内容；每条边占两个表项，两端各一个；所以一张图远在有 65535 个节点之前就满了） | 各 65535（16 位） | 否 | 构建该图的遍在任何东西运行之前失败，诊断为 `RuntimeDiag::GraphTooLarge`（`0x04000013`，阶段 `pass:<name>`），定位在编译出该图的函数（对遍创建的图，定位在它的某个节点），指出图、数量、它需要的大小和上限。在不受大小上限约束进行内联的 `onnx::export` 和 `onnx.export_model` 里，它是在 `export_model` 调用处的一次拒绝，带有同样的四项信息 |
@@ -280,7 +280,7 @@
 | `std::fvm`，通过函数值的调用或高阶算子的元素调用 | 同上，再加上原生栈上解释器循环的一次嵌套激活 | 嵌套激活约占 1.7 KiB 原生栈 | 4587 次嵌套激活；然后是诊断（不做检查时在 4890 处崩溃） |
 | `std::tf` | 每张图一个的池（堆）里的帧，加上原生栈上的求值器 | 约 520 字节原生栈 | 14875 次调用；然后是诊断（不做检查时在 15858 处崩溃） |
 
-**默认上限的余量**（Linux x86-64、发布构建实测）：把栈上限逐步调小，默认上限允许的最深递归（直接递归 `depth(999)`、经函数值 `step(499)`、`map` 元素内 `depth(998)`）仍能跑完所需的最小 `ulimit -s`：`std::nvm` 与 `std::tf` 三种情形都是 768 KiB；`std::fvm` 与 `std::jit`（含 `std::inline std::jit`）直接递归和 `map` 内是 192 KiB，经函数值是 1024 KiB。默认的 8 MiB 栈因此有 8 倍以上的余量；栈更小时得到的是上面那条“原生栈已满”的诊断，不是崩溃。Windows 上线程的默认栈是 1 MiB，测试集在那里第一次运行时，默认上限下 `std::nvm`（以及经函数值的 `std::fvm`）遇到的就是这条诊断，`std::tf` 则是栈溢出；因此各工具以 32 MiB 的栈链接（`/STACK`，见 `tools/libcamel_tool.cmake`），在 Windows 上这也是进程创建的每个线程的栈。macOS 上主线程是 8 MiB，但 `std::tf` 的工作线程是 512 KiB，默认上限下最深的递归若落在工作线程上可能先遇到这条诊断，尚未验证。自行加载 `libcamel` 的宿主（Python 包）用的是宿主自己的栈。
+**默认上限的余量**（Linux x86-64、发布构建实测）：把栈上限逐步调小，默认上限允许的最深递归（直接递归 `depth(999)`、经函数值 `step(499)`、`map` 元素内 `depth(998)`）仍能跑完所需的最小 `ulimit -s`：`std::nvm` 与 `std::tf` 三种情形都是 768 KiB；`std::fvm` 与 `std::jit`（含 `std::inline std::jit`）直接递归和 `map` 内是 192 KiB，经函数值是 1024 KiB。默认的 8 MiB 栈因此有 8 倍以上的余量；栈更小时得到的是上面那条“原生栈已满”的诊断，不是崩溃。Windows 上线程的默认栈是 1 MiB，测试集在那里第一次运行时，默认上限下 `std::nvm`（以及经函数值的 `std::fvm`）遇到的就是这条诊断，`std::tf` 则是栈溢出；因此各工具以 32 MiB 的栈链接（`/STACK`，见 `tools/libcamel_tool.cmake`），在 Windows 上这也是进程创建的每个线程的栈。`std::tf` 的工作线程在所有平台上都以指定的栈大小创建，至少 8 MiB：不指定大小创建的线程在 macOS 上只有 512 KiB，在 Windows 上由宿主加载 `libcamel` 时（`python.exe`）只有宿主的 1 MiB（`include/camel/utils/big_stack_thread.h`、`cmake/TaskflowWorkerStack.cmake`）。macOS 这一侧尚未运行过。自行加载 `libcamel` 的宿主（Python 包）用的是宿主自己的栈。
 
 `std::nvm` 和 `std::fvm` 的帧池按上限确定大小：每个可能打开的调用 4 KiB（默认值下约 4 MiB），最多 256 MiB；它一次性保留，只有用到的部分才被触及。帧非常大的函数的递归可能在计数到达之前就把它填满；那是同一条带位置的诊断，说明帧池已满。运行时间不受上限影响。`CAMEL_NATIVE_STACK_GUARD=0` 关闭原生栈检查；它用于测量栈实际在哪里结束（上面的崩溃点），不供正常使用。
 

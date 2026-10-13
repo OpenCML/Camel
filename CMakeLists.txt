@@ -128,6 +128,10 @@ target_link_libraries(libcamel PRIVATE
     Taskflow::Taskflow
 )
 
+# Workers of the parallel scheduler with an 8 MiB stack on every platform.
+include(${PROJECT_SOURCE_DIR}/cmake/TaskflowWorkerStack.cmake)
+camel_taskflow_with_worker_stack(libcamel)
+
 # External modules: compile python / pyplot / io and similar sources into .cmo.
 # Python embedding (python.cmo, pyplot.cmo, py_bridge*) requires Development headers and import libraries.
 # Without a venv/SDK, modules/python/CMakeLists.txt returns early; calling add_subdirectory(pyplot) anyway will fail on find_package(REQUIRED).
