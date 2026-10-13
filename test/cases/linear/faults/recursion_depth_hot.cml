@@ -6,8 +6,8 @@
  */
 module recursion_depth_hot
 
-func loop(n: int, acc: int): int {
-    return if n <= 0 then acc else loop(n - 1, acc + n)
+func spin(n: int, acc: int): int {
+    return if n <= 0 then acc else spin(n - 1, acc + n)
 }
 
 func down(n: int): int {
@@ -20,7 +20,7 @@ func tree(n: int): int {
 }
 
 func main(): int sync {
-    println('loop {}'->format<loop(1000000, 0)>)
+    println('loop {}'->format<spin(1000000, 0)>)
     println('down {}'->format<down(999)>)
     println('tree {}'->format<tree(999)>)
     println('tree {}'->format<tree(1000)>)

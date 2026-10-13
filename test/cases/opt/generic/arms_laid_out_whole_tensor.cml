@@ -11,10 +11,10 @@ module arms_laid_out_whole_tensor
 
 import { Tensor, load_npy, sum } from tensor
 
-func loop(i: int, n: int, acc: Tensor): Tensor {
+func spin(i: int, n: int, acc: Tensor): Tensor {
     return if i >= n then acc else {
         let a2 = acc * 0.5
-        loop(i + 1, n, a2)
+        spin(i + 1, n, a2)
     }
 }
 
@@ -22,7 +22,7 @@ func main(): int sync {
     let x = load_npy('test/cases/opt/generic/arms_laid_out_whole_v4.npy')
     let n = int(x[0] + 2.6)
     let r = if n > 2 then {
-        let a = loop(0, 2, x)
+        let a = spin(0, 2, x)
         a
     } else x
     println('r {}'->format<sum(r, 0, true)[0]>)

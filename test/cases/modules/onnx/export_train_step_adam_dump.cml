@@ -19,13 +19,13 @@ func loss(x: Tensor): float {
     return mean(y * y)
 }
 
-sync func loop(m: Mlp, st: OptimizerState, x: Tensor, i: int, steps: int, dir: string): Mlp {
+sync func spin(m: Mlp, st: OptimizerState, x: Tensor, i: int, steps: int, dir: string): Mlp {
     return if i >= steps then m else sync {
         let vg = value_and_grad(loss)<m>(x)
         let next = adam(m, vg.1, st, 0.001)
         'step={} loss={}'->format<i, vg.0>->println
         save_params(next.0, dir + '/step_' + '{}'->format<i>)
-        return loop(next.0, next.1, x, i + 1, steps, dir)
+        return spin(next.0, next.1, x, i + 1, steps, dir)
     }
 }
 
@@ -37,6 +37,6 @@ func main(): int sync {
         b2: reshape([0.2], [1])
     }
     let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
-    loop(m, adam_state(m), x, 0, int(get_env('STEPS')), get_env('DUMP_DIR'))
+    spin(m, adam_state(m), x, 0, int(get_env('STEPS')), get_env('DUMP_DIR'))
     return 0
 }

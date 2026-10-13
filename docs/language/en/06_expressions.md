@@ -299,6 +299,28 @@ Tuple patterns, struct patterns, and identifier patterns on values of ordinary t
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph): writing it gives `SemanticDiag::TryCatchNotInLanguage`. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
+### 6.8.3 `loop` (provisional notation, not implemented)
+
+A loop is an expression with a state (design principles 2.10). The state is written in the head of the loop, the value of the body is the state of the next round, and the value of the whole loop is the last state.
+
+```
+loop state = init (for name in sequence)? (while condition)? { body }
+```
+
+```cml
+let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
+let total    = loop acc = 0 for x in xs { acc + x * x }
+let found    = loop found = -1 for x in xs while found < 0 { if x > 9 then x else found }
+```
+
+- The state is one name, or several names in parentheses (the state is then a tuple).
+- `for` takes one element of the sequence per round, `while` goes on as long as its condition holds; with both, the loop ends when the elements are used up or the condition fails. At least one of them is written. There is no `break` and no `continue`: ending early is written as the `while` condition.
+- The first value and the sequence are evaluated once, and the names of the state are not visible in them; the condition and the body see the names of the state and the name bound by `for`.
+- The first value, the sequence and the condition are operator expressions; an `if`, a `match` or an assignment goes in parentheses. The body is always a block; a struct literal as its value takes a second pair of braces: `{ { x: 1 } }`.
+- `loop` and `while` are keywords.
+
+The syntax and the abstract syntax tree are in place; compiling a loop to the graph is not: using one gives `SemanticDiag::ConstructNotSupported`.
+
 ## 6.9 Lambdas and function types
 
 A lambda is written `(parameters): return-type => body`; the return type can be omitted, and the body is an expression or a block:

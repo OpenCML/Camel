@@ -367,7 +367,7 @@
         },
         {
           "name": "keyword.control.loop.camel",
-          "match": "\\b(?:for|in)\\b"
+          "match": "\\b(?:loop|while|for|in)\\b"
         },
         {
           "name": "keyword.control.exception.camel",

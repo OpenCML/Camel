@@ -679,6 +679,6 @@ kind = "behavior"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"
 args = ["-vv", "${case}", "${run_inline_jit}"]
 expect_exit = 1
-expect_output_contains = ["compiled & cached graph 'loop'", "compiled & cached graph 'down'", "compiled & cached graph 'tree'"]
+expect_output_contains = ["compiled & cached graph 'spin'", "compiled & cached graph 'down'", "compiled & cached graph 'tree'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

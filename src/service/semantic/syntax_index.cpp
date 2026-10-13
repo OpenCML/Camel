@@ -339,6 +339,8 @@ class Walker {
             return;
         case NK::IfExpr:
             return ifExpr(cst::IfExpr(node));
+        case NK::LoopExpr:
+            return loopExpr(cst::LoopExpr(node));
         case NK::AnnoExpr:
             return annoExpr(cst::AnnoExpr(node));
         case NK::AccessExpr:
@@ -655,6 +657,32 @@ class Walker {
         if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
             declare(DeclKind::Binding, nameOf(ident), rangeOf(ctx), rangeOf(ctx));
         }
+        walkBlockBody(ctx.get<cst::StmtBlock>());
+        popScope();
+    }
+
+    /// loop state = init for x in xs while c { body }: init and xs are outside the scope of the
+    /// state names and of x; c and the body are inside.
+    void loopExpr(cst::LoopExpr ctx) {
+        const auto forClause   = ctx.get<cst::LoopFor>();
+        const auto whileClause = ctx.get<cst::LoopWhile>();
+        walk(ctx.expr());
+        walk(forClause.expr());
+        const Range whole = rangeOf(ctx);
+        pushScope(ScopeKind::Arm, whole);
+        if (auto tuple = ctx.get<cst::ParentIdents>()) {
+            for (const auto ident : tuple.get<cst::IdentList>().all<cst::IdentDef>()) {
+                if (nameOf(ident)) {
+                    declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
+                }
+            }
+        } else if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
+        }
+        if (auto ident = forClause.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
+        }
+        walk(whileClause.expr());
         walkBlockBody(ctx.get<cst::StmtBlock>());
         popScope();
     }

@@ -87,3 +87,54 @@ args = ["check", "-s", "${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_ast"
+desc = "`loop state = init (for x in xs)? (while c)? { body }` parses to a LoopExpr node with its four children: the first value, the optional sequence, the optional condition, the body block."
+kind = "behavior"
+case = "../../../cases/parse/rulings/loop_forms.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["LoopExpr: (i, acc)", "LoopExpr: acc for x", "LoopExpr: found for x"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_not_implemented"
+desc = "A loop is reported where it stands as not implemented yet (the LOOP node of the graph is the next step), not compiled into something else."
+kind = "negative"
+case = "../../../cases/parse/rulings/loop_forms.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 20
+expect_output_contains = ["'loop' is not supported: loops are not implemented yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_needs_for_or_while"
+desc = "A loop head without `for` and without `while` is a syntax error that says what is expected."
+kind = "negative"
+case = "../../../cases/parse/rulings/loop_needs_clause.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_line = 2
+expect_output_contains = ["expected 'for' or 'while'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_is_a_keyword"
+desc = "`loop` is a keyword: a function cannot be named `loop`."
+kind = "negative"
+case = "../../../cases/parse/rulings/loop_is_keyword.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::KeywordAsIdentifier"
+expect_diagnostic_line = 1
+expect_output_contains = ["'loop' is a keyword"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

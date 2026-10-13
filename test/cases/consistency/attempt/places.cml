@@ -20,8 +20,8 @@ func inv(x: int): int { return 60 / (x - 3) }
 func keep(x: int): bool { return 12 / (x - 2) > 0 }
 func step(acc: int, x: int): int { return acc + 12 / (3 - x) }
 
-func loop(i: int, n: int, acc: int): int {
-    return if i > n then acc else loop(i + 1, n, acc + 1000 / (500 - i))
+func spin(i: int, n: int, acc: int): int {
+    return if i > n then acc else spin(i + 1, n, acc + 1000 / (500 - i))
 }
 
 func kind(r: int!): string {
@@ -49,8 +49,8 @@ func main(): int sync {
     println(attempt(() => range(4, 8)->reduce<step, 0>) !! -3)
     println(attempt(() => range(0, 8)->reduce<step, 0>) !! -3)
 
-    println(kind(attempt(loop, 0, 400, 0)))
-    println(kind(attempt(loop, 0, 1000, 0)))
+    println(kind(attempt(spin, 0, 400, 0)))
+    println(kind(attempt(spin, 0, 1000, 0)))
     println('end')
     return 0
 }

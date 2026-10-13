@@ -2912,6 +2912,44 @@ any Builder::visitIdentRef(cst::IdentRef context) {
     return ref;
 }
 
+/*
+loopExpr : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock ;
+The children of the node are described at LoopExprLoad.
+*/
+any Builder::visitLoopExpr(cst::LoopExpr context) {
+    std::vector<Reference> state;
+    const auto tuple = context->get<cst::ParentIdents>();
+    if (tuple) {
+        for (const auto ident : tuple->get<cst::IdentList>()->all<cst::IdentDef>()) {
+            state.emplace_back(ident->text());
+        }
+    } else {
+        state.emplace_back(context->get<cst::IdentDef>()->text());
+    }
+    const auto forClause   = context->get<cst::LoopFor>();
+    const auto whileClause = context->get<cst::LoopWhile>();
+    Reference binder;
+    if (forClause) {
+        binder = Reference(forClause->get<cst::IdentDef>()->text());
+    }
+    node_ptr_t loopNode = createNodeAs<LoopExprLoad>(state, static_cast<bool>(tuple), binder);
+    setNodeTokenRangeByContext(loopNode, context);
+    *loopNode << any2node(visitExpr(context->expr()));
+    node_ptr_t sequence = createNodeAs<OptionalLoad>("Data");
+    if (forClause) {
+        setNodeTokenRangeByContext(sequence, forClause);
+        *sequence << any2node(visitExpr(forClause->expr()));
+    }
+    node_ptr_t condition = createNodeAs<OptionalLoad>("Data");
+    if (whileClause) {
+        setNodeTokenRangeByContext(condition, whileClause);
+        *condition << any2node(visitExpr(whileClause->expr()));
+    }
+    *loopNode << sequence << condition;
+    *loopNode << any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
+    return loopNode;
+}
+
 // ---- Dispatch on the kind of a node ----
 
 /// Any expression (what `dataExpr` derives).
@@ -2925,6 +2963,8 @@ any Builder::visitExpr(syn::Node context) {
     case NK::MatchExpr:
     case NK::TryExpr:
         return visitCtrlExpr(context);
+    case NK::LoopExpr:
+        return visitLoopExpr(cst::LoopExpr(context));
     case NK::AssignExpr:
         return visitAssignExpr(cst::AssignExpr(context));
     case NK::LogicalOrExpr:

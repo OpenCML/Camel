@@ -234,6 +234,7 @@ class ParserImpl {
     void parseMatchCase();
     void parsePattern();
     void parseTry();
+    void parseLoop();
     void parseCatchClause();
     void parseIndexValue();
     void parseKeyValuePair();

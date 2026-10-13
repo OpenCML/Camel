@@ -119,6 +119,7 @@ class Builder {
     /// IfExpr, MatchExpr, TryExpr.
     std::any visitCtrlExpr(syntax::Node context);
     std::any visitWaitExpr(syntax::cst::WaitExpr context);
+    std::any visitLoopExpr(syntax::cst::LoopExpr context);
     std::any visitAssignExpr(syntax::cst::AssignExpr context);
     std::any visitLogicalOrExpr(syntax::cst::LogicalOrExpr context);
     std::any visitLogicalAndExpr(syntax::cst::LogicalAndExpr context);

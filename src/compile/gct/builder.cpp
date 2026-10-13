@@ -1140,6 +1140,13 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::TryExpr:
         dataNode = visitTryExpr(ast);
         break;
+    case AST::DataType::LoopExpr:
+        // The syntax and the AST node (AST::LoopExprLoad) are in place; the LOOP node of the
+        // graph is not yet.
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("loop", "loops are not implemented yet");
+        throw BuildAbortException();
     case AST::DataType::Literal:
         dataNode = visitLiteral(ast);
         break;

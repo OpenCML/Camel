@@ -299,6 +299,28 @@ func main(): int sync {
 
 `try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射）：写了得到 `SemanticDiag::TryCatchNotInLanguage`。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
+### 6.8.3 `loop`（写法暂定，尚未实现）
+
+循环是一个带状态的表达式（设计原则 2.10）。状态写在循环头上，循环体的值是下一轮的状态，整个循环的值是最后的状态。
+
+```
+loop 状态 = 初值 (for 名字 in 序列)? (while 条件)? { 循环体 }
+```
+
+```cml
+let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
+let total    = loop acc = 0 for x in xs { acc + x * x }
+let found    = loop found = -1 for x in xs while found < 0 { if x > 9 then x else found }
+```
+
+- 状态是一个名字，或圆括号里的几个名字（此时状态是元组）。
+- `for` 每轮取序列的一个元素，`while` 在条件成立时继续；两者都写时，元素取完或条件不成立即结束。至少写其中一个。没有 `break` 与 `continue`：提前结束写成 `while` 条件。
+- 初值与序列只求值一次，其中看不到状态的名字；条件与循环体里看得到状态的名字与 `for` 绑定的名字。
+- 初值、序列、条件是运算符表达式；要写 `if`、`match` 或赋值时加圆括号。循环体必须是块；块里要以结构体字面量作值时再套一层花括号：`{ { x: 1 } }`。
+- `loop` 与 `while` 是关键字。
+
+目前语法与抽象语法树已经就位，编译到图的部分尚未实现：使用它得到 `SemanticDiag::ConstructNotSupported`。
+
 ## 6.9 lambda 与函数类型
 
 lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略；体是一个表达式或一个块：

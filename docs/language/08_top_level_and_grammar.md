@@ -128,7 +128,7 @@ keyParamPair       : 'var'? identDef ':' typeExpr ('=' dataExpr)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
-dataExpr           : waitExpr | ctrlExpr
+dataExpr           : waitExpr | ctrlExpr | loopExpr
 waitExpr           : 'wait'? assignExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
                      | 'match' identRef '{' matchCase+ '}'
@@ -170,6 +170,10 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
                      | '{' (pairedValues | identList)? ','? '}' | '_'
+loopExpr           : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+loopState          : identDef | parentIdents
+loopFor            : 'for' identDef 'in' logicalOrExpr
+loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
 typeExpr           : unionType (('?' | '!')+ | '?' unionType)?
 unionType          : interType ('|' interType)*
@@ -242,7 +246,7 @@ typeList           : typeExpr (',' typeExpr)*
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`T ? U`、`名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof`、`enum` | 语法错误 | 无 |
-| `for`、`while` 循环 | 语法错误（没有循环语法） | 递归；`map`/`filter`/`reduce`/`foreach` |
+| `loop 状态 = 初值 (for x in xs)? (while 条件)? { 体 }` | `ConstructNotSupported`（语法与 AST 已有，图上的 `LOOP` 节点尚未实现；写法是暂定的） | 递归；`map`/`filter`/`reduce`/`foreach` |
 | 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
 
 此外有几处“能写出来但目前用不了”：联合类型 `A | B`（成员类型的值不能进入它）、带函数类型的声明 `let f: (x: int) => int = g`。

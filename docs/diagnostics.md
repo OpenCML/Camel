@@ -414,7 +414,13 @@ To compare, write '==': if x == 1 then ...
 Choose another name, for example '{0}_'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/rulings/loop_is_keyword.cml`, run as `camel -E short test/cases/parse/rulings/loop_is_keyword.cml`)
+
+```camel
+func loop(i: int): int {
+    return i
+}
+```
 
 ### MissingComma
 

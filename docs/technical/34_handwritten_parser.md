@@ -209,6 +209,57 @@ Nothing else changes: no tables to regenerate, no prediction to re-check. For an
 (`loop … while … { }` as an operand) step 3 is a `case` in `parseExpr` or `parsePrimary`
 instead.
 
+### The `loop` expression (provisional notation)
+
+```
+loopExpr  : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+loopState : identDef | parentIdents
+loopFor   : 'for' identDef 'in' logicalOrExpr
+loopWhile : 'while' logicalOrExpr
+```
+
+`loop` and `while` are keywords. The CST node `LoopExpr` has the children `loop`, the state
+(`IdentDef` or `ParentIdents`), `=`, the first value, `LoopFor`?, `LoopWhile`?, `StmtBlock`. The AST
+node is `AST::LoopExprLoad` (`include/camel/parse/ast/data.h`), which the next stage is to turn
+into the `LOOP` node of the graph:
+
+| | |
+|---|---|
+| `state()` | the names of the state: one for `loop acc = …`, several for `loop (i, acc) = …` |
+| `isTuple()` | whether the state was written as a tuple pattern |
+| `binder()`, `hasFor()` | the name `for` binds each round; empty without `for` |
+| child 0, Data | the first value of the state; evaluated once, outside the scope of the names |
+| child 1, Optional Data | the sequence of `for`; evaluated once, outside that scope; empty without `for` |
+| child 2, Optional Data | the condition of `while`; state names and binder in scope; empty without `while` |
+| child 3, StmtBlock | the body; same scope; its value is the state of the next round |
+
+The value of the expression is the last state. With both clauses a round runs while an element
+is left and the condition holds. The GCT builder reports `ConstructNotSupported` at the loop
+for now; the formatter, the syntax index (scopes and bindings) and the editor grammar know the
+form.
+
+What the notation leaves awkward or open (for the language author):
+
+1. **The body block and struct literals.** The body is always a block, so `{ x: 1 }` after the
+   head is a block whose first statement fails at the `:`; a struct state needs `{ { x: 1 } }`.
+   Elsewhere (`if` arms, lambda bodies) `{ name: …` is read as a struct literal; here the block
+   was preferred because the body is mandatory and most states are not structs.
+2. **Where the first value, the sequence and the condition end.** They end at `for`, `while` or
+   `{`. A `{` never continues an operator expression, so there is no ambiguity as long as they
+   are operator expressions; `if`, `match`, a lambda with an expression body, and `??` (whose
+   right side is a whole expression) would swallow the `{` or the keyword, so the three are
+   restricted to `logicalOrExpr` and anything else goes in parentheses. `loop a = x ?? 0 while …`
+   therefore reads the `??` operand as `0`, then expects the clause: it works, but only because
+   the right side of `??` stops at `while`; `loop a = x ?? if c then 1 else 2 while …` does not.
+3. **`loop` and `while` as keywords** take two common names away. 17 files of the repository (54 places)
+   named a function `loop` (the usual name of a tail-recursive helper); they were renamed to `spin`.
+4. **A loop without a state** (`loop for x in xs { println(x) }`) is not in the notation: the
+   ruling says effects are iterated with `foreach`.
+5. **A tuple state of one name**, `loop (a,) = …`, is accepted and distinguished from
+   `loop a = …` (`isTuple()`); whether it should be is not said.
+6. `loop … for x in xs while c`: the order `for` then `while` is fixed; `while … for …` is a
+   syntax error.
+
 ## 5. The tree
 
 ```cpp

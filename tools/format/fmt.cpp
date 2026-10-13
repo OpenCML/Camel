@@ -1366,6 +1366,19 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(RelationalExpr)
         CAMEL_FORMAT(AdditiveExpr)
         CAMEL_FORMAT(MultiplicativeExpr)
+    case NK::LoopExpr: {
+        // loop state = init (for x in xs)? (while c)? { body }
+        string text = "loop " + any_cast<string>(visit(context.child(1).node())) + " = " +
+                      any_cast<string>(visit(context.expr()));
+        if (const auto clause = context.get<cst::LoopFor>()) {
+            text += " for " + any_cast<string>(visitIdentDef(clause.get<cst::IdentDef>())) +
+                    " in " + any_cast<string>(visit(clause.expr()));
+        }
+        if (const auto clause = context.get<cst::LoopWhile>()) {
+            text += " while " + any_cast<string>(visit(clause.expr()));
+        }
+        return text + " " + any_cast<string>(visitStmtBlock(context.get<cst::StmtBlock>()));
+    }
     case NK::ImportItem: {
         // name, or name as local
         string item = any_cast<string>(visitIdentDef(context.get<cst::IdentDef>(0)));

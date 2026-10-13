@@ -74,6 +74,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::KwIf:
     case TK::KwMatch:
     case TK::KwTry:
+    case TK::KwLoop:
     case TK::KwSync:
     case TK::KwMacro:
     case TK::KwAtomic:
@@ -84,7 +85,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     }
 }
 
-/// dataExpr : waitExpr | ctrlExpr
+/// dataExpr : waitExpr | ctrlExpr | loopExpr
 /// waitExpr : 'wait'? assignExpr
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
@@ -102,6 +103,8 @@ void ParserImpl::parseExpr() {
         return parseMatch();
     case TK::KwTry:
         return parseTry();
+    case TK::KwLoop:
+        return parseLoop();
     case TK::KwWait: {
         const size_t m = mark();
         bump();
@@ -862,6 +865,57 @@ void ParserImpl::parseTry() {
         parseStmtBlock();
     }
     close(m, NK::TryExpr);
+}
+
+/// loopExpr : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+/// loopState : identDef | parentIdents
+/// loopFor : 'for' identDef 'in' logicalOrExpr
+/// loopWhile : 'while' logicalOrExpr
+/// A loop is an expression with a state (design principles 2.10): the state is named after
+/// `loop` and given its first value; the block is evaluated once per round and its value is
+/// the state of the next round; the value of the loop is the last state. `for` takes the
+/// elements of a sequence one per round, `while` goes on as long as its condition holds, and
+/// with both the loop ends when either does.
+/// The first value, the sequence and the condition are operator expressions, not `if`, `match`
+/// or an assignment (write those in parentheses), so each ends at the keyword or the `{` that
+/// follows, since a `{` can never continue an expression. The body is always a block.
+void ParserImpl::parseLoop() {
+    const size_t m = mark();
+    bump();
+    if (cur_ == TK::LParen) {
+        parseBracketedIdents(TK::RParen, NK::ParentIdents);
+    } else {
+        parseIdentDef();
+    }
+    if (panic_ || !expect(TK::Assign)) {
+        return close(m, NK::LoopExpr);
+    }
+    parseLogicalOr();
+    bool clause = false;
+    if (cur_ == TK::KwFor && !panic_) {
+        const size_t fm = mark();
+        bump();
+        parseIdentDef();
+        if (!panic_ && expect(TK::KwIn)) {
+            parseLogicalOr();
+        }
+        close(fm, NK::LoopFor);
+        clause = true;
+    }
+    if (cur_ == TK::KwWhile && !panic_) {
+        const size_t wm = mark();
+        bump();
+        parseLogicalOr();
+        close(wm, NK::LoopWhile);
+        clause = true;
+    }
+    if (!clause && !panic_) {
+        unexpected({e(TK::KwFor), e(TK::KwWhile)});
+    }
+    if (!panic_) {
+        parseStmtBlock();
+    }
+    close(m, NK::LoopExpr);
 }
 
 /// catchClause : 'catch' identDef ':' typeExpr stmtBlock

@@ -68,6 +68,9 @@ CAMEL_NODE(WaitExpr, Expr)             // 'wait' assignExpr
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' identRef '{' matchCase+ '}'
 CAMEL_NODE(TryExpr, Expr)              // 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
+CAMEL_NODE(LoopExpr, Expr)             // 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+CAMEL_NODE(LoopFor, Other)             // 'for' identDef 'in' logicalOrExpr
+CAMEL_NODE(LoopWhile, Other)           // 'while' logicalOrExpr
 CAMEL_NODE(AssignExpr, Expr)           // logicalOrExpr (('=' | '+=' | ...) logicalOrExpr)?
 CAMEL_NODE(LogicalOrExpr, Expr)        // logicalAndExpr ('||' logicalAndExpr)*
 CAMEL_NODE(LogicalAndExpr, Expr)       // equalityExpr ('&&' equalityExpr)*
