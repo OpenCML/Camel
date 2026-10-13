@@ -368,13 +368,13 @@ timeout_ms = 60000
 [[tests]]
 name = "gc.jit_object_constant.poison"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-desc = "When objects move, std::jit compiles a graph with an object constant as framed code, which reads the constant from the static area (frameless code would bake its address in), and still compiles the scalar one as frameless code."
+desc = "When objects move, std::jit still compiles a graph with an object constant: the code reads the constant from the static area, which the collector updates, instead of baking its address in."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
 args = ["-vv", "${case}", "std::inline", "std::jit"]
 envs = ["CAMEL_GC_POISON=1"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'count' as frameless code", "compiled & cached graph 'tag' as framed code"]
+expect_output_contains = ["compiled & cached graph 'count' as frameless code", "compiled & cached graph 'tag' as frameless code"]
 expect_stdout_contains = ["leaf 50", "leaf 60 200", "leaf 70 200"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

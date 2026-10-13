@@ -161,6 +161,10 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
     return found;
 }
 
+// Arguments of a call that are kept in registers at once; a call with more copies them one by
+// one through memory (see FUNC and TAIL in compileBytecodeWith).
+constexpr size_t kMaxRegisterArgs = 4;
+
 // What keeps a unit from being compiled as frameless code (mir.h, JitExitKind): every construct
 // that needs the runtime. The single place that says which code a unit gets: none of these,
 // frameless; any, framed.
@@ -186,22 +190,32 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
     //    hold object references, e.g. a var parameter that a self call passes on. The
     //    allocator refuses a safepoint reached under frameless code
     //    (mm::detail::nativeCodeDepth, counted in FastVMSchedPass::invokeOwnedJitFrame).
-    // 2. A static slot that frameless code reads is baked into it as an immediate
-    //    (emitLoadStaticConst): for an object constant that is the address the object had at
-    //    compile time, and the code outlives any number of collections. A graph with an object
-    //    constant in its static area is therefore not frameless code when objects can move.
-    //    It is framed code, which reads object constants from the static area, a root the
-    //    collector updates in place.
-    if (camel::core::mm::autoSpace().youngGenCopyingEnabled()) {
-        const auto *staticLayout = unit.runtimeGraph->staticDataType();
-        if (staticLayout != nullptr && staticLayout->refCount() != 0) {
-            add(0,
-                "object-constants",
-                "graph needs the runtime: it has object constants and the collector moves "
-                "objects");
-            return found;
+    // 2. The code outlives any number of collections, so it must not contain the address of an
+    //    object. When objects can move, an object constant is read from the static area each
+    //    time (loadStaticConst in compileBytecodeWith): the area is a root the collector
+    //    updates in place. The one place that has no such load is a call or self tail call
+    //    with more arguments than are passed in registers, which copies constants as
+    //    immediates; a graph that passes an object constant there is framed code.
+    const bool objectsMove          = camel::core::mm::autoSpace().youngGenCopyingEnabled();
+    const auto *staticLayoutOfGraph = unit.runtimeGraph->staticDataType();
+    auto passesObjectConstantInMemory = [&](const Bytecode &bc) {
+        if (!objectsMove || staticLayoutOfGraph == nullptr)
+            return false;
+        const data_arr_t srcArgs  = bc.directCallSrcArgs();
+        const data_arr_t dstSlots = bc.directCallDstSlots();
+        size_t moved              = 0;
+        bool objectConstant       = false;
+        for (size_t i = 0; i < srcArgs.size() && i < dstSlots.size(); ++i) {
+            if (bc.opcode == OpCode::TAIL && srcArgs[i] == dstSlots[i])
+                continue;
+            ++moved;
+            const auto index = static_cast<size_t>(-srcArgs[i]);
+            objectConstant   = objectConstant ||
+                             (srcArgs[i] < 0 && index < staticLayoutOfGraph->size() &&
+                              camel::core::type::isGCTraced(staticLayoutOfGraph->codeAt(index)));
         }
-    }
+        return objectConstant && moved > kMaxRegisterArgs;
+    };
     const size_t graphEnd = unit.entryPc + unit.graphLength;
     ASSERT(
         graphEnd <= unit.bytecodes.size(),
@@ -248,6 +262,13 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
                         pc,
                         target ? target->name() : "<null>",
                         static_cast<const void *>(target)));
+            } else if (passesObjectConstantInMemory(bc)) {
+                add(pc,
+                    "object-constant-arg",
+                    std::format(
+                        "graph needs the runtime: pc={} passes an object constant among more "
+                        "arguments than fit registers, and the collector moves objects",
+                        pc));
             } else if (bc.opcode == OpCode::FUNC && frameBytes > x64::kMaxNativeFrameBytes) {
                 add(pc,
                     "frame-too-large",
@@ -414,13 +435,16 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
     x64::VRegId nextVReg                     = 0;
-    // A constant is read at compile time and becomes an immediate. Framed code does not do
-    // that for an object constant: its code runs across safepoints of the collector, and the
-    // static area is where the collector keeps the reference up to date. Frameless code holds
-    // such a reference only between its entry and its return, with no safepoint in between.
+    // A constant is read at compile time and becomes an immediate, except an object constant
+    // when the collector moves objects (the code outlives collections; the static area is
+    // where the collector keeps the reference up to date) and in framed code under either
+    // collector. A register that holds such a reference is not live across a safepoint:
+    // frameless code has none between its entry and its return, and in framed code no value
+    // lives across a helper call, an exit or a poll.
+    const bool objectsMove = camel::core::mm::autoSpace().youngGenCopyingEnabled();
     auto loadStaticConst = [&](data_idx_t idx, x64::VRegId v) {
         const auto index = static_cast<size_t>(-idx);
-        if (framed && staticLayout != nullptr && index < staticLayout->size() &&
+        if ((framed || objectsMove) && staticLayout != nullptr && index < staticLayout->size() &&
             camel::core::type::isGCTraced(staticLayout->codeAt(index))) {
             build.emitVLoadFromMemAt(v, reinterpret_cast<uint64_t>(staticBase + index));
         } else {
@@ -435,9 +459,6 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     const uint64_t helperOper      = reinterpret_cast<uint64_t>(&jitHelperOper);
     const uint64_t helperBytecode  = reinterpret_cast<uint64_t>(&jitHelperBytecode);
     const uint64_t helperBranchArm = reinterpret_cast<uint64_t>(&jitHelperBranchArm);
-    // Arguments of a call that are kept in registers at once; a call with more copies them
-    // one by one through memory (see FUNC and TAIL).
-    constexpr size_t kMaxRegisterArgs = 4;
     // Owns the parameter blocks the NativeJitFuncCall MIRs point to, until encoding is done.
     std::vector<std::unique_ptr<NativeJitCallParams>> callParams;
 
@@ -1121,7 +1142,12 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             for (size_t ai = 0; ai < srcArgs.size(); ++ai) {
                 NativeJitCallParams::Arg arg;
                 arg.dstDisp = slotDisp(dstSlots[ai]);
-                if (srcArgs[ai] <= 0) {
+                if (srcArgs[ai] < 0 && objectsMove && isObjectConstant(srcArgs[ai])) {
+                    // Read from the static area at every call (collectRuntimeConstructs keeps
+                    // such an argument to calls whose arguments are all in registers).
+                    arg.vreg = nextVReg++;
+                    loadStaticConst(srcArgs[ai], arg.vreg);
+                } else if (srcArgs[ai] <= 0) {
                     arg.isImm = true;
                     arg.imm   = staticBase[static_cast<size_t>(-srcArgs[ai])];
                 } else {
