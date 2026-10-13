@@ -1,0 +1,4 @@
+func main(): int sync {
+    println([x + 1 for x in 5])
+    return 0
+}

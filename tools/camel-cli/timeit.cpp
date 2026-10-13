@@ -33,21 +33,16 @@
 #include "camel/utils/windows_parser_guard.h"
 #include "nlohmann/json.hpp"
 
-#include "antlr4-runtime/antlr4-runtime.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
-#include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/init.h"
-#include "camel/parse/antlr/OpenCMLLexer.h"
-#include "camel/parse/antlr/OpenCMLParser.h"
 #include "camel/parse/ast/builder.h"
-#include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
@@ -83,7 +78,6 @@
 #endif
 
 namespace mm = camel::core::mm;
-using namespace antlr4;
 using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace std;
@@ -632,7 +626,7 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             return 1;
         } catch (Diagnostic &d) {
             if (invocation && invocation->parser) {
-                RangeConverter conv(invocation->parser->getTokens());
+                RangeConverter conv(invocation->parser->tokenPositions());
                 d.fetchRange(conv);
             }
             os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText()) << endl;

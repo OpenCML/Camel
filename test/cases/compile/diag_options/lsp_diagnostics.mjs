@@ -81,7 +81,7 @@ if (instance) {
     check('one related location', related.length === 1, JSON.stringify(related))
     if (related.length === 1) {
         check('related location is the call', related[0].location.uri === uriOf(generic) && related[0].location.range.start.line === 9, JSON.stringify(related[0].location))
-        check('related message names the instance', related[0].message.includes("in the instance 'twice<i64[]>'"), related[0].message)
+        check('related message names the instance', related[0].message.includes("in the instance 'twice<int[]>'"), related[0].message)
     }
     check('the message is free of the instance note', !instance.message.includes('instantiated'), instance.message)
 }

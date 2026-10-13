@@ -1,0 +1,15 @@
+// `map` over 20000 elements, each a tail-recursive loop of some tens of calls (the Collatz
+// sequence of the element): elements of a few microseconds, between map_light and map_heavy.
+module map_medium
+
+func collatz_steps(n: int, steps: int): int {
+    return if n == 1 then steps
+        else if n % 2 == 0 then collatz_steps(n / 2, steps + 1)
+        else collatz_steps(3 * n + 1, steps + 1)
+}
+
+func main(): int sync {
+    let steps = range(1, 20001)->map<(n: int): int => collatz_steps(n, 0)>
+    println(steps->reduce<(acc: int, cur: int): int => acc + cur, 0>)
+    return 0
+}

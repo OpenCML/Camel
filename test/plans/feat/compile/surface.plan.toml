@@ -26,14 +26,14 @@ expect_output_contains = ["'println' is used as a value here"]
 
 [[tests]]
 name = "surface.name_as_value_bound_operator"
-desc = "`println(len<1>)`: the same for an operator with `with` arguments bound (it was the same internal error)."
+desc = "`println(len<1>)`: an operator whose signature depends on its arguments, with `with` arguments bound, is no partial application (it was an internal error, then FunctionNameAsValue; since `f<w>` is a partial application the diagnostic says why this one cannot be made)."
 kind = "negative"
 case = "../../../cases/compile/surface/name_as_value_bound_operator.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
+expect_diagnostic_name = "SemanticDiag::PartialApplicationRefused"
 expect_diagnostic_line = 2
-expect_output_contains = ["'len' is used as a value here"]
+expect_output_contains = ["The context arguments <int> cannot be bound to 'len' as a value", "an operator whose signature depends on its arguments"]
 
 [[tests]]
 name = "surface.name_as_value_overloads"
@@ -45,7 +45,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 26
-expect_output_contains = ["an operator with 4 signatures [(i32) => i32; (i64) => i64; (f32) => f32; (f64) => f64]"]
+expect_output_contains = ["an operator with 4 signatures [(i32) => i32; (int) => int; (f32) => f32; (float) => float]"]
 
 [[tests]]
 name = "surface.name_as_value_user_overloads"
@@ -56,23 +56,20 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
 expect_diagnostic_line = 6
-expect_output_contains = ["2 functions of that name [(x: i64) => i64; (x: f64) => f64]"]
+expect_output_contains = ["2 functions of that name [(x: int) => int; (x: float) => float]"]
 
 [[tests]]
 name = "surface.if_without_else"
-desc = "`if c then println(...)`: the diagnostic says that the `if` has no `else` and its arm has a value, and how to write it (it named the types string and void, which the program does not show)."
-kind = "negative"
+desc = "`if c then println(...)` compiles and runs: an if without else has no value and its arm may be of any type (design principles 2.10). It used to be an error."
+kind = "behavior"
 case = "../../../cases/compile/surface/if_without_else.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::IfArmValueWithoutElse"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 5
-expect_output_contains = ["has no 'else' arm with a value", "return null"]
+expect_exit = 0
+expect_stdout_starts_with = "lt\n"
 
 [[tests]]
 name = "surface.if_without_else_ok"
-desc = "The rule is unchanged: an `if` without `else` whose arm ends with `return null` is a statement; the arm of the false one does not run."
+desc = "An arm that ends in nothing stays legal; the arm of the false one does not run."
 kind = "behavior"
 case = "../../../cases/compile/surface/if_without_else_ok.cml"
 args = ["-E", "short", "${case}"]
@@ -123,21 +120,25 @@ expect_output_contains = ["function composition is not implemented"]
 
 [[tests]]
 name = "surface.angle_then_string_line"
-desc = "A statement ending in `>` followed by a line with `<...>` of its own is read as one comparison chain: the warning at that `>` says the two statements may have been joined, next to the error that follows."
-kind = "negative"
+desc = "A statement ending in the `>` of angle arguments, followed by a line that starts with a string: two statements. The `>` touches the last argument, so it closes the list, and the line break ends the statement (it used to be read as one comparison chain)."
+kind = "behavior"
 case = "../../../cases/compile/surface/angle_then_string_line.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_output_contains = ["angle_then_string_line.cml:2:69: [Warn]", "name=SyntaxDiag::ComparisonAcrossLines", "name=SemanticDiag::NoMatchingFunction"]
+expect_exit = 0
+expect_stdout_contains = ["total = 3"]
+expect_output_not_contains = ["Warn", "Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
 
 [[tests]]
 name = "surface.angle_then_name_line"
-desc = "The same when the next line starts with a name: the warning explains the `Unresolved reference` to the name the statement declares."
+desc = "The same when the next line starts with a name: the name declared on the first line is known on the second (what is reported is that `format` wants a string, at line 3)."
 kind = "negative"
 case = "../../../cases/compile/surface/angle_then_name_line.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["angle_then_name_line.cml:2:69: [Warn]", "name=SyntaxDiag::ComparisonAcrossLines", "name=SemanticDiag::UnresolvedReference"]
+expect_output_contains = ["angle_then_name_line.cml:3:5: [Error]", "name=SemanticDiag::NoMatchingFunction"]
+expect_output_not_contains = ["ComparisonAcrossLines", "UnresolvedReference"]
 
 [[tests]]
 name = "surface.angle_then_semicolon"

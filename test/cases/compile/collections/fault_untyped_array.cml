@@ -4,10 +4,8 @@ module main
 // appended to, so the conversion is a fault with its position, on every back end.
 
 func main(): int sync {
-    var xs = []
-    xs->append<1>
     println("before")
-    let s = xs as Set<int>
+    let s = ([]->append<1>) as Set<int>
     println(s)
     println("never printed")
     return 0

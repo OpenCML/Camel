@@ -1,0 +1,20 @@
+/**
+ * `return null` in an arm of an unused `if` does not leave the function. It used to be
+ * exempt from the warning, being how an arm was given no value; an arm needs no such thing
+ * now, so it is reported like any other exit: the program most likely meant to leave `f`.
+ */
+module return_null_in_arm
+
+func f(x: int): int sync {
+    if x > 2 then sync {
+        println('big')
+        return null
+    }
+    println('after')
+    return x
+}
+
+func main(): int sync {
+    println(f(9))
+    return 0
+}

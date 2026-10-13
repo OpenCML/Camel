@@ -22,7 +22,6 @@
 #include "camel/core/module/userdef.h"
 #include "core/module/userdef_internal.h"
 
-#include "antlr4-runtime/antlr4-runtime.h"
 
 #include "camel/compile/gir/encode.h"
 #include "camel/core/debug_breakpoint.h"
@@ -31,7 +30,6 @@
 #include "compile/gir/builder.h"
 
 #include "camel/core/error/diagnostics.h"
-#include "camel/core/error/listener.h"
 
 #include "camel/utils/log.h"
 
@@ -41,7 +39,6 @@
 namespace fs = std::filesystem;
 
 using namespace std;
-using namespace antlr4;
 using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::error;

@@ -133,4 +133,3 @@ Hello, Camel!
 
 本项目贡献者编写的代码以 [MIT 许可证](../LICENSE)授权。
 
-来自 antlr4 的第三方代码以 BSD-3-Clause 许可证授权。

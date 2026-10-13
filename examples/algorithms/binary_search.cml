@@ -10,8 +10,8 @@ import { index_of } from array
 // Searches xs[lo, hi) for `target` and returns its index.
 func search(xs: int[], target: int, lo: int, hi: int): int? {
     let mid = (lo + hi) / 2
-    return if lo >= hi then { return null }
-        else if xs[mid] == target then { return mid }
+    return if lo >= hi then null
+        else if xs[mid] == target then mid
         else if xs[mid] < target then search(xs, target, mid + 1, hi)
         else search(xs, target, lo, mid)
 }

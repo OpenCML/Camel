@@ -1,7 +1,6 @@
 /**
- * A `match` without `case _` on a value no case matches is a fault with the position of the
- * match and the value. It used to read an arm that does not exist: the match gave 0, or the
- * scheduler crashed. A value a case matches behaves as before.
+ * A `match` without `case _` is a compile-time error (design principles 2.10): the compiler
+ * adds no arm of its own, so a value no case lists would have nowhere to go.
  */
 module no_case_matches_string
 
@@ -14,7 +13,5 @@ func f(s: string): int {
 
 func main(): int sync {
     println(f('a'), f('b'))
-    println(f('zzz'))
-    println('not reached')
     return 0
 }

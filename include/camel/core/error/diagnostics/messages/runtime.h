@@ -65,8 +65,6 @@ enum class RuntimeDiag : uint32_t {
     ConversionOutOfRange   = 0x000050,
     UnhandledError         = 0x000051,
     SliceOutOfRange        = 0x000052,
-    // 0x90 and up, clear of what other work adds after OperatorNotImplemented.
-    MatchNotExhaustive     = 0x000090,
     // Warnings (severity bits = Warn).
     PassesNeverRun = 0x10000F,
     ConstantExpressionFaults = 0x100015,

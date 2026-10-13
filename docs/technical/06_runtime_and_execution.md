@@ -79,10 +79,147 @@ than the call. A recursive graph is heavy exactly when its body is heavy apart f
 recursive calls.
 
 The rule is static: it is decided once per graph when its plan is built, and nothing is measured
-at run time. The higher-order operators keep their own fan-out (one task per element) whatever
-the rule says about the scope they sit in. `CAMEL_TF_FANOUT_ALL=1` switches the rule off (every
-scope that is not totally ordered runs as a task graph) for comparison; `CAMEL_TF_GC_STATS=1`
-prints the number of task graphs a run started (`[taskflow] run: task_graphs=N`).
+at run time. The higher-order operators decide for themselves, whatever the rule says about the
+scope they sit in: the ordered ones (`reduce`, `foreach`) run their steps on the calling thread,
+the unordered ones hand their elements out in measured chunks (4.3.2). `CAMEL_TF_FANOUT_ALL=1`
+switches the rule off (every scope that is not totally ordered runs as a task graph) for
+comparison; `CAMEL_TF_GC_STATS=1` prints the number of task graphs a run started and the number
+of workers (`[taskflow] run: task_graphs=N workers=W`; scopes, and unordered operators that
+asked for helpers).
+
+#### 4.3.2 What the parallel scheduler costs, and what it is for (开销模型)
+
+`std::prl` (`std::tf`) evaluates a graph with its own node-by-node evaluator
+(`src/passes/sched/taskflow/`), on the thread that reached the graph, and hands work to other
+workers in two places only: a scope with two unordered heavy items (4.3.1), and the elements of
+an unordered higher-order operator. The number of workers is `-t` / `--threads`, by default the
+number of hardware threads. Everything below was measured on one machine (Linux x86-64 in a
+container, 18 logical CPUs of a laptop processor with two kinds of cores, release build) while
+other builds were running on it; each table row comes from rounds in which the configurations
+ran in turn, and only the comparison within a round means anything. Nothing here was measured
+on Windows, on macOS or on an idle machine. The programs and the scripts are in
+`benchmarks/parallel/` (`run.sh` repeats the tables, `stack_sample.sh` the stack samples).
+
+**Cost model.** What a program pays on `std::prl` in addition to its operators:
+
+| What | When | Cost now | Before (trunk of 2026-10-12) |
+|---|---|---|---|
+| A node of a graph | every executed node | the evaluator's dispatch on the node kind, operands read through the graph. About the cost of `std::nvm`; `std::fvm` runs the same graph as bytecode 4 to 6 times faster | the same, plus resolving every operator by its URI (two string copies, two hash lookups, the read lock of the operator table) |
+| A call | every `FUNC`, `CALL` and element call | a frame from the calling thread's own list, the callee's plan from the thread's own cache, one check whether a collector is waiting | the mutex of the callee's graph twice, a hash insert and erase for the set of active frames, the shared lock of the plan table, two sequentially consistent stores |
+| A built-in operator, a branch | every one | nothing (the collector's region stays held; a branch checks whether a collector is waiting) | two sequentially consistent stores each |
+| A step of `reduce` / `foreach` | every element | a call | a task, in a chain of one task per element, inside a task graph per operator |
+| An element of `map` / `filter` / `apply` / `unordered_foreach` | every element | a call, plus one shared counter and two clock reads per *chunk* | a task |
+| Help from other workers | per unordered operator that asks for it | one task per helper (at most one per worker), their wake-up | (one task per element) |
+| A scope run as a task graph (4.3.1) | every execution of that scope | a pooled task graph: one task per chain, a mutex for the pool | the same |
+
+**How the elements of an unordered operator are run** (`runElements` in `taskflow.cpp`).
+Whether an element is worth a task cannot be read off the graph: a light graph can recurse for
+seconds, and a built-in operator can build a large array. So it is measured. The elements are
+claimed in chunks from a shared counter by whoever works on the operator. A chunk starts at one
+element; every finished chunk sets the size of the next ones to what fits 50 microseconds at the
+pace just measured (at most four times the last size, at most an eighth of an even share per
+worker). When the element function is *bounded and light* (built-in operators and direct calls
+without recursion), the calling thread starts alone and asks for helpers only when the rest, at
+the pace of its last chunk, is worth 200 microseconds or more; otherwise the helpers start at
+once, so that elements of seconds each run side by side from the first. With one worker, or one
+element, everything runs on the calling thread. The decision depends on time, so which thread
+ran an element and how many task graphs a run started can differ between two runs of a program
+with a light `map`; the result does not. The fault rule is unchanged (design principles 2.10):
+elements that started run to their end, elements after the smallest faulting index known do not
+start, the fault of the smallest index is reported (`ElementFaults`); within a chunk the elements
+run in index order.
+
+**Where the time went before** (stack samples of the trunk build, `stack_sample.sh`):
+
+- `map_heavy` (64 elements, each a scalar recursion), 18 workers: 71% of all thread samples were
+  inside `pthread_mutex_lock`, 84% under `TaskflowFramePool::acquire` / `release`. Every call
+  took the mutex of its callee's graph twice, and all workers were running the same function.
+  The run took 8 s of wall time and 30 to 49 s of CPU time for 0.25 s of work on `std::fvm`; the
+  process made 1.6 to 2.4 million voluntary context switches.
+- `fib` on one thread, where nothing is shared: of the samples of the working thread, 46% were in
+  the frame pool (mutex, hash set), 15% in the lookup of an operator by URI, 13% in the lock of
+  the plan table.
+- After the changes the same sample of `fib` shows no lock: 29% is the argument copy of a call
+  (`fillFrameForDirectInvoke`, shared with the other back ends), the rest is spread over the
+  evaluator.
+
+**Measurements.** Wall-clock seconds of the whole process, minimum / median over the rounds;
+CPU is user + system, minimum. "before" is the trunk the work was rebased on, "after" the same
+trunk with the changes. `std::prl` with the default 18 workers unless a row says otherwise.
+
+| Program (`benchmarks/parallel/cases/`) | `std::fvm` | `std::nvm` | `std::prl` before | `std::prl` after | CPU before -> after | Rounds, load average |
+|---|---|---|---|---|---|---|
+| `fib` (scalar recursion, no task) | 0.17 / 0.19 | 0.63 / 1.20 | 2.21 / 3.90 | 0.87 / 2.30 | 1.96 -> 0.74 | 5, 29 to 34 |
+| `fib`, one worker | | | 2.50 / 4.18 | 1.07 / 1.27 | 1.99 -> 0.74 | same |
+| `small_calls` (2e6 loop iterations, two small calls each) | 0.24 / 0.42 | 0.98 / 1.40 | 4.33 / 5.12 | 1.37 / 1.52 | 2.71 -> 0.96 | 5, 29 to 35 |
+| `map_light` (`map`, `filter`, `reduce` over 3e5 elements, a few operators each) | 0.05 / 0.15 | 0.11 / 0.15 | 1.12 / 1.32 | 0.08 / 0.10 | 2.30 -> 0.11 | 5, 29 to 33 |
+| `map_medium` (2e4 elements of some tens of calls) | 0.21 / 0.22 | 0.75 / 0.88 | 3.52 / 3.66 | 0.14 / 0.19 | 13.9 -> 1.18 | 5, 24 to 33 |
+| `map_heavy` (64 elements, a recursion of milliseconds each) | 0.25 / 0.29 | 1.07 / 1.25 | 6.99 / 8.17 | 0.26 / 0.28 | 29.9 -> 2.13 | 5, 20 to 26 |
+| `collatz_reduce` (8 `map` elements, each a `reduce` over 5000) | 0.45 / 0.48 | (1.2) | 7.82 / 8.67 | 0.39 / 0.42 | 46.3 -> 2.35 | 3, 14 to 15 |
+| `tensor_train` (60 SGD steps of a small MLP, after `std::macro`) | 0.22 / 0.24 | (0.3) | 0.22 / 0.25 | 0.25 / 0.26 | 0.88 -> 0.90 | 3, 15 |
+| `mc_pi` (16 elements, one module operator of 0.25 s each) | 4.07 / 4.16 | (4.0) | 0.91 / 0.93 | 0.75 / 0.91 | 7.2 -> 6.5 | 3, 14 to 16 |
+| `asian_mc` (16 elements, a module operator each) | 2.21 / 2.22 | | 0.44 / 0.50 | 0.48 / 0.49 | 3.4 -> 3.7 | 3, 13 to 14 |
+| `merge_sort` (8e6 values, leaves sorted by a module operator) | 1.40 / 1.43 | | 0.79 / 0.83 | 0.72 / 0.83 | 2.3 -> 1.9 | 3, 12 |
+
+The `std::nvm` figures in parentheses are from an earlier round. In a quieter round (load 6 to
+9, an earlier trunk) `fib` took 0.11 s on `std::fvm`, 0.43 s on `std::nvm`, 1.34 s on `std::prl`
+before and 0.52 s after; `small_calls` 0.19, 0.60, 1.61 and 0.67.
+
+**Reading.** Before, every program whose work was written in Camel (scalar recursion, small
+calls, higher-order operators with element functions in Camel) ran 12 to 30 times slower on
+`std::prl` than on `std::fvm`, and with more workers it used several times the CPU without
+getting faster: the workers were waiting for each other. After:
+
+- Programs with independent coarse elements written in Camel (`map_medium`, `map_heavy`,
+  `collatz_reduce`) are as fast as `std::fvm` or faster, 4 to 6 times faster than `std::prl` on
+  one worker, and 3 to 5 times faster than `std::nvm`. The CPU time with 18 workers is 1.3 to 1.5
+  times that with one (part of it the slower kind of core).
+- Elements that are module operators (`mc_pi`, `asian_mc`, `merge_sort`) are unchanged: this is
+  what the scheduler was good at, a speed-up of 2 to 5 over the linear back ends.
+- A program with nothing independent in it (`fib`, `small_calls`) pays for the evaluator: it runs
+  at about the speed of `std::nvm`, 4 to 6 times slower than `std::fvm`. More workers change
+  nothing; they sleep.
+- A light `map` over a large array (`map_light`) is no longer slower than `std::nvm` and about
+  as fast as `std::fvm`; there is little to gain from more workers at a fraction of a microsecond
+  per element.
+- A tensor program (`tensor_train`) is the same on every back end: the time is in the kernels,
+  which have their own threads, and the graph of a training step is mostly a chain.
+
+**What `std::prl` is for, then:** programs with independent pieces of work that are each much
+longer than a call: elements of a `map` / `filter` that call module operators or recurse,
+independent calls of heavy graphs. For a program that is sequential by its dependencies,
+`std::fvm` remains 4 to 6 times faster and `std::prl` cannot help.
+
+**Remaining gaps, and questions that are not the scheduler's to decide.**
+
+- `DESIGN-QUESTION(prl-light-graph-evaluator)`: the remaining factor of 4 to 6 on scalar code is
+  the difference between walking the nodes of a graph and running its bytecode, not scheduling.
+  It can only go away by running light graphs (the ones the granularity rule never makes tasks
+  of) on the bytecode interpreter inside a worker. Candidates: (a) `std::prl` compiles light
+  graphs with FastVM's compiler and runs them on a per-worker interpreter: this needs the
+  interpreter to be re-entrant per thread, to take frames the collector's handshake can see, and
+  to count calls and report faults the way the scheduler does; (b) a pass before `std::prl` that
+  marks or outlines light regions, with the same requirements at run time; (c) leave it and say
+  that scalar-heavy programs belong on `std::fvm`. (a) and (b) change how back ends are composed.
+- `DESIGN-QUESTION(prl-coarsening-pass)`: for scopes, the granularity is still the static rule
+  of 4.3.1: two unordered calls of heavy graphs become a task graph every time, whatever their
+  size at run time (a recursive split keeps making task graphs down to its leaves), and two
+  unordered calls of light graphs never do, however long they run (`fib(40) + fib(40)` runs on
+  one thread). The scheduler could measure scopes as it now measures elements, but a scope has
+  no counter to claim from; the alternative is a coarsening pass before `std::prl` that decides
+  per call site. Not done: either changes which parts of a program run concurrently.
+- `DESIGN-QUESTION(prl-thread-budget)`: the tensor kernels and the scheduler each start as many
+  threads as there are hardware threads (`tensor_train` under `std::prl` has 36). `-t` limits
+  the scheduler only. Whether one budget should cover both is undecided.
+- The calling thread of an operator that got helpers waits for them without working when it is
+  not a worker itself (the main thread): with `-t N` there are never more than N threads
+  computing.
+- Not verified: behaviour on an idle machine (all timings were taken under load 7 to 35), on
+  more or fewer cores than 18, on Windows and macOS (the per-thread caches and the clock reads
+  are portable C++, but nothing was built there), and with the generational collector as the
+  optional collector (the frame pool marks active frames in the frame header instead of a set;
+  the stop-the-world handshake is unchanged, and the stress tests with a verified major
+  collection at every safepoint pass).
 
 ### 4.4 How each back end runs a call, a fault and the end of a program
 

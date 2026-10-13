@@ -238,7 +238,7 @@ error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of len
 help: Ensure the index is within the valid range of the collection.
 ```
 
-把故障隔离在子图边界上的算子（设计原则中暂名 `attempt`）尚未提供。
+把故障隔离在子图边界上的算子是 `attempt`（见 [6.10.1](06_expressions.md)）。
 
 **`exit(n)`** 立即结束程序，退出码为 `n`；此前的输出照常写出。
 

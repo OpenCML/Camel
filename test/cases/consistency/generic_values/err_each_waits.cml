@@ -1,0 +1,6 @@
+func apply(f: (x: typeas T) => typeas U, x: T): U { return f(x) }
+func id(x: typeas A): A { return x }
+func main(): int sync {
+    println(apply(id, id))
+    return 0
+}

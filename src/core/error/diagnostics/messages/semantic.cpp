@@ -338,19 +338,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::IfArmValueWithoutElse,
-            {
-                "IfArmValueWithoutElse",
-                "This 'if' has no 'else' arm with a value, but its 'then' arm gives a value of "
-                "type '{0}' (in function '{1}').",
-                "An 'if' without 'else' gives nothing when its condition is false, so its arm "
-                "must give nothing either. A call such as 'println(...)' has a value. When the "
-                "'if' is a statement run for its effect, end the arm with 'return null': 'if c "
-                "then sync {{ println(x); return null }}'. When its value is wanted, add an "
-                "'else' arm of the same type.",
-            },
-        },
-        {
             SemanticDiag::ImportCycle,
             {
                 "ImportCycle",
@@ -426,19 +413,23 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericArgumentsMismatch",
                 "The generic function '{0}' cannot be called with argument types {1}: {2}.",
-                "A type variable is bound once, at its 'typeas' position, from the type of the "
-                "argument found there; every other parameter is then checked against its type "
-                "with the variables replaced. Nothing is converted implicitly. Signature: {3}",
+                "A type variable takes the type of the argument found at its 'typeas' position, "
+                "or, when that argument says nothing (a 'null', a generic function that is "
+                "itself waiting for its types), at another occurrence; every parameter is then "
+                "checked against its type with the variables replaced. A value enters a 'T?' "
+                "or 'T!' parameter by itself; nothing else is converted. Signature: {3}",
             },
         },
         {
             SemanticDiag::GenericFunctionAsValue,
             {
                 "GenericFunctionAsValue",
-                "The generic function '{0}' is used as a value, but it is only a template until "
-                "it is called with arguments that fix its type variables.",
-                "Call it directly, or wrap the call in a function whose parameter types are "
-                "written out, e.g. '(x: int) => {0}(x)'.",
+                "The generic function '{0}' cannot be given its types here: {1}.",
+                "A generic function may stand wherever a function is expected, also as an "
+                "argument of another generic function. It is a template: the compiler builds "
+                "the instance once the position fixes its type variables (a parameter of "
+                "function type, a declared type, the other arguments of the call). Here they "
+                "are not fixed. Signature: {2}",
             },
         },
         {
@@ -563,9 +554,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TaggedOperandMismatch",
                 "'{0}' cannot be applied here: {1}.",
-                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T'. 'a !! b' needs 'a' of "
-                "type 'T!' and 'b' of type 'T'. 'x ?-> f' needs 'x' of type 'T!' and a "
-                "function 'f' that takes a 'T'.",
+                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or "
+                "'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). "
+                "'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'. 'x ?-> f' needs "
+                "'x' of type 'T!' and a function 'f' that takes a 'T'.",
             },
         },
         {
@@ -625,15 +617,57 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::IfWithoutElseAsValue,
+            {
+                "IfWithoutElseAsValue",
+                "This 'if' has no 'else' and is used as a value.",
+                "An 'if' without 'else' has no value: its arm may be of any type and what the "
+                "arm gives is dropped. It can only stand as a statement. Where a value is "
+                "wanted, add an 'else' arm of the same type ('if c then 1 else 0'), or make "
+                "the result nullable ('if c then 1 else null').",
+            },
+        },
+        {
+            SemanticDiag::EmptyArrayWithoutType,
+            {
+                "EmptyArrayWithoutType",
+                "'{0}' is bound to an empty array '[]' that has no element type.",
+                "The empty array literal takes its element type from where it stands: a "
+                "declared type, a parameter, the other arm of a branch, an 'as'. Here there "
+                "is none. Write the type: 'let {0}: int[] = []'.",
+            },
+        },
+        {
+            SemanticDiag::ComprehensionSourceRefused,
+            {
+                "ComprehensionSourceRefused",
+                "The source of this list comprehension has type '{0}', which has no elements "
+                "to take.",
+                "A list comprehension '[e for x in xs if c]' is "
+                "'xs->filter<(x) => c>->map<(x) => e>': 'xs' must be an array (or another value "
+                "'map' and 'filter' accept), and 'x' has the type of its elements.",
+            },
+        },
+        {
+            SemanticDiag::PartialApplicationRefused,
+            {
+                "PartialApplicationRefused",
+                "The context arguments <{0}> cannot be bound to '{1}' as a value: {2}.",
+                "'f<w>' used as a value is a partial application: a function that already has "
+                "its context ('with') arguments, 'let g = inc<1>' then 'g(2)'. It needs 'f' "
+                "to be one function that takes these arguments. Called in place, "
+                "'f<w>(x)', the arguments of the call choose the function.",
+            },
+        },
+        {
             SemanticDiag::MatchWithoutDefault,
             {
                 "MatchWithoutDefault",
-                "This 'match' on a value of type '{0}' has no 'case _': a value that none of "
-                "its cases matches stops the program.",
-                "Add 'case _ => ...' for the values the cases do not list. Without it, meeting "
-                "such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A "
-                "'match' on a bool that has both 'case true' and 'case false' is complete and "
-                "is not reported.",
+                "This 'match' on a value of type '{0}' has no 'case _'.",
+                "A 'match' must have a default case: add 'case _ => ...' for the values the "
+                "cases do not list. A 'match' on a bool that has both 'case true' and "
+                "'case false' is complete, and so is one over 'T?' or 'T!' with its two fixed "
+                "patterns.",
             },
         },
         {

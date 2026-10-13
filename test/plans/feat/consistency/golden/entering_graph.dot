@@ -1,0 +1,69 @@
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="or_else";
+            subgraph cluster_F03 {
+                label="__g_4__";
+                F03 [label="ARGS", type="ARGS"];
+                O03 [label="EXIT", type="EXIT"];
+                N00 [label="PORT", type="PORT"];
+                F03 -> N00 [label="0", type="WITH_PORT"];
+                N00 -> O03 [label="0", type="EXIT"];
+            }
+            subgraph cluster_F04 {
+                label="__g_6__";
+                F04 [label="ARGS", type="ARGS"];
+                O04 [label="EXIT", type="EXIT"];
+                N01 [label="PORT", type="PORT"];
+                N02 [label=":op/tag_null_value", type="OPER", origin=100, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+                F04 -> N01 [label="0", type="WITH_PORT"];
+                N02 -> O04 [label="0", type="EXIT"];
+                N01 -> N02 [label="0|0", type="NORM"];
+            }
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N03 [label="x", type="PORT"];
+            N04 [label="d", type="PORT"];
+            N05 [label=":op/tag_is_null", type="OPER", origin=96, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+            N06 [label="JOIN", type="JOIN", origin=102, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+            N07 [label="BRCH", type="BRCH", origin=101, span="0:46-0:48", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+            N08 [label="__g_4__", type="FUNC", origin=97, span="0:49-0:50", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+            N09 [label="__g_6__", type="FUNC", origin=98, span="0:49-0:50", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+            F02 -> N03 [label="0", type="NORM_PORT"];
+            F02 -> N04 [label="1", type="NORM_PORT"];
+            N06 -> O02 [label="0", type="EXIT"];
+            N03 -> N05 [label="0|0", type="NORM"];
+            N08 -> N06 [label="0|0", type="WITH"];
+            N09 -> N06 [label="0|1", type="WITH"];
+            N07 -> N06 [label="0|0", type="NORM"];
+            N05 -> N07 [label="0|0", type="NORM"];
+            N04 -> N07 [label="0|0", type="CTRL"];
+            N03 -> N07 [label="0|1", type="CTRL"];
+            N04 -> N08 [label="0|0", type="WITH"];
+            N07 -> N08 [label="0|0", type="CTRL"];
+            N03 -> N09 [label="0|0", type="WITH"];
+            N07 -> N09 [label="1|0", type="CTRL"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N0A [label="5", type="DATA", origin=104, span="2:12-2:13", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+        N0B [label="CAST", type="CAST", origin=107, span="3:20-3:29", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+        N0C [label="0", type="DATA", origin=108, span="3:31-3:32", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+        N0D [label="or_else", type="FUNC", origin=109, span="3:19-3:33", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+        N0E [label=":io/println", type="OPER", origin=110, span="3:4-3:11", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+        N0F [label="0", type="DATA", origin=111, span="4:11-4:12", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+        N10 [label="GATE", type="GATE"];
+        N10 -> O01 [label="0", type="EXIT"];
+        N0A -> N0B [label="0|0", type="NORM"];
+        N0B -> N0D [label="0|0", type="NORM"];
+        N0C -> N0D [label="0|1", type="NORM"];
+        N0D -> N0E [label="0|0", type="NORM"];
+        N0F -> N10 [label="0|0", type="NORM"];
+        N0E -> N10 [label="0|0", type="CTRL"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N11 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=103, span="1:0-5:1", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml"];
+    N12 [label="CALL", type="CALL"];
+    N12 -> O00 [label="0", type="EXIT"];
+    N11 -> N12 [label="0|0", type="WITH"];
+}

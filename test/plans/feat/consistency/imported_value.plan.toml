@@ -1,0 +1,26 @@
+id = "consistency.imported_value"
+order = 359
+tier = "feat"
+tags = ["feat", "consistency", "modules", "function-values"]
+desc = "A function imported from another module is a value like a local one, written `import { f }` or `import m` and `m::f`"
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "[2, 4, 6]\n8 10 12\n9 10\n"
+expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "imported_value.by_name"
+desc = "`import { twice } from lib`: handed to map, bound, passed, returned; an imported name with two functions is settled by the parameter. (The function was counted twice and had no value.)"
+case = "../../../cases/consistency/imported_value/by_name.cml"
+
+[[tests]]
+name = "imported_value.by_module"
+desc = "`import lib` and `lib::twice`: the same."
+case = "../../../cases/consistency/imported_value/by_module.cml"

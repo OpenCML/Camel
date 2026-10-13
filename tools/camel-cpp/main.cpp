@@ -24,10 +24,7 @@
 #include "camel/core/type.h"
 #include "camel/execute/pass/base.h"
 #include "camel/init.h"
-#include "camel/parse/antlr/OpenCMLLexer.h"
-#include "camel/parse/antlr/OpenCMLParser.h"
 #include "camel/parse/ast/builder.h"
-#include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
@@ -83,27 +80,23 @@ static int runCompile(const fs::path &projRoot, const fs::path &cppPath, const s
     auto include = projRoot / "include";
     auto src     = projRoot / "src";
     auto third   = projRoot / "third_party";
-    auto antlr4  = third / "antlr4-runtime";
 
     std::ostringstream cmd;
 #ifdef _WIN32
     cmd << "clang++ -std=c++23 -O2 -m64 "
-        << "-DANTLR4CPP_STATIC -DPLATFORM_WINDOWS "
+        << "-DPLATFORM_WINDOWS "
         << "-I \"" << include.string() << "\" "
         << "-I \"" << src.string() << "\" "
         << "-I \"" << third.string() << "\" "
-        << "-I \"" << antlr4.string() << "\" "
         << "-I \"" << projRoot.string() << "\" "
         << "\"" << cppPath.string() << "\" "
         << "-o \"" << outExe.string() << "\" "
         << "\"" << libPath.string() << "\"";
 #else
     cmd << "clang++ -std=c++23 -O2 "
-        << "-DANTLR4CPP_STATIC "
         << "-I " << include.string() << " "
         << "-I " << src.string() << " "
         << "-I " << third.string() << " "
-        << "-I " << antlr4.string() << " "
         << "-I " << projRoot.string() << " " << cppPath.string() << " "
         << "-o " << outExe.string() << " " << libPath.string();
 #endif
@@ -220,7 +213,7 @@ int main(int argc, char *argv[]) {
         return runCompile(projRoot, cppPath, stem);
 
     } catch (Diagnostic &d) {
-        RangeConverter conv(parser->getTokens());
+        RangeConverter conv(parser->tokenPositions());
         d.fetchRange(conv);
         std::cerr << "Uncaught diagnostic: " << d.toText() << std::endl;
         return 1;

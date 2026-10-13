@@ -13,102 +13,38 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 24, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * CamelParser: one source file from text to abstract syntax tree.
+ *
+ *   text -> tokens (syntax::Lexer) -> concrete syntax tree (syntax::Parser) -> AST (ast::Builder)
+ *
+ * and the diagnostics of each step. The concrete tree is kept whatever the outcome: the tools
+ * that describe a file being edited (the language server, the formatter) work on it.
+ * See docs/technical/34_handwritten_parser.md.
  */
 
 #pragma once
 
-#include <iomanip>
+#include <iosfwd>
+#include <memory>
+#include <string>
 
-#include "antlr4-runtime/antlr4-runtime.h"
+#include "ast.h"
+#include "syntax/cst.h"
 
-#include "camel/parse/antlr/OpenCMLLexer.h"
-#include "camel/parse/antlr/OpenCMLParser.h"
-
-#include "ast/builder.h"
-#include "cst_dumper.h"
-#include "syntax_errors.h"
-
-#include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
-#include "camel/utils/log.h"
+#include "camel/core/source/manager.h"
 
 namespace camel::parse {
 
 class CamelParser {
-    camel::core::error::diagnostics_ptr_t diagnostics_;
-    camel::source::source_context_ptr_t
-        sourceContext_; // Parse-stage spans/origins are written here.
-    antlr4::ANTLRInputStream input_;
-
-    std::unique_ptr<OpenCMLLexer> lexer_;
-    std::unique_ptr<LexerErrorListener> lexerListener_;
-    std::unique_ptr<antlr4::CommonTokenStream> tokens_;
-    std::unique_ptr<OpenCMLParser> parser_;
-
-    antlr4::tree::ParseTree *cst_ = nullptr;
-    // The tree of the last parse whatever its outcome (see syntaxTree).
-    antlr4::tree::ParseTree *syntaxTree_ = nullptr;
-    AST::node_ptr_t ast_          = nullptr;
-    // Logical ID of the source file currently being parsed in SourceContext.
-    camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
-
-    bool buildCST() {
-        auto interpreter = parser_->getInterpreter<antlr4::atn::ParserATNSimulator>();
-        parser_->removeErrorListeners();
-
-        try {
-            interpreter->setPredictionMode(antlr4::atn::PredictionMode::SLL);
-            parser_->setErrorHandler(std::make_shared<antlr4::BailErrorStrategy>());
-            cst_ = parser_->program();
-        } catch (antlr4::ParseCancellationException &e) {
-            parser_->reset();
-            interpreter->setPredictionMode(antlr4::atn::PredictionMode::LL);
-            auto listener = std::make_unique<ParserErrorListener>(diagnostics_);
-            parser_->addErrorListener(listener.get());
-            parser_->setErrorHandler(std::make_shared<antlr4::DefaultErrorStrategy>());
-
-            cst_ = parser_->program();
-
-            if (listener->hasErrors()) {
-                syntaxTree_ = cst_;
-                cst_        = nullptr;
-                return false;
-            }
-        }
-        syntaxTree_ = cst_;
-        // A lexical error leaves the parser a token stream without the offending text, which
-        // may well parse; the file is in error all the same.
-        if (diagnostics_->hasErrors()) {
-            cst_ = nullptr;
-            return false;
-        }
-        EXEC_WHEN_DEBUG({
-            if (cst_)
-                camel::DebugBreakpoint::Hit("CST", cst_);
-        });
-        return cst_ != nullptr;
-    }
-
-    bool buildAST() {
-        auto constructor = AST::Builder();
-        ast_             = constructor.build(cst_, diagnostics_);
-
-        if (diagnostics_->hasErrors()) {
-            ast_ = nullptr;
-            return false;
-        }
-        EXEC_WHEN_DEBUG({
-            if (ast_)
-                camel::DebugBreakpoint::Hit("AST", ast_.get());
-        });
-        return ast_ != nullptr;
-    }
-
   public:
-    CamelParser(camel::core::error::diagnostics_ptr_t diagnostics) : diagnostics_(diagnostics) {}
-    ~CamelParser() = default;
+    explicit CamelParser(camel::core::error::diagnostics_ptr_t diagnostics);
+    ~CamelParser();
 
     /// The parser does not own SourceContext; it only records parse results into it.
     void setSourceContext(camel::source::source_context_ptr_t sourceContext) {
@@ -120,131 +56,56 @@ class CamelParser {
     camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
     camel::source::source_file_id_t sourceFileId() const { return sourceFileId_; }
 
-    const std::vector<antlr4::Token *> getTokens() {
-        return tokens_ ? tokens_->getTokens() : std::vector<antlr4::Token *>{};
-    }
+    /// Lexical analysis only (`camel check -i`): the tokens are produced, nothing is parsed.
+    /// False when the text has a lexical error.
+    bool lex(std::istream &is);
+    /// Tokens and concrete syntax tree. False when the text has a lexical or a syntax error.
+    bool parseCST(std::istream &is);
+    /// The whole way to the AST.
+    bool parse(std::istream &is);
 
-    antlr4::tree::ParseTree *cst() const { return cst_; }
-    /// The tree of the last parse also when the file has errors: what ANTLR recovered, with
-    /// error nodes and incomplete contexts. For tools that describe a file being edited
-    /// (camel/service/semantic); the compiler only ever uses cst().
-    antlr4::tree::ParseTree *syntaxTree() const { return syntaxTree_; }
     AST::node_ptr_t ast() const { return ast_; }
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
 
-    /// Returns the declared module name from AST (e.g. from "module mnist_json"), or empty if none.
-    std::string getDeclaredModuleName() const {
-        if (!ast_)
-            return "";
-        auto load    = ast_->load();
-        auto modLoad = std::dynamic_pointer_cast<AST::ModuleLoad>(load);
-        if (!modLoad)
-            return "";
-        return modLoad->getModuleNameOrEmpty();
-    }
+    /// The concrete syntax tree of the last parse, whatever its outcome: with Error nodes and
+    /// incomplete nodes where the text is wrong. After lex() it holds the tokens only. Null
+    /// before the first call.
+    const syntax::Tree *tree() const { return tree_.get(); }
+    /// Whether the last parse found neither a lexical nor a syntax error.
+    bool parsed() const { return parsed_; }
 
+    /// Where the tokens are, for diagnostics placed by token range.
+    const camel::core::error::TokenPositions &tokenPositions() const;
+
+    /// Returns the declared module name from AST (e.g. from "module mnist_json"), or empty if
+    /// none.
+    std::string getDeclaredModuleName() const;
     /// The module name a file declares (`module name`), read from the tokens: what a file
     /// that does not parse still says about itself. Empty if it declares none.
-    std::string declaredModuleNameInTokens() const {
-        if (!tokens_) {
-            return "";
-        }
-        const antlr4::Token *keyword = nullptr;
-        for (const antlr4::Token *token : tokens_->getTokens()) {
-            if (token->getChannel() != antlr4::Token::DEFAULT_CHANNEL) {
-                continue;
-            }
-            if (keyword != nullptr) {
-                if (token->getType() == OpenCMLLexer::IDENTIFIER) {
-                    return token->getText();
-                }
-                keyword = nullptr;
-            }
-            if (token->getType() == OpenCMLLexer::MODULE) {
-                keyword = token;
-            }
-        }
-        return "";
-    }
+    std::string declaredModuleNameInTokens() const;
 
-    /// Lexical analysis only (`camel check -i`): the tokens are produced, nothing is parsed.
-    /// False when the text has a lexical error.
-    bool lex(std::istream &is) {
-        prepare(is);
-        tokens_->fill();
-        nameModuleFromTokens();
-        return !diagnostics_->hasErrors();
-    }
-
-    bool parseCST(std::istream &is) {
-        prepare(is);
-        return buildCST();
-    }
+    void dumpTokens(std::ostream &os);
+    void dumpCST(std::ostream &os);
+    void dumpDiagnostics(std::ostream &os, bool json = false);
 
   private:
-    void nameModuleFromTokens() {
-        const std::string declaredName = declaredModuleNameInTokens();
-        if (!declaredName.empty() && diagnostics_) {
-            diagnostics_->setModuleName(declaredName);
-        }
-    }
+    class Positions;
 
-    void prepare(std::istream &is) {
-        input_.load(is);
-        if (sourceContext_) {
-            // Register the full source text before parsing so later AST construction can build
-            // spans from parser context start/stop offsets.
-            sourceFileId_ =
-                sourceContext_->registerFile(diagnostics_->modulePath(), input_.toString());
-        }
+    camel::core::error::diagnostics_ptr_t diagnostics_;
+    camel::source::source_context_ptr_t
+        sourceContext_; // Parse-stage spans/origins are written here.
+    // Logical ID of the source file currently being parsed in SourceContext.
+    camel::source::source_file_id_t sourceFileId_ = camel::source::kInvalidSourceFileId;
+    AST::node_ptr_t ast_                          = nullptr;
+    bool parsed_                                  = false;
 
-        lexer_ = std::make_unique<OpenCMLLexer>(&input_);
-        // Lexical errors become diagnostics; ANTLR's default listener printed them raw on
-        // standard error and left the diagnostics empty.
-        lexerListener_ = std::make_unique<LexerErrorListener>(diagnostics_);
-        lexer_->removeErrorListeners();
-        lexer_->addErrorListener(lexerListener_.get());
-        tokens_ = std::make_unique<antlr4::CommonTokenStream>(lexer_.get());
-        parser_ = std::make_unique<OpenCMLParser>(tokens_.get());
-        EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("CTS", this); });
-    }
+    std::unique_ptr<syntax::Tree> tree_;
+    std::unique_ptr<Positions> positions_;
 
-  public:
-    bool parse(std::istream &is) {
-        if (!parseCST(is) || !buildAST()) {
-            // A file that does not parse is still named by the module it declares: its
-            // diagnostics read `(my_module)file.cml`, as the semantic ones do, not `(main)`.
-            nameModuleFromTokens();
-            return false;
-        }
-        // Use declared module name from source (e.g. "module mnist_json") for diagnostics
-        std::string declaredName = getDeclaredModuleName();
-        if (!declaredName.empty() && diagnostics_)
-            diagnostics_->setModuleName(declaredName);
-        return true;
-    }
-
-    void dumpTokens(std::ostream &os) {
-        tokens_->reset();
-        while (true) {
-            antlr4::Token *token = tokens_->LT(1);
-            if (token->getType() == antlr4::Token::EOF) {
-                break;
-            }
-            os << std::setw(4) << std::right << token->getTokenIndex() << " [" << std::setw(3)
-               << std::right << token->getLine() << ":" << std::setw(3) << std::left
-               << token->getCharPositionInLine() << "] (" << token->getChannel()
-               << ") : " << token->getText() << std::endl;
-            tokens_->consume();
-        }
-        tokens_->reset();
-    }
-
-    void dumpDiagnostics(std::ostream &os, bool json = false) {
-        const auto &tokenVec = tokens_->getTokens();
-        diagnostics_->fetchAll(tokenVec);
-        diagnostics_->dump(os, json);
-    }
+    std::string readAndRegister(std::istream &is);
+    void nameModuleFromTokens();
+    bool buildCST(std::istream &is);
+    bool buildAST();
 };
 
 using parser_ptr_t = std::shared_ptr<CamelParser>;

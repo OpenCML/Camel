@@ -30,7 +30,7 @@ func main(): int sync {
     v -= 1
     println(v)
     v=-1
-    println(v, v-1, v>-2, v<-2, v==-1, v!=-1)
+    println(v, v-1, v>-2, v < -2, v==-1, v!=-1)
     let m = match v {
         case -1 => 'minus one'
         case 1 => 'one'

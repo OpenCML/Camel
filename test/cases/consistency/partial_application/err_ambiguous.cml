@@ -1,0 +1,15 @@
+with <k: int>
+func scale(x: int): int { return x * k }
+with <k: int>
+func scale(x: float): float { return x * float(k) }
+
+func apply(f: (x: float) => float, x: float): float { return f(x) }
+
+func main(): int sync {
+    // the parameter says which function is meant
+    println(apply(scale<2>, 1.5))
+    // nothing does here
+    let g = scale<2>
+    println(g(3))
+    return 0
+}

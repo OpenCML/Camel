@@ -1,0 +1,5 @@
+func main(): int sync {
+    let ys = []
+    println(ys)
+    return 0
+}

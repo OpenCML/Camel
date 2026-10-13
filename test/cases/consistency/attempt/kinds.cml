@@ -9,25 +9,12 @@ func div(a: int, b: int): int { return a / b }
 func rem(a: int, b: int): int { return a % b }
 func fdiv(a: float, b: float): float { return a / b }
 func at(xs: int[], i: int): int { return xs[i] }
-func name_of(k: int): string {
-    return match k {
-        case 1 => 'one'
-        case 2 => 'two'
-    }
-}
 func number(s: string): int { return int(s) }
 
 func show(r: int!): string {
     return match r {
         case error e => e.kind + ' | ' + e.message + ' | ' + e.location
         case v => format<v>('value {}')
-    }
-}
-
-func show_s(r: string!): string {
-    return match r {
-        case error e => e.kind + ' | ' + e.message + ' | ' + e.location
-        case v => 'value ' + v
     }
 }
 
@@ -45,8 +32,6 @@ func main(): int sync {
     println(show_f(attempt(fdiv, 1.0, 0.0)))
     println(show(attempt(at, [1, 2, 3], 2)))
     println(show(attempt(at, [1, 2, 3], 3)))
-    println(show_s(attempt(name_of, 2)))
-    println(show_s(attempt(name_of, 3)))
     println(show(attempt(number, '42')))
     println(show(attempt(number, 'forty-two')))
     println('end')

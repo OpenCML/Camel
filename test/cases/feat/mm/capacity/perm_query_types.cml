@@ -93,7 +93,7 @@ func main(): int sync {
     if (!false) || (false || true) then sync {
         println('L3 {} {}'->format<v41, v41>);
         wait v41 = (len(n38), v41.1);
-        return null;
+        null;
     } else sync {
         println('L4 {} {}'->format<n36, v41>);
         let h44 = (p42: int): int => sync {
@@ -103,7 +103,7 @@ func main(): int sync {
                 case _ => n36
             };
         };
-        return null;
+        null;
     };
     println('L5 {} {}'->format<v41, n35>);
     v41 = (if false then v41 else (n36, 31));

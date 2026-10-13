@@ -10,7 +10,7 @@
 
 ```
 源文件 (.cml)
-    → 词法/语法分析 (ANTLR4)
+    → 词法/语法分析 (手写解析器)
     → CST（具象语法树）
     → AST（抽象语法树）
     → 图构造树 (GCT)
@@ -30,9 +30,9 @@
 
 ### 2.1 词法与语法
 
-- **词法**：`antlr/OpenCMLLex.g4`。
-- **语法**：`antlr/OpenCML.g4`。
-- 解析器由 ANTLR4 生成（如 `parse/antlr/OpenCMLParser.h`），产出 CST。
+- **词法**：`src/parse/syntax/lexer.cpp`，记号表 `include/camel/parse/syntax/token_kinds.def`。
+- **语法**：`src/parse/syntax/parser*.cpp`，每个函数对应一条产生式（语言参考 8.5）。
+- 解析器是手写的递归下降解析器，产出 CST（`syntax::Tree`），见 [34_handwritten_parser.md](34_handwritten_parser.md)。
 - 入口与错误处理见 `main.cpp`、`parse/parse.h`、`error/listener.h`。
 
 ### 2.2 CST → AST

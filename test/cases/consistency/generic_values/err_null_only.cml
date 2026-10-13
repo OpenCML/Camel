@@ -1,0 +1,5 @@
+func or_zero(x: (typeas T)?, d: T?): T { return x ?? (d ?? x ?? d) }
+func main(): int sync {
+    println(or_zero(null, null))
+    return 0
+}

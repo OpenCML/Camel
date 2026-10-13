@@ -30,8 +30,7 @@
 
 #include "camel/service/semantic/model.h"
 
-#include "antlr4-runtime/antlr4-runtime.h"
-#include "camel/parse/antlr/OpenCMLLexer.h"
+#include "camel/parse/syntax/token.h"
 
 #include <algorithm>
 #include <functional>
@@ -147,25 +146,17 @@ LineIndex::Position LineIndex::utf16PositionOf(uint32_t offset) const {
 
 namespace {
 
-// The keywords of the language, read from the lexer's vocabulary so that the list cannot
-// drift from the grammar: the literal names that are words.
+using TK = camel::parse::syntax::TokenKind;
+
+bool isKind(uint16_t type, TK kind) { return type == static_cast<uint16_t>(kind); }
+
+// The keywords of the language, from the lexer's own table so that the list cannot drift
+// from it.
 const std::vector<std::string> &keywords() {
     static const std::vector<std::string> list = [] {
         std::vector<std::string> out;
-        antlr4::ANTLRInputStream empty("");
-        OpenCMLLexer lexer(&empty);
-        const auto &vocabulary = lexer.getVocabulary();
-        for (size_t type = 1; type <= vocabulary.getMaxTokenType(); ++type) {
-            std::string literal(vocabulary.getLiteralName(type));
-            if (literal.size() < 3 || literal.front() != '\'' || literal.back() != '\'') {
-                continue;
-            }
-            literal = literal.substr(1, literal.size() - 2);
-            if (std::all_of(literal.begin(), literal.end(), [](char c) {
-                    return (c >= 'a' && c <= 'z') || c == '_';
-                })) {
-                out.push_back(literal);
-            }
+        for (const auto &info : camel::parse::syntax::keywordTable()) {
+            out.emplace_back(info.text);
         }
         return out;
     }();
@@ -173,7 +164,7 @@ const std::vector<std::string> &keywords() {
 }
 
 bool isKeywordToken(uint16_t type) {
-    return type >= OpenCMLLexer::AS && type <= OpenCMLLexer::FALSE;
+    return camel::parse::syntax::isKeyword(static_cast<TK>(type));
 }
 
 const std::vector<std::string> &builtinTypeNames() {
@@ -807,10 +798,10 @@ std::optional<Hover> SemanticModel::hover(uint32_t offset) const {
     const int32_t token = file.syntax.tokenAt(offset);
     if (token >= 0) {
         const TokenInfo &info = file.syntax.tokens[token];
-        if (info.type == OpenCMLLexer::INTEGER || info.type == OpenCMLLexer::REAL ||
-            info.type == OpenCMLLexer::STRING || info.type == OpenCMLLexer::MULTI_STR ||
-            info.type == OpenCMLLexer::FSTRING || info.type == OpenCMLLexer::TRUE ||
-            info.type == OpenCMLLexer::FALSE) {
+        if (isKind(info.type, TK::Integer) || isKind(info.type, TK::Real) ||
+            isKind(info.type, TK::String) || isKind(info.type, TK::MultiStr) ||
+            isKind(info.type, TK::FString) || isKind(info.type, TK::KwTrue) ||
+            isKind(info.type, TK::KwFalse)) {
             if (auto type = typeOfExpression(info.range)) {
                 code(types_[*type].text);
                 return Hover{md.str(), info.range};
@@ -965,8 +956,8 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
     // Nothing inside a comment or a string.
     for (const TokenInfo &token : file.syntax.tokens) {
         if (token.range.start < offset && offset < token.range.end + (token.channel == 3 ? 1u : 0u) &&
-            (token.channel >= 3 || token.type == OpenCMLLexer::STRING ||
-             token.type == OpenCMLLexer::MULTI_STR || token.type == OpenCMLLexer::FSTRING)) {
+            (token.channel >= 3 || isKind(token.type, TK::String) ||
+             isKind(token.type, TK::MultiStr) || isKind(token.type, TK::FString))) {
             return items;
         }
         if (token.range.start > offset) {
@@ -1207,7 +1198,7 @@ std::optional<SignatureHelp> SemanticModel::signatureHelp(uint32_t offset) const
             while (prev >= 0 && tokens[prev].channel != 0) {
                 --prev;
             }
-            if (text == "(" && prev >= 0 && tokens[prev].type == OpenCMLLexer::IDENTIFIER &&
+            if (text == "(" && prev >= 0 && isKind(tokens[prev].type, TK::Identifier) &&
                 tokens[prev].range.end == tokens[i].range.start) {
                 open = i;
                 break;
@@ -1226,14 +1217,14 @@ std::optional<SignatureHelp> SemanticModel::signatureHelp(uint32_t offset) const
     for (;;) {
         path.insert(path.begin(), std::string(textOf(tokens[at])));
         if (at >= 2 && textOf(tokens[at - 1]) == "::" &&
-            tokens[at - 2].type == OpenCMLLexer::IDENTIFIER) {
+            isKind(tokens[at - 2].type, TK::Identifier)) {
             at -= 2;
             continue;
         }
         break;
     }
     // A declaration header `func f(` is not a call.
-    if (at >= 1 && tokens[at - 1].type == OpenCMLLexer::FUNC) {
+    if (at >= 1 && isKind(tokens[at - 1].type, TK::KwFunc)) {
         return std::nullopt;
     }
     SignatureHelp help;
@@ -1463,20 +1454,20 @@ std::vector<SemanticToken> SemanticModel::semanticTokens() const {
         if (text.find('\n') != std::string_view::npos) {
             continue; // a token over several lines cannot be expressed; the grammar has it
         }
-        if (token.type == OpenCMLLexer::IDENTIFIER) {
+        if (isKind(token.type, TK::Identifier)) {
             if (auto it = names.find(token.range.start); it != names.end()) {
                 out.push_back(it->second);
             }
         } else if (isKeywordToken(token.type)) {
             out.push_back({token.range, TKeyword, 0});
-        } else if (token.type == OpenCMLLexer::INTEGER || token.type == OpenCMLLexer::REAL) {
+        } else if (isKind(token.type, TK::Integer) || isKind(token.type, TK::Real)) {
             // `.0` after a dot is a tuple index, lexed as an integer.
             out.push_back({token.range, TNumber, 0});
-        } else if (token.type == OpenCMLLexer::STRING || token.type == OpenCMLLexer::FSTRING) {
+        } else if (isKind(token.type, TK::String) || isKind(token.type, TK::FString)) {
             out.push_back({token.range, TString, 0});
         } else if (
-            token.type == OpenCMLLexer::DOTDOT ||
-            (token.type < OpenCMLLexer::SEP &&
+            isKind(token.type, TK::DotDot) ||
+            (camel::parse::syntax::isPunctuation(static_cast<TK>(token.type)) &&
              text.find_first_of("+-*/%^@&|!=<>~?") != std::string_view::npos && text != "=>")) {
             out.push_back({token.range, TOperator, 0});
         }

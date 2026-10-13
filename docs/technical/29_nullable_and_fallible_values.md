@@ -2,7 +2,8 @@
 
 This note describes how the two built-in forms `T?` ("may be null") and `T!` ("may have
 failed"), the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` are
-compiled. The normative text is `docs/design-principles.cn.md` section 2.9, "空值、错误与故障";
+compiled. The normative text is `docs/design-principles.cn.md` sections 2.9, "空值、错误与故障",
+and 2.10, "分支与类型";
 the user-facing description is in `docs/language/` (3.4, 6.6, 6.8.2, 7.3).
 
 Choices the design principles do not make are collected in section 10 as questions for the
@@ -18,7 +19,7 @@ language author. Each is implemented the way section 10 recommends and marked in
 | `match x { case null => A  case v => B }` | the same `BRCH`; arm 0 is `A`, arm 1 binds `v` and is `B` |
 | `match r { case error e => A  case v => B }` | the same `BRCH`; arm 0 binds `e` and is `A`, arm 1 binds `v` and is `B` |
 | `throw e` | the exit of the graph, exactly where `return` puts it; the value is the failed form of the declared `T!` (`OPER`, `CAST`) |
-| `v as T?`, `return v` in a function declared `T?`/`T!` | a `CAST` node |
+| `v as T?`, and a value that enters a `T?`/`T!` position by itself (an argument, an annotated `let`, an array element, a branch arm, `return`) | a `CAST` node per level |
 | `try`/`catch` | nothing: a diagnostic |
 
 Section numbers below: 2 the tag, 3 the nodes, 4 types, 5 `try`, 6 faults, 7 passes, 8
@@ -123,6 +124,10 @@ main:
 
 `a` is evaluated once, in the enclosing graph; arm 1 captures it. The result type is `T`.
 
+When `b` is itself a `T?` (a `T!` for `!!`) the result is that type (design principles
+2.10): arm 1 then hands `a` on as it is instead of taking the value out. It is still one
+branch, so `a ?? b ?? 9` is two branches in sequence whichever way it is grouped.
+
 ### 3.2 `x ?-> f`
 
 `x: T!`. Arm 1 is the call `f(__error_value__(x))`; if `f` returns a plain `U` the arm ends
@@ -187,15 +192,37 @@ function or union payload).
 ### 4.2 Assignment and unification
 
 - `T?` is assignable from `T?` only, and `T!` from `T!` only (payloads equal).
-- A value of type `T` does **not** flow into a `T?`/`T!` position by itself (Q1). It enters
-  - where the program converts it: `v as T?`, `let x: T? = v`;
-  - at `return v` in a function whose *declared* return type is `T?`/`T!` — the counterpart
-    of `throw`: one exit statement gives the value form, the other the error form.
-  An argument is not converted: `f(5)` with `f(x: int?)` is an error that suggests `5 as int?`.
-- `null` is the literal of every `T?`, by the same three spellings: `let x: T? = null`,
-  `null as T?`, `return null`. On the graph it is the constant `null` under a `CAST`.
-- Branch arms unify as before (equal types). `if c then 1 else null` is an error; write the
-  type on one arm.
+- A value of type `T` enters a `T?`/`T!` position by itself wherever the target type is
+  known (design principles 2.10); never the other way. The rule is two functions of the type
+  library (`include/camel/core/type/composite/tuple.h`):
+  - `entersImplicitly(target, source)`: `source` is assignable; or `target` is tagged and
+    `source` enters its payload (so several levels are entered at once: `int` into `int?!`);
+    or `source` is `void` (the type of `null`) and `target` is a `T?`; or `source` is the type
+    of the empty literal `[]` and `target` is an array type. A tagged value of the same form
+    with another payload does not enter (`int?` is not put into `float?`).
+  - `joinTypes(a, b)`: the type two arms or two elements have in common: what they unify
+    to, else the one the other enters, else (one of them being `null`) the other, nullable.
+- On the graph every level is a `CAST` node, the one `v as T?` gives; the GIR builder adds it
+  (`Builder::coerceTo`). The positions:
+
+  | Position | Where |
+  |---|---|
+  | argument of a function, a function value, a decorated or a generic function | `visitLinkNode`: the callee is first tried with the argument types as they are, so an exact overload wins, then with each entering argument counted as its parameter's type (`enteringTypes`); the CASTs are added once the callee is known (`enterParameters`) |
+  | annotated `let`, `as` | a GCT `CAST` as before; `visitCastNode` adds the levels a single conversion does not cover |
+  | array literal with a known element type (`let xs: (int?)[] = [1, null]`, `[...] as (int?)[][]`) | GCT `visitDataInto`: every element is the value under a `CAST` to the element type, recursively for nested literals |
+  | array literal without one, with a `null` among its elements (`[1, null, 3]`, `[x, null]`) | GCT `visitArrayData` leaves every element computed; `visitDataNode` joins the element types and puts the elements that are not of the joined type into it |
+  | branch arms (`if`, `match`) | `buildBranch`: the join type is `joinTypes` of the arms; an arm that is not of it gets the CAST at its exit (`coerceArmExit`), added to the arm's own graph |
+  | `return v` under a declared `T?`/`T!` | `adaptExitValue` |
+
+- An argument of a built-in operator is not such a position: an operator's parameter types
+  are computed from the argument types by its C++ resolver, so there is no target type before
+  the resolver has accepted the arguments.
+- `null` is the literal of every `T?`. On the graph it is the constant `null` under a `CAST`.
+  Its type is `void`, and a `void` expression that is not the literal is treated the same
+  (Q11).
+- The empty literal `[]` (type `void[]`) is given the element type of its position by the
+  same function: a static array of the target type takes its place. A name bound to a
+  `void[]` without a type is `EmptyArrayWithoutType`.
 
 ### 4.3 Nesting and combination (Q2)
 
@@ -223,8 +250,9 @@ language needs that, and it should be refused where the name is resolved.
 `substituteTypeVars`, `bindTypeVars`, `containsTypeVar` and `collectBindableTypeVars` descend
 through both forms. `(typeas T)?` binds `T` from the payload of a nullable argument, so
 `func or_zero(x: (typeas T)?, d: T): T { return x ?? d }` instantiates per payload type. A
-plain argument does not bind it (no implicit injection, Q1). An instance is an ordinary
-graph of concrete types; nothing new exists at run time.
+plain argument enters the parameter and binds the variable of the payload (`or_zero(5, 0)`
+gives `T = int`). An instance is an ordinary graph of concrete types; nothing new exists at
+run time.
 
 ## 5. `try` / `catch`
 
@@ -307,16 +335,11 @@ through `std::inline`, not through `std::opt`.
 
 Each is implemented as recommended; none changes the behaviour of an existing program.
 
-- **Q1. Does a `T` flow into a `T?`/`T!` position implicitly?** Implemented: no, except at
-  `return` under a declared `T?`/`T!`, by annotation and by `as`. Alternatives: (a) nowhere
-  implicitly, so `return 5 as int!`; (b) everywhere a type is declared, including arguments
-  and branch arms.
-- **Q2. Nesting.** Implemented: `T?!` and `T!?` allowed, `T??` and `T!!` rejected.
-  Alternatives: reject every combination; allow all.
-- **Q3. What `throw` takes and how an error is made.** Implemented: `throw e` with `e:
-  Error`; `error(kind, message)` makes one and records the position of that call. The field
-  names are `kind`, `message`, `location`; `location` is the string `file:line:column`.
-  Alternatives: `throw 'message'`; `throw kind, message`; a structured location.
+- **Q1. Does a `T` flow into a `T?`/`T!` position implicitly?** Ruled on (design principles
+  2.10): yes, wherever the target type is known; never the other way. Section 4.2.
+- **Q2. Nesting.** Ruled on (2.10): `T?!` and `T!?` allowed, `T??` and `T!!` rejected.
+- **Q3. What `throw` takes and how an error is made.** Ruled on (2.10): `throw e` with `e`
+  an error value made by `error(kind, message)`; the compiler fills in the position.
 - **Q4. `match` on a tagged value.** Implemented: exactly two cases, the tagged one and one
   rest case; literal cases are not mixed in (`case null`, `case 0`, `case v` together is an
   error). The spelling `case error e` makes `error` a word with a meaning only in this
@@ -327,16 +350,15 @@ Each is implemented as recommended; none changes the behaviour of an existing pr
 - **Q6. `?->` on a `T?`.** Implemented: an error; the principles define `?->` for errors
   only. The AST name of the construct (`NotNullThen`) suggests null propagation was once
   meant.
-- **Q7. The right-hand side of `??`/`!!`.** Implemented: it must have type `T`; the result
-  is `T`. Alternative: also accept `T?`/`T!` and give that type (a chain of fallbacks).
+- **Q7. The right-hand side of `??`/`!!`.** Ruled on (2.10): a `T` gives a `T`, a `T?`
+  (`T!`) gives that type. Section 3.1.
 - **Q8. `let x: int! = v` written without a space** lexes `!=` as one token and is a syntax
   error; `let x: int! = v` with the space is accepted. Should the grammar accept the token,
   as it does `>=` after a type function's parameters?
-- **Q9. Arms of different forms.** `if c then 1 else null` is rejected (arms must have equal
-  types), and so is `if c then x else throw e` written without `return` on the first arm.
-  Should a branch whose arms are `T` and `null` (or `T` and a failed value) have type `T?`
-  (`T!`)? That would put a conversion the program did not write into an arm.
-- **Q10. `null` given to a parameter.** `f(null)` with `f(x: int?)` is an error like `f(5)`;
-  written `f(null as int?)`. Should a literal `null` be accepted where a `T?` parameter is?
-- **Q11. A void expression under `as T?`.** `null` has the type `void`, so `println(1) as
-  int?` is accepted and is null. Should only the literal be?
+- **Q9. Arms of different forms.** Ruled on (2.10): the arms join, `if c then 1 else null`
+  is an `int?`.
+- **Q10. `null` given to a parameter.** Ruled on (2.10): `f(null)` with `f(x: int?)`.
+- **Q11. A void expression where a `T?` is expected.** `null` has the type `void`, so any
+  `void` expression is accepted where `null` is: under `as T?`, as an argument, as a branch
+  arm (`if c then 1 else f()` with a `f` that returns nothing is an `int?`). Should only the
+  literal be? `DESIGN-QUESTION(void-as-null)`.

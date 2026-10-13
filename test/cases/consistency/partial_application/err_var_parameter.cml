@@ -1,0 +1,8 @@
+with <var total: int>
+sync func add(x: int): int sync { total = total + x; return total }
+func main(): int sync {
+    var t = 0
+    let g = add<t>
+    println(g(2))
+    return 0
+}

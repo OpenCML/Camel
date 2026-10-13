@@ -3,8 +3,8 @@
 module nullable
 
 func find(xs: int[], target: int, i: int): int? {
-    return if i >= len(xs) then { return null }
-        else if xs[i] == target then { return i }
+    return if i >= len(xs) then null
+        else if xs[i] == target then i
         else find(xs, target, i + 1)
 }
 

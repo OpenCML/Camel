@@ -123,7 +123,16 @@ enum class CastSafety {
     Forbidden = 0,
 };
 
+/// The name of a type as a program writes it (design principles 2.10): `int` and `float`
+/// for the 64-bit integer and floating-point types, which the compiler knows by their width
+/// (`i64`, `f64`; a program may write those too). This function and sourceTypeSpelling are
+/// the one place the mapping is written: everything that prints a type (diagnostics, the
+/// names and annotations of graphs, `inspect`, the language server) prints this.
 std::string typeCodeToString(TypeCode code);
+/// `text` with the type names the compiler uses internally replaced by the names of source
+/// text, word by word (`(x: i64) => f64` gives `(x: int) => float`). For signatures written
+/// by hand as text (the type rules of built-in operators); a Type prints itself that way.
+std::string sourceTypeSpelling(std::string_view text);
 
 extern const signed char primitiveTypeConvMatrix[8][8];
 

@@ -32,31 +32,9 @@ known where the failing work was requested: the call that asked for an instance 
 function is attached to the errors found in the instance's body.
 
 Lines and columns are 0-based inside the compiler and in JSON, 1-based in text. A column counts
-code points. (Spans store byte offsets into the UTF-8 text; ANTLR reports character indices,
-which `SourceContext::createSpan` converts. Before that conversion every position after
-non-ASCII text in a file was wrong.)
+code points. (Spans store byte offsets into the UTF-8 text, which is what the lexer counts in;
+the column of a position is counted from the start of its line when it is shown.)
 
-## 2. Text forms
-
-`src/core/error/diagnostics/render.cpp`. The form and the colour policy are process-wide
-(`setDiagnosticRenderConfig`); the default is the one-line form with colours, so a tool that
-does not choose keeps what it printed before. `camel` chooses from `--error-format` and
-`--color`.
-
-- **Short**: `(module)path:line:col: [Error]: message suggestion (name=..., code=0x...)`.
-  A secondary location is printed after the message as ` [<label> at <line>:<col>]`.
-- **Rich**: header `error[<name>]: <message>`, then `--> path:line:col` and the excerpt, then
-  one `note:` and excerpt per secondary location, the notes, and `help:` with the suggestion.
-
-The excerpt is laid out in display columns: a tab advances to the next multiple of 4, an East
-Asian wide or fullwidth character takes two columns, a combining mark none, a control character
-is drawn as a space. The underline is computed in those columns.
-
-- A range within one line is underlined from its start to its end; an empty range, and one that
-  starts past the end of the line (the end of the file), gets one caret.
-- A range over several lines shows at most four lines: all of them, or the first two, `...`,
-  and the last. The first line is underlined from the start of the range, the last up to its
-  end, the lines between from their first to their last non-blank character.
 - A line wider than 120 columns is cut to a window that keeps the start of the range in view,
   with `...` on each cut side.
 - Without a position only the header (and the file, when known) is printed.
@@ -70,12 +48,14 @@ command line stopped at the first error because it limited the diagnostics conta
 `--max-errors` (default 20) is now the limit, and what has to be prevented is the report of
 errors that only follow from an earlier one.
 
-**Syntax.** Only the first syntax error of a file is reported. After an error ANTLR
-resynchronises by guessing which token is missing or superfluous, and its later reports are
-mostly consequences of the guess (for `let func = 1` it reports three more errors, all
-spurious). Lexical errors are independent of one another and are all reported; a file with a
+**Syntax.** Every independent syntax error of a file is reported. The parser
+([34_handwritten_parser.md](34_handwritten_parser.md), section 6) reports an error once, says
+nothing more until it has resynchronized at the next statement, and goes on from there, so a
+second diagnostic is a second mistake. (Under ANTLR only the first was reported: its recovery
+guessed at a missing or superfluous token and what it reported afterwards mostly followed from
+the guess.) Lexical errors are independent of one another and are all reported; a file with a
 lexical error gets no syntax error, because the parser saw the tokens without the offending
-text. `DESIGN-QUESTION(diagnostics) Q1`.
+text.
 
 **Stages.** A file with syntax errors is not compiled further. A module whose GCT has errors
 (unresolved types, constructs that are not supported, literals that cannot be cast) is not
@@ -197,9 +177,8 @@ use: syntax `0x01`-`0x0B`; run time `0x30`-`0x3B` for operator and module faults
 
 ## 7. Questions for the language author
 
-- **Q1. Syntax errors after the first.** Only the first is reported (section 3). The
-  alternative is to report all that ANTLR produces; on the samples collected for this work
-  every one after the first was spurious.
+- **Q1. Syntax errors after the first.** Settled by the hand-written parser: every
+  independent syntax error is reported (section 3).
 - **Q2. One error per statement, and silence for poisoned names.** Section 3 lists what is
   not reported until an earlier error is fixed. The alternative for poisoned names, a
   "poisoned type" that flows through expressions so that independent errors in the same

@@ -47,16 +47,6 @@ DiagnosticBuilder &DiagnosticBuilder::at(size_t token) {
     return *this;
 }
 
-DiagnosticBuilder &DiagnosticBuilder::at(antlr4::Token *start, antlr4::Token *end) {
-    range_ = CharRange::fromTokens(start, end);
-    return *this;
-}
-
-DiagnosticBuilder &DiagnosticBuilder::at(antlr4::Token *token) {
-    range_ = CharRange::fromTokens(token, token);
-    return *this;
-}
-
 DiagnosticBuilder &
 DiagnosticBuilder::relatedOrigin(camel::source::origin_id_t origin, std::string message) {
     if (origin != camel::source::kInvalidOriginId) {

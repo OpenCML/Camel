@@ -17,8 +17,6 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "camel/parse/antlr/OpenCMLLexer.h"
-
 #include "camel/parse/ast/builder.h"
 
 #include "camel/utils/scope.h"
@@ -30,6 +28,10 @@
 using namespace std;
 using namespace AST;
 using namespace camel::core::error;
+namespace syn = camel::parse::syntax;
+namespace cst = camel::parse::syntax::cst;
+using TK      = camel::parse::syntax::TokenKind;
+using NK      = camel::parse::syntax::NodeKind;
 
 namespace {
 thread_local camel::source::source_context_ptr_t g_sourceContext = nullptr;
@@ -71,21 +73,34 @@ inline void setNodeOriginByOffsets(
     node->load()->setOrigin(origin);
 }
 
-inline antlr4::Token *tokenFromTree(antlr4::tree::ParseTree *tree) {
-    auto *terminal = dynamic_cast<antlr4::tree::TerminalNode *>(tree);
-    return terminal ? terminal->getSymbol() : nullptr;
+inline syn::TokenRef tokenOf(syn::Child child) { return child.token(); }
+
+// Where a diagnostic placed at tokens points: from the first character of `start` to the end
+// of `end`. The end column is the start column of `end` plus its length in bytes, on the line
+// `end` starts on (what the positions always were, also for a token with non-ASCII text).
+inline CharRange rangeOf(syn::TokenRef start, syn::TokenRef end) {
+    CharRange r{{0, 0}, {0, 0}};
+    if (start) {
+        r.start = {start.line(), start.column()};
+    }
+    const syn::TokenRef last = end ? end : start;
+    if (last) {
+        r.end = {last.line(), last.column() + (last.end() - last.begin())};
+    }
+    return r;
 }
+inline CharRange rangeOf(syn::TokenRef token) { return rangeOf(token, token); }
 
 inline camel::source::origin_id_t
-deriveAstAnchorOrigin(const node_ptr_t &owner, antlr4::Token *token, const std::string &label) {
+deriveAstAnchorOrigin(const node_ptr_t &owner, syn::TokenRef token, const std::string &label) {
     if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId || !owner ||
         !token) {
         return camel::source::kInvalidOriginId;
     }
     auto span = g_sourceContext->createSpan(
         g_sourceFileId,
-        static_cast<size_t>(token->getStartIndex()),
-        static_cast<size_t>(token->getStopIndex() + 1));
+        static_cast<size_t>(token->begin()),
+        static_cast<size_t>(token->end()));
     if (span == camel::source::kInvalidSpanId) {
         return camel::source::kInvalidOriginId;
     }
@@ -106,15 +121,15 @@ deriveAstAnchorOrigin(const node_ptr_t &owner, antlr4::Token *token, const std::
 }
 
 inline camel::source::origin_id_t deriveAstAnchorOrigin(
-    const node_ptr_t &owner, const antlr4::ParserRuleContext *context, const std::string &label) {
+    const node_ptr_t &owner, syn::Node context, const std::string &label) {
     if (!g_sourceContext || g_sourceFileId == camel::source::kInvalidSourceFileId || !context ||
-        !context->getStart() || !context->getStop()) {
+        !context->firstToken() || !context->lastToken()) {
         return camel::source::kInvalidOriginId;
     }
     auto span = g_sourceContext->createSpan(
         g_sourceFileId,
-        static_cast<size_t>(context->getStart()->getStartIndex()),
-        static_cast<size_t>(context->getStop()->getStopIndex() + 1));
+        static_cast<size_t>(context->firstToken()->begin()),
+        static_cast<size_t>(context->lastToken()->end()));
     if (span == camel::source::kInvalidSpanId) {
         return camel::source::kInvalidOriginId;
     }
@@ -175,9 +190,9 @@ template <typename LoadType> std::shared_ptr<LoadType> unwrapNodeAs(std::shared_
     return std::dynamic_pointer_cast<LoadType>(node->load());
 }
 
-inline TokenRange extractTokenRangeFromContext(const antlr4::ParserRuleContext *context) {
-    if (context && context->getStart() && context->getStop()) {
-        return {context->getStart()->getTokenIndex(), context->getStop()->getTokenIndex() + 1};
+inline TokenRange extractTokenRangeFromContext(syn::Node context) {
+    if (context && context->firstToken() && context->lastToken()) {
+        return {context->firstToken()->index(), context->lastToken()->index() + 1};
     } else {
         return {0, 0};
     }
@@ -190,29 +205,29 @@ inline void setNodeTokenRange(node_ptr_t node, size_t start, size_t end) {
     node->load()->setTokenRange(start, end);
 }
 
-inline void setNodeTokenRangeByContext(node_ptr_t node, const antlr4::ParserRuleContext *context) {
+inline void setNodeTokenRangeByContext(node_ptr_t node, syn::Node context) {
     node->load()->setTokenRange(extractTokenRangeFromContext(context));
-    if (context && context->getStart() && context->getStop()) {
+    if (context && context->firstToken() && context->lastToken()) {
         setNodeOriginByOffsets(
             node,
-            static_cast<size_t>(context->getStart()->getStartIndex()),
-            static_cast<size_t>(context->getStop()->getStopIndex() + 1));
+            static_cast<size_t>(context->firstToken()->begin()),
+            static_cast<size_t>(context->lastToken()->end()));
     }
 }
 
-template <typename Context>
-inline void setNodeTokenRangeByContexts(node_ptr_t node, const vector<Context *> context) {
-    if (context.empty()) {
+/// The range from the first of two sibling nodes to the last.
+inline void setNodeTokenRangeBetween(node_ptr_t node, syn::Node first, syn::Node last) {
+    if (!first || !last) {
         node->load()->setTokenRange(0, 0);
         return;
     }
-    size_t start = context.front()->getStart()->getTokenIndex();
-    size_t end   = context.back()->getStop()->getTokenIndex() + 1;
+    size_t start = first->firstToken()->index();
+    size_t end   = last->lastToken()->index() + 1;
     node->load()->setTokenRange(start, end);
     setNodeOriginByOffsets(
         node,
-        static_cast<size_t>(context.front()->getStart()->getStartIndex()),
-        static_cast<size_t>(context.back()->getStop()->getStopIndex() + 1));
+        static_cast<size_t>(first->firstToken()->begin()),
+        static_cast<size_t>(last->lastToken()->end()));
 }
 
 inline node_ptr_t any2node(const std::any &a) { return std::any_cast<node_ptr_t>(a); }
@@ -240,7 +255,7 @@ void Builder::popNamespace(size_t previousSize) {
 /*
 program : SEP? (decl SEP?)* EOF;
 */
-any Builder::visitProgram(OpenCMLParser::ProgramContext *context) {
+any Builder::visitProgram(cst::Program context) {
     ENTER("Program");
     g_sourceContext = sourceContext_;
     g_sourceFileId  = sourceFileId_;
@@ -249,7 +264,10 @@ any Builder::visitProgram(OpenCMLParser::ProgramContext *context) {
 
     node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmts");
     setNodeTokenRangeByContext(stmts, context);
-    for (const auto &decl : context->decl()) {
+    for (const syn::Node decl : context->nodes()) {
+        if (decl.is(NK::Error)) {
+            continue;
+        }
         any res = visitDecl(decl);
         if (res.has_value()) {
             if (res.type() == typeid(node_ptr_t)) {
@@ -286,65 +304,83 @@ any Builder::visitProgram(OpenCMLParser::ProgramContext *context) {
 }
 
 /*
-decl
-    : moduleDecl
-    | importDecl
-    | exportDecl
-    | namespaceDecl
-    |
-usingNamespaceDecl
-    | dataDecl
-    | funcDecl
-    | typeDecl
-    | useDecl
-    ;
+decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
+     | dataDecl | funcDecl | typeDecl | useDecl ;
+namespaceItem : the same without moduleDecl and dataDecl.
+The tree has no node for either rule: the declaration itself is the child.
 */
-any Builder::visitDecl(OpenCMLParser::DeclContext *context) {
-    ENTER("Decl");
-    any res = visit(context->children[0]);
-    LEAVE("Decl");
-    return res;
+any Builder::visitDecl(syn::Node context) {
+    switch (context.kind()) {
+    case NK::ModuleDecl:
+        return visitModuleDecl(cst::ModuleDecl(context));
+    case NK::ImportDecl:
+        return visitImportDecl(cst::ImportDecl(context));
+    case NK::ExportDecl:
+        return visitExportDecl(cst::ExportDecl(context));
+    case NK::NamespaceDecl:
+        return visitNamespaceDecl(cst::NamespaceDecl(context));
+    case NK::UsingNamespaceDecl:
+        return visitUsingNamespaceDecl(cst::UsingNamespaceDecl(context));
+    case NK::DataDecl:
+        return visitDataDecl(cst::DataDecl(context));
+    case NK::FuncDecl:
+        return visitFuncDecl(cst::FuncDecl(context));
+    case NK::TypeDecl:
+        return visitTypeDecl(cst::TypeDecl(context));
+    case NK::UseDecl:
+        return visitUseDecl(cst::UseDecl(context));
+    default:
+        return std::any();
+    }
 }
 
 /*
-stmt
-    : dataDecl
-    | funcDecl
-    | typeDecl
-    | dataExpr
-    | usingNamespaceDecl
-    |
-useDecl
-    | retStmt
-    | blockStmt
-    ;
+stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt
+     | blockStmt ;
+The tree has no node for the rule: the statement itself is the child.
 */
-any Builder::visitStmt(OpenCMLParser::StmtContext *context) {
-    ENTER("Stmt");
-    if (context->dataExpr()) {
-        node_ptr_t expr = any2node(visitDataExpr(context->dataExpr()));
+any Builder::visitStmt(syn::Node context) {
+    if (context.isExpr()) {
+        node_ptr_t expr = any2node(visitExpr(context));
         node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
-        setNodeTokenRangeByContext(stmt, context->dataExpr());
+        setNodeTokenRangeByContext(stmt, context);
         *stmt << expr;
-        LEAVE("Stmt");
         return stmt;
     }
-    any res = visit(context->children[0]);
-    LEAVE("Stmt");
-    return res;
+    switch (context.kind()) {
+    case NK::DataDecl:
+        return visitDataDecl(cst::DataDecl(context));
+    case NK::FuncDecl:
+        return visitFuncDecl(cst::FuncDecl(context));
+    case NK::TypeDecl:
+        return visitTypeDecl(cst::TypeDecl(context));
+    case NK::UsingNamespaceDecl:
+        return visitUsingNamespaceDecl(cst::UsingNamespaceDecl(context));
+    case NK::UseDecl:
+        return visitUseDecl(cst::UseDecl(context));
+    case NK::RetStmt:
+        return visitRetStmt(cst::RetStmt(context));
+    case NK::BlockStmt:
+        return visitBlockStmt(cst::BlockStmt(context));
+    case NK::StmtBlock:
+        return visitStmtBlock(cst::StmtBlock(context));
+    default:
+        throw std::runtime_error(
+            "Builder: not a statement: " + std::string(syn::nodeKindName(context.kind())));
+    }
 }
 
 /*
 stmtList : stmt (SEP? stmt)* SEP? ;
 */
-any Builder::visitStmtList(OpenCMLParser::StmtListContext *context) {
+any Builder::visitStmtList(cst::StmtList context) {
     ENTER("StmtList");
     node_ptr_t block = createNodeAs<StmtBlockLoad>();
     setNodeTokenRangeByContext(block, context);
     node_ptr_t rep = createNodeAs<RepeatedLoad>("Stmt");
     setNodeTokenRangeByContext(rep, context);
-    if (context->stmt().size() > 0) {
-        for (auto &stmt : context->stmt()) {
+    for (const syn::Node stmt : context->nodes()) {
+        if (!stmt.is(NK::Error)) {
             *rep << any2node(visitStmt(stmt));
         }
     }
@@ -353,22 +389,13 @@ any Builder::visitStmtList(OpenCMLParser::StmtListContext *context) {
     return block;
 }
 
-/*
-moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
-*/
-any Builder::visitModuleName(OpenCMLParser::ModuleNameContext *context) {
-    ENTER("ModuleName");
-    string result = context->getText();
-    LEAVE("ModuleName");
-    return result;
-}
 
 /*
 moduleDecl : MODULE identDef ;
 */
-any Builder::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
+any Builder::visitModuleDecl(cst::ModuleDecl context) {
     ENTER("ModuleDecl");
-    Reference ref(context->identDef()->getText());
+    Reference ref(context->get<cst::IdentDef>()->text());
     module_->setRef(ref);
     LEAVE("ModuleDecl");
     return std::any();
@@ -377,20 +404,20 @@ any Builder::visitModuleDecl(OpenCMLParser::ModuleDeclContext *context) {
 /*
 importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
 */
-any Builder::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
+any Builder::visitImportDecl(cst::ImportDecl context) {
     ENTER("ImportDecl");
     auto import_ = std::make_shared<ImportLoad>();
     // Where the import is: a module that is not found is reported here.
     import_->setTokenRange(extractTokenRangeFromContext(context));
-    if (context->moduleName()) {
-        import_->setPath(context->moduleName()->getText());
+    if (context->get<cst::ModuleName>()) {
+        import_->setPath(context->get<cst::ModuleName>()->text());
     }
-    if (context->identDef()) {
-        import_->setAs(Reference(context->identDef()->getText()));
-    } else if (context->bracedIdents()) {
+    if (context->get<cst::IdentDef>()) {
+        import_->setAs(Reference(context->get<cst::IdentDef>()->text()));
+    } else if (context->get<cst::BracedIdents>()) {
         std::vector<Reference> refs;
-        for (auto &ident : context->bracedIdents()->identList()->identDef()) {
-            refs.emplace_back(ident->getText());
+        for (const auto ident : context->get<cst::BracedIdents>()->get<cst::IdentList>()->all<cst::IdentDef>()) {
+            refs.emplace_back(ident->text());
         }
         import_->setRefs(refs);
     }
@@ -402,21 +429,21 @@ any Builder::visitImportDecl(OpenCMLParser::ImportDeclContext *context) {
 /*
 exportDecl : EXPORT (dataDecl | typeDecl | bracedIdents) ;
 */
-any Builder::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
+any Builder::visitExportDecl(cst::ExportDecl context) {
     ENTER("ExportDecl");
     node_ptr_t res = nullptr;
-    if (context->dataDecl()) {
-        res                  = any2node(visitDataDecl(context->dataDecl()));
+    if (context->get<cst::DataDecl>()) {
+        res                  = any2node(visitDataDecl(context->get<cst::DataDecl>()));
         const auto &dataDecl = res->loadAs<DataDeclLoad>();
         for (const auto &ref : dataDecl->refs()) {
             export_->addRef(ref);
         }
-    } else if (context->typeDecl()) {
-        res = any2node(visitTypeDecl(context->typeDecl()));
+    } else if (context->get<cst::TypeDecl>()) {
+        res = any2node(visitTypeDecl(context->get<cst::TypeDecl>()));
         export_->addRef(res->loadAs<TypeDeclLoad>()->ref());
-    } else if (context->bracedIdents()) {
-        for (auto &ident : context->bracedIdents()->identList()->identDef()) {
-            export_->addRef(qualifyRef(Reference(ident->getText())));
+    } else if (context->get<cst::BracedIdents>()) {
+        for (const auto ident : context->get<cst::BracedIdents>()->get<cst::IdentList>()->all<cst::IdentDef>()) {
+            export_->addRef(qualifyRef(Reference(ident->text())));
         }
     }
     LEAVE("ExportDecl");
@@ -430,9 +457,9 @@ any Builder::visitExportDecl(OpenCMLParser::ExportDeclContext *context) {
 /*
 usingNamespaceDecl : USING NAMESPACE identRef ;
 */
-any Builder::visitUsingNamespaceDecl(OpenCMLParser::UsingNamespaceDeclContext *context) {
+any Builder::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
     ENTER("UsingNamespaceDecl");
-    Reference ref        = qualifyRef(any_cast<Reference>(visitIdentRef(context->identRef())));
+    Reference ref        = qualifyRef(any_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
     node_ptr_t usingNode = createNodeAs<UsingNamespaceLoad>(ref);
     setNodeTokenRangeByContext(usingNode, context);
     LEAVE("UsingNamespaceDecl");
@@ -442,10 +469,10 @@ any Builder::visitUsingNamespaceDecl(OpenCMLParser::UsingNamespaceDeclContext *c
 /*
 blockStmt  : WAIT? stmtBlock ;
 */
-any Builder::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) {
+any Builder::visitBlockStmt(cst::BlockStmt context) {
     ENTER("BlockStmt");
-    node_ptr_t res = any2node(visitStmtBlock(context->stmtBlock()));
-    if (context->WAIT()) {
+    node_ptr_t res = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
+    if (context->tok(TK::KwWait)) {
         unwrapNodeAs<StmtBlockLoad>(res)->wait();
     }
     LEAVE("BlockStmt");
@@ -455,12 +482,12 @@ any Builder::visitBlockStmt(OpenCMLParser::BlockStmtContext *context) {
 /*
 stmtBlock  : SYNC? '{' stmtList? '}' ;
 */
-any Builder::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
+any Builder::visitStmtBlock(cst::StmtBlock context) {
     ENTER("StmtBlock");
     node_ptr_t blockNode = nullptr;
-    if (context->stmtList()) {
-        blockNode = any2node(visitStmtList(context->stmtList()));
-        if (context->SYNC()) {
+    if (context->get<cst::StmtList>()) {
+        blockNode = any2node(visitStmtList(context->get<cst::StmtList>()));
+        if (context->tok(TK::KwSync)) {
             // If SYNC is present, we treat this as a synchronous block statement.
             unwrapNodeAs<StmtBlockLoad>(blockNode)->sync();
         }
@@ -476,16 +503,16 @@ any Builder::visitStmtBlock(OpenCMLParser::StmtBlockContext *context) {
 
 /*
 blockExpr  : stmtBlock | dataExpr ;
+The tree has no node for the rule: the block or the expression itself is the child.
 */
-any Builder::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
-    ENTER("BlockExpr");
+any Builder::visitBlockExpr(syn::Node context) {
     node_ptr_t res = nullptr;
-    if (context->stmtBlock()) {
-        res = any2node(visitStmtBlock(context->stmtBlock()));
-    } else if (context->dataExpr()) {
-        node_ptr_t expr = any2node(visitDataExpr(context->dataExpr()));
+    if (context.is(NK::StmtBlock)) {
+        res = any2node(visitStmtBlock(cst::StmtBlock(context)));
+    } else if (context) {
+        node_ptr_t expr = any2node(visitExpr(context));
         node_ptr_t stmt = createNodeAs<ExprStmtLoad>();
-        setNodeTokenRangeByContext(stmt, context->dataExpr());
+        setNodeTokenRangeByContext(stmt, context);
         res = createNodeAs<StmtBlockLoad>();
         setNodeTokenRangeByContext(res, context);
         node_ptr_t rep = createNodeAs<RepeatedLoad>("Stmt");
@@ -494,46 +521,45 @@ any Builder::visitBlockExpr(OpenCMLParser::BlockExprContext *context) {
         *rep << stmt;
         *res << rep;
     }
-    LEAVE("BlockExpr");
     return res;
 }
 
 /*
 funcData   : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr ;
 */
-any Builder::visitFuncData(OpenCMLParser::FuncDataContext *context) {
+any Builder::visitFuncData(cst::FuncData context) {
     ENTER("FuncData");
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     setNodeTokenRangeByContext(funcTypeNode, context);
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
-    auto modifier = context->modifiers();
+    auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->ATOMIC().size() > 0) {
+        if (modifier->tokCount(TK::KwAtomic) > 0) {
             modSet.insert(Modifier::Atomic);
         }
-        if (modifier->SHARED().size() > 0) {
+        if (modifier->tokCount(TK::KwShared) > 0) {
             modSet.insert(Modifier::Shared);
         }
-        if (modifier->SYNC().size() > 0) {
+        if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
         }
-        if (modifier->MACRO().size() > 0) {
+        if (modifier->tokCount(TK::KwMacro) > 0) {
             modSet.insert(Modifier::Macro);
         }
     }
     funcType->setModifiers(modSet);
 
-    if (context->angledParams()) {
-        node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
+    if (context->get<cst::AngledParams>()) {
+        node_ptr_t withParams = any2node(visitAngledParams(context->get<cst::AngledParams>()));
         *funcTypeNode << withParams;
     } else {
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
-    if (context->parentParams()) {
-        node_ptr_t normParams = any2node(visitParentParams(context->parentParams()));
+    if (context->get<cst::ParentParams>()) {
+        node_ptr_t normParams = any2node(visitParentParams(context->get<cst::ParentParams>()));
         *funcTypeNode << normParams;
     } else {
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
@@ -542,25 +568,24 @@ any Builder::visitFuncData(OpenCMLParser::FuncDataContext *context) {
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
     setNodeTokenRange(
         typeOptNode,
-        context->getStart()->getTokenIndex(),
-        (context->typeExpr() ? context->typeExpr()->getStop()->getTokenIndex()
-                             : context->parentParams()->getStart()->getTokenIndex()) +
+        context->firstToken()->index(),
+        (context->type() ? context->type()->lastToken()->index()
+                             : context->get<cst::ParentParams>()->firstToken()->index()) +
             1);
     setNodeOriginByOffsets(
         typeOptNode,
-        static_cast<size_t>(context->getStart()->getStartIndex()),
+        static_cast<size_t>(context->firstToken()->begin()),
         static_cast<size_t>(
-            (context->typeExpr() ? context->typeExpr()->getStop()
-                                 : context->parentParams()->getStart())
-                ->getStopIndex() +
-            1));
-    if (context->typeExpr()) {
-        node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
+            (context->type() ? context->type()->lastToken()
+                                 : context->get<cst::ParentParams>()->firstToken())
+                ->end()));
+    if (context->type()) {
+        node_ptr_t typeNode = any2node(visitType(context->type()));
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
 
-    node_ptr_t blockNode = any2node(visitBlockExpr(context->blockExpr()));
+    node_ptr_t blockNode = any2node(visitBlockExpr(context->lastChild().node()));
 
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>();
     setNodeTokenRangeByContext(funcNode, context);
@@ -599,11 +624,11 @@ any Builder::visitFuncData(OpenCMLParser::FuncDataContext *context) {
 /*
 funcAnno   : '@' identRef angledValues? ;
 */
-any Builder::visitFuncAnno(OpenCMLParser::FuncAnnoContext *context) {
+any Builder::visitFuncAnno(cst::FuncAnno context) {
     ENTER("FuncAnno");
 
-    Reference ref = any_cast<Reference>(visitIdentRef(context->identRef()));
-    if (!context->angledValues()) {
+    Reference ref = any_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>()));
+    if (!context->get<cst::AngledValues>()) {
         // `@name`: the decorator itself.
         node_ptr_t refNode = createNodeAs<RefDataLoad>(ref);
         setNodeTokenRangeByContext(refNode, context);
@@ -615,7 +640,7 @@ any Builder::visitFuncAnno(OpenCMLParser::FuncAnnoContext *context) {
     setNodeTokenRangeByContext(annoNode, context);
     *annoNode << createNodeAs<RefDataLoad>(ref);
     auto [dataList, namedDataList] =
-        any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitAngledValues(context->angledValues()));
+        any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitAngledValues(context->get<cst::AngledValues>()));
     *annoNode << dataList << namedDataList;
 
     LEAVE("FuncAnno");
@@ -629,64 +654,64 @@ funcDecl   :
         EXPORT? implMark? modifiers?
         FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
-any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
+any Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
     node_ptr_t annoListNode = nullptr;
-    if (!context->funcAnno().empty()) {
+    if (!context->all<cst::FuncAnno>().empty()) {
         annoListNode = createNodeAs<RepeatedLoad>("FuncAnno");
-        for (const auto &funcAnno : context->funcAnno()) {
+        for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
             *annoListNode << any2node(visitFuncAnno(funcAnno));
         }
     }
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     TokenRange typeRange    = {
-        context->getStart()->getTokenIndex(),
-        context->stmtBlock()->getStart()->getTokenIndex() + 1};
+        context->firstToken()->index(),
+        context->get<cst::StmtBlock>()->firstToken()->index() + 1};
     setNodeTokenRange(funcTypeNode, typeRange);
     setNodeOriginByOffsets(
         funcTypeNode,
-        static_cast<size_t>(context->getStart()->getStartIndex()),
-        static_cast<size_t>(context->stmtBlock()->getStart()->getStartIndex()));
+        static_cast<size_t>(context->firstToken()->begin()),
+        static_cast<size_t>(context->get<cst::StmtBlock>()->firstToken()->begin()));
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
-    auto implMark = context->implMark();
+    auto implMark = context->get<cst::ImplMark>();
     if (implMark) {
-        if (implMark->getText() == "inner") {
+        if (implMark->text() == "inner") {
             funcType->setImplMark(ImplMark::Inner);
         } else {
             funcType->setImplMark(ImplMark::Outer);
         }
     }
 
-    auto modifier = context->modifiers();
+    auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->ATOMIC().size() > 0) {
+        if (modifier->tokCount(TK::KwAtomic) > 0) {
             modSet.insert(Modifier::Atomic);
         }
-        if (modifier->SHARED().size() > 0) {
+        if (modifier->tokCount(TK::KwShared) > 0) {
             modSet.insert(Modifier::Shared);
         }
-        if (modifier->SYNC().size() > 0) {
+        if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
         }
-        if (modifier->MACRO().size() > 0) {
+        if (modifier->tokCount(TK::KwMacro) > 0) {
             modSet.insert(Modifier::Macro);
         }
     }
     funcType->setModifiers(modSet);
 
-    if (context->angledParams()) {
-        node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
+    if (context->get<cst::AngledParams>()) {
+        node_ptr_t withParams = any2node(visitAngledParams(context->get<cst::AngledParams>()));
         *funcTypeNode << withParams;
     } else {
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
-    if (context->parentParams()) {
-        node_ptr_t normParams = any2node(visitParentParams(context->parentParams()));
+    if (context->get<cst::ParentParams>()) {
+        node_ptr_t normParams = any2node(visitParentParams(context->get<cst::ParentParams>()));
         *funcTypeNode << normParams;
     } else {
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
@@ -696,20 +721,20 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
     setNodeTokenRange(typeOptNode, typeRange);
     setNodeOriginByOffsets(
         typeOptNode,
-        static_cast<size_t>(context->getStart()->getStartIndex()),
-        static_cast<size_t>(context->stmtBlock()->getStart()->getStartIndex()));
-    if (context->typeExpr()) {
-        node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
+        static_cast<size_t>(context->firstToken()->begin()),
+        static_cast<size_t>(context->get<cst::StmtBlock>()->firstToken()->begin()));
+    if (context->type()) {
+        node_ptr_t typeNode = any2node(visitType(context->type()));
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
 
-    Reference ref = qualifyRef(any_cast<Reference>(visitIdentRef(context->identRef())));
-    if (context->EXPORT()) {
+    Reference ref = qualifyRef(any_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
+    if (context->tok(TK::KwExport)) {
         export_->addRef(ref);
     }
 
-    node_ptr_t blockNode = any2node(visitStmtBlock(context->stmtBlock()));
+    node_ptr_t blockNode = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
 
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>(ref);
     setNodeTokenRangeByContext(funcNode, context);
@@ -727,7 +752,7 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
         {
             semanticPart(
                 camel::source::SemanticRole::FuncName,
-                deriveAstAnchorOrigin(funcDeclNode, context->identRef(), "ast.func.name"),
+                deriveAstAnchorOrigin(funcDeclNode, context->get<cst::IdentRef>(), "ast.func.name"),
                 -1,
                 ref.toString()),
             semanticPart(
@@ -760,15 +785,18 @@ any Builder::visitFuncDecl(OpenCMLParser::FuncDeclContext *context) {
 /*
 namespaceDecl : NAMESPACE identRef '{' SEP? (namespaceItem SEP?)* '}' ;
 */
-any Builder::visitNamespaceDecl(OpenCMLParser::NamespaceDeclContext *context) {
+any Builder::visitNamespaceDecl(cst::NamespaceDecl context) {
     ENTER("NamespaceDecl");
-    const Reference nsRef     = any_cast<Reference>(visitIdentRef(context->identRef()));
+    const Reference nsRef     = any_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>()));
     const size_t previousSize = namespaceStack_.size();
     pushNamespace(nsRef);
 
     std::vector<node_ptr_t> nodes;
-    for (const auto &item : context->namespaceItem()) {
-        any res = visitNamespaceItem(item);
+    for (const syn::Node item : context->nodes()) {
+        if (item.is(NK::Error) || item.is(NK::IdentRef)) {
+            continue;
+        }
+        any res = visitDecl(item);
         if (!res.has_value()) {
             continue;
         }
@@ -788,132 +816,59 @@ any Builder::visitNamespaceDecl(OpenCMLParser::NamespaceDeclContext *context) {
     return nodes;
 }
 
-/*
-namespaceItem
-    : namespaceDecl
-    | importDecl
-    | exportDecl
-    | usingNamespaceDecl
- |
- * funcDecl
-    | typeDecl
-    | useDecl
-    ;
-*/
-any Builder::visitNamespaceItem(OpenCMLParser::NamespaceItemContext *context) {
-    ENTER("NamespaceItem");
-    any res = visit(context->children[0]);
-    LEAVE("NamespaceItem");
-    return res;
-}
 
-/*
-parentIdents  : '(' identList? ','? ')' ;
-*/
-any Builder::visitParentIdents(OpenCMLParser::ParentIdentsContext *context) {
-    ENTER("ParentIdents");
-    vector<Reference> refs;
-    if (context->identList()) {
-        refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
-    }
-    LEAVE("ParentIdents");
-    return refs;
-}
 
-/*
-bracedIdents  : '{' identList? ','? '}' ;
-*/
-any Builder::visitBracedIdents(OpenCMLParser::BracedIdentsContext *context) {
-    ENTER("BracedIdents");
-    vector<Reference> refs;
-    if (context->identList()) {
-        refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
-    }
-    LEAVE("BracedIdents");
-    return refs;
-}
 
-/*
-bracketIdents : '[' identList? ','? ']' ;
-*/
-any Builder::visitBracketIdents(OpenCMLParser::BracketIdentsContext *context) {
-    ENTER("BracketIdents");
-    vector<Reference> refs;
-    if (context->identList()) {
-        refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
-    }
-    LEAVE("BracketIdents");
-    return refs;
-}
 
-/*
-carrier       : identList | parentIdents | bracedIdents | bracketIdents ;
-*/
-any Builder::visitCarrier(OpenCMLParser::CarrierContext *context) {
-    ENTER("Carrier");
-    UnpackType type = UnpackType::Tuple;
-    vector<Reference> refs;
-    if (context->identList()) {
-        refs = any_cast<vector<Reference>>(visitIdentList(context->identList()));
-    } else if (context->parentIdents()) {
-        refs = any_cast<vector<Reference>>(visitParentIdents(context->parentIdents()));
-    } else if (context->bracedIdents()) {
-        type = UnpackType::Struct;
-        refs = any_cast<vector<Reference>>(visitBracedIdents(context->bracedIdents()));
-    } else if (context->bracketIdents()) {
-        type = UnpackType::Array;
-        refs = any_cast<vector<Reference>>(visitBracketIdents(context->bracketIdents()));
-    }
-    LEAVE("Carrier");
-    return make_tuple(type, refs);
-}
 
 /*
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 */
-any Builder::visitDataDecl(OpenCMLParser::DataDeclContext *context) {
+any Builder::visitDataDecl(cst::DataDecl context) {
     ENTER("DataDecl");
     bool isVar = false;
-    if (context->VAR()) {
+    if (context->tok(TK::KwVar)) {
         isVar = true;
     }
-    auto [type, refs] =
-        any_cast<std::tuple<UnpackType, vector<Reference>>>(visitCarrier(context->carrier()));
+    // carrier : identList | parentIdents | bracedIdents | bracketIdents
+    UnpackType type          = UnpackType::Tuple;
+    cst::IdentList identList = context->get<cst::IdentList>();
+    if (auto parent = context->get<cst::ParentIdents>()) {
+        identList = parent->get<cst::IdentList>();
+    } else if (auto braced = context->get<cst::BracedIdents>()) {
+        type      = UnpackType::Struct;
+        identList = braced->get<cst::IdentList>();
+    } else if (auto bracket = context->get<cst::BracketIdents>()) {
+        type      = UnpackType::Array;
+        identList = bracket->get<cst::IdentList>();
+    }
+    vector<Reference> refs;
+    std::vector<cst::IdentDef> bindingIdents;
+    for (const auto ident : identList->all<cst::IdentDef>()) {
+        refs.emplace_back(ident->text());
+        bindingIdents.push_back(ident);
+    }
     node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(isVar, type, refs);
     setNodeTokenRangeByContext(dataDeclNode, context);
-    std::vector<OpenCMLParser::IdentDefContext *> bindingIdents;
-    if (context->carrier()->identList()) {
-        bindingIdents = context->carrier()->identList()->identDef();
-    } else if (
-        context->carrier()->parentIdents() && context->carrier()->parentIdents()->identList()) {
-        bindingIdents = context->carrier()->parentIdents()->identList()->identDef();
-    } else if (
-        context->carrier()->bracedIdents() && context->carrier()->bracedIdents()->identList()) {
-        bindingIdents = context->carrier()->bracedIdents()->identList()->identDef();
-    } else if (
-        context->carrier()->bracketIdents() && context->carrier()->bracketIdents()->identList()) {
-        bindingIdents = context->carrier()->bracketIdents()->identList()->identDef();
-    }
-
-    if (context->typeList()) {
-        *dataDeclNode << any2node(visitTypeList(context->typeList()));
+    if (context->get<cst::TypeList>()) {
+        *dataDeclNode << any2node(visitTypeList(context->get<cst::TypeList>()));
     } else {
         node_ptr_t typeListNode = createNodeAs<RepeatedLoad>("Type");
         *dataDeclNode << typeListNode;
     }
 
-    *dataDeclNode << any2node(visitDataList(context->dataList()));
+    *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
     std::vector<camel::source::SemanticPart> parts;
-    if (context->LET()) {
+    if (context->tok(TK::KwLet)) {
         parts.push_back(semanticPart(
             camel::source::SemanticRole::Keyword,
-            deriveAstAnchorOrigin(dataDeclNode, context->LET()->getSymbol(), "ast.data.let"),
+            deriveAstAnchorOrigin(dataDeclNode, context->tok(TK::KwLet), "ast.data.let"),
             -1,
             "let"));
-    } else if (context->VAR()) {
+    } else if (context->tok(TK::KwVar)) {
         parts.push_back(semanticPart(
             camel::source::SemanticRole::Keyword,
-            deriveAstAnchorOrigin(dataDeclNode, context->VAR()->getSymbol(), "ast.data.var"),
+            deriveAstAnchorOrigin(dataDeclNode, context->tok(TK::KwVar), "ast.data.var"),
             -1,
             "var"));
     }
@@ -942,40 +897,40 @@ typeDecl
       (typeExpr | STRING)
     ;
 */
-any Builder::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
+any Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
     string uri;
     ImplMark implMark = ImplMark::Graph;
-    Reference ref     = qualifyRef(any_cast<Reference>(visitIdentRef(context->identRef())));
-    if (context->implMark()) {
-        if (context->implMark()->INNER()) {
+    Reference ref     = qualifyRef(any_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
+    if (context->get<cst::ImplMark>()) {
+        if (context->get<cst::ImplMark>()->tok(TK::KwInner)) {
             implMark = ImplMark::Inner;
         } else {
             implMark = ImplMark::Outer;
         }
     }
-    if (context->STRING()) {
-        uri = context->STRING()->getText();
+    if (context->tok(TK::String)) {
+        uri = context->tok(TK::String)->text();
         // Remove quotes from the string
         uri = uri.substr(1, uri.size() - 2);
     }
 
     node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, implMark, uri);
     setNodeTokenRangeByContext(typeDeclNode, context);
-    if (!context->identDef().empty()) {
+    if (!context->all<cst::IdentDef>().empty()) {
         // `type Pair<T> = (T, T)`: a type function, its parameters are type names in the
         // right-hand side.
         std::vector<std::string> params;
-        for (auto *param : context->identDef()) {
-            params.push_back(param->getText());
+        for (const auto param : context->all<cst::IdentDef>()) {
+            params.push_back(param->text());
         }
         unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setParams(std::move(params));
     }
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
-    if (context->typeExpr()) {
-        setNodeTokenRangeByContext(typeOptNode, context->typeExpr());
-        *typeOptNode << any2node(visitTypeExpr(context->typeExpr()));
+    if (context->type()) {
+        setNodeTokenRangeByContext(typeOptNode, context->type());
+        *typeOptNode << any2node(visitType(context->type()));
     }
 
     *typeDeclNode << typeOptNode;
@@ -986,13 +941,13 @@ any Builder::visitTypeDecl(OpenCMLParser::TypeDeclContext *context) {
 /*
 useDecl    : USE (identDef '=')? identRef ;
 */
-any Builder::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
+any Builder::visitUseDecl(cst::UseDecl context) {
     ENTER("UseDecl");
     Reference ref;
-    if (context->identDef()) {
-        ref.parse(context->identDef()->getText());
+    if (context->get<cst::IdentDef>()) {
+        ref.parse(context->get<cst::IdentDef>()->text());
     }
-    Reference alias(context->identRef()->getText());
+    Reference alias(context->get<cst::IdentRef>()->text());
     node_ptr_t nameDeclNode = createNodeAs<NameDeclLoad>(ref, alias);
     setNodeTokenRangeByContext(nameDeclNode, context);
     LEAVE("UseDecl");
@@ -1000,64 +955,38 @@ any Builder::visitUseDecl(OpenCMLParser::UseDeclContext *context) {
 }
 
 /*
-retStmt    : (RETURN | RAISE | THROW) dataList ;
+retStmt    : (RETURN | THROW) dataList ;
 */
-any Builder::visitRetStmt(OpenCMLParser::RetStmtContext *context) {
+any Builder::visitRetStmt(cst::RetStmt context) {
     ENTER("RetStmt");
     // `throw e` returns an error value: an exit like `return`, whose value is the failed form
     // of the function's declared `T!` (design principles 2.9; the graph builder checks the
-    // declaration). `raise` is undecided (design principles section 6) and stays an error; it
-    // used to be compiled as `return`, silently.
-    if (context->RAISE()) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(context->getStart(), context->getStop())
-            .commit("raise", "exceptions are not implemented");
-    }
-    // The error above stops compilation; the statement is kept as a return so that the rest
-    // of the file is still checked.
-    ExitType exitType = context->THROW() ? ExitType::Throw : ExitType::Return;
+    // declaration).
+    ExitType exitType = context->tok(TK::KwThrow) ? ExitType::Throw : ExitType::Return;
     node_ptr_t exitNode = createNodeAs<ExitStmtLoad>(exitType);
     setNodeTokenRangeByContext(exitNode, context);
-    if (context->dataList()) {
-        *exitNode << any2node(visitDataList(context->dataList()));
+    if (context->get<cst::DataList>()) {
+        *exitNode << any2node(visitDataList(context->get<cst::DataList>()));
     }
     LEAVE("RetStmt");
     return exitNode;
 }
 
-/*
-implMark    : INNER | OUTER ;
-*/
-any Builder::visitImplMark(OpenCMLParser::ImplMarkContext *context) {
-    ENTER("ImplMark");
-    // NOTHING TO DO
-    LEAVE("ImplMark");
-    return nullptr;
-}
 
-/*
-modifiers   : (ATOMIC | SHARED | SYNC | MACRO)+ ;
-*/
-any Builder::visitModifiers(OpenCMLParser::ModifiersContext *context) {
-    ENTER("Modifiers");
-    // NOTHING TO DO
-    LEAVE("Modifiers");
-    return nullptr;
-}
 
 /*
 indexValue   : '...'? dataExpr ;
 */
-any Builder::visitIndexValue(OpenCMLParser::IndexValueContext *context) {
+any Builder::visitSpreadValue(cst::SpreadValue context) {
     ENTER("IndexValue");
-    if (context->children.size() > 1) {
+    if (context->childCount() > 1) {
         // `...xs` is in the grammar but spreading is not implemented. The marker used to be
         // dropped, so that `[...xs, 4]` was built as the array of `xs` and 4.
         diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(context->getStart())
+            .at(rangeOf(context->firstToken()))
             .commit("...", "spreading is not implemented");
     }
-    node_ptr_t res = any2node(visitDataExpr(context->dataExpr()));
+    node_ptr_t res = any2node(visitExpr(context->expr()));
     LEAVE("IndexValue");
     return res;
 }
@@ -1065,13 +994,13 @@ any Builder::visitIndexValue(OpenCMLParser::IndexValueContext *context) {
 /*
 keyTypePair  : identDef ':' typeExpr ;
 */
-any Builder::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
+any Builder::visitKeyTypePair(cst::KeyTypePair context) {
     ENTER("KeyTypePair");
-    Reference ref(context->identDef()->getText());
+    Reference ref(context->get<cst::IdentDef>()->text());
     node_ptr_t namedTypeNode = createNodeAs<NamedTypeLoad>(ref);
     setNodeTokenRangeByContext(namedTypeNode, context);
-    if (context->typeExpr()) {
-        *namedTypeNode << any2node(visitTypeExpr(context->typeExpr()));
+    if (context->type()) {
+        *namedTypeNode << any2node(visitType(context->type()));
     }
     LEAVE("KeyTypePair");
     return namedTypeNode;
@@ -1080,21 +1009,21 @@ any Builder::visitKeyTypePair(OpenCMLParser::KeyTypePairContext *context) {
 /*
 keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
 */
-any Builder::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
+any Builder::visitKeyValuePair(cst::KeyValuePair context) {
     ENTER("KeyValuePair");
-    if (!context->identDef()) {
+    if (!context->get<cst::IdentDef>()) {
         // `...s` in a struct literal or an argument list: in the grammar, not implemented. It
         // used to dereference the missing key and crash the compiler.
         diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(context->getStart())
+            .at(rangeOf(context->firstToken()))
             .commit("...", "spreading is not implemented");
     }
     // The error above stops compilation; a placeholder key keeps the rest of the file checked.
-    Reference ref(context->identDef() ? context->identDef()->getText() : std::string("_"));
+    Reference ref(context->get<cst::IdentDef>() ? context->get<cst::IdentDef>()->text() : std::string("_"));
     node_ptr_t namedDataNode = createNodeAs<NamedDataLoad>(ref);
     setNodeTokenRangeByContext(namedDataNode, context);
-    if (context->dataExpr()) {
-        *namedDataNode << any2node(visitDataExpr(context->dataExpr()));
+    if (context->expr()) {
+        *namedDataNode << any2node(visitExpr(context->expr()));
     }
     LEAVE("KeyValuePair");
     return namedDataNode;
@@ -1103,20 +1032,20 @@ any Builder::visitKeyValuePair(OpenCMLParser::KeyValuePairContext *context) {
 /*
 keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
 */
-any Builder::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
+any Builder::visitKeyParamPair(cst::KeyParamPair context) {
     ENTER("KeyParamPair");
     bool isVar = false;
-    if (context->VAR()) {
+    if (context->tok(TK::KwVar)) {
         isVar = true;
     }
-    Reference ref(context->identDef()->getText());
+    Reference ref(context->get<cst::IdentDef>()->text());
     node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar);
     setNodeTokenRangeByContext(namedPairNode, context);
-    *namedPairNode << any2node(visitTypeExpr(context->typeExpr()));
+    *namedPairNode << any2node(visitType(context->type()));
     node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
-    if (context->dataExpr()) {
-        setNodeTokenRangeByContext(dataExprOptNode, context->dataExpr());
-        *dataExprOptNode << any2node(visitDataExpr(context->dataExpr()));
+    if (context->expr()) {
+        setNodeTokenRangeByContext(dataExprOptNode, context->expr());
+        *dataExprOptNode << any2node(visitExpr(context->expr()));
     }
     *namedPairNode << dataExprOptNode;
     LEAVE("KeyParamPair");
@@ -1126,12 +1055,12 @@ any Builder::visitKeyParamPair(OpenCMLParser::KeyParamPairContext *context) {
 /*
 dataList     : dataExpr (',' dataExpr)* ;
 */
-any Builder::visitDataList(OpenCMLParser::DataListContext *context) {
+any Builder::visitDataList(cst::DataList context) {
     ENTER("DataList");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(rep, context);
-    for (const auto &dataExpr : context->dataExpr()) {
-        *rep << any2node(visitDataExpr(dataExpr));
+    for (const auto &dataExpr : context->exprs()) {
+        *rep << any2node(visitExpr(dataExpr));
     }
     LEAVE("DataList");
     return rep;
@@ -1140,11 +1069,11 @@ any Builder::visitDataList(OpenCMLParser::DataListContext *context) {
 /*
 identList    : identDef (',' identDef)* ;
 */
-any Builder::visitIdentList(OpenCMLParser::IdentListContext *context) {
+any Builder::visitIdentList(cst::IdentList context) {
     ENTER("IdentList");
     std::vector<Reference> refs;
-    for (const auto &identDef : context->identDef()) {
-        refs.emplace_back(identDef->getText());
+    for (const auto &identDef : context->all<cst::IdentDef>()) {
+        refs.emplace_back(identDef->text());
     }
     LEAVE("IdentList");
     return refs;
@@ -1153,12 +1082,12 @@ any Builder::visitIdentList(OpenCMLParser::IdentListContext *context) {
 /*
 indexValues  : indexValue (',' indexValue)* ;
 */
-any Builder::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {
+any Builder::visitIndexValues(cst::IndexValues context) {
     ENTER("IndexValues");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(rep, context);
-    for (const auto &indexValue : context->indexValue()) {
-        *rep << any2node(visitIndexValue(indexValue));
+    for (const auto &indexValue : context->exprs()) {
+        *rep << any2node(visitExpr(indexValue));
     }
     LEAVE("IndexValues");
     return rep;
@@ -1167,11 +1096,11 @@ any Builder::visitIndexValues(OpenCMLParser::IndexValuesContext *context) {
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
 */
-any Builder::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
+any Builder::visitPairedValues(cst::PairedValues context) {
     ENTER("PairedValues");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedData");
     setNodeTokenRangeByContext(rep, context);
-    for (const auto &keyValuePair : context->keyValuePair()) {
+    for (const auto &keyValuePair : context->all<cst::KeyValuePair>()) {
         *rep << any2node(visitKeyValuePair(keyValuePair));
     }
     LEAVE("PairedValues");
@@ -1181,11 +1110,11 @@ any Builder::visitPairedValues(OpenCMLParser::PairedValuesContext *context) {
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
-any Builder::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
+any Builder::visitPairedParams(cst::PairedParams context) {
     ENTER("PairedParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
-    for (const auto &keyParamPair : context->keyParamPair()) {
+    for (const auto &keyParamPair : context->all<cst::KeyParamPair>()) {
         *rep << any2node(visitKeyParamPair(keyParamPair));
     }
     LEAVE("PairedParams");
@@ -1195,17 +1124,17 @@ any Builder::visitPairedParams(OpenCMLParser::PairedParamsContext *context) {
 /*
 argumentList : indexValues (',' pairedValues)? | pairedValues ;
 */
-any Builder::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
+any Builder::visitArgumentList(cst::ArgumentList context) {
     ENTER("ArgumentList");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
-    if (context->indexValues()) {
-        setNodeTokenRangeByContext(dataList, context->indexValues());
-        dataList = any2node(visitIndexValues(context->indexValues()));
+    if (context->get<cst::IndexValues>()) {
+        setNodeTokenRangeByContext(dataList, context->get<cst::IndexValues>());
+        dataList = any2node(visitIndexValues(context->get<cst::IndexValues>()));
     }
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
-    if (context->pairedValues()) {
-        setNodeTokenRangeByContext(namedDataList, context->pairedValues());
-        namedDataList = any2node(visitPairedValues(context->pairedValues()));
+    if (context->get<cst::PairedValues>()) {
+        setNodeTokenRangeByContext(namedDataList, context->get<cst::PairedValues>());
+        namedDataList = any2node(visitPairedValues(context->get<cst::PairedValues>()));
     }
     LEAVE("ArgumentList");
     return make_pair(dataList, namedDataList);
@@ -1214,18 +1143,18 @@ any Builder::visitArgumentList(OpenCMLParser::ArgumentListContext *context) {
 /*
 indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
 */
-any Builder::visitIndices(OpenCMLParser::IndicesContext *context) {
+any Builder::visitIndices(cst::Indices context) {
     ENTER("Indices");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
-    if (context->dataExpr(0)) {
-        *dataList << any2node(visitDataExpr(context->dataExpr(0)));
+    if (context->expr(0)) {
+        *dataList << any2node(visitExpr(context->expr(0)));
     }
-    if (context->dataExpr(1)) {
-        *dataList << any2node(visitDataExpr(context->dataExpr(1)));
+    if (context->expr(1)) {
+        *dataList << any2node(visitExpr(context->expr(1)));
     }
-    if (context->dataExpr(2)) {
-        *dataList << any2node(visitDataExpr(context->dataExpr(2)));
+    if (context->expr(2)) {
+        *dataList << any2node(visitExpr(context->expr(2)));
     }
     LEAVE("Indices");
     return dataList;
@@ -1234,11 +1163,11 @@ any Builder::visitIndices(OpenCMLParser::IndicesContext *context) {
 /*
 parentParams : '(' pairedParams? ','? ')' ;
 */
-any Builder::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
+any Builder::visitParentParams(cst::ParentParams context) {
     ENTER("ParentParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
-    const auto &pairedParams = context->pairedParams();
+    const auto &pairedParams = context->get<cst::PairedParams>();
     if (pairedParams) {
         rep = any2node(visitPairedParams(pairedParams));
     }
@@ -1249,14 +1178,14 @@ any Builder::visitParentParams(OpenCMLParser::ParentParamsContext *context) {
 /*
 parentArgues : '(' argumentList? ','? ')' ;
 */
-any Builder::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
+any Builder::visitParentArgues(cst::ParentArgues context) {
     ENTER("ParentArgues");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
-    if (context->argumentList()) {
+    if (context->get<cst::ArgumentList>()) {
         auto res =
-            any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->argumentList()));
+            any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->get<cst::ArgumentList>()));
         dataList      = res.first;
         namedDataList = res.second;
     }
@@ -1267,11 +1196,11 @@ any Builder::visitParentArgues(OpenCMLParser::ParentArguesContext *context) {
 /*
 angledParams : '<' pairedParams? ','? '>' ;
 */
-any Builder::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
+any Builder::visitAngledParams(cst::AngledParams context) {
     ENTER("AngledParams");
     node_ptr_t res = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(res, context);
-    const auto &pairedParams = context->pairedParams();
+    const auto &pairedParams = context->get<cst::PairedParams>();
     if (pairedParams) {
         res = any2node(visitPairedParams(pairedParams));
     }
@@ -1282,14 +1211,14 @@ any Builder::visitAngledParams(OpenCMLParser::AngledParamsContext *context) {
 /*
 angledValues : '<' argumentList? ','? '>' ;
 */
-any Builder::visitAngledValues(OpenCMLParser::AngledValuesContext *context) {
+any Builder::visitAngledValues(cst::AngledValues context) {
     ENTER("AngledValues");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
-    if (context->argumentList()) {
+    if (context->get<cst::ArgumentList>()) {
         auto res =
-            any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->argumentList()));
+            any_cast<std::pair<node_ptr_t, node_ptr_t>>(visitArgumentList(context->get<cst::ArgumentList>()));
         dataList      = res.first;
         namedDataList = res.second;
     }
@@ -1306,47 +1235,47 @@ pattern
     | '_' // wildcard
     ;
 */
-any Builder::visitPattern(OpenCMLParser::PatternContext *context) {
+any Builder::visitPattern(cst::Pattern context) {
     ENTER("Pattern");
     node_ptr_t res;
-    if (context->literal()) {
-        Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
+    if (context->get<cst::Literal>()) {
+        Literal literal = any_cast<Literal>(visitLiteral(context->get<cst::Literal>()));
         res             = createNodeAs<LiteralLoad>(literal);
-        setNodeTokenRangeByContext(res, context->literal());
-    } else if (context->getText() == "_") {
+        setNodeTokenRangeByContext(res, context->get<cst::Literal>());
+    } else if (context->text() == "_") {
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
-    } else if (context->identRef()) {
+    } else if (context->get<cst::IdentRef>()) {
         // The two fixed patterns over a tagged value (design principles 2.9): `v` binds the
         // value taken out of a `T?` / `T!`, `error e` binds the error of a failed `T!`. Both
         // are a reference node; `error e` carries the bound name as its child. Whether the
         // scrutinee has such a type is known to the graph builder only, which reports an
         // identifier pattern over any other type as not implemented.
-        if (context->identDef() && context->identRef()->getText() != "error") {
+        if (context->get<cst::IdentDef>() && context->get<cst::IdentRef>()->text() != "error") {
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(context->getStart(), context->getStop())
+                .at(rangeOf(context->firstToken(), context->lastToken()))
                 .commit(
-                    context->identRef()->getText() + " " + context->identDef()->getText(),
+                    context->get<cst::IdentRef>()->text() + " " + context->get<cst::IdentDef>()->text(),
                     "the only pattern of two words is 'error e'");
         }
-        res = createNodeAs<RefDataLoad>(Reference(context->identRef()->getText()));
+        res = createNodeAs<RefDataLoad>(Reference(context->get<cst::IdentRef>()->text()));
         setNodeTokenRangeByContext(res, context);
-        if (context->identDef()) {
+        if (context->get<cst::IdentDef>()) {
             node_ptr_t bound =
-                createNodeAs<RefDataLoad>(Reference(context->identDef()->getText()));
-            setNodeTokenRangeByContext(bound, context->identDef());
+                createNodeAs<RefDataLoad>(Reference(context->get<cst::IdentDef>()->text()));
+            setNodeTokenRangeByContext(bound, context->get<cst::IdentDef>());
             *res << bound;
         }
     } else {
         // Tuple and struct patterns are in the grammar, but what they destructure and bind
         // has not been decided. They used to end in an internal error without a position.
-        const char *kind = context->identRef()                       ? "an identifier pattern"
-                           : context->getStart()->getText() == "(" ? "a tuple pattern"
+        const char *kind = context->get<cst::IdentRef>()                       ? "an identifier pattern"
+                           : context->firstToken()->text() == "(" ? "a tuple pattern"
                                                                      : "a struct pattern";
         diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(context->getStart(), context->getStop())
+            .at(rangeOf(context->firstToken(), context->lastToken()))
             .commit(
-                context->getText(),
+                context->text(),
                 std::string(kind) + " is not implemented, only literal patterns and '_' are");
         // The error above stops compilation; a wildcard keeps the rest of the file checked.
         res = createNodeAs<NullLoad>();
@@ -1361,14 +1290,14 @@ matchCase
     : CASE pattern ('|' pattern)* '=>' blockExpr
     ;
 */
-any Builder::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
+any Builder::visitMatchCase(cst::MatchCase context) {
     ENTER("MatchCase");
     // `case a | b => body` enters the body when any of its patterns matches. A branch has one
     // value per arm, so the case becomes one arm per pattern, each with its own copy of the
     // body (only the first pattern used to be read). An alternative that is the wildcard
     // matches everything: the whole case is then the wildcard arm.
     std::vector<node_ptr_t> patterns;
-    for (auto *patternContext : context->pattern()) {
+    for (const auto patternContext : context->all<cst::Pattern>()) {
         node_ptr_t pattern = any2node(visitPattern(patternContext));
         if (pattern->type() == LoadType::Null) {
             patterns.assign(1, pattern);
@@ -1380,14 +1309,14 @@ any Builder::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     for (const node_ptr_t &pattern : patterns) {
         node_ptr_t caseNode = createNodeAs<MatchCaseLoad>();
         setNodeTokenRangeByContext(caseNode, context);
-        node_ptr_t exprNode = any2node(visitBlockExpr(context->blockExpr()));
+        node_ptr_t exprNode = any2node(visitBlockExpr(context->lastChild().node()));
         *caseNode << pattern << exprNode;
         registerAstSemanticBundle(
             caseNode,
             {
                 semanticPart(
                     camel::source::SemanticRole::Keyword,
-                    deriveAstAnchorOrigin(caseNode, context->CASE()->getSymbol(), "ast.match.case"),
+                    deriveAstAnchorOrigin(caseNode, context->tok(TK::KwCase), "ast.match.case"),
                     -1,
                     "case"),
                 semanticPart(
@@ -1407,17 +1336,6 @@ any Builder::visitMatchCase(OpenCMLParser::MatchCaseContext *context) {
     return caseNodes;
 }
 
-/*
-catchClause
-    : CATCH identDef ':' typeExpr stmtBlock
-    ;
-*/
-any Builder::visitCatchClause(OpenCMLParser::CatchClauseContext *context) {
-    ENTER("CatchClause");
-    throw std::runtime_error("visitCatchClause: not implemented yet");
-    LEAVE("CatchClause");
-    return nullptr;
-}
 
 /*
 ctrlExpr
@@ -1426,23 +1344,23 @@ ctrlExpr
     | TRY stmtBlock catchClause+ (FINALLY stmtBlock)?
     ;
 */
-any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
+any Builder::visitCtrlExpr(syn::Node context) {
     ENTER("CtrlExpr");
     node_ptr_t ctrlNode = nullptr;
-    switch (context->getAltNumber()) {
-    case 1: // IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
+    switch (context.kind()) {
+    case NK::IfExpr: // IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     {
         ctrlNode = createNodeAs<IfExprLoad>();
         setNodeTokenRangeByContext(ctrlNode, context);
-        node_ptr_t condNode = any2node(visitLogicalOrExpr(context->logicalOrExpr()));
-        node_ptr_t thenNode = any2node(visitBlockExpr(context->blockExpr(0)));
+        node_ptr_t condNode = any2node(visitExpr(context->expr()));
+        node_ptr_t thenNode = any2node(visitBlockExpr(context->child(3).node()));
         *ctrlNode << condNode;
         *ctrlNode << thenNode;
         node_ptr_t elseBlockNode = createNodeAs<OptionalLoad>("StmtBlock");
         *ctrlNode << elseBlockNode;
-        if (context->blockExpr(1)) {
-            setNodeTokenRangeByContext(elseBlockNode, context->blockExpr(1));
-            *elseBlockNode << any2node(visitBlockExpr(context->blockExpr(1)));
+        if (context->child(5).node()) {
+            setNodeTokenRangeByContext(elseBlockNode, context->child(5).node());
+            *elseBlockNode << any2node(visitBlockExpr(context->child(5).node()));
         } else {
             node_ptr_t stmts = createNodeAs<StmtBlockLoad>();
             *stmts << createNodeAs<RepeatedLoad>("Stmt");
@@ -1453,19 +1371,19 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
             {
                 semanticPart(
                     camel::source::SemanticRole::Keyword,
-                    deriveAstAnchorOrigin(ctrlNode, context->IF()->getSymbol(), "ast.if.keyword"),
+                    deriveAstAnchorOrigin(ctrlNode, context->tok(TK::KwIf), "ast.if.keyword"),
                     -1,
                     "if"),
                 semanticPart(
                     camel::source::SemanticRole::Keyword,
-                    deriveAstAnchorOrigin(ctrlNode, context->THEN()->getSymbol(), "ast.if.then"),
+                    deriveAstAnchorOrigin(ctrlNode, context->tok(TK::KwThen), "ast.if.then"),
                     -1,
                     "then"),
                 semanticPart(
                     camel::source::SemanticRole::Keyword,
-                    context->ELSE() ? deriveAstAnchorOrigin(
+                    context->tok(TK::KwElse) ? deriveAstAnchorOrigin(
                                           ctrlNode,
-                                          context->ELSE()->getSymbol(),
+                                          context->tok(TK::KwElse),
                                           "ast.if.else")
                                     : camel::source::kInvalidOriginId,
                     -1,
@@ -1488,15 +1406,15 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
                     "else"),
             });
     } break;
-    case 2: // MATCH identRef '{' matchCase+ '}'
+    case NK::MatchExpr: // MATCH identRef '{' matchCase+ '}'
     {
-        Reference ref(context->identRef()->getText());
+        Reference ref(context->get<cst::IdentRef>()->text());
         ctrlNode = createNodeAs<MatchExprLoad>(ref);
         setNodeTokenRangeByContext(ctrlNode, context);
         node_ptr_t casesNode = createNodeAs<RepeatedLoad>("MatchCase");
         setNodeTokenRangeByContext(casesNode, context);
-        OpenCMLParser::MatchCaseContext *wildcardCase = nullptr;
-        for (auto &matchCase : context->matchCase()) {
+        cst::MatchCase wildcardCase;
+        for (const auto matchCase : context->all<cst::MatchCase>()) {
             // One node per pattern of the case (see visitMatchCase).
             for (const node_ptr_t &caseNode :
                  any_cast<std::vector<node_ptr_t>>(visitMatchCase(matchCase))) {
@@ -1511,7 +1429,7 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
                 break;
             }
         }
-        if (wildcardCase != nullptr && casesNode->size() == 1) {
+        if (wildcardCase && casesNode->size() == 1) {
             // Only the wildcard is left: the match is its body, whatever the value. A branch
             // without a value to compare is read as an `if` on a boolean, so this is built as
             // one whose condition is true (the scrutinee used to be read as that boolean, and
@@ -1519,11 +1437,11 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
             ctrlNode = createNodeAs<IfExprLoad>();
             setNodeTokenRangeByContext(ctrlNode, context);
             node_ptr_t condNode = createNodeAs<LiteralLoad>(Literal(LiteralType::Boolean, "true"));
-            setNodeTokenRangeByContext(condNode, context->identRef());
+            setNodeTokenRangeByContext(condNode, context->get<cst::IdentRef>());
             node_ptr_t thenNode      = casesNode->at(0)->at(1);
             node_ptr_t elseBlockNode = createNodeAs<OptionalLoad>("StmtBlock");
-            setNodeTokenRangeByContext(elseBlockNode, wildcardCase->blockExpr());
-            *elseBlockNode << any2node(visitBlockExpr(wildcardCase->blockExpr()));
+            setNodeTokenRangeByContext(elseBlockNode, wildcardCase->lastChild().node());
+            *elseBlockNode << any2node(visitBlockExpr(wildcardCase->lastChild().node()));
             *ctrlNode << condNode << thenNode << elseBlockNode;
             registerAstSemanticBundle(
                 ctrlNode,
@@ -1532,7 +1450,7 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
                         camel::source::SemanticRole::Keyword,
                         deriveAstAnchorOrigin(
                             ctrlNode,
-                            context->MATCH()->getSymbol(),
+                            context->tok(TK::KwMatch),
                             "ast.match.keyword"),
                         -1,
                         "match"),
@@ -1558,12 +1476,12 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
         std::vector<camel::source::SemanticPart> parts = {
             semanticPart(
                 camel::source::SemanticRole::Keyword,
-                deriveAstAnchorOrigin(ctrlNode, context->MATCH()->getSymbol(), "ast.match.keyword"),
+                deriveAstAnchorOrigin(ctrlNode, context->tok(TK::KwMatch), "ast.match.keyword"),
                 -1,
                 "match"),
             semanticPart(
                 camel::source::SemanticRole::BranchCondition,
-                deriveAstAnchorOrigin(ctrlNode, context->identRef(), "ast.match.scrutinee"),
+                deriveAstAnchorOrigin(ctrlNode, context->get<cst::IdentRef>(), "ast.match.scrutinee"),
                 -1,
                 ref.ident()),
         };
@@ -1583,7 +1501,7 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
         // Not part of the language (design principles 2.9): its shape on the graph would
         // depend on what the block contains. The diagnostic names what replaces it.
         diags_->of(SemanticDiag::TryCatchNotInLanguage)
-            .at(context->getStart(), context->getStop())
+            .at(rangeOf(context->firstToken(), context->lastToken()))
             .commit();
         // The error above stops compilation; a placeholder keeps the rest of the file checked.
         ctrlNode = createNodeAs<NullLoad>();
@@ -1593,31 +1511,14 @@ any Builder::visitCtrlExpr(OpenCMLParser::CtrlExprContext *context) {
     return ctrlNode;
 }
 
-/*
-dataExpr
-    : waitExpr
-    | ctrlExpr
-    ;
-*/
-any Builder::visitDataExpr(OpenCMLParser::DataExprContext *context) {
-    ENTER("DataExpr");
-    node_ptr_t res = nullptr;
-    if (context->waitExpr()) {
-        res = any2node(visitWaitExpr(context->waitExpr()));
-    } else if (context->ctrlExpr()) {
-        res = any2node(visitCtrlExpr(context->ctrlExpr()));
-    }
-    LEAVE("DataExpr");
-    return res;
-}
 
 /*
 waitExpr : WAIT? assignExpr ;
 */
-any Builder::visitWaitExpr(OpenCMLParser::WaitExprContext *context) {
+any Builder::visitWaitExpr(cst::WaitExpr context) {
     ENTER("WaitExpr");
-    node_ptr_t dataNode = any2node(visitAssignExpr(context->assignExpr()));
-    if (context->WAIT()) {
+    node_ptr_t dataNode = any2node(visitExpr(context->expr()));
+    if (context->tok(TK::KwWait)) {
         unwrapNodeAs<DataLoad>(dataNode)->wait();
     }
     LEAVE("WaitExpr");
@@ -1632,12 +1533,12 @@ assignExpr
     )?
     ;
 */
-any Builder::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
+any Builder::visitAssignExpr(cst::AssignExpr context) {
     ENTER("AssignExpr");
-    node_ptr_t lhsNode = any2node(visitLogicalOrExpr(context->logicalOrExpr(0)));
-    for (size_t i = 1; i < context->logicalOrExpr().size(); i++) {
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    for (size_t i = 1; i < context->exprs().size(); i++) {
         BinaryDataOp op;
-        string strOp = context->children[i * 2 - 1]->getText();
+        string strOp = context->child(i * 2 - 1)->text();
         if (strOp == "=") {
             op = BinaryDataOp::Assign;
         } else if (strOp == "+=") {
@@ -1661,9 +1562,9 @@ any Builder::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
         } else {
             throw std::runtime_error("Invalid assignment operator: " + strOp);
         }
-        node_ptr_t rhsNode      = any2node(visitLogicalOrExpr(context->logicalOrExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
-        setNodeTokenRangeByContext(dataExprNode, context->logicalOrExpr(i));
+        setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataExprNode,
@@ -1672,7 +1573,7 @@ any Builder::visitAssignExpr(OpenCMLParser::AssignExprContext *context) {
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         dataExprNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.assign.operator"),
                     -1,
                     strOp),
@@ -1690,13 +1591,13 @@ logicalOrExpr
     : logicalAndExpr ('||' logicalAndExpr)*
     ;
 */
-any Builder::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
+any Builder::visitLogicalOrExpr(cst::LogicalOrExpr context) {
     ENTER("LogicalOrExpr");
-    node_ptr_t lhsNode = any2node(visitLogicalAndExpr(context->logicalAndExpr(0)));
-    for (size_t i = 1; i < context->logicalAndExpr().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitLogicalAndExpr(context->logicalAndExpr(i)));
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    for (size_t i = 1; i < context->exprs().size(); ++i) {
+        node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::Or);
-        setNodeTokenRangeByContext(dataExprNode, context->logicalAndExpr(i));
+        setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataExprNode,
@@ -1705,7 +1606,7 @@ any Builder::visitLogicalOrExpr(OpenCMLParser::LogicalOrExprContext *context) {
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         dataExprNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.logic.or"),
                     -1,
                     "||"),
@@ -1723,13 +1624,13 @@ logicalAndExpr
     : equalityExpr ('&&' equalityExpr)*
     ;
 */
-any Builder::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) {
+any Builder::visitLogicalAndExpr(cst::LogicalAndExpr context) {
     ENTER("LogicalAndExpr");
-    node_ptr_t lhsNode = any2node(visitEqualityExpr(context->equalityExpr(0)));
-    for (size_t i = 1; i < context->equalityExpr().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitEqualityExpr(context->equalityExpr(i)));
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    for (size_t i = 1; i < context->exprs().size(); ++i) {
+        node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::And);
-        setNodeTokenRangeByContext(dataExprNode, context->equalityExpr(i));
+        setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataExprNode,
@@ -1738,7 +1639,7 @@ any Builder::visitLogicalAndExpr(OpenCMLParser::LogicalAndExprContext *context) 
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         dataExprNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.logic.and"),
                     -1,
                     "&&"),
@@ -1756,13 +1657,13 @@ equalityExpr
     : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
     ;
 */
-any Builder::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
+any Builder::visitEqualityExpr(cst::EqualityExpr context) {
     ENTER("EqualityExpr");
-    node_ptr_t lhsNode = any2node(visitRelationalExpr(
-        context->relationalExpr(0))); // get the left hand side of the equality expr
-    for (size_t i = 1; i < context->relationalExpr().size(); ++i) {
+    node_ptr_t lhsNode = any2node(visitExpr(
+        context->expr(0))); // get the left hand side of the equality expr
+    for (size_t i = 1; i < context->exprs().size(); ++i) {
         BinaryDataOp op;
-        string strOp = context->children[i * 2 - 1]->getText();
+        string strOp = context->child(i * 2 - 1)->text();
         if (strOp == "===") {
             op = BinaryDataOp::StrictEq;
         } else if (strOp == "!==") {
@@ -1774,9 +1675,9 @@ any Builder::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
         } else {
             throw std::runtime_error("Invalid equality operator: " + strOp);
         }
-        node_ptr_t rhsNode      = any2node(visitRelationalExpr(context->relationalExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
-        setNodeTokenRangeByContext(dataExprNode, context->relationalExpr(i));
+        setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataExprNode,
@@ -1785,7 +1686,7 @@ any Builder::visitEqualityExpr(OpenCMLParser::EqualityExprContext *context) {
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         dataExprNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.equality.operator"),
                     -1,
                     strOp),
@@ -1803,12 +1704,12 @@ relationalExpr
     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
     ;
 */
-any Builder::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) {
+any Builder::visitRelationalExpr(cst::RelationalExpr context) {
     ENTER("RelationalExpr");
-    node_ptr_t lhsNode = any2node(visitAdditiveExpr(context->additiveExpr(0)));
-    for (size_t i = 1; i < context->additiveExpr().size(); ++i) {
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    for (size_t i = 1; i < context->exprs().size(); ++i) {
         BinaryDataOp op;
-        string strOp = context->children[i * 2 - 1]->getText();
+        string strOp = context->child(i * 2 - 1)->text();
         if (strOp == "<") {
             op = BinaryDataOp::Less;
         } else if (strOp == ">") {
@@ -1820,7 +1721,7 @@ any Builder::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) 
         } else {
             throw std::runtime_error("Invalid relational operator: " + strOp);
         }
-        if (strOp == ">" && context->additiveExpr().size() > 2) {
+        if (strOp == ">" && context->exprs().size() > 2) {
             // `f<a, 0>` at the end of a line, followed by a line that goes on to contain a
             // `<...>` of its own (`'total = {}'->format<total>->println`): the first `>` is
             // read as a comparison between `0` and the next line, that line's `<` as another,
@@ -1828,17 +1729,17 @@ any Builder::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) 
             // operator, a name used before its declaration) do not point there. A chain of
             // comparisons (`a > b < c`) is never what a program means, so a `>` in one that
             // ends its line is reported.
-            antlr4::Token *opToken   = tokenFromTree(context->children[i * 2 - 1]);
-            antlr4::Token *nextToken = context->additiveExpr(i)->getStart();
-            if (opToken && nextToken && nextToken->getLine() > opToken->getLine()) {
+            syn::TokenRef opToken   = tokenOf(context->child(i * 2 - 1));
+            syn::TokenRef nextToken = context->expr(i)->firstToken();
+            if (opToken && nextToken && nextToken->line() > opToken->line()) {
                 diags_->of(SyntaxDiag::ComparisonAcrossLines)
-                    .at(opToken)
-                    .commit(quoteForDiagnostic(nextToken->getText()));
+                    .at(rangeOf(opToken))
+                    .commit(quoteForDiagnostic(nextToken->text()));
             }
         }
-        node_ptr_t rhsNode      = any2node(visitAdditiveExpr(context->additiveExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
-        setNodeTokenRangeByContext(dataExprNode, context->additiveExpr(i));
+        setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataExprNode,
@@ -1847,7 +1748,7 @@ any Builder::visitRelationalExpr(OpenCMLParser::RelationalExprContext *context) 
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         dataExprNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.relational.operator"),
                     -1,
                     strOp),
@@ -1865,12 +1766,12 @@ additiveExpr
     : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
     ;
 */
-any Builder::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
+any Builder::visitAdditiveExpr(cst::AdditiveExpr context) {
     ENTER("AdditiveExpr");
-    node_ptr_t lhsNode = any2node(visitMultiplicativeExpr(context->multiplicativeExpr(0)));
-    for (size_t i = 1; i < context->multiplicativeExpr().size(); i++) {
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    for (size_t i = 1; i < context->exprs().size(); i++) {
         BinaryDataOp op;
-        string strOp = context->children[i * 2 - 1]->getText();
+        string strOp = context->child(i * 2 - 1)->text();
         if (strOp == "+") {
             op = BinaryDataOp::Add;
         } else if (strOp == "-") {
@@ -1878,9 +1779,9 @@ any Builder::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
         } else {
             throw std::runtime_error("Invalid additive operator: " + strOp);
         }
-        node_ptr_t rhsNode      = any2node(visitMultiplicativeExpr(context->multiplicativeExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
-        setNodeTokenRangeByContext(dataExprNode, context->multiplicativeExpr(i));
+        setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataExprNode,
@@ -1889,7 +1790,7 @@ any Builder::visitAdditiveExpr(OpenCMLParser::AdditiveExprContext *context) {
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         dataExprNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.additive.operator"),
                     -1,
                     strOp),
@@ -1907,12 +1808,12 @@ multiplicativeExpr
     : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
     ;
 */
-any Builder::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *context) {
+any Builder::visitMultiplicativeExpr(cst::MultiplicativeExpr context) {
     ENTER("MultiplicativeExpr");
     BinaryDataOp op;
-    node_ptr_t lhsNode = any2node(visitNullableExpr(context->nullableExpr(0)));
-    for (size_t i = 1; i < context->nullableExpr().size(); i++) {
-        string strOp = context->children[i * 2 - 1]->getText();
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    for (size_t i = 1; i < context->exprs().size(); i++) {
+        string strOp = context->child(i * 2 - 1)->text();
         if (strOp == "*") {
             op = BinaryDataOp::Mul;
         } else if (strOp == "/") {
@@ -1926,9 +1827,9 @@ any Builder::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *c
         } else {
             throw std::runtime_error("Invalid multiplicative operator: " + strOp);
         }
-        node_ptr_t rhsNode      = any2node(visitNullableExpr(context->nullableExpr(i)));
+        node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
         node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(op);
-        setNodeTokenRangeByContext(dataExprNode, context->nullableExpr(i));
+        setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
             dataExprNode,
@@ -1937,7 +1838,7 @@ any Builder::visitMultiplicativeExpr(OpenCMLParser::MultiplicativeExprContext *c
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         dataExprNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.multiplicative.operator"),
                     -1,
                     strOp),
@@ -1955,12 +1856,12 @@ nullableExpr
     : unaryExpr (('??' | '!!') dataExpr)?
     ;
 */
-any Builder::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
+any Builder::visitNullableExpr(cst::NullableExpr context) {
     ENTER("NullableExpr");
-    node_ptr_t res = any2node(visitUnaryExpr(context->unaryExpr()));
+    node_ptr_t res = any2node(visitExpr(context->expr()));
 
-    if (context->children.size() > 1) {
-        string strOp = context->children[1]->getText();
+    if (context->childCount() > 1) {
+        string strOp = context->child(1)->text();
         ReservedDataOp op;
         if (strOp == "??") {
             op = ReservedDataOp::NullThen;
@@ -1970,16 +1871,16 @@ any Builder::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
             throw std::runtime_error("Invalid nullable operator: " + strOp);
         }
         // `a ?? b` / `a !! b`: a branch on the tag of `a` (design principles 2.9).
-        if (context->dataExpr()) {
+        if (context->expr(1)) {
             node_ptr_t dataExprNode = createNodeAs<ReservedExprLoad>(op);
             // Located at the operator: that is where its diagnostics point.
-            antlr4::Token *opToken = tokenFromTree(context->children[1]);
-            setNodeTokenRange(dataExprNode, opToken->getTokenIndex(), opToken->getTokenIndex() + 1);
+            syn::TokenRef opToken = tokenOf(context->child(1));
+            setNodeTokenRange(dataExprNode, opToken->index(), opToken->index() + 1);
             setNodeOriginByOffsets(
                 dataExprNode,
-                static_cast<size_t>(opToken->getStartIndex()),
-                static_cast<size_t>(opToken->getStopIndex() + 1));
-            node_ptr_t rhsNode = any2node(visitDataExpr(context->dataExpr()));
+                static_cast<size_t>(opToken->begin()),
+                static_cast<size_t>(opToken->end()));
+            node_ptr_t rhsNode = any2node(visitExpr(context->expr(1)));
             *dataExprNode << res << rhsNode;
             registerAstSemanticBundle(
                 dataExprNode,
@@ -1988,7 +1889,7 @@ any Builder::visitNullableExpr(OpenCMLParser::NullableExprContext *context) {
                         camel::source::SemanticRole::Operator,
                         deriveAstAnchorOrigin(
                             dataExprNode,
-                            tokenFromTree(context->children[1]),
+                            tokenOf(context->child(1)),
                             "ast.nullable.operator"),
                         -1,
                         strOp),
@@ -2013,33 +1914,31 @@ unaryExpr
     | ('!' | '-' | '~') linkExpr
     ;
 */
-any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
+any Builder::visitUnaryExpr(syn::Node context) {
     ENTER("UnaryExpr");
     node_ptr_t res = nullptr;
 
-    switch (context->getAltNumber()) {
+    switch (context.is(NK::CastExpr) ? 1 : 2) {
     case 1: {
-        if (context->children.size() == 1) {
-            res = any2node(visitLinkExpr(context->linkExpr()));
-        } else {
+        {
             ReservedDataOp op;
-            if (context->AS()) {
+            if (context->tok(TK::KwAs)) {
                 op = ReservedDataOp::As;
-            } else if (context->IS()) {
+            } else if (context->tok(TK::KwIs)) {
                 op = ReservedDataOp::Is;
             } else {
                 throw std::runtime_error(
-                    "Invalid unary operator: " + context->children[0]->getText());
+                    "Invalid unary operator: " + context->child(0)->text());
             }
-            if (context->IS()) {
+            if (context->tok(TK::KwIs)) {
                 // There is no run-time type test. `x is T` used to be accepted with a warning
                 // and compiled as `x`.
                 diags_->of(SemanticDiag::ConstructNotSupported)
-                    .at(context->IS()->getSymbol())
+                    .at(rangeOf(context->tok(TK::KwIs)))
                     .commit("is", "the operator is not implemented");
             }
-            node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
-            node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
+            node_ptr_t dataNode = any2node(visitExpr(context->expr()));
+            node_ptr_t typeNode = any2node(visitType(context->type()));
             res                 = createNodeAs<ReservedExprLoad>(op);
             setNodeTokenRangeByContext(res, context);
             *res << dataNode << typeNode;
@@ -2050,10 +1949,10 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
                         camel::source::SemanticRole::Operator,
                         deriveAstAnchorOrigin(
                             res,
-                            context->AS() ? context->AS()->getSymbol() : context->IS()->getSymbol(),
+                            context->tok(TK::KwAs) ? context->tok(TK::KwAs) : context->tok(TK::KwIs),
                             "ast.unary.keyword"),
                         -1,
-                        context->AS() ? "as" : "is"),
+                        context->tok(TK::KwAs) ? "as" : "is"),
                     semanticPart(
                         camel::source::SemanticRole::Receiver,
                         nodeOrigin(dataNode),
@@ -2070,7 +1969,7 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
     }
     case 2: {
         UnaryDataOp op;
-        string strOp = context->children[0]->getText();
+        string strOp = context->child(0)->text();
         if (strOp == "!") {
             op = UnaryDataOp::Not;
         } else if (strOp == "-") {
@@ -2080,7 +1979,7 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
         } else {
             throw std::runtime_error("Invalid unary operator: " + strOp);
         }
-        node_ptr_t dataNode = any2node(visitLinkExpr(context->linkExpr()));
+        node_ptr_t dataNode = any2node(visitExpr(context->expr()));
         res                 = createNodeAs<UnaryExprLoad>(op);
         setNodeTokenRangeByContext(res, context);
         *res << dataNode;
@@ -2091,7 +1990,7 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         res,
-                        tokenFromTree(context->children[0]),
+                        tokenOf(context->child(0)),
                         "ast.unary.operator"),
                     -1,
                     strOp),
@@ -2104,8 +2003,7 @@ any Builder::visitUnaryExpr(OpenCMLParser::UnaryExprContext *context) {
         break;
     }
     default:
-        throw std::runtime_error(
-            "Invalid alternative number in UnaryExpr: " + std::to_string(context->getAltNumber()));
+        throw std::runtime_error("Invalid alternative in UnaryExpr");
     }
 
     LEAVE("UnaryExpr");
@@ -2117,31 +2015,31 @@ linkExpr
     : compExpr (('->' | '?->') compExpr)*
     ;
 */
-any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
+any Builder::visitLinkExpr(cst::LinkExpr context) {
     ENTER("LinkExpr");
-    node_ptr_t lhsNode = any2node(visitCompExpr(context->compExpr(0)));
-    for (size_t i = 1; i < context->compExpr().size(); i++) {
-        string strOp        = context->children[i * 2 - 1]->getText();
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    for (size_t i = 1; i < context->exprs().size(); i++) {
+        string strOp        = context->child(i * 2 - 1)->text();
         node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
         setNodeTokenRangeByContext(linkNode, context);
-        node_ptr_t rhsNode = any2node(visitCompExpr(context->compExpr(i)));
+        node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
         if (strOp == "?->") {
             // `x ?-> f`: a branch on the tag of `x`; the call is the arm taken when `x` has
             // not failed (design principles 2.9). The marked receiver tells the GCT builder.
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            antlr4::Token *opToken = tokenFromTree(context->children[i * 2 - 1]);
-            setNodeTokenRange(notNullNode, opToken->getTokenIndex(), opToken->getTokenIndex() + 1);
+            syn::TokenRef opToken = tokenOf(context->child(i * 2 - 1));
+            setNodeTokenRange(notNullNode, opToken->index(), opToken->index() + 1);
             setNodeOriginByOffsets(
                 notNullNode,
-                static_cast<size_t>(opToken->getStartIndex()),
-                static_cast<size_t>(opToken->getStopIndex() + 1));
+                static_cast<size_t>(opToken->begin()),
+                static_cast<size_t>(opToken->end()));
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
         node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
-        setNodeTokenRangeByContext(dataList, context->compExpr(i));
+        setNodeTokenRangeByContext(dataList, context->expr(i));
         node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
-        setNodeTokenRangeByContext(namedDataList, context->compExpr(i));
+        setNodeTokenRangeByContext(namedDataList, context->expr(i));
         *dataList << lhsNode;
         *linkNode << rhsNode << dataList << namedDataList;
         registerAstSemanticBundle(
@@ -2151,7 +2049,7 @@ any Builder::visitLinkExpr(OpenCMLParser::LinkExprContext *context) {
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         linkNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.link.operator"),
                     -1,
                     strOp),
@@ -2187,20 +2085,20 @@ compExpr
     : annoExpr (('..' | '?..') annoExpr)*
     ;
 */
-any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
+any Builder::visitCompExpr(cst::CompExpr context) {
     ENTER("CompExpr");
-    node_ptr_t lhsNode = any2node(visitAnnoExpr(context->annoExpr(0)));
-    for (size_t i = 1; i < context->annoExpr().size(); i++) {
-        string strOp        = context->children[i * 2 - 1]->getText();
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
+    for (size_t i = 1; i < context->exprs().size(); i++) {
+        string strOp        = context->child(i * 2 - 1)->text();
         node_ptr_t dataNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Comp);
         setNodeTokenRangeByContext(dataNode, context);
-        node_ptr_t rhsNode = any2node(visitAnnoExpr(context->annoExpr(i)));
+        node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
         if (strOp == "..") {
             // `f..g` is in the grammar, but what it builds is not a function: its result
             // could not be called and printed as 0. Its meaning is not specified (the order
             // of the two functions, functions of several parameters).
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(tokenFromTree(context->children[i * 2 - 1]))
+                .at(rangeOf(tokenOf(context->child(i * 2 - 1))))
                 .commit(
                     strOp,
                     "function composition is not implemented; write a lambda, e.g. "
@@ -2209,10 +2107,10 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
         if (strOp == "?..") {
             // Used to be accepted with a warning and compiled as `..`.
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(tokenFromTree(context->children[i * 2 - 1]))
+                .at(rangeOf(tokenOf(context->child(i * 2 - 1))))
                 .commit(strOp, "the operator is not implemented");
             node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            setNodeTokenRangeByContext(notNullNode, context->annoExpr(i));
+            setNodeTokenRangeByContext(notNullNode, context->expr(i));
             *notNullNode << lhsNode;
             lhsNode = notNullNode;
         }
@@ -2224,7 +2122,7 @@ any Builder::visitCompExpr(OpenCMLParser::CompExprContext *context) {
                     camel::source::SemanticRole::Operator,
                     deriveAstAnchorOrigin(
                         dataNode,
-                        tokenFromTree(context->children[i * 2 - 1]),
+                        tokenOf(context->child(i * 2 - 1)),
                         "ast.comp.operator"),
                     -1,
                     strOp),
@@ -2242,20 +2140,20 @@ annoExpr
     : accessExpr (({isAdjacent()}? (indices | parentArgues | angledValues | '!')) | memberAccess)*
     ;
 */
-any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
+any Builder::visitAnnoExpr(cst::AnnoExpr context) {
     ENTER("AnnoExpr");
-    node_ptr_t lhsNode = any2node(visitAccessExpr(context->accessExpr()));
-    for (size_t i = 1; i < context->children.size(); i++) {
-        auto child = context->children[i];
-        if (antlr4::RuleContext::is(child)) {
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr()));
+    for (size_t i = 1; i < context->childCount(); i++) {
+        auto child = context->child(i);
+        if (child.isNode()) {
             node_ptr_t exprNode = nullptr;
-            if (tt::is_instance_of<OpenCMLParser::IndicesContext>(child)) {
+            if (child.node().is(NK::Indices)) {
                 exprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::Index);
                 setNodeTokenRangeByContext(
                     exprNode,
-                    tt::as_ptr<OpenCMLParser::IndicesContext>(child));
+                    cst::Indices(child.node()));
                 node_ptr_t rhsNode =
-                    any2node(visitIndices(tt::as_ptr<OpenCMLParser::IndicesContext>(child)));
+                    any2node(visitIndices(cst::Indices(child.node())));
                 *exprNode << lhsNode << rhsNode;
                 registerAstSemanticBundle(
                     exprNode,
@@ -2266,7 +2164,7 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                             camel::source::SemanticRole::Operator,
                             deriveAstAnchorOrigin(
                                 exprNode,
-                                tt::as_ptr<OpenCMLParser::IndicesContext>(child)->getStart(),
+                                cst::Indices(child.node())->firstToken(),
                                 "ast.index.operator"),
                             -1,
                             "[]"),
@@ -2281,13 +2179,13 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                             -1,
                             "target"),
                     });
-            } else if (tt::is_instance_of<OpenCMLParser::ParentArguesContext>(child)) {
+            } else if (child.node().is(NK::ParentArgues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
                 setNodeTokenRangeByContext(
                     exprNode,
-                    tt::as_ptr<OpenCMLParser::ParentArguesContext>(child));
+                    cst::ParentArgues(child.node()));
                 auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
-                    visitParentArgues(tt::as_ptr<OpenCMLParser::ParentArguesContext>(child)));
+                    visitParentArgues(cst::ParentArgues(child.node())));
                 *exprNode << lhsNode << dataList << namedDataList;
                 std::vector<camel::source::SemanticPart> parts = {
                     semanticPart(
@@ -2309,16 +2207,16 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
                         "arg"));
                 }
                 registerAstSemanticBundle(exprNode, std::move(parts));
-            } else if (tt::is_instance_of<OpenCMLParser::MemberAccessContext>(child)) {
-                auto *access = tt::as_ptr<OpenCMLParser::MemberAccessContext>(child);
-                exprNode     = makeMemberAccess(lhsNode, access->children[0], access->children[1], access);
-            } else if (tt::is_instance_of<OpenCMLParser::AngledValuesContext>(child)) {
+            } else if (child.node().is(NK::MemberAccess)) {
+                auto access = cst::MemberAccess(child.node());
+                exprNode     = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+            } else if (child.node().is(NK::AngledValues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
                 setNodeTokenRangeByContext(
                     exprNode,
-                    tt::as_ptr<OpenCMLParser::AngledValuesContext>(child));
+                    cst::AngledValues(child.node()));
                 auto [dataList, namedDataList] = any_cast<std::pair<node_ptr_t, node_ptr_t>>(
-                    visitAngledValues(tt::as_ptr<OpenCMLParser::AngledValuesContext>(child)));
+                    visitAngledValues(cst::AngledValues(child.node())));
                 *exprNode << lhsNode << dataList << namedDataList;
                 std::vector<camel::source::SemanticPart> parts = {
                     semanticPart(
@@ -2345,7 +2243,7 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
         } else {
             // The postfix `!` (non-null assertion) used to be recorded and never read.
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(tokenFromTree(child))
+                .at(rangeOf(tokenOf(child)))
                 .commit("!", "the postfix non-null assertion is not implemented");
             unwrapNodeAs<DataLoad>(lhsNode)->setNonNull(true);
         }
@@ -2355,13 +2253,13 @@ any Builder::visitAnnoExpr(OpenCMLParser::AnnoExprContext *context) {
 }
 
 node_ptr_t Builder::makeMemberAccess(
-    node_ptr_t lhs, antlr4::tree::ParseTree *dot, antlr4::tree::ParseTree *member,
-    antlr4::ParserRuleContext *range) {
-    antlr4::Token *memberToken = tokenFromTree(member);
-    std::string memberText     = member->getText();
-    size_t memberBegin         = memberToken ? memberToken->getStartIndex() : 0;
-    size_t memberEnd           = memberToken ? memberToken->getStopIndex() + 1 : 0;
-    if (memberToken && memberToken->getType() == OpenCMLLexer::REAL) {
+    node_ptr_t lhs, syn::Child dot, syn::Child member,
+    syn::Node range) {
+    syn::TokenRef memberToken = tokenOf(member);
+    std::string memberText     = member->text();
+    size_t memberBegin         = memberToken ? memberToken->begin() : 0;
+    size_t memberEnd           = memberToken ? memberToken->end() : 0;
+    if (memberToken && memberToken.kind() == TK::Real) {
         // `t.0.1`: the lexer reads `0.1` as one REAL. It stands for two indices, the first
         // applied here and the second to its result.
         const size_t split = memberText.find('.');
@@ -2369,7 +2267,7 @@ node_ptr_t Builder::makeMemberAccess(
                              memberText.find_first_not_of("0123456789.") == std::string::npos;
         if (!plain) {
             diags_->of(SemanticDiag::InvalidLiteral)
-                .at(memberToken)
+                .at(rangeOf(memberToken))
                 .commit("member index", memberText);
         } else {
             node_ptr_t first = createNodeAs<ReservedExprLoad>(ReservedDataOp::Access);
@@ -2378,8 +2276,8 @@ node_ptr_t Builder::makeMemberAccess(
             node_ptr_t firstMember = createNodeAs<RefDataLoad>(firstRef);
             setNodeTokenRange(
                 firstMember,
-                static_cast<size_t>(memberToken->getTokenIndex()),
-                static_cast<size_t>(memberToken->getTokenIndex() + 1));
+                static_cast<size_t>(memberToken->index()),
+                static_cast<size_t>(memberToken->index() + 1));
             setNodeOriginByOffsets(
                 firstMember,
                 memberBegin,
@@ -2391,7 +2289,7 @@ node_ptr_t Builder::makeMemberAccess(
                 {
                     semanticPart(
                         camel::source::SemanticRole::Operator,
-                        deriveAstAnchorOrigin(first, tokenFromTree(dot), "ast.access.dot"),
+                        deriveAstAnchorOrigin(first, tokenOf(dot), "ast.access.dot"),
                         -1,
                         "."),
                     semanticPart(
@@ -2417,8 +2315,8 @@ node_ptr_t Builder::makeMemberAccess(
     if (memberToken) {
         setNodeTokenRange(
             rhsNode,
-            static_cast<size_t>(memberToken->getTokenIndex()),
-            static_cast<size_t>(memberToken->getTokenIndex() + 1));
+            static_cast<size_t>(memberToken->index()),
+            static_cast<size_t>(memberToken->index() + 1));
         setNodeOriginByOffsets(rhsNode, memberBegin, memberEnd, "ast.access.member");
     }
     *dataNode << lhs << rhsNode;
@@ -2429,7 +2327,7 @@ node_ptr_t Builder::makeMemberAccess(
                 camel::source::SemanticRole::Operator,
                 deriveAstAnchorOrigin(
                     dataNode,
-                    tokenFromTree(dot),
+                    tokenOf(dot),
                     "ast.access.dot"),
                 -1,
                 "."),
@@ -2447,24 +2345,21 @@ node_ptr_t Builder::makeMemberAccess(
     return dataNode;
 }
 
-any Builder::visitMemberAccess(OpenCMLParser::MemberAccessContext *context) {
-    throw std::runtime_error("memberAccess is built by visitAnnoExpr");
-}
 
 /*
 accessExpr
     : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
     ;
 */
-any Builder::visitAccessExpr(OpenCMLParser::AccessExprContext *context) {
+any Builder::visitAccessExpr(cst::AccessExpr context) {
     ENTER("AccessExpr");
-    node_ptr_t lhsNode = any2node(visitPrimaryData(context->primaryData()));
-    for (size_t i = 1; i < context->children.size(); i += 2) {
-        string strOp = context->children[i]->getText();
+    node_ptr_t lhsNode = any2node(visitExpr(context->expr()));
+    for (size_t i = 1; i < context->childCount(); i += 2) {
+        string strOp = context->child(i)->text();
         if (strOp != ".") {
             throw std::runtime_error("Invalid access operator: " + strOp);
         }
-        lhsNode = makeMemberAccess(lhsNode, context->children[i], context->children[i + 1], context);
+        lhsNode = makeMemberAccess(lhsNode, context->child(i), context->child(i + 1), context);
     }
     LEAVE("AccessExpr");
     return lhsNode;
@@ -2475,12 +2370,12 @@ structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
     ;
 */
-any Builder::visitStructData(OpenCMLParser::StructDataContext *context) {
+any Builder::visitStructData(cst::StructData context) {
     ENTER("StructData");
     node_ptr_t dataNode = createNodeAs<StructDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
-    if (context->pairedValues()) {
-        *dataNode << any2node(visitPairedValues(context->pairedValues()));
+    if (context->get<cst::PairedValues>()) {
+        *dataNode << any2node(visitPairedValues(context->get<cst::PairedValues>()));
     } else {
         *dataNode << createNodeAs<RepeatedLoad>("NamedData");
     }
@@ -2493,26 +2388,43 @@ arrayData
     : '[' ((indexValues ','?) | dataExpr FOR identRef IN dataExpr (IF dataExpr)?)? ']'
     ;
 */
-any Builder::visitArrayData(OpenCMLParser::ArrayDataContext *context) {
+any Builder::visitArrayData(cst::ArrayData context) {
     ENTER("ArrayData");
     node_ptr_t dataNode = createNodeAs<ArrayDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
-    if (context->indexValues()) {
-        *dataNode << any2node(visitIndexValues(context->indexValues()));
+    if (context->get<cst::IndexValues>()) {
+        *dataNode << any2node(visitIndexValues(context->get<cst::IndexValues>()));
     } else {
-        if (context->FOR()) {
-            // `[e for x in xs if c]` is in the grammar, but its meaning is not specified (how
-            // `x` is bound, the order and the effects of the element expressions). It used to
-            // be compiled as the empty array, silently.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(context->getStart(), context->getStop())
-                .commit(
-                    "[... for ... in ...]",
-                    "list comprehensions are not implemented; write it with 'map' and 'filter'");
-            // The error above stops compilation; the empty array keeps the rest of the file
-            // checked.
-        }
         *dataNode << createNodeAs<RepeatedLoad>("Data");
+        if (context->tok(TK::KwFor)) {
+            // `[e for x in xs if c]` (design principles 2.10): `filter` then `map`. The parts
+            // are kept as they are written, after the (empty) element list: the element
+            // expression, the name, the source and the optional condition. The GCT builder
+            // lowers them to the two calls (visitComprehension).
+            std::vector<cst::Node> exprs;
+            for (const auto &expr : context->exprs()) {
+                exprs.push_back(expr);
+            }
+            // The name after `for` is an expression node of its own when a bare name is one.
+            const size_t written = 2 + (context->has(TK::KwIf) ? 1 : 0);
+            const bool nameIsExpr = exprs.size() == written + 1;
+            const cst::Node nameSyntax =
+                nameIsExpr ? exprs[1] : cst::Node(context->get<cst::IdentRef>());
+            if (nameIsExpr) {
+                exprs.erase(exprs.begin() + 1);
+            }
+            *dataNode << any2node(visitExpr(exprs[0]));
+            node_ptr_t nameNode = createNodeAs<RefDataLoad>(Reference(nameSyntax->text()));
+            setNodeTokenRangeByContext(nameNode, nameSyntax);
+            *dataNode << nameNode;
+            *dataNode << any2node(visitExpr(exprs[1]));
+            node_ptr_t condNode = createNodeAs<OptionalLoad>("Data");
+            if (exprs.size() > 2) {
+                setNodeTokenRangeByContext(condNode, exprs[2]);
+                *condNode << any2node(visitExpr(exprs[2]));
+            }
+            *dataNode << condNode;
+        }
     }
     LEAVE("ArrayData");
     return dataNode;
@@ -2523,20 +2435,20 @@ tupleData
     : '(' dataList? ','? ')'
     ;
 */
-any Builder::visitTupleData(OpenCMLParser::TupleDataContext *context) {
+any Builder::visitTupleData(cst::TupleData context) {
     ENTER("TupleData");
     // `(e)`: a parenthesized expression, not a tuple (three children: the brackets and the
     // list; a trailing comma would be a fourth).
-    if (context->dataList() && context->dataList()->dataExpr().size() == 1 &&
-        context->children.size() == 3) {
-        any inner = visitDataExpr(context->dataList()->dataExpr(0));
+    if (context->get<cst::DataList>() && context->get<cst::DataList>()->exprs().size() == 1 &&
+        context->childCount() == 3) {
+        any inner = visitExpr(context->get<cst::DataList>()->expr(0));
         LEAVE("TupleData");
         return inner;
     }
     node_ptr_t dataNode = createNodeAs<TupleDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
-    if (context->dataList()) {
-        *dataNode << any2node(visitDataList(context->dataList()));
+    if (context->get<cst::DataList>()) {
+        *dataNode << any2node(visitDataList(context->get<cst::DataList>()));
     } else {
         *dataNode << createNodeAs<RepeatedLoad>("Data");
     }
@@ -2545,30 +2457,20 @@ any Builder::visitTupleData(OpenCMLParser::TupleDataContext *context) {
 }
 
 /*
-primaryData
-    : identRef
-    | literal
-    | arrayData
-    | structData
-    | tupleData
-    | funcData
-    ;
+primaryData : identRef | literal | arrayData | structData | tupleData | funcData ;
+The tree has no node for the rule. A name as an operand is a RefData node, a literal a Literal.
 */
-any Builder::visitPrimaryData(OpenCMLParser::PrimaryDataContext *context) {
-    ENTER("PrimaryData");
-    node_ptr_t res;
-    if (context->identRef()) {
-        Reference ref(context->identRef()->getText());
-        res = createNodeAs<RefDataLoad>(ref);
-        setNodeTokenRangeByContext(res, context->identRef());
-    } else if (context->literal()) {
-        Literal literal = any_cast<Literal>(visitLiteral(context->literal()));
-        res             = createNodeAs<LiteralLoad>(literal);
-        setNodeTokenRangeByContext(res, context->literal());
-    } else {
-        res = any2node(visit(context->children[0]));
-    }
-    LEAVE("PrimaryData");
+any Builder::visitRefData(cst::RefData context) {
+    Reference ref(context->text());
+    node_ptr_t res = createNodeAs<RefDataLoad>(ref);
+    setNodeTokenRangeByContext(res, context);
+    return res;
+}
+
+any Builder::visitLiteralData(cst::Literal context) {
+    Literal literal = any_cast<Literal>(visitLiteral(context));
+    node_ptr_t res  = createNodeAs<LiteralLoad>(literal);
+    setNodeTokenRangeByContext(res, context);
     return res;
 }
 
@@ -2584,36 +2486,34 @@ literal
     | NULL
     ;
 */
-any Builder::visitLiteral(OpenCMLParser::LiteralContext *context) {
-    ENTER("Literal: " + std::to_string(context->getAltNumber()));
+any Builder::visitLiteral(cst::Literal context) {
     LiteralType type;
-    string data = context->getText();
-    if (context->INTEGER()) {
+    string data = context->text();
+    if (context->tok(TK::Integer)) {
         type = LiteralType::Integer;
-    } else if (context->REAL()) {
+    } else if (context->tok(TK::Real)) {
         type = LiteralType::Real;
-    } else if (context->STRING() || context->FSTRING()) {
-        if (context->FSTRING()) {
+    } else if (context->tok(TK::String) || context->tok(TK::FString)) {
+        if (context->tok(TK::FString)) {
             // A backquoted string is a formatted string, which is not implemented. It used to
             // be compiled as a plain string, its `{...}` left as written.
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(context->getStart())
+                .at(rangeOf(context->firstToken()))
                 .commit("`...`", "formatted strings are not implemented; use 'format'");
         }
         data = data.substr(1, data.size() - 2); // Remove quotes
         type = LiteralType::String;
-    } else if (context->MULTI_STR()) {
+    } else if (context->tok(TK::MultiStr)) {
         data = data.substr(3, data.size() - 6); // Remove triple quotes
         type = LiteralType::String;
-    } else if (context->TRUE() || context->FALSE()) {
+    } else if (context->tok(TK::KwTrue) || context->tok(TK::KwFalse)) {
         type = LiteralType::Boolean;
-    } else if (context->NULL_()) {
+    } else if (context->tok(TK::KwNull)) {
         type = LiteralType::Null;
     } else {
         throw std::runtime_error("Unknown literal type in visitLiteral");
     }
     Literal literal(type, data);
-    LEAVE("Literal: " + std::to_string(context->getAltNumber()));
     return literal;
 }
 
@@ -2622,20 +2522,20 @@ typeExpr
     : unionType ('?' unionType?)?
     ;
 */
-any Builder::visitTypeExpr(OpenCMLParser::TypeExprContext *context) {
+any Builder::visitTypeExpr(cst::TypeExpr context) {
     ENTER("TypeExpr");
-    node_ptr_t lhsNode = any2node(visitUnionType(context->unionType(0)));
-    if (context->children.size() > 1) {
-        if (context->unionType().size() > 1) {
+    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
+    if (context->childCount() > 1) {
+        if (context->types().size() > 1) {
             node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::ErrorThen);
-            setNodeTokenRangeByContext(typeExprNode, context->unionType(1));
-            *typeExprNode << any2node(visitUnionType(context->unionType(1)));
+            setNodeTokenRangeByContext(typeExprNode, context->type(1));
+            *typeExprNode << any2node(visitType(context->type(1)));
             lhsNode = typeExprNode;
         } else {
             // `T?` and `T!`, innermost mark first: `T?!` is a fallible nullable.
-            for (size_t i = 1; i < context->children.size(); ++i) {
+            for (size_t i = 1; i < context->childCount(); ++i) {
                 node_ptr_t markedTypeNode =
-                    createNodeAs<NullableTypeLoad>(context->children[i]->getText() == "!");
+                    createNodeAs<NullableTypeLoad>(context->child(i)->text() == "!");
                 setNodeTokenRangeByContext(markedTypeNode, context);
                 *markedTypeNode << lhsNode;
                 lhsNode = markedTypeNode;
@@ -2651,13 +2551,13 @@ unionType
     : interType ('|' interType)*
     ;
 */
-any Builder::visitUnionType(OpenCMLParser::UnionTypeContext *context) {
+any Builder::visitUnionType(cst::UnionType context) {
     ENTER("UnionType");
-    node_ptr_t lhsNode = any2node(visitInterType(context->interType(0)));
-    for (size_t i = 1; i < context->interType().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitInterType(context->interType(i)));
+    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
+    for (size_t i = 1; i < context->types().size(); ++i) {
+        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Union);
-        setNodeTokenRangeByContext(typeExprNode, context->interType(i));
+        setNodeTokenRangeByContext(typeExprNode, context->type(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -2670,13 +2570,13 @@ interType
     : diffType ('&' diffType)*
     ;
 */
-any Builder::visitInterType(OpenCMLParser::InterTypeContext *context) {
+any Builder::visitInterType(cst::InterType context) {
     ENTER("InterType");
-    node_ptr_t lhsNode = any2node(visitDiffType(context->diffType(0)));
-    for (size_t i = 1; i < context->diffType().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitDiffType(context->diffType(i)));
+    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
+    for (size_t i = 1; i < context->types().size(); ++i) {
+        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Inter);
-        setNodeTokenRangeByContext(typeExprNode, context->diffType(i));
+        setNodeTokenRangeByContext(typeExprNode, context->type(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -2689,13 +2589,13 @@ diffType
     : keyUnionDiffType ('\\' keyUnionDiffType)*
     ;
 */
-any Builder::visitDiffType(OpenCMLParser::DiffTypeContext *context) {
+any Builder::visitDiffType(cst::DiffType context) {
     ENTER("DiffType");
-    node_ptr_t lhsNode = any2node(visitKeyUnionDiffType(context->keyUnionDiffType(0)));
-    for (size_t i = 1; i < context->keyUnionDiffType().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitKeyUnionDiffType(context->keyUnionDiffType(i)));
+    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
+    for (size_t i = 1; i < context->types().size(); ++i) {
+        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Diff);
-        setNodeTokenRangeByContext(typeExprNode, context->keyUnionDiffType(i));
+        setNodeTokenRangeByContext(typeExprNode, context->type(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -2708,12 +2608,12 @@ keyUnionDiffType
     : keyInterType (('+' | '-') keyInterType)*
     ;
 */
-any Builder::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *context) {
+any Builder::visitKeyUnionDiffType(cst::KeyUnionDiffType context) {
     ENTER("KeyUnionDiffType");
-    node_ptr_t lhsNode = any2node(visitKeyInterType(context->keyInterType(0)));
-    for (size_t i = 1; i < context->keyInterType().size(); ++i) {
+    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
+    for (size_t i = 1; i < context->types().size(); ++i) {
         TypeOp op;
-        string strOp = context->children[i * 2 - 1]->getText();
+        string strOp = context->child(i * 2 - 1)->text();
         if (strOp == "+") {
             op = TypeOp::KeyUnion;
         } else if (strOp == "-") {
@@ -2721,9 +2621,9 @@ any Builder::visitKeyUnionDiffType(OpenCMLParser::KeyUnionDiffTypeContext *conte
         } else {
             throw std::runtime_error("Invalid key union diff operator: " + strOp);
         }
-        node_ptr_t rhsNode      = any2node(visitKeyInterType(context->keyInterType(i)));
+        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(op);
-        setNodeTokenRangeByContext(typeExprNode, context->keyInterType(i));
+        setNodeTokenRangeByContext(typeExprNode, context->type(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -2736,13 +2636,13 @@ keyInterType
     : typeUnit ('^' typeUnit)*
     ;
 */
-any Builder::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {
+any Builder::visitKeyInterType(cst::KeyInterType context) {
     ENTER("KeyInterType");
-    node_ptr_t lhsNode = any2node(visitTypeUnit(context->typeUnit(0)));
-    for (size_t i = 1; i < context->typeUnit().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitTypeUnit(context->typeUnit(i)));
+    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
+    for (size_t i = 1; i < context->types().size(); ++i) {
+        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
         node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::KeyInter);
-        setNodeTokenRangeByContext(typeExprNode, context->typeUnit(i));
+        setNodeTokenRangeByContext(typeExprNode, context->type(i));
         *typeExprNode << lhsNode << rhsNode;
         lhsNode = typeExprNode;
     }
@@ -2753,20 +2653,20 @@ any Builder::visitKeyInterType(OpenCMLParser::KeyInterTypeContext *context) {
 /*
 typeUnit : (identDef OF)? arrayType ;
 */
-any Builder::visitTypeUnit(OpenCMLParser::TypeUnitContext *context) {
+any Builder::visitTypeUnit(cst::TypeUnit context) {
     ENTER("TypeUnit");
     node_ptr_t res = nullptr;
-    if (context->identDef()) {
+    if (context->get<cst::IdentDef>()) {
         // `name of T` used to end in an exception without a position.
         diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(context->getStart(), context->getStop())
+            .at(rangeOf(context->firstToken(), context->lastToken()))
             .commit(
-                context->identDef()->getText() + " of ...",
+                context->get<cst::IdentDef>()->text() + " of ...",
                 "the 'of' type form is not implemented");
         // The error above stops compilation; the type itself keeps the rest checked.
-        res = any2node(visitArrayType(context->arrayType()));
-    } else if (context->arrayType()) {
-        res = any2node(visitArrayType(context->arrayType()));
+        res = any2node(visitType(context->type()));
+    } else if (context->type()) {
+        res = any2node(visitType(context->type()));
     }
     LEAVE("TypeUnit");
     return res;
@@ -2777,11 +2677,11 @@ arrayType
     : specType ('[' ']')*
     ;
 */
-any Builder::visitArrayType(OpenCMLParser::ArrayTypeContext *context) {
+any Builder::visitArrayType(cst::ArrayType context) {
     ENTER("ArrayType");
-    node_ptr_t res = any2node(visitSpecType(context->specType()));
-    if (context->children.size() > 1) {
-        size_t dims              = (context->children.size() - 1) / 2;
+    node_ptr_t res = any2node(visitType(context->type()));
+    if (context->childCount() > 1) {
+        size_t dims              = (context->childCount() - 1) / 2;
         node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(dims);
         setNodeTokenRangeByContext(arrayTypeNode, context);
         *arrayTypeNode << res;
@@ -2793,81 +2693,60 @@ any Builder::visitArrayType(OpenCMLParser::ArrayTypeContext *context) {
 
 /*
 typeOrData : typeExpr | CONST dataExpr ;
+The tree has a node for the second alternative only.
 */
-any Builder::visitTypeOrData(OpenCMLParser::TypeOrDataContext *context) {
-    ENTER("TypeOrData");
-    node_ptr_t res = nullptr;
-    if (context->typeExpr()) {
-        res = any2node(visitTypeExpr(context->typeExpr()));
-    } else if (context->dataExpr()) {
-        res = any2node(visitDataExpr(context->dataExpr()));
-    } else {
-        throw std::runtime_error("Invalid TypeOrData context");
-    }
-    LEAVE("TypeOrData");
-    return res;
-}
+any Builder::visitConstData(cst::ConstData context) { return visitExpr(context->expr()); }
 
 /*
 specType
     : primaryType ('<' typeOrData (',' typeOrData)* '>')?
     ;
+The node exists only with arguments: its first type child is the type that is specialized.
 */
-any Builder::visitSpecType(OpenCMLParser::SpecTypeContext *context) {
-    ENTER("SpecType");
-    node_ptr_t res          = any2node(visitPrimaryType(context->primaryType()));
+any Builder::visitSpecType(cst::SpecType context) {
+    const auto types        = context->types();
+    const size_t count      = types.size();
+    node_ptr_t res          = any2node(visitType(types[0]));
     node_ptr_t specTypeNode = createNodeAs<SpecTypeLoad>();
     setNodeTokenRangeByContext(specTypeNode, context);
-    if (context->typeOrData().size() > 0) {
+    if (count > 1) {
         node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("TypeOrData");
-        setNodeTokenRangeByContexts(repeatNode, context->typeOrData());
-        for (auto &typeOrData : context->typeOrData()) {
-            *repeatNode << any2node(visitTypeOrData(typeOrData));
+        setNodeTokenRangeBetween(repeatNode, types[1], types[count - 1]);
+        for (size_t i = 1; i < count; ++i) {
+            *repeatNode << any2node(visitType(types[i]));
         }
         *specTypeNode << res << repeatNode;
         res = specTypeNode;
     }
-    LEAVE("SpecType");
     return res;
 }
 
 /*
 primaryType
-    : structType
-    | identRef
-    | '(' typeExpr ')'
-    | tupleType
-    | funcType
-    | TYPEOF dataExpr
-    | TYPEAS identDef
+    : structType | identRef | '(' typeExpr ')' | tupleType | funcType
+    | TYPEOF dataExpr | TYPEAS identDef
     ;
+The tree has no node for the rule, one kind per alternative instead.
 */
-any Builder::visitPrimaryType(OpenCMLParser::PrimaryTypeContext *context) {
-    ENTER("PrimaryType");
-    node_ptr_t res = nullptr;
-    if (context->structType()) {
-        res = any2node(visitStructType(context->structType()));
-    } else if (context->identRef()) {
-        res = createNodeAs<RefTypeLoad>(any_cast<Reference>(visitIdentRef(context->identRef())));
-        setNodeTokenRangeByContext(res, context->identRef());
-    } else if (context->typeExpr()) {
-        res = any2node(visitTypeExpr(context->typeExpr()));
-    } else if (context->tupleType()) {
-        res = any2node(visitTupleType(context->tupleType()));
-    } else if (context->funcType()) {
-        res = any2node(visitFuncType(context->funcType()));
-    } else if (context->dataExpr()) {
-        res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
-        setNodeTokenRangeByContext(res, context);
-        *res << any2node(visitDataExpr(context->dataExpr()));
-    } else if (context->identDef()) {
-        res = createNodeAs<TypeExprLoad>(TypeOp::TypeAs);
-        setNodeTokenRangeByContext(res, context);
-        Reference ref(context->identDef()->getText());
-        *res << createNodeAs<RefTypeLoad>(ref);
-        setNodeTokenRangeByContext(res, context->identDef());
-    }
-    LEAVE("PrimaryType");
+any Builder::visitRefType(cst::RefType context) {
+    node_ptr_t res = createNodeAs<RefTypeLoad>(Reference(context->text()));
+    setNodeTokenRangeByContext(res, context);
+    return res;
+}
+
+any Builder::visitTypeOfType(cst::TypeOfType context) {
+    node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
+    setNodeTokenRangeByContext(res, context);
+    *res << any2node(visitExpr(context->expr()));
+    return res;
+}
+
+any Builder::visitTypeAsType(cst::TypeAsType context) {
+    node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeAs);
+    setNodeTokenRangeByContext(res, context);
+    Reference ref(context->get<cst::IdentDef>()->text());
+    *res << createNodeAs<RefTypeLoad>(ref);
+    setNodeTokenRangeByContext(res, context->get<cst::IdentDef>());
     return res;
 }
 
@@ -2876,12 +2755,12 @@ structType
     : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
     ;
 */
-any Builder::visitStructType(OpenCMLParser::StructTypeContext *context) {
+any Builder::visitStructType(cst::StructType context) {
     ENTER("StructType");
     node_ptr_t res        = createNodeAs<StructTypeLoad>();
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("NamedType");
     setNodeTokenRangeByContext(repeatNode, context);
-    for (auto &pair : context->keyTypePair()) {
+    for (const auto pair : context->all<cst::KeyTypePair>()) {
         node_ptr_t pairNode = any2node(visitKeyTypePair(pair));
         *repeatNode << pairNode;
     }
@@ -2895,12 +2774,12 @@ typeList
     : typeExpr (',' typeExpr)*
     ;
 */
-any Builder::visitTypeList(OpenCMLParser::TypeListContext *context) {
+any Builder::visitTypeList(cst::TypeList context) {
     ENTER("TypeList");
     node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("Type");
     setNodeTokenRangeByContext(repeatNode, context);
-    for (auto &typeExpr : context->typeExpr()) {
-        node_ptr_t typeExprNode = any2node(visitTypeExpr(typeExpr));
+    for (const auto typeExpr : context->types()) {
+        node_ptr_t typeExprNode = any2node(visitType(typeExpr));
         *repeatNode << typeExprNode;
     }
     LEAVE("TypeList");
@@ -2912,12 +2791,12 @@ tupleType
     : '(' typeList? ','? ')'
     ;
 */
-any Builder::visitTupleType(OpenCMLParser::TupleTypeContext *context) {
+any Builder::visitTupleType(cst::TupleType context) {
     ENTER("TupleType");
     node_ptr_t res = createNodeAs<TupleTypeLoad>();
     setNodeTokenRangeByContext(res, context);
-    if (context->typeList()) {
-        node_ptr_t repeatNode = any2node(visitTypeList(context->typeList()));
+    if (context->get<cst::TypeList>()) {
+        node_ptr_t repeatNode = any2node(visitTypeList(context->get<cst::TypeList>()));
         *res << repeatNode;
     } else {
         *res << createNodeAs<RepeatedLoad>("Type");
@@ -2931,50 +2810,50 @@ funcType
     : modifiers? angledParams? parentParams '=>' typeExpr
     ;
 */
-any Builder::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
+any Builder::visitFuncType(cst::FuncType context) {
     ENTER("FuncType");
 
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     setNodeTokenRangeByContext(funcTypeNode, context);
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
-    auto modifier = context->modifiers();
+    auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->ATOMIC().size() > 0) {
+        if (modifier->tokCount(TK::KwAtomic) > 0) {
             modSet.insert(Modifier::Atomic);
         }
-        if (modifier->SHARED().size() > 0) {
+        if (modifier->tokCount(TK::KwShared) > 0) {
             modSet.insert(Modifier::Shared);
         }
-        if (modifier->SYNC().size() > 0) {
+        if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
         }
-        if (modifier->MACRO().size() > 0) {
+        if (modifier->tokCount(TK::KwMacro) > 0) {
             modSet.insert(Modifier::Macro);
         }
     }
     funcType->setModifiers(modSet);
 
-    if (context->angledParams()) {
-        node_ptr_t withParams = any2node(visitAngledParams(context->angledParams()));
+    if (context->get<cst::AngledParams>()) {
+        node_ptr_t withParams = any2node(visitAngledParams(context->get<cst::AngledParams>()));
         *funcTypeNode << withParams;
     } else {
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
-    if (context->parentParams()) {
-        node_ptr_t normParams = any2node(visitParentParams(context->parentParams()));
+    if (context->get<cst::ParentParams>()) {
+        node_ptr_t normParams = any2node(visitParentParams(context->get<cst::ParentParams>()));
         *funcTypeNode << normParams;
     } else {
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
     }
 
     node_ptr_t typeOptNode = createNodeAs<OptionalLoad>("Type");
-    if (context->typeExpr()) {
-        setNodeTokenRangeByContext(typeOptNode, context->typeExpr());
-        setNodeTokenRangeByContext(typeOptNode, context->typeExpr());
-        node_ptr_t typeNode = any2node(visitTypeExpr(context->typeExpr()));
+    if (context->type()) {
+        setNodeTokenRangeByContext(typeOptNode, context->type());
+        setNodeTokenRangeByContext(typeOptNode, context->type());
+        node_ptr_t typeNode = any2node(visitType(context->type()));
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
@@ -2986,9 +2865,9 @@ any Builder::visitFuncType(OpenCMLParser::FuncTypeContext *context) {
 /*
 identDef : IDENTIFIER ;
 */
-any Builder::visitIdentDef(OpenCMLParser::IdentDefContext *context) {
+any Builder::visitIdentDef(cst::IdentDef context) {
     ENTER("IdentDef");
-    Reference ref(context->IDENTIFIER()->getText());
+    Reference ref(context->tok(TK::Identifier)->text());
     LEAVE("IdentDef");
     return ref;
 }
@@ -2996,9 +2875,110 @@ any Builder::visitIdentDef(OpenCMLParser::IdentDefContext *context) {
 /*
 identRef : (IDENTIFIER '::')* IDENTIFIER ;
 */
-any Builder::visitIdentRef(OpenCMLParser::IdentRefContext *context) {
+any Builder::visitIdentRef(cst::IdentRef context) {
     ENTER("IdentRef");
-    Reference ref(context->getText());
+    Reference ref(context->text());
     LEAVE("IdentRef");
     return ref;
+}
+
+// ---- Dispatch on the kind of a node ----
+
+/// Any expression (what `dataExpr` derives).
+any Builder::visitExpr(syn::Node context) {
+    switch (context.kind()) {
+    case NK::SpreadValue:
+        return visitSpreadValue(cst::SpreadValue(context));
+    case NK::WaitExpr:
+        return visitWaitExpr(cst::WaitExpr(context));
+    case NK::IfExpr:
+    case NK::MatchExpr:
+    case NK::TryExpr:
+        return visitCtrlExpr(context);
+    case NK::AssignExpr:
+        return visitAssignExpr(cst::AssignExpr(context));
+    case NK::LogicalOrExpr:
+        return visitLogicalOrExpr(cst::LogicalOrExpr(context));
+    case NK::LogicalAndExpr:
+        return visitLogicalAndExpr(cst::LogicalAndExpr(context));
+    case NK::EqualityExpr:
+        return visitEqualityExpr(cst::EqualityExpr(context));
+    case NK::RelationalExpr:
+        return visitRelationalExpr(cst::RelationalExpr(context));
+    case NK::AdditiveExpr:
+        return visitAdditiveExpr(cst::AdditiveExpr(context));
+    case NK::MultiplicativeExpr:
+        return visitMultiplicativeExpr(cst::MultiplicativeExpr(context));
+    case NK::NullableExpr:
+        return visitNullableExpr(cst::NullableExpr(context));
+    case NK::CastExpr:
+    case NK::UnaryExpr:
+        return visitUnaryExpr(context);
+    case NK::LinkExpr:
+        return visitLinkExpr(cst::LinkExpr(context));
+    case NK::CompExpr:
+        return visitCompExpr(cst::CompExpr(context));
+    case NK::AnnoExpr:
+        return visitAnnoExpr(cst::AnnoExpr(context));
+    case NK::AccessExpr:
+        return visitAccessExpr(cst::AccessExpr(context));
+    case NK::RefData:
+        return visitRefData(cst::RefData(context));
+    case NK::Literal:
+        return visitLiteralData(cst::Literal(context));
+    case NK::ArrayData:
+        return visitArrayData(cst::ArrayData(context));
+    case NK::StructData:
+        return visitStructData(cst::StructData(context));
+    case NK::TupleData:
+        return visitTupleData(cst::TupleData(context));
+    case NK::FuncData:
+        return visitFuncData(cst::FuncData(context));
+    default:
+        throw std::runtime_error(
+            "Builder: not an expression: " + std::string(syn::nodeKindName(context.kind())));
+    }
+}
+
+/// Any type expression (what `typeExpr` and `typeOrData` derive).
+any Builder::visitType(syn::Node context) {
+    switch (context.kind()) {
+    case NK::TypeExpr:
+        return visitTypeExpr(cst::TypeExpr(context));
+    case NK::UnionType:
+        return visitUnionType(cst::UnionType(context));
+    case NK::InterType:
+        return visitInterType(cst::InterType(context));
+    case NK::DiffType:
+        return visitDiffType(cst::DiffType(context));
+    case NK::KeyUnionDiffType:
+        return visitKeyUnionDiffType(cst::KeyUnionDiffType(context));
+    case NK::KeyInterType:
+        return visitKeyInterType(cst::KeyInterType(context));
+    case NK::TypeUnit:
+        return visitTypeUnit(cst::TypeUnit(context));
+    case NK::ArrayType:
+        return visitArrayType(cst::ArrayType(context));
+    case NK::SpecType:
+        return visitSpecType(cst::SpecType(context));
+    case NK::ConstData:
+        return visitConstData(cst::ConstData(context));
+    case NK::StructType:
+        return visitStructType(cst::StructType(context));
+    case NK::RefType:
+        return visitRefType(cst::RefType(context));
+    case NK::ParenType:
+        return visitType(context.type());
+    case NK::TupleType:
+        return visitTupleType(cst::TupleType(context));
+    case NK::FuncType:
+        return visitFuncType(cst::FuncType(context));
+    case NK::TypeOfType:
+        return visitTypeOfType(cst::TypeOfType(context));
+    case NK::TypeAsType:
+        return visitTypeAsType(cst::TypeAsType(context));
+    default:
+        throw std::runtime_error(
+            "Builder: not a type: " + std::string(syn::nodeKindName(context.kind())));
+    }
 }

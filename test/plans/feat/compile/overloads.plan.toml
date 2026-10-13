@@ -131,7 +131,7 @@ kind = "negative"
 case = "../../../cases/compile/overloads/no_match.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "no_match.cml:16:14:", "(bool)", "f: (x: i64) => string", "f: (x: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "no_match.cml:16:14:", "(bool)", "f: (x: int) => string", "f: (x: string) => string"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -186,7 +186,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
 expect_diagnostic_line = 15
 expect_diagnostic_column = 18
-expect_output_contains = ["Function of type '(x: i64) => i64' cannot be called with argument types: <> (f64)."]
+expect_output_contains = ["Function of type '(x: int) => int' cannot be called with argument types: <> (float)."]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

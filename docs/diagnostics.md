@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-123 diagnostics: 112 errors, 11 warnings.
+126 diagnostics: 115 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -36,6 +36,9 @@ prints one entry.
 | `0x02000009` | [SyntaxDiag::MissingToken](#missingtoken) | Error |
 | `0x0200000A` | [SyntaxDiag::UnexpectedToken](#unexpectedtoken) | Error |
 | `0x0200000B` | [SyntaxDiag::UnexpectedEndOfFile](#unexpectedendoffile) | Error |
+| `0x0200000C` | [SyntaxDiag::ComparisonNeedsSpace](#comparisonneedsspace) | Error |
+| `0x0200000D` | [SyntaxDiag::AngleCloseAfterSpace](#anglecloseafterspace) | Error |
+| `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
 | `0x03000000` | [SemanticDiag::UnknownSemanticError](#unknownsemanticerror) | Error |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
@@ -498,6 +501,60 @@ Something opened earlier is not finished: check the last declaration of the file
 
 *No example: no test small enough to show raises it.*
 
+### ComparisonNeedsSpace
+
+`0x0200000C` · Error · `SyntaxDiag::ComparisonNeedsSpace`
+
+**Message**
+
+```text
+This '<' touches {0}, so it opens an angle-bracket argument list, which {1} does not continue.
+```
+
+**Help**
+
+```text
+A '<' directly after a name, a literal or a closing bracket starts '<...>' arguments, as in f<a>(x). If a comparison is meant, put a space before the '<': a < b.
+```
+
+*No example: no test small enough to show raises it.*
+
+### AngleCloseAfterSpace
+
+`0x0200000D` · Error · `SyntaxDiag::AngleCloseAfterSpace`
+
+**Message**
+
+```text
+This '>' follows a space and is read as the comparison operator, so the angle-bracket list it was meant to close is still open at {0}.
+```
+
+**Help**
+
+```text
+The '>' that closes '<...>' touches the last item or starts its line: f<a, b>. Directly inside '<...>', a '>' after a space is a comparison (xs->filter<(x: int) => x > 1>).
+```
+
+*No example: no test small enough to show raises it.*
+
+### LineStartsWithOperator
+
+`0x0200000E` · Error · `SyntaxDiag::LineStartsWithOperator`
+
+**Message**
+
+```text
+A statement cannot start with '{0}': the line break before it ended the statement of the line above.
+```
+
+**Help**
+
+```text
+A line break ends a statement unless the line is visibly unfinished. To continue an expression on the next line, end the line with the operator ('a +', then 'b'). An operator that can only be binary ('*', '->', '&&', '==', ...) also continues the expression when it starts the next line.
+```
+
+*No example: no test small enough to show raises it.*
+
 ### ComparisonAcrossLines
 
 `0x02100001` · Warn · `SyntaxDiag::ComparisonAcrossLines`
@@ -511,15 +568,15 @@ This '>' is read as a comparison with the next line, which starts with {0}: two 
 **Help**
 
 ```text
-A newline does not end a statement, and a '>' followed by an expression is the comparison operator. If this '>' was meant to close '<...>' arguments and the next line to be a new statement, write ';' after the '>'.
+A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.
 ```
 
-**Example** (`test/cases/compile/surface/angle_then_string_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_string_line.cml`)
+**Example** (`test/cases/compile/surface/angle_then_name_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_name_line.cml`)
 
 ```camel
 func main(): int sync {
     let total = [1, 2]->reduce<(acc: int, x: int): int => acc + x, 0>
-    'total = {}'->format<total>->println
+    total->format<total>->println
     return 0
 }
 ```
@@ -1337,13 +1394,14 @@ func main(): int sync {
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/semantic/raise_not_supported.cml`, run as `camel test/cases/compile/semantic/raise_not_supported.cml`)
+**Example** (`test/cases/compile/module_imports/d2_value.cml`, run as `camel -E short test/cases/compile/module_imports/d2_value.cml`)
 
 ```camel
-module raise_not_supported
+import { pi } from mi_values
 
 func main(): int sync {
-    raise 'failed'
+    println(pi)
+    return 0
 }
 ```
 

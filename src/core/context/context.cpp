@@ -179,7 +179,7 @@ namespace {
 /// range is converted with the module's token stream; without this it prints as `?:?`.
 void resolveTokenRanges(const std::shared_ptr<UserDefinedModule> &module) {
     if (module && module->diagnostics() && module->parser()) {
-        module->diagnostics()->fetchAll(module->parser()->getTokens());
+        module->diagnostics()->fetchAll(module->parser()->tokenPositions());
     }
 }
 

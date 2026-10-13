@@ -50,8 +50,8 @@ func in_block(a: int): int {
     return 2
 }
 
-// `return null` is how an arm is given no value (an `if` without `else` needs it after an
-// expression statement). It is not reported.
+// `return null` used to be how an arm was given no value, and was exempt. An `if` without
+// `else` needs no such thing (design principles 2.10), so it is reported like any other.
 func no_value(a: int): int sync {
     var total = 0
     if a > 0 then sync {

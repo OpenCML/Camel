@@ -71,7 +71,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 14
-expect_output_contains = ["The call to 'h: (a: Tensor<float32, [3]>) => f64' needs an explicit conversion", "argument 1 ('t', for parameter 'a') has type 'Tensor', which is less exact than 'Tensor<float32, [3]>'", "write the conversion: 't as Tensor<f32, const [3]>'"]
+expect_output_contains = ["The call to 'h: (a: Tensor<float32, [3]>) => float' needs an explicit conversion", "argument 1 ('t', for parameter 'a') has type 'Tensor', which is less exact than 'Tensor<float32, [3]>'", "write the conversion: 't as Tensor<f32, const [3]>'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

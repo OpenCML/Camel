@@ -1,0 +1,14 @@
+/**
+ * `reduce` and `foreach` are ordered: step i runs after step i - 1. The parallel scheduler runs
+ * their steps one after the other on the thread that reached the operator, and starts no task
+ * graph for them (a chain of one task per step is the same order at the price of a task each).
+ * The test reads the number of task graphs from the scheduler's statistics: 0.
+ */
+module ordered_operators_inline
+
+func main(): int sync {
+    let total = range(0, 2000)->reduce<(acc: int, cur: int): int => (acc * 31 + cur) % 1000003, 7>
+    println(total)
+    range(0, 5)->foreach<(i: int) => sync { println('step', i) }>
+    return 0
+}

@@ -11,7 +11,7 @@ case = "../../../cases/compile/return_type/string_as_int.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
-expect_output_contains = ["Return type 'string' does not match the function's declared return type 'i64'"]
+expect_output_contains = ["Return type 'string' does not match the function's declared return type 'int'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -23,7 +23,7 @@ case = "../../../cases/compile/return_type/int_as_float.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
-expect_output_contains = ["Return type 'i64' does not match the function's declared return type 'f64'"]
+expect_output_contains = ["Return type 'int' does not match the function's declared return type 'float'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

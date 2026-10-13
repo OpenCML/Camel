@@ -1,13 +1,13 @@
 /**
- * A list comprehension is in the grammar but not implemented: a compile-time error at the
- * literal (line 9), not the empty array it used to be compiled as.
+ * A list comprehension is `filter` then `map` (design principles 2.10). It used to be refused
+ * as not implemented, and before that compiled as the empty array.
  */
 module list_comprehension
 
 func main(): int sync {
     let xs = [1, 2, 3]
     let ys = [x * 2 for x in xs if x > 1]
-    println('never printed')
+    println('reached')
     println(ys)
     return 0
 }

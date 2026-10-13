@@ -45,8 +45,6 @@ class DiagnosticBuilder {
     DiagnosticBuilder &atSpan(camel::source::span_id_t span);
     DiagnosticBuilder &atOrigin(camel::source::origin_id_t origin);
     DiagnosticBuilder &at(size_t token);
-    DiagnosticBuilder &at(antlr4::Token *start, antlr4::Token *end);
-    DiagnosticBuilder &at(antlr4::Token *token);
 
     // Secondary locations and remarks (see DiagLabel). They are taken verbatim: only the
     // message and the suggestion of the catalog entry are format templates.

@@ -23,31 +23,12 @@
 
 namespace camel::core::error {
 
-CharRange CharRange::fromTokens(antlr4::Token *start, antlr4::Token *end) {
-    CharRange r{{0, 0}, {0, 0}};
-    if (start) {
-        r.start = {
-            static_cast<size_t>(start->getLine() - 1),
-            static_cast<size_t>(start->getCharPositionInLine())};
-    }
-    if (end) {
-        r.end = {
-            static_cast<size_t>(end->getLine() - 1),
-            static_cast<size_t>(end->getCharPositionInLine() + end->getText().length())};
-    } else if (start) {
-        r.end = {
-            static_cast<size_t>(start->getLine() - 1),
-            static_cast<size_t>(start->getCharPositionInLine() + start->getText().length())};
-    }
-    return r;
-}
-
 // ---- RangeConverter implementation ----
 CharRange RangeConverter::conv(const TokenRange &tr) const {
     size_t startIdx = tr.start;
     size_t endIdx   = tr.end;
 
-    if (tokens_.empty())
+    if (tokens_.size() == 0)
         return {{0, 0}, {0, 0}};
     if (startIdx >= endIdx)
         return {{0, 0}, {0, 0}};
@@ -58,7 +39,7 @@ CharRange RangeConverter::conv(const TokenRange &tr) const {
         startIdx = tokens_.size() - 1;
     endIdx = std::max(std::min(endIdx, tokens_.size()) - 1, startIdx);
 
-    return CharRange::fromTokens(tokens_[startIdx], tokens_[endIdx]);
+    return tokens_.charRange(startIdx, endIdx);
 }
 
 } // namespace camel::core::error

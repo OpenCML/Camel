@@ -167,7 +167,7 @@ const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 3, 'three warnings on stderr, got ' + lines.length + ': ' + input.normalized.stderr)
 const expect = [
     ['warnings_visible.cml:11:10: [Warn]: Variable parameters are only allowed in sync functions.', 'SemanticDiag::VarParamInAsyncFunction, code=0x03100001'],
-    ['warnings_visible.cml:18:5: [Warn]: The call of \'inc: (var x: i64) => i64\' is neither waited nor in a sync block, and it takes a var argument.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
+    ['warnings_visible.cml:18:5: [Warn]: The call of \'inc: (var x: int) => int\' is neither waited nor in a sync block, and it takes a var argument.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
     ['warnings_visible.cml:19:13: [Warn]: The branch is neither waited nor in a sync block, and an arm writes the captured variable \'c\'.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
 ]
 expect.forEach(([text, name], i) => {

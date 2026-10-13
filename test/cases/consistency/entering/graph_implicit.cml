@@ -1,0 +1,6 @@
+func or_else(x: int?, d: int): int { return x ?? d }
+func main(): int sync {
+    let v = 5
+    println(or_else(v, 0))
+    return 0
+}

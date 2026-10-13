@@ -23,11 +23,11 @@ func main(): int sync {
     let n26 = [('', false)];
     let n42 = if false then sync {
         if f1([(1.0, false)]) then sync {
-            return null;
+            null;
         } else sync {
             let n34 = k17(7);
             var v35 = n26[1].0;
-            return null;
+            null;
         };
         let n36 = k17(0);
         return [{ x: 0, y: 0 }];

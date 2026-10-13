@@ -1,0 +1,45 @@
+/**
+ * map, filter and unordered_foreach over arrays large enough for the parallel scheduler to hand
+ * the elements out in chunks to several workers, with element functions of three kinds: a few
+ * built-in operators (the calling thread starts alone and asks for help), a recursion (helpers
+ * from the start), and a call of a module operator. Whatever the chunks were and whoever ran
+ * them, element i of a result comes from element i of the input, every element runs exactly
+ * once, and an empty and a one-element array work.
+ */
+module map_chunks
+
+import { sqrt } from math
+import { unordered_foreach } from para
+
+func collatz_steps(n: int, steps: int): int {
+    return if n == 1 then steps
+        else if n % 2 == 0 then collatz_steps(n / 2, steps + 1)
+        else collatz_steps(3 * n + 1, steps + 1)
+}
+
+func checksum(xs: int[]): int {
+    return range(0, len(xs))->reduce<(acc: int, i: int): int => (acc * 31 + xs[i] * (i % 7 + 1)) % 1000000007, 0>
+}
+
+func main(): int sync {
+    let n = 60000
+    let light = range(0, n)->map<(x: int): int => x * 3 % 1009 + x % 5>
+    println('light', len(light), light[0], light[1], light[n / 2], light[n - 1], checksum(light))
+
+    let kept = range(0, n)->filter<(x: int): bool => x * x % 7 == 2>
+    println('kept', len(kept), kept[0], kept[len(kept) - 1], checksum(kept))
+
+    let steps = range(1, 4001)->map<(x: int): int => collatz_steps(x, 0)>
+    println('steps', len(steps), steps[0], steps[26], steps[3999], checksum(steps))
+
+    let roots = range(0, 3000)->map<(x: int): int => int(sqrt(float(x * x)) + 0.5)>
+    println('roots', len(roots), roots[0], roots[2999], checksum(roots))
+
+    let none = range(0, 0)->map<(x: int): int => x + 1>
+    let one = range(5, 6)->map<(x: int): int => x + 1>
+    println('edge', len(none), one)
+
+    unordered_foreach<(x: int) => x + 1>(range(0, 5000))
+    println('done')
+    return 0
+}

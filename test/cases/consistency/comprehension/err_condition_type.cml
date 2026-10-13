@@ -1,0 +1,4 @@
+func main(): int sync {
+    println([x for x in [1, 2] if x + 1])
+    return 0
+}

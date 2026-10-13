@@ -1,0 +1,54 @@
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="__g_3__";
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N00 [label="x", type="PORT"];
+            N01 [label=":op/mul_l", type="OPER", origin=146, span="2:66-2:67", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+            F02 -> N00 [label="0", type="NORM_PORT"];
+            N01 -> O02 [label="0", type="EXIT"];
+            N00 -> N01 [label="0|0", type="NORM"];
+            N00 -> N01 [label="0|1", type="NORM"];
+        }
+        subgraph cluster_F03 {
+            label="__g_5__";
+            F03 [label="ARGS", type="ARGS"];
+            O03 [label="EXIT", type="EXIT"];
+            N02 [label="x", type="PORT"];
+            N03 [label="2", type="DATA", origin=151, span="2:39-2:40", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+            N04 [label=":op/mod_l", type="OPER", origin=152, span="2:37-2:38", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+            N05 [label="0", type="DATA", origin=153, span="2:44-2:45", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+            N06 [label=":op/eq_l", type="OPER", origin=154, span="2:41-2:43", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+            F03 -> N02 [label="0", type="NORM_PORT"];
+            N06 -> O03 [label="0", type="EXIT"];
+            N02 -> N04 [label="0|0", type="NORM"];
+            N03 -> N04 [label="0|1", type="NORM"];
+            N04 -> N06 [label="0|0", type="NORM"];
+            N05 -> N06 [label="0|1", type="NORM"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N07 [label="[1, 2, 3, 4, 5, 6]", type="DATA", origin=141, span="1:13-1:31", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+        N08 [label="Function(graph=__g_3__, tupleSlots=0)", type="DATA", origin=144, span="2:52-2:69", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+        N09 [label="Function(graph=__g_5__, tupleSlots=0)", type="DATA", origin=148, span="2:23-2:45", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+        N0A [label=":mark/filter_arr", type="OPER", origin=155, span="2:22-2:46", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+        N0B [label=":mark/map_arr", type="OPER", origin=156, span="2:51-2:70", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+        N0C [label=":io/println", type="OPER", origin=157, span="2:4-2:11", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+        N0D [label="0", type="DATA", origin=158, span="3:11-3:12", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+        N0E [label="GATE", type="GATE"];
+        N0E -> O01 [label="0", type="EXIT"];
+        N09 -> N0A [label="0|0", type="WITH"];
+        N07 -> N0A [label="0|0", type="NORM"];
+        N08 -> N0B [label="0|0", type="WITH"];
+        N0A -> N0B [label="0|0", type="NORM"];
+        N0B -> N0C [label="0|0", type="NORM"];
+        N0D -> N0E [label="0|0", type="NORM"];
+        N0C -> N0E [label="0|0", type="CTRL"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N0F [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=140, span="0:0-4:1", srcfile="<ROOT>/test/cases/consistency/comprehension/graph_written_out.cml"];
+    N10 [label="CALL", type="CALL"];
+    N10 -> O00 [label="0", type="EXIT"];
+    N0F -> N10 [label="0|0", type="WITH"];
+}

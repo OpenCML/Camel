@@ -1,0 +1,77 @@
+/**
+ * A value enters a `T?` / `T!` position by itself where the target type is known (design
+ * principles 2.10): an argument, an annotated `let`, an element of an array, the arms of a
+ * branch, `return`. `null` likewise. On the graph each is the CAST node a program would
+ * write with `as`.
+ */
+module positions
+
+func or_else(x: int?, d: int): int { return x ?? d }
+func show(r: int!): string {
+    return match r {
+        case error e => 'error ' + e.kind
+        case v => 'ok ' + string(v)
+    }
+}
+func deep(x: int?!): string {
+    return match x {
+        case error e => 'failed'
+        case v => 'value ' + string(v ?? -1)
+    }
+}
+
+// overloads: the exact match wins over the one the argument would enter
+func which(x: int): string { return 'int' }
+func which(x: int?): string { return 'int?' }
+
+// generic: an argument that is not of the form binds the payload
+func first_or(x: (typeas T)?, d: T): T { return x ?? d }
+
+// branch arms: one arm enters the form of the other
+func pick(c: bool, x: int): int? { return if c then x else null }
+func half(x: int): int! { return if x % 2 == 1 then { throw error('Odd', 'odd') } else x / 2 }
+func grade(k: int): string? {
+    return match k {
+        case 1 => 'one'
+        case 2 => 'two'
+        case _ => null
+    }
+}
+
+// return: several levels at once
+func lift(x: int): int?! { return x }
+
+func total(xs: (int?)[]): int {
+    return xs->map<(x: int?): int => x ?? 0>->reduce<(a: int, b: int): int => a + b, 0>
+}
+
+func main(): int sync {
+    // arguments
+    println(or_else(7, 0), or_else(null, 0), show(3), deep(4), deep(null))
+    let opt: int? = 9
+    println(which(5), which(opt), which(null))
+    println(first_or(5, 0), first_or(opt, 0), first_or('a', 'z'))
+    // a function value
+    let f = (x: int?, y: string!): string => string(x ?? -1) + (y !! '?')
+    println(f(1, 'a'), f(null, 'b'))
+    // annotated let
+    let a: int? = 5
+    let b: float? = null
+    let c: int?! = 6
+    println(a, b, deep(c))
+    // elements of an array
+    let xs: (int?)[] = [1, null, 3]
+    let ys = [4, null, 6]
+    let v = 10
+    let zs = [v, null, v + 1]
+    let ws = [[1, null], []] as (int?)[][]
+    println(xs, ys, zs, ws, total(xs), total([7, null]), total([]))
+    // branch arms
+    println(pick(true, 3), pick(false, 3), half(8) !! -1, half(7) !! -1)
+    println(grade(1) ?? '-', grade(9) ?? '-')
+    let n = if v > 5 then 'big' else null
+    println(n ?? 'small')
+    // return
+    println(deep(lift(2)))
+    return 0
+}
