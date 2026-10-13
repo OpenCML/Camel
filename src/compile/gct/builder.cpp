@@ -192,9 +192,9 @@ inline void registerGctSemantic(
 }
 
 data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
-    if (node->type() == LoadType::DATA) {
+    if (node->type() == NodeKind::DATA) {
         return node->data();
-    } else if (node->type() == LoadType::DREF) {
+    } else if (node->type() == NodeKind::DREF) {
         return make_shared<RefData>(node->name());
     } else {
         return nullptr;
@@ -326,9 +326,9 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     for (auto &stmt : *stmtNodes) {
         try {
             node_ptr_t node = visitStmt(stmt);
-            if (node->type() == GCT::LoadType::DECL) {
+            if (node->type() == GCT::NodeKind::DECL) {
                 decls.push_back(node);
-            } else if (node->type() == GCT::LoadType::FUNC) {
+            } else if (node->type() == GCT::NodeKind::FUNC) {
                 // Handle function declarations
                 node_ptr_t declNode = tree_->makeDecl(node->name(), true);
                 node_ptr_t typeNode = node->at(0);
@@ -498,7 +498,7 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     ENTER("Stmt");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type");
     const auto &stmt = ast->loadAs<AST::StmtLoad>();
-    node_ptr_t stmtNode;
+    node_ptr_t stmtNode = nullptr;
 
     switch (stmt->stmtType()) {
     case AST::StmtType::Data:
@@ -630,8 +630,8 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     // no node.
                     if (asTagged(type) != nullptr ||
                         (type->code() == TypeCode::Function &&
-                         dataNode->type() != LoadType::DATA) ||
-                        (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
+                         dataNode->type() != NodeKind::DATA) ||
+                        (dataNode->type() == NodeKind::DATA && containsTypeVar(type))) {
                         // Decided when the generic function is instantiated. A declared
                         // `T?` / `T!` puts the value into that form (design principles
                         // 2.10): a CAST, for any expression.
@@ -644,7 +644,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                             camel::source::OriginKind::GctNode,
                             "gct.cast");
                         dataNode = castNode;
-                    } else if (dataNode->type() == LoadType::DATA) {
+                    } else if (dataNode->type() == NodeKind::DATA) {
                         const auto &data   = dataNode->data();
                         auto convertedData = data->convertTo(type);
                         if (convertedData) {
@@ -696,8 +696,8 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     // no node.
                     if (asTagged(type) != nullptr ||
                         (type->code() == TypeCode::Function &&
-                         dataNode->type() != LoadType::DATA) ||
-                        (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
+                         dataNode->type() != NodeKind::DATA) ||
+                        (dataNode->type() == NodeKind::DATA && containsTypeVar(type))) {
                         // Decided when the generic function is instantiated. A declared
                         // `T?` / `T!` puts the value into that form (design principles
                         // 2.10): a CAST, for any expression.
@@ -710,7 +710,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                             camel::source::OriginKind::GctNode,
                             "gct.cast");
                         dataNode = castNode;
-                    } else if (dataNode->type() == LoadType::DATA) {
+                    } else if (dataNode->type() == NodeKind::DATA) {
                         const auto &data   = dataNode->data();
                         auto convertedData = data->convertTo(type);
                         if (convertedData) {
@@ -1110,7 +1110,7 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     ENTER("Data");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for visitData");
     const auto &data = ast->loadAs<AST::DataLoad>();
-    node_ptr_t dataNode;
+    node_ptr_t dataNode = nullptr;
 
     switch (data->dataType()) {
     case AST::DataType::UnaryExpr:
@@ -1197,7 +1197,7 @@ node_ptr_t Builder::visitUnaryExpr(const AST::node_ptr_t &ast) {
     const auto &unaryExpr   = ast->loadAs<AST::UnaryExprLoad>();
     const auto &dataASTNode = ast->atAs<AST::DataLoad>(0);
 
-    node_ptr_t opNode;
+    node_ptr_t opNode = nullptr;
 
     // Determine the unary operator and create the corresponding node
     switch (unaryExpr->op()) {
@@ -1292,7 +1292,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     // Check if the binary expression is marked as "waited"
     bool waited = binaryExpr->waited();
 
-    node_ptr_t opNode;
+    node_ptr_t opNode = nullptr;
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
@@ -1489,7 +1489,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Data)
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ReservedExpr");
 
-    node_ptr_t res;
+    node_ptr_t res           = nullptr;
     const auto &reservedExpr = ast->loadAs<AST::ReservedExprLoad>();
     bool waited              = reservedExpr->waited();
     const auto &lhsASTNode   = ast->atAs<AST::DataLoad>(0);
@@ -1549,7 +1549,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         node_ptr_t passedNode       = nullptr;
         AST::node_ptr_t passOperator = nullptr;
         for (auto &argNode : *argsNode) {
-            node_ptr_t gctArg;
+            node_ptr_t gctArg   = nullptr;
             const auto &argData = argNode->loadAs<AST::DataLoad>();
             if (argData->dataType() == AST::DataType::ReservedExpr &&
                 argNode->loadAs<AST::ReservedExprLoad>()->op() ==
@@ -1686,10 +1686,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // A conversion into a Map or a Set builds the collection when the program runs (a
         // CAST), for a literal too; what can be said about the literal is said here.
         const bool intoCollection = asCollectionTypeOrPrototype(dstType) != nullptr;
-        if (intoCollection && dataNode->type() == LoadType::DATA) {
+        if (intoCollection && dataNode->type() == NodeKind::DATA) {
             rejectDuplicateLiteralKeys(dataNode->data(), dstType, ast);
         }
-        if (dataNode->type() == LoadType::DATA && !containsTypeVar(dstType) &&
+        if (dataNode->type() == NodeKind::DATA && !containsTypeVar(dstType) &&
             asTagged(dstType) == nullptr && !intoCollection) {
             const auto &data = dataNode->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
@@ -2278,7 +2278,7 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
                 camel::source::OriginKind::GctNode,
                 "gct.cast");
             dataNode = castNode;
-        } else if (!nested && dataNode->type() == LoadType::DATA) {
+        } else if (!nested && dataNode->type() == NodeKind::DATA) {
             // An inner literal without elements to put into a form (`[]`): the literal of
             // the element type.
             const auto &data = dataNode->data();

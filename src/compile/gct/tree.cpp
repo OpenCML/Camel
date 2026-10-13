@@ -18,57 +18,392 @@
  */
 
 /*
- * The node factory of the graph construction tree (camel/compile/gct/tree.h).
+ * The graph construction tree: its arena, the node factory, appending children, copying a
+ * subtree and the text dump (camel/compile/gct/tree.h, node.h).
  */
 
 #include "camel/compile/gct/tree.h"
 
-#include <memory>
+#include <algorithm>
+#include <bit>
+#include <cstdint>
+#include <cstring>
+#include <iomanip>
+#include <new>
 #include <ostream>
-#include <utility>
+#include <sstream>
+#include <stdexcept>
 
 namespace camel::compile::gct {
 
 namespace {
 
-template <typename LoadT, typename... Args> node_ptr_t make(Args &&...args) {
-    return std::make_shared<Node>(
-        std::static_pointer_cast<Load>(std::make_shared<LoadT>(std::forward<Args>(args)...)));
+/// Everything in the arena is made of pointers and 64-bit integers.
+constexpr size_t kArenaAlign = alignof(uint64_t);
+
+size_t alignUp(size_t bytes) { return (bytes + kArenaAlign - 1) & ~(kArenaAlign - 1); }
+
+/// The capacity of a child array that holds `count` children: none, two, then doubling.
+size_t childCapacity(size_t count) {
+    return count == 0 ? 0 : std::max<size_t>(2, std::bit_ceil(count));
+}
+
+std::string pointerToHex(const void *ptr) {
+    std::stringstream ss;
+    ss << "0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0')
+       << reinterpret_cast<uintptr_t>(ptr);
+    return ss.str();
 }
 
 } // namespace
 
-node_ptr_t Tree::makeData(const data_ptr_t &data) { return make<DataLoad>(data); }
-node_ptr_t Tree::makeType(Type *type, ImplMark impl) { return make<TypeLoad>(type, impl); }
-node_ptr_t Tree::makeDecl(const std::string &name, bool isFunc) {
-    return make<DeclLoad>(name, isFunc);
-}
-node_ptr_t Tree::makeFunc(const std::string &name) { return make<FuncLoad>(name); }
-node_ptr_t Tree::makeNRef(const std::string &name) { return make<NRefLoad>(name); }
-node_ptr_t Tree::makeDRef(const std::string &name) { return make<DRefLoad>(Reference(name)); }
-node_ptr_t Tree::makeVari() { return make<VariLoad>(); }
-node_ptr_t Tree::makeWait() { return make<WaitLoad>(); }
-node_ptr_t Tree::makeLink(size_t argCount) { return make<LinkLoad>(argCount); }
-node_ptr_t Tree::makeWith(size_t argCount) { return make<WithLoad>(argCount); }
-node_ptr_t Tree::makeAccs(size_t index) { return make<AccsLoad>(index); }
-node_ptr_t Tree::makeAccs(const std::string &key) { return make<AccsLoad>(key); }
-node_ptr_t Tree::makeBrch(BranchKind kind) { return make<BrchLoad>(kind); }
-node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
-    return make<CaseLoad>(type, binding);
-}
-node_ptr_t Tree::makeCast(Type *targetType, bool annotation) {
-    return make<CastLoad>(targetType, annotation);
-}
-node_ptr_t Tree::makeAnno() { return make<AnnoLoad>(std::string()); }
-node_ptr_t Tree::makeExit(ExitType type) { return make<ExitLoad>(type); }
-node_ptr_t Tree::makeExec(bool synced, bool operands) { return make<ExecLoad>(synced, operands); }
-node_ptr_t Tree::makeExpt(const std::vector<Reference> &exports) { return make<ExptLoad>(exports); }
+// =============================================================================
+// Arena
+// =============================================================================
 
-node_ptr_t Tree::clone(const node_ptr_t &node) { return node->clone(); }
+Tree::~Tree() {
+    while (chunks_ != nullptr) {
+        Chunk *older = chunks_->next;
+        ::operator delete(chunks_, std::align_val_t(kChunkBytes));
+        chunks_ = older;
+    }
+}
+
+Tree *Tree::of(const Node *node) {
+    const auto address = reinterpret_cast<uintptr_t>(node);
+    return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
+        ->owner;
+}
+
+void *Tree::allocate(size_t bytes) {
+    bytes = alignUp(bytes);
+    if (bytes > kLargeBytes) {
+        largeBlocks_.push_back(std::make_unique<uint64_t[]>(bytes / sizeof(uint64_t)));
+        arenaBytes_ += bytes;
+        return largeBlocks_.back().get();
+    }
+    if (chunks_ == nullptr || chunks_->used + bytes > kChunkBytes) {
+        auto *chunk =
+            static_cast<Chunk *>(::operator new(kChunkBytes, std::align_val_t(kChunkBytes)));
+        chunk->owner = this;
+        chunk->next  = chunks_;
+        chunk->used  = alignUp(sizeof(Chunk));
+        chunks_      = chunk;
+        arenaBytes_ += kChunkBytes;
+    }
+    void *memory = reinterpret_cast<std::byte *>(chunks_) + chunks_->used;
+    chunks_->used += bytes;
+    return memory;
+}
+
+Node *Tree::makeNode(NodeKind kind) {
+    ++nodeCount_;
+    return new (allocate(sizeof(Node))) Node(kind);
+}
+
+const std::string *Tree::intern(std::string_view name) {
+    if (const auto known = names_.find(name); known != names_.end()) {
+        return &*known;
+    }
+    return &*names_.emplace(name).first;
+}
+
+const std::string *Tree::internReference(std::string_view name) {
+    // What Reference accepts: a last part, after any `::`, that is not empty.
+    if (name.empty() || name.ends_with("::")) {
+        throw std::runtime_error("Invalid reference name: " + std::string(name));
+    }
+    return intern(name);
+}
+
+void Tree::append(Node &parent, Node *child) {
+    ASSERT((child->flags_ & Node::kAttached) == 0, "Node already has a parent");
+    const size_t count = parent.childCount_;
+    if (count == childCapacity(count)) {
+        auto **grown = static_cast<Node **>(allocate(childCapacity(count + 1) * sizeof(Node *)));
+        if (count != 0) {
+            std::memcpy(grown, parent.children_, count * sizeof(Node *));
+        }
+        parent.children_ = grown;
+    }
+    parent.children_[count] = child;
+    parent.childCount_      = static_cast<uint32_t>(count + 1);
+    child->flags_ |= Node::kAttached;
+}
+
+Node &Node::operator<<(node_ptr_t child) {
+    if (child != nullptr) {
+        Tree::of(this)->append(*this, child);
+    }
+    return *this;
+}
+
+// =============================================================================
+// Node factory
+// =============================================================================
+
+node_ptr_t Tree::makeData(const data_ptr_t &data) {
+    ASSERT(data != nullptr, "A DATA node cannot be made of a null data pointer");
+    Node *node          = makeNode(NodeKind::DATA);
+    node->payload_.data = &constants_.emplace_back(data);
+    return node;
+}
+
+node_ptr_t Tree::makeType(Type *type, ImplMark impl) {
+    Node *node          = makeNode(NodeKind::TYPE);
+    node->payload_.type = type;
+    node->tag_          = static_cast<uint16_t>(impl);
+    return node;
+}
+
+node_ptr_t Tree::makeDecl(const std::string &name, bool isFunc) {
+    Node *node          = makeNode(NodeKind::DECL);
+    node->payload_.name = internReference(name);
+    node->flags_        = isFunc ? Node::kFlagA : 0;
+    return node;
+}
+
+node_ptr_t Tree::makeFunc(const std::string &name) {
+    Node *node          = makeNode(NodeKind::FUNC);
+    node->payload_.name = intern(name);
+    return node;
+}
+
+node_ptr_t Tree::makeNRef(const std::string &name) {
+    Node *node          = makeNode(NodeKind::NREF);
+    node->payload_.name = internReference(name);
+    return node;
+}
+
+node_ptr_t Tree::makeDRef(const std::string &name) {
+    Node *node          = makeNode(NodeKind::DREF);
+    node->payload_.name = internReference(name);
+    return node;
+}
+
+node_ptr_t Tree::makeVari() { return makeNode(NodeKind::VARI); }
+
+node_ptr_t Tree::makeWait() { return makeNode(NodeKind::WAIT); }
+
+node_ptr_t Tree::makeLink(size_t argCount) {
+    Node *node            = makeNode(NodeKind::LINK);
+    node->payload_.number = argCount;
+    return node;
+}
+
+node_ptr_t Tree::makeWith(size_t argCount) {
+    Node *node            = makeNode(NodeKind::WITH);
+    node->payload_.number = argCount;
+    return node;
+}
+
+node_ptr_t Tree::makeAccs(size_t index) {
+    Node *node            = makeNode(NodeKind::ACCS);
+    node->payload_.number = index;
+    node->flags_          = Node::kFlagA;
+    return node;
+}
+
+node_ptr_t Tree::makeAccs(const std::string &key) {
+    Node *node          = makeNode(NodeKind::ACCS);
+    node->payload_.name = intern(key);
+    return node;
+}
+
+node_ptr_t Tree::makeBrch(BranchKind kind) {
+    Node *node = makeNode(NodeKind::BRCH);
+    node->tag_ = static_cast<uint16_t>(kind);
+    return node;
+}
+
+node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
+    Node *node          = makeNode(NodeKind::CASE);
+    node->payload_.name = intern(binding);
+    node->tag_          = static_cast<uint16_t>(type);
+    return node;
+}
+
+node_ptr_t Tree::makeCast(Type *targetType, bool annotation) {
+    Node *node          = makeNode(NodeKind::CAST);
+    node->payload_.type = targetType;
+    node->flags_        = annotation ? Node::kFlagA : 0;
+    return node;
+}
+
+node_ptr_t Tree::makeAnno() { return makeNode(NodeKind::ANNO); }
+
+node_ptr_t Tree::makeExit(ExitType type) {
+    Node *node = makeNode(NodeKind::EXIT);
+    node->tag_ = static_cast<uint16_t>(type);
+    return node;
+}
+
+node_ptr_t Tree::makeExec(bool synced, bool operands) {
+    Node *node = makeNode(NodeKind::EXEC);
+    node->flags_ =
+        static_cast<uint8_t>((synced ? Node::kFlagA : 0) | (operands ? Node::kFlagB : 0));
+    return node;
+}
+
+node_ptr_t Tree::makeExpt(const std::vector<Reference> &exports) {
+    Node *node  = makeNode(NodeKind::EXPT);
+    auto *list  = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(exports.size())));
+    list->count = exports.size();
+    for (size_t i = 0; i < exports.size(); ++i) {
+        list->items[i] = intern(exports[i].toString());
+    }
+    node->payload_.names = list;
+    return node;
+}
+
+node_ptr_t Tree::clone(const Node *node) {
+    Node *copy    = makeNode(node->kind_);
+    copy->flags_  = static_cast<uint8_t>(node->flags_ & ~Node::kAttached);
+    copy->tag_    = node->tag_;
+    copy->origin_ = node->origin_;
+    // What the payload points to is taken into this tree, so that the copy does not depend
+    // on the tree of the original for more than its own lifetime requires.
+    switch (node->kind_) {
+    case NodeKind::DATA:
+        copy->payload_.data = &constants_.emplace_back(*node->payload_.data);
+        break;
+    case NodeKind::DECL:
+    case NodeKind::FUNC:
+    case NodeKind::NREF:
+    case NodeKind::DREF:
+    case NodeKind::CASE:
+        copy->payload_.name = intern(*node->payload_.name);
+        break;
+    case NodeKind::ACCS:
+        if (node->accessByIndex()) {
+            copy->payload_.number = node->payload_.number;
+        } else {
+            copy->payload_.name = intern(*node->payload_.name);
+        }
+        break;
+    case NodeKind::EXPT: {
+        const Node::NameList *names = node->payload_.names;
+        auto *list =
+            static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(names->count)));
+        list->count = names->count;
+        for (size_t i = 0; i < names->count; ++i) {
+            list->items[i] = intern(*names->items[i]);
+        }
+        copy->payload_.names = list;
+        break;
+    }
+    default:
+        copy->payload_ = node->payload_; // a type, a number or nothing
+        break;
+    }
+    for (const Node *child : *node) {
+        append(*copy, clone(child));
+    }
+    return copy;
+}
+
+// =============================================================================
+// Text
+// =============================================================================
+
+std::string Node::toString() const {
+    switch (kind_) {
+    case NodeKind::DATA: {
+        const data_ptr_t &value = data();
+        std::string text        = "DATA: " + pointerToHex(value.get()) + ", ";
+        text += value->type() ? value->type()->toString() : std::string("null");
+        return text + ", " + value->toString();
+    }
+    case NodeKind::TYPE:
+        return "TYPE: " + dataType()->toString();
+    case NodeKind::DECL:
+        return "DECL: " + std::string(isFunc() ? "func " : "type ") + name();
+    case NodeKind::FUNC:
+        return "FUNC: " + (name().empty() ? std::string("(anonymous)") : name());
+    case NodeKind::NREF:
+        return "NREF: " + name();
+    case NodeKind::DREF:
+        return "DREF: " + name();
+    case NodeKind::LINK:
+        return "LINK: argcnt=" + std::to_string(argCount());
+    case NodeKind::WITH:
+        return "WITH: argcnt=" + std::to_string(argCount());
+    case NodeKind::ACCS:
+        return "ACCS: " + (accessByIndex() ? std::to_string(accessIndex()) : accessKey());
+    case NodeKind::BRCH:
+        switch (branchKind()) {
+        case BranchKind::NullThen:
+            return "BRCH: ??";
+        case BranchKind::ErrorThen:
+            return "BRCH: !!";
+        case BranchKind::ErrorPass:
+            return "BRCH: ?->";
+        default:
+            return "BRCH";
+        }
+    case NodeKind::CASE:
+        switch (caseType()) {
+        case CaseType::Value:
+            return "CASE: (value)";
+        case CaseType::True:
+            return "CASE: (true)";
+        case CaseType::Else:
+            return "CASE: (else)";
+        case CaseType::Bind:
+            return "CASE: (bind " + binding() + ")";
+        default:
+            return "CASE: (error " + binding() + ")";
+        }
+    case NodeKind::CAST:
+        return "CAST: " + targetType()->toString();
+    case NodeKind::EXIT:
+        return "EXIT: " + to_string(exitType());
+    case NodeKind::EXEC:
+        return synced() ? "SYNC" : "EXEC";
+    case NodeKind::EXPT: {
+        std::string text = "EXPT: [";
+        for (size_t i = 0; i < exportCount(); ++i) {
+            text += (i == 0 ? "" : ", ") + exportName(i);
+        }
+        return text + "]";
+    }
+    default:
+        return to_string(kind_); // VARI, WAIT, ANNO
+    }
+}
+
+namespace {
+
+/// One line per node, children below their parent. `ancestorsLast[i]` says whether the
+/// ancestor at depth i + 1 is the last child of its parent: under such an ancestor the
+/// column is blank, under any other it carries the line down to the next sibling.
+void printNode(
+    std::ostream &os, const Node &node, std::vector<bool> &ancestorsLast, bool isRoot,
+    bool isLast) {
+    if (!isRoot) {
+        for (const bool last : ancestorsLast) {
+            os << (last ? "   " : "|  ");
+        }
+        os << (isLast ? "\\-" : "|-");
+    }
+    os << node.toString() << std::endl;
+    if (!isRoot) {
+        ancestorsLast.push_back(isLast);
+    }
+    for (size_t i = 0; i < node.size(); ++i) {
+        printNode(os, *node.at(i), ancestorsLast, false, i + 1 == node.size());
+    }
+    if (!isRoot) {
+        ancestorsLast.pop_back();
+    }
+}
+
+} // namespace
 
 void Tree::print(std::ostream &os) const {
-    if (root_) {
-        root_->print(os);
+    if (root_ != nullptr) {
+        std::vector<bool> ancestorsLast;
+        printNode(os, *root_, ancestorsLast, true, true);
     }
 }
 

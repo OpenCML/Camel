@@ -1161,42 +1161,42 @@ any Builder::visit(const GCT::node_ptr_t &node) {
 
 any Builder::dispatch(const GCT::node_ptr_t &node) {
     switch (node->type()) {
-    case GCT::LoadType::DECL:
+    case GCT::NodeKind::DECL:
         return visitDeclNode(node);
-    case GCT::LoadType::FUNC:
+    case GCT::NodeKind::FUNC:
         if (node->name().empty() && isGenericHere(node->at(0)->dataType())) {
             return anonymousTemplateOf(node);
         }
         return visitFuncNode(node);
-    case GCT::LoadType::DATA:
+    case GCT::NodeKind::DATA:
         return visitDataNode(node);
-    case GCT::LoadType::TYPE:
+    case GCT::NodeKind::TYPE:
         return visitTypeNode(node);
-    case GCT::LoadType::NREF:
+    case GCT::NodeKind::NREF:
         return visitNRefNode(node);
-    case GCT::LoadType::DREF:
+    case GCT::NodeKind::DREF:
         return visitDRefNode(node);
-    case GCT::LoadType::VARI:
+    case GCT::NodeKind::VARI:
         return visitVariNode(node);
-    case GCT::LoadType::WAIT:
+    case GCT::NodeKind::WAIT:
         return visitWaitNode(node);
-    case GCT::LoadType::LINK:
+    case GCT::NodeKind::LINK:
         return visitLinkNode(node);
-    case GCT::LoadType::WITH:
+    case GCT::NodeKind::WITH:
         return visitWithNode(node);
-    case GCT::LoadType::ACCS:
+    case GCT::NodeKind::ACCS:
         return visitAccsNode(node);
-    case GCT::LoadType::BRCH:
+    case GCT::NodeKind::BRCH:
         return visitBrchNode(node);
-    case GCT::LoadType::ANNO:
+    case GCT::NodeKind::ANNO:
         return visitAnnoNode(node);
-    case GCT::LoadType::EXIT:
+    case GCT::NodeKind::EXIT:
         return visitExitNode(node);
-    case GCT::LoadType::EXEC:
+    case GCT::NodeKind::EXEC:
         return visitExecNode(node);
-    case GCT::LoadType::EXPT:
+    case GCT::NodeKind::EXPT:
         return visitExptNode(node);
-    case GCT::LoadType::CAST:
+    case GCT::NodeKind::CAST:
         return visitCastNode(node);
     default:
         ASSERT(false, "Unknown GCT NodeType");
@@ -1254,7 +1254,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     std::vector<GCT::node_ptr_t> annoNodes;
     for (size_t i = 2; i < gct->size(); ++i) {
         const auto &annoNode = gct->at(i);
-        if (annoNode && annoNode->type() == GCT::LoadType::ANNO) {
+        if (annoNode && annoNode->type() == GCT::NodeKind::ANNO) {
             annoNodes.push_back(annoNode);
         }
     }
@@ -1323,7 +1323,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
     std::unordered_set<std::string> plainNames;
     for (size_t i = 0; i < exec->size(); ++i) {
         const auto &child = exec->at(i);
-        if (child->type() != GCT::LoadType::FUNC) {
+        if (child->type() != GCT::NodeKind::FUNC) {
             continue;
         }
         const std::string name = child->name();
@@ -1334,7 +1334,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
     }
     for (size_t i = 0; i < exec->size(); ++i) {
         const auto &child = exec->at(i);
-        if (child->type() != GCT::LoadType::FUNC) {
+        if (child->type() != GCT::NodeKind::FUNC) {
             continue;
         }
         const std::string name = child->name();
@@ -1349,7 +1349,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             continue;
         }
         for (size_t k = 2; k < child->size(); ++k) {
-            if (child->at(k) && child->at(k)->type() == GCT::LoadType::ANNO) {
+            if (child->at(k) && child->at(k)->type() == GCT::NodeKind::ANNO) {
                 diags_->of(SemanticDiag::GenericFunctionUnsupported)
                     .atOrigin(child->origin())
                     .commit(name, "decorated: a decorator takes a function value");
@@ -2966,7 +2966,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
     if (const auto &operand = gct->at(0);
-        operand->type() == GCT::LoadType::DATA && containsTypeVar(gct->targetType()) &&
+        operand->type() == GCT::NodeKind::DATA && containsTypeVar(gct->targetType()) &&
         asTagged(gct->targetType()) == nullptr &&
         asCollectionTypeOrPrototype(gct->targetType()) == nullptr) {
         // A literal converted to a type written with a type variable (`let zero: T = 0`,
@@ -3041,7 +3041,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     rejectInvalidCollectionKey(targetType, gct);
     node_handle_t valueNode{};
     if (TupleType *tagged = asTagged(targetType);
-        tagged != nullptr && gct->at(0)->type() == GCT::LoadType::DATA) {
+        tagged != nullptr && gct->at(0)->type() == GCT::NodeKind::DATA) {
         // A literal put into `T?` / `T!`: it is first the literal of the payload type, by the
         // rule for any annotated literal (`let x: float? = 1`); `null` stays `null`.
         data_ptr_t data    = gct->at(0)->data();
@@ -3799,7 +3799,7 @@ node_handle_t Builder::partialApplicationOf(
         return node;
     };
     const auto nameNode = [&](const std::string &name) { return make(tree_->makeDRef(name)); };
-    GCT::node_ptr_t callee;
+    GCT::node_ptr_t callee = nullptr;
     if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
         const auto known = boundWithCallee_.find(target);
         ASSERT(known != boundWithCallee_.end(), "A bound callee has its expression recorded.");
@@ -3914,7 +3914,7 @@ void Builder::rejectLiteralConversion(
     static const std::unordered_set<std::string> kConversions = {
         "int", "i64", "i32", "float", "f64", "f32"};
     if (!kConversions.contains(group) || operands.size() != 1 || funcType == nullptr ||
-        !funcType->hasExitType() || operands[0].expr->type() != GCT::LoadType::DATA) {
+        !funcType->hasExitType() || operands[0].expr->type() != GCT::NodeKind::DATA) {
         return;
     }
     // `int(1.0e30)`, `i32(5000000000)`, `int('12abc')`: the argument is written in the
@@ -3986,7 +3986,7 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
         });
     std::string name = "the function";
     if (const auto callee = boundWithCallee_.find(node);
-        callee != boundWithCallee_.end() && callee->second->type() == GCT::LoadType::DREF) {
+        callee != boundWithCallee_.end() && callee->second->type() == GCT::NodeKind::DREF) {
         name = callee->second->name();
     }
     std::string why;
@@ -4099,7 +4099,7 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
 
 node_handle_t
 Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcValueNode) {
-    ASSERT(annoNode && annoNode->type() == GCT::LoadType::ANNO, "Expected ANNO node.");
+    ASSERT(annoNode && annoNode->type() == GCT::NodeKind::ANNO, "Expected ANNO node.");
     ASSERT(annoNode->size() == 1, "ANNO node should have exactly one lowered expression child.");
     ASSERT(funcValueNode != nullptr, "Decorator input function value is null.");
 
@@ -4348,7 +4348,7 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
 }
 
 node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call) {
-    if (expr->type() == GCT::LoadType::DREF) {
+    if (expr->type() == GCT::NodeKind::DREF) {
         const std::string name = expr->name();
         if (nodeAt(name).has_value()) {
             if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
@@ -4368,10 +4368,10 @@ node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node
 
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {
     GCT::node_ptr_t root = expr;
-    while (root && root->type() == GCT::LoadType::ACCS) {
+    while (root && root->type() == GCT::NodeKind::ACCS) {
         root = root->at(0);
     }
-    if (!root || root->type() != GCT::LoadType::DREF) {
+    if (!root || root->type() != GCT::NodeKind::DREF) {
         return std::nullopt;
     }
     const std::string name = root->name();
@@ -4394,8 +4394,8 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
-    genericCalleeAllowed_ = gct->at(0)->type() == GCT::LoadType::DREF ||
-                            gct->at(0)->type() == GCT::LoadType::WITH;
+    genericCalleeAllowed_ =
+        gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::WITH;
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
@@ -4488,10 +4488,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         const auto nameOf = [](const GCT::node_ptr_t &expr) -> std::string {
             GCT::node_ptr_t at = expr;
-            while (at && at->type() == GCT::LoadType::WITH && at->size() > 0) {
+            while (at && at->type() == GCT::NodeKind::WITH && at->size() > 0) {
                 at = at->at(0);
             }
-            return at && at->type() == GCT::LoadType::DREF ? at->name() : std::string("the name");
+            return at && at->type() == GCT::NodeKind::DREF ? at->name() : std::string("the name");
         };
         const auto settle = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
             for (size_t i = 0; i < inputs.size(); ++i) {
@@ -4795,7 +4795,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (nodeIsKind(input.node, runtime::GCNodeKind::Dref)) {
                         rejectNameWithoutValue(
                             input.node,
-                            input.expr->type() == GCT::LoadType::DREF ? input.expr->name()
+                            input.expr->type() == GCT::NodeKind::DREF ? input.expr->name()
                                                                       : std::string("the name"),
                             input.expr);
                     }
@@ -5134,8 +5134,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     ENTER("WITH");
     // `f<w>(x)`: the callee of the call is the target of the binding.
-    genericCalleeAllowed_ = std::exchange(genericCalleeAllowed_, false) &&
-                            gct->at(0)->type() == GCT::LoadType::DREF;
+    genericCalleeAllowed_ =
+        std::exchange(genericCalleeAllowed_, false) && gct->at(0)->type() == GCT::NodeKind::DREF;
     any targetNodeRes     = visit(gct->at(0));
     genericCalleeAllowed_ = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
@@ -5521,12 +5521,12 @@ node_handle_t Builder::visitTaggedMatch(
         throw BuildAbortException();
     };
     // DESIGN-QUESTION(nullable-error) Q4: exactly the tagged case and one other.
-    GCT::node_ptr_t taggedCase, restCase;
+    GCT::node_ptr_t taggedCase = nullptr, restCase = nullptr;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
         const auto caseType  = caseNode->caseType();
         const bool isNull    = caseType == CaseType::Value &&
-                            caseNode->at(0)->type() == GCT::LoadType::DATA &&
+                            caseNode->at(0)->type() == GCT::NodeKind::DATA &&
                             caseNode->at(0)->data()->type()->code() == TypeCode::Void;
         if (isNull || caseType == CaseType::Error) {
             if (isNull != type->isNullable()) {
@@ -5635,7 +5635,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
             continue;
         }
         hasValueCase = true;
-        if (caseNode->at(0)->type() == GCT::LoadType::DATA) {
+        if (caseNode->at(0)->type() == GCT::NodeKind::DATA) {
             const auto literal = std::dynamic_pointer_cast<BoolData>(caseNode->at(0)->data());
             if (literal) {
                 (literal->data() ? hasTrue : hasFalse) = true;
@@ -5962,7 +5962,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         const auto &returned = gct->at(0);
         rejectNameWithoutValue(
             resNode,
-            returned->type() == GCT::LoadType::DREF ? returned->name()
+            returned->type() == GCT::NodeKind::DREF ? returned->name()
                                                     : std::string("the returned name"),
             gct);
     }
@@ -6232,7 +6232,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             if (result.has_value() && result.type() == typeid(node_handle_t)) {
                 res = any_cast<node_handle_t>(result);
             } else if (
-                result.type() == typeid(graph_ptr_t) && child->type() == GCT::LoadType::FUNC &&
+                result.type() == typeid(graph_ptr_t) && child->type() == GCT::NodeKind::FUNC &&
                 child->name().empty()) {
                 // A function literal is a value like any other expression, e.g. a branch arm.
                 res = valueNodeOf(result);
@@ -6247,7 +6247,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     if (gct->size() > 0 && res != nullptr && nodeIsKind(res, runtime::GCNodeKind::Dref) &&
-        gct->at(gct->size() - 1)->type() == GCT::LoadType::DREF && sameGraph(res, currGraph_)) {
+        gct->at(gct->size() - 1)->type() == GCT::NodeKind::DREF && sameGraph(res, currGraph_)) {
         // A block that ends in the name of a function has that function's value: the value
         // of a branch arm (`if c then inc else dec`), of a block, of a function body. Left a
         // name, it gave the block the type void.
@@ -6260,7 +6260,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
         // graph's exit). Without this the chain of a block ending in a plain value was not
         // reachable from anything and the block's effects were dropped.
         const bool returned =
-            gct->size() > 0 && gct->at(gct->size() - 1)->type() == GCT::LoadType::EXIT;
+            gct->size() > 0 && gct->at(gct->size() - 1)->type() == GCT::NodeKind::EXIT;
         if (synced_ && !returned && res != nullptr && lastSyncedNode_ != nullptr &&
             lastSyncedNode_ != res && sameGraph(res, currGraph_)) {
             node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));

@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include "gct/load.h"
 #include "gct/node.h"
 #include "gct/tree.h"
 #include "gct/types.h"

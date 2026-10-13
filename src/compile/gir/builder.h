@@ -123,7 +123,7 @@ class Builder {
     // An argument of a call: its value node and the expression it was written as.
     struct Argument {
         node_handle_t node;
-        GCT::node_ptr_t expr;
+        GCT::node_ptr_t expr = nullptr;
     };
 
     // Track whether this Graph has already been used (via createFuncDataNode).
@@ -250,7 +250,7 @@ class Builder {
     };
     struct GenericTemplate {
         std::string name;
-        GCT::node_ptr_t func;
+        GCT::node_ptr_t func = nullptr;
         // The declared type with the variables of enclosing instances replaced; the function's
         // own variables remain.
         FunctionType *funcType = nullptr;

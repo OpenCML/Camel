@@ -47,7 +47,7 @@ using namespace camel::parse;
 
 namespace {
 
-/// Number of nodes of a tree (AST or GCT), for the phase report.
+/// Number of nodes of an AST, for the phase report.
 template <typename NodePtr> uint64_t countNodes(const NodePtr &root) {
     uint64_t count = 0;
     if (root) {
@@ -142,12 +142,9 @@ bool UserDefinedModule::compile(CompileStage till) {
                 camel::utils::phase::Scope phaseScope("(counting)");
                 camel::utils::phase::count("modules", 1);
                 camel::utils::phase::count("ast.nodes", countNodes(ast));
-                camel::utils::phase::count(
-                    "gct.nodes",
-                    countNodes(gct_ ? gct_->root() : GCT::node_ptr_t()));
+                camel::utils::phase::count("gct.nodes", gct_ ? gct_->nodeCount() : 0);
             }
-            EXEC_WHEN_DEBUG(
-                { camel::DebugBreakpoint::Hit("GCT", gct_ ? gct_->root().get() : nullptr); });
+            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GCT", gct_ ? gct_->root() : nullptr); });
             if (diagnostics_->hasErrors()) {
                 CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GCT", name_);
                 return false;

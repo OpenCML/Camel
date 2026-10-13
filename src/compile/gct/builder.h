@@ -60,7 +60,7 @@ class Builder {
             tree_->setRoot(visitModule(node));
         } catch (camel::core::error::Diagnostic &d) {
             diags_->add(std::move(d));
-            tree_ = nullptr;
+            tree_.reset();
         }
         return std::move(tree_);
     }
