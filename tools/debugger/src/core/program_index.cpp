@@ -596,6 +596,8 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     // What the user calls the graph. A function is called by its name. A graph the compiler
     // named itself (`__g_7__`) is a lambda or the arm of a branch: it is shown as that, in the
     // named function it was written in, with the line it starts on.
+    // DESIGN-QUESTION(arm-frames): an arm is shown as the frame it is, not folded into the
+    // frame of its function.
     info->display = info->name;
     if (info->name.rfind("__g_", 0) == 0) {
         std::string owner;
