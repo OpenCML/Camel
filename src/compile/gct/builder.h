@@ -22,6 +22,7 @@
 #include <set>
 #include <unordered_set>
 #include <iostream>
+#include <memory>
 #include <regex>
 #include <string>
 
@@ -48,20 +49,25 @@ class Builder {
     };
     virtual ~Builder() = default;
 
-    node_ptr_t build(AST::node_ptr_t node, camel::core::error::diagnostics_ptr_t diags) {
+    /// The tree of the module whose AST is `node`. Null when the module could not be lowered
+    /// at all; errors that leave a tree behind are in `diags`.
+    std::unique_ptr<Tree> build(AST::node_ptr_t node, camel::core::error::diagnostics_ptr_t diags) {
         idIndex_ = 0;
         diags_   = diags;
+        tree_    = std::make_unique<Tree>();
         initInnerTypes();
         try {
-            root_ = visitModule(node);
+            tree_->setRoot(visitModule(node));
         } catch (camel::core::error::Diagnostic &d) {
             diags_->add(std::move(d));
-            root_ = nullptr;
+            tree_ = nullptr;
         }
-        return root_;
+        return std::move(tree_);
     }
 
   private:
+    // The tree being built: every node of the module is made by it.
+    std::unique_ptr<Tree> tree_;
     node_ptr_t root_;
     size_t idIndex_ = 0;
     scope_ptr_t<Reference, Type *> typeScope_;

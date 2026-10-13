@@ -46,7 +46,9 @@ enum class CompileStage { None, AST, GCT, GIR, Done };
 class UserDefinedModule : public Module {
     friend class detail::UserDefinedModuleAccess;
 
-    GCT::node_ptr_t gct_;
+    // The graph construction tree of the module. It is kept for as long as the module:
+    // generic functions are lowered again from it, also by modules that import this one.
+    std::unique_ptr<GCT::Tree> gct_;
     std::shared_ptr<camel::compile::gir::DraftGraphBuilder> compileGraph_;
     camel::core::error::diagnostics_ptr_t diagnostics_;
     camel::parse::parser_ptr_t parser_;
@@ -58,7 +60,8 @@ class UserDefinedModule : public Module {
         camel::parse::parser_ptr_t parser = nullptr);
     virtual ~UserDefinedModule() = default;
 
-    GCT::node_ptr_t gct() const { return gct_; }
+    /// The graph construction tree, or null before the module reached that stage.
+    const GCT::Tree *gct() const { return gct_.get(); }
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
     camel::parse::parser_ptr_t parser() const { return parser_; }
     virtual bool loaded() const override { return stage_ == CompileStage::Done; }

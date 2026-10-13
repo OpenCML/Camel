@@ -72,7 +72,7 @@ class DataLoad : public Load {
         ASSERT(data != nullptr, "DataLoad cannot be constructed with a null data pointer");
     }
 
-    data_ptr_t data() { return data_; }
+    const data_ptr_t &data() const { return data_; }
 
     const std::string toString() const override;
 };
@@ -100,15 +100,17 @@ class TypeLoad : public Load {
 class DeclLoad : public Load {
     bool isFunc_;
     Reference ref_;
+    std::string name_;
 
   public:
     DeclLoad(const Reference &ref, bool isFunc = false)
-        : Load(LoadType::DECL), isFunc_(isFunc), ref_(ref) {}
+        : Load(LoadType::DECL), isFunc_(isFunc), ref_(ref), name_(ref.toString()) {}
     DeclLoad(const std::string &str, bool isFunc = false)
-        : Load(LoadType::DECL), isFunc_(isFunc), ref_(str) {}
+        : Load(LoadType::DECL), isFunc_(isFunc), ref_(str), name_(ref_.toString()) {}
 
     bool isFunc() const { return isFunc_; }
     const Reference ref() const { return ref_; }
+    const std::string &name() const { return name_; }
 
     const std::string toString() const override;
 };
@@ -118,28 +120,32 @@ class FuncLoad : public Load {
 
   public:
     FuncLoad(const std::string name) : Load(LoadType::FUNC), name_(name) {}
-    std::string name() const { return name_; }
+    const std::string &name() const { return name_; }
 
     const std::string toString() const override;
 };
 
 class NRefLoad : public Load {
     Reference ref_;
+    std::string name_;
 
   public:
-    NRefLoad(const Reference &ref) : Load(LoadType::NREF), ref_(ref) {}
-    NRefLoad(const std::string &str) : Load(LoadType::NREF), ref_(str) {}
+    NRefLoad(const Reference &ref) : Load(LoadType::NREF), ref_(ref), name_(ref.toString()) {}
+    NRefLoad(const std::string &str) : Load(LoadType::NREF), ref_(str), name_(ref_.toString()) {}
     const Reference ref() const { return ref_; }
+    const std::string &name() const { return name_; }
 
     const std::string toString() const override;
 };
 
 class DRefLoad : public Load {
     Reference ref_;
+    std::string name_;
 
   public:
-    DRefLoad(const Reference &ref) : Load(LoadType::DREF), ref_(ref) {}
+    DRefLoad(const Reference &ref) : Load(LoadType::DREF), ref_(ref), name_(ref.toString()) {}
     const Reference ref() const { return ref_; }
+    const std::string &name() const { return name_; }
 
     const std::string toString() const override;
 };
@@ -165,6 +171,7 @@ class LinkLoad : public Load {
 
     void setArgs(size_t args) { args_ = args; }
     void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
+    size_t args() const { return args_; }
 
     const std::string toString() const override {
         std::string result = "LINK: argcnt=" + std::to_string(args_);
@@ -190,6 +197,7 @@ class WithLoad : public Load {
 
     void setArgs(size_t args) { args_ = args; }
     void addKwarg(const std::string &kwarg) { kwargs_.push_back(kwarg); }
+    size_t args() const { return args_; }
 
     const std::string toString() const override {
         std::string result = "WITH: argcnt=" + std::to_string(args_);
@@ -234,9 +242,15 @@ class ExecLoad : public Load {
 
 class ExptLoad : public Load {
     std::vector<Reference> exports_;
+    std::vector<std::string> names_;
 
   public:
-    ExptLoad(const std::vector<Reference> &exports) : Load(LoadType::EXPT), exports_(exports) {}
+    ExptLoad(const std::vector<Reference> &exports) : Load(LoadType::EXPT), exports_(exports) {
+        for (const Reference &ref : exports_) {
+            names_.push_back(ref.toString());
+        }
+    }
+    const std::vector<std::string> &names() const { return names_; }
 
     const std::string toString() const override {
         std::string result = "EXPT: [";
@@ -264,6 +278,8 @@ class AccsLoad : public Load {
     bool isNum() const { return std::holds_alternative<size_t>(index_); }
     template <typename T> T index() const { return std::get<T>(index_); }
     std::variant<std::string, size_t> index() const { return index_; }
+    size_t number() const { return std::get<size_t>(index_); }
+    const std::string &key() const { return std::get<std::string>(index_); }
 
     const std::string toString() const override {
         std::string result = "ACCS: ";
@@ -282,14 +298,7 @@ inline constexpr const char *kPassedValueName = "$passed";
 
 class BrchLoad : public Load {
   public:
-    /// What selects the arm (design principles 2.9; all are the same structure on the graph).
-    ///  - Cond: `if` (a boolean) and `match` (a value compared with the cases, or the tag
-    ///    of a `T?` / `T!` with the fixed patterns). Children: condition, CASE...
-    ///  - NullThen: `a ?? b`. Children: a, CASE(True)[EXEC b].
-    ///  - ErrorThen: `a !! b`. Children: a, CASE(True)[EXEC b].
-    ///  - ErrorPass: `x ?-> f`. Children: x, CASE(Else)[EXEC call], where the call takes
-    ///    DREF kPassedValueName as its argument.
-    enum class Kind { Cond, NullThen, ErrorThen, ErrorPass };
+    using Kind = BranchKind;
 
     BrchLoad(Kind kind = Kind::Cond) : Load(LoadType::BRCH), kind_(kind) {}
     Kind kind() const { return kind_; }
@@ -313,16 +322,7 @@ class BrchLoad : public Load {
 
 class CaseLoad : public Load {
   public:
-    enum class CaseType {
-        Value,
-        True,
-        Else,
-        // The fixed patterns over a tagged scrutinee (design principles 2.9). One child, the
-        // body. Bind: `case v`, the value taken out of a `T?` / `T!` under the name
-        // binding(). Error: `case error e`, the error of a failed `T!` under that name.
-        Bind,
-        Error,
-    };
+    using CaseType = camel::compile::gct::CaseType;
 
   private:
     CaseType caseType_;

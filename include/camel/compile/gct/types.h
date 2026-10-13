@@ -28,6 +28,7 @@ namespace camel::compile::gct {
 
 class Load;
 class Node;
+class Tree;
 
 using load_ptr_t = std::shared_ptr<Load>;
 using node_ptr_t = std::shared_ptr<Node>;
@@ -54,5 +55,23 @@ enum class LoadType {
 };
 
 std::string to_string(LoadType type);
+
+/// What selects the arm of a BRCH node (design principles 2.9; all are the same structure on
+/// the graph).
+///  - Cond: `if` (a boolean) and `match` (a value compared with the cases, or the tag of a
+///    `T?` / `T!` with the fixed patterns). Children: condition, CASE...
+///  - NullThen: `a ?? b`. Children: a, CASE(True)[EXEC b].
+///  - ErrorThen: `a !! b`. Children: a, CASE(True)[EXEC b].
+///  - ErrorPass: `x ?-> f`. Children: x, CASE(Else)[EXEC call], where the call takes
+///    DREF kPassedValueName as its argument.
+enum class BranchKind { Cond, NullThen, ErrorThen, ErrorPass };
+
+/// The pattern of a CASE node.
+///  - Value: a value the scrutinee is compared with. Children: the value, the body.
+///  - True / Else: the arms of an `if`. One child, the body.
+///  - Bind: `case v` over a tagged scrutinee (design principles 2.9): the value taken out of
+///    a `T?` / `T!` under the name binding(). One child, the body.
+///  - Error: `case error e`: the error of a failed `T!` under that name. One child, the body.
+enum class CaseType { Value, True, Else, Bind, Error };
 
 } // namespace camel::compile::gct

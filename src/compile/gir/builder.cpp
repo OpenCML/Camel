@@ -706,8 +706,10 @@ inline void bindGraphScopedFuncNodeDebug(
     }
 }
 
-compile_graph_ptr_t Builder::build(GCT::node_ptr_t &gct, diagnostics_ptr_t diags) {
-    waited_ = false;
+compile_graph_ptr_t Builder::build(GCT::Tree &tree, diagnostics_ptr_t diags) {
+    tree_                      = &tree;
+    const GCT::node_ptr_t &gct = tree.root();
+    waited_                    = false;
     synced_ = false;
     varied_ = false;
     diags_  = diags;

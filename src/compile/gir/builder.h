@@ -61,11 +61,16 @@ class Builder {
         const camel::core::module::module_ptr_t &module)
         : context_(context), module_(module) {}
 
-    compile_graph_ptr_t build(GCT::node_ptr_t &gct, camel::core::error::diagnostics_ptr_t diags);
+    /// The graphs of the module whose construction tree is `tree`. The tree must outlive
+    /// the graphs' templates: generic functions are lowered again from its nodes.
+    compile_graph_ptr_t build(GCT::Tree &tree, camel::core::error::diagnostics_ptr_t diags);
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
   private:
+    // The tree of the module being built. Nodes the builder writes itself (a compound
+    // assignment spelled out, the tag operators of `??`) are made by it.
+    GCT::Tree *tree_ = nullptr;
     compile_graph_ptr_t rootGraph_;
     compile_graph_ptr_t currGraph_;
 
