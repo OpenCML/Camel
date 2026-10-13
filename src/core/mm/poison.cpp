@@ -69,7 +69,7 @@ void onFault(int signo, siginfo_t *info, void *context) {
         writeAll(
             "[camel] GC poison: a pointer to a Camel object was used after a safepoint moved "
             "the object (a raw pointer was kept across a safepoint; see "
-            "docs/technical/35_gc_handle_rules.md)\n");
+            "docs/technical/36_gc_handle_rules.md)\n");
         _exit(134);
     }
     // Not ours: hand the fault to whoever was installed before, or die by the default action.
