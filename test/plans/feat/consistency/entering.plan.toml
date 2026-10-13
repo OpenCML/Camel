@@ -284,3 +284,35 @@ expect_output_not_contains = ["Segmentation fault", "dumped core", "internal err
 expect_diagnostic_name = "SemanticDiag::EmptyArrayWithoutType"
 expect_diagnostic_line = 2
 expect_diagnostic_column = 14
+
+[[tests]]
+name = "entering.arms_folded.plain"
+desc = "Arms put into T? under a constant condition, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
+kind = "behavior"
+case = "../../../cases/consistency/entering/arms_folded.cml"
+args = ["${case}", "${backend}"]
+expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
+
+[[tests]]
+name = "entering.arms_folded.fold"
+desc = "Arms put into T? under a constant condition, std::opt::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
+kind = "behavior"
+case = "../../../cases/consistency/entering/arms_folded.cml"
+args = ["${case}", "std::opt::fold", "${backend}"]
+expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
+
+[[tests]]
+name = "entering.arms_folded.opt"
+desc = "Arms put into T? under a constant condition, std::opt, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
+kind = "behavior"
+case = "../../../cases/consistency/entering/arms_folded.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
+
+[[tests]]
+name = "entering.arms_folded.inline_fold"
+desc = "Arms put into T? under a constant condition, std::inline, std::opt::fold, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
+kind = "behavior"
+case = "../../../cases/consistency/entering/arms_folded.cml"
+args = ["${case}", "std::inline", "std::opt::fold", "${backend}"]
+expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"

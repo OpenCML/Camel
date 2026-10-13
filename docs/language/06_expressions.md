@@ -343,6 +343,7 @@ func main(): int sync {
 - lambda 捕获外层的变量，捕获是引用：外层的 `var` 被修改后 lambda 看到新值，lambda 对它的写入外层也看到。
 - 只有一个签名、且签名不随实参变化的库算子与用户函数一样是函数值：`xs->map<trim>`、`let t = trim`。
 - 代表一组重载（几个同名的用户函数，或有几个签名的算子，如 `abs`）的名字，在被调用者只有一个签名、且那个形参是函数类型的位置上，取签名与之完全相同的那一个：`func on_int(f: (x: int) => int, v: int)` 的调用 `on_int(abs, -3)`。其他位置上它没有单一的函数值，把它当值用是 `SemanticDiag::FunctionNameAsValue`，诊断列出各个签名；写一个写明形参类型的 lambda。签名随实参变化的算子（`println`、`len`、`map`）以及原地修改实参的算子（`append`）同样没有函数值。泛型函数的名字同理（`SemanticDiag::GenericFunctionAsValue`）。
+- 把这样的名字交给内建的高阶算子时（`xs->map<abs>`、`xs->reduce<max, 0>`、`xs->filter<is_even>`），算子说不出它期望哪个函数，编译器就逐个去问：恰好有一个被算子接受时取它；一个都不接受或有几个都接受时，名字没有值（`SemanticDiag::FunctionNameAsValue`，诊断列出候选）。
 - 带函数类型的声明 `let f: (x: int) => int = inc` 目前不可用（`SemanticDiag::FeatureNotSupported`）；省略类型即可。
 
 ## 6.10 高阶算子

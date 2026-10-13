@@ -36,6 +36,9 @@ env:
   CC: clang
   CXX: clang++
   HUSKY: "0"
+  # The build goes on after a file fails to compile (scripts/common.js), so that one run shows
+  # every error of a platform nobody builds on locally. The step still fails.
+  CAMEL_BUILD_KEEP_GOING: "1"
   # Reference-side packages of the ONNX export tests (skip_unless in test/plans/feat/modules/onnx.plan.toml);
   # without them those tests are skipped, not failed.
   TEST_PIP_PACKAGES: numpy onnx onnxruntime psutil

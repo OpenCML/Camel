@@ -1,0 +1,14 @@
+// Conversions of literals that fit are what they were; a computed argument that does not
+// fit is still a fault when the program runs, not a compile-time error.
+func narrow(x: int): i32 { return i32(x) }
+
+func main(): int sync {
+    println(int(2.5), i32(7), float(3), int('42'), float('1.5'))
+    let big = 5000000000
+    let r = attempt(narrow, big)
+    println(match r {
+        case error e => e.kind
+        case v => 'fits'
+    })
+    return 0
+}

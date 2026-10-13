@@ -209,6 +209,7 @@ Options (startup):
   -V, --verbose        Enable verbose output from startup
   --logfile <path>     Write program output to file from startup
   --run-worker <path>  Run one script and exit (for multi-process child; no server/REPL)
+  --dap                Serve the Debug Adapter Protocol on stdin/stdout (for editors)
   -h, --help           Show this help
   -v, --version        Show version
 

@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <concepts>
+#include <functional>
 #include <ranges>
 #include <string>
 #include <string_view>

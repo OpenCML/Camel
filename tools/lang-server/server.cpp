@@ -26,6 +26,7 @@
 
 #include "../format/fmt.h"
 
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>

@@ -24,6 +24,7 @@
 #include "camel/core/source/manager.h"
 #include "camel/runtime/graph.h"
 
+#include <cctype>
 #include <filesystem>
 #include <format>
 

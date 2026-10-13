@@ -1,0 +1,6 @@
+func twice(x: int): int { return x * 2 }
+func twice(x: float): float { return x * 2.0 }
+func main(): int sync {
+    println(['a']->map<twice>)
+    return 0
+}

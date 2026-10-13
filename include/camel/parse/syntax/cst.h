@@ -43,6 +43,7 @@
 
 #include "token.h"
 
+#include <cstddef>
 #include <iterator>
 
 namespace camel::parse::syntax {

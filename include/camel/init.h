@@ -22,9 +22,15 @@
 #include "camel/utils/dll_path.h"
 
 #include <atomic>
+#include <cstdio>
 #include <filesystem>
 #include <iostream>
 #include <mutex>
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 
 namespace camel {
 
@@ -37,10 +43,25 @@ inline std::atomic<bool> &runtimeInitialized() {
     return initialized;
 }
 
+/// What a program or a tool writes to standard output and standard error is the same bytes on
+/// every platform: a line ends with a line feed. On Windows the C runtime opens both in text
+/// mode and writes CR LF for every line feed, which changes program output, JSON diagnostics
+/// and everything that is compared with a recorded text. Standard input is left alone: a line
+/// typed at a console ends with CR LF there, and text mode is what removes the CR.
+inline void useBinaryStandardOutput() {
+#ifdef _WIN32
+    std::fflush(stdout);
+    std::fflush(stderr);
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
+#endif
+}
+
 inline void initialize() {
     runtimeInitialized().store(true, std::memory_order_release);
     static std::once_flag once;
     std::call_once(once, []() {
+        useBinaryStandardOutput();
         camel::utils::setupLibrarySearchPathForHost();
         auto installRoot = camel::utils::resolveInstallRoot();
         namespace fs     = std::filesystem;

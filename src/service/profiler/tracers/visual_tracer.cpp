@@ -19,6 +19,7 @@
 
 #include "visual_tracer.h"
 #include "../analysis/perfetto_integration.h"
+#include <cstdint>
 #include <iostream>
 
 #ifndef NDEBUG

@@ -22,6 +22,8 @@
 #include "camel/core/type/composite/tuple.h"
 #include "tuple.h"
 
+#include <new>
+
 namespace camel::runtime {
 class GCGraph;
 } // namespace camel::runtime

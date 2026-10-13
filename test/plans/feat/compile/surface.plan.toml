@@ -37,15 +37,22 @@ expect_output_contains = ["The context arguments <int> cannot be bound to 'len' 
 
 [[tests]]
 name = "surface.name_as_value_overloads"
-desc = "`xs->map<abs>`: `abs` has four signatures and `map` does not say which it wants; the diagnostic lists them, each once."
-kind = "negative"
+desc = "`xs->map<abs>`: `abs` has four signatures; `map` is asked about each and accepts one (it was FunctionNameAsValue; consistency/generic_values.plan.toml covers the rule)."
+kind = "behavior"
 case = "../../../cases/compile/surface/name_as_value_overloads.cml"
 args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "[1, 2]\n"
+
+[[tests]]
+name = "surface.reserved_function_name"
+desc = "`func __add__`: a function cannot take a name of the form `__x__` (it replaced `+` in the whole module, and the code the compiler writes itself refers to such names)."
+kind = "negative"
+case = "../../../cases/compile/surface/reserved_function_name.cml"
+args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 26
-expect_output_contains = ["an operator with 4 signatures [(i32) => i32; (int) => int; (f32) => f32; (float) => float]"]
+expect_diagnostic_name = "SemanticDiag::ReservedIdentifier"
+expect_diagnostic_line = 1
 
 [[tests]]
 name = "surface.name_as_value_user_overloads"

@@ -27,6 +27,7 @@
 #include "cst.h"
 
 #include <iosfwd>
+#include <ostream>
 
 namespace camel::parse::syntax {
 

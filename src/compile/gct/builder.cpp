@@ -811,6 +811,14 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->size() >= 1, "FuncDecl AST should have at least one child.");
 
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(ast->size() - 1);
+    // The names of the form `__x__` are the compiler's: the operators are functions of such
+    // names (`a + b` is `__add__(a, b)`), and code the compiler writes itself refers to them
+    // (`t += u` on a tensor, the tag operators of `??`). A `let` could not take one; a
+    // function could, and `func __add__` then replaced `+` in the whole module.
+    if (!validateIdent(funcDataNode->loadAs<AST::FuncDataLoad>()->ref().ident())) {
+        diags_->of(SemanticDiag::ReservedIdentifier).at(ast->load()->tokenRange()).commit();
+        throw BuildAbortException();
+    }
     funcDeclPending_         = true;
     node_ptr_t funcNode      = visitFuncData(funcDataNode);
 
@@ -2235,9 +2243,13 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
     };
     node_ptr_t result = visitData(sourceAst);
     if (conditionAst) {
-        result = apply("filter", elementFunction(conditionAst), result);
+        result = apply("$builtin::filter", elementFunction(conditionAst), result);
     }
-    return apply("map", elementFunction(elementAst), result);
+    // The two operators themselves, not what the names `filter` and `map` stand for where
+    // the comprehension is written: a function of the program with one of those names must
+    // not change what a comprehension means (the GIR builder resolves the reserved prefix
+    // in the built-in module, visitDRefNode).
+    return apply("$builtin::map", elementFunction(elementAst), result);
 }
 
 namespace {
@@ -2390,6 +2402,15 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     declSignature_ = isDecl;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    // A parameter of a reserved name would stand in front of the operator of that name.
+    for (size_t i = 0; i < funcType->argNamesCount(); ++i) {
+        if (!validateIdent(std::string(funcType->argNameAt(i)))) {
+            diags_->of(SemanticDiag::ReservedIdentifier)
+                .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                .commit();
+            throw BuildAbortException();
+        }
+    }
     if (!declaredTypeVars_.empty()) {
         // Every variable needs a position in an argument type to take its type from.
         std::vector<std::string> bindable;

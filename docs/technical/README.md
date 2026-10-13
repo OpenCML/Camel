@@ -43,6 +43,7 @@
 | [32_semantic_query_layer.md](32_semantic_query_layer.md) | How a tool asks the compiler about a source text by position: the syntactic index, the facts the builders report to a recorder, the join, generic instances and overloads, what is available in text with errors, rename, and the measured cost |
 | [33_fault_isolation.md](33_fault_isolation.md) | The fault-isolation operator `attempt` (name provisional): its type and graph form, which faults it isolates, how each back end returns to the boundary and what is restored, parallel siblings, release of external resources when a run ends, and the questions left to the language author |
 | [34_handwritten_parser.md](34_handwritten_parser.md) | 手写的词法分析器、解析器与具体语法树：两条排版规则（尖括号紧贴、换行结束语句）、文法判定表、错误恢复、与 ANTLR 解析器的差分结果、性能数据 |
+| [35_debugger.md](35_debugger.md) | The debugger `camel-db`: the source view and the graph view of a stopped program, line and node breakpoints and steps, the stack on both back ends, variables by source name, faults, the execution observer in the schedulers and its cost, the Debug Adapter Protocol coverage, and the questions left to the language author |
 | [nn-autograd.md](nn-autograd.md) | `nn` / `tensor` 自动求导架构：`nn.apply_gradients` 的图合成、helper 调用与参数别名、公共 API、内置 VJP 覆盖范围与已知限制 |
 | [jit/README.md](jit/README.md) | FastVM JIT 实现级注解的目录索引 |
 | [jit/bytecode-to-asm.md](jit/bytecode-to-asm.md) | JIT 字节码到机器码翻译注解：槽模型、调用约定、逐条字节码经 MIR（V* 虚拟寄存器）与寄存器分配生成 x64 汇编 |
@@ -55,7 +56,8 @@
 - [../language/README.md](../language/README.md) — **语言参考（详细版）**：按主题分章，含大量示例
 - [../setup.cn.md](../setup.cn.md) / [../setup.en.md](../setup.en.md) — 开发环境配置
 - [../cli.cn.md](../cli.cn.md) / [../cli.md](../cli.md) — CLI 使用说明
-- [../../tools/debugger/README.md](../../tools/debugger/README.md) — 调试器（camel-db）与按类型断点 API（libcamel `DebugBreakpoint`）
+- [../debugging.cn.md](../debugging.cn.md) / [../debugging.en.md](../debugging.en.md) — 调试 Camel 程序（命令行与 VS Code，单步在 Camel 里的含义）
+- [../../tools/debugger/README.md](../../tools/debugger/README.md) — 调试器（camel-db）的 Web 界面与按类型断点 API（libcamel `DebugBreakpoint`）
 - [../Camel.asdl](../Camel.asdl) — AST 结构定义（ASDL 格式，实现用）
 
 ## 术语速查

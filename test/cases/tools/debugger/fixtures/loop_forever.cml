@@ -1,0 +1,12 @@
+module main
+
+func spin(n: int): int {
+    return spin(n + 1)               // mark:spin
+}
+
+func main(): int sync {
+    println('spinning')
+    let r = spin(0)
+    println(r)
+    return 0
+}

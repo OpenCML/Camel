@@ -31,9 +31,11 @@ The eight lines of `ZEN` outline this position: the first two say the graph is f
 | `macro` function | A subgraph that can be evaluated early, its result materialized as a constant of the graph | Builds a static graph dynamically |
 | `a ?? b`, `a !! b`, `x ?-> f` | A branch: the condition is a one-bit tag on the value (null / error), and the two arms are the original value and the substitute | The same structure as `if` |
 | `throw e` | Returning an error value | The same structure as `return` |
-| Fault isolation (`attempt`, name provisional) | One tagged call of a subgraph | The boundary of the fault is the boundary of the subgraph; the structure does not vary with the content of the subgraph |
+| Fault isolation (`attempt`) | One tagged call of a subgraph | The boundary of the fault is the boundary of the subgraph; the structure does not vary with the content of the subgraph |
 | Generic function | A subgraph template; each call with a set of concrete types instantiates a subgraph whose types are all concrete | Only concrete types are on the graph |
 | Type function | Evaluated while the graph is built; leaves no node on the graph | A value of kind "type" does not exist at run time |
+| `loop` expression | One `LOOP` node with a condition subgraph, a body subgraph and state edges | The state is decided by the loop header, not by what the body contains |
+| A `let` at the top level of a module | A node of the common root graph | Evaluated when depended on; importing executes no code |
 | Pass | A program that turns one graph into another (or consumes a graph) | An open pipeline |
 
 ---
@@ -216,6 +218,84 @@ At present all complicated type computation is implemented directly by operators
 - **The debugger** offers two views, source lines and graph nodes, and stepping likewise by line and by node.
 - **The outward statement of what Camel is**: Camel is a graph-native general-purpose programming language, and AI is its primary application domain; it no longer calls itself a domain-specific language for AI.
 
+### 2.10 Supplementary rulings (2026-10-12)
+
+**An assumption.** There must be no node reference across graphs: a node of one graph does not point at a node of another, and the only relation between graphs is "a graph refers to a graph" (a call). Every design has to pass this first.
+
+**A criterion for choices.** Camel is meant to differ from the traditional control-flow languages. No syntactic sugar imitates traditional control flow; the mapping between syntax elements and graph nodes stays simple. (This does not exclude concise notations whose meaning is unambiguous, such as the list comprehension.)
+
+#### Optimization and behaviour
+
+- **"The program behaves the same with and without optimization" is not a design principle of Camel**, and the language core cannot enforce such agreement. What a pass keeps and what it removes is the pass's own decision. Example: a pure computation in a sync block whose result is not used but which would fault (`let q = 1 / z`) faults without passes, while a simplification pass may delete it and the program goes on. That is not a defect.
+
+#### Syntax
+
+- **Angle brackets are tight.** The angle brackets of `with` arguments and of type arguments must touch the token before them: `f<a>` is `f` with an argument, `f < a` is a comparison. The comparison operator `<` needs white space before it; `i<n` is an error, and the diagnostic should say why.
+- **A line end ends a statement**, in the spirit of JavaScript's automatic semicolons, with intuition as the measure. In detail: a line continues while a bracket is open, when it ends in a binary operator, a comma or another token after which something must follow, and when the next line starts with an operator that can only be binary (`->`, `.`, `??`, ...); a next line that starts with a token that can begin an expression (`-`, `+`, `(`, `[`, ...) is a new statement. Semicolons may still be written.
+- **The parser** is a hand-written lexer and parser, no longer depending on ANTLR, for efficiency and determinism.
+- **`raise` is removed.** It is no longer part of the grammar and not a reserved word; an error value is returned with `throw`.
+- **A minus sign that touches a number literal and is not preceded by a value is part of that number**: `-2->f` is `(-2)->f`. `a-1` is still a subtraction.
+- **`^` binds one level tighter than multiplication and division, and associates from right to left.** `2 * 3 ^ 2` is 18.
+- **A literal with an exponent or a decimal point is always a floating-point number.** `1e5` is `100000.0`.
+- **`===` is not supported for now.**
+- **The list comprehension** `[e for x in xs if c]` means `filter` then `map`, that is `xs->filter<c>->map<e>`; nothing is promised about the order of the elements.
+- **An import can rename**: `import { find as str_find } from str`. Two imported names that collide are a compile-time error; one must not be taken silently.
+- **Documentation comments** are a convention of the language: the comment lines starting with `///` directly above a declaration are its documentation.
+
+#### Loops
+
+- **A `LOOP` node is introduced.** Most modern computation-graph standards have such a node, and connecting to them needs it. It is to be done gracefully: first the syntax, the node and a lowering "from `LOOP` to a tail-recursive subgraph", with every subsystem lowering at its entry; then the subsystems are changed to native handling one by one. The loop body is a subgraph of its own and is not merged into the enclosing graph.
+- **A loop is an expression with state.** The state is written in the loop header, the value of the body is the state of the next round, and the value of the whole loop is the final state. No statement form is added for "a `var` outside the loop as the state"; iterating for effects only uses `foreach` and the other existing means. The notation is provisionally:
+
+  ```camel
+  let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
+  let total    = loop acc = 0 for x in xs { acc + x * x }
+  ```
+
+- **No `break` and no `continue`.** Ending early is written as a continuation condition in the loop header: `loop found = -1 for x in xs while found < 0 { ... }`.
+
+#### Branches and types
+
+- **An `if` without `else` has no value of its own.** Its arm may be of any type and the value of the arm is dropped: `if debug then println('checking')` is legal, `let x = if debug then 1` is a compile-time error. Nothing changes on the graph: a branch with two arms, the `else` not written being an empty arm, and a join that takes no value. An arm no longer needs `return null` to make the types fit.
+- **`==` and `!=` compare arrays, tuples and structs by content, element by element.** Both sides must have the same type and the element types must themselves be comparable (not those holding function values), otherwise it is a compile-time error; floating-point elements follow the floating-point rule (an array containing `nan` is not equal to itself). Tensors are not included. On the graph it is an ordinary operator node. Strings have `contains` too, written as for arrays: `'hello'->contains<'ell'>`.
+- **The right side of `a ?? b` may be nullable**: when it is a `T?` the result is a `T?`, when it is a `T` the result is a `T`; it associates from right to left, so `a ?? b ?? 9` is "try a, then b, then give the default". Likewise `!!`. On the graph it is still one branch.
+- **`t += u` on a tensor computes a new tensor and rebinds**, as for a number; nothing is changed in place. Changing in place takes an explicit operator.
+- **A `match` must have a default case.** Without `case _` it is a compile-time error, except over a `bool` with both literals listed and with the fixed patterns of `T?` and `T!`. The compiler adds no arm the user cannot see.
+- **A value that enters a `T?` or `T!` position is put into the form by itself**, wherever the target type is known (an argument, a `let` with a type, an array element, the two arms of a branch); `null` likewise. Never the other way: a `T?` or `T!` used as a `T` must be opened with `??`, `!!`, `?->` or `match`. The element type of the empty array literal `[]` is taken from the target position in the same way.
+- **A generic function may stand wherever a function is expected**, also as an argument of another generic function. The compiler delays its instantiation until the type variables can be determined from the context; when they cannot, it is a compile-time error that says which variable stays undetermined. The delay exists at compile time only; the graph holds concrete instances only.
+- **`f<w>` is a partial application**: `let g = f<w>` gives a function that already has its context arguments.
+- **Diagnostics and graphs use the type names of source text** (`first<int>`, not `first<i64>`).
+- **`throw` takes an error value only**: `throw error('Kind', 'message')`, with the position filled in by the compiler. `int?!` is allowed; `int??` and `int!!` are not. The fault-isolation operator is named `attempt`.
+
+#### Numbers
+
+- `int('12abc')` is a fault: the whole string must be one number. To parse safely use `parse_int`, which returns an `int!`.
+- A conversion whose value does not fit the target type is a fault: `int(1e30)`, `int(nan)`, `i32(5000000000)`.
+- Overflow of integer addition, subtraction and multiplication, and the least integer divided by -1, keep wrapping around.
+- There is one rule for writing a floating-point number as text: the shortest text that reads back as the same number. `string`, `println` and `format` agree.
+- `&=` and `|=` are the boolean and / or; bit operations are functions (`bit_and`, ...).
+
+#### Effects, errors and parallelism
+
+- **An effectful function returns a value too.** `println(x)` returns `x`, so that an effect can be threaded into the data flow: when its result is used, it is certainly executed, and before the use.
+- **Only a `main` with an explicitly declared return type has its return value count as the result of the program.**
+- **An error value that reaches the exit of `main` unhandled** is printed on standard error, and the exit code is non-zero.
+- **A `slice` out of bounds at run time is a fault**, as an index out of bounds is. `take` and `drop` truncate by definition and are not affected.
+- **When one element of a parallel `map` faults**, the elements that have started run to their end and those that have not are not started. When several elements fault at once, the one with the smallest index is reported.
+
+#### Modules and standard library
+
+- **Code at the top level of a module is not executed by default**: Camel is not an imperative scripting language. Top-level statements are evaluated by dependency like any others.
+- **A module can export values.** A module is itself a `__root__` graph; when imported, the roots of the modules are merged under one common root, and a top-level `let` of a module is a node of that root, evaluated when depended on. So there is no node reference across graphs. How exactly the roots are merged is to be set out in a design note first.
+- **The calling style of the standard library**: the value being processed is the ordinary argument, everything else is a `with` argument (`'a,b'->split<','>`, `xs->take<3>`); when two arguments are on an equal footing both are ordinary arguments (`merge(m1, m2)`). The operations on maps and sets keep one form accordingly.
+- A map is traversed and printed in key order; the types that can be keys are integers, booleans, strings and tuples of them; `'abc'[1]` is the string of that one byte.
+
+#### Defaults
+
+- The default limit for non-tail recursion is 1000 on every scheduler, and the parallel scheduler counts likewise.
+- The instruction-set baseline of release packages is `x86-64-v2`.
+- The graph, type and metadata spaces each have a total limit of 256 MB; an expansion that does not stop is halted by the exporter's own budget of rounds.
+
 ---
 
 ## 3. `macro`
@@ -266,15 +346,36 @@ All of the following are misreadings that have actually happened; check against 
 
 When you meet one of the following, ask the language author:
 
-- Whether the configurable limit for non-tail recursion (see 2.9) takes the same default on every scheduler.
-- The design of the loop node (see 2.9): its structure on the graph, and its relation to tail-recursive subgraphs, automatic differentiation and export.
-- Whether `raise` stays: `throw` has been decided to mean returning an error value; whether `raise` is kept as a synonym for it or removed.
 - The type notation for "may fail": 2.9 decides on `T!`; the grammar also has an earlier reserved `T ? U` (called ErrorThen in the syntax tree), and the relation between the two is to be decided.
 - The concrete content of the type-expression language: the meaning and fate of each of the reserved type operators `&`, `\`, `+`, `-`, `^` and of `typeof`, `keyof`, `ident of T`; how conditions and matching are written in type functions.
 - How numeric parameters in types (such as the dimensions of a tensor) are bound to names, and how arithmetic is done on them.
 - The meaning of `typeof` applied to a constant value, and its use in generics.
-- Whether the type parameters of a generic function may be given explicitly at the call.
 - The position of `any`: kept as an escape hatch, or replaced by generics; whether the currently unchecked `any as T` is tightened.
 - How failure or non-termination of the evaluation of a type function is handled.
+- The notation of the loop header (the one in 2.10 is provisional).
+- How exactly the module roots are merged (see 2.10).
+- Whether the type parameters of a generic function may be given explicitly at the call.
+- Whether generational collection is on by default.
 - The behaviour when the same mutable object is written through references in several places outside a sync block, none of them with `wait`.
 - How side-effect tracking is preserved under the various passes (see 2.7).
+- **A `main` without a declared return type whose body ends in an error value** (marked `main-undeclared-error` in the code):
+  `func main() sync { parse_int('x') }`. Implemented: a `main` that declares no return type has no result (2.10), so this error value is not reported either, and the exit code is 0.
+  Alternative: treat it as "an error value that reaches the exit of `main` unhandled", print it on standard error and exit non-zero.
+- **A `slice` whose two bounds lie inside the array, with the end before the start** (`slice-reversed-range`):
+  `[10, 20, 30]->slice<2, 1>`. Implemented: the empty array (the earlier behaviour; a bound outside the array is a fault by 2.10).
+  Alternative: a fault as well.
+- **After a fault in a parallel `map`, whether elements of smaller index that have not started still run** (`parallel-fault-lower-elements`):
+  `range(0, 64)->map<bad>` where every element faults and a worker happens to run element 40 first. Implemented: only the elements with an index above 40 are not started, 0 to 39 still run, so the one reported is always element 0, as on the linear back ends and the same on every run.
+  Alternative: start no element at all after a fault; "the smallest index" is then taken among the elements that happened to have started, and may differ from run to run.
+- **`!=` on a bare `T?`, `T!` or function value**: `let a: int? = 1`, `a != a`, or `f != g`. `!=` used to accept any two values of one type and compare references (a meaningless result);
+  with equality by content, `==` and `!=` are defined only for numbers, booleans, strings, maps, sets, and arrays, tuples and structs of comparable elements, and the two forms above are now compile-time errors.
+  Alternatives: keep them errors (open the value with `??`, `!!`, `match` first); or define equality by content for a bare `T?` and `T!` too.
+- **Whether an expression without a value counts as `null`** (marked `void-as-null` in the code): `null` has the type `void`, and so has a call of a function that returns nothing.
+  `if c then 1 else log()` (`log` returns nothing). Implemented: every `void` expression is treated as `null` where a value enters a form and where arms join, so this is an `int?`.
+  Alternative: accept the literal `null` only; any other `void` expression where a value is needed is a compile-time error.
+- **Whether arguments of built-in operators enter `T?` / `T!`** (`entering-operator-args`): `xs->append<5>` (with `xs: (int?)[]`), `len([])`.
+  Implemented: they do not; the first needs `5 as int?`, and the `[]` of the second has no element type and is not reported. The parameter types of a built-in operator are computed from the arguments by its C++ type rule, so there is no target type before the call.
+  Alternative: let a type rule name the types it accepts, so that built-in operators behave as user functions do.
+- **Whether a function with a `var` context parameter can be partially applied** (`partial-application-var`): `with <var total: int> sync func add(x: int)`, `let g = add<t>`.
+  Implemented: refused (`ConstructNotSupported`). Once configured, `g` is a function value that writes a captured variable; whether that agrees with "a modification is declared explicitly at every level" has not been ruled on.
+  Alternatives: allow it, each call of `g` counting as a write of `t`; or keep refusing.

@@ -1,7 +1,7 @@
 {
   "name": "camel-lang",
   "displayName": "Camel",
-  "description": "Camel language support: syntax highlighting, the camel-ls language server, graph view and pass runner.",
+  "description": "Camel language support: syntax highlighting, the camel-ls language server, the camel-db debugger, graph view and pass runner.",
   "version": "0.1.0",
   "publisher": "opencml",
   "license": "MIT",
@@ -15,17 +15,21 @@
     "vscode": "^1.82.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Debuggers"
   ],
   "keywords": [
     "camel",
     "cml",
     "opencml",
-    "language server"
+    "language server",
+    "debugger"
   ],
   "main": "./out/extension.js",
   "activationEvents": [
-    "onLanguage:camel"
+    "onLanguage:camel",
+    "onDebugResolve:camel",
+    "onDebugInitialConfigurations"
   ],
   "contributes": {
     "languages": [
@@ -47,6 +51,121 @@
         "language": "camel",
         "scopeName": "source.camel",
         "path": "./syntaxes/camel.tmLanguage.json"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "camel"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "camel",
+        "label": "Camel",
+        "languages": [
+          "camel"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "The .cml file to debug.",
+                "default": "${file}"
+              },
+              "passes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [
+                  "std::fvm"
+                ],
+                "markdownDescription": "Passes applied in order, as on the command line (`camel <file> <pass>...`). Empty: the graph as compiled, on `std::nvm`. `std::nvm` and `std::fvm` can be stopped; `std::jit` and `std::prl` run as `std::fvm` under the debugger."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [],
+                "markdownDescription": "Values for the parameters of `main`, each as `name=value` (the `--arg` option of `camel`)."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory of the program.",
+                "default": "${workspaceFolder}"
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Environment variables added to the program's environment.",
+                "default": {}
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Stop at the first node of the program that has a source position.",
+                "default": false
+              },
+              "stepBy": {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "node"
+                ],
+                "default": "line",
+                "markdownDescription": "What Step Over, Step Into and Step Out step by: `line` (the next source line that executes) or `node` (the next graph node, several of which may be on one line)."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "camel",
+            "request": "launch",
+            "name": "Debug Camel file",
+            "program": "${file}",
+            "passes": [
+              "std::fvm"
+            ]
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Camel: Debug current file",
+            "description": "Debug the open .cml file on the bytecode VM (std::fvm).",
+            "body": {
+              "type": "camel",
+              "request": "launch",
+              "name": "Debug Camel file",
+              "program": "^\"\\${file}\"",
+              "passes": [
+                "std::fvm"
+              ]
+            }
+          },
+          {
+            "label": "Camel: Debug with a pass sequence",
+            "description": "Debug a .cml file after a pass sequence, with values for the parameters of main.",
+            "body": {
+              "type": "camel",
+              "request": "launch",
+              "name": "Debug Camel file (passes)",
+              "program": "^\"\\${workspaceFolder}/${1:main.cml}\"",
+              "passes": [
+                "${2:std::inline}",
+                "std::fvm"
+              ],
+              "args": [],
+              "stopOnEntry": false
+            }
+          }
+        ]
       }
     ],
     "commands": [
@@ -120,6 +239,12 @@
           "default": "",
           "scope": "machine-overridable",
           "markdownDescription": "Path of the `camel` executable used by **Camel: Run Current File with Passes…**. When empty, `$CAMEL_HOME/bin/camel` is used if it exists, then `camel` on `PATH`."
+        },
+        "camel.debugger.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "markdownDescription": "Path of the `camel-db` executable, started as `camel-db --dap` for a debug session of type `camel`. When empty, `$CAMEL_HOME/bin/camel-db` is used if it exists, then `camel-db` on `PATH`."
         },
         "camel.graph.passes": {
           "type": "array",

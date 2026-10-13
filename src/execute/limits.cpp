@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <format>
 #include <string>
+#include <system_error>
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <pthread.h>
