@@ -980,10 +980,6 @@ any Formatter::visitUnaryExpr(syn::Node context) {
                any_cast<string>(visitType(context->type()));
     }
     const string op = context->child(0)->text();
-    // `- 1` negates the number 1; written together it would be the literal -1.
-    if (op == "-" && !operand.empty() && std::isdigit(static_cast<unsigned char>(operand[0]))) {
-        return op + " " + operand;
-    }
     return op + operand;
 }
 
@@ -1389,6 +1385,9 @@ any Formatter::visit(syn::Node context) {
         }
         return item;
     }
+    case NK::OrExpr:
+    case NK::AndExpr:
+        return formatBiOpsList(context, true);
     case NK::PowerExpr:
         return formatBiOpsList(context, true);
         CAMEL_FORMAT(NullableExpr)

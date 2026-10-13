@@ -6,14 +6,14 @@ desc = "The syntax rulings of design principles 2.10: the precedence of `^`, lit
 
 [[tests]]
 name = "rulings.power"
-desc = "`^` binds one level tighter than `*` and `/` and associates from right to left; a prefix operator applies to the whole power (`-x ^ 2` is -(x ^ 2)); a minus that touches a number belongs to the literal (`-2 ^ 2` is 4)."
+desc = "`^` binds one level tighter than `*` and `/` and associates from right to left; the minus applies to the whole power, before a name and before a number alike (`-x ^ 2` is -(x ^ 2), `-2 ^ 2` is -4)."
 kind = "behavior"
 case = "../../../cases/parse/rulings/power.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["18 512 64 2", "-9 9 4 -4 12", "0.5 2 3"]
+expect_stdout_contains = ["18 512 64 2", "-9 9 -4 -4 12", "0.5 2 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -136,5 +136,64 @@ expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::KeywordAsIdentifier"
 expect_diagnostic_line = 1
 expect_output_contains = ["'loop' is a keyword"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.minus_by_precedence"
+desc = "The minus is always an operator (ruling of October 13): looser than `^`, tighter than `->` and the other binary operators, the same before a literal and a name. `-2 ^ 2` and `-x ^ 2` are -4, `-2->inc` and `-x->inc` are -1; the smallest int and i32 can still be written; `2.0 ^ -1.0 ^ 2.0` has a signed exponent."
+kind = "behavior"
+case = "../../../cases/parse/rulings/minus.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["-4 -4 4 0.5", "-1 -1 -6 7 4 1", "-9223372036854775808 -2.5 [-1, 2] -3", "-2147483648"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.eager_and_or"
+desc = "`&` and `|` are ordinary binary operators that evaluate both sides: `&` above `|`, both above `&&` and below the comparisons; both operands of `&` are evaluated when the left one is false."
+kind = "behavior"
+case = "../../../cases/parse/rulings/eager_logic.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["true true true true", "left\nright\nfalse"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.logical_operators_marked_in_ast"
+desc = "In the AST `&&` and `||` are operators of their own kind (LogicalAnd, LogicalOr, printed `&&` and `||`), distinct from `&` and `|`, so that a later stage can turn them into branches."
+kind = "behavior"
+case = "../../../cases/parse/rulings/eager_logic.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["BinaryExpr: &&", "BinaryExpr: &\n", "BinaryExpr: |\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.null_comparison_parses"
+desc = "`x == null` and `x != null` are syntactically ordinary comparisons (`camel check -s`)."
+kind = "behavior"
+case = "../../../cases/parse/rulings/null_compare.cml"
+args = ["check", "-s", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.operator_names_reserved"
+desc = "A function cannot take the name of an operator: the names of the form `__x__` are the compiler's, `__and__` and `__or__` among them."
+kind = "negative"
+case = "../../../cases/parse/rulings/reserved_and.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReservedIdentifier"
+expect_diagnostic_line = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

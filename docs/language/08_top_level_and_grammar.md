@@ -47,15 +47,19 @@ ctrlExpr   : if logicalOr then blockExpr (else blockExpr)?
 waitExpr   : wait? assignExpr
 assignExpr : logicalOr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOr)?
 logicalOr  : logicalAnd ('||' logicalAnd)*
-logicalAnd : equality ('&&' equality)*
+logicalAnd : or ('&&' or)*
+or         : and ('|' and)*
+and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
 relational : additive (('<' | '>' | '<=' | '>=') additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
-unary      : link (as 类型)? | ('!' | '-' | '~') link
-link       : comp (('->' | '?->') comp)*
+unary      : link (as 类型)? | ('!' | '~') link
+link       : neg (('->' | '?->') comp)*
+neg        : '-' negPower | comp
+negPower   : '-' negPower | comp ('^' negPower)?
 comp       : anno ('..' anno)*
 anno       : primary ( '.'字段 | '[' 下标 ']' | '(' 实参 ')' | '<' with 实参 '>' )*
 primary    : 名字 | 字面量 | '[' 元素, ... ']' | '{' 键: 值, ... '}' | '(' 表达式, ... ')' | lambda
@@ -136,7 +140,9 @@ ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 assignExpr         : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&='
                      | '|=') logicalOrExpr)?
 logicalOrExpr      : logicalAndExpr ('||' logicalAndExpr)*
-logicalAndExpr     : equalityExpr ('&&' equalityExpr)*
+logicalAndExpr     : orExpr ('&&' orExpr)*
+orExpr             : andExpr ('|' andExpr)*
+andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
@@ -144,8 +150,10 @@ multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-                     | ('!' | '-' | '~') linkExpr ('^' powerExpr)?
-linkExpr           : compExpr (('->' | '?->') compExpr)*
+                     | ('!' | '~') linkExpr ('^' powerExpr)?
+linkExpr           : negExpr (('->' | '?->') compExpr)*
+negExpr            : '-' negPower | compExpr
+negPower           : '-' negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
@@ -211,7 +219,7 @@ typeList           : typeExpr (',' typeExpr)*
 | 实参：位置实参还是具名实参 | 第一个 `名字 :` 起是具名实参 |
 | `T ?` | 同一行上 `?` 后面能开始一个类型时是保留写法 `T ? U`，否则是可空标记 |
 | 类型之后的 `+` `-` `^` | 其后能开始一个类型时属于类型（`x as T + U` 是转换为类型 `T + U`） |
-| 数字前的 `-` | 紧贴数字且前面不是一个值时是字面量的符号 |
+| 一元 `-` | 永远是运算符；比 `^` 松、比 `->` 紧；直接作用在数字上时给出负的字面量 |
 
 相关文件：
 

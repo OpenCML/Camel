@@ -95,8 +95,12 @@ std::string to_string(BinaryDataOp op) {
     case BinaryDataOp::AssignOr:
         return "|=";
     case BinaryDataOp::Or:
-        return "||";
+        return "|";
     case BinaryDataOp::And:
+        return "&";
+    case BinaryDataOp::LogicalOr:
+        return "||";
+    case BinaryDataOp::LogicalAnd:
         return "&&";
     case BinaryDataOp::Eq:
         return "==";

@@ -127,6 +127,8 @@ class Builder {
     Value visitAssignExpr(syntax::cst::AssignExpr context);
     Value visitLogicalOrExpr(syntax::cst::LogicalOrExpr context);
     Value visitLogicalAndExpr(syntax::cst::LogicalAndExpr context);
+    /// OrExpr (`a | b`) and AndExpr (`a & b`).
+    Value visitEagerLogicExpr(syntax::Node context);
     Value visitEqualityExpr(syntax::cst::EqualityExpr context);
     Value visitRelationalExpr(syntax::cst::RelationalExpr context);
     Value visitAdditiveExpr(syntax::cst::AdditiveExpr context);

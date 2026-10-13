@@ -11,7 +11,7 @@ This chapter describes the lexical structure of source code. The token table is 
 - Spaces and tabs are only separators. **A line break ends a statement**, unless the line is visibly unfinished:
   - a round bracket, a square bracket, an angle-bracket argument list or the braces of a struct literal are still open;
   - the line ends with a binary operator, `,`, `=`, `=>`, `->`, `:`, `then`, `else`, `return` or another token that must be followed by something;
-  - the next line starts with an operator that **can only be binary**: `->` `?->` `.` `..` `?..` `??` `!!` `*` `/` `%` `^` `&&` `||` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `as` `is` and the assignment operators; in a type also `|` `&` `\`;
+  - the next line starts with an operator that **can only be binary**: `->` `?->` `.` `..` `?..` `??` `!!` `*` `/` `%` `^` `&` `|` `&&` `||` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `as` `is` and the assignment operators; in a type also `\`. **A symbol of two roles (`+`, `-`, `@`) that starts a line has the role that starts something new**: `-x` is a new statement, `@name` an annotation. To continue a line, leave it at the end of the line before (a matrix product: `a @`, line break, `b`);
   - the next line is the next part of the same construct: `else`, `then`, `catch`, `finally`, `=>`, `from`.
 
   A next line that starts with `-`, `+`, `!`, `~`, `@`, `(`, `[`, `{`, a name, a literal or a statement keyword is a **new statement**. To write an addition or a subtraction on two lines, leave the operator at the end of the first (`a +`, then `b`); a line that starts with `+` is not a statement and gives `SyntaxDiag::LineStartsWithOperator`.
@@ -70,7 +70,7 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 - **A literal with an exponent or a decimal point is a floating-point number** ([2.5.2](#252-floating-point-numbers)): `1e6` is a `float` with the value `1000000.0`; `1e-2` is `0.01`. An integer literal has only the four forms of the table above.
 - An exponent is for decimal numbers only: `0b1e5` and `07e2` are `SemanticDiag::InvalidLiteral` (in a hexadecimal number `e` is a digit).
 - There are no digit separators (`1_000` is a syntax error) and no `0o` prefix.
-- **A number token carries no sign.** Between two operands `+` and `-` are always the binary operators, whatever the spacing: `n - 1`, `n-1` and `n -1` are all subtractions. Where an operand is expected (no value precedes), a `-` that **touches** a number is part of that number: `-1`, `-2.5`, `[-1, 2]`, `f(-1)`, `case -1 =>`, `-9223372036854775808`. A signed literal is one operand, so `-2->f` passes `-2` to `f` and `-2 ^ 2` is `(-2) ^ 2`; `-a->f` is `-(a->f)`, and so is `- 2->f` (white space after the minus) ([6.12](06_expressions.md#612-operator-precedence)). A `+` before a number is read as its sign too (`+2.5`). The sign of an exponent belongs to the number token itself: `1.0e-2`.
+- **A number token carries no sign, and a minus is always an operator.** Between two operands `+` and `-` are always the binary operators, whatever the spacing: `n - 1`, `n-1` and `n -1` are all subtractions. Where an operand is expected (no value precedes) `-` is the unary minus, and it reads the same before a literal and before a name: it binds less tightly than `^` and more tightly than `->` and the other binary operators ([6.12](06_expressions.md#612-operator-precedence)). `-2 ^ 2` is `-(2 ^ 2)`, that is `-4`; `-2->f` is `(-2)->f`; `-x->f` is `(-x)->f`. A minus applied directly to a number gives the negative literal, so `-1`, `-2.5`, `[-1, 2]`, `f(-1)`, `-9223372036854775808` and `let b: i32 = -2147483648` are written as ever; a `match` pattern may be `case -1 =>`. A `+` before a number is read as its sign (`+2.5`). The sign of an exponent belongs to the number token itself: `1.0e-2`.
 - A line break ends a statement ([2.1](#21-lines-whitespace-and-separators)), so a line that starts with `-x` or `-1` is a new statement and is not joined to the line before it as a subtraction.
 
 ### 2.5.2 Floating-point numbers
@@ -120,7 +120,8 @@ pi is about 3.14
 | `+` `-` `*` `/` `%` `^` `@` | Arithmetic: addition, subtraction, multiplication, division, remainder, power, matrix multiplication |
 | `==` `!=` `<` `>` `<=` `>=` | Comparison |
 | `===` `!==` | Reserved, not supported for now (compile-time error) |
-| `&&` `\|\|` `!` | Logical and, or, not |
+| `&&` `\|\|` `!` | Logical and, or, not; `&&` and `\|\|` are reserved operators and cannot be overloaded |
+| `&` `\|` | And, or with both sides evaluated; ordinary operators |
 | `~` | Bitwise not |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Assignment and compound assignment |
 | `??` `!!` `?->` | Unwrap a nullable value, unwrap a fallible value, pass the error on if there is one |

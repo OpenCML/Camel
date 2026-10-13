@@ -138,10 +138,10 @@ Tokens at the start of a line, in full:
 
 Two entries need a word.
 
-- `@` is both the matrix product and the mark of an annotation. A line starting with `@` is read
-  as an annotation, by the principle of the rule (a token that can start a statement does). The
-  author's table listed `@` among the binary operators; the corpus has no line that starts with
-  a binary `@` and has annotations at the start of a line throughout. **Open for the author.**
+- `@` is both the matrix product and the mark of an annotation. A line starting with `@` is an
+  annotation (ruled on October 13): a symbol of two roles (`+`, `-`, `@`) that starts a line has
+  the role that starts something new. A matrix product continued on the next line leaves the
+  `@` at the end of the line before.
 - `<` at the start of a line continues as a comparison, as the table says, although a lambda
   with `with` parameters can start with `<`. A statement that is a bare lambda does nothing.
 
@@ -208,6 +208,25 @@ reports an error instead of exhausting the stack.
 Nothing else changes: no tables to regenerate, no prediction to re-check. For an expression form
 (`loop … while … { }` as an operand) step 3 is a `case` in `parseExpr` or `parsePrimary`
 instead.
+
+### The minus, and `&` `|` beside `&&` `||` (rulings of October 13)
+
+The minus is always an operator; the parser no longer takes a `-` that touches a number into
+the literal. Its level is its own (`negExpr`, the first operand of `linkExpr`): tighter than
+`->` and every other binary operator, looser than `^`, which under a minus is taken by
+`negPower`. So `-2 ^ 2` and `-x ^ 2` are `-(… ^ 2)`, `-2->f` and `-x->f` are `(-…)->f`. Without
+a minus nothing changed: `x->f ^ 2` is still `(x->f) ^ 2` through `powerExpr`, whose right
+operand reaches `negExpr` (`2 ^ -1`). The AST builder turns a minus applied directly to a
+number literal into the negative literal, which keeps `-9223372036854775808`, typed literals
+(`let b: i32 = -2147483648`) and every snapshot of `-1` as they were; `-(2)` and `-2 ^ 2` are
+negations. `!` and `~` keep their place (they apply to the `->` chain after them). In a pattern
+(`case -1 =>`) the sign is still part of the literal.
+
+`orExpr` (`|`) and `andExpr` (`&`) sit between `&&` and the comparisons, `&` the tighter. In
+the AST they are `BinaryDataOp::Or` and `And`, the ordinary operators that become calls of
+`__or__` and `__and__`; `||` and `&&` are `LogicalOr` and `LogicalAnd`, for the stage that will
+turn them into branches (the GCT builder compiles them as `|` and `&` until then). In a type
+`|` and `&` are parsed by the type functions and never meet these.
 
 ### The `loop` expression (provisional notation)
 

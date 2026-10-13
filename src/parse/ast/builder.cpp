@@ -1642,7 +1642,7 @@ Value Builder::visitLogicalOrExpr(cst::LogicalOrExpr context) {
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); ++i) {
         node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
-        node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::Or);
+        node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::LogicalOr);
         setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
@@ -1666,8 +1666,43 @@ Value Builder::visitLogicalOrExpr(cst::LogicalOrExpr context) {
 }
 
 /*
+orExpr  : andExpr ('|' andExpr)* ;
+andExpr : equalityExpr ('&' equalityExpr)* ;
+Ordinary binary operators that evaluate both sides: BinaryDataOp::Or and And. `||` and `&&`
+are LogicalOr and LogicalAnd, which a later stage turns into branches.
+*/
+Value Builder::visitEagerLogicExpr(syn::Node context) {
+    const bool isOr     = context.is(NK::OrExpr);
+    node_ptr_t lhsNode  = any2node(visitExpr(context->expr(0)));
+    const size_t count  = context->exprs().size();
+    for (size_t i = 1; i < count; ++i) {
+        node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
+        node_ptr_t dataExprNode =
+            createNodeAs<BinaryExprLoad>(isOr ? BinaryDataOp::Or : BinaryDataOp::And);
+        setNodeTokenRangeByContext(dataExprNode, context->expr(i));
+        *dataExprNode << lhsNode << rhsNode;
+        registerAstSemanticBundle(
+            dataExprNode,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::Operator,
+                    deriveAstAnchorOrigin(
+                        dataExprNode,
+                        tokenOf(context->child(i * 2 - 1)),
+                        isOr ? "ast.or" : "ast.and"),
+                    -1,
+                    isOr ? "|" : "&"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(lhsNode), 0, "lhs"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(rhsNode), 1, "rhs"),
+            });
+        lhsNode = dataExprNode;
+    }
+    return lhsNode;
+}
+
+/*
 logicalAndExpr
-    : equalityExpr ('&&' equalityExpr)*
+    : orExpr ('&&' orExpr)*
     ;
 */
 Value Builder::visitLogicalAndExpr(cst::LogicalAndExpr context) {
@@ -1675,7 +1710,7 @@ Value Builder::visitLogicalAndExpr(cst::LogicalAndExpr context) {
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); ++i) {
         node_ptr_t rhsNode      = any2node(visitExpr(context->expr(i)));
-        node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::And);
+        node_ptr_t dataExprNode = createNodeAs<BinaryExprLoad>(BinaryDataOp::LogicalAnd);
         setNodeTokenRangeByContext(dataExprNode, context->expr(i));
         *dataExprNode << lhsNode << rhsNode;
         registerAstSemanticBundle(
@@ -2024,6 +2059,21 @@ Value Builder::visitUnaryExpr(syn::Node context) {
             op = UnaryDataOp::Inv;
         } else {
             throw std::runtime_error("Invalid unary operator: " + strOp);
+        }
+        if (op == UnaryDataOp::Neg && context->expr().is(NK::Literal)) {
+            // A minus applied directly to a number is the negative number: the literal -2, the
+            // smallest integer -9223372036854775808 (whose digits alone do not fit), a typed
+            // `let b: i32 = -2147483648`. Only the minus right before the literal: `-2 ^ 2`
+            // negates the power and `-(2)` the parenthesis.
+            const auto literal = cst::Literal(context->expr());
+            const bool integer = static_cast<bool>(literal->tok(TK::Integer));
+            if ((integer || literal->tok(TK::Real)) && literal->childCount() == 1) {
+                res = createNodeAs<LiteralLoad>(Literal(
+                    integer ? LiteralType::Integer : LiteralType::Real,
+                    "-" + literal->text()));
+                setNodeTokenRangeByContext(res, context);
+                break;
+            }
         }
         node_ptr_t dataNode = any2node(visitExpr(context->expr()));
         res                 = createNodeAs<UnaryExprLoad>(op);
@@ -2999,6 +3049,9 @@ Value Builder::visitExpr(syn::Node context) {
         return visitMultiplicativeExpr(cst::MultiplicativeExpr(context));
     case NK::NullableExpr:
         return visitNullableExpr(cst::NullableExpr(context));
+    case NK::OrExpr:
+    case NK::AndExpr:
+        return visitEagerLogicExpr(context);
     case NK::CastExpr:
     case NK::UnaryExpr:
         return visitUnaryExpr(context);

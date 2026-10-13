@@ -73,7 +73,9 @@ CAMEL_NODE(LoopFor, Other)             // 'for' identDef 'in' logicalOrExpr
 CAMEL_NODE(LoopWhile, Other)           // 'while' logicalOrExpr
 CAMEL_NODE(AssignExpr, Expr)           // logicalOrExpr (('=' | '+=' | ...) logicalOrExpr)?
 CAMEL_NODE(LogicalOrExpr, Expr)        // logicalAndExpr ('||' logicalAndExpr)*
-CAMEL_NODE(LogicalAndExpr, Expr)       // equalityExpr ('&&' equalityExpr)*
+CAMEL_NODE(LogicalAndExpr, Expr)       // orExpr ('&&' orExpr)*
+CAMEL_NODE(OrExpr, Expr)               // andExpr ('|' andExpr)*
+CAMEL_NODE(AndExpr, Expr)              // equalityExpr ('&' equalityExpr)*
 CAMEL_NODE(EqualityExpr, Expr)         // relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 CAMEL_NODE(RelationalExpr, Expr)       // additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 CAMEL_NODE(AdditiveExpr, Expr)         // multiplicativeExpr (('+' | '-') multiplicativeExpr)*
@@ -81,8 +83,8 @@ CAMEL_NODE(MultiplicativeExpr, Expr)   // powerExpr (('*' | '/' | '@' | '%') pow
 CAMEL_NODE(PowerExpr, Expr)            // nullableExpr ('^' powerExpr)?; also the operand of a prefix operator
 CAMEL_NODE(NullableExpr, Expr)         // unaryExpr (('??' | '!!') dataExpr)?
 CAMEL_NODE(CastExpr, Expr)             // linkExpr ('as' | 'is') typeExpr
-CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '-' | '~') linkExpr
-CAMEL_NODE(LinkExpr, Expr)             // compExpr (('->' | '?->') compExpr)*
+CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '~') linkExpr, '-' negPower
+CAMEL_NODE(LinkExpr, Expr)             // negExpr (('->' | '?->') compExpr)*
 CAMEL_NODE(CompExpr, Expr)             // annoExpr (('..' | '?..') annoExpr)*
 CAMEL_NODE(AnnoExpr, Expr)             // accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
 CAMEL_NODE(AccessExpr, Expr)           // primaryData ('.' (IDENTIFIER | INTEGER | REAL))*

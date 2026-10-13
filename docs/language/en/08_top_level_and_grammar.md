@@ -47,15 +47,19 @@ ctrlExpr   : if logicalOr then blockExpr (else blockExpr)?
 waitExpr   : wait? assignExpr
 assignExpr : logicalOr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOr)?
 logicalOr  : logicalAnd ('||' logicalAnd)*
-logicalAnd : equality ('&&' equality)*
+logicalAnd : or ('&&' or)*
+or         : and ('|' and)*
+and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
 relational : additive (('<' | '>' | '<=' | '>=') additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
-unary      : link (as type)? | ('!' | '-' | '~') link
-link       : comp (('->' | '?->') comp)*
+unary      : link (as type)? | ('!' | '~') link
+link       : neg (('->' | '?->') comp)*
+neg        : '-' negPower | comp
+negPower   : '-' negPower | comp ('^' negPower)?
 comp       : anno ('..' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
@@ -136,7 +140,9 @@ ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 assignExpr         : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&='
                      | '|=') logicalOrExpr)?
 logicalOrExpr      : logicalAndExpr ('||' logicalAndExpr)*
-logicalAndExpr     : equalityExpr ('&&' equalityExpr)*
+logicalAndExpr     : orExpr ('&&' orExpr)*
+orExpr             : andExpr ('|' andExpr)*
+andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
@@ -144,8 +150,10 @@ multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-                     | ('!' | '-' | '~') linkExpr ('^' powerExpr)?
-linkExpr           : compExpr (('->' | '?->') compExpr)*
+                     | ('!' | '~') linkExpr ('^' powerExpr)?
+linkExpr           : negExpr (('->' | '?->') compExpr)*
+negExpr            : '-' negPower | compExpr
+negPower           : '-' negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
@@ -211,7 +219,7 @@ Where there is more than one reading, the following rules decide, each on a boun
 | Arguments: positional or named | named from the first `name :` on |
 | `T ?` | the reserved form `T ? U` when a type can start after the `?` on the same line, the nullable mark otherwise |
 | `+` `-` `^` after a type | part of the type when a type can start after it (`x as T + U` casts to the type `T + U`) |
-| `-` before a number | the sign of the literal when it touches the number and no value precedes it |
+| Unary `-` | always an operator; looser than `^`, tighter than `->`; applied directly to a number it gives the negative literal |
 
 Related files:
 

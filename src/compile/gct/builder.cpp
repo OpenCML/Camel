@@ -1335,9 +1335,11 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     case AST::BinaryDataOp::AssignOr: {
         opNode = createNodeAs<DRefLoad>("__assn_or__");
     } break;
+    case AST::BinaryDataOp::LogicalOr: // to become a branch; both sides evaluated for now
     case AST::BinaryDataOp::Or: {
         opNode = createNodeAs<DRefLoad>("__or__");
     } break;
+    case AST::BinaryDataOp::LogicalAnd: // as LogicalOr
     case AST::BinaryDataOp::And: {
         opNode = createNodeAs<DRefLoad>("__and__");
     } break;

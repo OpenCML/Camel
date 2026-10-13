@@ -54,8 +54,10 @@ enum class BinaryDataOp {
     AssignExp,
     AssignAnd,
     AssignOr,
-    Or,
-    And,
+    Or,         // `|`: both sides evaluated, an ordinary operator
+    And,        // `&`
+    LogicalOr,  // `||`: reserved, the right side evaluated only when it decides
+    LogicalAnd, // `&&`
     Eq,
     Neq,
     StrictEq,

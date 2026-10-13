@@ -145,11 +145,13 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
 **Two places where mistakes are easy:**
 
 - `^` binds one level tighter than `*` and `/` and associates from right to left: `2 * 3 ^ 2` is `18`, and `2 ^ 3 ^ 2` is `2 ^ (3 ^ 2)`, that is `512`.
-- Unary `-`, `!` and `~` bind less tightly than `^`: `-n ^ 2` is `-(n ^ 2)`. A minus that touches a number is part of the literal ([2.5.1](02_lexical.md#251-integers)), so `-2 ^ 2` is `(-2) ^ 2`, that is `4`; for `-4` write `-(2 ^ 2)`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`.
+- Unary `-` binds less tightly than `^` and more tightly than `->` and the other binary operators, before a literal as before a name: `-n ^ 2` is `-(n ^ 2)`, `-2 ^ 2` is `-4` (for `4` write `(-2) ^ 2`); `-n->f` is `(-n)->f`; `-a * b` is `(-a) * b`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`. `!` and `~` apply to the whole `->` chain and power after them: `!xs->empty` is `!(xs->empty)`.
 
 ### 6.7.2 Logic
 
-`a && b`, `a || b`, `!a`; the operands are `bool`. `&&` and `||` short-circuit: the right side is evaluated only when needed.
+`a && b`, `a || b`, `!a`; the operands are `bool`. `&&` and `||` short-circuit: the right side is evaluated only when needed; they are reserved operators and cannot be overloaded.
+
+`a & b` and `a | b` are and, or with both sides evaluated: ordinary binary operators (a function each, like the others). Precedence: `&` above `|`, both above `&&` and below the comparisons, so `a == b & c == d` is `(a == b) & (c == d)`.
 
 ### 6.7.3 Comparison
 
@@ -425,14 +427,17 @@ From lowest to highest:
 | 2 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Cannot be chained |
 | 3 | `\|\|` | Left-associative |
 | 4 | `&&` | Left-associative |
+| 4a | `\|` | Left-associative, both sides evaluated |
+| 4b | `&` | Left-associative, both sides evaluated |
 | 5 | `==` `!=` (`===` `!==` not supported for now) | |
 | 6 | `<` `>` `<=` `>=` | |
 | 7 | `+` `-` | Left-associative |
 | 8 | `*` `/` `%` `@` | Left-associative |
 | 8a | `^` | Right-associative, one level above the multiplicative operators |
 | 9 | `??` `!!` | The right side is a complete expression |
-| 10 | Unary `!` `-` `~`; `as` | A unary operator applies to the whole power after it: `-a ^ 2` is `-(a ^ 2)`; `-a->f` is `-(a->f)`; a signed number literal is one operand, `-2->f` is `(-2)->f` |
+| 10 | Unary `!` `~`; `as` | `!` and `~` apply to the `->` chain and the power after them |
 | 11 | `->` `?->` | Left-associative |
+| 11a | Unary `-` | Tighter than `->`, looser than `^`: `-a->f` is `(-a)->f`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike |
 | 12 | `..` `?..` | |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
 
