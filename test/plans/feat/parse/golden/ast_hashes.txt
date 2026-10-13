@@ -521,6 +521,7 @@ b5415a5a0dff0ad2 ok test/cases/consistency/comprehension/graph_comprehension.cml
 c9b03fe8ec99d6da ok test/cases/consistency/comprehension/graph_written_out.cml
 f79e8ead285be9fc ok test/cases/consistency/comprehension/shadowed.cml
 4452f8cec07c8705 ok test/cases/consistency/comprehension/values.cml
+75883233dd95e8ca ok test/cases/consistency/entering/arms_folded.cml
 6fa20605b76648e2 ok test/cases/consistency/entering/empty_array.cml
 62e4bf813ec58f31 ok test/cases/consistency/entering/err_arg_reverse.cml
 b535b9ada4055d80 ok test/cases/consistency/entering/err_arms_unrelated.cml
@@ -1065,6 +1066,7 @@ d566fbd173dc45f9 ok test/cases/opt/inline/specialized_arg_keeps_order.cml
 7efe4f52e585292b ok test/cases/opt/progen/findings/const_graph_capacity.cml
 24f5ec71ade68920 ok test/cases/opt/progen/findings/fold_inline_env_value.cml
 ec5093050923e6a1 ok test/cases/opt/progen/findings/fold_inline_match_arm_value.cml
+457a79d0ffd9ada3 ok test/cases/opt/progen/findings/fold_joined_arm_slot.cml
 5436b784d0486906 ok test/cases/opt/progen/findings/inline_branch_value_null.cml
 874bf69d10ee334b ok test/cases/opt/progen/findings/inline_crash_capturing_lambda.cml
 85a394a8711a65b5 ok test/cases/opt/progen/findings/inline_crash_function_argument.cml
@@ -1105,6 +1107,7 @@ bf5077f961a64e7b ok test/cases/opt/progen/findings/string_ordering.cml
 21615aedc56c2a48 ok test/cases/opt/progen/findings/tuple_comparison_parse.cml
 a8e29c466a2c0f6a ok test/cases/opt/progen/judgement/bare_arm_var_call_warning.cml
 cfc6f022c68bcd7c ok test/cases/opt/progen/judgement/macro_builtin_refused.cml
+c03fc5f818bb04d6 ok test/cases/opt/progen/judgement/short_circuit_fault.cml
 2fb2fc40fc35b91b ok test/cases/opt/progen/judgement/string_of_float_format.cml
 220a37913a7e9693 ok test/cases/para/core/arm_reads_outer_value.cml
 3b0e0563cd10ad3b ok test/cases/para/core/asian_option_mc.cml
