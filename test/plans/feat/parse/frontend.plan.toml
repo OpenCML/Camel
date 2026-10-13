@@ -30,13 +30,13 @@ timeout_ms = 120000
 
 [[tests]]
 name = "frontend.format_keeps_ast"
-desc = "Formatting an accepted file gives a text that parses to the same AST (the order of imports aside): where the formatter breaks a line or removes a space, the two layout rules must not change the meaning."
+desc = "Formatting an accepted file gives a text that parses to the same AST (the order of imports aside): where the formatter breaks a line or removes a space, the two layout rules must not change the meaning. Formatting the result again changes nothing (comments after match cases and after imports used to be written twice)."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/parsecheck/check.py"
 args = ["${case}", "format"]
 expect_exit = 0
-expect_stdout_contains = ["changed=0"]
+expect_stdout_contains = ["changed=0", "unstable=0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 

@@ -241,9 +241,11 @@ any Formatter::visitProgram(cst::Program context) {
         TrailingC | Multiline | PaddingNL | PRightOnly,
         1,
         headTokenRanges);
+    // A file of imports only: the comments have been written with the imports. An empty list
+    // with a context writes every comment of the context, which wrote them a second time.
     tailStr = formatList(
         tail,
-        context,
+        tail.empty() && !head.empty() ? syn::Node() : syn::Node(context),
         "; ",
         (this->preferSemis ? ";" : ""),
         TrailingC | Multiline | PaddingNL | PRightOnly,

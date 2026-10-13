@@ -228,7 +228,11 @@ class Formatter {
                     }
                 } else {
                     start = context->firstToken()->index();
-                    if (start > 0) {
+                    // A list that starts its context (the statements of a block) has its leading
+                    // comments before the context: look one token back. A context with a token
+                    // of its own first (`case` before the patterns) has none there, and the
+                    // comment before it belongs to the item above.
+                    if (start > 0 && list[0]->firstToken()->index() == start) {
                         start--;
                     }
                     end = list[0]->firstToken()->index();
@@ -368,7 +372,7 @@ class Formatter {
                 result += multiLine ? nComma : iComma;
             }
 
-            lastStopLine                    = list[i]->lastToken()->line();
+            lastStopLine                    = list[i]->lastToken()->endLine();
             auto [predCmtStart, predCmtEnd] = findCmtRange(i, false);
             for (size_t j = predCmtStart; j < predCmtEnd; j++) {
                 const auto &comment     = tokens[j];
@@ -389,7 +393,7 @@ class Formatter {
             }
 
             if (predCmtStart < predCmtEnd) {
-                const size_t currLineEnd        = list[i]->lastToken()->line();
+                const size_t currLineEnd        = list[i]->lastToken()->endLine();
                 const auto &lastComment         = tokens[predCmtEnd - 1];
                 const auto &lastText            = lastComment.text();
                 const size_t lastCommentLineEnd = lastComment.line() + countLines(lastText);
