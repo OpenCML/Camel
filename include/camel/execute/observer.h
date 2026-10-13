@@ -26,10 +26,10 @@
  * scheduler do not. A hook may block (that is how the program is stopped) and may throw to
  * end the run; it must not run Camel code.
  *
- * Cost without an observer: std::nvm loads the pointer once per node and once per call;
- * std::fvm calls beforeInstruction only inside the branch on the inspection-mode flag its
- * dispatch already tests, so it pays nothing per instruction, and loads the pointer once per
- * nested activation.
+ * Cost without an observer: std::nvm loads the pointer once per node and once per call.
+ * std::fvm loads it once per nested activation and runs the loop it always ran; while an
+ * observer is installed its activations run on a second instance of the loop that calls
+ * beforeInstruction (src/passes/sched/fastvm/inspectvm.cpp), so the normal loop has no hook.
  */
 
 #pragma once
