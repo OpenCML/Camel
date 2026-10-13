@@ -22,6 +22,7 @@
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/source/ids.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -175,6 +176,12 @@ class SpanArena {
   public:
     span_id_t create(source_file_id_t fileId, size_t startOffset, size_t endOffset);
     const SourceSpan *span(span_id_t id) const;
+    /// Room for `more` spans, so that creating them does not move the ones there are.
+    void reserve(size_t more) {
+        if (spans_.capacity() - spans_.size() < more) {
+            spans_.reserve(std::max(spans_.capacity() * 2, spans_.size() + more));
+        }
+    }
 
   private:
     std::vector<SourceSpan> spans_ = {SourceSpan{}};
@@ -192,6 +199,12 @@ class OriginTable {
         span_id_t primarySpan = kInvalidSpanId, bool synthetic = false,
         std::vector<origin_id_t> inputs = {});
     const OriginRecord *origin(origin_id_t id) const;
+    /// Room for `more` origins, so that creating them does not move the ones there are.
+    void reserve(size_t more) {
+        if (origins_.capacity() - origins_.size() < more) {
+            origins_.reserve(std::max(origins_.capacity() * 2, origins_.size() + more));
+        }
+    }
 
   private:
     std::vector<OriginRecord> origins_ = {OriginRecord{}};
@@ -249,6 +262,12 @@ class SourceContext {
 
     /// A span of `fileId` from byte offset `startOffset` to `endOffset` (half-open).
     span_id_t createSpan(source_file_id_t fileId, size_t startOffset, size_t endOffset);
+    /// Announces about `count` spans and origins to come (the AST of a file has one of each per
+    /// node): the tables grow once instead of doubling their way up.
+    void reserveOrigins(size_t count) {
+        spans_.reserve(count);
+        origins_.reserve(count);
+    }
 
     origin_id_t createOrigin(
         span_id_t primarySpan, OriginStage stage, OriginKind kind, std::string label = "",

@@ -458,6 +458,19 @@ Time per step, microseconds (minimum of 41 rounds; of 5 for the last file):
   about 1 µs per CST node, spent in what the AST is made of, a `shared_ptr` node and load per
   node, an origin and a span record per node, semantic bundles with strings. That code was
   ported, not redesigned; the AST's shape was not to change in this work.
+- A first pass over the builder (October 13) removed two thirds of its allocations without
+  changing the tree (the AST hash snapshot is unchanged): the nodes and loads of a tree come
+  from an arena that the tree keeps alive (`NodeArena`), a builder function returns a `Value`
+  with room for a node pointer where `std::any` allocated, and the span and origin tables are
+  reserved once per file. On a 3 300-line file (39 985 tokens, 35 041 CST nodes) one front-end
+  round went from 158 531 calls of `malloc` to 52 119, and "to the AST" from a minimum of
+  13.7 ms to 10.8 to 11.9 ms (lexer and parser: 0.9 ms), on the same busy machine; on files of
+  a few hundred lines the difference is within the noise. **The aim, the same order of
+  magnitude as lexer and parser, is not reached.** Sampling shows no single place any more:
+  the origin and span records, the semantic bundles with their strings and hash table, the
+  construction and the destruction of some 39 000 nodes with their loads and child vectors
+  each take a tenth to a quarter. Going further means recording less per node (origins made
+  on demand, labels that are not strings), which changes what the later stages read.
 - ANTLR's time on the small file is dominated by building its prediction tables on first use;
   on the large file by the full-LL fallback. Its time grows faster than the input.
 
