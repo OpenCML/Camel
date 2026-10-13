@@ -44,13 +44,8 @@ using namespace camel::core::type;
 
 namespace camel::compile::gct {
 
-template <typename LoadType, typename... Args> node_ptr_t createNodeAs(Args &&...args) {
-    return std::make_shared<Node>(
-        std::dynamic_pointer_cast<Load>(std::make_shared<LoadType>(std::forward<Args>(args)...)));
-}
-
 inline camel::source::origin_id_t nodeOrigin(const node_ptr_t &node) {
-    return node ? node->load()->origin() : camel::source::kInvalidOriginId;
+    return node ? node->origin() : camel::source::kInvalidOriginId;
 }
 
 inline camel::source::SemanticPart semanticPart(
@@ -122,7 +117,7 @@ inline void setOriginFromOrigin(
     if (!sourceContext) {
         return;
     }
-    node->load()->setOrigin(sourceContext->deriveOrigin(
+    node->setOrigin(sourceContext->deriveOrigin(
         parent,
         camel::source::OriginStage::GCT,
         kind,
@@ -152,7 +147,7 @@ inline void setOriginFromAst(
     if (astOrigin == camel::source::kInvalidOriginId) {
         return;
     }
-    node->load()->setOrigin(sourceContext->deriveOrigin(
+    node->setOrigin(sourceContext->deriveOrigin(
         astOrigin,
         camel::source::OriginStage::GCT,
         kind,
@@ -198,9 +193,9 @@ inline void registerGctSemantic(
 
 data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
     if (node->type() == LoadType::DATA) {
-        return node->loadAs<DataLoad>()->data();
+        return node->data();
     } else if (node->type() == LoadType::DREF) {
-        return make_shared<RefData>(node->loadAs<DRefLoad>()->ref());
+        return make_shared<RefData>(node->name());
     } else {
         return nullptr;
     }
@@ -208,7 +203,7 @@ data_ptr_t extractStaticDataFromNode(const node_ptr_t &node) {
 
 pair<node_ptr_t, data_ptr_t> Builder::makeRefData(const node_ptr_t &expr) {
     const string id    = std::to_string(idIndex_++);
-    node_ptr_t refNode = createNodeAs<NRefLoad>(id);
+    node_ptr_t refNode = tree_->makeNRef(id);
     *refNode << expr;
     data_ptr_t data = make_shared<RefData>(id);
     return make_pair(refNode, data);
@@ -326,7 +321,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     vector<node_ptr_t> decls;
     vector<node_ptr_t> stmts;
 
-    root_ = createNodeAs<ExecLoad>();
+    node_ptr_t root = tree_->makeExec();
 
     for (auto &stmt : *stmtNodes) {
         try {
@@ -335,10 +330,9 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 decls.push_back(node);
             } else if (node->type() == GCT::LoadType::FUNC) {
                 // Handle function declarations
-                const auto &funcLoad = node->loadAs<FuncLoad>();
-                node_ptr_t declNode  = createNodeAs<DeclLoad>(funcLoad->name(), true);
-                node_ptr_t typeNode  = node->atAs<TypeLoad>(0);
-                *declNode << typeNode->clone();
+                node_ptr_t declNode = tree_->makeDecl(node->name(), true);
+                node_ptr_t typeNode = node->at(0);
+                *declNode << tree_->clone(typeNode);
                 setOriginFromAst(
                     context_,
                     declNode,
@@ -358,7 +352,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                                 astSemantic(context_, stmt),
                                 camel::source::SemanticRole::FuncName),
                             -1,
-                            funcLoad->name()),
+                            node->name()),
                         semanticPart(
                             camel::source::SemanticRole::ReturnType,
                             nodeOrigin(typeNode),
@@ -381,13 +375,13 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     // Add collected declarations to the root node
     if (!decls.empty()) {
         for (const auto &decl : decls) {
-            *root_ << decl;
+            *root << decl;
         }
     }
 
     // Add collected statements to the root node
     for (const auto &stmt : stmts) {
-        *root_ << stmt;
+        *root << stmt;
     }
 
     // Process the optional export declaration if it exists
@@ -399,13 +393,13 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             exportOptNode->front(),
             camel::source::OriginKind::GctNode,
             "gct.export");
-        *root_ << exportNode;
+        *root << exportNode;
     }
 
     LEAVE("Module");
-    setOriginFromAst(context_, root_, ast, camel::source::OriginKind::GctNode, "gct.module");
-    registerGctSemantic(context_, root_, ast);
-    return root_;
+    setOriginFromAst(context_, root, ast, camel::source::OriginKind::GctNode, "gct.module");
+    registerGctSemantic(context_, root, ast);
+    return root;
 }
 
 /*
@@ -494,7 +488,7 @@ node_ptr_t Builder::visitExport(const AST::node_ptr_t &ast) {
     const auto &refs = load->getRefs();
 
     // Create an export node with the extracted references
-    node_ptr_t res = createNodeAs<ExptLoad>(refs);
+    node_ptr_t res = tree_->makeExpt(refs);
 
     LEAVE("ExportDecl");
     return res;
@@ -585,7 +579,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
 
     // The names of the declaration get a scope of their own, which is not a block of the
     // program: in a sync block the initializer keeps its place in the block's order.
-    node_ptr_t res = createNodeAs<ExecLoad>(false, true);
+    node_ptr_t res = tree_->makeExec(false, true);
 
     // Handle different unpacking types
     switch (dataDeclLoad->unpackType()) {
@@ -641,7 +635,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                         // Decided when the generic function is instantiated. A declared
                         // `T?` / `T!` puts the value into that form (design principles
                         // 2.10): a CAST, for any expression.
-                        node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
+                        node_ptr_t castNode = tree_->makeCast(type, true);
                         *castNode << dataNode;
                         setOriginFromAst(
                             context_,
@@ -651,11 +645,10 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                             "gct.cast");
                         dataNode = castNode;
                     } else if (dataNode->type() == LoadType::DATA) {
-                        const auto &dataLoad = dataNode->loadAs<DataLoad>();
-                        const auto &data     = dataLoad->data();
-                        auto convertedData   = data->convertTo(type);
+                        const auto &data   = dataNode->data();
+                        auto convertedData = data->convertTo(type);
                         if (convertedData) {
-                            dataNode = createNodeAs<DataLoad>(convertedData);
+                            dataNode = tree_->makeData(convertedData);
                         } else {
                             reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, type);
                             throw BuildAbortException();
@@ -673,7 +666,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     dataASTNode->type() == AST::LoadType::Data,
                     "Tuple unpacking requires Data type nodes");
                 // Create a reference node and link the data node to it
-                node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
+                node_ptr_t nRefNode = tree_->makeNRef(ref.ident());
                 *nRefNode << dataNode;
                 setOriginFromOrigin(
                     context_,
@@ -708,7 +701,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                         // Decided when the generic function is instantiated. A declared
                         // `T?` / `T!` puts the value into that form (design principles
                         // 2.10): a CAST, for any expression.
-                        node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
+                        node_ptr_t castNode = tree_->makeCast(type, true);
                         *castNode << dataNode;
                         setOriginFromAst(
                             context_,
@@ -718,11 +711,10 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                             "gct.cast");
                         dataNode = castNode;
                     } else if (dataNode->type() == LoadType::DATA) {
-                        const auto &dataLoad = dataNode->loadAs<DataLoad>();
-                        const auto &data     = dataLoad->data();
-                        auto convertedData   = data->convertTo(type);
+                        const auto &data   = dataNode->data();
+                        auto convertedData = data->convertTo(type);
                         if (convertedData) {
-                            dataNode = createNodeAs<DataLoad>(convertedData);
+                            dataNode = tree_->makeData(convertedData);
                         } else {
                             reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, type);
                             throw BuildAbortException();
@@ -736,8 +728,8 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 }
 
                 const string id     = std::to_string(idIndex_++);
-                node_ptr_t nRefNode = createNodeAs<NRefLoad>(id);
-                node_ptr_t dRefNode = createNodeAs<DRefLoad>(id);
+                node_ptr_t nRefNode = tree_->makeNRef(id);
+                node_ptr_t dRefNode = tree_->makeDRef(id);
                 *nRefNode << dataNode;
                 *res << nRefNode;
                 for (size_t i = 0; i < refs.size(); ++i) {
@@ -748,9 +740,9 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                             .commit();
                         throw BuildAbortException();
                     }
-                    node_ptr_t nRefNode = createNodeAs<NRefLoad>(ref.ident());
-                    node_ptr_t accsNode = createNodeAs<AccsLoad>(i);
-                    *accsNode << dRefNode->clone();
+                    node_ptr_t nRefNode = tree_->makeNRef(ref.ident());
+                    node_ptr_t accsNode = tree_->makeAccs(i);
+                    *accsNode << tree_->clone(dRefNode);
                     *nRefNode << accsNode;
                     setOriginFromOrigin(
                         context_,
@@ -777,7 +769,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
 
     // If it's a variable declaration, create a variable node and link the result node to it
     if (isVar) {
-        node_ptr_t variNode = createNodeAs<VariLoad>();
+        node_ptr_t variNode = tree_->makeVari();
         *variNode << res;
         setOriginFromAst(context_, variNode, ast, camel::source::OriginKind::GctNode, "gct.var");
         registerGctSemantic(
@@ -833,7 +825,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
         for (const auto &annoAst : *annoListNode) {
             ASSERT(annoAst->type() == AST::LoadType::Data, "FuncAnno should lower to AST Data.");
             node_ptr_t annoExprNode = visitData(annoAst);
-            node_ptr_t annoNode     = createNodeAs<AnnoLoad>(annoAst->toString());
+            node_ptr_t annoNode     = tree_->makeAnno();
             *annoNode << annoExprNode;
             *funcNode << annoNode;
         }
@@ -903,8 +895,8 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         typeScope_->erase(typeLoad->ref(), false);
     }
     typeScope_->insert(typeLoad->ref(), type);
-    node_ptr_t declNode = createNodeAs<DeclLoad>(typeLoad->ref(), false);
-    *declNode << createNodeAs<TypeLoad>(type, typeLoad->implMark(), typeLoad->uri());
+    node_ptr_t declNode = tree_->makeDecl(typeLoad->ref(), false);
+    *declNode << tree_->makeType(type, typeLoad->implMark());
     LEAVE("TypeDecl");
     return declNode;
 }
@@ -937,7 +929,7 @@ node_ptr_t Builder::visitUsingNamespaceDecl(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
     LEAVE("UsingNamespaceDecl");
-    return createNodeAs<ExecLoad>();
+    return tree_->makeExec();
 }
 
 /*
@@ -962,8 +954,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
     // it returns the failed form of the function's declared `T!` (the graph builder checks).
     const bool isThrow = ast->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Throw;
-    node_ptr_t exitNode =
-        createNodeAs<ExitLoad>(isThrow ? ExitType::Throw : ExitType::Return);
+    node_ptr_t exitNode = tree_->makeExit(isThrow ? ExitType::Throw : ExitType::Return);
     reportExitInUnusedArm(ast, isThrow);
 
     // Retrieve the data nodes associated with the exit statement
@@ -981,7 +972,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
             TupleDataFactory tupleFactory;
             bool dangling       = false;
-            node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+            node_ptr_t execNode = tree_->makeExec(false, true);
 
             for (const auto &item : *dataNodes) {
                 node_ptr_t dataNode = visitData(item);
@@ -990,7 +981,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             }
 
             auto tupleData      = tupleFactory.build();
-            node_ptr_t dataNode = createNodeAs<DataLoad>(tupleData);
+            node_ptr_t dataNode = tree_->makeData(tupleData);
 
             if (dangling) {
                 *execNode << dataNode;
@@ -1058,7 +1049,7 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
                 "to run the statements of a block in order");
         throw BuildAbortException();
     }
-    node_ptr_t execNode   = createNodeAs<ExecLoad>(stmtBlock->synced());
+    node_ptr_t execNode = tree_->makeExec(stmtBlock->synced());
 
     // Push a new scope for the statement block
     pushScope();
@@ -1211,13 +1202,13 @@ node_ptr_t Builder::visitUnaryExpr(const AST::node_ptr_t &ast) {
     // Determine the unary operator and create the corresponding node
     switch (unaryExpr->op()) {
     case AST::UnaryDataOp::Not: {
-        opNode = createNodeAs<DRefLoad>("__not__");
+        opNode = tree_->makeDRef("__not__");
     } break;
     case AST::UnaryDataOp::Neg: {
-        opNode = createNodeAs<DRefLoad>("__neg__");
+        opNode = tree_->makeDRef("__neg__");
     } break;
     case AST::UnaryDataOp::Inv: {
-        opNode = createNodeAs<DRefLoad>("__inv__");
+        opNode = tree_->makeDRef("__inv__");
     } break;
     default:
         // If the operator is unknown, assert and return nullptr
@@ -1234,7 +1225,7 @@ node_ptr_t Builder::visitUnaryExpr(const AST::node_ptr_t &ast) {
 
     // Create a LinkLoad node to link the operator and the operand
     node_ptr_t operandNode = visitData(dataASTNode);
-    node_ptr_t linkNode    = createNodeAs<LinkLoad>(1);
+    node_ptr_t linkNode    = tree_->makeLink(1);
     *linkNode << opNode << operandNode;
     setOriginFromAst(context_, linkNode, ast, camel::source::OriginKind::GctNode, "gct.unary.link");
     registerGctSemantic(
@@ -1306,48 +1297,48 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
     case AST::BinaryDataOp::Assign: {
-        opNode = createNodeAs<DRefLoad>("__assn__");
+        opNode = tree_->makeDRef("__assn__");
     } break;
     case AST::BinaryDataOp::AssignAdd: {
-        opNode = createNodeAs<DRefLoad>("__assn_add__");
+        opNode = tree_->makeDRef("__assn_add__");
     } break;
     case AST::BinaryDataOp::AssignSub: {
-        opNode = createNodeAs<DRefLoad>("__assn_sub__");
+        opNode = tree_->makeDRef("__assn_sub__");
     } break;
     case AST::BinaryDataOp::AssignMul: {
-        opNode = createNodeAs<DRefLoad>("__assn_mul__");
+        opNode = tree_->makeDRef("__assn_mul__");
     } break;
     case AST::BinaryDataOp::AssignDiv: {
-        opNode = createNodeAs<DRefLoad>("__assn_div__");
+        opNode = tree_->makeDRef("__assn_div__");
     } break;
     case AST::BinaryDataOp::AssignMod: {
-        opNode = createNodeAs<DRefLoad>("__assn_mod__");
+        opNode = tree_->makeDRef("__assn_mod__");
     } break;
     case AST::BinaryDataOp::AssignMat: {
-        opNode = createNodeAs<DRefLoad>("__assn_mat__");
+        opNode = tree_->makeDRef("__assn_mat__");
     } break;
     case AST::BinaryDataOp::AssignExp: {
-        opNode = createNodeAs<DRefLoad>("__assn_pow__");
+        opNode = tree_->makeDRef("__assn_pow__");
     } break;
     case AST::BinaryDataOp::AssignAnd: {
-        opNode = createNodeAs<DRefLoad>("__assn_and__");
+        opNode = tree_->makeDRef("__assn_and__");
     } break;
     case AST::BinaryDataOp::AssignOr: {
-        opNode = createNodeAs<DRefLoad>("__assn_or__");
+        opNode = tree_->makeDRef("__assn_or__");
     } break;
     case AST::BinaryDataOp::LogicalOr: // to become a branch; both sides evaluated for now
     case AST::BinaryDataOp::Or: {
-        opNode = createNodeAs<DRefLoad>("__or__");
+        opNode = tree_->makeDRef("__or__");
     } break;
     case AST::BinaryDataOp::LogicalAnd: // as LogicalOr
     case AST::BinaryDataOp::And: {
-        opNode = createNodeAs<DRefLoad>("__and__");
+        opNode = tree_->makeDRef("__and__");
     } break;
     case AST::BinaryDataOp::Eq: {
-        opNode = createNodeAs<DRefLoad>("__eq__");
+        opNode = tree_->makeDRef("__eq__");
     } break;
     case AST::BinaryDataOp::Neq: {
-        opNode = createNodeAs<DRefLoad>("__neq__");
+        opNode = tree_->makeDRef("__neq__");
     } break;
     case AST::BinaryDataOp::StrictEq:
     case AST::BinaryDataOp::StrictNeq: {
@@ -1365,40 +1356,40 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
     case AST::BinaryDataOp::Less: {
-        opNode = createNodeAs<DRefLoad>("__lt__");
+        opNode = tree_->makeDRef("__lt__");
     } break;
     case AST::BinaryDataOp::LessEq: {
-        opNode = createNodeAs<DRefLoad>("__le__");
+        opNode = tree_->makeDRef("__le__");
     } break;
     case AST::BinaryDataOp::Greater: {
-        opNode = createNodeAs<DRefLoad>("__gt__");
+        opNode = tree_->makeDRef("__gt__");
     } break;
     case AST::BinaryDataOp::GreaterEq: {
-        opNode = createNodeAs<DRefLoad>("__ge__");
+        opNode = tree_->makeDRef("__ge__");
     } break;
     case AST::BinaryDataOp::Add: {
-        opNode = createNodeAs<DRefLoad>("__add__");
+        opNode = tree_->makeDRef("__add__");
     } break;
     case AST::BinaryDataOp::Sub: {
-        opNode = createNodeAs<DRefLoad>("__sub__");
+        opNode = tree_->makeDRef("__sub__");
     } break;
     case AST::BinaryDataOp::Mul: {
-        opNode = createNodeAs<DRefLoad>("__mul__");
+        opNode = tree_->makeDRef("__mul__");
     } break;
     case AST::BinaryDataOp::Div: {
-        opNode = createNodeAs<DRefLoad>("__div__");
+        opNode = tree_->makeDRef("__div__");
     } break;
     case AST::BinaryDataOp::Mod: {
-        opNode = createNodeAs<DRefLoad>("__mod__");
+        opNode = tree_->makeDRef("__mod__");
     } break;
     case AST::BinaryDataOp::Mat: {
-        opNode = createNodeAs<DRefLoad>("__mat__");
+        opNode = tree_->makeDRef("__mat__");
     } break;
     case AST::BinaryDataOp::Pow: {
-        opNode = createNodeAs<DRefLoad>("__pow__");
+        opNode = tree_->makeDRef("__pow__");
     } break;
     case AST::BinaryDataOp::Index: {
-        opNode = createNodeAs<DRefLoad>("__idx__");
+        opNode = tree_->makeDRef("__idx__");
     } break;
     default:
         // If the operator is unknown, assert and return nullptr
@@ -1414,7 +1405,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         "gct.binary.operator");
 
     // Create a LinkLoad node to link the operator and the operands
-    node_ptr_t res     = createNodeAs<LinkLoad>(2);
+    node_ptr_t res     = tree_->makeLink(2);
     node_ptr_t lhsNode = visitData(lhsASTNode);
     *res << opNode << lhsNode;
     std::vector<camel::source::SemanticPart> parts = {
@@ -1452,7 +1443,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     // If the expression is marked as "waited", wrap it in a WaitLoad node
     if (waited) {
-        node_ptr_t waitNode = createNodeAs<WaitLoad>();
+        node_ptr_t waitNode = tree_->makeWait();
         *waitNode << res;
         setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
         registerGctSemantic(
@@ -1511,8 +1502,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // principles 2.9). The graph builder knows the types; it adds the arm that takes the
         // value out of `a`.
         const bool onNull = reservedExpr->op() == AST::ReservedDataOp::NullThen;
-        res               = createNodeAs<BrchLoad>(
-            onNull ? BrchLoad::Kind::NullThen : BrchLoad::Kind::ErrorThen);
+        res               = tree_->makeBrch(onNull ? BranchKind::NullThen : BranchKind::ErrorThen);
         // The node is located at the operator.
         setOriginFromAst(
             context_,
@@ -1522,7 +1512,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             "gct.tagged.branch");
         node_ptr_t lhsNode  = visitData(lhsASTNode);
         node_ptr_t rhsNode  = visitData(ast->atAs<AST::DataLoad>(1));
-        node_ptr_t execNode = createNodeAs<ExecLoad>();
+        node_ptr_t execNode = tree_->makeExec();
         setOriginFromOrigin(
             context_,
             execNode,
@@ -1530,7 +1520,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             camel::source::OriginKind::GctNode,
             "gct.tagged.fallback");
         *execNode << rhsNode;
-        node_ptr_t caseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
+        node_ptr_t caseNode = tree_->makeCase(CaseType::True);
         *caseNode << execNode;
         *res << lhsNode << caseNode;
     } break;
@@ -1545,8 +1535,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // Handle the "Call" operator
         const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
-        res                    = createNodeAs<LinkLoad>(argsNode->size());
-        const auto &linkLoad   = res->loadAs<LinkLoad>();
+        res                    = tree_->makeLink(argsNode->size());
         node_ptr_t calleeNode  = visitData(lhsASTNode);
         *res << calleeNode;
         std::vector<camel::source::SemanticPart> parts = {
@@ -1567,7 +1556,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                     AST::ReservedDataOp::NotNullThen) {
                 passedNode   = visitData(argNode->atAs<AST::DataLoad>(0));
                 passOperator = argNode;
-                gctArg     = createNodeAs<DRefLoad>(Reference(kPassedValueName));
+                gctArg       = tree_->makeDRef(kPassedValueName);
                 setOriginFromOrigin(
                     context_,
                     gctArg,
@@ -1592,17 +1581,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 .commit("kwargs");
             throw BuildAbortException();
         }
-        // for (const auto &kwargNode : *kwargsNode) {
-        //     const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
-        //     const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
-        //     const auto &kwargName = namedData->ref().ident();
-        //     linkLoad->addKwarg(kwargName);
-        //     *res << visitData(dataNode);
-        // }
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
         if (passedNode != nullptr) {
-            node_ptr_t execNode = createNodeAs<ExecLoad>();
+            node_ptr_t execNode = tree_->makeExec();
             setOriginFromAst(
                 context_,
                 execNode,
@@ -1610,9 +1592,9 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 camel::source::OriginKind::GctNode,
                 "gct.tagged.call");
             *execNode << res;
-            node_ptr_t caseNode = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+            node_ptr_t caseNode = tree_->makeCase(CaseType::Else);
             *caseNode << execNode;
-            node_ptr_t brchNode = createNodeAs<BrchLoad>(BrchLoad::Kind::ErrorPass);
+            node_ptr_t brchNode = tree_->makeBrch(BranchKind::ErrorPass);
             // Located at the operator, as the marked receiver is.
             setOriginFromAst(
                 context_,
@@ -1628,8 +1610,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::Bind: {
         const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
-        res                    = createNodeAs<WithLoad>(argsNode->size());
-        const auto &linkLoad   = res->loadAs<WithLoad>();
+        res                    = tree_->makeWith(argsNode->size());
         node_ptr_t calleeNode  = visitData(lhsASTNode);
         *res << calleeNode;
         std::vector<camel::source::SemanticPart> parts = {
@@ -1653,21 +1634,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 .commit("kwargs");
             throw BuildAbortException();
         }
-        // for (const auto &kwargNode : *kwargsNode) {
-        //     const auto &namedData = kwargNode->loadAs<AST::NamedDataLoad>();
-        //     const auto &dataNode = kwargNode->atAs<AST::DataLoad>(0);
-        //     const auto &kwargName = namedData->ref().ident();
-        //     linkLoad->addKwarg(kwargName);
-        //     *res << visitData(dataNode);
-        // }
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.bind");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
     } break;
 
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        node_ptr_t opNode      = createNodeAs<DRefLoad>("__cmp__");
-        res                    = createNodeAs<LinkLoad>(2);
+        node_ptr_t opNode      = tree_->makeDRef("__cmp__");
+        res                    = tree_->makeLink(2);
         auto compAstBundle     = astSemantic(context_, ast);
         setOriginFromOrigin(
             context_,
@@ -1713,25 +1687,24 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // CAST), for a literal too; what can be said about the literal is said here.
         const bool intoCollection = asCollectionTypeOrPrototype(dstType) != nullptr;
         if (intoCollection && dataNode->type() == LoadType::DATA) {
-            rejectDuplicateLiteralKeys(dataNode->loadAs<DataLoad>()->data(), dstType, ast);
+            rejectDuplicateLiteralKeys(dataNode->data(), dstType, ast);
         }
         if (dataNode->type() == LoadType::DATA && !containsTypeVar(dstType) &&
             asTagged(dstType) == nullptr && !intoCollection) {
-            const auto &dataLoad = dataNode->loadAs<DataLoad>();
-            const auto &data     = dataLoad->data();
+            const auto &data = dataNode->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
                 reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, dstType);
                 throw BuildAbortException();
             }
             auto convertedData = data->convertTo(dstType);
             if (convertedData) {
-                res = createNodeAs<DataLoad>(convertedData);
+                res = tree_->makeData(convertedData);
             } else {
                 reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, dstType);
                 throw BuildAbortException();
             }
         } else {
-            res = createNodeAs<CastLoad>(dstType);
+            res = tree_->makeCast(dstType);
             *res << dataNode;
             setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.cast");
             registerGctSemantic(
@@ -1769,10 +1742,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         const auto &ref         = refDataLoad->ref();
         try {
             size_t index = std::stoul(ref.ident());
-            res          = createNodeAs<AccsLoad>(index);
+            res          = tree_->makeAccs(index);
         } catch (const std::exception &) {
             // Not an index, treat as named access
-            res = createNodeAs<AccsLoad>(ref);
+            res = tree_->makeAccs(ref);
         }
         node_ptr_t targetNode = visitData(lhsASTNode);
         *res << targetNode;
@@ -1805,7 +1778,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     // If the expression is "waited", wrap the result in a WaitLoad node
     if (waited) {
-        node_ptr_t waitNode = createNodeAs<WaitLoad>();
+        node_ptr_t waitNode = tree_->makeWait();
         *waitNode << res; // Wait for the result of the reserved expression
         setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
         registerGctSemantic(
@@ -1834,7 +1807,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for IfExpr");
 
     // Create a branch node to represent the conditional expression
-    node_ptr_t brchNode = createNodeAs<BrchLoad>();
+    node_ptr_t brchNode = tree_->makeBrch();
     setOriginFromAst(context_, brchNode, ast, camel::source::OriginKind::GctNode, "gct.if");
 
     // Whether this `if` is a statement whose value nothing takes: its arms are then lowered
@@ -1862,7 +1835,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     const auto &thenBlock = ast->atAs<AST::StmtBlockLoad>(1);
     enterArmOf(ast, valueUnused);
     node_ptr_t thenNode   = visitStmtBlock(thenBlock);
-    node_ptr_t trueCase   = createNodeAs<CaseLoad>(CaseLoad::CaseType::True);
+    node_ptr_t trueCase   = tree_->makeCase(CaseType::True);
     setOriginFromOrigin(
         context_,
         trueCase,
@@ -1877,7 +1850,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
 
     // Process the optional "else" block and attach it as the "Else" case
     const auto &elseNode = ast->optAtAs<AST::StmtBlockLoad>(2);
-    node_ptr_t elseCase  = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+    node_ptr_t elseCase  = tree_->makeCase(CaseType::Else);
     setOriginFromOrigin(
         context_,
         elseCase,
@@ -1896,7 +1869,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     } else {
         // empty else block
         // If no "else" block exists, attach an empty execution block
-        *elseCase << createNodeAs<ExecLoad>();
+        *elseCase << tree_->makeExec();
     }
     registerGctSemantic(
         context_,
@@ -1940,8 +1913,8 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
 
     // Create a reference node for the condition and a branch node for the match expression
-    node_ptr_t dRefNode = createNodeAs<DRefLoad>(matchRef); // condition node
-    node_ptr_t brchNode = createNodeAs<BrchLoad>();
+    node_ptr_t dRefNode = tree_->makeDRef(matchRef); // condition node
+    node_ptr_t brchNode = tree_->makeBrch();
     setOriginFromOrigin(
         context_,
         dRefNode,
@@ -1976,14 +1949,12 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
             const bool isError  = pattern->size() > 0;
             const std::string name =
                 (isError ? pattern->front() : pattern)->loadAs<AST::RefDataLoad>()->ref().toString();
-            gCaseNode = createNodeAs<CaseLoad>(
-                isError ? CaseLoad::CaseType::Error : CaseLoad::CaseType::Bind,
-                name);
+            gCaseNode = tree_->makeCase(isError ? CaseType::Error : CaseType::Bind, name);
             enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseExprNode;
         } else if (caseLoadType != AST::LoadType::Null) {
-            gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Value);
+            gCaseNode               = tree_->makeCase(CaseType::Value);
             node_ptr_t caseDataNode = visitData(aCaseNode->atAs<AST::DataLoad>(0));
             enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
@@ -1996,7 +1967,7 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
                 "caseValue"));
         } else {
             // Handle the "else" case
-            gCaseNode               = createNodeAs<CaseLoad>(CaseLoad::CaseType::Else);
+            gCaseNode = tree_->makeCase(CaseType::Else);
             enterArmOf(ast, valueUnused);
             node_ptr_t caseExprNode = visitStmtBlock(aCaseNode->atAs<AST::StmtBlockLoad>(1));
             *gCaseNode << caseExprNode;
@@ -2146,7 +2117,7 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     }
 
     // Create a DataLoad node to represent the literal and return it
-    node_ptr_t res = createNodeAs<DataLoad>(data);
+    node_ptr_t res = tree_->makeData(data);
     LEAVE("Literal");
     return res;
 }
@@ -2165,7 +2136,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     ArrayDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+    node_ptr_t execNode = tree_->makeExec(false, true);
 
     // `[1, null, 3]`: a `null` among other elements makes the array one of `T?` (design
     // principles 2.10), whose elements are put into that form when the program runs. Which
@@ -2202,7 +2173,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     }
 
     auto arrayData = factory.build();
-    node_ptr_t res = createNodeAs<DataLoad>(arrayData);
+    node_ptr_t res = tree_->makeData(arrayData);
 
     if (dangling) {
         *execNode << res;
@@ -2237,20 +2208,20 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
             TypeVarType::create("$element" + std::to_string(idIndex_++), true),
             false);
         FunctionType *type  = tt::as_ptr<FunctionType>(factory.build());
-        node_ptr_t typeNode = place(createNodeAs<TypeLoad>(type, type->implMark()), body, "gct.func.type");
+        node_ptr_t typeNode = place(tree_->makeType(type, type->implMark()), body, "gct.func.type");
         const ValueUseScope valueUseScope(*this);
         valueUse_           = {};
-        node_ptr_t bodyNode = place(createNodeAs<ExecLoad>(false), body, "gct.block");
+        node_ptr_t bodyNode = place(tree_->makeExec(false), body, "gct.block");
         *bodyNode << visitData(body);
-        node_ptr_t funcNode = place(createNodeAs<FuncLoad>(std::string()), body, "gct.func");
+        node_ptr_t funcNode = place(tree_->makeFunc(std::string()), body, "gct.func");
         *funcNode << typeNode << bodyNode;
         return funcNode;
     };
     // `value->op<function>`.
     const auto apply = [&](const char *op, const node_ptr_t &function, const node_ptr_t &value) {
-        node_ptr_t withNode = place(createNodeAs<WithLoad>(1), ast, "gct.with");
-        *withNode << place(createNodeAs<DRefLoad>(Reference(op)), ast, "gct.dref") << function;
-        node_ptr_t linkNode = place(createNodeAs<LinkLoad>(1), ast, "gct.link");
+        node_ptr_t withNode = place(tree_->makeWith(1), ast, "gct.with");
+        *withNode << place(tree_->makeDRef(op), ast, "gct.dref") << function;
+        node_ptr_t linkNode = place(tree_->makeLink(1), ast, "gct.link");
         *linkNode << withNode << value;
         return linkNode;
     };
@@ -2293,12 +2264,12 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
     // the array is built from computed elements of exactly that type.
     entered = true;
     ArrayDataFactory factory;
-    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+    node_ptr_t execNode = tree_->makeExec(false, true);
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         bool nested         = false;
         node_ptr_t dataNode = visitDataInto(item, elemType, nested);
         if (asTagged(elemType) != nullptr) {
-            node_ptr_t castNode = createNodeAs<CastLoad>(elemType, true);
+            node_ptr_t castNode = tree_->makeCast(elemType, true);
             *castNode << dataNode;
             setOriginFromAst(
                 context_,
@@ -2310,16 +2281,16 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
         } else if (!nested && dataNode->type() == LoadType::DATA) {
             // An inner literal without elements to put into a form (`[]`): the literal of
             // the element type.
-            const auto &data = dataNode->loadAs<DataLoad>()->data();
+            const auto &data = dataNode->data();
             if (auto converted = data->convertTo(elemType)) {
-                dataNode = createNodeAs<DataLoad>(converted);
+                dataNode = tree_->makeData(converted);
             }
         }
         auto [refNode, refData] = makeRefData(dataNode);
         *execNode << refNode;
         factory.add(refData);
     }
-    *execNode << createNodeAs<DataLoad>(factory.build());
+    *execNode << tree_->makeData(factory.build());
     return execNode;
 }
 
@@ -2333,7 +2304,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
 
     StructDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+    node_ptr_t execNode = tree_->makeExec(false, true);
     std::unordered_set<string> fieldNames;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
@@ -2350,7 +2321,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     }
 
     auto structData = factory.build();
-    node_ptr_t res  = createNodeAs<DataLoad>(structData);
+    node_ptr_t res  = tree_->makeData(structData);
 
     // If there are dangling nodes, attach them to the execution node
     if (dangling) {
@@ -2371,7 +2342,7 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
 
     TupleDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+    node_ptr_t execNode = tree_->makeExec(false, true);
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
@@ -2380,7 +2351,7 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     }
 
     auto tupleData = factory.build();
-    node_ptr_t res = createNodeAs<DataLoad>(tupleData);
+    node_ptr_t res = tree_->makeData(tupleData);
 
     // If there are dangling nodes, attach them to the execution node
     if (dangling) {
@@ -2446,13 +2417,13 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
             }
         }
     }
-    node_ptr_t typeNode  = createNodeAs<TypeLoad>(funcType, funcType->implMark());
+    node_ptr_t typeNode = tree_->makeType(funcType, funcType->implMark());
     // The body of a function or lambda is a body of its own: its value is the function's
     // result, and its exits are the function's, wherever the function is written.
     const ValueUseScope valueUseScope(*this);
     valueUse_            = {};
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
-    node_ptr_t funcNode  = createNodeAs<FuncLoad>(funcData->ref().toString());
+    node_ptr_t funcNode  = tree_->makeFunc(funcData->ref().toString());
     *funcNode << typeNode << stmtsNode;
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");
@@ -2487,7 +2458,7 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
     ENTER("RefData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for RefData");
     const auto &refData = ast->loadAs<AST::RefDataLoad>();
-    node_ptr_t refNode  = createNodeAs<DRefLoad>(refData->ref());
+    node_ptr_t refNode  = tree_->makeDRef(refData->ref());
     LEAVE("RefData");
     return refNode;
 }

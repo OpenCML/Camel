@@ -68,7 +68,6 @@ class Builder {
   private:
     // The tree being built: every node of the module is made by it.
     std::unique_ptr<Tree> tree_;
-    node_ptr_t root_;
     size_t idIndex_ = 0;
     scope_ptr_t<Reference, Type *> typeScope_;
     // Type names whose declaration (or whose import) failed: a use of one is a consequence of
