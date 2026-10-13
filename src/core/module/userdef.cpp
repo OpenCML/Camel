@@ -138,6 +138,9 @@ bool UserDefinedModule::compile(CompileStage till) {
                 gct_            = gctBuilder.build(ast, diagnostics_);
             }
             if (camel::utils::phase::enabled()) {
+                // Counting walks both trees: a phase of its own, so that the cost of
+                // measuring is not read as a cost of compiling.
+                camel::utils::phase::Scope phaseScope("(counting)");
                 camel::utils::phase::count("modules", 1);
                 camel::utils::phase::count("ast.nodes", countNodes(ast));
                 camel::utils::phase::count("gct.nodes", countNodes(gct_));

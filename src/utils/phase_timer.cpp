@@ -28,6 +28,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -38,7 +39,6 @@
 
 #ifndef _WIN32
 #include <dlfcn.h>
-#include <sys/resource.h>
 #endif
 
 namespace camel::utils::phase {
@@ -103,13 +103,19 @@ AllocSnapshotFn findAllocShim() {
 }
 
 /// Peak resident set size of the process in kilobytes; 0 where it cannot be read.
+/// Read from /proc/self/status (VmHWM), which belongs to this program image: the maximum
+/// getrusage reports also covers the process that started this one, before its exec.
 uint64_t peakRssKb() {
 #if defined(__linux__)
-    rusage usage{};
-    return getrusage(RUSAGE_SELF, &usage) == 0 ? static_cast<uint64_t>(usage.ru_maxrss) : 0;
-#else
-    return 0;
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    while (std::getline(status, line)) {
+        if (line.starts_with("VmHWM:")) {
+            return std::strtoull(line.c_str() + 6, nullptr, 10);
+        }
+    }
 #endif
+    return 0;
 }
 
 void appendJsonString(std::ostringstream &os, std::string_view text) {

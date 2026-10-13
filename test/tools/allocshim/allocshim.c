@@ -26,8 +26,16 @@
  * Where the allocations come from. With CAMEL_ALLOCSHIM_SITES=<file> every N-th allocation
  * (CAMEL_ALLOCSHIM_EVERY, default 97) records the return addresses of its callers; at exit
  * the samples and the memory map of the process are written to <file>, and
- * benchmarks/compile/alloc_sites.py turns them into a table by function. Sampling costs time
- * (an unwind per sample); do not read wall-clock times from such a run.
+ * benchmarks/compile/hotspots.py turns them into tables by function. Sampling costs time (an
+ * unwind per sample); do not read wall-clock times from such a run.
+ *
+ * Where the time goes. With CAMEL_ALLOCSHIM_CPU=<file> the shim is a sampling profiler
+ * instead: a CPU-time timer (CAMEL_ALLOCSHIM_HZ samples per second of CPU time, default 1000)
+ * interrupts the process and the handler records the stack in the same format. This is what
+ * `perf record -g` would give where perf is not available. The two kinds of sampling are not
+ * combined: when both variables are set, the CPU profile wins. Nothing is counted during a
+ * CPU profile (the totals stay zero), so that the profile shows the allocator and not the
+ * bookkeeping of this file.
  *
  * The counters are atomics and the shim is safe to use from several threads. It is a
  * measuring tool for the benchmark scripts and the tests of this repository, not a part of
@@ -39,12 +47,14 @@
 #include <execinfo.h>
 #include <fcntl.h>
 #include <malloc.h>
+#include <signal.h>
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 extern void *__libc_malloc(size_t size);
@@ -70,7 +80,7 @@ static atomic_uint_fast64_t g_peak;
 
 /* ---- call-site sampling ---------------------------------------------------------------- */
 
-enum { SITE_FRAMES = 24, SITE_CAPACITY = 1 << 16 };
+enum { SITE_FRAMES = 48, SITE_CAPACITY = 1 << 16 };
 
 struct site_sample {
     uint32_t depth;
@@ -79,13 +89,14 @@ struct site_sample {
 };
 
 static const char *g_sites_path;         /* NULL: sampling is off */
+static int g_cpu_profile;                /* samples are taken by the timer, not by allocations */
 static uint64_t g_sites_every = 97;      /* one sample per this many allocations */
 static struct site_sample *g_sites;      /* SITE_CAPACITY samples, taken from glibc directly */
 static atomic_uint_fast64_t g_sites_count;
 static __thread int t_in_shim;           /* set while the shim itself calls into glibc */
 
 static void sample_site(size_t size, uint64_t ordinal) {
-    if (g_sites == NULL || ordinal % g_sites_every != 0 || t_in_shim) {
+    if (g_sites == NULL || g_cpu_profile || ordinal % g_sites_every != 0 || t_in_shim) {
         return;
     }
     t_in_shim = 1; /* backtrace() may allocate (it loads the unwinder on its first call) */
@@ -96,6 +107,37 @@ static void sample_site(size_t size, uint64_t ordinal) {
         sample->depth              = (uint32_t)backtrace(sample->frames, SITE_FRAMES);
     }
     t_in_shim = 0;
+}
+
+/* The handler of the profiling timer. backtrace() is not on the list of functions a signal
+ * handler may call; it is safe here because it was called once before the timer started (so
+ * it has loaded what it loads lazily) and because it only reads the stack afterwards. The
+ * first frames of a sample are the handler and the signal trampoline; hotspots.py drops them. */
+static void on_profile_tick(int signal_number) {
+    (void)signal_number;
+    const int saved_errno = errno;
+    const uint64_t slot   = atomic_fetch_add(&g_sites_count, 1);
+    if (slot < SITE_CAPACITY) {
+        struct site_sample *sample = &g_sites[slot];
+        sample->size               = 0;
+        sample->depth              = (uint32_t)backtrace(sample->frames, SITE_FRAMES);
+    }
+    errno = saved_errno;
+}
+
+static void start_cpu_profile(uint64_t hertz) {
+    void *prime[4];
+    backtrace(prime, 4);
+    struct sigaction action;
+    memset(&action, 0, sizeof action);
+    action.sa_handler = on_profile_tick;
+    action.sa_flags   = SA_RESTART;
+    sigaction(SIGPROF, &action, NULL);
+    struct itimerval timer;
+    timer.it_interval.tv_sec  = 0;
+    timer.it_interval.tv_usec = (suseconds_t)(1000000 / hertz);
+    timer.it_value            = timer.it_interval;
+    setitimer(ITIMER_PROF, &timer, NULL);
 }
 
 static void copy_file(int out, const char *path) {
@@ -118,13 +160,19 @@ __attribute__((destructor)) static void write_sites(void) {
     if (g_sites == NULL || g_sites_path == NULL) {
         return;
     }
+    if (g_cpu_profile) {
+        struct itimerval off;
+        memset(&off, 0, sizeof off);
+        setitimer(ITIMER_PROF, &off, NULL);
+    }
     t_in_shim     = 1;
     const int out = open(g_sites_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (out < 0) {
         return;
     }
     copy_file(out, "/proc/self/maps");
-    dprintf(out, "--- samples every=%llu\n", (unsigned long long)g_sites_every);
+    dprintf(out, "--- samples kind=%s every=%llu\n", g_cpu_profile ? "cpu" : "alloc",
+            (unsigned long long)g_sites_every);
     uint64_t count = atomic_load(&g_sites_count);
     if (count > SITE_CAPACITY) {
         count = SITE_CAPACITY;
@@ -141,23 +189,33 @@ __attribute__((destructor)) static void write_sites(void) {
 }
 
 __attribute__((constructor)) static void read_settings(void) {
-    const char *path = getenv("CAMEL_ALLOCSHIM_SITES");
+    const char *cpu  = getenv("CAMEL_ALLOCSHIM_CPU");
+    const char *path = cpu != NULL && *cpu != '\0' ? cpu : getenv("CAMEL_ALLOCSHIM_SITES");
     if (path == NULL || *path == '\0') {
         return;
     }
-    const char *every = getenv("CAMEL_ALLOCSHIM_EVERY");
+    g_cpu_profile     = path == cpu;
+    const char *every = getenv(g_cpu_profile ? "CAMEL_ALLOCSHIM_HZ" : "CAMEL_ALLOCSHIM_EVERY");
     if (every != NULL && atoll(every) > 0) {
         g_sites_every = (uint64_t)atoll(every);
+    } else if (g_cpu_profile) {
+        g_sites_every = 1000;
     }
     t_in_shim    = 1;
     g_sites_path = path;
     g_sites      = __libc_calloc(SITE_CAPACITY, sizeof(struct site_sample));
     t_in_shim    = 0;
+    if (g_cpu_profile && g_sites != NULL) {
+        start_cpu_profile(g_sites_every);
+    }
 }
 
 /* ---- counting -------------------------------------------------------------------------- */
 
 static void note_alloc(void *ptr, size_t requested) {
+    if (g_cpu_profile) {
+        return; /* the profile should show the allocator, not this bookkeeping */
+    }
     const uint64_t ordinal = atomic_fetch_add_explicit(&g_allocations, 1, memory_order_relaxed);
     atomic_fetch_add_explicit(&g_bytes, requested, memory_order_relaxed);
     const uint64_t live =
@@ -172,6 +230,9 @@ static void note_alloc(void *ptr, size_t requested) {
 }
 
 static void note_free(void *ptr) {
+    if (g_cpu_profile) {
+        return;
+    }
     atomic_fetch_add_explicit(&g_frees, 1, memory_order_relaxed);
     atomic_fetch_sub_explicit(&g_live, malloc_usable_size(ptr), memory_order_relaxed);
 }
@@ -214,7 +275,7 @@ void *realloc(void *old, size_t size) {
     }
     const size_t before = malloc_usable_size(old);
     void *ptr           = __libc_realloc(old, size);
-    if (ptr != NULL) {
+    if (ptr != NULL && !g_cpu_profile) {
         atomic_fetch_add_explicit(&g_frees, 1, memory_order_relaxed);
         atomic_fetch_sub_explicit(&g_live, before, memory_order_relaxed);
         note_alloc(ptr, size);

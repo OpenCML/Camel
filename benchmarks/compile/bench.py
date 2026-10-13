@@ -22,19 +22,24 @@ What is measured, and how:
   * Heap allocations (count and bytes per phase, peak live bytes) come from one extra run
     under the counting shim test/tools/allocshim, built here with the C compiler found on
     PATH. That run is not timed.
-  * The peak resident set size is the one the phase report reads from getrusage.
+  * The peak resident set size is the one the phase report reads from /proc/self/status.
 
 Method. Every (input, pipeline) is run `--rounds` times, pinned with `taskset -c K` when
 taskset exists; when several compilers are compared (`--camel base=/path/one --camel
 new=/path/two`, each a CAMEL_HOME) they alternate inside each round, so a change of load hits
 both. The tables give the median and the minimum over the rounds. /proc/loadavg is recorded
-before every round and reported: on a busy machine read the minimum, not the median.
+before every round and reported: on a busy machine read the minimum, not the median. A case
+whose single run takes longer than five seconds is run twice only, whatever --rounds says.
 
 INPUT SETS (`--sets small,medium,large,modules`; default all):
 
   small    hello.cml and a ten-line arithmetic program
-  medium   the largest real programs of the repository that compile on their own
-  large    a random program of test/tools/progen at --size 40 (a few thousand lines)
+  medium   real programs of the repository: the test of stdlib/array.cml (which imports that
+           module), the two largest benchmark models (compiled only), a progen program of the
+           default size
+  large    a random program of test/tools/progen at --size 20 (about 2,300 lines, every
+           construct of the generator but `macro` functions) and 4,000 small functions of test/tools/scale in the
+           shape `mixed` (about 14,000 lines, flat)
   modules  generated projects of N small modules (gen_modules.py) for N in --modules
            (default 1,2,4,8,16,32,64,128), in the shapes flat, chain and fan
 
@@ -68,6 +73,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO / "test" / "tools" / "progen"))
+sys.path.insert(0, str(REPO / "test" / "tools" / "scale"))
 
 import gen_modules  # noqa: E402
 
@@ -83,7 +89,9 @@ PIPELINES = {
 }
 RUN_PIPELINES = ["compile", "passes", "nvm", "fvm", "jit", "bc"]
 DEFAULT_MODULE_COUNTS = [1, 2, 4, 8, 16, 32, 64, 128]
-LARGE_SEED, LARGE_SIZE = 20261013, 40
+LARGE_SEED, LARGE_SIZE = 2, 20  # the generator rarely finds a usable program above size 20
+SCALE_FUNCTIONS = 4000
+SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated only this often
 
 # The order of the rows of the phase tables; phases not listed follow alphabetically.
 PHASE_ORDER = ["(process)", "startup", "mm_init", "context", "builtin_module", "parse", "resolve", "cmo_load",
@@ -105,11 +113,11 @@ func main(): int sync {
 
 # ---- inputs -------------------------------------------------------------------------------
 
-def progen_program(seed: int, size: int) -> Tuple[str, dict]:
+def progen_program(seed: int, size: int, features: Optional[str] = None) -> Tuple[str, dict]:
     """The source of a random program and the environment variables it reads."""
-    from generate import DEFAULT_FEATURES, generate
+    from generate import generate, parse_features
     from model import emit
-    prog, _expected, _attempts = generate(seed, DEFAULT_FEATURES, size=size)
+    prog, _expected, _attempts = generate(seed, parse_features(features), size=size)
     return emit(prog), {k: str(v) for k, v in prog.a["env"].items()}
 
 
@@ -126,19 +134,30 @@ def build_inputs(sets: List[str], work: Path, module_counts: List[int], large_si
         arith.write_text(SMALL_ARITH, encoding="utf-8", newline="\n")
         add("arith10", "small", arith, True)
     if "medium" in sets:
-        # Programs of the repository; the models need data files to run, so they are compiled only.
-        add("array.cml", "medium", REPO / "stdlib" / "array.cml", False)
-        add("resnetbn", "medium", REPO / "benchmarks" / "resnetbn" / "model.cml", False)
-        add("lora_mlp", "medium", REPO / "benchmarks" / "lora" / "lora_mlp.cml", False)
+        # Programs of the repository. array_basic is the test of stdlib/array.cml (the largest
+        # module of the standard library written in Camel, all generic functions) and imports
+        # it; the two models import the benchmark driver module and need data files to run,
+        # so they are compiled only.
+        packages = {"CAMEL_PACKAGES": str(REPO / "benchmarks" / "common")}
+        add("array_basic", "medium", REPO / "test" / "cases" / "modules" / "stdlib" / "array_basic.cml", True)
+        add("resnetbn", "medium", REPO / "benchmarks" / "resnetbn" / "model.cml", False, packages)
+        add("lora_mlp", "medium", REPO / "benchmarks" / "lora" / "lora_mlp.cml", False, packages)
         source, env = progen_program(7, 1)
         default = work / "progen_s1.cml"
         default.write_text(source, encoding="utf-8", newline="\n")
         add("progen-1", "medium", default, True, env)
     if "large" in sets:
-        source, env = progen_program(LARGE_SEED, large_size)
+        # Without `macro` functions: at this size std::macro meets one it cannot evaluate
+        # (an operator that is unavailable ahead of time) and rejects the program.
+        source, env = progen_program(LARGE_SEED, large_size, "-macro")
         large = work / f"progen_s{large_size}.cml"
         large.write_text(source, encoding="utf-8", newline="\n")
         add(f"progen-{large_size}", "large", large, True, env)
+        import scale
+        source, _expected = scale.program("mixed", SCALE_FUNCTIONS)
+        flat = work / f"scale_mixed_{SCALE_FUNCTIONS}.cml"
+        flat.write_text(source, encoding="utf-8", newline="\n")
+        add(f"scale-{SCALE_FUNCTIONS}", "large", flat, True)
     if "modules" in sets:
         for shape in gen_modules.SHAPES:
             for count in module_counts:
@@ -273,6 +292,8 @@ def measure(inputs: List[dict], versions: List[Tuple[str, Path]], rounds: int, c
     report = work / "phases.json"
     for round_index in range(rounds):
         for case in cases:
+            if round_index >= SLOW_CASE_ROUNDS and case["_wall"] and max(case["_wall"]) > SLOW_CASE_MS:
+                continue
             item = case["_item"]
             env = camel_env(case["_home"], item["env"])
             wall, code, data = run_camel(case["_home"], item["path"], PIPELINES[case["pipeline"]], env, cpu, report)
@@ -386,7 +407,7 @@ def alloc_table(columns: List[dict]) -> str:
     rows.append(["**total**"] + [f"**{fmt_count(r['alloc']['allocations'])} / {fmt_count(r['alloc']['bytes'])}B**"
                                  for r in columns])
     rows.append(["peak live heap"] + [f"{fmt_count(r['alloc']['peak_bytes'])}B" for r in columns])
-    for name in ("ast.nodes", "gct.nodes", "graph.nodes"):
+    for name in ("modules", "ast.nodes", "gct.nodes", "graph.nodes"):
         rows.append([name] + [fmt_count(r.get("counters", {}).get(name, 0)) for r in columns])
     return table(["phase (allocations / bytes)"] + [r["input"] for r in columns], rows)
 
