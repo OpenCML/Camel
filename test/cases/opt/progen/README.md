@@ -305,6 +305,7 @@ standard passes; failures without any pass. "all" under schedulers means `std::n
 | F35 | `opt_cast_argument_value.cml` | `std::opt`, `std::opt::simplify`, `std::specialize` | all | `7.5`, `17.25`, `10.75` | `0.5`, `-1.75`, `7.75` (found by hand: an argument written `i as float`) | (other) wrong value after a rewrite | fixed (D, ca28e0b8) |
 | F38 | `inline_prl_tail_call_arguments.cml` | `std::inline` | prl | `L4 0 6` | `L4 0 0` (a self tail call with its parameters permuted; nvm, fvm and jit print 6) | (other) wrong value after inlining | fixed (E, 7f1b3f05) |
 | F39 | `opt_dead_branch_laid_out.cml` | `std::opt`, `std::inline` | all | an empty line | nothing on nvm and prl; on fvm and jit the unreduced program repeats its first lines until memory is exhausted | branch arm | fixed (F, fda8ac4f) |
+| F42 | `fold_joined_arm_slot.cml` | `std::opt::fold` (also with `cse`, and `macro` + `fold` + `cse` + `dce`) | all | `1.0` | `6.5937273290103e-310`: the arms `null` and `1.0` join to `float?`; the node of the arm kept a slot typed `float`, which the users of the JOIN read once the pass pruned the branch (a front-end defect the pass exposed; found by the `nullable` feature, 2 of 600 programs, seeds 7001-7600 on the full matrix) | branch arm | fixed (gir: a slot of the joined type) |
 
 ### Faults and crashes after a standard pass
 
@@ -528,3 +529,16 @@ The generator writes every effectful arm as `sync { ... }`, so no finding depend
 - Reading A: `string` is the C conversion with six decimals by design.
 - Reading B: a value has one default text, and `string` should give what `println` prints.
 The generator does not use `string` on floats.
+
+**J4. Do `&&` and `||` short-circuit?** `judgement/short_circuit_fault.cml`:
+`c || (xs[i] < 3)` with `c` true and `i` past the end of `xs` stops with `IndexOutOfRange`
+under every scheduler, without any pass.
+- Reading A (the language reference, 6.7.2): the right side is evaluated only when needed, so
+  the program prints `true`; `a || b` would then be a branch on the graph, like `a ?? b`.
+- Reading B (the implementation): `&&` and `||` are operator nodes like `+`, both operands are
+  inputs and both are evaluated; a guard is written with `if`. The reference is then wrong.
+The design principles do not say. The reference evaluator keeps the short-circuit value but
+now discards a program whose skipped operand would fault (one program of 1200, seeds
+7001-7600 and 8001-8600; it was the only disagreement of the run without passes), so no
+finding depends on this.
+
