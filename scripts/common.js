@@ -256,7 +256,10 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
         `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake ${clangFlags} ${cmakeOptionFlags}`,
         cmakeEnv ? { env: cmakeEnv } : {}
     )
-    runCommand(`cmake --build . --config ${config}`, cmakeEnv ? { env: cmakeEnv } : {})
+    // CAMEL_BUILD_KEEP_GOING=1: do not stop at the first file that fails to compile, so that one
+    // run shows every error (continuous integration on a platform nobody builds on locally).
+    const keepGoing = process.env.CAMEL_BUILD_KEEP_GOING === '1' ? ' -- -k 0' : ''
+    runCommand(`cmake --build . --config ${config}${keepGoing}`, cmakeEnv ? { env: cmakeEnv } : {})
 }
 
 /**
