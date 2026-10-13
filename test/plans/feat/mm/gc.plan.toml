@@ -367,6 +367,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "gc.jit_object_constant.poison"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "std::jit leaves a graph with an object constant to the interpreter when objects move (the constant would be baked into the code as an address), and still compiles the scalar one."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
@@ -380,6 +381,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "gc.jit_object_constant.default"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "Without the moving collector std::jit compiles both graphs."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_jit_constants.cml"
