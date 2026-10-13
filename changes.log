@@ -1,3 +1,5 @@
+[0.2.9]
+
 [0.2.8]
 Changes:
 - 新增 --gc / CAMEL_GC 回收器选择，分代 GC 作为可选模式，默认保持 mark-sweep。
