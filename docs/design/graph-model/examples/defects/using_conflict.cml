@@ -1,0 +1,9 @@
+// Two using-directives bring `inc` with the same signature from two modules.
+import lib
+import lib2
+using namespace lib::Tools
+using namespace lib2::Tools
+func main(): int sync {
+    println(inc(1))
+    return 0
+}

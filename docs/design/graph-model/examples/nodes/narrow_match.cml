@@ -1,0 +1,12 @@
+// The same thing written as a `match` on the nullable value (works today).
+func len_or_zero(s: string?): int {
+    return match s {
+        case null => 0
+        case v => len(v)
+    }
+}
+
+func main(): int sync {
+    println(len_or_zero('abc'), len_or_zero(null))
+    return 0
+}

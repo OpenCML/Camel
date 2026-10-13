@@ -1,0 +1,11 @@
+// sync block: control edges between consecutive expressions; GATE joins value and order.
+func twice(x: int): int sync {
+    println('a', x)
+    println('b', x)
+    return x * 2
+}
+
+func main(): int sync {
+    println(twice(4))
+    return 0
+}

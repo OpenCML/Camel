@@ -1,0 +1,6 @@
+// docs/language/05_modules.md 5.2: `import sqrt from math` brings in one name.
+import sqrt from math
+func main(): int sync {
+    println(sqrt(9.0))
+    return 0
+}

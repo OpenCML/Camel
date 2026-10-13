@@ -1,0 +1,10 @@
+// FILL (FunctionClosure): a lambda that captures a local value.
+func adder(n: int): (x: int) => int {
+    return (x: int): int => x + n
+}
+
+func main(): int sync {
+    let add5 = adder(5)
+    println(add5(1))
+    return 0
+}

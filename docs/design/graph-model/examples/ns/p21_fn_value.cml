@@ -1,0 +1,6 @@
+// A qualified name used as a function value.
+import lib
+func main(): int sync {
+    println([1, 2, 3]->map<lib::Tools::inc>)
+    return 0
+}

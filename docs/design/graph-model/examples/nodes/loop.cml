@@ -1,0 +1,10 @@
+// loop expression (design principles 2.10).
+func sum_to(n: int): int {
+    let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
+    return acc
+}
+
+func main(): int sync {
+    println(sum_to(10))
+    return 0
+}

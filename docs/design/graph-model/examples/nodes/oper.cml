@@ -1,0 +1,9 @@
+// DATA, PORT, OPER: an expression is nodes and data edges.
+func hyp2(a: int, b: int): int {
+    return a * a + b * b + 1
+}
+
+func main(): int sync {
+    println(hyp2(3, 4))
+    return 0
+}

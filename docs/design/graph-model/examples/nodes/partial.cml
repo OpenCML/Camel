@@ -1,0 +1,11 @@
+// `f<w>` as a value: partial application.
+with <w: int>
+func scale(x: int): int {
+    return x * w
+}
+
+func main(): int sync {
+    let triple = scale<3>
+    println(triple(2), scale<5>(2))
+    return 0
+}

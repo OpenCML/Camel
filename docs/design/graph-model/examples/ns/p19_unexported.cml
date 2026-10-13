@@ -1,0 +1,6 @@
+// A name of a namespace that the module did not export.
+import hidden
+func main(): int sync {
+    println(hidden::Tools::secret())
+    return 0
+}

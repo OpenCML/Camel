@@ -1,0 +1,17 @@
+// var cell (:var/new, :var/get), assignment, and `wait`: order follows the uses of the variable.
+sync func bump(var i: int): int sync {
+    i = i + 1
+    return i
+}
+
+func run(): int {
+    var i = 1
+    let before = i + 10
+    wait bump(i)
+    return before + i
+}
+
+func main(): int sync {
+    println(run())
+    return 0
+}
