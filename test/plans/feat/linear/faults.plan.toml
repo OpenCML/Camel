@@ -655,8 +655,11 @@ expect_output_not_contains = ["not reached", "Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+# Asserts that the function was compiled to native code: only where the JIT generates code
+# (x86-64; elsewhere std::jit runs the bytecode interpreter, see test/tools/have-native-jit.mjs).
 [[tests]]
 name = "divide_by_zero_hot.inline_jit.compiled"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "The function with the variable divisor is compiled by the JIT after std::inline (the -vv log names it) for its run with a nonzero divisor."
 kind = "behavior"
 case = "../../../cases/linear/faults/divide_by_zero_hot.cml"
@@ -666,8 +669,11 @@ expect_output_contains = ["compiled & cached graph 'f'", "145"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+# Asserts that the function was compiled to native code: only where the JIT generates code
+# (x86-64; elsewhere std::jit runs the bytecode interpreter, see test/tools/have-native-jit.mjs).
 [[tests]]
 name = "recursion_depth_hot.inline_jit.compiled"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "The three recursive functions are compiled by the JIT after std::inline (the -vv log names them)."
 kind = "behavior"
 case = "../../../cases/linear/faults/recursion_depth_hot.cml"

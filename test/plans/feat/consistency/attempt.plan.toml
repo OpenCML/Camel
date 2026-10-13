@@ -83,8 +83,11 @@ desc = "The callee runs as compiled code under std::jit: a division by zero and 
 case = "../../../cases/consistency/attempt/compiled.cml"
 golden = "golden/attempt_compiled.txt"
 
+# Asserts that the function was compiled to native code: only where the JIT generates code
+# (x86-64; elsewhere std::jit runs the bytecode interpreter, see test/tools/have-native-jit.mjs).
 [[tests]]
 name = "attempt.compiled.inline_jit"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "With std::inline before std::jit the recursive callee is compiled as a native self-recursion; the log shows that it was compiled."
 kind = "behavior"
 backends = false
@@ -95,8 +98,11 @@ verify_script = """
 assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify(input.normalized.stdout.slice(-200)))
 """
 
+# Asserts that the function was compiled to native code: only where the JIT generates code
+# (x86-64; elsewhere std::jit runs the bytecode interpreter, see test/tools/have-native-jit.mjs).
 [[tests]]
 name = "attempt.compiled.jit_log"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "Under std::jit the straight-line callee is compiled, and the graphs that contain the `attempt` node (an OPER) are not."
 kind = "behavior"
 backends = false
