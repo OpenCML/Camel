@@ -5845,6 +5845,16 @@ node_handle_t Builder::buildBranch(
             if (exitType != nullptr && !joinType->assignableFrom(exitType) &&
                 entersImplicitly(joinType, exitType)) {
                 coerceArmExit(armList[i], joinType, gct);
+                // The node that stands for the arm was typed when the arm was added, with
+                // what the arm gave then. A pass that folds the branch to this one arm
+                // reads the value through that type (std::opt::fold read a `float?` box as
+                // a float).
+                // The slot the arm's value is kept in has a type of its own, given when the
+                // node was made: a new slot of the joined type (a `float?` box kept in a
+                // slot typed `float` is not traced by the collector either).
+                setNodeType(branchFuncs[i], joinType);
+                nodeDraftOf(branchFuncs[i])
+                    ->setNodeDataIndex(nodeIdOf(branchFuncs[i]), currGraph_->addRuntimeSlot(joinType));
             }
         }
     }
