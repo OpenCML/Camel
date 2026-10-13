@@ -21,7 +21,7 @@
 /**
  * @file adapter.h
  * @brief `camel-db --dap`: the Debug Adapter Protocol on standard input and output
- *        (docs/technical/34_debugger.md, 7.3).
+ *        (docs/technical/35_debugger.md, 7.3).
  *
  * The adapter is a translator and holds no debugging logic: it starts one worker process
  * (`camel-db --run-worker`) for the program, forwards the worker's standard output and error

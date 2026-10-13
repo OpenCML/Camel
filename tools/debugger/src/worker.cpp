@@ -128,7 +128,7 @@ static void parseRunBodyAndSetPasses(const std::string &body) {
     }
 }
 
-/// The launch of a debug session: what to run and how (docs/technical/34_debugger.md, 7.3).
+/// The launch of a debug session: what to run and how (docs/technical/35_debugger.md, 7.3).
 static void applyLaunchOptions(const nlohmann::json &j) {
     auto &st = getState();
     const auto strings = [&](const char *key, std::vector<std::string> &into) {

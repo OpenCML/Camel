@@ -23,7 +23,7 @@
  * @brief Showing a run-time value to the user of the debugger.
  *
  * A Camel value does not carry its type: a slot is shown with the static type of the node or
- * field it belongs to (docs/technical/34_debugger.md, 6.2). Everything here reads the stopped
+ * field it belongs to (docs/technical/35_debugger.md, 6.2). Everything here reads the stopped
  * program on its own thread and returns text: no pointer to a Camel object leaves these
  * functions except inside a ValueView, which is valid only until the program resumes.
  */

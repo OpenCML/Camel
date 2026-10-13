@@ -22,7 +22,7 @@
  * @file program_index.h
  * @brief What the debugger knows about one compiled program, by source line and by graph.
  *
- * Two directions (docs/technical/34_debugger.md, sections 2, 3 and 6):
+ * Two directions (docs/technical/35_debugger.md, sections 2, 3 and 6):
  *  - from a source line to the nodes whose origin starts on it, in three states of the program
  *    (as built, before the passes, as it runs), which is what verifies a line breakpoint or
  *    says why it cannot be;

@@ -7,6 +7,7 @@
 import { runTest, check, checkEq, fixture, lineOf } from '../../../tools/debugger/client.mjs'
 
 const FAULTS = fixture('faults.cml')
+const UNHANDLED = fixture('unhandled.cml')
 const L = (mark) => lineOf(FAULTS, `mark:${mark}`)
 
 await runTest(async (t) => {
@@ -78,6 +79,26 @@ await runTest(async (t) => {
             stop = await dap.waitStop()
             checkEq(stop?.frames[1]?.line, L('uncaught'), on('resumed, it became an error value; the next stop is the uncaught fault'))
             check(await dap.waitOutput('stdout', '-1\n'), on('after the fallback value was printed'), dap.outputOf('stdout'))
+            await dap.stop()
+        }
+
+        // ---- an error value is not a fault; unhandled at the exit of main it is reported ----
+        {
+            const dap = await t.dap()
+            const throwLine = lineOf(UNHANDLED, 'mark:throw')
+            await dap.launch(UNHANDLED, { passes: [backend] }, { [UNHANDLED]: [throwLine] })
+            const stop = await dap.waitStop()
+            checkEq(`${stop?.reason}:${stop?.line}`, `breakpoint:${throwLine}`, on('a breakpoint where the error value is made'))
+            await dap.request('continue', { threadId: 1 })
+            checkEq(await dap.waitStopOrEnd(), 'end', on('the error value does not stop the program: it is a value, not a fault'))
+            const exited = await dap.waitEvent('exited')
+            checkEq(exited?.body?.exitCode, 1, on('unhandled at the exit of main, it ends the program with exit code 1'))
+            check(
+                /error\[RuntimeDiag::UnhandledError\][\s\S]*unhandled\.cml:\d+:\d+/.test(dap.outputOf('stderr')),
+                on('and is reported on standard error with the place it was made'),
+                dap.outputOf('stderr'),
+            )
+            checkEq(dap.outputOf('stdout'), 'start\n', on("standard output holds only the program's output"))
             await dap.stop()
         }
 

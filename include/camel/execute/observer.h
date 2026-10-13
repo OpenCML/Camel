@@ -19,7 +19,7 @@
 
 /*
  * What a sequential scheduler tells a debugger while it runs a program
- * (docs/technical/34_debugger.md, 7.1).
+ * (docs/technical/35_debugger.md, 7.1).
  *
  * One observer per process, installed by the debugger (camel-db) and null otherwise. The
  * schedulers that call it are std::nvm and std::fvm; compiled code (std::jit) and the parallel

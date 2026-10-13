@@ -1385,7 +1385,7 @@ void DebuggerServer::httpServerLoop() {
         dispatchAndRespond("setBreakpointTypes", req, res);
     });
 
-    // ---- the debug core (docs/technical/34_debugger.md, 7) ----------------------------
+    // ---- the debug core (docs/technical/35_debugger.md, 7) ----------------------------
     // A worker answers these itself. The gateway forwards the event poll like any query;
     // commands go through its command layer ("debug"), which forwards them to the task.
     svr.Get(

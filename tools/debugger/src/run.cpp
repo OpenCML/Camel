@@ -119,7 +119,7 @@ using debugger::core::DebugCore;
 
 /// The pass sequence as it runs under the debugger, and what the user is told when it is not
 /// the one that was asked for (empty otherwise). Only the sequential interpreters have hooks
-/// (docs/technical/34_debugger.md, 7.2): compiled code cannot be stopped, so std::jit runs as
+/// (docs/technical/35_debugger.md, 7.2): compiled code cannot be stopped, so std::jit runs as
 /// the interpreter it is built on; the parallel scheduler runs several nodes at once and has no
 /// single current node, so it is replaced by std::fvm, one of the orders it may choose.
 std::vector<std::string>

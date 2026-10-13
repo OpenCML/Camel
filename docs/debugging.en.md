@@ -10,7 +10,7 @@ the VS Code extension in [`editors/vscode`](../editors/vscode) is set up for it.
 A Camel program is a graph, and the debugger does not pretend otherwise. What "the next line",
 "the call stack" and "a variable" mean in Camel is explained in [section 3](#3-what-you-see-and-why);
 read it once, it will save you from surprises. The design and the internals are in
-[technical note 34](technical/34_debugger.md).
+[technical note 34](technical/35_debugger.md).
 
 Verified on Linux x86-64. On Windows the adapter and its process handling are built but have not
 been run; in VS Code nothing has been tried by hand (the tests speak the protocol to the adapter
@@ -79,9 +79,10 @@ the script lists every step. The session above, with a breakpoint in a tail-recu
    (node %18 OPER :op/eq_l)
 <- stopped (breakpoint) in loop at recursion.cml:8:17
 -> stackTrace {"threadId":1}
-   #6 loop  recursion.cml:8
+   #11 loop  recursion.cml:8
    #2 main  recursion.cml:13
    #1 __root__  recursion.cml:11
+-> scopes {"frameId":11}
    [Locals]
      n: int = 5
      acc: int = 0
@@ -89,9 +90,10 @@ the script lists every step. The session above, with a breakpoint in a tail-recu
    (node %18 OPER :op/eq_l)
 <- stopped (breakpoint) in loop (tail call, 2 frames replaced) at recursion.cml:8:17
 -> stackTrace {"threadId":1}
-   #8 loop (tail call, 2 frames replaced)  recursion.cml:8
+   #13 loop (tail call, 2 frames replaced)  recursion.cml:8
    #2 main  recursion.cml:13
    #1 __root__  recursion.cml:11
+-> scopes {"frameId":13}
    [Locals]
      n: int = 4
      acc: int = 5
@@ -205,6 +207,9 @@ is raised, as an exception: the editor shows the text of the diagnostic at its p
 the stack and variables of that moment. Resuming lets the fault take its course: the program
 ends with the diagnostic and exit code 1, exactly as without a debugger.
 
+An error *value* (`throw`, a `T!` that failed) is not a fault: it is an ordinary value, shown
+in the variables as `error <kind>: <message>`, and does not stop the program.
+
 A fault raised inside `attempt(...)` is isolated: it becomes an error value at the boundary
 and the program goes on. Such faults do not stop the program unless the filter *Faults
 isolated by attempt* is switched on.
@@ -244,8 +249,13 @@ survive. What changes:
 - A stop inside an operator implemented in C++ is not possible; `pause` and `terminate` take
   effect at the next node (a program that reaches none for two seconds is ended with its
   process on `terminate`).
-- With the pass `std::macro`, macro functions are evaluated while the pass runs, before the
-  program starts; breakpoints in them are hit at that time.
+- With the pass `std::macro`, a call of a macro function with constant arguments is evaluated
+  by the pass, before the program starts, and replaced by its result: the debugger does not
+  stop in that evaluation, and a breakpoint on the line of the replaced call becomes
+  unverified (*this line only defines constants*).
+- An error value that reaches the exit of `main` unhandled (`main(): T!`) is not a stop: no
+  frame is left by then. It is reported as without a debugger, `UnhandledError` on standard
+  error and exit code 1; break on the `throw` to see where it is made.
 - After `std::inline` a name bound to an inlined call is not shown under its name (see section 4).
 - Not verified: Windows (the adapter's process handling is ported but untested), macOS, and the
   behaviour of the VS Code user interface itself.

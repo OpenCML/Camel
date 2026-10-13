@@ -21,7 +21,7 @@
 /**
  * @file debug_core.h
  * @brief The one place that controls a program being debugged
- *        (docs/technical/34_debugger.md, section 7).
+ *        (docs/technical/35_debugger.md, section 7).
  *
  * DebugCore lives in the process that runs the program (a camel-db worker). It is the
  * scheduler's ExecutionObserver: it keeps the stack of frames, decides at every node whether

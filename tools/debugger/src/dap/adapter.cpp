@@ -18,7 +18,7 @@
  */
 
 /*
- * The Debug Adapter Protocol front end of camel-db (docs/technical/34_debugger.md, 7.3).
+ * The Debug Adapter Protocol front end of camel-db (docs/technical/35_debugger.md, 7.3).
  *
  * Threads:
  *  - the main thread reads requests from stdin and answers them, one at a time;
@@ -553,7 +553,7 @@ class Adapter {
         }
         if (command == "next" || command == "stepIn" || command == "stepOut") {
             // Granularity "instruction" is a step by graph node; a statement or a line is a
-            // step by source line (docs/technical/34_debugger.md, section 4). A session
+            // step by source line (docs/technical/35_debugger.md, section 4). A session
             // launched with "stepBy": "node" steps by node whatever the client asks: editors
             // send the instruction granularity only from a disassembly view.
             const bool byNode =
