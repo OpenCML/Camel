@@ -98,14 +98,20 @@ static thread_local size_t s_jit_save_depth = 0;
 #endif
 #include <unordered_set>
 
-// Inspection mode (a debugger or another inspecting tool is attached): the instruction about to
-// run is published, see FastVMSchedPass::inspectInstruction. One test of a flag otherwise.
+// This file is compiled a second time by inspectvm.cpp, which defines the two hooks below
+// before it includes this file: that is the loop a program runs on while an execution observer
+// (a debugger) is installed. Here they are what the loop of a normal run always had: no hook.
+#ifndef CAMEL_FVM_INSPECTED_LOOP
 #define SYNC_RUNTIME_ORIGIN()                                                                      \
     do {                                                                                           \
         if (InternalGlobalConfig::IsInspectionMode() && context_) {                                \
-            inspectInstruction(pc, currFrame);                                                     \
+            if (auto _sourceContext = context_->sourceContext()) {                                 \
+                _sourceContext->setCurrentRuntimeOrigin(_sourceContext->debugMap().pcOrigin(pc));  \
+            }                                                                                      \
         }                                                                                          \
     } while (0)
+#define OBSERVE_RUNTIME_FAULT(fault) ((void)0)
+#endif
 
 #define NEXT()                                                                                     \
     do {                                                                                           \
@@ -207,7 +213,6 @@ static void writeComputedGotoFillSlots(
 } // namespace
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
-    camel::execute::ActivationScope observedActivation;
     Frame *currFrame                = rootFrame;
     Frame *rootActiveFrame          = rootFrame;
     const Bytecode *base            = bytecodes_.data();
@@ -722,7 +727,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             try {
                 result = func(withView, normView, *context_);
             } catch (const RuntimeFault &fault) {
-                observeFault(fault); // a debugger stops here, every frame still alive
+                OBSERVE_RUNTIME_FAULT(fault);
                 throw reportRuntimeFault(
                     *context_,
                     fault,
@@ -797,10 +802,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         DEF_CMP_OP_LABEL(FGE, Float32, >=);
         DEF_CMP_OP_LABEL(DGE, Float64, >=);
     } catch (const RuntimeFault &fault) {
+        OBSERVE_RUNTIME_FAULT(fault);
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
         s_jit_save_depth = jitSaveBase;
 #endif
-        observeFault(fault); // a debugger stops here, before any frame is released
         std::unordered_set<Frame *> released;
         auto releaseFrame = [&](Frame *frame) {
             if (!frame || released.count(frame) != 0) {

@@ -939,6 +939,18 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
 }
 
 slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
+#if ENABLE_FASTVM_COMPUTED_GOTO
+    // With an execution observer (a debugger) installed, the activation is reported and runs
+    // on the loop that has the observer's hooks (inspectvm.cpp). One load of a pointer per
+    // nested activation otherwise; the loop of a normal run has no hook at all.
+    if (camel::execute::executionObserver() != nullptr) [[unlikely]] {
+        camel::execute::ActivationScope observedActivation;
+        CallResult inspected = callBorrowedInspected(pc, rootFrame);
+        if (inspected.rootFrame)
+            framePool_.release(inspected.rootFrame);
+        return inspected.result;
+    }
+#endif
     CallResult result = callBorrowed(pc, rootFrame);
     if (result.rootFrame)
         framePool_.release(result.rootFrame);

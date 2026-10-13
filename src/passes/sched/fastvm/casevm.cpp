@@ -69,7 +69,6 @@ using namespace camel::jit;
     } break;
 
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
-    camel::execute::ActivationScope observedActivation;
     Frame *currFrame                = rootFrame;
     Frame *rootActiveFrame          = rootFrame;
     const size_t stackDepthBase     = stackDepth_;
@@ -80,7 +79,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             // The switch interpreter follows the same policy as computed-goto FVM: no per-opcode
             // GC safepoint; call transitions poll fastVmCallBoundarySafepoint().
             if (InternalGlobalConfig::IsInspectionMode() && context_) {
-                inspectInstruction(pc, currFrame);
+                if (auto sourceContext = context_->sourceContext()) {
+                    sourceContext->setCurrentRuntimeOrigin(sourceContext->debugMap().pcOrigin(pc));
+                }
             }
             const Bytecode &bc = bytecodes_[pc];
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
@@ -394,7 +395,6 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 try {
                     result = func(withView, normView, *context_);
                 } catch (const RuntimeFault &fault) {
-                    observeFault(fault); // a debugger stops here, every frame still alive
                     throw reportRuntimeFault(
                         *context_,
                         fault,
@@ -469,7 +469,6 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             pc += bc.opsize;
         }
     } catch (const RuntimeFault &fault) {
-        observeFault(fault); // a debugger stops here, before any frame is released
         std::unordered_set<Frame *> released;
         auto releaseFrame = [&](Frame *frame) {
             if (!frame || released.count(frame) != 0) {
