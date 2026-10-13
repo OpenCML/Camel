@@ -23,6 +23,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/execute/limits.h"
+#include "camel/execute/observer.h"
 #include "camel/execute/pass/runtime_sched.h"
 #include "camel/runtime/graph.h"
 #include "compile.h"
@@ -151,6 +152,15 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     /// One element call of a higher-order operator: a nested, counted call.
     slot_t callElement(const HigherOrderCallSite &site, ctx::Frame *frame);
 
+    /// Called by the inspected loop before each instruction: records the origin of the
+    /// instruction at `pc` as the current runtime origin and reports the instruction to the
+    /// execution observer, if any.
+    void inspectInstruction(size_t pc, ctx::Frame *frame);
+    /// Called by the inspected loop where it catches a fault, before the frames of the stack
+    /// are released (a debugger shows the stack and the values there): reports the fault to
+    /// the execution observer, if any.
+    void observeFault(const camel::core::error::RuntimeFault &fault);
+
     void precompile(camel::runtime::GCGraph *runtimeRoot);
     /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).
     void compileLate(camel::runtime::GCGraph *graph);
@@ -210,6 +220,11 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
+#if ENABLE_FASTVM_COMPUTED_GOTO
+    /// The same loop compiled a second time with the hooks of the execution observer
+    /// (inspectvm.cpp): what a program runs on while an observer is installed.
+    CallResult callBorrowedInspected(size_t pc, ctx::Frame *rootFrame);
+#endif
     slot_t call(size_t pc, ctx::Frame *rootFrame);
     /// Entry pc of `graph`, compiling it (and what it reaches) first when it was created after
     /// startup, e.g. a gradient built at run time.

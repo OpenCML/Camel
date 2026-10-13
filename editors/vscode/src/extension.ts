@@ -3,7 +3,8 @@
 // The extension itself only contributes the grammar and the language configuration (see
 // package.json), starts `camel-ls --stdio`, and adds two commands that have no counterpart in
 // the language server protocol: showing the graph of a function (custom request `camel/graph`)
-// and running the current file through a pass sequence.
+// and running the current file through a pass sequence. Debugging is `camel-db --dap`, a debug
+// adapter on stdio: the extension only finds the executable and fills in a default configuration.
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -13,6 +14,7 @@ import { LanguageClient, LanguageClientOptions, ServerOptions, State } from 'vsc
 const LANGUAGE_ID = 'camel';
 const GRAPH_SCHEME = 'camel-graph';
 const LAST_PASSES_KEY = 'camel.run.lastPasses';
+const DEBUG_TYPE = 'camel';
 
 let client: LanguageClient | undefined;
 let output: vscode.OutputChannel;
@@ -395,6 +397,51 @@ async function runWithPasses(context: vscode.ExtensionContext): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Debugging: the debug adapter is `camel-db --dap` (docs/debugging.en.md)
+// ---------------------------------------------------------------------------------------------
+
+/** Starts `camel-db --dap` for a session; VS Code speaks the Debug Adapter Protocol to it on stdio. */
+class CamelDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
+    async createDebugAdapterDescriptor(): Promise<vscode.DebugAdapterDescriptor | undefined> {
+        const debuggerExe = resolveExecutable('camel-db', 'camel.debugger.path');
+        if (!debuggerExe.path) {
+            await reportMissing('camel-db', 'camel.debugger.path', debuggerExe.tried);
+            return undefined;
+        }
+        return new vscode.DebugAdapterExecutable(debuggerExe.path, ['--dap']);
+    }
+}
+
+/** F5 on a Camel file without a launch.json debugs that file; a configuration needs a program. */
+class CamelDebugConfigurationProvider implements vscode.DebugConfigurationProvider {
+    provideDebugConfigurations(): vscode.DebugConfiguration[] {
+        return [{ type: DEBUG_TYPE, request: 'launch', name: 'Debug Camel file', program: '${file}', passes: ['std::fvm'] }];
+    }
+
+    async resolveDebugConfiguration(
+        _folder: vscode.WorkspaceFolder | undefined,
+        config: vscode.DebugConfiguration
+    ): Promise<vscode.DebugConfiguration | undefined> {
+        if (!config.type && !config.request && !config.name) {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || editor.document.languageId !== LANGUAGE_ID) {
+                return config; // not ours: VS Code offers to create a launch.json
+            }
+            config.type = DEBUG_TYPE;
+            config.request = 'launch';
+            config.name = 'Debug Camel file';
+            config.program = '${file}';
+            config.passes = ['std::fvm'];
+        }
+        if (!config.program) {
+            await vscode.window.showErrorMessage('Camel: the debug configuration has no "program" (the .cml file to debug).');
+            return undefined;
+        }
+        return config;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     output = vscode.window.createOutputChannel('Camel Language Server');
@@ -407,6 +454,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.commands.registerCommand('camel.restartServer', restartClient),
         vscode.commands.registerCommand('camel.showGraph', showGraph),
         vscode.commands.registerCommand('camel.runWithPasses', () => runWithPasses(context)),
+        vscode.debug.registerDebugAdapterDescriptorFactory(DEBUG_TYPE, new CamelDebugAdapterFactory()),
+        vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, new CamelDebugConfigurationProvider()),
         vscode.workspace.onDidSaveTextDocument((document) => {
             if (document.languageId === LANGUAGE_ID) {
                 graphProvider.refreshFor(document.uri.toString());

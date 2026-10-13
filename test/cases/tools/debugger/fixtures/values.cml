@@ -1,0 +1,41 @@
+module main
+
+func risky(d: int): int {
+    return 100 / d
+}
+
+func pick(flag: bool, v: int): int? {
+    return if flag then v as int? else null as int?
+}
+
+func main(): int sync {
+    let n = 42
+    let ratio = 2.5
+    let ok = true
+    let name = 'camel'
+    let xs = [1, 2, 3]
+    let pair = (7, 'seven')
+    let point = { x: 1, y: 2 }
+    var counter = 10
+    counter = counter + 5
+    let some = pick(true, 9)
+    let none = pick(false, 9)
+    let good = attempt(risky, 4)
+    let bad = attempt(risky, 0)
+    let table = [('a', 1), ('b', 2)] as Map<string, int>
+    let later = n + 1                // mark:later
+    println(xs)                      // mark:stop
+    println(pair)
+    println(point)
+    println(counter)
+    println(some ?? 0)
+    println(none ?? 0)
+    println(good !! -1)
+    println(bad !! -1)
+    println(table)
+    println(name)
+    println(ratio)
+    println(ok)
+    println(later)
+    return 0
+}

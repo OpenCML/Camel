@@ -21,6 +21,7 @@
 
 #include <cstddef>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 template <std::size_t N> struct ExtraStorage {

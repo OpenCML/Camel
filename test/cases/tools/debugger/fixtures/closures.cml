@@ -1,0 +1,22 @@
+module main
+
+func make_adder(k: int): (v: int) => int {
+    return (v: int): int => v + k    // mark:lambda
+}
+
+func classify(n: int): string {
+    return if n > 2 then 'big' else 'small'    // mark:branch
+}
+
+func main(): int sync {
+    let base = 10
+    let add = make_adder(base)       // mark:make
+    let ys = [1, 2, 3]->map<(x: int): int => {
+        let scaled = x * base        // mark:element
+        return scaled + 1
+    }>
+    println(add(5))                  // mark:calladd
+    println(ys)
+    println(classify(3))             // mark:classify
+    return 0
+}

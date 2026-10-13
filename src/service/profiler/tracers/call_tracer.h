@@ -20,6 +20,7 @@
 #pragma once
 
 #include "service/profiler/core/trace.h"
+#include <cstdint>
 #include <limits>
 #include <mutex>
 #include <string>

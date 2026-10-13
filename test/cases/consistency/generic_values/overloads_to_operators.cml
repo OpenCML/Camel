@@ -1,0 +1,8 @@
+import { abs, max } from math
+func is_even(x: int): bool { return x % 2 == 0 }
+func is_even(s: string): bool { return len(s) % 2 == 0 }
+func main(): int sync {
+    println([-1, 2, -3]->map<abs>, [1.5, -2.5]->map<abs>)
+    println([3, 9, 4]->reduce<max, 0>, [1, 2, 3, 4]->filter<is_even>, ['a', 'bb']->filter<is_even>)
+    return 0
+}

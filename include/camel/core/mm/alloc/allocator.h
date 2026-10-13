@@ -24,8 +24,10 @@
 #include "header.h"
 
 #include <functional>
+#include <new>
 #include <type_traits>
 #include <utility> // for std::forward
+#include <vector>
 
 namespace camel::core::mm {
 

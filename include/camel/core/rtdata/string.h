@@ -21,6 +21,8 @@
 
 #include "base.h"
 
+#include <new>
+
 namespace rtdata = camel::core::rtdata;
 namespace type   = camel::core::type;
 

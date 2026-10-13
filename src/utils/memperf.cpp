@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <locale>
+#include <new>
 #include <sstream>
 
 #ifdef MEMPERF_ENABLED

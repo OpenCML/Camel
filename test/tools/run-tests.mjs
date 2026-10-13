@@ -257,6 +257,39 @@ function printDetailLines(lines) {
     }
 }
 
+/**
+ * The end of what a failed test wrote, for a log that is all there is to read (continuous
+ * integration, where the files of test/results are not at hand): with CI or
+ * CAMEL_TEST_SHOW_OUTPUT set, the last lines of standard output and standard error follow the
+ * failure, line ends and control characters made visible.
+ */
+const SHOW_FAILED_OUTPUT = Boolean(process.env.CAMEL_TEST_SHOW_OUTPUT || process.env.CI)
+
+function printFailedOutput(result) {
+    if (!SHOW_FAILED_OUTPUT) return
+    const maxLines = 12
+    const maxWidth = 240
+    for (const [name, text] of [['stdout', result.stdout], ['stderr', result.stderr]]) {
+        if (!text) {
+            console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} (empty)`)
+            continue
+        }
+        const lines = text.replace(/\n$/, '').split('\n')
+        const shown = lines.slice(-maxLines)
+        if (lines.length > shown.length) {
+            console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} ... ${lines.length - shown.length} line(s) before`)
+        }
+        for (const line of shown) {
+            const visible = line
+                .replace(/\r/g, '\\r')
+                .replace(/\x1b/g, '\\e')
+                .replace(/[\x00-\x08\x0b-\x1f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`)
+            const clipped = visible.length > maxWidth ? `${visible.slice(0, maxWidth)}...` : visible
+            console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} ${clipped}`)
+        }
+    }
+}
+
 function printRunSummary(summary) {
     const total = summary.pass + summary.fail + summary.skip + summary.xfail
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
@@ -579,7 +612,9 @@ function validateTest(test, result, context) {
         if (!fs.existsSync(goldenPath)) {
             failures.push(`golden file does not exist: ${goldenPath}`)
         } else {
-            const expected = fs.readFileSync(goldenPath, 'utf8')
+            // A golden file is text with LF line ends, also in a checkout that has CRLF (git's
+            // core.autocrlf); what the program printed is compared as it is.
+            const expected = fs.readFileSync(goldenPath, 'utf8').replace(/\r\n/g, '\n')
             const expectedText = applyNormalizers(expected, test.normalizers)
             const cmp = snapshotCompare(actualText, expectedText, test.snapshot_compare || 'text_exact')
             if (!cmp.ok) failures.push(cmp.message)
@@ -857,6 +892,7 @@ function main() {
                     printDetailLines([`note: ${note}`])
                 }
                 printDetailLines(result.failures)
+                if (result.status === 'fail') printFailedOutput(result)
             }
             writeLogFiles(plan, test, result, result.status, logDir)
         }

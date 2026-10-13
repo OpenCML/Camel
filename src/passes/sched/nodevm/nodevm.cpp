@@ -18,13 +18,13 @@
  */
 
 #include "nodevm.h"
-#include "camel/core/debug_breakpoint.h"
 #include "camel/core/global_config.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 
@@ -432,6 +432,9 @@ void NodeVMSchedPass::requireRecursionRoom(const camel::runtime::GCGraph *caller
 }
 
 slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame) {
+    // Tells a debugger, when one is attached, that an activation starts and ends here
+    // (camel/execute/observer.h). One load of a pointer otherwise.
+    camel::execute::ActivationScope observedActivation;
     currRecursionDepth_++;
     slot_t result = NullSlot;
     ASSERT(
@@ -517,11 +520,12 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 tillNode = joinNode;
             }
 
-            // Node-level debugger hook (camel-db): unlike Hit(), this stays live in release
-            // builds and costs one atomic load when no handler is installed. It fires after
-            // branch-skip resolution and before the node executes, so breakpoints/stepping stop
-            // at the node that is about to run.
-            camel::DebugBreakpoint::HitGirNode(currRuntimeGraph, static_cast<uint64_t>(nodeRef));
+            // Debugger hook: live in release builds, one load of a pointer when no observer
+            // is installed. It fires after branch-skip resolution and before the node
+            // executes, so breakpoints and steps stop at the node that is about to run.
+            if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+                observer->beforeNode(currRuntimeGraph, currFrame, nodeRef);
+            }
 
             EXEC_WHEN_DEBUG({
                 CAMEL_LOG_DEBUG_S(
@@ -701,6 +705,9 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                         currRuntimeGraph->name(),
                         nodeRef));
                     // Reuse the current C++ stack frame by rebinding graph/frame state.
+                    if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+                        observer->tailCall();
+                    }
                     Frame *lastFrame = currFrame;
                     tillNode         = kInvalidNodeRef;
                     skipNode         = kInvalidNodeRef;
@@ -827,6 +834,12 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
         return result;
     } catch (const RuntimeFault &fault) {
+        // A debugger stops here, while every frame of the stack is still alive.
+        if (auto *observer = camel::execute::executionObserver()) [[unlikely]] {
+            observer->faultRaised(
+                fault,
+                faultIsolationDepth() != 0 && isIsolatableFault(fault.diag()));
+        }
         currRecursionDepth_--;
         releaseTailFrames(tailLow, tailHigh);
         if (rootFrame) {

@@ -99,7 +99,7 @@ inline void handle_assert_failure(
     disable_windows_abort_dialogs();
 
     std::cerr << "\n\033[1;31mStack Trace:\033[0m\n";
-    auto trace                  = std::stacktrace::current();
+    auto trace                  = std::stacktrace::current(); // std-includes: ignore
     constexpr size_t skip_front = 1;
 
     const size_t frame_count = trace.size();

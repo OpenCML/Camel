@@ -49,16 +49,16 @@
 #include <string>
 #include <thread>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace debugger {
 
-struct RestartRequestedException : std::exception {
-    const char *what() const noexcept override { return "restart requested"; }
-};
-struct TerminateRequestedException : std::exception {
-    const char *what() const noexcept override { return "terminate requested"; }
-};
+/// Thrown out of a pause to end the run. Deliberately not std::exception (like
+/// camel::core::ProcessExit): the pass driver turns a std::exception into a diagnostic of the
+/// pass and a failed run, and a run that was asked to stop has not failed.
+struct RestartRequestedException {};
+struct TerminateRequestedException {};
 
 class DebuggerServer {
   public:
@@ -105,24 +105,22 @@ class DebuggerServer {
     bool isMemoryScanRunning() const { return memoryScanRunning_; }
 
     void pauseAndWaitForContinue(const void *ptr, size_t size, const char *space); /// Worker-only.
-    void pauseAndWaitForGirBreakpoint(
-        const std::string &nodeId, const std::string &graphId, uint64_t origin,
-        uint64_t ref);                                      /// Worker-only.
     void pauseAndWaitForPipelineStage(const char *stageId); /// Worker-only.
     bool isPaused() const { return paused_.load(); }
     void requestContinue();  /// Worker-only.
     void requestRestart();   /// Worker-only.
     void requestTerminate(); /// Worker-only.
 
-    /// Arm single-step mode: the next GIR node to execute pauses. An empty graphId arms
-    /// "step in" (any graph); a non-empty graphId (the graph paused in) arms "step over",
-    /// stopping only at the next node of the same graph. Worker-only.
-    void requestGirStep(std::string graphId);
-    /// True while a step request is armed but not yet consumed (step target not reached).
-    bool isGirStepPending() const { return girStepRequested_.load(std::memory_order_acquire); }
-    /// Called by the GIR node hook before each node: returns true (consuming the request) when
-    /// a step was armed and its graph constraint matches the node's graph.
-    bool consumeGirStepRequest(const std::string &currentGraphId);
+    /// The program was stopped by the debug core (`pauseJson` describes where, in the shape
+    /// GET /api/step-paused returns), or resumed. Worker-only.
+    void notePaused(const std::string &pauseJson);
+    void noteResumed();
+
+    /// Commands of /api/debug that the worker's main loop performs (load, start). Returns the
+    /// response body, or an empty string for a command that is not one of them.
+    using WorkerDebugHandlerFn =
+        std::function<std::string(const std::string &command, const std::string &body)>;
+    void setWorkerDebugHandler(WorkerDebugHandlerFn fn);
 
     void enableAllocStep(bool enable) { allocStepEnabled_ = enable; }
     bool allocStepEnabled() const { return allocStepEnabled_; }
@@ -204,9 +202,7 @@ class DebuggerServer {
     std::unordered_set<std::string> girBreakpointStableIds_;
     std::unordered_set<uint64_t> girBreakpointOrigins_;
     mutable std::mutex girBreakpointNodeIdsMutex_;
-    std::atomic<bool> girStepRequested_{false};
-    std::mutex girStepMutex_;
-    std::string girStepGraphId_;
+    WorkerDebugHandlerFn workerDebugHandler_;
     std::vector<std::string> enabledBreakpointTypes_;
     mutable std::mutex enabledBreakpointTypesMutex_;
     std::string lastRunBody_;

@@ -1,0 +1,4 @@
+func main(): int sync {
+    println(i32(5000000000))
+    return 0
+}

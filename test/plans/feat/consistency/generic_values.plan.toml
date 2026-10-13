@@ -151,3 +151,22 @@ backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
 expect_output_contains = ["name=SemanticDiag::GenericArgumentsMismatch", "the type variable(s) T cannot be determined from the arguments"]
+
+[[tests]]
+name = "generic_values.overloads_to_operators"
+desc = "A name with several ordinary functions handed to a built-in higher-order operator: the operator is asked about each, and the one it accepts is taken (`map<abs>` over ints and over floats, `reduce<max, 0>`, `filter<is_even>` with two user overloads)."
+kind = "behavior"
+case = "../../../cases/consistency/generic_values/overloads_to_operators.cml"
+expect_stdout_starts_with = "[1, 2, 3] [1.5, 2.5]\n9 [2, 4] [bb]\n"
+
+[[tests]]
+name = "generic_values.err_no_overload_fits"
+desc = "None of the functions of the name is one the operator accepts: the diagnostic lists them."
+kind = "negative"
+case = "../../../cases/consistency/generic_values/err_no_overload_fits.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
+expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "2 functions of that name [(x: int) => int; (x: float) => float]"]

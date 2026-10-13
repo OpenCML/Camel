@@ -37,6 +37,7 @@
 
 #include <cstddef>
 #include <iosfwd>
+#include <ostream>
 #include <string>
 #include <string_view>
 

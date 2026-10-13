@@ -1,3 +1,5 @@
+
+#include <ostream>
 /**
  * Copyright (c) 2024 the OpenCML Organization
  * Camel is licensed under the MIT license.

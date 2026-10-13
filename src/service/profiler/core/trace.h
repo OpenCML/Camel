@@ -21,6 +21,7 @@
 
 #include "event.h"
 #include "nlohmann/json.hpp"
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>

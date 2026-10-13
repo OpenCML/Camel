@@ -679,7 +679,15 @@ Identifiers starting and ending with double underscores are reserved for interna
 Avoid using names like '__example__'; choose different identifiers.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/surface/reserved_function_name.cml`, run as `camel -E short test/cases/compile/surface/reserved_function_name.cml`)
+
+```camel
+func __add__(a: int, b: int): int { return 99 }
+func main(): int sync {
+    println(1 + 2)
+    return 0
+}
+```
 
 ### TupleUnpackingCountMismatch
 

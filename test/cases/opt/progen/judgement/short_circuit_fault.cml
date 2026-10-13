@@ -1,0 +1,18 @@
+/**
+ * progen judgement J4. The language reference (6.7.2) says `&&` and `||` short-circuit: the
+ * right side is evaluated only when it is needed. They are compiled as ordinary operator
+ * nodes, whose operands are both inputs, so the right side is evaluated whatever the left one
+ * is. With pure operands the difference cannot be seen, except by a fault: here the left side
+ * is true and the right side indexes past the array.
+ * Without passes, every scheduler: IndexOutOfRange at the index (exit 1). By the language
+ * reference: `true`.
+ * Reduced by test/tools/progen from seed 8190 (generator version 3, all features).
+ */
+module short_circuit_fault
+
+func f(xs: int[], i: int, c: bool): bool { return c || (xs[i] < 3) }
+
+func main(): int sync {
+    println(f([1], 2, true))
+    return 0
+}

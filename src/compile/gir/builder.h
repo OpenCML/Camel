@@ -472,6 +472,11 @@ class Builder {
     node_handle_t compoundAssignmentByRebinding(
         const std::string &group, const GCT::node_ptr_t &gct,
         const std::vector<Argument> &operands);
+    /// An error at `call` when the conversion `group` (`int`, `i32`, `float`, ...) is given
+    /// a literal that does not fit the type (LiteralOutOfRange, LiteralStaticCastFailed).
+    void rejectLiteralConversion(
+        const std::string &group, FunctionType *funcType,
+        const std::vector<Argument> &operands, const GCT::node_ptr_t &call);
     /// An error at `origin` when `node` still carries `with` arguments no partial
     /// application could be made of (PartialApplicationRefused): the binding is never
     /// dropped without a word.

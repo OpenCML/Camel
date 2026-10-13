@@ -19,6 +19,7 @@
 
 #include "mir_optimize.h"
 
+#include <cstddef>
 #include <unordered_map>
 #include <unordered_set>
 

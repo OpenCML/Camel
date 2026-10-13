@@ -256,7 +256,11 @@ export class LspClient {
     /** A scratch folder of this client, removed when the server is shut down. */
     dir() {
         if (!this.scratch) {
-            this.scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-ls-test-'))
+            // The real path: on Windows the temporary folder may be given in its short form
+            // (`RUNNER~1`), which a file URL made here spells `%7E` and one made by the server
+            // spells `~`; the tests compare the URIs of files as text.
+            const tmp = fs.realpathSync.native(os.tmpdir())
+            this.scratch = fs.mkdtempSync(path.join(tmp, 'camel-ls-test-'))
         }
         return this.scratch
     }

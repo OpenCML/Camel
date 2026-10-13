@@ -1,0 +1,17 @@
+# Text is stored and checked out with LF on every platform. The tests compare the bytes of
+# sources, golden files and fixtures (the AST snapshot hashes token positions, the grammar check
+# and the LSP fixtures match text with `\n`), and a checkout converted to CRLF on Windows
+# (core.autocrlf) changes them.
+* text=auto eol=lf
+
+# Windows command scripts are the one exception.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never text.
+*.npy binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.onnx binary
+*.pdf binary

@@ -7,6 +7,8 @@ Camel's editor support has two parts:
 - **`camel-ls`**, a language server speaking the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) over standard input and output. It is built with the rest of the repository and works with any editor that has an LSP client.
 - **The VS Code extension** in [`editors/vscode`](../editors/vscode): a TextMate grammar and a language configuration for `.cml` files, a thin client that starts `camel-ls`, and two commands that have no counterpart in the protocol (show the graph of a function, run the file through a pass sequence).
 
+Debugging is a third part with a guide of its own: [Debugging Camel Programs](debugging.en.md). The extension contributes the debugger type `camel`, which starts `camel-db --dap`.
+
 ---
 
 ## 1. Building and installing
@@ -58,6 +60,7 @@ The extension looks for `camel-ls` in this order: the setting `camel.server.path
 |---------|---------|---------|
 | `camel.server.path` | `""` | Path of `camel-ls`. |
 | `camel.path` | `""` | Path of `camel`. |
+| `camel.debugger.path` | `""` | Path of `camel-db`, started as `camel-db --dap` for a debug session. |
 | `camel.graph.passes` | `[]` | Passes applied before the graph is printed, for example `["std::inline"]`. |
 | `camel.run.passes` | `["std::inline", "std::fvm"]` | Pass sequence proposed the first time a file is run. |
 | `camel.trace.server` | `off` | Logs the protocol messages (`messages` or `verbose`). |

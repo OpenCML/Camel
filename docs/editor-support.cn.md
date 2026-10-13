@@ -7,6 +7,8 @@ Camel 的编辑器支持由两部分组成：
 - **`camel-ls`**：语言服务器，通过标准输入输出使用[语言服务器协议（LSP）](https://microsoft.github.io/language-server-protocol/)。它随仓库的其余部分一起构建，任何带 LSP 客户端的编辑器都能使用。
 - **VS Code 扩展**，位于 [`editors/vscode`](../editors/vscode)：`.cml` 文件的 TextMate 语法与语言配置、一个启动 `camel-ls` 的薄客户端，以及协议中没有对应物的两条命令（显示函数的图、让文件经过一个遍序列运行）。
 
+调试是第三部分，另有专文：[调试 Camel 程序](debugging.cn.md)。扩展贡献了调试器类型 `camel`，它启动 `camel-db --dap`。
+
 ---
 
 ## 1. 构建与安装

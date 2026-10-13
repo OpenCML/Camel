@@ -72,6 +72,10 @@ Each switch is a feature (`progen.py features`); all are on by default and they 
 | `wait` | `wait` before assignments and calls that write (inside sync blocks, where it must not change anything) |
 | `env` | one to three values read with `get_env`, which no pass can know |
 | `macro` | pure functions declared `macro` (ordinary functions without `std::macro`, evaluated ahead of time with it) |
+| `comprehension` | `[e for x in xs if c]` with a pure element expression and condition (the condition is left out in two of five), over arrays of every element type, nested in any expression |
+| `nullable` | `T?`: functions that return `T?` (`if c then e else null`) and take one (`x ?? d`); `let o: T? = ...`; a plain value, `null` or a `T?` written where a `T?` is expected (argument, typed `let`, `return`); `a ?? d` and `a ?? b ?? d`, with a nullable right side too; a nullable value printed by itself |
+| `partial` | functions with one or two context parameters (`with <k: T>`), called in place (`f<w>(x)`), bound (`let g = f<w>`), and handed to `map` / `filter` / user functions as `f<w>` |
+| `ifnoelse` | `if c then e` as a statement of a sync block with one expression as its arm: a `println`, a call with effects, or a pure value of any type that is dropped |
 
 The spelling of a program varies without touching the random stream (a seed still names the
 same program): `+`, `-` and `*` are written with both spaces, with none, or with one (`a - b`,
@@ -98,7 +102,9 @@ checks it on every generated and every reduced program:
    a call of a function that prints or writes, `reduce` with such an element function) is the
    expression of a statement of a `sync` block, and all enclosing blocks up to the function or
    lambda body are `sync` blocks (principles 2.2). `if` and `match` pass the position on only to
-   arms written as `sync { ... }`. Nowhere else can an effect appear, so "an effect outside a
+   arms written as `sync { ... }`, and a statement `if c then e` without `else` to the one
+   expression `e` that is its arm (2.10: the arm is evaluated as any arm is; only its value is
+   dropped). Nowhere else can an effect appear, so "an effect outside a
    sync block whose result is not used does not run" (2.1, misreadings 1 and 3) never decides
    an output. A function that prints has a sync body of its own (2.4).
 2. **One effect per statement.** An effectful call is a whole statement (`let r = f(...)`,
@@ -190,7 +196,10 @@ the rewrite sequence it was found with and under `std::inline`, `std::opt`,
   *not* run.
 - Module-level variables, `with` parameters, imports of user modules, namespaces, decorators.
 - Faults and their diagnostics (division by zero, index out of range, recursion limits, macro
-  evaluation failure by depth), `??`, `!!`, `?->`, `throw`.
+  evaluation failure by depth), `!!`, `?->`, `throw`, `T!`, `match` on a `T?`, arrays of `T?`.
+- Generic functions (as callees or as values), partial application of a function value that
+  still has context parameters (`g<w>` with `g` a parameter), `var` context parameters, `==` on
+  arrays, tuples and structs, a `match` case with several patterns.
 - Deep programs: recursion is at most 9 deep and arrays have at most 64 elements. At the
   default size a program also has at most 34 graphs that own a constant object: that was the
   most the compiler could build (finding F24, fixed since), and the filter is kept at size 1
@@ -202,12 +211,12 @@ the rewrite sequence it was found with and under `std::inline`, `std::opt`,
   checker has no such overload). Ordering comparisons of strings, `+=` on a string, `%=` and
   `string(bool)` were left out for findings F27, F28, F29 and F26 and are generated since
   those were fixed (`generate.VERSION` 2); an ordering comparison is no longer parenthesized
-  for F30. A statement-form `if` without `else` is always
-  written with a block arm that ends in `null` (it used to be `return null`, which the warning
-  ExitInUnusedBranch now reports; since the ruling of 2026-10-12 the arm may be of any type,
-  and the generator could write other forms).
+  for F30. A statement-form `if` without `else` written with a block arm ends that arm in
+  `null` (it used to be `return null`, which the warning ExitInUnusedBranch now reports);
+  since the ruling of 2026-10-12 the arm may be one expression of any type, which the feature
+  `ifnoelse` writes (`generate.VERSION` 3, with `comprehension`, `nullable` and `partial`).
 - Integers near the 64-bit range (programs are discarded when a value leaves +-2^62), bit
-  operators, `^`, `i32` / `f32`, `as` / `is`, list comprehensions, slices with a step.
+  operators, `^`, `i32` / `f32`, `as` / `is`, slices with a step.
 
 ## Limits of the reference
 

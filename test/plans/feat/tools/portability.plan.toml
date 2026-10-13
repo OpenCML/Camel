@@ -1,0 +1,23 @@
+id = "tools.portability"
+order = 915
+tier = "feat"
+tags = ["feat", "tools", "portability"]
+desc = "Properties of the sources that one platform's toolchain does not check for the others."
+
+# scripts/check-std-includes.mjs reads every .h / .cpp of src/, include/, modules/ and tools/:
+# a file that names something of the standard library gets the header that declares it from its
+# own include lines or from the project headers it includes, not from what one standard library
+# includes inside another header (libstdc++, libc++ and the MSVC library differ there).
+# `node scripts/check-std-includes.mjs --fix` adds the missing lines.
+
+[[tests]]
+name = "portability.std_includes"
+desc = "No source file relies on a standard header that only another standard header brings in."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/check-std-includes.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["every standard header used is reached through its includes"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
