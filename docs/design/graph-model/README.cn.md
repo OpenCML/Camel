@@ -1,6 +1,6 @@
 # Camel 计算图的对外数据模型（设计稿）
 
-状态：**设计稿，待语言作者过目。本稿不含任何编译器源码改动。**
+状态：**设计稿，待语言作者过目。** 第 7 节的第 1 步与第 2 步的一部分已经在分支 `lane/graph-storage` 上实施，进度与实测数字见第 7 节的"实施状态"；其余各节描述的仍是设计。
 依据：`docs/design-principles.cn.md`（第 1 节对应表、2.1–2.10、第 5 节、第 6 节）；[模块导出值与公共 root](../module-root/README.cn.md)；[循环](../loops/README.cn.md)。
 基线提交：`e4652d81`（Camel v0.2.9）。文中的图与数字都可以用附录 A 的命令复现。
 
@@ -231,7 +231,7 @@
 | 节点种类 `BIND` | 无创建者（1.2） |
 | 节点种类 `DREF` 出现在运行期枚举里 | 只在建图期存在，编码时遇到即报错（`graph_encode.cpp:440-446`） |
 | `src/compile/gir/validate.cpp` 全文 | 无调用点（1.7） |
-| `src/compile/gir/debug_json.cpp`（304 行） | `getGirJsonFromCompileGraph` 等无调用点【读码，检索】 |
+| ~~`src/compile/gir/debug_json.cpp`（304 行）~~ | 更正（2026-10-14）：它**有**调用点，调试器的 `tools/debugger/src/compile.cpp` 链接 `getGirJsonFromCompileGraph`；不是包袱，保留 |
 | `DraftGraphBuilder::looped_` | 读写函数都没有调用者 |
 | 四个锚点 `entry`/`exit`/`output`/`return` 加 `GCReturnKind` 的四个值 | 前端总是把 `output` 与 `exit` 设成同一个节点，`returnKind` 只用 `None`/`Self`（`builder.cpp:73-91`） |
 | `GCCallBody` | 只有保留字段，`callKind` 只有一个值 |
@@ -1501,6 +1501,30 @@ export func simplify(p: Program): Program! {
 | 11 | **Camel 一侧的 `graph` 模块**：值类型、查询算子、`apply`、规则驱动 | 约 1,200 行 | 中：接口一旦发布要稳定 | 用 Camel 写的遍可以放进流水线 |
 | 12 | **命名空间补全**（第 8 节） | 每项 50–200 行 | 低 | 见第 8 节 |
 
+**实施状态（2026-10-14，分支 `lane/graph-storage`）。** 第 1 步与第 2 步已动工；数字是在同一语料、同一容器里用附录 A 的命令量的【实测】。
+
+| 步 | 状态 | 做了什么 | 没做的与原因 |
+|---|---|---|---|
+| 1 | **已完成（一项留待第 3 步）** | 删除 `src/compile/gir/validate.cpp` 与头文件、`DraftGraphBuilder::looped_`、没人用的 `gir::NodeType`、`addBindNode`；`GCNodeKind` 写明数值，`Bind`、`Dref` 标为保留；三个调度器、`std::cpp`、DOT 转储、调试器索引里为这两种节点留的分支删掉 | **`debug_json.cpp` 没有删**：本稿 1.11 与附录 B 的 D5 说它没有调用点，这是错的——调试器的 `/gir` 查询经 `tools/debugger/src/compile.cpp` 链接它（删掉后 `camel-db` 链接失败）。**四个锚点收成 `exit`/`result` 没有做**：`entry`/`output`/`return`/`returnKind` 在 23 个文件里有 165 处使用（内联、自动微分、四个后端），它改的正是第 3 步要重排的图头，放到第 3 步一起做 |
+| 2 | **部分完成** | **符号表**（`include/camel/core/symbol.h`）：`ACCS` 的字段名改存 `SymId`。**算子表**（`include/camel/core/operator_table.h`）：`OperId`；`OPER` 节点负载定长、不再内嵌 URI；原来三张按 URI 查的注册表（性质、类型规则、类型折叠）并入表项；新增 `mayFault`（缺省为真）与 `callsGraphs` 两个声明。**类型表**（`include/camel/core/type/intern.h`）：`TypeId`；帧布局与静态区布局、结构体类型、算子类型规则给出的签名做了驻留。`CAMEL_TYPE_STATS=1` 按种类印出类型对象的个数与字节数 | 见下 |
+
+第 2 步的验收数字（永久空间，扣除空程序的基线后）：
+
+| | 迁移前 | 现在 | 设计的目标 |
+|---|---|---|---|
+| 不加遍：每图字节数 / 分配次数 | 1,364 / 11.0 | **1,192 / 9.7** | 200 以内 |
+| `std::inline` 之后 | 1,811 / 12.2 | **1,496 / 10.3** | |
+| `std::macro std::opt::simplify` 之后：每图 / 每节点 | 4,493 / 185 | **2,424 / 100** | 不随提交增长 |
+| 图空间：每节点字节数（不加遍 / 化简后） | 97.0 / 136.8 | 92.4 / 127.9 | （第 3 步的指标） |
+
+**目标没有达到。** 按 10.1 的退路只驻留了"共享之后不改变程序含义"的类型，剩下的三块各有一个不属于存储层的前提：
+
+1. **程序能写出来的元组与数组类型没有驻留，因为今天的 `as` 规则依赖对象身份。** `TupleType`/`ArrayType::castSafetyFrom` 只在两个类型是同一个对象时才算安全，所以 `let ys = xs as int[]`（`xs` 就是 `int[]`）今天是 `DynamicCastForbidden: Dynamic cast from 'int[]' to 'int[]' is not allowed`【实测】；而 `type A = int[]`、形参 `p: A`、`p as A` 可以通过【实测】，因为这时两边恰好是同一个类型对象（`src/core/type/composite/array.cpp` 的 `castSafetyFrom`）。驻留会让结构相同的类型成为同一个对象，这条诊断就消失了。这是语言问题（见第 9 节新增的 Q11），裁定之前不动。`array_basic.cml` 的 122 张图建了 347 个数组类型对象【实测，`CAMEL_TYPE_STATS=1`；其中有多少是重复的没有量】。
+2. **每张图自己的函数类型没有驻留。** 前端就地补全它（`setExitType` 在 `src/compile/gir/builder.cpp` 等 5 个文件里 11 处，`addClosureRef` 2 处），形参名与捕获名挂在它上面（读取处：`argNameAt` 等 31 处、`closureRefAt` 等 10 处）。要按 3.8 把名字移到端口表、把"先有图再驻留签名"做出来，改的是建图器与 GCT 层，与正在进行的 GCT 重构冲突，留给它之后。这一块最大：`array_basic.cml` 扣除基线后的 116 KB 里，函数类型及其元数据占 66 KB。
+3. **被改写的图每次重新编码仍然得到一个新的帧布局**（内容确实不同）。只有第 3 步把帧布局做成图块里的 `TypeId` 数组、随图释放，这一项才消失；没改的图现在已经不再新增。
+
+第 2 步里与设计不同的地方：符号表与算子表的存储在表自己的、从不释放的块里，没有放进永久空间（算子在模块装载时就登记，那时命令行还没有配置空间上限；也使"永久空间 = 类型"这个度量保持干净）。算子的实现（函数指针）没有进算子表，它按 `Context` 由执行器管理器解析；NodeVM 往冻结图里回写函数指针的做法（附录 B 的 D6）因此原样保留，等第 3 步的 `ExecPlan`。`mayFault` 只为实现里完全没有故障路径的内建算子声明了"不故障"（带类型后缀的加、减、大小比较，`and`/`or`/`not`），其余一律是缺省的"可能故障"；没有任何遍读它。
+
 **依赖与并行。**
 
 ```
@@ -1774,6 +1798,22 @@ let mul_one = graph::rule(lhs, rhs)
 
 共 15 行（`var`、函数值、`if`/`match`、`&&`/`||`、`&`/`|`、收窄、装入、高阶算子、部分应用、顶层值的捕获、三种导入、命名空间）。它们都是已经裁定或现状如此的事实，补进去之后对应表就是"每种语言元素在图上是什么"的完整清单。
 
+### Q11 `v as T` 的目标类型与 `v` 的类型相同时是否合法（实施第 2 步时发现）
+
+```camel
+let xs = [1, 2]
+let ys = xs as int[]        // 今天：DynamicCastForbidden: Dynamic cast from 'int[]' to 'int[]' is not allowed
+let t  = (1, 2)
+let u  = t as (int, int)    // 今天：同上，'(int, int)' to '(int, int)'
+```
+
+【实测 2026-10-13】。而 `type A = int[]` 之后对形参 `p: A` 写 `p as A` 可以通过【实测】。原因在实现：数组与元组类型的转换规则只认"同一个类型对象"，而每写一次 `int[]` 就是一个新对象。这不是哪条裁定规定的行为，但它是今天可观察的行为。
+
+它挡住了第 2 步里最直接的一块：把程序能写出来的数组、元组类型也驻留。驻留之后上面两行会通过编译（转换什么也不做）。
+
+候选：(a) 相同类型之间的 `as` 合法，是空操作；(b) 保持是错误，但改成按结构判断并给出"转换到自身"的专门诊断；(c) 维持现状。
+**建议：(a)。** 选 (a) 或 (b) 之后数组与元组类型即可驻留；选 (c) 则这两类类型只能继续每次新建。
+
 ---
 
 ## 10. 最不放心的地方
@@ -1847,7 +1887,7 @@ bash docs/design/graph-model/tools/run_examples.sh docs/design/graph-model/examp
 | D2 | `import sqrt from math` 之后 `sqrt(9.0)` 是 `UnresolvedReference`：实现把单个名字当作模块的别名，而 `docs/language/05_modules.md` 5.2 把这种写法列为"引入一个名字" | `camel docs/design/graph-model/examples/defects/import_one_name.cml` | 实现与文档一致（8.2 N4） |
 | D3 | 写在函数体里的 `using namespace` 对整个模块生效 | `camel docs/design/graph-model/examples/ns/p24_using_scope.cml` 打印 `2 11`（`b` 里没有写 `using` 也能用 `inc`） | 按 8.2 N2：`b` 里的 `inc` 是 `UnresolvedReference` |
 | D4 | 带类型标注的结构体字面量里有算出来的字段时是 `LiteralStaticCastFailed`：`let p: P = { x: a, y: b }`；去掉标注可以 | `camel docs/design/graph-model/examples/defects/struct_annotated.cml` | 通过，打印 `2` |
-| D5 | `src/compile/gir/validate.cpp` 与 `src/compile/gir/debug_json.cpp` 没有调用点；`GCNodeKind::Bind` 没有创建者；`DraftGraphBuilder::looped_` 没有读写者 | 检索 `assertGraphTreeSealingPreconditions`、`getGirJsonFromCompileGraph`、`addBindNode`、`setLooped` | 删除（第 7 节第 1 步） |
+| D5 | `src/compile/gir/validate.cpp` 没有调用点（`debug_json.cpp` 原列在此处，有误：调试器在用，见第 7 节的实施状态）；`GCNodeKind::Bind` 没有创建者；`DraftGraphBuilder::looped_` 没有读写者 | 检索 `assertGraphTreeSealingPreconditions`、`getGirJsonFromCompileGraph`、`addBindNode`、`setLooped` | 删除（第 7 节第 1 步） |
 | D6 | NodeVM 对冻结的图做 `const_cast` 并写入（把解析到的算子函数指针写回节点负载）。冻结图按约定是只读的（`docs/technical/17_graph_rewrite_api_contracts.md` 2.2） | 【读码 `src/passes/sched/nodevm/nodevm.cpp:754-766`】；未构造出可观察的错误 | 解析结果放在后端自己的结构里（4.1 的 `ExecPlan`） |
 
 D4 与图模型无关，是做 `FILL` 的例子时碰到的。
