@@ -36,6 +36,7 @@
 #include "modes.h"
 
 #include "../format/fmt.h"
+#include "camel/init.h"
 #include "camel/parse/parse.h"
 
 #include <fstream>
@@ -108,6 +109,8 @@ int usage() {
 } // namespace
 
 int main(int argc, char **argv) {
+    // Where libcamel is looked for (on Windows it is loaded on first use, from ../libs).
+    camel::ScopedRuntime camelRuntime;
     std::vector<std::string> args(argv + 1, argv + argc);
     if (args.empty()) {
         return usage();
