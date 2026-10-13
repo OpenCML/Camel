@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -232,13 +233,29 @@ class DebugMap {
 };
 
 /// Semantic side table keyed by OriginId, mainly for tree-like stages such as AST/GCT.
+///
+/// Origin ids are handed out in order by the OriginTable, and a stage registers a bundle for
+/// most of the origins it creates, so the table is an array indexed by origin, not a hash
+/// table: every AST and GCT node is looked up here while the next stage is built.
+///  - `slots_[origin]` is 1 + the index of the origin's bundle in `bundles_`, 0 for none.
+///  - `bundles_` is a deque: a bundle keeps its address while others are registered, so a
+///    pointer returned by bundle() stays valid for the life of the table.
+///  - An id beyond kDenseLimit (none is created today) is kept in `sparse_`, so that an id
+///    that did not come from the table cannot make the array grow without bound.
 class OriginSemanticMap {
   public:
+    /// Stores `bundle` for `origin`, replacing one registered before. The invalid origin is
+    /// ignored.
     void registerBundle(origin_id_t origin, SemanticBundle bundle);
+    /// The bundle of `origin`, or null.
     const SemanticBundle *bundle(origin_id_t origin) const;
 
   private:
-    std::unordered_map<origin_id_t, SemanticBundle> bundles_;
+    static constexpr origin_id_t kDenseLimit = origin_id_t{1} << 28;
+
+    std::vector<uint32_t> slots_;
+    std::deque<SemanticBundle> bundles_;
+    std::unordered_map<origin_id_t, SemanticBundle> sparse_;
 };
 
 /// A side table keyed by stable execution entity IDs. It mainly serves GIR graphs/nodes and the
