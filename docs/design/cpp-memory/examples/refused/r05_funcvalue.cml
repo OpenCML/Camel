@@ -1,0 +1,8 @@
+/// Refused by std::cpp: a function value passed to a higher-order operator
+module r05_funcvalue
+
+func main(): int sync {
+    let total = range(0, 10)->map<(i: int): int => i * i>->reduce<(a: int, b: int): int => a + b, 0>
+    println(total)
+    return 0
+}

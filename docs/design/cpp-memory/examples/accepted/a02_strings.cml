@@ -1,0 +1,9 @@
+/// Strings are the only object type std::cpp translates: they come out as `String *`.
+/// (Every string here goes straight from one operator into the next; see defects/d08.)
+module a02_strings
+
+func main(): int sync {
+    println('hello, ' + 'camel' + ' #' + string(1))
+    println(len('hello' + string(12345)))
+    return 0
+}

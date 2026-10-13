@@ -1,0 +1,11 @@
+/// Refused by std::cpp: a computed top-level value
+module r12_top_level
+
+func twice(x: int): int { return x * 2 }
+
+let k = twice(21)
+
+func main(): int sync {
+    println(k)
+    return 0
+}

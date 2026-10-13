@@ -1,0 +1,15 @@
+/// Not a defect of std::cpp: an observation for section 3. `append` takes its array as a
+/// `var` parameter and changes it in place (`:struct/append_arr`), so this program is refused
+/// with ImmutablePassedToVarParam, while design principles 2.9 describe `append` as returning
+/// a new value.
+module o01_append_needs_var
+
+func build(i: int, n: int, acc: int[]): int[] {
+    return if i == n then acc else build(i + 1, n, acc->append<i>)
+}
+
+func main(): int sync {
+    let empty: int[] = []
+    println(len(build(0, 10, empty)))
+    return 0
+}

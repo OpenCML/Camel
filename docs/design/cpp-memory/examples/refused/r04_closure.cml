@@ -1,0 +1,9 @@
+/// Refused by std::cpp: a function that captures
+module r04_closure
+
+func main(): int sync {
+    let k = 10
+    let add = (x: int): int => x + k
+    println(add(1))
+    return 0
+}

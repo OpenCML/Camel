@@ -1,0 +1,7 @@
+/// Refused by std::cpp: main with parameters
+module r11_main_args
+
+func main(n: int): int sync {
+    println(n + 1)
+    return 0
+}
