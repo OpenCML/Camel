@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -164,6 +164,15 @@ class FunctionType : public CompositeType {
         const param_vec_t &&withTypes, const param_vec_t &&normTypes, Type *returnType,
         const ModifierSet &modifiers = Modifier::None);
 
+    /// The one function type with this signature and no parameter names: an interned, immutable
+    /// object (camel/core/type/intern.h). For signatures that are computed again and again and
+    /// never completed in place, such as the type an operator's type rule gives a call.
+    /// setExitType() and addClosureRef() must not be called on the result; a graph's own
+    /// function type is made with create() or a factory instead.
+    static FunctionType *interned(
+        const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
+        const ModifierSet &modifiers = Modifier::None);
+
     // Build from a factory.
     static FunctionType *fromFactory(FunctionTypeFactory &factory);
 
@@ -174,8 +183,11 @@ class FunctionType : public CompositeType {
         const TypeCode *normTypeCodes, const bool *normIsVar, Type *exitType, ImplMark implMark,
         ModifierSet modifiers, const FunctionMetaInfo *metaInfo);
 
-    /** Set the return type in place at compile time. */
-    void setExitType(Type *type) { exitType_ = type; }
+    /** Set the return type in place at compile time. Not for interned types. */
+    void setExitType(Type *type) {
+        ASSERT(!isInterned(), "An interned function type is immutable.");
+        exitType_ = type;
+    }
     /** Append a closure reference name in place at compile time. */
     void addClosureRef(const std::string &ref);
 

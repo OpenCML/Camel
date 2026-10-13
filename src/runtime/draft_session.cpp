@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -435,8 +435,7 @@ TupleType *draftStaticDataType(const GraphDraft &draft, const GCGraph *fallback)
             return known;
         }
     }
-    std::vector<camel::core::type::Type *> staticTypes(slotTypes.begin(), slotTypes.end());
-    return TupleType::create(std::move(staticTypes));
+    return TupleType::layout(slotTypes);
 }
 
 std::vector<GCGraph *> collectDraftStaticGraphRefs(

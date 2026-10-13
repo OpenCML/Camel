@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: May. 01, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -1288,7 +1288,7 @@ camel::core::type::TupleType *GraphDraft::runtimeDataType() const {
         }
         slotTypes.insert(slotTypes.end(), pendingRuntimeSlots_.begin(), pendingRuntimeSlots_.end());
         pendingRuntimeSlots_.clear();
-        runtimeDataType_ = camel::core::type::TupleType::create(std::move(slotTypes));
+        runtimeDataType_ = camel::core::type::TupleType::layout(slotTypes);
     }
     return runtimeDataType_;
 }
@@ -1349,7 +1349,7 @@ GCGraph *GraphDraft::encode(
     recordDraftNodeOrigins(debugRecord, *this);
     camel::core::type::TupleType *staticDataType = nullptr;
     if (!staticSlotTypes_.empty()) {
-        staticDataType = camel::core::type::TupleType::create(staticSlotTypes_);
+        staticDataType = camel::core::type::TupleType::layout(staticSlotTypes_);
     }
     const auto payloadShape = [&] {
         try {

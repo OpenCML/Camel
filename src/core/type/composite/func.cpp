@@ -13,14 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/type/composite/func.h"
 #include "camel/core/mm.h"
-#include "camel/core/type/storage.h"
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/type/intern.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
@@ -332,6 +333,30 @@ FunctionType *FunctionType::create(
     return create(withTypes, normTypes, returnType, modifiers);
 }
 
+FunctionType *FunctionType::interned(
+    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
+    const ModifierSet &modifiers) {
+    // The key is everything create() stores: the counts (which also separate the two
+    // parameter lists), the modifiers, the result type, then each parameter with its `var`
+    // mark. Types are compared by address (see intern.h).
+    std::vector<uintptr_t> key;
+    key.reserve(4 + 2 * (withTypes.size() + normTypes.size()));
+    key.push_back(withTypes.size());
+    key.push_back(normTypes.size());
+    key.push_back(static_cast<uintptr_t>(modifiers.mask));
+    key.push_back(reinterpret_cast<uintptr_t>(returnType));
+    for (const auto *params : {&withTypes, &normTypes}) {
+        for (const auto &[type, isVar] : *params) {
+            key.push_back(reinterpret_cast<uintptr_t>(type));
+            key.push_back(isVar ? 1 : 0);
+        }
+    }
+    Type *type = TypeTable::instance().intern(TypeTable::Shape::Function, key, [&]() -> Type * {
+        return create(withTypes, normTypes, returnType, modifiers);
+    });
+    return static_cast<FunctionType *>(type);
+}
+
 FunctionType *FunctionType::fromFactory(FunctionTypeFactory &factory) {
     const size_t withCount    = factory.withTypes_.size();
     const size_t normCount    = factory.normTypes_.size();
@@ -393,6 +418,7 @@ FunctionType *FunctionType::fromData(
 void FunctionMetaInfo::addClosureRef(const std::string &ref) { closureRefs_.push_back(ref); }
 
 void FunctionType::addClosureRef(const std::string &ref) {
+    ASSERT(!isInterned(), "An interned function type is immutable.");
     if (metaInfo_)
         metaInfo_->addClosureRef(ref);
 }

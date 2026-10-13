@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,7 +90,7 @@ using camel::runtime::GCOperBody;
 using camel::runtime::GraphDraft;
 using camel::runtime::validateRuntimeGraphPayload;
 
-TupleType *ensureRuntimeTupleType(TupleType *type) { return type ? type : TupleType::create(); }
+TupleType *ensureRuntimeTupleType(TupleType *type) { return type ? type : TupleType::layout({}); }
 
 bool canEncodeRuntimeStaticSlotType(Type *type) {
     if (type == nullptr || type->code() == TypeCode::Ref) {
@@ -937,7 +937,7 @@ class EncodeSession {
                     type = Type::Void();
                 }
             }
-            staticDataType = TupleType::create(types);
+            staticDataType = TupleType::layout(types);
             CAMEL_LOG_INFO_S(
                 "GIREncode",
                 "Static runtime tuple type built for graph '{}'.",

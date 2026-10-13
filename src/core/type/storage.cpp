@@ -24,6 +24,7 @@
 #include "camel/core/type/storage.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/type/intern.h"
 #include "camel/utils/assert.h"
 
 #include <array>
@@ -92,6 +93,10 @@ void reportTypeStorage(std::ostream &os) {
         os << ' ' << kKindNames[i] << '=' << counter.objects.load(std::memory_order_relaxed) << '/'
            << counter.bytes.load(std::memory_order_relaxed);
     }
+    // The type table: ids handed out (interned types and primitive singletons) and how many
+    // constructions it answered with an existing object instead of allocating.
+    const TypeTable &table = TypeTable::instance();
+    os << " interned=" << (table.size() - 1) << " intern_hits=" << table.hits();
     os << '\n';
 }
 

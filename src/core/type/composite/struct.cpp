@@ -13,14 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/mm.h"
-#include "camel/core/type/storage.h"
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/symbol.h"
+#include "camel/core/type/intern.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -85,21 +87,30 @@ StructType::StructType(
     }
 }
 
-StructType *StructType::create() {
-    StructTypeLayout layout = computeLayout(0, 0, 0);
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "StructType",
-        "Allocating StructType: (), size: {} bytes",
-        layout.totalSize));
-    void *mem = allocTypeStorage<StructType>(TypeStorageKind::Struct, layout.totalSize);
-    return new (mem) StructType(layout, nullptr, nullptr, nullptr, nullptr, nullptr);
-}
+StructType *StructType::create() { return fromFactoryData({}, {}); }
 
 StructType *StructType::fromFactory(StructTypeFactory &factory) {
     return fromFactoryData(factory.fields_, factory.refs_);
 }
 
 StructType *StructType::fromFactoryData(
+    const std::vector<std::pair<std::string, Type *>> &fields,
+    const std::vector<std::string> &refs) {
+    // One object per sequence of (field name, field type object); see intern.h. `refs` names
+    // the fields whose type is Ref, which the fields already determine.
+    std::vector<uintptr_t> key;
+    key.reserve(fields.size() * 2);
+    for (const auto &[name, type] : fields) {
+        key.push_back(camel::core::internSymbol(name));
+        key.push_back(reinterpret_cast<uintptr_t>(type));
+    }
+    Type *interned = TypeTable::instance().intern(TypeTable::Shape::Struct, key, [&]() -> Type * {
+        return allocate(fields, refs);
+    });
+    return static_cast<StructType *>(interned);
+}
+
+StructType *StructType::allocate(
     const std::vector<std::pair<std::string, Type *>> &fields,
     const std::vector<std::string> &refs) {
     size_t size     = fields.size();

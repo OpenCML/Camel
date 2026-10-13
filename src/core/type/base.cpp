@@ -13,18 +13,19 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/type/base.h"
 #include "camel/core/mm.h"
-#include "camel/core/type/storage.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/composite.h"
+#include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
@@ -475,87 +476,68 @@ Type *Type::create(TypeCode code) {
     return new (mem) Type(code);
 }
 
+namespace {
+
+/// The one object of a primitive type, registered with the type table so that it has a TypeId.
+Type *primitiveSingleton(TypeCode code) {
+    Type *type = Type::create(code);
+    TypeTable::instance().adopt(type);
+    return type;
+}
+
+} // namespace
+
 Type *Type::Int32() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Int32);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Int32);
     return type;
 }
 
 Type *Type::Int64() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Int64);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Int64);
     return type;
 }
 
 Type *Type::Int() { return Type::Int64(); }
 
 Type *Type::Float32() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Float32);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Float32);
     return type;
 }
 
 Type *Type::Float64() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Float64);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Float64);
     return type;
 }
 
 Type *Type::Float() { return Type::Float64(); }
 
 Type *Type::Bool() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Bool);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Bool);
     return type;
 }
 
 Type *Type::Byte() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Byte);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Byte);
     return type;
 }
 
 Type *Type::Void() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Void);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Void);
     return type;
 }
 
 Type *Type::String() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::String);
-    }
+    static Type *type = primitiveSingleton(TypeCode::String);
     return type;
 }
 
 Type *Type::Ref() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Ref);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Ref);
     return type;
 }
 
 Type *Type::Any() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Any);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Any);
     return type;
 }
 

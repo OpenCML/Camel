@@ -79,6 +79,23 @@ Two rules follow, and code on a query or probe path has to keep them:
   tuple type (`draftStaticDataType` in `src/runtime/draft_session.cpp`) instead of creating an
   equal one for the size computation and another for the encoding.
 
+Since 2026-10-13 (graph data model, migration step 2) the type table
+(`include/camel/core/type/intern.h`) removes the two largest sources at the constructor
+instead of at each caller:
+
+- Frame and static-area layouts are interned (`TupleType::layout`): the same slot type objects
+  give the same layout object, so re-encoding an unchanged graph, and graphs with equal
+  layouts, allocate nothing.
+- The signature an operator's type rule gives a call is interned (`FunctionType::interned`,
+  used by `DynamicFuncTypeResolver` and the tensor operator definitions): resolving the same
+  overload for the same argument types returns the same object.
+- Struct types are interned by field names and field type objects.
+
+Not interned: tuple and array types a program can name (their cast rule depends on object
+identity, see the header), a graph's own function type (completed in place by the front end,
+carries parameter names), unions and type variables. `CAMEL_TYPE_STATS=1` prints what a
+program allocated per kind of type and how many constructions the table answered.
+
 Composite types are otherwise not canonical: two equal array, tuple or function types are two
 objects, and type equality is structural (`equals`). That costs the 5 to 17 type objects per
 function counted above, which is proportional to the program and was left as it is.

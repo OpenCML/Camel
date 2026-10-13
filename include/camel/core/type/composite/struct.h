@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -156,8 +156,13 @@ class StructType : public CompositeType {
         const StructTypeLayout &layout, const Type *const *types, const TypeCode *typeCodes,
         const size_t *nameOffsets, const char *fieldNamesData, const size_t *refs);
 
-    // Helper: build from raw data (internal use).
+    // The struct type with these fields, interned (camel/core/type/intern.h): the same field
+    // names and field type objects, in the same order, always give the same StructType.
     static StructType *fromFactoryData(
+        const std::vector<std::pair<std::string, Type *>> &fields,
+        const std::vector<std::string> &refs);
+    // A new, unshared object; only fromFactoryData() calls it.
+    static StructType *allocate(
         const std::vector<std::pair<std::string, Type *>> &fields,
         const std::vector<std::string> &refs);
 

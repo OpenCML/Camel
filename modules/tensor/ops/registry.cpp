@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -134,7 +134,7 @@ class OpDefResolver final : public FuncTypeResolver {
         for (Type *t : norm) {
             normParams.emplace_back(t, false);
         }
-        return FunctionType::create(param_vec_t{}, std::move(normParams), *result, modifiers);
+        return FunctionType::interned(param_vec_t{}, normParams, *result, modifiers);
     }
 
     std::optional<std::string> explainRejection(

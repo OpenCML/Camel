@@ -66,7 +66,8 @@ template <typename T> void *allocTypeStorage(TypeStorageKind kind, size_t size =
 }
 
 /// One line (`[camel] types: ...`) with, per kind, the number of objects allocated so far and
-/// their bytes. Printed at exit when CAMEL_TYPE_STATS is set.
+/// their bytes, then the size of the type table and the constructions it answered without
+/// allocating (`interned=`, `intern_hits=`). Printed at exit when CAMEL_TYPE_STATS is set.
 void reportTypeStorage(std::ostream &os);
 
 } // namespace camel::core::type
