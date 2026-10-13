@@ -34,7 +34,7 @@ const SCAN_DIRS = ['src', 'include', 'modules', 'tools']
 // Where `#include "a/b.h"` is looked up after the directory of the including file.
 const INCLUDE_ROOTS = ['include', 'src', '.', 'third_party', 'modules', 'tools', 'tools/debugger']
 // Sources that are not the project's own.
-const SKIP = [/^third_party\//, /^modules\/python\/sdks\//, /\/third_party\//, /(^|\/)ui\//]
+const SKIP = [/^third_party\//, /^modules\/python\/sdks\//, /\/third_party\//, /(^|\/)ui\//, /^(?:src|include\/camel)\/parse\/antlr\//]
 const SOURCE = /\.(h|hpp|cpp|cc)$/
 
 const PLATFORM_MACRO =
