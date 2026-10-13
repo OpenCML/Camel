@@ -18,6 +18,8 @@
  */
 
 #include "trace.h"
+
+#include <cstdint>
 #ifndef NDEBUG
 
 #include <chrono>

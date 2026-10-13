@@ -50,6 +50,7 @@ namespace mm = camel::core::mm;
 #include <format>
 #include <httplib.h>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <sstream>
 #include <streambuf>

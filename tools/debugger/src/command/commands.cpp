@@ -43,6 +43,7 @@ namespace mm = camel::core::mm;
 #include <memory>
 #include <sstream>
 #include <thread>
+#include <unordered_set>
 
 namespace fs = std::filesystem;
 

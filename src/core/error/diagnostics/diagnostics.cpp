@@ -26,9 +26,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <sstream>
 
 namespace camel::core::error {
 

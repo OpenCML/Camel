@@ -32,6 +32,8 @@
 
 #include "fmt/format.h"
 
+#include <algorithm>
+
 namespace camel::builtin {
 
 template <typename T> struct LanguageFloat {

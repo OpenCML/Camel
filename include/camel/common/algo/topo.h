@@ -22,6 +22,7 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/debug.h"
 
+#include <algorithm>
 #include <functional>
 #include <iterator>
 #include <queue>

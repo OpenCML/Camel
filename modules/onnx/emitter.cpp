@@ -35,6 +35,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 
+#include <cctype>
 #include <cstring>
 #include <format>
 #include <unordered_set>

@@ -24,6 +24,7 @@
 #endif
 
 #include "nlohmann/json.hpp"
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 

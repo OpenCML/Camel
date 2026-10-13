@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <functional>
 #include <iostream>
 #include <map>

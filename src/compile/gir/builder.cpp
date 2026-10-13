@@ -33,6 +33,7 @@
 #include "camel/core/type/other.h"
 
 #include <atomic>
+#include <cctype>
 #define DEBUG_LEVEL -1
 
 using namespace std;

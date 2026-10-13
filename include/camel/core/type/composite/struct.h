@@ -26,6 +26,7 @@
 #include <cstddef>
 #include <cstring>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace camel::core::type {
