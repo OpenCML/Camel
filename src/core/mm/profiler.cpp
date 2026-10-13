@@ -199,7 +199,10 @@ std::string snapshotToJson() {
     regions.push_back(bumpRegionToJson("cacheSpace", autoSp.cacheSpace()));
 
     // Elder Gen.
-    regions.push_back(freeListRegionToJson("elderGenSpace", autoSp.elderGenSpace()));
+    for (size_t i = 0; i < autoSp.elderGenSpace().segmentCount(); ++i) {
+        const std::string name = segmentRegionName("elderGenSpace", i);
+        regions.push_back(freeListRegionToJson(name.c_str(), autoSp.elderGenSpace().segment(i)));
+    }
 
     // Large Object.
     regions.push_back(largeObjRegionToJson(autoSp.largeObjSpace()));

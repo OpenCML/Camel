@@ -71,6 +71,8 @@ timeout_ms = 4000
 
 [[tests]]
 name = "unordered_foreach_timing.prl"
+# Wall-clock time is the assertion: not for a mode that collects at every safepoint.
+sweep = false
 desc = "Uses wall-clock time as a correctness proxy that unordered_foreach is not serialized under PRL."
 kind = "behavior"
 case = "../../../cases/para/core/unordered_foreach_timing.cml"

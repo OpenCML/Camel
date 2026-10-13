@@ -3,7 +3,5 @@ warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects
    |
  4 |     println('never printed')
    |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
-      variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
-      block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 

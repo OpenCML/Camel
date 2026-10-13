@@ -109,6 +109,9 @@ struct GrowableSpaceConfig {
     size_t maxSegmentBytes = 256 * MB;
     size_t limitBytes      = 1 * GB; // Total over all segments.
     const char *limitEnv   = "";     // Environment variable that sets limitBytes, in MB.
+    // Free-list spaces only: read the size of a freed block from its header and keep no table
+    // of sizes (see FreeListAllocator). For spaces that only a collector frees.
+    bool sizesFromHeaders = false;
 };
 
 /// Occupancy of a growable space. `usedBytes` counts object headers.
@@ -176,6 +179,13 @@ class GrowableFreeListAllocator final : public IAllocator, public detail::Growab
     size_t available() const override;
     bool contains(void *ptr) const override { return segmentOf(ptr) != nullptr; }
     void iterateAllocated(const std::function<void(ObjectHeader *)> &visitor) const override;
+    /// Whether `payload` is a block the space handed out and has not freed.
+    bool isAllocated(void *payload) const {
+        FreeListAllocator *segment = segmentOf(payload);
+        return segment != nullptr && segment->isAllocated(payload);
+    }
+    /// Releases many blocks at once, each into its segment, in one pass per segment.
+    void freeBulk(const std::vector<ObjectHeader *> &objects) override;
 
     /// Structural check of every segment (see FreeListAllocator::validate).
     bool validate() const;

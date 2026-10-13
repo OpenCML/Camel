@@ -47,6 +47,14 @@ function ensureDir(dir) {
     fs.mkdirSync(dir, { recursive: true })
 }
 
+// CAMEL_TEST_TIMEOUT_SCALE=<n> multiplies every test and verification timeout. For running
+// the plans under a diagnostic mode that slows every program down (collection stress,
+// safepoint poisoning, a sanitizer build), where the timeouts would otherwise decide.
+const TIMEOUT_SCALE = (() => {
+    const scale = Number(process.env.CAMEL_TEST_TIMEOUT_SCALE)
+    return Number.isFinite(scale) && scale > 0 ? scale : 1
+})()
+
 function walkPlans(entryPath, files = []) {
     const stats = fs.statSync(entryPath)
     if (stats.isFile()) {
@@ -495,7 +503,7 @@ function runVerification(test, result) {
         cwd: REPO_ROOT,
         env: process.env,
         encoding: 'utf8',
-        timeout: test.verify_timeout_ms || 5000,
+        timeout: (test.verify_timeout_ms || 5000) * TIMEOUT_SCALE,
     })
     fs.rmSync(tempDir, { recursive: true, force: true })
 
@@ -705,7 +713,7 @@ function runOneTest(test, sharedVars, logContext) {
         cwd: REPO_ROOT,
         env,
         encoding: 'utf8',
-        timeout: test.timeout_ms || 10000,
+        timeout: (test.timeout_ms || 10000) * TIMEOUT_SCALE,
     })
     const ended = performance.now()
     const raw = {
@@ -825,14 +833,74 @@ function expandBackends(test) {
     }))
 }
 
+function loadPlanTests(planPath) {
+    const doc = parseTomlFile(planPath)
+    const tests = (doc.tests || [])
+        .map((test) => ({ ...(doc.defaults || {}), ...test, __planPath: planPath }))
+        .flatMap(expandBackends)
+    return { doc, tests }
+}
+
+/**
+ * A `[[sweeps]]` entry of a plan runs the tests of other plans again under an extra
+ * environment, with all their assertions:
+ *
+ *   [[sweeps]]
+ *   name = "poison"                     # the tests are named "<name>:<original name>"
+ *   plans = ["../modules", "../linear"] # plan files or directories, relative to this plan
+ *   exclude = ["modules/onnx"]          # substrings of plan paths that are left out
+ *   envs = ["CAMEL_GC_POISON=1"]
+ *   skip_env_prefix = "CAMEL_GC_"       # leave out tests that set such a variable themselves
+ *   timeout_scale = 20
+ *
+ * It is how a property that every program must keep (here: no raw pointer is held across a
+ * safepoint) is checked against whatever the other plans exercise, including tests added
+ * later. Benchmarks and differential tests are left out, and so is a test that sets
+ * `sweep = false`.
+ */
+function expandSweeps(doc, planPath) {
+    const out = []
+    for (const sweep of doc.sweeps || []) {
+        if (!sweep.name || !Array.isArray(sweep.plans)) {
+            throw new Error(`a [[sweeps]] entry of ${planPath} needs a name and plans`)
+        }
+        const exclude = (sweep.exclude || []).map((item) => String(item))
+        const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
+        const prefix = sweep.skip_env_prefix || null
+        const rename = (name) => `${sweep.name}:${name}`
+        const sources = sweep.plans
+            .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
+            .filter((source) => source !== planPath)
+            .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item)))
+            .sort()
+        for (const source of sources) {
+            for (const test of loadPlanTests(source).tests) {
+                if (test.kind !== 'behavior' && test.kind !== 'snapshot') continue
+                if (test.sweep === false || test.__knownFail) continue
+                if ((test.tool || 'camel') !== 'camel') continue
+                const own = (test.envs || []).map((entry) => String(entry))
+                if (prefix && own.some((entry) => entry.startsWith(prefix))) continue
+                out.push({
+                    ...test,
+                    name: rename(test.name),
+                    envs: [...own, ...(sweep.envs || [])],
+                    timeout_ms: (test.timeout_ms || 10000) * scale,
+                    verify_timeout_ms: (test.verify_timeout_ms || 5000) * scale,
+                    __backendReference: test.__backendReference ? rename(test.__backendReference) : null,
+                    __sweep: sweep.name,
+                })
+            }
+        }
+    }
+    return out
+}
+
 function loadPlans(targets, tier) {
     const planPaths = targets.length > 0 ? targets.flatMap((target) => walkPlans(target)) : walkPlans(PLANS_ROOT)
     const plans = planPaths
         .map((planPath) => {
-            const doc = parseTomlFile(planPath)
-            const tests = (doc.tests || [])
-                .map((test) => ({ ...(doc.defaults || {}), ...test, __planPath: planPath }))
-                .flatMap(expandBackends)
+            const { doc, tests: ownTests } = loadPlanTests(planPath)
+            const tests = [...ownTests, ...expandSweeps(doc, planPath)]
             return { ...doc, __planPath: planPath, tests }
         })
         .filter((plan) => !tier || plan.tier === tier)

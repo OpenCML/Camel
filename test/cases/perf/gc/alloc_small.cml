@@ -1,0 +1,24 @@
+/**
+ * Allocation benchmark: short-lived small values of every common kind. Each step makes a small
+ * array, a tuple, a struct, a string and a closure, uses them once and drops them.
+ */
+module alloc_small
+
+type P = { x: int, y: int, name: string }
+
+func step(i: int): int {
+    let xs = [i, i + 1, i + 2, i + 3]
+    let t = (i, 'n' + string(i % 97))
+    let p = { x: i, y: i * 2, name: t.1 }
+    let add = (k: int): int => k + p.x + xs[2]
+    return add(len(p.name)) % 1000 + t.0 % 3
+}
+
+func run(left: int, total: int): int {
+    return if left == 0 then total else run(left - 1, (total + step(left)) % 1000000007)
+}
+
+func main(reps: int): int sync {
+    println('alloc_small total={}'->format<run(reps, 0)>)
+    return 0
+}

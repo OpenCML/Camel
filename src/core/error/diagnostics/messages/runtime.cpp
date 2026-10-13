@@ -217,8 +217,9 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "stop allocating. If the program is this large, raise the limit with the "
                 "environment variable the message names. If a pass is named, the growth may be "
                 "its doing (an inlining or unrolling that does not end): run the pipeline "
-                "without it. The auto space holds run-time values and is bounded only by the "
-                "memory of the host.",
+                "without it. The auto space holds run-time values: it is bounded by the memory of "
+                "the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the "
+                "values the program keeps alive do not fit the limit.",
             },
         },
         {

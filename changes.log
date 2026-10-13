@@ -1,3 +1,12 @@
+[0.2.8]
+Changes:
+- 新增 --gc / CAMEL_GC 回收器选择，分代 GC 作为可选模式，默认保持 mark-sweep。
+- 修复移动回收中的大对象引用、晋升、foreign 释放、宏常量及 JIT safepoint 问题。
+- 优化 RootHandle、写屏障和老年代分配，完善堆上限、nursery 与大对象阈值设置。
+- 新增 safepoint poisoning、GC 压力与浸泡回归、内存上限验证及基准报告。
+- 修复 help/note 换行：按实际终端宽度折行，读取不到宽度时单行输出。
+- 减少信息命令及纯词法/语法检查的启动初始化，保留参数校验、诊断格式和错误上限。
+
 [0.2.7]
 Changes:
 - 新增执行观察器、源码级调试核心、DAP 协议和 VS Code 调试配置。

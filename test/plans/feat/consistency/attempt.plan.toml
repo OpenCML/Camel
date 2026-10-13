@@ -103,11 +103,16 @@ assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify
 [[tests]]
 name = "attempt.compiled.jit_log"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+# Asserts which graphs std::jit compiles and why it leaves the others: with a collector that moves
+# objects the graphs that hold the `attempt` node are refused earlier, for their object constants,
+# and the log never says "contains OPER". The test therefore names the default collector.
+sweep = false
 desc = "Under std::jit the straight-line callee is compiled, and the graphs that contain the `attempt` node (an OPER) are not."
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
 args = ["-vv", "${case}", "std::jit"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_output_contains = ["compiled & cached graph 'quot'", "contains OPER"]
 
 [[tests]]
@@ -407,6 +412,9 @@ expect_output_not_contains = ["Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "attempt.resources.isolated"
+# Asserts where "release" falls among the lines: a wrapper is released when the collector finds it dead,
+# which is at the next safepoint under safepoint poisoning.
+sweep = false
 desc = "The holder of a resource faults inside a boundary and the program goes on: the resource is released (by a collection, or at the latest when the run ends; DESIGN-QUESTION(attempt-finalizers))."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/resource_release.cml"
@@ -419,6 +427,8 @@ for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length
 
 [[tests]]
 name = "attempt.resources.normal"
+# Release order depends on when the collector runs (see attempt.resources.isolated).
+sweep = false
 desc = "main returns: both resources are released before the process ends."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/resource_release.cml"
@@ -431,6 +441,8 @@ for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length
 
 [[tests]]
 name = "attempt.resources.fault"
+# Release order depends on when the collector runs (see attempt.resources.isolated).
+sweep = false
 desc = "A fault ends the program: both resources are released before the process ends."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/resource_release.cml"
@@ -448,6 +460,8 @@ for (const name of ['a', 'b']) assert(out.split('release ' + name + '\n').length
 
 [[tests]]
 name = "attempt.resources.exit"
+# Release order depends on when the collector runs (see attempt.resources.isolated).
+sweep = false
 desc = "exit(5): both resources are released before the process ends."
 kind = "behavior"
 case = "../../../cases/consistency/attempt/resource_release.cml"

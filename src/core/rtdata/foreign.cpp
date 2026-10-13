@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 05, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 12, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/rtdata/foreign.h"
 
 #include <algorithm>
+#include <atomic>
+#include <mutex>
 #include <new>
 #include <ostream>
 #include <unordered_set>
@@ -63,6 +65,18 @@ LiveControlBlocks &liveControlBlocks() {
 
 uint64_t loadCounter(const std::atomic<uint64_t> &value) {
     return value.load(std::memory_order_acquire);
+}
+
+// Control blocks of wrappers the collector found dead, waiting for runDeferredForeignReleases.
+struct DeferredReleases {
+    std::mutex mutex;
+    std::vector<ForeignResourceControlBlock *> blocks;
+    std::atomic<bool> pending{false};
+};
+
+DeferredReleases &deferredReleases() {
+    static auto *value = new DeferredReleases(); // Outlives every static destructor.
+    return *value;
 }
 
 } // namespace
@@ -201,7 +215,11 @@ ForeignResourceObject *ForeignResourceObject::createWithControlBlock(
         }
         throw std::bad_alloc();
     }
-    return new (mem) ForeignResourceObject(control);
+    auto *wrapper = new (mem) ForeignResourceObject(control);
+    // The collector does not look at dead young objects one by one; it must be told which
+    // of them have something to release.
+    allocator.noteFinalizable(wrapper);
+    return wrapper;
 }
 
 void ForeignResourceObject::dispose() noexcept {
@@ -266,11 +284,42 @@ void ForeignResourceObject::onMoved() {
 }
 
 void ForeignResourceObject::finalize() noexcept {
+    // Called by the collector, inside the collection and with the allocator locked. Running
+    // the deleter here would run foreign code under that lock: a deleter that allocates
+    // would deadlock on it, and the Python one takes the GIL, which every Python operator
+    // holds while it allocates (the opposite order). So the wrapper only gives its reference
+    // up; the allocator releases it once the collection is over and the lock is dropped.
     ForeignResourceControlBlock *control = control_;
     control_                             = nullptr;
-    if (control) {
+    if (!control) {
+        return;
+    }
+    auto &deferred = deferredReleases();
+    try {
+        std::lock_guard<std::mutex> lock(deferred.mutex);
+        deferred.blocks.push_back(control);
+        deferred.pending.store(true, std::memory_order_release);
+    } catch (...) {
+        // No memory for the queue entry: release in place rather than leak the resource.
         control->releaseFromWrapperFinalizer();
     }
+}
+
+size_t runDeferredForeignReleases() noexcept {
+    auto &deferred = deferredReleases();
+    if (!deferred.pending.load(std::memory_order_acquire)) {
+        return 0;
+    }
+    std::vector<ForeignResourceControlBlock *> blocks;
+    {
+        std::lock_guard<std::mutex> lock(deferred.mutex);
+        blocks.swap(deferred.blocks);
+        deferred.pending.store(false, std::memory_order_release);
+    }
+    for (ForeignResourceControlBlock *control : blocks) {
+        control->releaseFromWrapperFinalizer();
+    }
+    return blocks.size();
 }
 
 void ForeignResourceObject::updateRefs(

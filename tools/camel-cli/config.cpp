@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: May. 03, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,6 +29,7 @@
 
 #include "build_config.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/mm.h"
 #include "camel/execute/limits.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
@@ -142,8 +143,9 @@ bool parseTimeitSpecValue(
 bool readDepthLimit(
     const std::string &optionText, const char *option, const char *envName, size_t &out) {
     const auto refuse = [](const char *what, std::string_view text) {
-        std::cerr << "Invalid " << what << " value: '" << text << "'. Expected an integer from 1 to "
-                  << camel::execute::kMaxDepthLimit << "." << std::endl;
+        std::cerr << "Invalid " << what << " value: '" << text
+                  << "'. Expected an integer from 1 to " << camel::execute::kMaxDepthLimit << "."
+                  << std::endl;
         return false;
     };
     if (!optionText.empty()) {
@@ -278,16 +280,17 @@ int maxThreads    = -1; // -1 means use the maximum number of threads
 
 string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
 string maxMacroDepthOpt     = ""; // raw --max-macro-depth
+string gcModeOpt            = ""; // raw --gc
 size_t maxRecursionDepth    = 0;  // 0: not given on the command line
 size_t maxMacroDepth        = 0;
 } // namespace Run
 
 namespace Check {
-bool lexical           = false;  // Whether to check lexical errors
-bool syntaxOnly        = false;  // Whether to check syntax only
-bool ignoreDefiFile    = false;  // Whether to ignore the definition file
-string outputFormat    = ""; // Output format; "" = not given, see Diag::format
-string configFilePath  = ""; // Configuration file path
+bool lexical          = false; // Whether to check lexical errors
+bool syntaxOnly       = false; // Whether to check syntax only
+bool ignoreDefiFile   = false; // Whether to ignore the definition file
+string outputFormat   = "";    // Output format; "" = not given, see Diag::format
+string configFilePath = "";    // Configuration file path
 } // namespace Check
 
 namespace Inspect {
@@ -329,7 +332,7 @@ std::vector<char *> takeWarningArguments(int argc, char *argv[]) {
 
 /// Turns the diagnostics options into the process-wide render configuration and warning
 /// policy. Returns false (after printing why) on a value or a warning name that does not exist.
-bool applyDiagnosticOptions() {
+bool applyDiagnosticOptions(bool configureRuntime) {
     using namespace camel::core::error;
 
     // Format: -E/--error-format (run) or -O/--output-format (check), else the environment.
@@ -358,7 +361,9 @@ bool applyDiagnosticOptions() {
                   << "'. Expected auto, always or never." << std::endl;
         return false;
     }
-    setDiagnosticRenderConfig(format == "short" ? DiagFormat::Short : DiagFormat::Rich, color);
+    if (configureRuntime) {
+        setDiagnosticRenderConfig(format == "short" ? DiagFormat::Short : DiagFormat::Rich, color);
+    }
 
     if (Diag::maxErrors < 0 || Diag::maxWarnings < 0) {
         std::cerr << "Error: --max-errors and --max-warning take a non-negative number."
@@ -369,12 +374,14 @@ bool applyDiagnosticOptions() {
     // Warning names are checked against the catalog: a misspelt -Wno-<name> that silently did
     // nothing would be worse than no option.
     std::vector<std::string> known;
-    for (const DiagCatalogEntry &entry : diagnosticCatalog()) {
-        if (entry.severity == Severity::Warn) {
-            known.push_back(normalizeDiagnosticName(entry.name));
-        }
-    }
     auto checkName = [&](const std::string &spec, const std::string &name) {
+        if (known.empty()) {
+            for (const DiagCatalogEntry &entry : diagnosticCatalog()) {
+                if (entry.severity == Severity::Warn) {
+                    known.push_back(normalizeDiagnosticName(entry.name));
+                }
+            }
+        }
         const std::string key = normalizeDiagnosticName(name);
         if (std::find(known.begin(), known.end(), key) != known.end()) {
             return true;
@@ -413,7 +420,9 @@ bool applyDiagnosticOptions() {
             return false;
         }
     }
-    setWarningPolicy(std::move(policy));
+    if (configureRuntime) {
+        setWarningPolicy(std::move(policy));
+    }
     return true;
 }
 
@@ -559,6 +568,9 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
              "limit on nested calls while std::macro evaluates a call (default: 64; also "
              "CAMEL_MAX_MACRO_DEPTH)",
+         (option("--gc") & value("collector", gcModeOpt)) %
+             "collector of run-time values: mark-sweep (default; objects keep their address) or "
+             "generational (young objects are copied); also CAMEL_GC",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
@@ -654,8 +666,13 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
 
-    applyCamelCliLogging(argc, argv);
-    if (!applyDiagnosticOptions()) {
+    // Informational text lives in the CLI. Validate its options without loading libcamel;
+    // explaining a diagnostic or checking a warning name still needs the catalog.
+    const bool configureRuntime = selectedCommand != Command::Info || !Diag::explain.empty();
+    if (configureRuntime) {
+        applyCamelCliLogging(argc, argv);
+    }
+    if (!applyDiagnosticOptions(configureRuntime)) {
         exitCode = 1;
         return false;
     }
@@ -761,6 +778,21 @@ bool parseArgs(int argc, char *argv[]) {
                 camel::execute::kMaxMacroDepthEnvVar,
                 Run::maxMacroDepth)) {
             std::exit(1);
+        }
+
+        // The collector: the option, else the environment (read by the allocator itself).
+        if (!Run::gcModeOpt.empty()) {
+            const auto mode = camel::core::mm::parseCollectorMode(Run::gcModeOpt);
+            if (!mode) {
+                std::cerr << "Error: --gc " << Run::gcModeOpt
+                          << " is not a collector; give mark-sweep or generational." << std::endl;
+                std::exit(1);
+            }
+            if (!camel::core::mm::selectCollectorMode(*mode)) {
+                std::cerr << "Error: --gc was read after the run-time heap was set up."
+                          << std::endl;
+                std::exit(1);
+            }
         }
 
         if (Run::timeitEnabled && Run::profile) {

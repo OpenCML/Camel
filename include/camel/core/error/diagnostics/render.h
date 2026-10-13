@@ -57,8 +57,9 @@ struct RenderOptions {
     size_t maxLineWidth = 120;
     /// Display columns of a tab stop in a source excerpt.
     size_t tabWidth = 4;
-    /// Display columns at which `help:` and `note:` text is wrapped.
-    size_t wrapWidth = 100;
+    /// Display columns at which `help:` and `note:` text is wrapped; zero disables wrapping.
+    /// renderOptionsFor uses the visible terminal width when it can be read.
+    size_t wrapWidth = 0;
 };
 
 /// Sets the process-wide text format and colour policy of diagnostics.
