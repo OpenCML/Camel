@@ -221,6 +221,32 @@ independent calls of heavy graphs. For a program that is sequential by its depen
   the stop-the-world handshake is unchanged, and the stress tests with a verified major
   collection at every safepoint pass).
 
+**The stack of a worker thread, and a dependency on the inside of Taskflow.** The evaluator nests
+on the native stack, and the default recursion limit is measured against 8 MiB (section 4.4).
+`tf::Executor` starts its workers with `std::thread`, which cannot be told a stack size: a
+worker would have the process's stack limit with glibc, the executable's value on Windows (1 MiB
+under `python.exe`) and 512 KiB on macOS. Taskflow has no hook for the creation of its threads
+(`WorkerInterface` runs on the thread after it exists), so the build replaces the thread type:
+`cmake/TaskflowWorkerStack.cmake` copies the Taskflow headers of the Conan package into the build
+tree at configure time, rewrites three lines (the member `std::thread _thread;` and its accessor
+in `taskflow/core/worker.hpp`, and `_workers[id]._thread = std::thread(` in
+`Executor::_spawn`, `taskflow/core/executor.hpp`) to `camel::utils::BigStackThread`
+(`include/camel/utils/big_stack_thread.h`: `pthread_create` / `_beginthreadex` with 8 MiB at
+least, joinable and movable like the part of `std::thread` Taskflow uses), and puts the copy
+before the package on libcamel's include path. Only libcamel includes Taskflow, so there is one
+definition of `tf::Worker`.
+
+This depends on how Taskflow 3.10.0 is written, not on its interface. **When the version of
+Taskflow in `conanfile.txt` changes, look at it again**: the configuration stops with an error
+that names the line it did not find when one of the three is gone; if Taskflow has come to
+create its threads elsewhere, or uses more of `std::thread` (`get_id`, `native_handle`,
+`detach`), the rewrite or `BigStackThread` has to follow, and
+`-DCAMEL_TASKFLOW_WORKER_STACK=OFF` builds with Taskflow as it is (workers then have the
+platform's default stack) until that is done. The class does nothing a collector has to know
+about: a worker registers with the stop-the-world gate on its first safepoint
+(`TaskflowGcGate::self`), whichever way its thread was started, and reads its stack bounds from
+the thread itself.
+
 ### 4.4 How each back end runs a call, a fault and the end of a program
 
 Facts established while the four back ends were made to agree (`test/plans/feat/consistency`).

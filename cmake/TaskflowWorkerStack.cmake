@@ -11,7 +11,26 @@
 # rewritten, and the configuration fails if one of them is not found (a new version of Taskflow:
 # look at Executor::_spawn and Worker again).
 
+option(CAMEL_TASKFLOW_WORKER_STACK
+    "Create the workers of the parallel scheduler with an 8 MiB stack (rewrites three lines of a copy of the Taskflow headers)"
+    ON)
+
+# What to do when a line this file rewrites is not found.
+set(_camel_taskflow_help
+    "This build rewrites three lines of Taskflow's headers so that the workers of std::tf get an "
+    "8 MiB stack (cmake/TaskflowWorkerStack.cmake, written against Taskflow 3.10.0; see "
+    "docs/technical/06_runtime_and_execution.md, section 4.3). The Taskflow found here is written "
+    "differently. Either keep the version of conanfile.txt, or adapt the three patterns of that "
+    "file to the new Executor::_spawn and Worker, or configure with "
+    "-DCAMEL_TASKFLOW_WORKER_STACK=OFF to build with Taskflow unchanged (workers then have the "
+    "platform's default stack: 512 KiB on macOS, where deep recursion under std::tf will not fit).")
+string(CONCAT _camel_taskflow_help ${_camel_taskflow_help})
+
 function(camel_taskflow_with_worker_stack target)
+    if(NOT CAMEL_TASKFLOW_WORKER_STACK)
+        message(STATUS "Taskflow workers: platform default stack (CAMEL_TASKFLOW_WORKER_STACK=OFF)")
+        return()
+    endif()
     set(_source "")
     foreach(_dir IN LISTS Taskflow_INCLUDE_DIRS Taskflow_INCLUDE_DIR taskflow_INCLUDE_DIRS_RELEASE)
         if(EXISTS "${_dir}/taskflow/core/executor.hpp")
@@ -21,8 +40,10 @@ function(camel_taskflow_with_worker_stack target)
     endforeach()
     if(_source STREQUAL "")
         message(FATAL_ERROR
-            "camel_taskflow_with_worker_stack: taskflow/core/executor.hpp not found in "
-            "Taskflow_INCLUDE_DIRS ('${Taskflow_INCLUDE_DIRS}')")
+            "taskflow/core/executor.hpp not found in Taskflow_INCLUDE_DIRS "
+            "('${Taskflow_INCLUDE_DIRS}'): the layout of the Taskflow package has changed.
+"
+            "${_camel_taskflow_help}")
     endif()
 
     set(_patched "${CMAKE_BINARY_DIR}/taskflow-worker-stack")
@@ -40,8 +61,9 @@ function(camel_taskflow_with_worker_stack target)
         string(FIND "${_worker}" "${_needle}" _at)
         if(_at EQUAL -1)
             message(FATAL_ERROR
-                "camel_taskflow_with_worker_stack: '${_needle}' not found in taskflow/core/worker.hpp "
-                "of ${_source}; see cmake/TaskflowWorkerStack.cmake")
+                "'${_needle}' not found in taskflow/core/worker.hpp of ${_source}.
+"
+                "${_camel_taskflow_help}")
         endif()
     endforeach()
     string(REPLACE
@@ -63,8 +85,9 @@ function(camel_taskflow_with_worker_stack target)
     string(FIND "${_executor}" "${_needle}" _at)
     if(_at EQUAL -1)
         message(FATAL_ERROR
-            "camel_taskflow_with_worker_stack: '${_needle}' not found in taskflow/core/executor.hpp "
-            "of ${_source}; see cmake/TaskflowWorkerStack.cmake")
+            "'${_needle}' not found in taskflow/core/executor.hpp of ${_source}.
+"
+            "${_camel_taskflow_help}")
     endif()
     string(REPLACE
         "${_needle}"
