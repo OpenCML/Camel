@@ -602,9 +602,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                     ASSERT(idx < t->size(), "Tuple index out of bounds in NodeVM.");
                     currFrame->set(n->dataIndex, t->get<slot_t>(idx));
                 } else {
-                    ASSERT(
-                        body->keyBytes <= n->bodyBytes() - sizeof(GCAccsBody),
-                        "NodeVM ACCS struct-key payload exceeds the node body.");
                     const std::string_view keyView = body->key();
                     std::string key                = std::string(keyView.data(), keyView.size());
                     Struct *s                      = currFrame->get<Struct *>(srcIdx);

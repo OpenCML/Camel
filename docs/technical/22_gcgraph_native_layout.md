@@ -280,8 +280,10 @@ These kinds require no body beyond `GCNode`:
 - `Cast`
 - `Sync`
 - `Gate`
-- `Bind`
-- `Dref`
+
+`Bind` and `Dref` are reserved kind values that never appear in a frozen graph
+(nothing creates `Bind`; `Dref` is a build-time placeholder that encoding
+rejects), so no consumer of `GCGraph` handles them.
 
 For these nodes, `blockCount` is just the number of blocks required by the
 header itself.
@@ -328,7 +330,10 @@ heavy call descriptor.
 `ACCS` stores the accessor mode plus its compact parameter:
 
 - tuple index, or
-- interned struct-key id
+- the `SymId` of the struct field name (`camel/core/symbol.h`)
+
+The body is fixed-size: field names are interned in the process-wide symbol
+table and resolved through `GCAccsBody::key()`, which takes no lock.
 
 ### 11.6 `FILL`
 

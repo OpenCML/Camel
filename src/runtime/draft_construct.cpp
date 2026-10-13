@@ -48,14 +48,8 @@ std::vector<std::byte> bytesForStruct(const auto &body) {
 std::vector<std::byte> bytesForAccsStructKey(std::string_view key) {
     GCAccsBody body;
     body.accsKind = GCAccsKind::StructKey;
-    body.keyBytes = static_cast<uint16_t>(key.size());
-
-    std::vector<std::byte> bytes(sizeof(GCAccsBody) + key.size());
-    std::memcpy(bytes.data(), &body, sizeof(body));
-    if (!key.empty()) {
-        std::memcpy(bytes.data() + sizeof(GCAccsBody), key.data(), key.size());
-    }
-    return bytes;
+    body.value    = camel::core::internSymbol(key);
+    return bytesForStruct(body);
 }
 
 std::vector<std::byte> bytesForOperPayload(operator_t op, std::string_view uri) {

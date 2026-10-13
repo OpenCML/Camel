@@ -160,9 +160,6 @@ string recordLabel(
             record.bodyBytes() >= sizeof(camel::runtime::GCAccsBody),
             "GraphViz ACCS payload is smaller than its fixed header.");
         if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
-            ASSERT(
-                body->keyBytes <= record.bodyBytes() - sizeof(camel::runtime::GCAccsBody),
-                "GraphViz ACCS struct-key payload exceeds the node body.");
             const std::string_view key = body->key();
             return "." + std::string(key.data(), key.size());
         }

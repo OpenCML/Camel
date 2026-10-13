@@ -36,6 +36,7 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/symbol.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -207,16 +208,20 @@ struct GCCallBody {
 };
 static_assert(std::is_trivially_copyable_v<GCCallBody>);
 
+// Payload of an ACCS node: which member of its input it takes. Fixed size: a struct field is
+// named by its symbol (camel/core/symbol.h), not by characters stored in the node.
 struct GCAccsBody {
     GCAccsKind accsKind = GCAccsKind::TupleIndex;
     uint8_t reserved0   = 0;
-    uint16_t keyBytes   = 0;
-    uint32_t value      = 0;
+    uint16_t reserved1  = 0;
+    // TupleIndex: the element index. StructKey: the SymId of the field name.
+    uint32_t value = 0;
 
+    /// The field name of a StructKey access; empty for a TupleIndex access. The view is owned
+    /// by the symbol table and never invalidated.
     std::string_view key() const {
-        const char *data = reinterpret_cast<const char *>(
-            reinterpret_cast<const std::byte *>(this) + sizeof(GCAccsBody));
-        return {data, keyBytes};
+        return accsKind == GCAccsKind::StructKey ? camel::core::symbolText(value)
+                                                 : std::string_view{};
     }
 };
 static_assert(std::is_trivially_copyable_v<GCAccsBody>);
