@@ -39,7 +39,7 @@ Hello, Camel!
 
 ## 1.3 Notation
 
-- **Syntax** is written in a notation close to BNF: `*` zero or more times, `?` optional, `|` alternative, literal symbols inside quotes. The exact grammar is in `antlr/OpenCML.g4` and `antlr/OpenCMLLex.g4`.
+- **Syntax** is written in a notation close to BNF: `*` zero or more times, `?` optional, `|` alternative, literal symbols inside quotes. The exact grammar is in [8.5](08_top_level_and_grammar.md#85-the-complete-grammar).
 - **Examples** are given as `cml` code blocks; a `text` code block is its output.
 - **"Reserved, not implemented"**: a construct that the grammar accepts but the compiler explicitly rejects. Every such construct gets a compile-time diagnostic; the text gives the name of the diagnostic and the alternative that works today. For a list see [8.6](08_top_level_and_grammar.md#86-constructs-reserved-but-not-implemented).
 - **"Behaviour of the current implementation, not yet decided"**: the implementation already has a definite behaviour, but there is no ruling on the language rule yet, and it may change later. Do not rely on the details of these behaviours when writing programs.

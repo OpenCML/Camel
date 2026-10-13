@@ -39,6 +39,9 @@ enum class SyntaxDiag : uint32_t {
     MissingToken              = 0x000009,
     UnexpectedToken           = 0x00000A,
     UnexpectedEndOfFile       = 0x00000B,
+    ComparisonNeedsSpace      = 0x00000C,
+    AngleCloseAfterSpace      = 0x00000D,
+    LineStartsWithOperator    = 0x00000E,
 
     // Warnings (severity bits = Warn).
     ComparisonAcrossLines = 0x100001,

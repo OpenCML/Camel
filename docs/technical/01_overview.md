@@ -4,7 +4,7 @@
 
 **Camel** 是一种采用现代 C++ 技术栈实现的、**以图为核心**的编程语言。程序在编译期被转换为**图中间表示（GIR）**，运行时通过**图调度**执行：顺序由依赖决定，并行性由编译器与运行时从图中发现，而非由程序员显式编写。
 
-- **前端**：基于 ANTLR4 的语法分析，产出 CST/AST。
+- **前端**：手写的词法分析器与递归下降解析器，产出 CST/AST（见 [34_handwritten_parser.md](34_handwritten_parser.md)）。
 - **核心**：AST → 图构造树（GCT）→ 图 IR（GIR），图是程序的原生表示。
 - **执行**：支持线性调度（FastVM 字节码、NodeVM 直接遍历）与并行调度（Taskflow DAG）。
 - **许可**：MIT；受国家重点研发计划支持。
@@ -44,7 +44,7 @@
 
 | 层次 | 技术 |
 |------|------|
-| 语法解析 | ANTLR4（OpenCML.g4 / OpenCMLLex.g4） |
+| 语法解析 | 手写词法分析器与解析器（`src/parse/syntax/`） |
 | AST | 自研 AST，结构由 docs/Camel.asdl 描述 |
 | 图构造 | GCT（Graph Construct Tree）→ GIR Builder |
 | 图 IR | GraphIR 命名空间：Graph、Node 及多种节点类型 |

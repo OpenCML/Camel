@@ -1,0 +1,6 @@
+module lib
+
+export func twice(x: int): int { return x * 2 }
+
+export func area(w: int, h: int): int { return w * h }
+export func area(side: int): int { return side * side }

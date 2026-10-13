@@ -39,6 +39,7 @@ type Pair<T> = (T, T)
 
 - **No implicit conversions.** `1 + 2.0`, `1 < 2.0` and mixing `i32` with `int` are all compile-time errors (`SemanticDiag::NoMatchingFunction`). Convert explicitly where needed.
 - Conversion functions: `int(x)`, `i64(x)`, `i32(x)`, `float(x)`, `f64(x)`, `f32(x)`, `string(x)`.
+- `i64` and `f64` are only other spellings of `int` and `float`. Diagnostics, graphs (`std::rgir`, `inspect`) and editors always show `int` and `float`: an instance of a generic function is `first<int>`, not `first<i64>`.
 
   | Form | Result |
   |---|---|
@@ -169,15 +170,11 @@ Two dedicated built-in forms, each carrying a one-bit tag:
 
 ```cml
 func positive(x: int): int? {
-    return if x > 0 then { return x } else { return null }
+    return if x > 0 then x else null
 }
 
 func safe_div(a: int, b: int): int! {
-    return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
-    } else {
-        return a / b
-    }
+    return if b == 0 then { throw error('DivByZero', 'the divisor is zero') } else a / b
 }
 
 func main(): int sync {
@@ -197,13 +194,16 @@ error DivByZero: the divisor is zero
 Rules:
 
 - `T?`, `T!` and `T` are different types. Values of these two kinds can be stored, passed, returned and printed, but **cannot be used as a `T`**: operators such as arithmetic and comparison, and functions that accept a `T`, do not accept them, and their members cannot be accessed. They can only be unwrapped with `??`, `!!`, `?->` ([6.6](06_expressions.md#66-operators-for-null-and-errors)) or with the fixed patterns of `match` ([6.8.2](06_expressions.md#682-match)).
-- **A `T` does not become a `T?`/`T!` by itself.** The only ways into these two forms are:
-  - `v as T?`, `v as T!`;
-  - a typed declaration `let x: T? = v`;
-  - `return v` in a function whose return type is declared as `T?`/`T!` (`throw e` gives an error, `return null` gives null).
+- **A value that enters a `T?` or `T!` position is put into the form by itself**, wherever the target type is known; `null` likewise. The positions are:
+  - an argument of a call: with a parameter `x: int?`, write `f(5)` or `f(null)`. Among overloads an exact match wins: `f(5)` takes `f(x: int)` when both it and `f(x: int?)` exist;
+  - a declaration with a type, `let x: T? = v`;
+  - the elements of an array: `let xs: (int?)[] = [1, null, 3]`; without a written type, an array literal with a `null` among its elements is an array of `T?` (`[1, null, 3]` is an `(int?)[]`);
+  - the two arms of a branch: when one arm is a `T` and the other is `null` or a `T?`, the branch is a `T?` (`if c then 1 else null` is an `int?`); likewise `T` and `T!`;
+  - `return v` in a function whose return type is declared as `T?`/`T!` (`throw e` gives an error).
 
-  Call arguments are not converted: passing `5` to a parameter `x: int?` is an error; write `f(5 as int?)`, `f(null as int?)`.
-- The arms of a branch must have the same type: `if c then 1 else null` is an error. In a function returning `T?`, write both arms as blocks with `return` (as in the example above), or use `as` on both arms.
+  `v as T?` can still be written. Several levels are entered at once: `let x: int?! = 5`. On the graph each level is a conversion node (`CAST`); the compiler adds the node a program would write with `as`, and the graph is the same.
+- **Never the other way.** A `T?` or `T!` used as a `T` must be opened; an `int?` does not become a `float?` either, and numbers are still not converted implicitly. The arguments of built-in operators (`append`, `println`, ...) are not such a position: their parameter types are computed from the arguments by C++ type rules, so there is no target type to enter; write `as` there.
+- **The empty array literal `[]` takes its element type from where it stands**: a declared type (`let xs: int[] = []`), a parameter (`count([])`), the other arm of a branch, the left side of `??`/`!!` (`attempt(f) !! []`), a declared return type, `as` (`[] as Map<string, int>`). Binding `[]` to a name without a type (`let xs = []`) is the compile-time error `SemanticDiag::EmptyArrayWithoutType`, which says to write the type.
 - The two tags can be combined: `T?!`, `T!?`. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
 - With generics: `(typeas T)?` binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
@@ -211,7 +211,7 @@ Rules:
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
-**Behaviour of the current implementation, not yet decided**: `T` does not flow implicitly into `T?`/`T!`; `T?!` and `T!?` are allowed; `throw` accepts only error values made by `error(...)`; `?->` is defined only for `T!`; the type of the right-hand side of `??`/`!!` must be `T`; a `match` on these two kinds of value has exactly two cases; they can be printed but cannot be compared with `==`. The relation between the previously reserved notation `T ? U` and `T!` is undecided, and using it is a compile-time error (`SemanticDiag::FeatureNotSupported`).
+**Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but not compared with `==`. The relation between the earlier reserved notation `T ? U` and `T!` is undecided, and using it is a compile-time error (`SemanticDiag::FeatureNotSupported`).
 
 ## 3.5 Maps and sets
 

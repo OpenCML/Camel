@@ -13,8 +13,8 @@ func mix(a: int, b: int, c: int, d: int, e: int, n: int): int {
 }
 
 func cmp(a: int, b: int, c: int, d: int, n: int): int {
-    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0)
-                          + (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
+                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
            else cmp(d, a, b, c, n - 1)
 }
 
@@ -24,8 +24,8 @@ func fmix(a: float, b: float, c: float, d: float, e: float, n: int): float {
 }
 
 func fcmp(a: float, b: float, c: float, d: float, n: int): int {
-    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0)
-                          + (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
+                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
            else fcmp(d, a, b, c, n - 1)
 }
 

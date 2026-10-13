@@ -23,10 +23,10 @@ func main(): int sync {
     } else sync {
         if !f1(0) then sync {
             let n24 = v14;
-            return null;
+            null;
         } else sync {
             let n25 = h13(0);
-            return null;
+            null;
         };
         return '';
     };

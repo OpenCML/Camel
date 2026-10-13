@@ -76,7 +76,7 @@ func first_true(flags: bool[]): int {
 with <x: typeas T>
 export func index_of(xs: T[]): int? {
     let i = first_true(xs->map<(y: T) => y == x>)
-    return if i < 0 then null as int? else i as int?
+    return if i < 0 then null else i
 }
 
 /// The first element for which pred is true, or null.
@@ -84,7 +84,7 @@ export func index_of(xs: T[]): int? {
 with <pred: (x: typeas T) => bool>
 export func find(xs: T[]): T? {
     let i = first_true(xs->map<pred>)
-    return if i < 0 then null as T? else xs[i] as T?
+    return if i < 0 then null else xs[i]
 }
 
 /// True when pred is true for at least one element; false for an empty array.
@@ -134,13 +134,13 @@ export func sum(xs: f32[]): f32 {
 /// when it is the first element.
 /// @example min([3, 9, 2]) ?? 0    // 2
 export func min(xs: (typeas T)[]): T? {
-    return if len(xs) == 0 then null as T? else xs->reduce<(acc: T, x: T) => if x < acc then x else acc, xs[0]> as T?
+    return if len(xs) == 0 then null else xs->reduce<(acc: T, x: T) => if x < acc then x else acc, xs[0]>
 }
 
 /// The largest element by `>`, or null for an empty array; among equal elements the first.
 /// @example max(['pear', 'fig']) ?? ''    // 'pear'
 export func max(xs: (typeas T)[]): T? {
-    return if len(xs) == 0 then null as T? else xs->reduce<(acc: T, x: T) => if x > acc then x else acc, xs[0]> as T?
+    return if len(xs) == 0 then null else xs->reduce<(acc: T, x: T) => if x > acc then x else acc, xs[0]>
 }
 
 // ---- transforming ----

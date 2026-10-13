@@ -35,7 +35,6 @@ See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detaile
 |-----------|--------------|
 | Python | 3.9 |
 | Node.js | 18 |
-| Java | 11 |
 | Clang | 19 |
 | CMake | 3.20 |
 | Conan | 2.10 |

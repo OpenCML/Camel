@@ -22,7 +22,8 @@ An expression is a node on the graph, and its operands are its input edges. Whet
 
 - The elements of an array literal must have the same type. The element type of the empty array `[]` comes from the context: `let xs: int[] = []`, `[] as Map<string, int>`.
 - The keys of a struct literal are identifiers.
-- The list comprehension `[e for x in xs if c]` and the spread `...xs` are reserved, not implemented (`SemanticDiag::ConstructNotSupported`). Write `xs->filter<...>->map<...>` and `concat(xs, ys)`.
+- **A list comprehension** `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>`: `x` has the element type of `xs`, `if c` may be left out, and the result is an array of `e`. On the graph it is exactly what the two calls written out are (two operator nodes, each with the subgraph of its element function), so it has their properties: nothing is promised about the order of the elements (a parallel scheduler may compute them concurrently), and effects in `e` and `c` are treated as in the element functions of `map` and `filter` ([6.10](#610-higher-order-operators)). It nests, and it may stand wherever an expression may. A source that is not an array is `SemanticDiag::ComprehensionSourceRefused`.
+- The spread `...xs` is reserved and not implemented (`SemanticDiag::ConstructNotSupported`). Write `concat(xs, ys)`.
 
 ## 6.3 Access and subscripts
 
@@ -58,8 +59,13 @@ func main(): int sync {
 ```
 
 - Ordinary arguments are written in parentheses, `with` arguments in angle brackets; both must directly follow the function name. When the function has no `with` parameters, no angle brackets are written.
-- Arguments correspond to parameters by position, and the types must match exactly (no implicit conversions). A mismatch is `SemanticDiag::NoMatchingFunction` or `SemanticDiag::ArgumentsMismatch`, and the diagnostic lists the available signatures.
+- Arguments correspond to parameters by position, and the types must match: numbers are not converted implicitly; only a value that enters a `T?` or `T!` parameter is put into the form by itself ([3.4](03_data_model.md)). A mismatch is `SemanticDiag::NoMatchingFunction` or `SemanticDiag::ArgumentsMismatch`, and the diagnostic lists the available signatures.
 - When there are several functions of the same name, one is selected by the overloading rules ([7.4.3](07_statements.md#743-overloading)).
+- **`f<w>` is a partial application.** Without parentheses, `f<w>` is a value: a function that already has its context arguments. After `let g = inc<1>`, `g(2)` is `inc<1>(2)`; `w` is evaluated once, where `f<w>` is written. It can be bound to a name, passed, returned, and handed to a higher-order operator directly (`xs->map<inc<10>>`).
+  - When only the first context parameters are given, the rest remain context parameters of the result: after `let above = clamp<0>`, write `above<5>(9)`. A function that has all of them cannot be given more (`g<2>` is an error).
+  - `f` must be one function that these arguments determine. Among several functions of one name, the only one that takes these context arguments is meant; if several do, the function type of the position (a parameter) decides, and when nothing does it is `SemanticDiag::PartialApplicationRefused`.
+  - On the graph it is a function value that carries the captured arguments, the shape a closure has: a subgraph of its own which the bound arguments enter through ports. No node kind is added.
+  - Not supported yet: functions with a `var` context parameter (`SemanticDiag::ConstructNotSupported`) and built-in operators whose type rule depends on their arguments (such as `len`; `SemanticDiag::FunctionNameAsValue`). Write the call in a lambda there.
 - Keyword arguments `f(a: 1)` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`).
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
 - A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->` and `?->`: `3->(x: int): int => x + 1`, `parse_int(s) ?-> (x: int): int => x * 2`.
@@ -98,7 +104,7 @@ For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). O
 
 ```cml
 func half(x: int): int! {
-    return if x % 2 == 0 then { return x / 2 } else { throw error('Odd', 'not even') }
+    return if x % 2 == 0 then x / 2 else { throw error('Odd', 'not even') }
 }
 
 func main(): int sync {
@@ -116,6 +122,7 @@ func main(): int sync {
 ```
 
 - The right side is evaluated only when it is selected.
+- **The right-hand side may be nullable.** In `a ?? b`, when `b` is a `T` the result is a `T`; when `b` is a `T?` the result is a `T?`. So `a ?? b ?? 9` tries `a`, then `b`, then gives the default, and the result is the same however it is parenthesized. Likewise `!!` (when `b` is a `T!` the result is a `T!`). On the graph each `??` is still one branch. A right-hand side `[]` takes the element type of the left-hand side.
 - The right side of `??` and `!!` extends to the end of the expression: `x ?? 0 + 1` is `x ?? (0 + 1)`. To take the value first and then compute, add parentheses: `(x ?? 0) + 1`.
 - A left side that is not of the required form (`??` on a plain `int`, `!!` or `?->` on a `T?`), or a right side of the wrong type, is `SemanticDiag::TaggedOperandMismatch`.
 
@@ -152,29 +159,13 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
   - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
   - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
 - `<`, `>`, `<=`, `>=`: numbers and `string` (by byte). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
-- `===` and `!==` are identity comparison: for numbers and `bool` they compare values; for objects such as arrays, tuples, structs and strings they compare whether the two sides are **the same object**.
-
-```cml
-func main(): int sync {
-    let a = [1, 2]
-    let b = [1, 2]
-    let c = a
-    println(a === c, a === b, 1 === 1)
-    return 0
-}
-```
-
-```text
-true false true
-```
-
-For strings too, `===` compares objects rather than contents (`'a' === 'a'` is `false`); to compare contents use `==`.
+- `===` and `!==` are not supported for now: the lexer knows the two tokens, and writing one is a located compile-time error, `SemanticDiag::ConstructNotSupported`. Compare values with `==` and `!=`.
 
 ### 6.7.4 Type conversion `as`
 
 `e as T` is used for:
 
-- entering the nullable or fallible form: `5 as int?`, `null as int?`, `v as int!`;
+- entering the nullable or fallible form: `5 as int?`, `null as int?`, `v as int!` (not needed where the target type is known, see [3.4](03_data_model.md));
 - constructing maps and sets: `[...] as Map<K, V>`, `[...] as Set<T>`;
 - checked conversion of module types: `t as Tensor<f32, const [3]>`, where the shape is checked at the conversion;
 - giving a type to a result of undetermined type, as returned by `json::decode` and the like: `decode(s) as int[]`.
@@ -197,7 +188,7 @@ func sign(x: int): string {
 }
 ```
 
-- An `if` without `else` has no value: it can only be a statement whose arm does something with side effects, and it usually has to be written in a sync block. In this case the arm must be a block ending with `return null`: `if c then sync { println('x'); return null }`; an arm with a value (`if c then println('x')`: the call of `println` has a value) is `SemanticDiag::IfArmValueWithoutElse`.
+- **An `if` without `else` has no value.** It can only be a statement; its arm may be of any type, and what the arm gives is dropped: `if debug then println('checking')` is legal, and an arm no longer needs `return null` to make the types fit. Using it as a value (`let x = if debug then 1`, as an argument, as the operand of `return`) is the compile-time error `SemanticDiag::IfWithoutElseAsValue`. Nothing changes on the graph: a branch with two arms, the `else` not written being an empty arm, and a join that takes no value; the arm is evaluated as usual, so an arm that does something with side effects usually has to be written in a sync block. An `else {}` written and left empty is the same as none.
 - The type of the condition is `bool`; there is no "truthiness" conversion.
 
 > **A `return` in a block gives the value of that block; it does not leave the function.**
@@ -239,7 +230,7 @@ warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 
 note: the value of this 'if' is not used
 ```
 
-So there is no "early return" in Camel: write the branch as the last expression of the function body, or write `return` before it. When several conditions are tested in turn, join `if ... else if ... else ...` into one expression. The warning can be turned off with `-Wno-exit-in-unused-branch`; `return null` and a `return` without a value are not reported.
+So there is no "early return" in Camel: write the branch as the last expression of the function body, or write `return` before it. When several conditions are tested in turn, join `if ... else if ... else ...` into one expression. The warning can be turned off with `-Wno-exit-in-unused-branch`. `return null` and a `return` without a value are reported too: an arm does not need one to make the types fit, so one written there was most likely meant to leave the function.
 
 ### 6.8.2 `match`
 
@@ -294,7 +285,7 @@ func report(r: int!): string {
 }
 
 func main(): int sync {
-    println(show(5 as int?), show(null as int?))
+    println(show(5), show(null))
     println(report(parse_int('7')), report(parse_int('x')))
     return 0
 }
@@ -302,7 +293,7 @@ func main(): int sync {
 
 A missing case, an extra case or a literal case mixed in is `SemanticDiag::TaggedMatchCases`.
 
-**A `match` without `case _` (behaviour of the current implementation, not yet decided).** There is no ruling yet on whether `case _` must be written. At present it may be left out, and the compiler gives the warning `SemanticDiag::MatchWithoutDefault`; at run time, meeting a value that no case matches is the fault `RuntimeDiag::MatchNotExhaustive`, whose message carries that value. A `match` on a `bool` that writes out both `case true` and `case false` is complete and gets no warning.
+**A `match` must have a default case.** A `match` without `case _` is the compile-time error `SemanticDiag::MatchWithoutDefault`, located at the `match`. Two shapes need none: a `match` on a `bool` that writes out both `case true` and `case false`, and a `match` on a `T?` or `T!` with the fixed patterns above. The compiler adds no arm the program does not write, so the arms on the graph correspond one to one to the `case`s in the source.
 
 Tuple patterns, struct patterns, and identifier patterns on values of ordinary types (`case n => ...`) are reserved, not implemented (`SemanticDiag::ConstructNotSupported`); use an `if` chain, or take the members first and then match.
 
@@ -397,6 +388,8 @@ If the element function of `foreach` is to produce side effects, its body must b
   | `&=`, `\|=` | `bool` (`a = a && b`, `a = a \|\| b`) |
   | `@=` | None of the built-in types |
 
+- **A compound assignment changes nothing in place.** `x op= e` computes the new value and binds `x` to it. A type defined by a module (a tensor) has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, wherever the binary operator is defined for the types): after `let a = t`, `t += u` leaves `a` unchanged. To change a value in place, use an explicit operator.
+
 - For `wait e` see [4.4](04_execution_model.md#44-var-references-and-wait).
 
 ## 6.12 Operator precedence
@@ -409,7 +402,7 @@ From lowest to highest:
 | 2 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Cannot be chained |
 | 3 | `\|\|` | Left-associative |
 | 4 | `&&` | Left-associative |
-| 5 | `==` `!=` `===` `!==` | |
+| 5 | `==` `!=` (`===` `!==` not supported for now) | |
 | 6 | `<` `>` `<=` `>=` | |
 | 7 | `+` `-` | Left-associative |
 | 8 | `*` `/` `%` `^` `@` | Left-associative; `^` is at the same level as `*` |

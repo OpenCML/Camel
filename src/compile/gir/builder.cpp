@@ -1153,6 +1153,10 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
     case GCT::LoadType::DECL:
         return visitDeclNode(node);
     case GCT::LoadType::FUNC:
+        if (node->loadAs<GCT::FuncLoad>()->name().empty() &&
+            isGenericHere(node->atAs<GCT::TypeLoad>(0)->loadAs<GCT::TypeLoad>()->dataType())) {
+            return anonymousTemplateOf(node);
+        }
         return visitFuncNode(node);
     case GCT::LoadType::DATA:
         return visitDataNode(node);
@@ -1359,24 +1363,203 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
     }
 }
 
+node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
+    Type *type           = func->atAs<GCT::TypeLoad>(0)->loadAs<GCT::TypeLoad>()->dataType();
+    auto tmpl            = std::make_shared<GenericTemplate>();
+    tmpl->func           = func;
+    tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
+    tmpl->outerBindings  = typeBindings_;
+    tmpl->ownerGraph     = currGraph_;
+    tmpl->module         = module_;
+    tmpl->homeRoot       = rootGraph_.get();
+    tmpl->nodeScope      = nodeScope_;
+    tmpl->graphScope     = graphScope_;
+    tmpl->decoratedScope = decoratedScope_;
+    tmpl->templateScope  = templateScope_;
+    node_handle_t drefNode = currGraph_->addDrefNode(
+        std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
+            std::make_shared<graph_set_t>()});
+    genericDrefs_[drefNode] = tmpl;
+    anonymousTemplates_.push_back(tmpl);
+    registerNodeOrigin(context_, drefNode, func, "gir.dref.generic");
+    return drefNode;
+}
+
+void Builder::rejectGenericValue(
+    const template_ptr_t &tmpl, const GCT::node_ptr_t &origin, const std::string &why) {
+    diags_->of(SemanticDiag::GenericFunctionAsValue)
+        .atOrigin(origin->load()->origin())
+        .commit(tmpl->name, why, tmpl->name + ": " + tmpl->funcType->toString());
+    throw BuildAbortException();
+}
+
+compile_graph_ptr_t Builder::instantiateGenericAs(
+    const template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
+    std::string &why) {
+    FunctionType *signature = tmpl->funcType;
+    const size_t withCount  = signature->withTypesCount();
+    const size_t normCount  = signature->normTypesCount();
+    if (withCount != expected->withTypesCount() || normCount != expected->normTypesCount()) {
+        why = std::format(
+            "it takes {} parameter(s) and {} context parameter(s), and a function of type '{}' "
+            "is expected",
+            normCount,
+            withCount,
+            expected->toString());
+        return nullptr;
+    }
+    const auto patternAt = [&](size_t i) {
+        return i < withCount ? signature->withTypeAt(i) : signature->normTypeAt(i - withCount);
+    };
+    const auto expectedAt = [&](size_t i) {
+        return i < withCount ? expected->withTypeAt(i) : expected->normTypeAt(i - withCount);
+    };
+    type_bindings_t bindings;
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        if (!unifyTypeVars(patternAt(i), expectedAt(i), bindings)) {
+            why = std::format(
+                "its parameter {}, '{}', does not have the form of '{}' in the function "
+                "expected here, '{}'",
+                i + 1,
+                patternAt(i)->toString(),
+                expectedAt(i)->toString(),
+                expected->toString());
+            return nullptr;
+        }
+    }
+    if (signature->hasExitType() && expected->hasExitType()) {
+        unifyTypeVars(signature->exitType(), expected->exitType(), bindings);
+    }
+    std::vector<std::string> names, open;
+    collectTypeVars(signature, names);
+    for (const std::string &name : names) {
+        if (findTypeBinding(bindings, name) == nullptr) {
+            open.push_back(name);
+        }
+    }
+    if (!open.empty()) {
+        why = std::format(
+            "its type variable(s) {} cannot be determined from the function expected here, '{}'",
+            strutil::join(open, ", ", [](const std::string &n) { return n; }),
+            expected->toString());
+        return nullptr;
+    }
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        Type *param = substituteTypeVars(patternAt(i), bindings);
+        if (containsTypeVar(expectedAt(i))) {
+            why = std::format(
+                "the function expected here, '{}', does not have all its types yet",
+                expected->toString());
+            return nullptr;
+        }
+        if (!param->equals(expectedAt(i))) {
+            why = std::format(
+                "with {} its parameter {} is '{}', and the function expected here is '{}'",
+                typeBindingsToString(bindings),
+                i + 1,
+                param->toString(),
+                expected->toString());
+            return nullptr;
+        }
+    }
+    if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
+        diags_->of(SemanticDiag::TaggedTypeNesting)
+            .atOrigin(origin->load()->origin())
+            .commit(
+                repeated->toString(),
+                asTagged(repeated->payloadType())->payloadType()->toString());
+        throw BuildAbortException();
+    }
+    rejectInvalidCollectionKey(substituteTypeVars(signature, bindings), origin);
+    compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, origin);
+    if (!graph->funcType()->hasExitType()) {
+        diags_->of(SemanticDiag::CallingIncompleteFunction)
+            .atOrigin(origin->load()->origin())
+            .commit(graph->name(), graph->funcType()->toString());
+        throw BuildAbortException();
+    }
+    if (expected->hasExitType() && !containsTypeVar(expected->exitType()) &&
+        !expected->exitType()->equals(graph->funcType()->exitType())) {
+        why = std::format(
+            "with {} it returns '{}', and the function expected here is '{}'",
+            typeBindingsToString(bindings),
+            graph->funcType()->exitType()->toString(),
+            expected->toString());
+        return nullptr;
+    }
+    return graph;
+}
+
+node_handle_t
+Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr_t &origin) {
+    const auto generic = genericDrefs_.find(node);
+    ASSERT(generic != genericDrefs_.end(), "Not the name of a generic function.");
+    const template_ptr_t tmpl = generic->second;
+    if (expected == nullptr) {
+        std::vector<std::string> names;
+        collectTypeVars(tmpl->funcType, names);
+        rejectGenericValue(
+            tmpl,
+            origin,
+            std::format(
+                "nothing here says which function is wanted, so its type variable(s) {} cannot "
+                "be determined; write the type, e.g. 'let f: (x: int) => int = {}'",
+                strutil::join(names, ", ", [](const std::string &n) { return n; }),
+                tmpl->name));
+    }
+    if (expected->code() != TypeCode::Function) {
+        rejectGenericValue(
+            tmpl,
+            origin,
+            "a value of type '" + expected->toString() + "' is expected here, not a function");
+    }
+    std::string why;
+    compile_graph_ptr_t graph =
+        instantiateGenericAs(tmpl, tt::as_ptr<FunctionType>(expected), origin, why);
+    if (graph == nullptr) {
+        rejectGenericValue(tmpl, origin, why);
+    }
+    return createFuncDataNode(graph, true, false);
+}
+
 compile_graph_ptr_t Builder::resolveGenericCall(
-    const template_ptr_t &tmpl, const type_vec_t &withTypes, const type_vec_t &normTypes,
+    const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+    std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
     const GCT::node_ptr_t &call) {
     FunctionType *signature = tmpl->funcType;
-    const auto typesText    = [](const type_vec_t &types) {
-        return strutil::join(types, ", ", [](Type *t) { return t->toString(); });
+    const size_t withCount  = signature->withTypesCount();
+    const size_t normCount  = signature->normTypesCount();
+    const auto inputAt = [&](size_t i) -> Argument & {
+        return i < withCount ? withInputs[i] : normInputs[i - withCount];
     };
-    const std::string argTypesStr =
-        withTypes.empty() ? std::format("({})", typesText(normTypes))
-                          : std::format("<{}> ({})", typesText(withTypes), typesText(normTypes));
+    const auto typeAt = [&](size_t i) -> Type *& {
+        return i < withCount ? withTypes[i] : normTypes[i - withCount];
+    };
+    // The arguments that name a generic function themselves: they have no type yet.
+    std::vector<template_ptr_t> waiting(withCount + normCount);
+    const auto typesText = [&](const type_vec_t &types, size_t offset) {
+        std::string text;
+        for (size_t i = 0; i < types.size(); ++i) {
+            const template_ptr_t &generic =
+                offset + i < waiting.size() ? waiting[offset + i] : nullptr;
+            text += (i == 0 ? "" : ", ") +
+                    (generic ? "<generic " + generic->name + ">" : types[i]->toString());
+        }
+        return text;
+    };
+    const auto argTypesStr = [&] {
+        return withTypes.empty() ? std::format("({})", typesText(normTypes, withCount))
+                                 : std::format(
+                                       "<{}> ({})",
+                                       typesText(withTypes, 0),
+                                       typesText(normTypes, withCount));
+    };
     const auto reject = [&](const std::string &why) {
         diags_->of(SemanticDiag::GenericArgumentsMismatch)
             .atOrigin(call->load()->origin())
-            .commit(tmpl->name, argTypesStr, why, tmpl->name + ": " + signature->toString());
+            .commit(tmpl->name, argTypesStr(), why, tmpl->name + ": " + signature->toString());
         throw BuildAbortException();
     };
-    const size_t withCount = signature->withTypesCount();
-    const size_t normCount = signature->normTypesCount();
     if (withCount != withTypes.size()) {
         // Every argument written in the parentheses (`take(xs, 2)`): say which parameters
         // are with-parameters and how the call is written.
@@ -1408,30 +1591,118 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         reject(
             std::format("it takes {} argument(s) and {} were given", normCount, normTypes.size()));
     }
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        if (auto generic = genericDrefs_.find(inputAt(i).node); generic != genericDrefs_.end()) {
+            waiting[i] = generic->second;
+        }
+    }
     // A parameter by its position among all parameters (`with` ones first).
     const auto patternAt = [&](size_t i) {
         return i < withCount ? signature->withTypeAt(i) : signature->normTypeAt(i - withCount);
     };
-    const auto actualAt = [&](size_t i) {
-        return valueTypeOf(i < withCount ? withTypes[i] : normTypes[i - withCount]);
-    };
+    const auto actualAt = [&](size_t i) { return valueTypeOf(typeAt(i)); };
     const auto describe = [&](size_t i) {
         const std::string paramName =
             i < signature->argNamesCount() ? std::string(signature->argNameAt(i)) : "?";
         return std::format(
-            "{} {} has type '{}', but its parameter '{}: {}'",
+            "{} {} {}, but its parameter '{}: {}'",
             i < withCount ? "with-argument" : "argument",
             (i < withCount ? i : i - withCount) + 1,
-            actualAt(i)->toString(),
+            waiting[i] ? "is the generic function '" + waiting[i]->name + "'"
+                       : "has type '" + actualAt(i)->toString() + "'",
             paramName,
             patternAt(i)->toString());
     };
-    // Each variable takes the type found at its `typeas` position...
+    // 1. Each variable takes the type found at its `typeas` position. An argument that is
+    // not of the form of a `T?` / `T!` parameter enters it (design principles 2.10), so it
+    // binds the variables of the payload: `or_zero(5, 0)` with `x: (typeas T)?` gives
+    // `T = int`. `null` binds nothing.
     type_bindings_t bindings;
+    const std::function<bool(Type *, Type *)> bindEntering = [&](Type *pattern, Type *actual) {
+        type_bindings_t attempt = bindings;
+        if (bindTypeVars(pattern, actual, attempt)) {
+            bindings = std::move(attempt);
+            return true;
+        }
+        TupleType *tagged = asTagged(pattern);
+        if (tagged == nullptr) {
+            return false;
+        }
+        if (tagged->isNullable() && actual->code() == TypeCode::Void) {
+            return true;
+        }
+        return bindEntering(tagged->payloadType(), actual);
+    };
     for (size_t i = 0; i < withCount + normCount; ++i) {
-        if (!bindTypeVars(patternAt(i), actualAt(i), bindings)) {
+        if (!waiting[i] && !bindEntering(patternAt(i), actualAt(i))) {
             reject(describe(i) + " needs a type of that form to bind its type variables");
         }
+    }
+    // 2. A variable that its `typeas` position left open (the argument there is `null`, or a
+    // generic function that is still waiting) takes the type found at any other occurrence:
+    // the constraints of all arguments are collected before any is held to its parameter.
+    for (size_t i = 0; i < withCount + normCount; ++i) {
+        if (!waiting[i]) {
+            unifyTypeVars(patternAt(i), actualAt(i), bindings);
+        }
+    }
+    // 3. The waiting arguments, as long as one of them can be given its types: the parameter
+    // it is passed to, with what is known so far, is the function it has to be; its instance
+    // then says what is still open in that parameter (its return type).
+    std::vector<std::string> reasons(waiting.size());
+    for (bool progress = true; progress;) {
+        progress = false;
+        for (size_t i = 0; i < waiting.size(); ++i) {
+            if (!waiting[i]) {
+                continue;
+            }
+            Type *wanted = substituteTypeVars(patternAt(i), bindings);
+            if (wanted->code() != TypeCode::Function) {
+                reasons[i] = wanted->code() == TypeCode::TypeVar
+                                 ? "its parameter has no type of its own for it to take"
+                                 : "its parameter is not a function";
+                continue;
+            }
+            compile_graph_ptr_t instance = instantiateGenericAs(
+                waiting[i],
+                tt::as_ptr<FunctionType>(wanted),
+                inputAt(i).expr,
+                reasons[i]);
+            if (instance == nullptr) {
+                continue;
+            }
+            inputAt(i).node = createFuncDataNode(instance, true, false);
+            typeAt(i)       = valueTypeOf(nodeTypeOf(inputAt(i).node));
+            waiting[i]      = nullptr;
+            unifyTypeVars(patternAt(i), actualAt(i), bindings);
+            progress = true;
+        }
+    }
+    std::vector<std::string> names, open;
+    collectTypeVars(signature, names);
+    for (const std::string &name : names) {
+        if (findTypeBinding(bindings, name) == nullptr) {
+            open.push_back(name);
+        }
+    }
+    const std::string openText =
+        strutil::join(open, ", ", [](const std::string &n) { return n; });
+    for (size_t i = 0; i < waiting.size(); ++i) {
+        if (waiting[i]) {
+            reject(std::format(
+                "{} cannot be given its types{}: {}",
+                describe(i),
+                open.empty() ? std::string()
+                             : " while the type variable(s) " + openText + " of '" + tmpl->name +
+                                   "' are not determined by the other arguments",
+                reasons[i]));
+        }
+    }
+    if (!open.empty()) {
+        reject(
+            "the type variable(s) " + openText +
+            " cannot be determined from the arguments (a 'null' or an empty array says nothing "
+            "about them)");
     }
     // ...and then every argument is held to its parameter exactly as for an ordinary function.
     for (size_t i = 0; i < withCount + normCount; ++i) {
@@ -1439,7 +1710,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         if (containsTypeVar(wanted)) {
             reject(describe(i) + " leaves a type variable without a type");
         }
-        if (!wanted->assignableFrom(actualAt(i))) {
+        if (!entersImplicitly(wanted, actualAt(i))) {
             reject(std::format(
                 "{} is '{}' here ({})",
                 describe(i),
@@ -1448,8 +1719,8 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         }
     }
     // `T?` with `T = int?` would be `int??`: the same mark twice is rejected where a type is
-    // written, and so it is where substitution writes it (design principles 2.9;
-    // DESIGN-QUESTION(nullable-error) Q2).
+    // written, and so it is where substitution writes it (design principles 2.10: `int?!`
+    // is allowed, `int??` and `int!!` are not).
     if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
             .atOrigin(call->load()->origin())
@@ -1461,6 +1732,192 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     // Likewise a key type: `Set<T>` with `T = float` (DESIGN-QUESTION(map-key-types)).
     rejectInvalidCollectionKey(substituteTypeVars(signature, bindings), call);
     return instantiateGeneric(tmpl, bindings, call);
+}
+
+void Builder::settleGenericOperatorArguments(
+    const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
+    std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
+    const GCT::node_ptr_t &call) {
+    const auto isWaiting = [&](const Argument &arg) { return genericDrefs_.contains(arg.node); };
+    // The types to try for a parameter of the function: what the other arguments are made
+    // of (the element type of an array, of a set, the key and value types of a map and their
+    // pair), then those arguments' own types.
+    type_vec_t candidates;
+    const auto add = [&](Type *type) {
+        if (type == nullptr || type->code() == TypeCode::Void || containsTypeVar(type)) {
+            return;
+        }
+        for (Type *known : candidates) {
+            if (known->equals(type)) {
+                return;
+            }
+        }
+        candidates.push_back(type);
+    };
+    const auto addParts = [&](Type *type) {
+        if (type == nullptr) {
+            return;
+        }
+        if (type->code() == TypeCode::Array) {
+            add(tt::as_ptr<ArrayType>(type)->elemType());
+        } else if (type->isOtherType()) {
+            const auto params = static_cast<OtherType *>(type)->paramsSpan();
+            for (Type *param : params) {
+                add(param);
+            }
+            if (params.size() == 2) {
+                add(TupleType::create(std::vector<Type *>{params[0], params[1]}));
+            }
+        }
+    };
+    for (const auto *list : {&withInputs, &normInputs}) {
+        const type_vec_t &types = list == &withInputs ? withTypes : normTypes;
+        for (size_t i = 0; i < list->size(); ++i) {
+            if (!isWaiting((*list)[i])) {
+                addParts(valueTypeOf(types[i]));
+            }
+        }
+    }
+    for (const auto *list : {&withInputs, &normInputs}) {
+        const type_vec_t &types = list == &withInputs ? withTypes : normTypes;
+        for (size_t i = 0; i < list->size(); ++i) {
+            if (!isWaiting((*list)[i])) {
+                add(valueTypeOf(types[i]));
+            }
+        }
+    }
+    const auto accepted = [&] {
+        std::vector<StaticArg> statics;
+        statics.reserve(normInputs.size());
+        for (const Argument &input : normInputs) {
+            statics.push_back(isWaiting(input) ? StaticArg{} : staticArgOf(input.node));
+        }
+        return ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+    };
+    const auto settleOne = [&](Argument &arg, Type *&type) {
+        const template_ptr_t tmpl = genericDrefs_.find(arg.node)->second;
+        FunctionType *signature   = tmpl->funcType;
+        const size_t params       = signature->normTypesCount();
+        std::vector<std::string> names;
+        collectTypeVars(signature, names);
+        std::string tried;
+        // An instance that was built and that the operator then refused (its result type
+        // is not what the operator needs): the first one stands for the name, so that the
+        // operator's own diagnostic says what does not fit.
+        node_handle_t refused{};
+        Type *refusedType = nullptr;
+        if (signature->withTypesCount() == 0 && params > 0 && !candidates.empty()) {
+            // Every choice of candidate types for the parameters, the first candidates first.
+            const size_t limit = 256;
+            std::vector<size_t> pick(params, 0);
+            for (size_t round = 0; round < limit; ++round) {
+                type_bindings_t bindings;
+                bool fits = true;
+                for (size_t p = 0; fits && p < params; ++p) {
+                    fits = unifyTypeVars(signature->normTypeAt(p), candidates[pick[p]], bindings);
+                }
+                for (size_t n = 0; fits && n < names.size(); ++n) {
+                    fits = findTypeBinding(bindings, names[n]) != nullptr;
+                }
+                for (size_t p = 0; fits && p < params; ++p) {
+                    fits = substituteTypeVars(signature->normTypeAt(p), bindings)
+                               ->equals(candidates[pick[p]]);
+                }
+                if (fits) {
+                    FunctionType *asType = instantiateFunctionType(signature, bindings);
+                    Type *saved          = type;
+                    // The operator is asked before the instance is built, so that the body
+                    // of an instance it would refuse is never built (its errors would be
+                    // reported for types the program does not mean). With a declared return
+                    // type the question is exact; without one it is asked for the return
+                    // types an element function usually has.
+                    bool wanted = false;
+                    if (asType->hasExitType()) {
+                        type   = asType;
+                        wanted = accepted();
+                    } else {
+                        type_vec_t results = candidates;
+                        for (Type *usual :
+                             {Type::Bool(), Type::Int64(), Type::Float64(), Type::String()}) {
+                            results.push_back(usual);
+                        }
+                        for (size_t r = 0; !wanted && r < results.size(); ++r) {
+                            FunctionType *probe = instantiateFunctionType(signature, bindings);
+                            probe->setExitType(results[r]);
+                            type   = probe;
+                            wanted = accepted();
+                        }
+                    }
+                    type = saved;
+                    if (wanted) {
+                        std::string why;
+                        compile_graph_ptr_t instance =
+                            instantiateGenericAs(tmpl, asType, arg.expr, why);
+                        if (instance != nullptr) {
+                            node_handle_t value = createFuncDataNode(instance, true, false);
+                            type                = valueTypeOf(nodeTypeOf(value));
+                            if (accepted()) {
+                                arg.node = value;
+                                return;
+                            }
+                            if (refused == nullptr) {
+                                refused     = value;
+                                refusedType = type;
+                            }
+                            type = saved;
+                        }
+                    }
+                    if (!tried.empty()) {
+                        tried += "; ";
+                    }
+                    tried += typeBindingsToString(bindings);
+                }
+                // The next choice.
+                size_t p = 0;
+                while (p < params && ++pick[p] == candidates.size()) {
+                    pick[p++] = 0;
+                }
+                if (p == params) {
+                    break;
+                }
+            }
+        }
+        if (refused != nullptr) {
+            arg.node = refused;
+            type     = refusedType;
+            return;
+        }
+        if (tmpl->name.empty()) {
+            // The element function of a list comprehension: nothing to take `x` from.
+            Type *source = !normTypes.empty() ? valueTypeOf(normTypes.front()) : nullptr;
+            diags_->of(SemanticDiag::ComprehensionSourceRefused)
+                .atOrigin(call->load()->origin())
+                .commit(source != nullptr ? source->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+        rejectGenericValue(
+            tmpl,
+            arg.expr,
+            std::format(
+                "the operator '{}' does not say which function it expects, and no instance "
+                "suggested by its other arguments is one it accepts{}; its type variable(s) {} "
+                "stay undetermined. Write the call in a function whose parameter types are "
+                "written out, e.g. '(x: int) => {}(x)'",
+                ops->name(),
+                tried.empty() ? std::string() : " (tried: " + tried + ")",
+                strutil::join(names, ", ", [](const std::string &n) { return n; }),
+                tmpl->name));
+    };
+    for (size_t i = 0; i < withInputs.size(); ++i) {
+        if (isWaiting(withInputs[i])) {
+            settleOne(withInputs[i], withTypes[i]);
+        }
+    }
+    for (size_t i = 0; i < normInputs.size(); ++i) {
+        if (isWaiting(normInputs[i])) {
+            settleOne(normInputs[i], normTypes[i]);
+        }
+    }
 }
 
 void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) {
@@ -1533,11 +1990,16 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     // " [in the instance ..., instantiated by the call at line:col]".
     const DiagLabel instanceLabel{
         SourceRange{call->load()->origin()},
-        std::format(
-            "in the instance '{}' of the generic function '{}' with {}, instantiated by the call",
-            instanceName,
-            tmpl->name,
-            typeBindingsToString(bindings)),
+        tmpl->name.empty()
+            ? std::format(
+                  "in a list comprehension whose elements have type '{}'",
+                  bindings.empty() ? std::string("?") : bindings.front().second->toString())
+            : std::format(
+                  "in the instance '{}' of the generic function '{}' with {}, instantiated by "
+                  "the call",
+                  instanceName,
+                  tmpl->name,
+                  typeBindingsToString(bindings)),
         ""};
 
     // The instance is built where the function was declared, not where it is called.
@@ -1612,14 +2074,18 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         lastSyncedNode_       = {};
 
         FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings);
-        graph                  = createCompileGraph(funcType, currGraph_, instanceName);
+        graph = tmpl->name.empty() ? createCompileGraph(funcType, currGraph_)
+                                   : createCompileGraph(funcType, currGraph_, instanceName);
         tmpl->instances.push_back({bindings, graph, false, rootGraph_.get()});
         // Scopes are kept by name under the scope they were entered from, here a scope of
         // the declaring module: the instances of two importing modules need two scopes.
+        // Likewise two functions written in place, which have no name to tell them apart.
         enterGraphScope(
             graph,
             foreign ? std::format("{}@{:p}", instanceName, static_cast<void *>(rootGraph_.get()))
-                    : instanceName);
+            : tmpl->name.empty()
+                ? std::format("{}@{:p}", instanceName, static_cast<void *>(tmpl.get()))
+                : instanceName);
         buildFuncBody(tmpl->func, graph, funcType, instanceName);
         leaveScope();
     } catch (...) {
@@ -1667,6 +2133,25 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             ASSERT(
                 holes.size() == refNodes.size(),
                 "Composite holes must match unresolved reference count.");
+            if (dataType->code() == TypeCode::Array && !dataType->resolved() &&
+                !refTypes.empty()) {
+                // An array whose elements are all computed (`[x, null]`, `[a, b]` with an
+                // `int` and an `int?`): its element type is what the elements join to, and
+                // an element that is not of that type enters it (design principles 2.10).
+                Type *joined = valueTypeOf(refTypes.front());
+                for (size_t i = 1; i < refTypes.size() && joined != nullptr; ++i) {
+                    joined = joinTypes(joined, valueTypeOf(refTypes[i]));
+                }
+                for (size_t i = 0; i < refTypes.size() && joined != nullptr; ++i) {
+                    if (joined->assignableFrom(valueTypeOf(refTypes[i]))) {
+                        continue;
+                    }
+                    if (node_handle_t entered = coerceTo(refNodes[i], joined, gct)) {
+                        refNodes[i] = entered;
+                        refTypes[i] = joined;
+                    }
+                }
+            }
             auto filledType       = dataType->resolved()
                                         ? dataType
                                         : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
@@ -1781,6 +2266,36 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         throw;
     }
     declaresVariable_ = isVar;
+    // `let g = f<w>` where `f<w>` is not one function: the name would be bound to `f` and the
+    // arguments lost.
+    try {
+        rejectUnappliedBinding(node, gct->at(0));
+        if (genericDrefs_.contains(node)) {
+            // `let g = id`: no context to take the types from.
+            (void)genericValueFor(node, nullptr, gct->at(0));
+        }
+    } catch (const BuildAbortException &) {
+        if (!declScope->has(ident, false)) {
+            poisonedNames_[declScope].insert(ident);
+        }
+        throw;
+    }
+    // Design principles 2.10: the empty literal `[]` takes its element type from where it
+    // stands (an annotation, a parameter, the other arm of a branch, `as`). A name bound to
+    // it without one has no element type; say so here, where the type can be written. (A
+    // name the compiler made for an element of a literal starts with a digit.)
+    if (Type *type = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
+        type != nullptr && type->code() == TypeCode::Array &&
+        tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void && !ident.empty() &&
+        !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
+        diags_->of(SemanticDiag::EmptyArrayWithoutType)
+            .atOrigin(gct->at(0)->load()->origin())
+            .commit(ident);
+        if (!declScope->has(ident, false)) {
+            poisonedNames_[declScope].insert(ident);
+        }
+        throw BuildAbortException();
+    }
     // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
     node_handle_t bound = isVar ? newVariable(node) : node;
@@ -2179,7 +2694,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
     const string name = gct->loadAs<GCT::DRefLoad>()->ref().toString();
-    const bool callee = std::exchange(genericCalleeAllowed_, false);
+    genericCalleeAllowed_ = false;
     auto optNode      = nodeAt(name);
     if (optNode.has_value()) {
         node_handle_t node = optNode.value();
@@ -2203,14 +2718,10 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     auto &graph       = currGraph_;
     if (auto optTemplate = templateScope_->get(name); optTemplate.has_value()) {
-        // The name of a generic function stands for a template, which has no graph and so
-        // no function value: it can only be called.
-        if (!callee) {
-            diags_->of(SemanticDiag::GenericFunctionAsValue)
-                .atOrigin(gct->load()->origin())
-                .commit(name);
-            throw BuildAbortException();
-        }
+        // The name of a generic function stands for a template, which has no graph. Called,
+        // the arguments choose the instance; anywhere else a function is expected the
+        // position does (design principles 2.10; genericValueFor), and until then the name
+        // is this marker node.
         node_handle_t drefNode = graph->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
                 std::make_shared<graph_set_t>()});
@@ -2280,14 +2791,9 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
                     "that returns the value");
             throw BuildAbortException();
         } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(e)) {
-            // A generic function of another module: like a local one it can only be called;
-            // the call builds the instance in this module (instantiateGeneric).
-            if (!callee) {
-                diags_->of(SemanticDiag::GenericFunctionAsValue)
-                    .atOrigin(gct->load()->origin())
-                    .commit(name);
-                throw BuildAbortException();
-            }
+            // A generic function of another module: like a local one it is a marker until a
+            // call or the position it stands in chooses the instance, which is built in this
+            // module (instantiateGeneric).
             node_handle_t drefNode = graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
                     std::make_shared<graph_set_t>()});
@@ -2390,6 +2896,37 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     const auto &castLoad = gct->loadAs<GCT::CastLoad>();
     Type *targetType     = boundType(castLoad->targetType());
+    if (targetType != nullptr && targetType->code() == TypeCode::Function) {
+        // A function type written for a function: it says which function a name stands for
+        // (the instance of a generic function, one of several overloads, a partial
+        // application), and it must be the type of any other value. Nothing is converted.
+        auto *wanted       = tt::as_ptr<FunctionType>(targetType);
+        node_handle_t node = valueNodeOf(visit(gct->at(0)));
+        if (genericDrefs_.contains(node)) {
+            node = genericValueFor(node, wanted, gct->at(0));
+        } else if (nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+            node_handle_t chosen{};
+            if (boundWithArgs_.contains(node)) {
+                chosen = partialApplicationOf(node, gct->at(0), wanted);
+            }
+            if (chosen == nullptr) {
+                chosen = overloadValueFor(node, wanted, gct->at(0));
+            }
+            node = chosen != nullptr ? chosen : functionValueOf(node, gct->at(0));
+            rejectNameWithoutValue(node, "the name", gct->at(0));
+        } else {
+            node = functionValueOf(node, gct->at(0));
+        }
+        Type *actual = valueTypeOf(nodeTypeOf(node));
+        if (!targetType->assignableFrom(actual)) {
+            diags_->of(SemanticDiag::DynamicCastForbidden)
+                .atOrigin(gct->load()->origin())
+                .commit(actual->toString(), targetType->toString());
+            throw BuildAbortException();
+        }
+        LEAVE("CAST");
+        return node;
+    }
     // A collection type written with a type variable is only checked now that it is replaced.
     rejectInvalidCollectionKey(targetType, gct);
     node_handle_t valueNode{};
@@ -2425,6 +2962,14 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
+    if (asTagged(targetType) != nullptr &&
+        targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
+        // Several levels at once (`let x: int?! = 5`): one CAST per level.
+        if (node_handle_t entered = coerceTo(valueNode, targetType, gct)) {
+            LEAVE("CAST");
+            return entered;
+        }
+    }
     // Safe conversions always; an Unsafe one only into a module type, which then checks the
     // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
     // that may lose information stay refused.
@@ -2519,6 +3064,19 @@ node_handle_t Builder::namedValueOf(
 }
 
 node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
+    if (boundWithArgs_.contains(node)) {
+        // `f<w>` as a value is a partial application (design principles 2.10). The binding
+        // used to be dropped here, without a word.
+        if (node_handle_t applied = partialApplicationOf(node, origin)) {
+            return applied;
+        }
+        // Not one function for these arguments. A name may still be settled by the position
+        // it stands in (a parameter of function type); a value cannot.
+        if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+            rejectUnappliedBinding(node, origin);
+        }
+        return node;
+    }
     if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
         return node;
     }
@@ -2692,6 +3250,10 @@ void Builder::rejectNameWithoutValue(
     node_handle_t node, const std::string &name, const GCT::node_ptr_t &origin) {
     if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
         return;
+    }
+    rejectUnappliedBinding(node, origin);
+    if (genericDrefs_.contains(node)) {
+        (void)genericValueFor(node, nullptr, origin); // nothing here fixes its types
     }
     const auto &target = nodeGraphOf(node)->drefTarget(node);
     std::string what   = "an operator with several signatures";
@@ -3021,6 +3583,285 @@ node_handle_t Builder::createFuncDataNode(
     // used only after all updates finish.
     usedGraphs_.insert(graph.get());
     return resultNode;
+}
+
+node_handle_t Builder::partialApplicationOf(
+    node_handle_t target, const GCT::node_ptr_t &origin, FunctionType *expected) {
+    const auto boundIt = boundWithArgs_.find(target);
+    if (boundIt == boundWithArgs_.end() || genericDrefs_.contains(target)) {
+        return nullptr;
+    }
+    std::vector<Argument> bound = boundIt->second;
+    type_vec_t boundTypes;
+    for (Argument &arg : bound) {
+        arg.node = functionValueOf(arg.node, arg.expr);
+        if (nodeIsKind(arg.node, runtime::GCNodeKind::Dref)) {
+            return nullptr; // a name without a function value among the arguments
+        }
+        boundTypes.push_back(valueTypeOf(nodeTypeOf(arg.node)));
+    }
+    // The one function the callee stands for with these `with` arguments (and, when the
+    // position says which function it wants, with the parameters that are left).
+    const auto fits = [&](FunctionType *type) {
+        if (type == nullptr || !type->hasExitType() || type->withTypesCount() < bound.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < bound.size(); ++i) {
+            if (!entersImplicitly(type->withTypeAt(i), boundTypes[i])) {
+                return false;
+            }
+        }
+        if (expected == nullptr) {
+            return true;
+        }
+        if (type->withTypesCount() - bound.size() != expected->withTypesCount() ||
+            type->normTypesCount() != expected->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < expected->withTypesCount(); ++i) {
+            if (!type->withTypeAt(bound.size() + i)->equals(expected->withTypeAt(i))) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < expected->normTypesCount(); ++i) {
+            if (!type->normTypeAt(i)->equals(expected->normTypeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    FunctionType *calleeType = nullptr;
+    if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
+        const auto &drefTarget = nodeGraphOf(target)->drefTarget(target);
+        size_t candidates      = 0;
+        if (std::holds_alternative<graph_vec_ptr_t>(drefTarget)) {
+            if (auto graphs = asCompileGraphVec(drefTarget)) {
+                for (const auto &g : *graphs) {
+                    if (!decoratedOf_.contains(g.get()) && fits(g->funcType())) {
+                        calleeType = g->funcType();
+                        ++candidates;
+                    }
+                }
+            }
+        } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
+            // An operator whose signature does not depend on its arguments. One whose type
+            // is computed from the argument types has no parameter types before it is
+            // called, so its binding cannot stand alone.
+            for (const auto &[uri, resolver] : std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
+                auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver);
+                if (fixed && fits(fixed->funcType())) {
+                    calleeType = fixed->funcType();
+                    ++candidates;
+                }
+            }
+        }
+        if (candidates != 1) {
+            return nullptr;
+        }
+    } else if (Type *type = valueTypeOf(nodeTypeOf(target));
+               type != nullptr && type->code() == TypeCode::Function &&
+               fits(tt::as_ptr<FunctionType>(type))) {
+        calleeType = tt::as_ptr<FunctionType>(type);
+    } else {
+        return nullptr;
+    }
+    for (size_t i = 0; i < calleeType->withTypesCount(); ++i) {
+        if (calleeType->withIsVarAt(i)) {
+            // DESIGN-QUESTION(partial-application-var): a `with` parameter declared `var`
+            // is a variable the function writes. Binding one ahead of the call would make
+            // the function value a writer of a captured variable; whether that is meant has
+            // not been decided, so it is refused rather than guessed.
+            diags_->of(SemanticDiag::ConstructNotSupported)
+                .atOrigin(origin->load()->origin())
+                .commit(
+                    "f<w> as a value",
+                    "a partial application is implemented for functions without 'var' "
+                    "context parameters; this one has '" +
+                        calleeType->toString() + "'. Call it with its arguments in place");
+            throw BuildAbortException();
+        }
+    }
+
+    // The bound values and, unless it is named, the callee: bound to names no program can
+    // write, in the scope the expression stands in, so that the new graph captures them the
+    // way any closure captures a name. Nothing refers to a node of another graph.
+    std::vector<std::string> boundNames;
+    for (const Argument &arg : bound) {
+        boundNames.push_back(bindTemporary(valueOf(arg.node)));
+    }
+    const auto make = [&](GCT::load_ptr_t load) {
+        load->setOrigin(origin->load()->origin());
+        return std::make_shared<GCT::Node>(std::move(load));
+    };
+    const auto nameNode = [&](const std::string &name) {
+        return make(std::make_shared<GCT::DRefLoad>(Reference(name)));
+    };
+    GCT::node_ptr_t callee;
+    if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
+        const auto known = boundWithCallee_.find(target);
+        ASSERT(known != boundWithCallee_.end(), "A bound callee has its expression recorded.");
+        callee = known->second->clone();
+    } else {
+        callee = nameNode(bindTemporary(target));
+    }
+    boundWithArgs_.erase(target);
+    boundWithCallee_.erase(target);
+
+    // The function: the `with` parameters that are left, then the ordinary parameters.
+    FunctionTypeFactory factory;
+    factory.setModifiers(calleeType->modifiers());
+    factory.setExitType(calleeType->exitType());
+    const size_t withCount = calleeType->withTypesCount();
+    const auto nameAt      = [&](size_t argIndex, const char *prefix, size_t i) {
+        return argIndex < calleeType->argNamesCount() && !calleeType->argNameAt(argIndex).empty()
+                   ? std::string(calleeType->argNameAt(argIndex))
+                   : std::format("{}{}", prefix, i);
+    };
+    for (size_t i = bound.size(); i < withCount; ++i) {
+        factory.addWithArg(nameAt(i, "__w", i), calleeType->withTypeAt(i), false);
+    }
+    for (size_t i = 0; i < calleeType->normTypesCount(); ++i) {
+        factory.addNormArg(
+            nameAt(withCount + i, "__n", i),
+            calleeType->normTypeAt(i),
+            calleeType->normIsVarAt(i));
+    }
+    FunctionType *type = factory.build();
+
+    compile_graph_ptr_t graph     = enterScope(type);
+    const bool outerSynced        = synced_;
+    const node_handle_t outerLast = lastSyncedNode_;
+    const auto restore            = [&] {
+        synced_                  = outerSynced;
+        lastSyncedNode_          = outerLast;
+        bodyStates_[graph.get()] = BodyState::Built;
+    };
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        // Its body is the one call `f<bound..., rest...>(args...)`, built as any call is.
+        GCT::node_ptr_t with = make(std::make_shared<GCT::WithLoad>(withCount));
+        *with << callee;
+        for (const std::string &name : boundNames) {
+            *with << nameNode(name);
+        }
+        size_t index = 0;
+        for (draft_node_ref_t port : graph->draft().withPorts()) {
+            const std::string name = "$with" + std::to_string(index++);
+            nodeScope_->insert(name, graph->draft().node(port));
+            *with << nameNode(name);
+        }
+        GCT::node_ptr_t call =
+            make(std::make_shared<GCT::LinkLoad>(calleeType->normTypesCount()));
+        *call << with;
+        index = 0;
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            const std::string name = "$norm" + std::to_string(index++);
+            nodeScope_->insert(name, graph->draft().node(port));
+            *call << nameNode(name);
+        }
+        // The call is the value of the function, so it runs whenever the function is called.
+        synced_             = true;
+        lastSyncedNode_     = {};
+        node_handle_t value = visitLinkNode(call);
+        setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
+        restore();
+        builtBodies_.push_back(graph);
+    } catch (...) {
+        restore();
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return createFuncDataNode(graph, true, false);
+}
+
+node_handle_t Builder::compoundAssignmentByRebinding(
+    const std::string &group, const GCT::node_ptr_t &gct, const std::vector<Argument> &operands) {
+    static const std::unordered_map<std::string, std::string> kPlainOperator = {
+        {"__assn_add__", "__add__"}, {"__assn_sub__", "__sub__"}, {"__assn_mul__", "__mul__"},
+        {"__assn_div__", "__div__"}, {"__assn_mod__", "__mod__"}, {"__assn_mat__", "__mat__"},
+        {"__assn_pow__", "__pow__"},
+    };
+    const auto plain = kPlainOperator.find(group);
+    if (plain == kPlainOperator.end() || operands.size() != 2) {
+        return nullptr;
+    }
+    // Only for a type a module defines. The built-in types have their own operators, and
+    // where one is missing (`%=` on a float, `+=` on an array) that stays an error.
+    Type *target = valueTypeOf(nodeTypeOf(operands[0].node));
+    if (target == nullptr || !target->isOtherType()) {
+        return nullptr;
+    }
+    const auto make = [&](GCT::load_ptr_t load) {
+        load->setOrigin(gct->load()->origin());
+        return std::make_shared<GCT::Node>(std::move(load));
+    };
+    // The right operand is evaluated once: it was built already, and is named here.
+    const std::string right = bindTemporary(valueOf(operands[1].node));
+    GCT::node_ptr_t value   = make(std::make_shared<GCT::LinkLoad>(2));
+    *value << make(std::make_shared<GCT::DRefLoad>(Reference(plain->second)))
+           << operands[0].expr->clone() << make(std::make_shared<GCT::DRefLoad>(Reference(right)));
+    GCT::node_ptr_t assign = make(std::make_shared<GCT::LinkLoad>(2));
+    *assign << make(std::make_shared<GCT::DRefLoad>(Reference("__assn__")))
+            << operands[0].expr->clone() << value;
+    return visitLinkNode(assign);
+}
+
+void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin) {
+    const auto boundIt = boundWithArgs_.find(node);
+    if (boundIt == boundWithArgs_.end()) {
+        return;
+    }
+    const std::string given =
+        strutil::join(boundIt->second, ", ", [&](const Argument &arg) {
+            return valueTypeOf(nodeTypeOf(arg.node))->toString();
+        });
+    std::string name = "the function";
+    if (const auto callee = boundWithCallee_.find(node);
+        callee != boundWithCallee_.end() && callee->second->type() == GCT::LoadType::DREF) {
+        name = callee->second->loadAs<GCT::DRefLoad>()->ref().toString();
+    }
+    std::string why;
+    if (genericDrefs_.contains(node)) {
+        why = "it is a generic function, whose type variables are fixed by a call";
+    } else if (nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+        const auto &target = nodeGraphOf(node)->drefTarget(node);
+        if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+            auto graphs = asCompileGraphVec(target);
+            why         = std::format(
+                "{} function(s) of that name, and not exactly one takes them [{}]; where "
+                "several do, a declared type or a parameter must say which is meant",
+                graphs ? graphs->size() : 0,
+                graphs ? strutil::join(
+                             *graphs,
+                             "; ",
+                             [](const graph_ptr_t &g) { return g->funcType()->toString(); })
+                       : std::string());
+        } else if (std::holds_alternative<oper_group_ptr_t>(target)) {
+            const auto &ops = std::get<oper_group_ptr_t>(target);
+            why             = std::format(
+                "it is an operator whose signature depends on its arguments [{}], so it has "
+                "no parameter types before it is called; write the call in a function, e.g. "
+                "'(x: int) => {}<...>(x)'",
+                strutil::join(
+                    ops->resolvers(),
+                    "; ",
+                    [](const std::pair<std::string, resolver_ptr_t> &p) {
+                        return p.second->signature();
+                    }),
+                name);
+        } else {
+            why = "it is a decorated function";
+        }
+    } else {
+        why = "its type is '" + valueTypeOf(nodeTypeOf(node))->toString() + "'";
+    }
+    boundWithArgs_.erase(node);
+    boundWithCallee_.erase(node);
+    diags_->of(SemanticDiag::PartialApplicationRefused)
+        .atOrigin(origin->load()->origin())
+        .commit(given, name, why);
+    throw BuildAbortException();
 }
 
 compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target) {
@@ -3403,7 +4244,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     type_vec_t withInputTypes, normInputTypes;
 
     if (auto bound = boundWithArgs_.find(targetNode); bound != boundWithArgs_.end()) {
-        withInputs = bound->second;
+        // Consumed by this call: a callee that is a value (`g<2>(x)` with `g` a variable) is
+        // the same node at its next use, which must not find these arguments again.
+        withInputs = std::move(bound->second);
+        boundWithArgs_.erase(bound);
+        boundWithCallee_.erase(targetNode);
     }
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
@@ -3488,8 +4333,34 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         const auto settle = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
             for (size_t i = 0; i < inputs.size(); ++i) {
                 node_handle_t node = inputs[i].node;
-                if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref) ||
-                    genericDrefs_.contains(node)) {
+                if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+                    continue;
+                }
+                if (genericDrefs_.contains(node)) {
+                    // The name of a generic function (design principles 2.10). A callee
+                    // with one known signature says which function it expects; a generic
+                    // callee solves for it with its other arguments (resolveGenericCall);
+                    // an operator tries the instances its other arguments suggest
+                    // (settleGenericOperatorArguments). Any other callee says nothing.
+                    const bool later =
+                        genericDrefs_.contains(targetNode) ||
+                        (nodeIsKind(targetNode, runtime::GCNodeKind::Dref) &&
+                         std::holds_alternative<oper_group_ptr_t>(
+                             nodeGraphOf(targetNode)->drefTarget(targetNode)));
+                    if (later) {
+                        continue;
+                    }
+                    Type *wanted = nullptr;
+                    if (knownCalleeType != nullptr) {
+                        const size_t count = with ? knownCalleeType->withTypesCount()
+                                                  : knownCalleeType->normTypesCount();
+                        if (i < count) {
+                            wanted = with ? knownCalleeType->withTypeAt(i)
+                                          : knownCalleeType->normTypeAt(i);
+                        }
+                    }
+                    inputs[i].node = genericValueFor(node, wanted, inputs[i].expr);
+                    types[i]       = valueTypeOf(nodeTypeOf(inputs[i].node));
                     continue;
                 }
                 Type *expected = nullptr;
@@ -3502,7 +4373,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     }
                 }
                 node_handle_t chosen{};
-                if (expected != nullptr && expected->code() == TypeCode::Function) {
+                if (boundWithArgs_.contains(node)) {
+                    // `apply(scale<2>, x)`: the partial application the parameter asks for.
+                    chosen = partialApplicationOf(
+                        node,
+                        inputs[i].expr,
+                        expected != nullptr && expected->code() == TypeCode::Function
+                            ? tt::as_ptr<FunctionType>(expected)
+                            : nullptr);
+                }
+                if (chosen == nullptr && expected != nullptr &&
+                    expected->code() == TypeCode::Function) {
                     chosen = overloadValueFor(
                         node,
                         tt::as_ptr<FunctionType>(expected),
@@ -3519,14 +4400,69 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         settle(normInputs, normInputTypes, false);
     }
 
+    // Design principles 2.10: an argument enters a `T?` / `T!` parameter by itself, `null`
+    // too, and `[]` takes the element type of its parameter. A callee is first tried with the
+    // argument types as they are, so that among overloads an exact match wins (`f(5)` with
+    // `f(x: int)` and `f(x: int?)`); then with every argument that enters its parameter
+    // counted as having the parameter's type. The CASTs are added once the callee is known
+    // (enterParameters below).
+    // DESIGN-QUESTION(entering-operator-args): operators are not tried this way. Their
+    // parameter types are computed from the arguments by C++ resolvers, so there is no
+    // target type before a resolver has accepted the arguments (`append(xs, 5)` with
+    // `xs: (int?)[]` still needs `5 as int?`, and `len([])` keeps `[]` without an element
+    // type). The alternative is to let a resolver name the type it would accept.
+    const auto enteringTypes = [](FunctionType *funcType, const type_vec_t &types, bool with) {
+        type_vec_t entered = types;
+        const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
+        for (size_t i = 0; i < entered.size() && i < count; ++i) {
+            Type *param      = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+            const bool isVar = with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
+            if (!isVar && param != nullptr && !param->assignableFrom(entered[i]) &&
+                entersImplicitly(param, entered[i])) {
+                entered[i] = param;
+            }
+        }
+        return entered;
+    };
+    const auto accepts = [&](FunctionType *funcType, bool entering) {
+        StaticFuncTypeResolver resolver(funcType);
+        if (!entering) {
+            return resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value();
+        }
+        return resolver
+            .resolve(
+                enteringTypes(funcType, withInputTypes, true),
+                enteringTypes(funcType, normInputTypes, false),
+                Modifier::None)
+            .has_value();
+    };
+    const auto enterParameters = [&](FunctionType *funcType) {
+        const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
+            const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
+            for (size_t i = 0; i < inputs.size() && i < count; ++i) {
+                Type *param      = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+                const bool isVar = with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i);
+                if (isVar || param == nullptr || containsTypeVar(param) ||
+                    param->assignableFrom(types[i])) {
+                    continue;
+                }
+                if (node_handle_t entered = coerceTo(inputs[i].node, param, inputs[i].expr)) {
+                    inputs[i].node = entered;
+                    types[i]       = param;
+                }
+            }
+        };
+        enter(withInputs, withInputTypes, true);
+        enter(normInputs, normInputTypes, false);
+    };
+
     // A call of a decorated function calls the function its decorators returned, so the
     // arguments are checked against that function's parameters (they were not checked at
     // all: a float passed where the decorated function takes an int was read as an int).
     const auto callDecorated = [&](const compile_graph_ptr_t &decoratedGraph) {
         node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
         FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
-        StaticFuncTypeResolver resolver(factoryType);
-        if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+        if (!accepts(factoryType, false) && !accepts(factoryType, true)) {
             reportConversionGaps(
                 {{std::string(), factoryType}},
                 withInputs,
@@ -3554,7 +4490,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
         // A call of a generic function: the argument types select (and, the first time,
         // build) the instance, which is then called like any other function.
-        targetGraph = resolveGenericCall(generic->second, withInputTypes, normInputTypes, gct);
+        targetGraph = resolveGenericCall(
+            generic->second,
+            withInputs,
+            normInputs,
+            withInputTypes,
+            normInputTypes,
+            gct);
         if (!targetGraph->funcType()->hasExitType()) {
             diags_->of(SemanticDiag::CallingIncompleteFunction)
                 .atOrigin(gct->load()->origin())
@@ -3580,10 +4522,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 return g->funcType();
             };
+            for (const bool entering : {false, true}) {
+            if (targetGraph || chosenDecorated) {
+                break;
+            }
             for (const auto &g : *graphs) {
                 FunctionType *funcType = signatureOf(g);
-                StaticFuncTypeResolver resolver(funcType);
-                if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+                if (!accepts(funcType, entering)) {
                     continue;
                 }
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
@@ -3602,6 +4547,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 targetGraph = g;
                 break;
+            }
             }
             if (!targetGraph && !chosenDecorated) {
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
@@ -3663,6 +4609,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         } else if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             auto ops        = std::get<oper_group_ptr_t>(drefTarget);
+            settleGenericOperatorArguments(
+                ops,
+                withInputs,
+                normInputs,
+                withInputTypes,
+                normInputTypes,
+                gct);
             // Constant arguments (shape literals, axes) let operators refine their result type.
             std::vector<StaticArg> normStatics;
             normStatics.reserve(normInputs.size());
@@ -3671,6 +4624,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             const auto &res =
                 ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
+            if (!res.has_value() && withInputs.empty()) {
+                // `t += u` on a tensor: no operator changes the tensor in place; the new
+                // tensor is computed and `t` bound to it, as for a number.
+                if (node_handle_t rebound =
+                        compoundAssignmentByRebinding(ops->name(), gct, normInputs)) {
+                    LEAVE("LINK");
+                    return rebound;
+                }
+            }
             if (!res.has_value()) {
                 std::string argTypesStr = std::format(
                     "<{}> ({})",
@@ -3818,8 +4780,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
-        StaticFuncTypeResolver resolver(funcType);
-        if (!resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value()) {
+        if (!accepts(funcType, false) && !accepts(funcType, true)) {
             reportConversionGaps(
                 {{std::string(), funcType}},
                 withInputs,
@@ -3853,6 +4814,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
 
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
+    if (targetOperator == nullptr) {
+        enterParameters(targetFuncType);
+    }
     if (recorder_) {
         recorder_->callResolved(
             gct->load()->origin(),
@@ -3996,6 +4960,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     }
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());
+    boundWithCallee_.try_emplace(targetNode, gct->at(0));
     LEAVE("WITH");
     return targetNode;
 }
@@ -4131,6 +5096,56 @@ Builder::castNodeTo(node_handle_t value, Type *target, const GCT::node_ptr_t &or
     return castNode;
 }
 
+node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
+    Type *source = valueTypeOf(nodeTypeOf(node));
+    if (target->assignableFrom(source)) {
+        return node;
+    }
+    if (!entersImplicitly(target, source)) {
+        return nullptr;
+    }
+    node = valueOf(node); // what a variable holds, not the variable
+    if (TupleType *tagged = asTagged(target)) {
+        // `null` is the null slot of every `T?`; any other value enters the payload first.
+        if (tagged->isNullable() && source->code() == TypeCode::Void) {
+            return castNodeTo(node, tagged, origin);
+        }
+        node_handle_t inner = coerceTo(node, tagged->payloadType(), origin);
+        return inner != nullptr ? castNodeTo(inner, tagged, origin) : nullptr;
+    }
+    // The empty literal `[]`: the same literal with the element type its position gives it.
+    ASSERT(target->code() == TypeCode::Array, "Only an empty array literal is left here.");
+    node_handle_t typed = currGraph_->addStaticDataNode(
+        tt::as_shared<Data>(ArrayData::create(tt::as_ptr<ArrayType>(target)->elemType())));
+    registerNodeOrigin(context_, typed, origin, "gir.data");
+    return typed;
+}
+
+void Builder::coerceArmExit(
+    const compile_graph_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
+    Type *exitType = arm->funcType()->exitType();
+    if (exitType != nullptr && target->assignableFrom(exitType)) {
+        return;
+    }
+    // The nodes are added to the arm's own graph; no name is looked up, so the scopes of the
+    // position the branch stands at do no harm.
+    const compile_graph_ptr_t outer = std::exchange(currGraph_, arm);
+    node_handle_t output            = arm->draft().node(arm->draft().exitNode());
+    node_handle_t coerced           = coerceTo(output, target, origin);
+    ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+    if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
+        // A literal took the place of the output (`[]`): what the output waited for (the
+        // statements of a sync arm) is still waited for.
+        node_handle_t gate = currGraph_->addGateNode(target);
+        linkNodes(LinkType::Norm, coerced, gate);
+        linkNodes(LinkType::Ctrl, output, gate);
+        coerced = gate;
+    }
+    arm->funcType()->setExitType(target);
+    setGraphReturnFromResult(arm, nodeIdOf(coerced), nodeIdOf(coerced), target);
+    currGraph_ = outer;
+}
+
 Type *Builder::declaredExitTypeHere() const {
     compile_graph_ptr_t graph = currGraph_;
     while (graph != nullptr && openArmGraphs_.contains(graph.get())) {
@@ -4165,7 +5180,7 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
                         : "the function around it returns '" + declared->toString() + "'");
             throw BuildAbortException();
         }
-        // DESIGN-QUESTION(nullable-error) Q3: `throw` takes an Error (made by `error(kind,
+        // Design principles 2.10: `throw` takes an error value (made by `error(kind,
         // message)` or bound by `case error e`), nothing else.
         if (!valueType->equals(errorType())) {
             diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
@@ -4175,12 +5190,13 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
         return fallible->equals(nodeTypeOf(thrown)) ? thrown : castNodeTo(thrown, fallible, gct->at(0));
     }
     // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
-    // `throw` (DESIGN-QUESTION(nullable-error) Q1). A value that already has the declared
-    // type, and one that fits neither way (reported by checkDeclaredReturn), is left alone.
-    if (TupleType *tagged = asTagged(declared);
-        tagged != nullptr && !tagged->assignableFrom(valueType) &&
-        tagged->castSafetyFrom(valueType) == CastSafety::Safe) {
-        return castNodeTo(value, tagged, gct->at(0));
+    // `throw`, and one of the positions where a value enters by itself (design principles
+    // 2.10; coerceTo). A value that already has the declared type, and one that fits neither
+    // way (reported by checkDeclaredReturn), is left alone.
+    if (declared != nullptr && !declared->assignableFrom(valueType)) {
+        if (node_handle_t entered = coerceTo(value, declared, gct->at(0))) {
+            return entered;
+        }
     }
     return value;
 }
@@ -4250,10 +5266,30 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
         // evaluated, only when the tag selects it. Arm 1 takes the value out.
         arms[0] = buildArmGraph(exec);
-        arms[1] = buildArmGraph(exec, [&] { return applyTagOperator(valueOp, name, gct); });
-        // DESIGN-QUESTION(nullable-error) Q7: the right-hand side has the payload type.
+        // Design principles 2.10: the right-hand side is a `T`, and the result is a `T`; or
+        // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
+        // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
+        // taking the value out. Either way it is one branch.
         Type *fallback = arms[0]->funcType()->exitType();
-        if (fallback == nullptr || payload->unify(fallback) == nullptr) {
+        const bool plain =
+            fallback != nullptr &&
+            (payload->unify(fallback) != nullptr || entersImplicitly(payload, fallback));
+        const bool chained = !plain && fallback != nullptr &&
+                             entersImplicitly(subjectType, fallback);
+        if (plain) {
+            if (payload->unify(fallback) == nullptr) {
+                coerceArmExit(arms[0], payload, gct);
+            }
+            arms[1] = buildArmGraph(exec, [&] { return applyTagOperator(valueOp, name, gct); });
+        } else if (chained) {
+            coerceArmExit(arms[0], subjectType, gct);
+            arms[1] = buildArmGraph(exec, [&] {
+                const auto dref = std::make_shared<GCT::Node>(
+                    std::make_shared<GCT::DRefLoad>(Reference(name)));
+                dref->load()->setOrigin(gct->load()->origin());
+                return visitDRefNode(dref);
+            });
+        } else {
             diags_->of(SemanticDiag::TaggedOperandMismatch)
                 .atOrigin(gct->load()->origin())
                 .commit(
@@ -4402,20 +5438,21 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
         }
-        node = buildBranch(gct, condNode, nullptr, matchNeedsFaultArm(gct, condNode));
+        requireMatchDefault(gct, condNode);
+        node = buildBranch(gct, condNode);
     }
     LEAVE("BRCH");
     return node;
 }
 
-bool Builder::matchNeedsFaultArm(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
+void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
     using CaseType = GCT::CaseLoad::CaseType;
     bool hasValueCase = false, hasTrue = false, hasFalse = false;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
         const auto caseType  = caseNode->loadAs<GCT::CaseLoad>()->caseType();
         if (caseType == CaseType::Else) {
-            return false;
+            return;
         }
         if (caseType != CaseType::Value) {
             continue;
@@ -4430,25 +5467,24 @@ bool Builder::matchNeedsFaultArm(const GCT::node_ptr_t &gct, node_handle_t scrut
         }
     }
     if (!hasValueCase) {
-        return false; // an `if`
+        return; // an `if`
     }
     Type *type = valueTypeOf(nodeTypeOf(scrutinee));
     if (type == Type::Bool() && hasTrue && hasFalse) {
-        return false; // every value of the type has a case
+        return; // every value of the type has a case
     }
-    // DESIGN-QUESTION(match-default): must a `match` have `case _`? Not decided. Until it
-    // is, a `match` without one compiles with this warning and gets an arm that faults
-    // (buildBranch). Should the answer be "yes", make the warning an error here; the arm then
-    // goes away with it.
+    // Design principles 2.10: a `match` must have a default case, and the compiler adds no
+    // arm the program does not show. A `match` without `case _` is therefore refused here
+    // (the fixed patterns over `T?` / `T!` never reach this function).
     diags_->of(SemanticDiag::MatchWithoutDefault)
         .atOrigin(gct->load()->origin())
         .commit(type->toString());
-    return true;
+    throw BuildAbortException();
 }
 
 node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode,
-    const std::vector<compile_graph_ptr_t> *arms, bool faultArm) {
+    const std::vector<compile_graph_ptr_t> *arms) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, {}, nullptr);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
@@ -4475,10 +5511,12 @@ node_handle_t Builder::buildBranch(
     // The variables the arms captured, and whether some arm writes them.
     std::vector<CapturedUse> captured;
     std::vector<DraftGraphBuilder *> armGraphs;
+    std::vector<graph_ptr_t> armList;
 
     // Makes `subGraph` the next arm of the branch.
     const auto addArm = [&](const graph_ptr_t &subGraph) {
         armGraphs.push_back(subGraph.get());
+        armList.push_back(subGraph);
         for (const CapturedUse &use : capturedUsesOf(subGraph)) {
             auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
             if (known == captured.end()) {
@@ -4512,27 +5550,25 @@ node_handle_t Builder::buildBranch(
             .tail = nodeIdOf(funcNode),
         });
 
-        if (joinType == nullptr) {
+        if (absentElse) {
+            // Design principles 2.10: an `if` without `else` has no value. Its arm may be of
+            // any type and what the arm gives is dropped: the join takes nothing. The arm
+            // written is evaluated as any arm is; the one not written is an empty arm.
+            joinType = Type::Void();
+            setNodeType(joinNode, joinType);
+        } else if (joinType == nullptr) {
             joinType = exitType;
             setNodeType(joinNode, joinType);
         } else {
             // Arms must agree up to refinement: unify widens (for example two
-            // tensors whose shapes differ in one extent) or fails.
-            Type *unified = joinType->unify(exitType);
+            // tensors whose shapes differ in one extent) or fails. Failing that, one arm may
+            // enter the form of the other (design principles 2.10): `if c then 1 else null`
+            // is an `int?`, `if c then v else failed` a `T!`. The arm that is not of the
+            // joined type gets the CAST at its exit once the type is known (below).
+            Type *unified = joinTypes(joinType, exitType);
             if (unified != nullptr && unified != joinType) {
                 joinType = unified;
                 setNodeType(joinNode, joinType);
-            }
-            if (unified == nullptr && absentElse) {
-                // `if c then println('x')`: without `else` the `if` gives nothing when the
-                // condition is false, and the arm gives a value. The message used to be
-                // "expected 'string', found 'void'", with types the program does not show.
-                diags_->of(SemanticDiag::IfArmValueWithoutElse)
-                    .atOrigin(gct->load()->origin())
-                    .commit(
-                        joinType->toString(),
-                        currGraph_->name() + ": " + currGraph_->funcType()->toString());
-                throw BuildAbortException();
             }
             if (unified == nullptr) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
@@ -4591,21 +5627,14 @@ node_handle_t Builder::buildBranch(
         }
         addArm(subGraph);
     }
-    if (faultArm) {
-        // DESIGN-QUESTION(match-default): a `match` without `case _`. A branch takes its
-        // last arm when no case value equals the scrutinee, and without `case _` that arm
-        // did not exist: the schedulers read past the arms and the match gave whatever was
-        // there (0, or a crash). The last arm is now one that stops the program with the
-        // value no case matched. It claims the type of the other arms; it never returns.
-        const std::string name = bindTemporary(condNode);
-        Type *resultType       = joinType;
-        addArm(buildArmGraph(gct, [&] {
-            node_handle_t fail = applyTagOperator("__match_fail__", name, gct);
-            if (resultType != nullptr) {
-                setNodeType(fail, resultType);
+    if (joinType != nullptr && !absentElse) {
+        for (size_t i = 0; i < armList.size(); ++i) {
+            Type *exitType = armList[i]->funcType()->exitType();
+            if (exitType != nullptr && !joinType->assignableFrom(exitType) &&
+                entersImplicitly(joinType, exitType)) {
+                coerceArmExit(armList[i], joinType, gct);
             }
-            return fail;
-        }));
+        }
     }
 
     runtime::DraftBrchPayload payload{
@@ -4742,6 +5771,10 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     // `return f`: the function value of a function named here. The name itself is not a
     // value, and left in place it reached the end of compilation as a DREF node.
     node_handle_t resNode = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+    if (genericDrefs_.contains(resNode)) {
+        // `return id` under a declared function type: that type is the function wanted.
+        resNode = genericValueFor(resNode, declaredExitTypeHere(), gct->at(0));
+    }
     if (nodeIsKind(resNode, runtime::GCNodeKind::Dref)) {
         const auto &returned = gct->at(0);
         rejectNameWithoutValue(

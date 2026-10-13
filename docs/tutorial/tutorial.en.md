@@ -110,7 +110,7 @@ Key points:
 - `let` is an immutable name, and `var` is a mutable variable. Camel favours immutability: most programs hardly ever need `var`.
 - **Fields and elements cannot be assigned to** (`p.x = 5` and `xs[0] = 5` are errors). To "modify" something, build a new value: `{ x: 5, y: p.y }`, `concat(xs, [4])`.
 - Strings can use either single or double quotes. Strings are measured in bytes: `len('中文')` is 6. Functions for splitting, trimming, searching and so on are in the `str` module (section 12).
-- A detail of how code is written: the parenthesis of a call must directly follow the function name (`f(1)`, not `f (1)`).
+- Two details of how code is written: the parenthesis of a call must directly follow the function name (`f(1)`, not `f (1)`); and when a statement is continued on the next line, leave the operator at the end of the line, or start the next line with an operator that can only be binary such as `->`, `.`, `*`, `&&` (a line that starts with `-` or `+` is a new statement).
 
 ## 3. Functions
 
@@ -205,7 +205,7 @@ A B D
 ```
 
 - `if ... then ... else ...` is an expression and has a value; the two arms must have the same type.
-- `match` matches on a **name** (which is why `grade` first writes `let band = ...`). A pattern is a literal or `_`, and one `case` can list several patterns with `|`. Always write `case _`: without it, if no branch matches at run time, the program terminates with a fault (the compiler gives a warning).
+- `match` matches on a **name** (which is why `grade` first writes `let band = ...`). A pattern is a literal or `_`, and one `case` can list several patterns with `|`. `case _` is required: a `match` without a default case is a compile-time error (except on a `bool` that lists both `true` and `false`).
 
 ### The easiest trap to fall into: `return` in a block
 
@@ -583,8 +583,8 @@ a
 
 - There is no separate type parameter list. At **the place where a type variable first appears** in the signature, write `typeas T`; this binds the type at that place as `T`, and after that you use `T` directly.
 - `type Pair<T> = (T, T)` is a type declaration with a parameter: `Pair<int>` is `(int, int)`.
-- In the graph, a generic function is a **subgraph template**. Each time it is called with a set of concrete types, a subgraph whose types are all concrete is instantiated: the program above has the two subgraphs `first<i64>` and `first<string>` (you can see them with `camel docs/tutorial/examples/08_generics.cml std::rgir`). The graph contains only concrete types, and no type information is needed at run time.
-- For now a generic function can only be called directly; it cannot be passed as a value.
+- In the graph, a generic function is a **subgraph template**. Each time it is called with a set of concrete types, a subgraph whose types are all concrete is instantiated: the program above has the two subgraphs `first<int>` and `first<string>` (you can see them with `camel docs/tutorial/examples/08_generics.cml std::rgir`). The graph contains only concrete types, and no type information is needed at run time.
+- A generic function may also be passed wherever a function is expected (`apply(id, 3)`, `xss->map<reverse>`, `let f: (x: int) => int = id`): the compiler builds the instance once the position fixes its types. Where nothing does (`let g = id`), it is a compile-time error that says to write the type.
 
 ## 9. Error handling
 
@@ -657,8 +657,8 @@ A value of type **`T?`** is either `null` or a `T`. [`examples/10_nullable.cml`]
 module nullable
 
 func find(xs: int[], target: int, i: int): int? {
-    return if i >= len(xs) then { return null }
-        else if xs[i] == target then { return i }
+    return if i >= len(xs) then null
+        else if xs[i] == target then i
         else find(xs, target, i + 1)
 }
 
@@ -688,7 +688,7 @@ null
 ```
 
 - `a ?? b`: takes `b` when `a` is null. `match` uses `case null` and `case v`.
-- An ordinary `int` does not turn into an `int?` by itself: use `return` in a function that returns `int?`, write the type in the declaration (`let maybe: int? = ...`), or write `5 as int?`.
+- An ordinary `int` is put into an `int?` wherever one is expected: the two arms of `find` are `null` and `i`, so the branch is an `int?`; an argument (`show(5)`), a declaration with a type (`let maybe: int? = 5`) and `return` work the same way. Not the other way round: to use an `int?` as an `int`, open it with `??` or `match`.
 
 ## 11. Maps and sets
 
@@ -821,7 +821,7 @@ HELLO a+b+c 6 5
 - **The calling convention**: the value a function works on is its ordinary parameter, and the values that configure the call are `with` parameters. So every library function can be attached to a pipe: `s->trim->split<','>`, `xs->unique->sort_by<key>->take<2>`.
 - Strings are measured in bytes: `len('héllo')` is 6; to count by character use `char_count`, which gives 5. `s[i]` takes out the `i`-th byte.
 - A function that may have no result returns `T?` (such as `find` when nothing is found), taken out with `??`; out-of-range arguments and arguments outside the domain are faults.
-- A detail of writing: when one argument list contains two calls with angle brackets (`f<a>(x), g<b>(y)`), it is read as a comparison. That is why the two calls of `find` above are written as two `let`s.
+- A detail of writing: angle brackets touch the name before them (`find<x>`), and the comparison `<` has a space before it (`a < b`). The two are never confused, and one argument list may hold several calls with angle brackets: `f<a>(x), g<b>(y)`.
 - The `array` module consists of generic functions written in Camel, which are visible subgraphs on the graph; the functions of `str` and `math` are C++ operators, each a single node on the graph.
 
 To find out which operators a program can use, and whether each is declared pure, ask the compiler:

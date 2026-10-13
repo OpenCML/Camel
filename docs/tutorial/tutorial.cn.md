@@ -110,7 +110,7 @@ func main(): int sync {
 - `let` 是不可变的名字，`var` 是可变的变量。Camel 崇尚不可变：大多数程序几乎用不到 `var`。
 - **字段与元素不能赋值**（`p.x = 5`、`xs[0] = 5` 是错误）。要“修改”就造一个新值：`{ x: 5, y: p.y }`、`concat(xs, [4])`。
 - 字符串用单引号或双引号都行。字符串按字节：`len('中文')` 是 6。切分、修剪、查找等函数在 `str` 模块里（第 12 节）。
-- 一个书写上的细节：调用的括号要紧贴函数名（`f(1)`，不是 `f (1)`）。
+- 两个书写上的细节：调用的括号要紧贴函数名（`f(1)`，不是 `f (1)`）；一条语句写不下要换行时，把运算符留在行尾，或让下一行以 `->`、`.`、`*`、`&&` 这类只能是二元的运算符开头（以 `-`、`+` 开头的一行是新语句）。
 
 ## 3. 函数
 
@@ -205,7 +205,7 @@ A B D
 ```
 
 - `if ... then ... else ...` 是表达式，有值；两臂的类型必须相同。
-- `match` 匹配的是一个**名字**（所以 `grade` 里先 `let band = ...`），模式是字面量或 `_`，一个 `case` 可以用 `|` 列多个模式。请总是写上 `case _`：没有它而运行时又没有分支匹配，程序会以故障终止（编译器有警告）。
+- `match` 匹配的是一个**名字**（所以 `grade` 里先 `let band = ...`），模式是字面量或 `_`，一个 `case` 可以用 `|` 列多个模式。`case _` 必须写：没有默认分支的 `match` 是编译期错误（对 `bool` 写全 `true` 与 `false` 时除外）。
 
 ### 最容易掉进去的坑：块里的 `return`
 
@@ -583,8 +583,8 @@ a
 
 - 没有单独的类型参数表。在签名里类型变量**第一次出现的位置**写 `typeas T`，把那个位置上的类型绑定为 `T`，之后直接用 `T`。
 - `type Pair<T> = (T, T)` 是带参数的类型声明：`Pair<int>` 就是 `(int, int)`。
-- 在图上，泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图：上面的程序里有 `first<i64>` 与 `first<string>` 两张子图（`camel docs/tutorial/examples/08_generics.cml std::rgir` 可以看到）。图上只有具体类型，运行时不需要类型信息。
-- 目前泛型函数只能直接调用，不能当值传递。
+- 在图上，泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图：上面的程序里有 `first<int>` 与 `first<string>` 两张子图（`camel docs/tutorial/examples/08_generics.cml std::rgir` 可以看到）。图上只有具体类型，运行时不需要类型信息。
+- 泛型函数也可以出现在任何期望一个函数的位置（`apply(id, 3)`、`xss->map<reverse>`、`let f: (x: int) => int = id`）：编译器在所在位置确定了类型之后才实例化它。什么都确定不了时（`let g = id`）是编译期错误，提示写出类型。
 
 ## 9. 错误处理
 
@@ -657,8 +657,8 @@ help: Ensure the index is within the valid range of the collection.
 module nullable
 
 func find(xs: int[], target: int, i: int): int? {
-    return if i >= len(xs) then { return null }
-        else if xs[i] == target then { return i }
+    return if i >= len(xs) then null
+        else if xs[i] == target then i
         else find(xs, target, i + 1)
 }
 
@@ -688,7 +688,7 @@ null
 ```
 
 - `a ?? b`：为空取 `b`。`match` 用 `case null` 与 `case v`。
-- 普通的 `int` 不会自己变成 `int?`：在返回 `int?` 的函数里用 `return`，在声明里写类型（`let maybe: int? = ...`），或写 `5 as int?`。
+- 普通的 `int` 进入 `int?` 的位置时自动装入：`find` 的两条臂一条是 `null`、一条是 `i`，分支就是 `int?`；实参（`show(5)`）、带类型的声明（`let maybe: int? = 5`）、`return` 同理。反过来不行：`int?` 要当 `int` 用，必须用 `??` 或 `match` 拆开。
 
 ## 11. 映射与集合
 
@@ -821,7 +821,7 @@ HELLO a+b+c 6 5
 - **调用的约定**：函数要处理的值是它的普通参数，配置这次调用的值是 `with` 参数。所以库函数都能接在管道上：`s->trim->split<','>`、`xs->unique->sort_by<key>->take<2>`。
 - 字符串按字节：`len('héllo')` 是 6；按字符计数用 `char_count`，是 5。`s[i]` 取出第 `i` 个字节。
 - 可能没有结果的函数返回 `T?`（如 `find` 找不到时），用 `??` 取出；越界、不在定义域内的实参是故障。
-- 一个书写上的细节：同一个实参表里有两个带尖括号的调用时（`f<a>(x), g<b>(y)`），会被读成比较。所以上面把两次 `find` 写成了两条 `let`。
+- 一个书写上的细节：尖括号要紧贴它前面的名字（`find<x>`），而比较运算符 `<` 前面要有空格（`a < b`）。这样两者不会混淆，同一个实参表里可以有几个带尖括号的调用：`f<a>(x), g<b>(y)`。
 - `array` 模块是用 Camel 写的泛型函数，在图上是看得见的子图；`str`、`math` 的函数是 C++ 算子，在图上是一个节点。
 
 想知道一个程序能用哪些算子、各自是否声明为纯，问编译器：

@@ -47,7 +47,13 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
                 const auto &graphs = detail::EntityAccess::graphSet(ent);
                 if (graphs) {
                     for (const auto &g : *graphs) {
-                        merged->push_back(g);
+                        // One module's function reaches here twice when a name is imported
+                        // both by name and with the module's default names: it is one
+                        // function. Counted twice, the name had "2 functions" and no
+                        // function value (`xs->map<twice>` with an imported `twice`).
+                        if (std::ranges::find(*merged, g) == merged->end()) {
+                            merged->push_back(g);
+                        }
                     }
                 }
             }

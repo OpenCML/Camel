@@ -17,6 +17,7 @@
  * Supported by: National Key Research and Development Program of China
  */
 
+#include <any>
 #include <deque>
 #include <fstream>
 #include <iostream>
@@ -135,6 +136,9 @@ class Builder {
     // beside the graph rather than as edges: the callee node is a value (a function literal, a
     // closure FILL whose with-inputs are its captures) that the binding must not alter.
     std::unordered_map<node_handle_t, std::vector<Argument>> boundWithArgs_;
+    // The callee expression of such a binding, for the binding used as a value
+    // (partialApplicationOf builds the call from it).
+    std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithCallee_;
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
@@ -287,6 +291,9 @@ class Builder {
     // Where each function imported from another module was last named in this module.
     std::unordered_map<const void *, camel::source::origin_id_t> importedUseOrigins_;
     std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
+    // The templates of functions written in place (anonymousTemplateOf): nothing else owns
+    // them.
+    std::vector<template_ptr_t> anonymousTemplates_;
 
     // A type read from the GCT, with the type variables of the current instance replaced.
     Type *boundType(Type *type) const {
@@ -305,9 +312,42 @@ class Builder {
     /// An error at `at` when `type` holds a Map or a Set whose key type is not allowed, which
     /// replacing a type variable can produce.
     void rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at);
+    // An argument that names a generic function waits for the others: once they give the
+    // parameter it is passed to a type, it is instantiated for that type and takes part like
+    // any other argument (its node and type replace the name in `withInputs` / `normInputs`
+    // and the type lists). Everything happens here, at the call; the graph only ever holds
+    // the instances.
     compile_graph_ptr_t resolveGenericCall(
-        const template_ptr_t &tmpl, const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+        const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    /// A function written in place whose type still holds a type variable (the element
+    /// functions of a list comprehension): a template without a name, registered where it
+    /// stands. Its marker node is what the name of a generic function gives.
+    node_handle_t anonymousTemplateOf(const GCT::node_ptr_t &func);
+    // ---- A generic function where a function is expected (design principles 2.10) ----
+    /// The instance of `tmpl` that is a function of type `expected` (whose return type may
+    /// still be open), or nullptr with the reason in `why`: the parameter types of `expected`
+    /// fix the type variables, and the instance must then have exactly those parameters.
+    compile_graph_ptr_t instantiateGenericAs(
+        const template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
+        std::string &why);
+    /// The function value of the generic function `node` names, instantiated for the type
+    /// the position expects; an error (GenericFunctionAsValue) that says which variables
+    /// cannot be determined when `expected` is not a function type that fixes them.
+    node_handle_t genericValueFor(
+        node_handle_t node, camel::core::type::Type *expected, const GCT::node_ptr_t &origin);
+    [[noreturn]] void rejectGenericValue(
+        const template_ptr_t &tmpl, const GCT::node_ptr_t &origin, const std::string &why);
+    /// An argument of a built-in operator that names a generic function. An operator's type
+    /// rule is C++ code that needs the argument types, so it cannot say which function it
+    /// expects; the instances the types of the other arguments suggest are tried (their
+    /// element types first) and the one the operator accepts is taken. Replaces the name in
+    /// `inputs` / `types`; an error when no instance is accepted.
+    void settleGenericOperatorArguments(
+        const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
     compile_graph_ptr_t instantiateGeneric(
         const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
         const GCT::node_ptr_t &call);
@@ -414,6 +454,28 @@ class Builder {
     // captured and calls it with them: what a function value of `target` refers to once the
     // captures of `target` have become with-parameters (createFuncDataNode).
     compile_graph_ptr_t forwardingGraphOf(const compile_graph_ptr_t &target);
+    /// `f<w>` used as a value (design principles 2.10): the function that calls `f` with the
+    /// `with` arguments bound to `target` and takes the rest, as its function value. It is a
+    /// closure: a graph of its own that captures the bound values, which enter it through
+    /// ports like any captured name; no node kind is added. `expected`, when given, is the
+    /// function type the position asks for and selects among overloads. Returns nullptr,
+    /// leaving the binding in place, when `target` does not name one function for these
+    /// arguments.
+    node_handle_t partialApplicationOf(
+        node_handle_t target, const GCT::node_ptr_t &origin,
+        camel::core::type::FunctionType *expected = nullptr);
+    /// `t += u` for a `t` of a module type without a compound-assignment operator of its
+    /// own (a tensor): the new value is computed and the variable bound to it, `t = t + u`
+    /// (design principles 2.10). `group` is the operator group of the compound assignment
+    /// and `operands` its two operands, already built. Returns nullptr when the form does
+    /// not apply.
+    node_handle_t compoundAssignmentByRebinding(
+        const std::string &group, const GCT::node_ptr_t &gct,
+        const std::vector<Argument> &operands);
+    /// An error at `origin` when `node` still carries `with` arguments no partial
+    /// application could be made of (PartialApplicationRefused): the binding is never
+    /// dropped without a word.
+    void rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin);
     // The functions named `name` when `decorated` is one of several of that name (the set a
     // call chooses from); null when the decorated function is the only one.
     graph_set_ptr_t
@@ -502,14 +564,13 @@ class Builder {
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
-    /// With `faultArm`, one more arm follows them, taken when no case value equals the
-    /// scrutinee: it stops the program (RuntimeDiag::MatchNotExhaustive).
+    /// No arm is added to those the program wrote (design principles 2.10).
     node_handle_t buildBranch(
         const GCT::node_ptr_t &gct, node_handle_t condNode,
-        const std::vector<compile_graph_ptr_t> *arms = nullptr, bool faultArm = false);
-    /// Whether the `match` `gct` can meet a value none of its cases matches (it has no
-    /// `case _` and does not list both values of a bool); reports MatchWithoutDefault then.
-    bool matchNeedsFaultArm(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
+        const std::vector<compile_graph_ptr_t> *arms = nullptr);
+    /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
+    /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
+    void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
     /// The subgraph of one branch arm. Its body is the block `exec`, or what `body` builds
     /// (called inside the arm's scope) when given; `exec` then only locates the arm.
     compile_graph_ptr_t buildArmGraph(
@@ -531,6 +592,16 @@ class Builder {
     /// A CAST of `value` to `target`, made by the compiler (no conversion rule is consulted).
     node_handle_t castNodeTo(
         node_handle_t value, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// `node` where a value of type `target` is expected (design principles 2.10): `node`
+    /// itself when its type is assignable; otherwise the value put into `T?` / `T!` (one
+    /// CAST per level), `null` as a `T?`, or the empty literal `[]` given the element type of
+    /// `target`. nullptr when the value does not enter (camel::core::type::entersImplicitly).
+    node_handle_t coerceTo(
+        node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// The same at the exit of a branch arm already built: what `arm` gives enters `target`.
+    void coerceArmExit(
+        const compile_graph_ptr_t &arm, camel::core::type::Type *target,
+        const GCT::node_ptr_t &origin);
     /// The return type the function around the current position declares (looking out of
     /// branch arms), or nullptr when it declares none.
     camel::core::type::Type *declaredExitTypeHere() const;

@@ -4,8 +4,6 @@ DivisionByZero | Attempted division by zero. | kinds.cml:9:42
 DivisionByZero | kinds.cml:10:49
 value 3
 IndexOutOfRange | Index 3 is out of range for an array of length 3. | kinds.cml:11:44
-value two
-MatchNotExhaustive | No case of this 'match' matches the value 3. | kinds.cml:13:12
 value 42
-InvalidNumberText | Cannot convert the string 'forty-two' to i64. | kinds.cml:18:38
+InvalidNumberText | Cannot convert the string 'forty-two' to int. | kinds.cml:12:38
 end

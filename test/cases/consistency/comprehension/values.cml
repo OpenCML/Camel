@@ -1,0 +1,29 @@
+/**
+ * `[e for x in xs if c]` is `xs->filter<(x) => c>->map<(x) => e>` (design principles 2.10):
+ * `x` has the element type of `xs`, the condition may be left out, and nothing is promised
+ * about the order in which the elements are computed.
+ */
+module values
+
+func squares_of_even(xs: int[]): int[] { return [x * x for x in xs if x % 2 == 0] }
+func lengths(ws: (typeas T)[][]): int[] { return [len(w) for w in ws] }
+func shout(x: int): string sync {
+    println('element ' + string(x))
+    return string(x) + '!'
+}
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5, 6]
+    let k = 10
+    println(squares_of_even(xs), [x + k for x in xs], [string(x) for x in xs if x > k])
+    // nested, over strings, over tuples, over the result of a call, inside a generic function
+    println([[y * x for y in [1, 2]] for x in xs if x < 3], [w + '!' for w in ['a', 'b']])
+    println([p.0 + p.1 for p in zip([1, 2], [10, 20])], [x for x in range(0, 4) if x != 2])
+    println(lengths([[1], [2, 3]]), lengths([['a', 'b', 'c']]))
+    // it is an expression like any other
+    println(len([x for x in xs if x > 4]), [x for x in [y * 2 for y in xs] if x > 8])
+    // an element expression with an effect, as in the element function of `map`: here the
+    // function it calls is a sync function and its result is the element, so it runs
+    println([shout(x) for x in [7]])
+    return 0
+}

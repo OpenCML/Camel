@@ -16,9 +16,9 @@ func f10(a11: (a0: string) => float, a12: int[], a13: string): string {
 func main(): int sync {
     if false then sync {
         let n29 = f10((p27: string): float => 1.5, [0], '');
-        return null;
+        null;
     } else sync {
-        return null;
+        null;
     };
     return 0;
 }

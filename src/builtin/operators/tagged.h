@@ -42,7 +42,6 @@ slot_t __error_value__(ArgsView &with, ArgsView &norm, camel::core::context::Con
 slot_t __error_info__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __throw__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 // The arm of a `match` without `case _` that is taken when no case matches: a fault.
-slot_t __match_fail__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 // Library.
 slot_t __error_new__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

@@ -1,0 +1,5 @@
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5, 6]
+    println(xs->filter<(x: int) => x % 2 == 0>->map<(x: int) => x * x>)
+    return 0
+}

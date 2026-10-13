@@ -1,0 +1,5 @@
+func main(): int sync {
+    let debug = true
+    println(if debug then 'yes')
+    return 0
+}

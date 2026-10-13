@@ -5,4 +5,16 @@ error[SyntaxDiag::KeywordAsIdentifier]: 'func' is a keyword and cannot be used a
    |         ^^^^
 help: Choose another name, for example 'func_'.
 
-camel: 1 error
+error[SyntaxDiag::UnexpectedToken]: Unexpected 'func'; expected an expression.
+  --> <ROOT>/test/cases/compile/diag_render/syntax_first_only.cml:5:12
+   |
+ 5 |     return func
+   |            ^^^^
+
+error[SyntaxDiag::UnexpectedToken]: Unexpected '}'; expected an expression.
+   --> <ROOT>/test/cases/compile/diag_render/syntax_first_only.cml:10:1
+    |
+ 10 | }
+    | ^
+
+camel: 3 errors

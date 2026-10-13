@@ -404,7 +404,7 @@ Diagnostic &Diagnostics::add(Diagnostic &&d) {
     return storage_.back();
 }
 
-void Diagnostics::fetchAll(const std::vector<antlr4::Token *> &tokens) {
+void Diagnostics::fetchAll(const TokenPositions &tokens) {
     std::lock_guard<std::mutex> lk(mtx_);
     RangeConverter conv(tokens);
     for (auto &d : storage_)

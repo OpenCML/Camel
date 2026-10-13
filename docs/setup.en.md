@@ -4,7 +4,7 @@
 
 ## 1. Project Overview
 
-Camel is an AI programming language built with a modern C++ technology stack. Its frontend is implemented using Antlr4 (requires a Java runtime) and integrates Python and Node.js toolchains for cross-platform development. This guide is designed to help developers quickly set up the development environment for the Camel project.
+Camel is an AI programming language built with a modern C++ technology stack. Its front end is a hand-written lexer and parser (the build needs no Java), and it integrates Python and Node.js toolchains for cross-platform development. This guide is designed to help developers quickly set up the development environment for the Camel project.
 
 ---
 
@@ -16,7 +16,6 @@ The following table lists the required components and their version specificatio
 | --------- | --------------- | ------------------- | ----------------------- |
 | Python    | 3.9             | 3.11               | `python --version`      |
 | Node.js   | 18              | 20 LTS             | `node -v`               |
-| Java      | 11              | 21                 | `java -version`         |
 | Clang     | 19              | 20                 | `clang --version`       |
 | CMake     | 3.20            | 3.28               | `cmake --version`       |
 | Conan     | 2.10            | 2.12               | `conan --version`       |
@@ -50,15 +49,6 @@ The following steps outline the setup process for the development environment, c
    ```bash
    node --version
    npm --version
-   ```
-
-#### 3.1.3 Installing Java
-
-1. Download and install Java from the [Oracle official website](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) or [AdoptOpenJDK](https://adoptopenjdk.net/).
-2. Configure the `JAVA_HOME` and `PATH` environment variables.
-3. Open a terminal and confirm the installation:
-   ```bash
-   java -version
    ```
 
 ---
@@ -189,11 +179,6 @@ Run the following commands to install the required dependencies:
    npm run init
    ```
 
-3. If the Antlr4 grammar definitions have changed, regenerate the parser:
-   ```bash
-   npm run psrgen
-   ```
-
 4. For VSCode users, it is recommended to run the following command to fix Intellisense errors:
    ```bash
    npm run fix:vsc
@@ -261,4 +246,3 @@ See [Editor support](editor-support.en.md) for what the server supports, the ext
 4. [Node.js Official Documentation](https://nodejs.org/en/docs/)
 5. [Python Official Documentation](https://docs.python.org/3/)
 6. [Ninja Build System](https://ninja-build.org/manual.html)
-7. [Antlr4 Official Documentation](https://www.antlr.org/)

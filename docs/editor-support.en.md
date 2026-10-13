@@ -293,7 +293,7 @@ Helix highlights with tree-sitter grammars, and there is none for Camel: a file 
 
 ## 5. Working on the grammar
 
-The TextMate grammar (`editors/vscode/syntaxes/camel.tmLanguage.json`) is derived from `antlr/OpenCMLLex.g4` and `antlr/OpenCML.g4`. Two kinds of tests keep it that way; both run with the default test set (`npm run test`):
+The TextMate grammar (`editors/vscode/syntaxes/camel.tmLanguage.json`) is kept in step with the lexer's own token table (`include/camel/parse/syntax/token_kinds.def`). Two kinds of tests keep it that way; both run with the default test set (`npm run test`):
 
 ```bash
 node scripts/test.js test/plans/feat/tools/grammar.plan.toml

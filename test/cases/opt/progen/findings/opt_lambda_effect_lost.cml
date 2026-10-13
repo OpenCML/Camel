@@ -21,9 +21,9 @@ func main(): int sync {
     };
     if (0 < 31) then sync {
         let n36 = h35(0 - 0);
-        return null;
+        null;
     } else sync {
-        return null;
+        null;
     };
     return 0;
 }

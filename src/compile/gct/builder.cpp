@@ -606,7 +606,15 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
             for (size_t i = 0; i < refs.size(); ++i) {
                 const auto &ref         = refs[i];
                 const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
-                node_ptr_t dataNode     = visitData(dataASTNode);
+                // The declared type first: an array literal takes the form of its elements
+                // from it (visitDataInto).
+                Type *declaredType = i < typeNodes->size()
+                                         ? visitType(typeNodes->atAs<AST::TypeLoad>(i))
+                                         : nullptr;
+                bool enteredLiteral = false;
+                node_ptr_t dataNode = declaredType != nullptr
+                                          ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
+                                          : visitData(dataASTNode);
 
                 // Validate the identifier
                 if (!validateIdent(ref.ident())) {
@@ -616,15 +624,19 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     throw BuildAbortException();
                 }
 
-                if (i < typeNodes->size()) {
-                    const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(i);
-                    Type *type              = visitType(typeASTNode);
+                if (i < typeNodes->size() && !enteredLiteral) {
+                    Type *type = declaredType;
                     // Try a static type conversion first.
+                    // A declared function type says which function a name stands for
+                    // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
+                    // no node.
                     if (asTagged(type) != nullptr ||
+                        (type->code() == TypeCode::Function &&
+                         dataNode->type() != LoadType::DATA) ||
                         (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
                         // Decided when the generic function is instantiated. A declared
-                        // `T?` / `T!` puts the value into that form (design principles 2.9;
-                        // DESIGN-QUESTION(nullable-error) Q1): a CAST, for any expression.
+                        // `T?` / `T!` puts the value into that form (design principles
+                        // 2.10): a CAST, for any expression.
                         node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
                         *castNode << dataNode;
                         setOriginFromAst(
@@ -682,11 +694,16 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
                     Type *type              = visitType(typeASTNode);
                     // Try a static type conversion first.
+                    // A declared function type says which function a name stands for
+                    // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
+                    // no node.
                     if (asTagged(type) != nullptr ||
+                        (type->code() == TypeCode::Function &&
+                         dataNode->type() != LoadType::DATA) ||
                         (dataNode->type() == LoadType::DATA && containsTypeVar(type))) {
                         // Decided when the generic function is instantiated. A declared
-                        // `T?` / `T!` puts the value into that form (design principles 2.9;
-                        // DESIGN-QUESTION(nullable-error) Q1): a CAST, for any expression.
+                        // `T?` / `T!` puts the value into that form (design principles
+                        // 2.10): a CAST, for any expression.
                         node_ptr_t castNode = createNodeAs<CastLoad>(type, true);
                         *castNode << dataNode;
                         setOriginFromAst(
@@ -987,23 +1004,9 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
     if (ctrl == nullptr) {
         return;
     }
-    if (!isThrow) {
-        // `return null` (and a bare `return`) is how an arm is given no value: an `if`
-        // without `else`, or one whose arms end in values of different types, compiles only
-        // when its arms end that way. It is not a value somebody meant to hand to a caller.
-        const auto &values = exit->atAs<AST::RepeatedLoad>(0);
-        if (values->size() == 0) {
-            return;
-        }
-        if (values->size() == 1) {
-            const auto &value = values->front();
-            if (value->type() == AST::LoadType::Data &&
-                value->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Literal &&
-                value->loadAs<AST::LiteralLoad>()->value().type() == LiteralType::Null) {
-                return;
-            }
-        }
-    }
+    // `return null` and a bare `return` are reported like any other: an arm needs no value
+    // to compile (design principles 2.10: an `if` without `else` has none, and its arm may
+    // be of any type), so one written there was most likely meant to leave the function.
     // One report per statement: the arm of `case a | b` is lowered once for each pattern.
     const auto range = exit->load()->tokenRange();
     if (!reportedExits_.insert({range.start, range.end}).second) {
@@ -1067,6 +1070,9 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
         const auto stmtType   = stmt->loadAs<AST::StmtLoad>()->stmtType();
         valueUse_.unusedCtrl  = nullptr;
         valueUse_.blockUnused = false;
+        valueUse_.stmtExpr    = stmtType == AST::StmtType::Expr && stmt->size() > 0
+                                    ? stmt->at(0).get()
+                                    : nullptr;
         if (stmtUnused && stmtType == AST::StmtType::Expr && stmt->size() > 0) {
             // An `if` / `match` written as a statement whose value nothing takes.
             const auto &expr = stmt->at(0);
@@ -1322,12 +1328,21 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     case AST::BinaryDataOp::Neq: {
         opNode = createNodeAs<DRefLoad>("__neq__");
     } break;
-    case AST::BinaryDataOp::StrictEq: {
-        opNode = createNodeAs<DRefLoad>("__strict_eq__");
-    } break;
+    case AST::BinaryDataOp::StrictEq:
     case AST::BinaryDataOp::StrictNeq: {
-        opNode = createNodeAs<DRefLoad>("__strict_neq__");
-    } break;
+        // Design principles 2.10: `===` is not supported for now (and `!==` with it). It
+        // used to compile and compared objects, so two equal string literals were unequal.
+        // Located at the whole comparison (the range of the node itself is its right side).
+        auto range  = ast->load()->tokenRange();
+        range.start = lhsASTNode->load()->tokenRange().start;
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(range)
+            .commit(
+                binaryExpr->op() == AST::BinaryDataOp::StrictEq ? "===" : "!==",
+                "identity comparison is not part of the language for now; compare values "
+                "with '==' and '!='");
+        throw BuildAbortException();
+    }
     case AST::BinaryDataOp::Less: {
         opNode = createNodeAs<DRefLoad>("__lt__");
     } break;
@@ -1661,8 +1676,14 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::As: {
         const auto &rhsASTNode = ast->atAs<AST::TypeLoad>(1);
-        const auto &dataNode   = visitData(lhsASTNode);
         const auto &dstType    = visitType(rhsASTNode);
+        // `[1, null] as (int?)[]`: the literal takes the form of its elements from the type.
+        bool enteredLiteral  = false;
+        const auto &dataNode = visitDataInto(lhsASTNode, dstType, enteredLiteral);
+        if (enteredLiteral) {
+            res = dataNode;
+            break;
+        }
         // A conversion to a type written with a type variable is decided when the generic
         // function is instantiated, for a literal as for any other value.
         // A conversion into `T?` / `T!` is a CAST node for a literal too: the value is put
@@ -1798,6 +1819,17 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     // Whether this `if` is a statement whose value nothing takes: its arms are then lowered
     // as arms of an unused branch (see ValueUse).
     const bool valueUnused = std::exchange(valueUse_.unusedCtrl, nullptr) == ast.get();
+    // Design principles 2.10: an `if` without `else` has no value, so it can only stand as
+    // a statement. (As the last statement of a block it gives the block no value either;
+    // what then expects one reports the missing value by the type.)
+    const bool isStatement = std::exchange(valueUse_.stmtExpr, nullptr) == ast.get();
+    // The AST gives an `if` without `else` an empty block in its place, so an `else` that
+    // is written and empty is the same thing here and in the GIR builder (buildBranch).
+    const auto &elseBlock = ast->optAtAs<AST::StmtBlockLoad>(2);
+    if (!isStatement && (!elseBlock || elseBlock->atAs<AST::RepeatedLoad>(0)->size() == 0)) {
+        diags_->of(SemanticDiag::IfWithoutElseAsValue).at(ast->load()->tokenRange()).commit();
+        throw BuildAbortException();
+    }
     const ValueUseScope valueUseScope(*this);
 
     // condition
@@ -2104,13 +2136,38 @@ ArrayData() : Data* data ;
 node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
     ENTER("ArrayData");
     ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for ArrayData");
+    if (ast->size() > 1) {
+        node_ptr_t res = visitComprehension(ast);
+        LEAVE("ArrayData");
+        return res;
+    }
 
     ArrayDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
 
-    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+    // `[1, null, 3]`: a `null` among other elements makes the array one of `T?` (design
+    // principles 2.10), whose elements are put into that form when the program runs. Which
+    // `T` is known to the GIR builder only, so every element is left to it as a computed one
+    // (visitDataNode joins their types and adds the CASTs).
+    const auto &items   = ast->atAs<AST::RepeatedLoad>(0);
+    bool hasNullLiteral = false;
+    for (const auto &item : *items) {
+        hasNullLiteral |= item->type() == AST::LoadType::Data &&
+                          item->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Literal &&
+                          item->loadAs<AST::LiteralLoad>()->value().type() == LiteralType::Null;
+    }
+    const bool allComputed = hasNullLiteral && items->size() > 1;
+
+    for (const auto &item : *items) {
         node_ptr_t dataNode = visitData(item);
+        if (allComputed) {
+            auto [refNode, refData] = makeRefData(dataNode);
+            *execNode << refNode;
+            dangling = true;
+            factory.add(refData);
+            continue;
+        }
         auto [data, _]      = extractData(dataNode, execNode, dangling);
         try {
             factory.add(data);
@@ -2133,6 +2190,112 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     LEAVE("ArrayData");
     return res;
+}
+
+node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
+    const AST::node_ptr_t &elementAst = ast->at(1);
+    const AST::node_ptr_t &nameAst    = ast->at(2);
+    const AST::node_ptr_t &sourceAst  = ast->at(3);
+    const AST::node_ptr_t conditionAst =
+        ast->at(4)->empty() ? AST::node_ptr_t{} : ast->at(4)->at(0);
+    const Reference nameRef = nameAst->loadAs<AST::RefDataLoad>()->ref();
+    if (!validateIdent(nameRef.ident())) {
+        diags_->of(SemanticDiag::ReservedIdentifier).at(nameAst->load()->tokenRange()).commit();
+        throw BuildAbortException();
+    }
+    const auto place = [&](const node_ptr_t &node, const AST::node_ptr_t &at, const char *what) {
+        setOriginFromAst(context_, node, at, camel::source::OriginKind::GctNode, what);
+        return node;
+    };
+    // The function `(x) => body`: what a lambda with an expression body is, with the type of
+    // `x` left to the call that receives it (a type variable no program can write).
+    const auto elementFunction = [&](const AST::node_ptr_t &body) {
+        FunctionTypeFactory factory;
+        factory.addNormArg(
+            nameRef.ident(),
+            TypeVarType::create("$element" + std::to_string(idIndex_++), true),
+            false);
+        FunctionType *type  = tt::as_ptr<FunctionType>(factory.build());
+        node_ptr_t typeNode = place(createNodeAs<TypeLoad>(type, type->implMark()), body, "gct.func.type");
+        const ValueUseScope valueUseScope(*this);
+        valueUse_           = {};
+        node_ptr_t bodyNode = place(createNodeAs<ExecLoad>(false), body, "gct.block");
+        *bodyNode << visitData(body);
+        node_ptr_t funcNode = place(createNodeAs<FuncLoad>(std::string()), body, "gct.func");
+        *funcNode << typeNode << bodyNode;
+        return funcNode;
+    };
+    // `value->op<function>`.
+    const auto apply = [&](const char *op, const node_ptr_t &function, const node_ptr_t &value) {
+        node_ptr_t withNode = place(createNodeAs<WithLoad>(1), ast, "gct.with");
+        *withNode << place(createNodeAs<DRefLoad>(Reference(op)), ast, "gct.dref") << function;
+        node_ptr_t linkNode = place(createNodeAs<LinkLoad>(1), ast, "gct.link");
+        *linkNode << withNode << value;
+        return linkNode;
+    };
+    node_ptr_t result = visitData(sourceAst);
+    if (conditionAst) {
+        result = apply("filter", elementFunction(conditionAst), result);
+    }
+    return apply("map", elementFunction(elementAst), result);
+}
+
+namespace {
+
+/// The element type of the array type `type` when a literal written where `type` is expected
+/// has elements to put into `T?` / `T!` (directly, or in arrays nested in it); else nullptr.
+Type *taggedElementTarget(Type *type) {
+    if (type == nullptr || type->code() != TypeCode::Array || containsTypeVar(type)) {
+        return nullptr;
+    }
+    Type *elem = tt::as_ptr<ArrayType>(type)->elemType();
+    return asTagged(elem) != nullptr || taggedElementTarget(elem) != nullptr ? elem : nullptr;
+}
+
+} // namespace
+
+node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered) {
+    entered        = false;
+    Type *elemType = taggedElementTarget(type);
+    if (elemType == nullptr || ast->type() != AST::LoadType::Data ||
+        ast->loadAs<AST::DataLoad>()->dataType() != AST::DataType::Array ||
+        ast->atAs<AST::RepeatedLoad>(0)->size() == 0) {
+        return visitData(ast);
+    }
+    // Design principles 2.10: the elements of an array literal are a position where a value
+    // enters `T?` / `T!` when the element type is known, as it is here. Each element is the
+    // value under a CAST to the element type (the conversion an annotated `let` writes), so
+    // the array is built from computed elements of exactly that type.
+    entered = true;
+    ArrayDataFactory factory;
+    node_ptr_t execNode = createNodeAs<ExecLoad>(false, true);
+    for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
+        bool nested         = false;
+        node_ptr_t dataNode = visitDataInto(item, elemType, nested);
+        if (asTagged(elemType) != nullptr) {
+            node_ptr_t castNode = createNodeAs<CastLoad>(elemType, true);
+            *castNode << dataNode;
+            setOriginFromAst(
+                context_,
+                castNode,
+                item,
+                camel::source::OriginKind::GctNode,
+                "gct.cast");
+            dataNode = castNode;
+        } else if (!nested && dataNode->type() == LoadType::DATA) {
+            // An inner literal without elements to put into a form (`[]`): the literal of
+            // the element type.
+            const auto &data = dataNode->loadAs<DataLoad>()->data();
+            if (auto converted = data->convertTo(elemType)) {
+                dataNode = createNodeAs<DataLoad>(converted);
+            }
+        }
+        auto [refNode, refData] = makeRefData(dataNode);
+        *execNode << refNode;
+        factory.add(refData);
+    }
+    *execNode << createNodeAs<DataLoad>(factory.build());
+    return execNode;
 }
 
 /*
@@ -2390,7 +2553,7 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
     Type *payload       = visitType(ast->atAs<AST::TypeLoad>(0));
     const bool fallible = ast->loadAs<AST::NullableTypeLoad>()->fallible();
     // The same mark twice (`T??`, `T!!`) adds nothing a program could tell apart; `T?!` and
-    // `T!?` are allowed (DESIGN-QUESTION(nullable-error) Q2).
+    // `T!?` are allowed (design principles 2.10).
     if (TupleType *inner = asTagged(payload); inner && inner->isFallible() == fallible) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
             .at(ast->load()->tokenRange())

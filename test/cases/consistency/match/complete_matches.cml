@@ -1,8 +1,7 @@
 /**
- * Matches that cannot meet a value without a case, and so get neither the warning
- * MatchWithoutDefault nor the faulting arm: one with `case _`, one over a bool that lists
- * `true` and `false`, and the fixed patterns over `T?` and `T!`. Their results are what they
- * always were.
+ * Matches that cannot meet a value without a case, and so are not refused with
+ * MatchWithoutDefault: one with `case _`, one over a bool that lists `true` and `false`, and
+ * the fixed patterns over `T?` and `T!`. The graph of each has exactly the arms written.
  */
 module complete_matches
 

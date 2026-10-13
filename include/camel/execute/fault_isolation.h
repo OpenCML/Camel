@@ -39,10 +39,9 @@
 
 namespace camel::execute {
 
-/// The name the operator has in a program. It is provisional (design principles 2.9), and this
+/// The name the operator has in a program: `attempt`, settled by design principles 2.10. This
 /// is the only place it is written: everything else uses the URI below, which does not
 /// contain it.
-/// DESIGN-QUESTION(attempt-name)
 inline constexpr const char *kFaultIsolationName = "attempt";
 
 /// The URI of the operator, and the same without the ":mark/" prefix.

@@ -20,9 +20,9 @@ func main(): int sync {
             let n32 = [(false, 0), (true, n27), (false, 0), (false, 0)];
             return 2.5;
         } else 3.0;
-        return null;
+        null;
     } else sync {
-        return null;
+        null;
     };
     return 0;
 }

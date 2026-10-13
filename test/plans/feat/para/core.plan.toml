@@ -408,7 +408,7 @@ timeout_ms = 30000
 # Granularity: a scope runs as a task graph only when it has two unordered items that are each
 # a higher-order operator or a call of a heavy graph (one that reaches a higher-order operator,
 # a module operator or a call of a function value). Asserted through the scheduler's statistics
-# line (CAMEL_TF_GC_STATS: "[taskflow] run: task_graphs=N"), not through time.
+# line (CAMEL_TF_GC_STATS: "[taskflow] run: task_graphs=N workers=W"), not through time.
 [[tests]]
 name = "scalar_recursion_inline.prl"
 desc = "Light side of the granularity rule: fib and a mutual recursion, bodies of built-in arithmetic only, make unordered recursive calls but run inline under PRL: 0 task graphs."
@@ -465,3 +465,102 @@ assert(Number(m[1]) >= 12, `only ${m[1]} task graph(s) ran for the merge sort, e
 }
 """
 timeout_ms = 30000
+
+# Higher-order operators: the ordered ones (reduce, foreach) run their steps on the calling
+# thread; the unordered ones (map, filter, unordered_foreach) hand their elements out in chunks
+# whose size is measured, to helpers that are started at once or when the work proves worth it
+# (docs/technical/06_runtime_and_execution.md, 4.3.2). Which elements shared a chunk and whether
+# a light map got helpers depend on time and are not asserted; what is asserted is the result,
+# and the task graphs that do not depend on time.
+[[tests]]
+name = "ordered_operators_inline.prl"
+desc = "reduce over 2000 elements and foreach over 5 start no task graph under PRL (0 in the scheduler's statistics) and give the result and the order of the linear back ends."
+kind = "behavior"
+case = "../../../cases/para/core/ordered_operators_inline.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === '790806 | step 0 | step 1 | step 2 | step 3 | step 4', `unexpected output: ${out}`)
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) === 0, `${m[1]} task graph(s) ran for reduce and foreach, expected 0`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "map_chunks.nvm"
+desc = "The reference output of map_chunks on the node VM: map, filter and unordered_foreach over arrays of thousands of elements with light, recursive and module-operator element functions, an empty and a one-element array."
+kind = "behavior"
+case = "../../../cases/para/core/map_chunks.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'light 60000 0 4 199 399 3421445 | kept 17142 3 59994 31038796 | steps 4000 0 111 113 932314209 | roots 3000 0 2999 534809138 | edge 0 [6] | done', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "map_chunks.prl"
+desc = "The same output under PRL with 4 workers, where the elements are handed out in chunks to several workers. The two maps whose element function recurses or calls a module operator get helpers from the start whatever the timing: at least 2 task graphs."
+kind = "behavior"
+case = "../../../cases/para/core/map_chunks.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'light 60000 0 4 199 399 3421445 | kept 17142 3 59994 31038796 | steps 4000 0 111 113 932314209 | roots 3000 0 2999 534809138 | edge 0 [6] | done', `unexpected output: ${out}`)
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 2, `only ${m[1]} task graph(s) ran, expected at least 2`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "map_chunks.prl_one_worker"
+desc = "The same output under PRL with one worker: every element runs on the calling thread and no task graph is started."
+kind = "behavior"
+case = "../../../cases/para/core/map_chunks.cml"
+args = ["-t", "1", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'light 60000 0 4 199 399 3421445 | kept 17142 3 59994 31038796 | steps 4000 0 111 113 932314209 | roots 3000 0 2999 534809138 | edge 0 [6] | done', `unexpected output: ${out}`)
+const m = /task_graphs=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no statistics line of the scheduler in stderr: ${input.normalized.stderr}`)
+assert(Number(m[1]) === 0, `${m[1]} task graph(s) ran with one worker, expected 0`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "map_chunks.prl_gc_stress"
+desc = "map_chunks under PRL with a verified major collection at every safepoint the scheduler polls: the chunks of several workers write into one result array while the collector moves it."
+kind = "behavior"
+case = "../../../cases/para/core/map_chunks.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
+assert(out === 'light 60000 0 4 199 399 3421445 | kept 17142 3 59994 31038796 | steps 4000 0 111 113 932314209 | roots 3000 0 2999 534809138 | edge 0 [6] | done', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 120000

@@ -23,9 +23,9 @@ func e8(): P sync {
             return 0;
         };
         let n12 = h11(100);
-        return null;
+        null;
     } else sync {
-        return null;
+        null;
     };
     return { x: 0, y: 0 };
 }

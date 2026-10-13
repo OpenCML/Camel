@@ -1,6 +1,5 @@
 /**
- * A match over a bool that lists only `true` is not complete: it is warned about, and
- * `false` is the fault.
+ * A match over a bool that lists only `true` is not complete: a compile-time error.
  */
 module one_bool_case
 
@@ -12,7 +11,5 @@ func only_true(b: bool): int {
 
 func main(): int sync {
     println(only_true(true))
-    println(only_true(false))
-    println('not reached')
     return 0
 }

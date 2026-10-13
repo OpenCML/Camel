@@ -47,16 +47,56 @@ const signed char primitiveTypeConvMatrix[8][8] = {
     {00, 00, 00, 00, 00, 00, 01}  // String
 };
 
+namespace {
+
+// Internal name -> the name a program writes. The only copy of this table.
+constexpr std::pair<std::string_view, std::string_view> kSourceTypeNames[] = {
+    {"i64", "int"},
+    {"f64", "float"},
+};
+
+} // namespace
+
+std::string sourceTypeSpelling(std::string_view text) {
+    const auto isWord = [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+               c == '_';
+    };
+    std::string out;
+    out.reserve(text.size());
+    size_t i = 0;
+    while (i < text.size()) {
+        if (isWord(text[i]) && (i == 0 || !isWord(text[i - 1]))) {
+            size_t end = i;
+            while (end < text.size() && isWord(text[end])) {
+                ++end;
+            }
+            std::string_view word = text.substr(i, end - i);
+            for (const auto &[internal, source] : kSourceTypeNames) {
+                if (word == internal) {
+                    word = source;
+                    break;
+                }
+            }
+            out += word;
+            i = end;
+            continue;
+        }
+        out += text[i++];
+    }
+    return out;
+}
+
 string typeCodeToString(TypeCode code) {
     switch (code) {
     case TypeCode::Int32:
         return "i32";
     case TypeCode::Int64:
-        return "i64";
+        return std::string(kSourceTypeNames[0].second);
     case TypeCode::Float32:
         return "f32";
     case TypeCode::Float64:
-        return "f64";
+        return std::string(kSourceTypeNames[1].second);
     case TypeCode::Bool:
         return "bool";
     case TypeCode::Byte:
@@ -265,7 +305,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Int32:
             return toSlot(checkedTruncate<Int32>(v, "i32"));
         case TypeCode::Int64:
-            return toSlot(checkedTruncate<Int64>(v, "i64"));
+            return toSlot(checkedTruncate<Int64>(v, "int"));
         case TypeCode::Float64:
             DO_CONV(Float32, Float64, v);
         case TypeCode::Bool:
@@ -286,7 +326,7 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Int32:
             return toSlot(checkedTruncate<Int32>(v, "i32"));
         case TypeCode::Int64:
-            return toSlot(checkedTruncate<Int64>(v, "i64"));
+            return toSlot(checkedTruncate<Int64>(v, "int"));
         case TypeCode::Float32:
             DO_CONV(Float64, Float32, v);
         case TypeCode::Bool:
@@ -359,11 +399,11 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
         case TypeCode::Int32:
             return toSlot(integerFromText<Int32>(s->view(), "i32"));
         case TypeCode::Int64:
-            return toSlot(integerFromText<Int64>(s->view(), "i64"));
+            return toSlot(integerFromText<Int64>(s->view(), "int"));
         case TypeCode::Float32:
             return toSlot(floatFromText<Float32>(s->view(), "f32"));
         case TypeCode::Float64:
-            return toSlot(floatFromText<Float64>(s->view(), "f64"));
+            return toSlot(floatFromText<Float64>(s->view(), "float"));
         case TypeCode::String:
             return value;
         default:

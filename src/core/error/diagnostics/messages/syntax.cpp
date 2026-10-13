@@ -123,14 +123,49 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             },
         },
         {
+            SyntaxDiag::ComparisonNeedsSpace,
+            {
+                "ComparisonNeedsSpace",
+                "This '<' touches {0}, so it opens an angle-bracket argument list, which {1} "
+                "does not continue.",
+                "A '<' directly after a name, a literal or a closing bracket starts '<...>' "
+                "arguments, as in f<a>(x). If a comparison is meant, put a space before the "
+                "'<': a < b.",
+            },
+        },
+        {
+            SyntaxDiag::AngleCloseAfterSpace,
+            {
+                "AngleCloseAfterSpace",
+                "This '>' follows a space and is read as the comparison operator, so the "
+                "angle-bracket list it was meant to close is still open at {0}.",
+                "The '>' that closes '<...>' touches the last item or starts its line: "
+                "f<a, b>. Directly inside '<...>', a '>' after a space is a comparison "
+                "(xs->filter<(x: int) => x > 1>).",
+            },
+        },
+        {
+            SyntaxDiag::LineStartsWithOperator,
+            {
+                "LineStartsWithOperator",
+                "A statement cannot start with '{0}': the line break before it ended the "
+                "statement of the line above.",
+                "A line break ends a statement unless the line is visibly unfinished. To "
+                "continue an expression on the next line, end the line with the operator "
+                "('a +', then 'b'). An operator that can only be binary ('*', '->', '&&', "
+                "'==', ...) also continues the expression when it starts the next line.",
+            },
+        },
+        {
             SyntaxDiag::ComparisonAcrossLines,
             {
                 "ComparisonAcrossLines",
                 "This '>' is read as a comparison with the next line, which starts with {0}: "
                 "two statements may have been joined into one.",
-                "A newline does not end a statement, and a '>' followed by an expression is the "
-                "comparison operator. If this '>' was meant to close '<...>' arguments and the "
-                "next line to be a new statement, write ';' after the '>'.",
+                "A '>' after a space, at the end of a line, is the comparison operator, and the "
+                "expression goes on with the next line. The '>' that closes '<...>' arguments "
+                "touches the last argument; a chain of comparisons (a < b > c) is never what a "
+                "program means.",
             },
         },
     };

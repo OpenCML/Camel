@@ -7,11 +7,10 @@
  *        (state.h,
  * compile.h, parse.h, etc.) to eliminate symbol conflicts
  *        between minwindef/wingdi
- * TRUE/FALSE/ERROR/CONST/IN and the ANTLR parser.
+ * TRUE/FALSE/ERROR/CONST/IN and the names of the front end.
  *
  * Usage: in any .cpp that may indirectly
- * include OpenCMLParser/OpenCMLLexer or
- *        antlr4-runtime, make this header the first
+ * include the parser's headers, make this header the first
  * include in the TU (or at
  *        least include it before any header that may pull in Windows
  * headers).

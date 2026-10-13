@@ -1,0 +1,10 @@
+7 0 ok 3 value 4 value -1
+int int? int?
+5 9 a
+1a -1b
+5 null value 6
+[1, null, 3] [4, null, 6] [10, null, 11] [[1, null], []] 4 7 0
+3 null 4 -1
+one -
+big
+value 2

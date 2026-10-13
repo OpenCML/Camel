@@ -22,7 +22,6 @@
 #include "camel/utils/windows_parser_guard.h"
 
 #include "camel/core/error/diagnostics.h"
-#include "camel/core/error/listener.h"
 #include "camel/init.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/log.h"
@@ -135,7 +134,7 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     } catch (Diagnostic &d) {
-        RangeConverter conv(parser->getTokens());
+        RangeConverter conv(parser->tokenPositions());
         d.fetchRange(conv);
         std::cerr << "Uncaught diagnostic: " << d.toText() << "\n";
         return 1;
@@ -153,8 +152,8 @@ int main(int argc, char *argv[]) {
 
     std::string out;
     try {
-        Formatter formatter(parser->getTokens(), options);
-        out = std::any_cast<std::string>(formatter.visit(parser->cst()));
+        Formatter formatter(*parser->tree(), options);
+        out = formatter.format();
     } catch (const std::exception &e) {
         std::cerr << "camel-format: failed to format: " << e.what() << "\n";
         return 1;

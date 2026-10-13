@@ -1,0 +1,16 @@
+// test/cases/para/core/asian_option_mc.cml at a size that runs in seconds: 16 map elements, each
+// one call of the module operator sim::asian_call_price.
+module asian_mc
+
+import { asian_call_price } from sim
+
+func main(): int sync {
+    let workers = 16
+    let paths_per_worker = 5000
+    let steps = 256
+    let prices = range(0, workers)
+        ->map<(i: int): float => asian_call_price(paths_per_worker, steps, 20260309 + i * 7919)>
+    let total = prices->reduce<(acc: float, cur: float): float => acc + cur, 0.0>
+    println(format<total>('Sum of worker prices = {:.6f}'))
+    return 0
+}

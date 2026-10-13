@@ -1,0 +1,25 @@
+// test/cases/para/core/merge_sort.cml at a size that runs in seconds: 8000000 values, leaves of
+// 1e6 sorted by algo::sorted, the two halves of every split independent of each other. The
+// shuffle and the merges are sequential; they bound what the parallel scheduler can gain.
+module merge_sort
+
+import { seed, shuffle } from random
+import { sorted, merge_sorted_arrays } from algo
+
+func mergesort(arr: int[]): int[] {
+    return if len(arr) <= 1000000 then sorted(arr) else {
+        let mid = len(arr) / 2
+        let lhs = arr->slice<0, mid>->mergesort
+        let rhs = arr->slice<mid, len(arr)>->mergesort
+        return merge_sorted_arrays(lhs, rhs)
+    }
+}
+
+func main(): int sync {
+    seed(1)
+    let arr = range(0, 8000000)->shuffle
+    let res = mergesort(arr)
+    res->slice<0, 16>->println
+    res->slice<len(res) - 4, len(res)>->println
+    return 0
+}

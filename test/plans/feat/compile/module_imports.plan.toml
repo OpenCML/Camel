@@ -192,7 +192,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImportNameConflict"
 expect_diagnostic_line = 2
 expect_diagnostic_column = 1
-expect_output_contains = ["The name 'f' is imported from the modules 'conf_b' and 'conf_c' with the same signature (i64)", "also imported here at 1:1"]
+expect_output_contains = ["The name 'f' is imported from the modules 'conf_b' and 'conf_c' with the same signature (int)", "also imported here at 1:1"]
 
 [[tests]]
 name = "imports.d5_conflict_check"

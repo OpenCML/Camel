@@ -1,567 +1,199 @@
 Program
-|-Decl
-|  \-ModuleDecl
-|     |- module
-|     \-IdentDef
-|        \- fib
-|-Decl
-|  \-ImportDecl
-|     |- import
-|     |-BracedIdents
-|     |  |- {
-|     |  |-IdentList
-|     |  |  \-IdentDef
-|     |  |     \- now
-|     |  \- }
-|     |- from
-|     \-ModuleName
-|        \- time
-|-Decl
-|  \-FuncDecl
-|     |- func
-|     |-IdentRef
-|     |  \- fib
-|     |-ParentParams
-|     |  |- (
-|     |  |-PairedParams
-|     |  |  \-KeyParamPair
-|     |  |     |-IdentDef
-|     |  |     |  \- n
-|     |  |     |- :
-|     |  |     \-TypeExpr
-|     |  |        \-UnionType
-|     |  |           \-InterType
-|     |  |              \-DiffType
-|     |  |                 \-KeyUnionDiffType
-|     |  |                    \-KeyInterType
-|     |  |                       \-TypeUnit
-|     |  |                          \-ArrayType
-|     |  |                             \-SpecType
-|     |  |                                \-PrimaryType
-|     |  |                                   \-IdentRef
-|     |  |                                      \- int
-|     |  \- )
-|     |- :
-|     |-TypeExpr
-|     |  \-UnionType
-|     |     \-InterType
-|     |        \-DiffType
-|     |           \-KeyUnionDiffType
-|     |              \-KeyInterType
-|     |                 \-TypeUnit
-|     |                    \-ArrayType
-|     |                       \-SpecType
-|     |                          \-PrimaryType
-|     |                             \-IdentRef
-|     |                                \- int
-|     \-StmtBlock
-|        |- {
-|        |-StmtList
-|        |  \-Stmt
-|        |     \-RetStmt
-|        |        |- return
-|        |        \-DataList
-|        |           \-DataExpr
-|        |              \-CtrlExpr
-|        |                 |- if
-|        |                 |-LogicalOrExpr
-|        |                 |  \-LogicalAndExpr
-|        |                 |     \-EqualityExpr
-|        |                 |        \-RelationalExpr
-|        |                 |           |-AdditiveExpr
-|        |                 |           |  \-MultiplicativeExpr
-|        |                 |           |     \-NullableExpr
-|        |                 |           |        \-UnaryExpr
-|        |                 |           |           \-LinkExpr
-|        |                 |           |              \-CompExpr
-|        |                 |           |                 \-AnnoExpr
-|        |                 |           |                    \-AccessExpr
-|        |                 |           |                       \-PrimaryData
-|        |                 |           |                          \-IdentRef
-|        |                 |           |                             \- n
-|        |                 |           |- <=
-|        |                 |           \-AdditiveExpr
-|        |                 |              \-MultiplicativeExpr
-|        |                 |                 \-NullableExpr
-|        |                 |                    \-UnaryExpr
-|        |                 |                       \-LinkExpr
-|        |                 |                          \-CompExpr
-|        |                 |                             \-AnnoExpr
-|        |                 |                                \-AccessExpr
-|        |                 |                                   \-PrimaryData
-|        |                 |                                      \-Literal
-|        |                 |                                         \- 1
-|        |                 |- then
-|        |                 |-BlockExpr
-|        |                 |  \-DataExpr
-|        |                 |     \-WaitExpr
-|        |                 |        \-AssignExpr
-|        |                 |           \-LogicalOrExpr
-|        |                 |              \-LogicalAndExpr
-|        |                 |                 \-EqualityExpr
-|        |                 |                    \-RelationalExpr
-|        |                 |                       \-AdditiveExpr
-|        |                 |                          \-MultiplicativeExpr
-|        |                 |                             \-NullableExpr
-|        |                 |                                \-UnaryExpr
-|        |                 |                                   \-LinkExpr
-|        |                 |                                      \-CompExpr
-|        |                 |                                         \-AnnoExpr
-|        |                 |                                            \-AccessExpr
-|        |                 |                                               \-PrimaryData
-|        |                 |                                                  \-IdentRef
-|        |                 |                                                     \- n
-|        |                 |- else
-|        |                 \-BlockExpr
-|        |                    \-DataExpr
-|        |                       \-WaitExpr
-|        |                          \-AssignExpr
-|        |                             \-LogicalOrExpr
-|        |                                \-LogicalAndExpr
-|        |                                   \-EqualityExpr
-|        |                                      \-RelationalExpr
-|        |                                         \-AdditiveExpr
-|        |                                            |-MultiplicativeExpr
-|        |                                            |  \-NullableExpr
-|        |                                            |     \-UnaryExpr
-|        |                                            |        \-LinkExpr
-|        |                                            |           \-CompExpr
-|        |                                            |              \-AnnoExpr
-|        |                                            |                 |-AccessExpr
-|        |                                            |                 |  \-PrimaryData
-|        |                                            |                 |     \-IdentRef
-|        |                                            |                 |        \- fib
-|        |                                            |                 \-ParentArgues
-|        |                                            |                    |- (
-|        |                                            |                    |-ArgumentList
-|        |                                            |                    |  \-IndexValues
-|        |                                            |                    |     \-IndexValue
-|        |                                            |                    |        \-DataExpr
-|        |                                            |                    |           \-WaitExpr
-|        |                                            |                    |              \-AssignExpr
-|        |                                            |                    |                 \-LogicalOrExpr
-|        |                                            |                    |                    \-LogicalAndExpr
-|        |                                            |                    |                       \-EqualityExpr
-|        |                                            |                    |                          \-RelationalExpr
-|        |                                            |                    |                             \-AdditiveExpr
-|        |                                            |                    |                                |-MultiplicativeExpr
-|        |                                            |                    |                                |  \-NullableExpr
-|        |                                            |                    |                                |     \-UnaryExpr
-|        |                                            |                    |                                |        \-LinkExpr
-|        |                                            |                    |                                |           \-CompExpr
-|        |                                            |                    |                                |              \-AnnoExpr
-|        |                                            |                    |                                |                 \-AccessExpr
-|        |                                            |                    |                                |                    \-PrimaryData
-|        |                                            |                    |                                |                       \-IdentRef
-|        |                                            |                    |                                |                          \- n
-|        |                                            |                    |                                |- -
-|        |                                            |                    |                                \-MultiplicativeExpr
-|        |                                            |                    |                                   \-NullableExpr
-|        |                                            |                    |                                      \-UnaryExpr
-|        |                                            |                    |                                         \-LinkExpr
-|        |                                            |                    |                                            \-CompExpr
-|        |                                            |                    |                                               \-AnnoExpr
-|        |                                            |                    |                                                  \-AccessExpr
-|        |                                            |                    |                                                     \-PrimaryData
-|        |                                            |                    |                                                        \-Literal
-|        |                                            |                    |                                                           \- 1
-|        |                                            |                    \- )
-|        |                                            |- +
-|        |                                            \-MultiplicativeExpr
-|        |                                               \-NullableExpr
-|        |                                                  \-UnaryExpr
-|        |                                                     \-LinkExpr
-|        |                                                        \-CompExpr
-|        |                                                           \-AnnoExpr
-|        |                                                              |-AccessExpr
-|        |                                                              |  \-PrimaryData
-|        |                                                              |     \-IdentRef
-|        |                                                              |        \- fib
-|        |                                                              \-ParentArgues
-|        |                                                                 |- (
-|        |                                                                 |-ArgumentList
-|        |                                                                 |  \-IndexValues
-|        |                                                                 |     \-IndexValue
-|        |                                                                 |        \-DataExpr
-|        |                                                                 |           \-WaitExpr
-|        |                                                                 |              \-AssignExpr
-|        |                                                                 |                 \-LogicalOrExpr
-|        |                                                                 |                    \-LogicalAndExpr
-|        |                                                                 |                       \-EqualityExpr
-|        |                                                                 |                          \-RelationalExpr
-|        |                                                                 |                             \-AdditiveExpr
-|        |                                                                 |                                |-MultiplicativeExpr
-|        |                                                                 |                                |  \-NullableExpr
-|        |                                                                 |                                |     \-UnaryExpr
-|        |                                                                 |                                |        \-LinkExpr
-|        |                                                                 |                                |           \-CompExpr
-|        |                                                                 |                                |              \-AnnoExpr
-|        |                                                                 |                                |                 \-AccessExpr
-|        |                                                                 |                                |                    \-PrimaryData
-|        |                                                                 |                                |                       \-IdentRef
-|        |                                                                 |                                |                          \- n
-|        |                                                                 |                                |- -
-|        |                                                                 |                                \-MultiplicativeExpr
-|        |                                                                 |                                   \-NullableExpr
-|        |                                                                 |                                      \-UnaryExpr
-|        |                                                                 |                                         \-LinkExpr
-|        |                                                                 |                                            \-CompExpr
-|        |                                                                 |                                               \-AnnoExpr
-|        |                                                                 |                                                  \-AccessExpr
-|        |                                                                 |                                                     \-PrimaryData
-|        |                                                                 |                                                        \-Literal
-|        |                                                                 |                                                           \- 2
-|        |                                                                 \- )
-|        \- }
-|-Decl
-|  \-FuncDecl
-|     |- func
-|     |-IdentRef
-|     |  \- main
-|     |-ParentParams
-|     |  |- (
-|     |  \- )
-|     |- :
-|     |-TypeExpr
-|     |  \-UnionType
-|     |     \-InterType
-|     |        \-DiffType
-|     |           \-KeyUnionDiffType
-|     |              \-KeyInterType
-|     |                 \-TypeUnit
-|     |                    \-ArrayType
-|     |                       \-SpecType
-|     |                          \-PrimaryType
-|     |                             \-IdentRef
-|     |                                \- int
-|     \-StmtBlock
-|        |- sync
-|        |- {
-|        |-StmtList
-|        |  |-Stmt
-|        |  |  \-DataDecl
-|        |  |     |- let
-|        |  |     |-Carrier
-|        |  |     |  \-IdentList
-|        |  |     |     \-IdentDef
-|        |  |     |        \- idx
-|        |  |     |- =
-|        |  |     \-DataList
-|        |  |        \-DataExpr
-|        |  |           \-WaitExpr
-|        |  |              \-AssignExpr
-|        |  |                 \-LogicalOrExpr
-|        |  |                    \-LogicalAndExpr
-|        |  |                       \-EqualityExpr
-|        |  |                          \-RelationalExpr
-|        |  |                             \-AdditiveExpr
-|        |  |                                \-MultiplicativeExpr
-|        |  |                                   \-NullableExpr
-|        |  |                                      \-UnaryExpr
-|        |  |                                         \-LinkExpr
-|        |  |                                            \-CompExpr
-|        |  |                                               \-AnnoExpr
-|        |  |                                                  \-AccessExpr
-|        |  |                                                     \-PrimaryData
-|        |  |                                                        \-Literal
-|        |  |                                                           \- 10
-|        |  |-Stmt
-|        |  |  \-DataExpr
-|        |  |     \-WaitExpr
-|        |  |        \-AssignExpr
-|        |  |           \-LogicalOrExpr
-|        |  |              \-LogicalAndExpr
-|        |  |                 \-EqualityExpr
-|        |  |                    \-RelationalExpr
-|        |  |                       \-AdditiveExpr
-|        |  |                          \-MultiplicativeExpr
-|        |  |                             \-NullableExpr
-|        |  |                                \-UnaryExpr
-|        |  |                                   \-LinkExpr
-|        |  |                                      |-CompExpr
-|        |  |                                      |  \-AnnoExpr
-|        |  |                                      |     \-AccessExpr
-|        |  |                                      |        \-PrimaryData
-|        |  |                                      |           \-Literal
-|        |  |                                      |              \- 'Start computing fibonacci({})...'
-|        |  |                                      |- ->
-|        |  |                                      |-CompExpr
-|        |  |                                      |  \-AnnoExpr
-|        |  |                                      |     |-AccessExpr
-|        |  |                                      |     |  \-PrimaryData
-|        |  |                                      |     |     \-IdentRef
-|        |  |                                      |     |        \- format
-|        |  |                                      |     \-AngledValues
-|        |  |                                      |        |- <
-|        |  |                                      |        |-ArgumentList
-|        |  |                                      |        |  \-IndexValues
-|        |  |                                      |        |     \-IndexValue
-|        |  |                                      |        |        \-DataExpr
-|        |  |                                      |        |           \-WaitExpr
-|        |  |                                      |        |              \-AssignExpr
-|        |  |                                      |        |                 \-LogicalOrExpr
-|        |  |                                      |        |                    \-LogicalAndExpr
-|        |  |                                      |        |                       \-EqualityExpr
-|        |  |                                      |        |                          \-RelationalExpr
-|        |  |                                      |        |                             \-AdditiveExpr
-|        |  |                                      |        |                                \-MultiplicativeExpr
-|        |  |                                      |        |                                   \-NullableExpr
-|        |  |                                      |        |                                      \-UnaryExpr
-|        |  |                                      |        |                                         \-LinkExpr
-|        |  |                                      |        |                                            \-CompExpr
-|        |  |                                      |        |                                               \-AnnoExpr
-|        |  |                                      |        |                                                  \-AccessExpr
-|        |  |                                      |        |                                                     \-PrimaryData
-|        |  |                                      |        |                                                        \-IdentRef
-|        |  |                                      |        |                                                           \- idx
-|        |  |                                      |        \- >
-|        |  |                                      |- ->
-|        |  |                                      \-CompExpr
-|        |  |                                         \-AnnoExpr
-|        |  |                                            \-AccessExpr
-|        |  |                                               \-PrimaryData
-|        |  |                                                  \-IdentRef
-|        |  |                                                     \- println
-|        |  |-Stmt
-|        |  |  \-DataDecl
-|        |  |     |- let
-|        |  |     |-Carrier
-|        |  |     |  \-IdentList
-|        |  |     |     \-IdentDef
-|        |  |     |        \- start
-|        |  |     |- =
-|        |  |     \-DataList
-|        |  |        \-DataExpr
-|        |  |           \-WaitExpr
-|        |  |              \-AssignExpr
-|        |  |                 \-LogicalOrExpr
-|        |  |                    \-LogicalAndExpr
-|        |  |                       \-EqualityExpr
-|        |  |                          \-RelationalExpr
-|        |  |                             \-AdditiveExpr
-|        |  |                                \-MultiplicativeExpr
-|        |  |                                   \-NullableExpr
-|        |  |                                      \-UnaryExpr
-|        |  |                                         \-LinkExpr
-|        |  |                                            \-CompExpr
-|        |  |                                               \-AnnoExpr
-|        |  |                                                  |-AccessExpr
-|        |  |                                                  |  \-PrimaryData
-|        |  |                                                  |     \-IdentRef
-|        |  |                                                  |        \- now
-|        |  |                                                  \-ParentArgues
-|        |  |                                                     |- (
-|        |  |                                                     \- )
-|        |  |-Stmt
-|        |  |  \-DataDecl
-|        |  |     |- let
-|        |  |     |-Carrier
-|        |  |     |  \-IdentList
-|        |  |     |     \-IdentDef
-|        |  |     |        \- res
-|        |  |     |- =
-|        |  |     \-DataList
-|        |  |        \-DataExpr
-|        |  |           \-WaitExpr
-|        |  |              \-AssignExpr
-|        |  |                 \-LogicalOrExpr
-|        |  |                    \-LogicalAndExpr
-|        |  |                       \-EqualityExpr
-|        |  |                          \-RelationalExpr
-|        |  |                             \-AdditiveExpr
-|        |  |                                \-MultiplicativeExpr
-|        |  |                                   \-NullableExpr
-|        |  |                                      \-UnaryExpr
-|        |  |                                         \-LinkExpr
-|        |  |                                            \-CompExpr
-|        |  |                                               \-AnnoExpr
-|        |  |                                                  |-AccessExpr
-|        |  |                                                  |  \-PrimaryData
-|        |  |                                                  |     \-IdentRef
-|        |  |                                                  |        \- fib
-|        |  |                                                  \-ParentArgues
-|        |  |                                                     |- (
-|        |  |                                                     |-ArgumentList
-|        |  |                                                     |  \-IndexValues
-|        |  |                                                     |     \-IndexValue
-|        |  |                                                     |        \-DataExpr
-|        |  |                                                     |           \-WaitExpr
-|        |  |                                                     |              \-AssignExpr
-|        |  |                                                     |                 \-LogicalOrExpr
-|        |  |                                                     |                    \-LogicalAndExpr
-|        |  |                                                     |                       \-EqualityExpr
-|        |  |                                                     |                          \-RelationalExpr
-|        |  |                                                     |                             \-AdditiveExpr
-|        |  |                                                     |                                \-MultiplicativeExpr
-|        |  |                                                     |                                   \-NullableExpr
-|        |  |                                                     |                                      \-UnaryExpr
-|        |  |                                                     |                                         \-LinkExpr
-|        |  |                                                     |                                            \-CompExpr
-|        |  |                                                     |                                               \-AnnoExpr
-|        |  |                                                     |                                                  \-AccessExpr
-|        |  |                                                     |                                                     \-PrimaryData
-|        |  |                                                     |                                                        \-IdentRef
-|        |  |                                                     |                                                           \- idx
-|        |  |                                                     \- )
-|        |  |-Stmt
-|        |  |  \-DataDecl
-|        |  |     |- let
-|        |  |     |-Carrier
-|        |  |     |  \-IdentList
-|        |  |     |     \-IdentDef
-|        |  |     |        \- duration
-|        |  |     |- =
-|        |  |     \-DataList
-|        |  |        \-DataExpr
-|        |  |           \-WaitExpr
-|        |  |              \-AssignExpr
-|        |  |                 \-LogicalOrExpr
-|        |  |                    \-LogicalAndExpr
-|        |  |                       \-EqualityExpr
-|        |  |                          \-RelationalExpr
-|        |  |                             \-AdditiveExpr
-|        |  |                                |-MultiplicativeExpr
-|        |  |                                |  \-NullableExpr
-|        |  |                                |     \-UnaryExpr
-|        |  |                                |        \-LinkExpr
-|        |  |                                |           \-CompExpr
-|        |  |                                |              \-AnnoExpr
-|        |  |                                |                 |-AccessExpr
-|        |  |                                |                 |  \-PrimaryData
-|        |  |                                |                 |     \-IdentRef
-|        |  |                                |                 |        \- now
-|        |  |                                |                 \-ParentArgues
-|        |  |                                |                    |- (
-|        |  |                                |                    \- )
-|        |  |                                |- -
-|        |  |                                \-MultiplicativeExpr
-|        |  |                                   \-NullableExpr
-|        |  |                                      \-UnaryExpr
-|        |  |                                         \-LinkExpr
-|        |  |                                            \-CompExpr
-|        |  |                                               \-AnnoExpr
-|        |  |                                                  \-AccessExpr
-|        |  |                                                     \-PrimaryData
-|        |  |                                                        \-IdentRef
-|        |  |                                                           \- start
-|        |  |-Stmt
-|        |  |  \-DataExpr
-|        |  |     \-WaitExpr
-|        |  |        \-AssignExpr
-|        |  |           \-LogicalOrExpr
-|        |  |              \-LogicalAndExpr
-|        |  |                 \-EqualityExpr
-|        |  |                    \-RelationalExpr
-|        |  |                       \-AdditiveExpr
-|        |  |                          \-MultiplicativeExpr
-|        |  |                             \-NullableExpr
-|        |  |                                \-UnaryExpr
-|        |  |                                   \-LinkExpr
-|        |  |                                      |-CompExpr
-|        |  |                                      |  \-AnnoExpr
-|        |  |                                      |     \-AccessExpr
-|        |  |                                      |        \-PrimaryData
-|        |  |                                      |           \-Literal
-|        |  |                                      |              \- 'Fibonacci({}) = {} (computed in {:.4f} seconds)'
-|        |  |                                      |- ->
-|        |  |                                      |-CompExpr
-|        |  |                                      |  \-AnnoExpr
-|        |  |                                      |     |-AccessExpr
-|        |  |                                      |     |  \-PrimaryData
-|        |  |                                      |     |     \-IdentRef
-|        |  |                                      |     |        \- format
-|        |  |                                      |     \-AngledValues
-|        |  |                                      |        |- <
-|        |  |                                      |        |-ArgumentList
-|        |  |                                      |        |  \-IndexValues
-|        |  |                                      |        |     |-IndexValue
-|        |  |                                      |        |     |  \-DataExpr
-|        |  |                                      |        |     |     \-WaitExpr
-|        |  |                                      |        |     |        \-AssignExpr
-|        |  |                                      |        |     |           \-LogicalOrExpr
-|        |  |                                      |        |     |              \-LogicalAndExpr
-|        |  |                                      |        |     |                 \-EqualityExpr
-|        |  |                                      |        |     |                    \-RelationalExpr
-|        |  |                                      |        |     |                       \-AdditiveExpr
-|        |  |                                      |        |     |                          \-MultiplicativeExpr
-|        |  |                                      |        |     |                             \-NullableExpr
-|        |  |                                      |        |     |                                \-UnaryExpr
-|        |  |                                      |        |     |                                   \-LinkExpr
-|        |  |                                      |        |     |                                      \-CompExpr
-|        |  |                                      |        |     |                                         \-AnnoExpr
-|        |  |                                      |        |     |                                            \-AccessExpr
-|        |  |                                      |        |     |                                               \-PrimaryData
-|        |  |                                      |        |     |                                                  \-IdentRef
-|        |  |                                      |        |     |                                                     \- idx
-|        |  |                                      |        |     |- ,
-|        |  |                                      |        |     |-IndexValue
-|        |  |                                      |        |     |  \-DataExpr
-|        |  |                                      |        |     |     \-WaitExpr
-|        |  |                                      |        |     |        \-AssignExpr
-|        |  |                                      |        |     |           \-LogicalOrExpr
-|        |  |                                      |        |     |              \-LogicalAndExpr
-|        |  |                                      |        |     |                 \-EqualityExpr
-|        |  |                                      |        |     |                    \-RelationalExpr
-|        |  |                                      |        |     |                       \-AdditiveExpr
-|        |  |                                      |        |     |                          \-MultiplicativeExpr
-|        |  |                                      |        |     |                             \-NullableExpr
-|        |  |                                      |        |     |                                \-UnaryExpr
-|        |  |                                      |        |     |                                   \-LinkExpr
-|        |  |                                      |        |     |                                      \-CompExpr
-|        |  |                                      |        |     |                                         \-AnnoExpr
-|        |  |                                      |        |     |                                            \-AccessExpr
-|        |  |                                      |        |     |                                               \-PrimaryData
-|        |  |                                      |        |     |                                                  \-IdentRef
-|        |  |                                      |        |     |                                                     \- res
-|        |  |                                      |        |     |- ,
-|        |  |                                      |        |     \-IndexValue
-|        |  |                                      |        |        \-DataExpr
-|        |  |                                      |        |           \-WaitExpr
-|        |  |                                      |        |              \-AssignExpr
-|        |  |                                      |        |                 \-LogicalOrExpr
-|        |  |                                      |        |                    \-LogicalAndExpr
-|        |  |                                      |        |                       \-EqualityExpr
-|        |  |                                      |        |                          \-RelationalExpr
-|        |  |                                      |        |                             \-AdditiveExpr
-|        |  |                                      |        |                                \-MultiplicativeExpr
-|        |  |                                      |        |                                   \-NullableExpr
-|        |  |                                      |        |                                      \-UnaryExpr
-|        |  |                                      |        |                                         \-LinkExpr
-|        |  |                                      |        |                                            \-CompExpr
-|        |  |                                      |        |                                               \-AnnoExpr
-|        |  |                                      |        |                                                  \-AccessExpr
-|        |  |                                      |        |                                                     \-PrimaryData
-|        |  |                                      |        |                                                        \-IdentRef
-|        |  |                                      |        |                                                           \- duration
-|        |  |                                      |        \- >
-|        |  |                                      |- ->
-|        |  |                                      \-CompExpr
-|        |  |                                         \-AnnoExpr
-|        |  |                                            \-AccessExpr
-|        |  |                                               \-PrimaryData
-|        |  |                                                  \-IdentRef
-|        |  |                                                     \- println
-|        |  \-Stmt
-|        |     \-RetStmt
-|        |        |- return
-|        |        \-DataList
-|        |           \-DataExpr
-|        |              \-WaitExpr
-|        |                 \-AssignExpr
-|        |                    \-LogicalOrExpr
-|        |                       \-LogicalAndExpr
-|        |                          \-EqualityExpr
-|        |                             \-RelationalExpr
-|        |                                \-AdditiveExpr
-|        |                                   \-MultiplicativeExpr
-|        |                                      \-NullableExpr
-|        |                                         \-UnaryExpr
-|        |                                            \-LinkExpr
-|        |                                               \-CompExpr
-|        |                                                  \-AnnoExpr
-|        |                                                     \-AccessExpr
-|        |                                                        \-PrimaryData
-|        |                                                           \-Literal
-|        |                                                              \- 0
-|        \- }
+|-ModuleDecl
+|  |- module
+|  \-IdentDef
+|     \- fib
+|-ImportDecl
+|  |- import
+|  |-BracedIdents
+|  |  |- {
+|  |  |-IdentList
+|  |  |  \-IdentDef
+|  |  |     \- now
+|  |  \- }
+|  |- from
+|  \-ModuleName
+|     \- time
+|-FuncDecl
+|  |- func
+|  |-IdentRef
+|  |  \- fib
+|  |-ParentParams
+|  |  |- (
+|  |  |-PairedParams
+|  |  |  \-KeyParamPair
+|  |  |     |-IdentDef
+|  |  |     |  \- n
+|  |  |     |- :
+|  |  |     \-RefType
+|  |  |        \- int
+|  |  \- )
+|  |- :
+|  |-RefType
+|  |  \- int
+|  \-StmtBlock
+|     |- {
+|     |-StmtList
+|     |  \-RetStmt
+|     |     |- return
+|     |     \-DataList
+|     |        \-IfExpr
+|     |           |- if
+|     |           |-RelationalExpr
+|     |           |  |-RefData
+|     |           |  |  \- n
+|     |           |  |- <=
+|     |           |  \-Literal
+|     |           |     \- 1
+|     |           |- then
+|     |           |-RefData
+|     |           |  \- n
+|     |           |- else
+|     |           \-AdditiveExpr
+|     |              |-AnnoExpr
+|     |              |  |-RefData
+|     |              |  |  \- fib
+|     |              |  \-ParentArgues
+|     |              |     |- (
+|     |              |     |-ArgumentList
+|     |              |     |  \-IndexValues
+|     |              |     |     \-AdditiveExpr
+|     |              |     |        |-RefData
+|     |              |     |        |  \- n
+|     |              |     |        |- -
+|     |              |     |        \-Literal
+|     |              |     |           \- 1
+|     |              |     \- )
+|     |              |- +
+|     |              \-AnnoExpr
+|     |                 |-RefData
+|     |                 |  \- fib
+|     |                 \-ParentArgues
+|     |                    |- (
+|     |                    |-ArgumentList
+|     |                    |  \-IndexValues
+|     |                    |     \-AdditiveExpr
+|     |                    |        |-RefData
+|     |                    |        |  \- n
+|     |                    |        |- -
+|     |                    |        \-Literal
+|     |                    |           \- 2
+|     |                    \- )
+|     \- }
+|-FuncDecl
+|  |- func
+|  |-IdentRef
+|  |  \- main
+|  |-ParentParams
+|  |  |- (
+|  |  \- )
+|  |- :
+|  |-RefType
+|  |  \- int
+|  \-StmtBlock
+|     |- sync
+|     |- {
+|     |-StmtList
+|     |  |-DataDecl
+|     |  |  |- let
+|     |  |  |-IdentList
+|     |  |  |  \-IdentDef
+|     |  |  |     \- idx
+|     |  |  |- =
+|     |  |  \-DataList
+|     |  |     \-Literal
+|     |  |        \- 10
+|     |  |-LinkExpr
+|     |  |  |-Literal
+|     |  |  |  \- 'Start computing fibonacci({})...'
+|     |  |  |- ->
+|     |  |  |-AnnoExpr
+|     |  |  |  |-RefData
+|     |  |  |  |  \- format
+|     |  |  |  \-AngledValues
+|     |  |  |     |- <
+|     |  |  |     |-ArgumentList
+|     |  |  |     |  \-IndexValues
+|     |  |  |     |     \-RefData
+|     |  |  |     |        \- idx
+|     |  |  |     \- >
+|     |  |  |- ->
+|     |  |  \-RefData
+|     |  |     \- println
+|     |  |-DataDecl
+|     |  |  |- let
+|     |  |  |-IdentList
+|     |  |  |  \-IdentDef
+|     |  |  |     \- start
+|     |  |  |- =
+|     |  |  \-DataList
+|     |  |     \-AnnoExpr
+|     |  |        |-RefData
+|     |  |        |  \- now
+|     |  |        \-ParentArgues
+|     |  |           |- (
+|     |  |           \- )
+|     |  |-DataDecl
+|     |  |  |- let
+|     |  |  |-IdentList
+|     |  |  |  \-IdentDef
+|     |  |  |     \- res
+|     |  |  |- =
+|     |  |  \-DataList
+|     |  |     \-AnnoExpr
+|     |  |        |-RefData
+|     |  |        |  \- fib
+|     |  |        \-ParentArgues
+|     |  |           |- (
+|     |  |           |-ArgumentList
+|     |  |           |  \-IndexValues
+|     |  |           |     \-RefData
+|     |  |           |        \- idx
+|     |  |           \- )
+|     |  |-DataDecl
+|     |  |  |- let
+|     |  |  |-IdentList
+|     |  |  |  \-IdentDef
+|     |  |  |     \- duration
+|     |  |  |- =
+|     |  |  \-DataList
+|     |  |     \-AdditiveExpr
+|     |  |        |-AnnoExpr
+|     |  |        |  |-RefData
+|     |  |        |  |  \- now
+|     |  |        |  \-ParentArgues
+|     |  |        |     |- (
+|     |  |        |     \- )
+|     |  |        |- -
+|     |  |        \-RefData
+|     |  |           \- start
+|     |  |-LinkExpr
+|     |  |  |-Literal
+|     |  |  |  \- 'Fibonacci({}) = {} (computed in {:.4f} seconds)'
+|     |  |  |- ->
+|     |  |  |-AnnoExpr
+|     |  |  |  |-RefData
+|     |  |  |  |  \- format
+|     |  |  |  \-AngledValues
+|     |  |  |     |- <
+|     |  |  |     |-ArgumentList
+|     |  |  |     |  \-IndexValues
+|     |  |  |     |     |-RefData
+|     |  |  |     |     |  \- idx
+|     |  |  |     |     |- ,
+|     |  |  |     |     |-RefData
+|     |  |  |     |     |  \- res
+|     |  |  |     |     |- ,
+|     |  |  |     |     \-RefData
+|     |  |  |     |        \- duration
+|     |  |  |     \- >
+|     |  |  |- ->
+|     |  |  \-RefData
+|     |  |     \- println
+|     |  \-RetStmt
+|     |     |- return
+|     |     \-DataList
+|     |        \-Literal
+|     |           \- 0
+|     \- }
 \- <EOF>

@@ -2,8 +2,8 @@
 
 Editor support for [Camel](https://github.com/OpenCML/Camel) source files (`.cml`):
 
-- **Syntax highlighting** from a TextMate grammar derived from the language's own lexer and parser
-  grammars (`antlr/OpenCMLLex.g4`, `antlr/OpenCML.g4`).
+- **Syntax highlighting** from a TextMate grammar checked against the token table of the language's own
+  lexer (`include/camel/parse/syntax/token_kinds.def`).
 - **Language features** from the `camel-ls` language server (diagnostics, hover, navigation,
   completion, semantic highlighting, ...). What the server supports is listed in
   [`docs/editor-support.en.md`](../../docs/editor-support.en.md).

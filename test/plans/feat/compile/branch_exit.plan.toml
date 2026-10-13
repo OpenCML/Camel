@@ -11,7 +11,7 @@ desc = "The warning for a return or throw in an arm of an if / match whose value
 
 [[tests]]
 name = "unused_arm_exit"
-desc = "Every return and throw in an arm of an unused if / match is warned about at the statement, with the branch as the second location; return null is not. The program runs as before, alike on the four back ends."
+desc = "Every return and throw in an arm of an unused if / match is warned about at the statement, with the branch as the second location; return null too (it used to be exempt). The program runs as before, alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/compile/branch_exit/unused_arm_exit.cml"
 args = ["-E", "short", "${case}", "${backend}"]
@@ -32,7 +32,7 @@ const want = [
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 const at = [...input.stderr.matchAll(/unused_arm_exit[.]cml:([0-9]+):([0-9]+): .Warn/g)].map(m => m[1] + ':' + m[2])
-const expected = '12:27 12:89 18:21 18:39 25:21 26:25 27:21 36:25 36:43 39:9 48:11'
+const expected = '12:27 12:89 18:21 18:39 25:21 26:25 27:21 36:25 36:43 39:9 48:11 59:9'
 assert(at.join(' ') === expected, `warned at: ${at.join(' ')}`)
 }
 """

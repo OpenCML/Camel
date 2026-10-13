@@ -18,11 +18,9 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "antlr4-runtime/antlr4-runtime.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
-#include "camel/core/error/listener.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/introspect.h"
 #include "camel/core/module/userdef.h"
@@ -33,10 +31,7 @@
 #include "camel/execute/pass/snapshot.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/init.h"
-#include "camel/parse/antlr/OpenCMLLexer.h"
-#include "camel/parse/antlr/OpenCMLParser.h"
 #include "camel/parse/ast/builder.h"
-#include "camel/parse/cst_dumper.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
@@ -58,7 +53,6 @@
 #include <string>
 
 namespace mm = camel::core::mm;
-using namespace antlr4;
 using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace std;
@@ -318,9 +312,7 @@ int main(int argc, char *argv[]) {
                 parser->dumpTokens(os);
             }
             if (Inspect::dumpCST) {
-                auto cst     = parser->cst();
-                auto visitor = CSTDumpVisitor(os);
-                visitor.visit(cst);
+                parser->dumpCST(os);
             }
             if (Inspect::dumpAST) {
                 auto ast = parser->ast();
@@ -565,7 +557,7 @@ int main(int argc, char *argv[]) {
         compileSummary(true);
         return 1;
     } catch (Diagnostic &d) {
-        RangeConverter conv(parser->getTokens());
+        RangeConverter conv(parser->tokenPositions());
         d.fetchRange(conv);
         os << "Uncaught diagnostic: " << (useJsonFormat ? d.toJson() : d.toText(os)) << endl;
         return 1;

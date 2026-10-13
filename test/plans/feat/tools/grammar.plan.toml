@@ -6,7 +6,7 @@ desc = "The TextMate grammar of the VS Code extension (editors/vscode): its tabl
 
 [[tests]]
 name = "grammar.tables"
-desc = "Every keyword token of antlr/OpenCMLLex.g4 is matched by exactly one keyword pattern of the grammar and the grammar lists no other keyword; every literal token of antlr/OpenCML.g4 is matched by an operator or punctuation pattern; the built-in type names are those of the compiler's root type scope. No dependencies."
+desc = "Every keyword of the lexer's token table (include/camel/parse/syntax/token_kinds.def) is matched by exactly one keyword pattern of the grammar and the grammar lists no other keyword; every operator and separator of the table is matched by an operator or punctuation pattern; the built-in type names are those of the compiler's root type scope. No dependencies."
 kind = "behavior"
 tool = "node"
 case = "../../../../editors/vscode/scripts/check-grammar.mjs"

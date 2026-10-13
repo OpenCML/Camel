@@ -1,0 +1,29 @@
+// The first version of examples/parallel/parallel_map.cml at 8 blocks of 5000 start values: every
+// map element is an ordered `reduce` over 5000 values whose step makes a tuple and calls a
+// tail-recursive scalar function. Fine-grained work: the parallel scheduler makes one task per
+// reduce step.
+module collatz_reduce
+
+func collatz_steps(n: int, steps: int): int {
+    return if n == 1 then steps
+        else if n % 2 == 0 then collatz_steps(n / 2, steps + 1)
+        else collatz_steps(3 * n + 1, steps + 1)
+}
+
+func longer(a: (int, int), b: (int, int)): (int, int) {
+    return if b.1 > a.1 then b else a
+}
+
+func longest_in(lo: int, hi: int): (int, int) {
+    return range(lo, hi)->reduce<
+        (best: (int, int), n: int): (int, int) => longer(best, (n, collatz_steps(n, 0))),
+        (lo, 0)
+    >
+}
+
+func main(): int sync {
+    let block = 5000
+    let results = range(0, 8)->map<(i: int): (int, int) => longest_in(i * block + 1, (i + 1) * block + 1)>
+    println(results)
+    return 0
+}
