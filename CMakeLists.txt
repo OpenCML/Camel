@@ -34,6 +34,8 @@ file(GLOB_RECURSE _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
     "${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
+# Older checkouts may still hold ignored ANTLR outputs. The handwritten frontend does not use them.
+list(FILTER _ALL_SRC EXCLUDE REGEX "/src/parse/antlr/")
 set(LIBCAMEL_SRC ${_ALL_SRC})
 
 find_package(fmt REQUIRED)
