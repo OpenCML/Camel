@@ -238,7 +238,7 @@ error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of len
 help: Ensure the index is within the valid range of the collection.
 ```
 
-The operator that isolates a fault at a subgraph boundary (provisionally named `attempt` in the design principles) is not provided yet.
+The operator that isolates a fault at a subgraph boundary is `attempt` ([6.10.1](06_expressions.md)).
 
 **`exit(n)`** ends the program immediately with exit code `n`; earlier output is written out as usual.
 

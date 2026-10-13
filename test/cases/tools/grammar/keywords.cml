@@ -50,7 +50,7 @@ func control(dir: string, xs: int[]): int! {
     try {
         throw 'failed'
     } catch e: Error {
-        raise e
+        throw e
     } finally {
         return picked
     }

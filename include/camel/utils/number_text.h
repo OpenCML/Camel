@@ -30,10 +30,12 @@
 
 #pragma once
 
+#include <cerrno>
 #include <charconv>
 #include <cmath>
 #include <concepts>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <ostream>
 #include <string>
@@ -104,13 +106,42 @@ template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_vi
         return NumberTextStatus::NotANumber;
     }
     T value{};
-    const auto [end, ec] =
-        std::from_chars(text.data(), text.data() + text.size(), value, std::chars_format::general);
-    if (ec == std::errc::invalid_argument || end != text.data() + text.size()) {
-        return NumberTextStatus::NotANumber;
-    }
-    if (ec == std::errc::result_out_of_range) {
-        return NumberTextStatus::OutOfRange;
+    if constexpr (requires(const char *p, T &v) { std::from_chars(p, p, v); }) {
+        const auto [end, ec] = std::from_chars(
+            text.data(),
+            text.data() + text.size(),
+            value,
+            std::chars_format::general);
+        if (ec == std::errc::invalid_argument || end != text.data() + text.size()) {
+            return NumberTextStatus::NotANumber;
+        }
+        if (ec == std::errc::result_out_of_range) {
+            return NumberTextStatus::OutOfRange;
+        }
+    } else {
+        // libc++ before version 20 has no from_chars for floating point. The C library's
+        // conversion takes more than a decimal number (a hexadecimal form), so the characters
+        // are checked first; it reads the decimal point of the C locale, which Camel never
+        // changes from ".".
+        for (const char c : text) {
+            const bool allowed =
+                (c >= '0' && c <= '9') || c == '.' || c == 'e' || c == 'E' || c == '+' || c == '-';
+            if (!allowed) {
+                return NumberTextStatus::NotANumber;
+            }
+        }
+        const std::string numeral(text);
+        char *end = nullptr;
+        errno     = 0;
+        value     = static_cast<T>(
+            sizeof(T) <= sizeof(float) ? std::strtof(numeral.c_str(), &end)
+                                       : std::strtod(numeral.c_str(), &end));
+        if (end != numeral.c_str() + numeral.size()) {
+            return NumberTextStatus::NotANumber;
+        }
+        if (errno == ERANGE && std::isinf(value)) {
+            return NumberTextStatus::OutOfRange;
+        }
     }
     out = negative ? -value : value;
     return NumberTextStatus::Ok;

@@ -1,0 +1,5 @@
+func id(x: typeas A): A { return x }
+func main(): int sync {
+    println(id)
+    return 0
+}

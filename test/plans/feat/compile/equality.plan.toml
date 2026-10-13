@@ -86,4 +86,4 @@ kind = "negative"
 case = "../../../cases/compile/equality/err_types_differ.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_types_differ.cml:4:23: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(i64[], f64[])"]
+expect_output_contains = ["err_types_differ.cml:4:23: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int[], float[])"]

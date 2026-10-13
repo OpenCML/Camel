@@ -64,7 +64,6 @@ enum class SemanticDiag : uint32_t {
     ArgumentNeedsConversion      = 0x000021,
     ReturnNeedsConversion        = 0x000022,
     LiteralOutOfRange            = 0x000023,
-    IfArmValueWithoutElse        = 0x000024,
     ImportCycle                  = 0x000025,
     ImportedFunctionUsesModuleValue = 0x000026,
     ImportNameConflict           = 0x000027,
@@ -97,6 +96,12 @@ enum class SemanticDiag : uint32_t {
     // Map and Set (design principles 2.9; docs/technical/31_map_and_set.md).
     CollectionKeyNotAllowed      = 0x0000A0,
     DuplicateCollectionKey       = 0x0000A1,
+    // Rulings of 2026-10-12 (design principles 2.10): 0xB0 and up.
+    MatchWithoutDefault          = 0x0000B0,
+    IfWithoutElseAsValue         = 0x0000B1,
+    EmptyArrayWithoutType        = 0x0000B2,
+    PartialApplicationRefused    = 0x0000B3,
+    ComprehensionSourceRefused   = 0x0000B4,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,
@@ -105,7 +110,6 @@ enum class SemanticDiag : uint32_t {
     EffectNotExecuted            = 0x100004,
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
     ExitInUnusedBranch           = 0x100090,
-    MatchWithoutDefault          = 0x100091,
     IntegerLiteralTruncated      = 0x1000A0,
 };
 

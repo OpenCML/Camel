@@ -1,0 +1,45 @@
+/**
+ * An `if` without `else` has no value (design principles 2.10): its arm may be of any type
+ * and what the arm gives is dropped. On the graph it is a branch with two arms, the one not
+ * written being empty; the arm written is evaluated like any arm.
+ */
+module statement
+
+func noisy(debug: bool, x: int): int sync {
+    // an arm that is a call with a value (println gives its argument)
+    if debug then println('checking')
+    // a block arm whose last expression has a value
+    if x > 2 then sync { println('big'); x * 2 }
+    // an arm of yet another type; not taken here
+    if x > 100 then 'huge'
+    return x + 1
+}
+
+// as the last statement of a body: the body has no value either
+func tail(debug: bool): void sync {
+    if debug then println('tail')
+}
+
+// an `else` written and left empty is the same thing
+func empty_else(c: bool): int sync {
+    if c then println('then') else {}
+    return 0
+}
+
+// the older spelling stays legal: an arm that ends in nothing
+func older(c: bool): int sync {
+    if c then sync { println('older'); null }
+    return 1
+}
+
+func main(): int sync {
+    println(noisy(true, 3))
+    println(noisy(false, 1))
+    tail(true)
+    tail(false)
+    empty_else(true)
+    empty_else(false)
+    println(older(true), older(false))
+    [1, 5, 9]->foreach<(x: int) => sync { if x > 2 then println(x) }>
+    return 0
+}

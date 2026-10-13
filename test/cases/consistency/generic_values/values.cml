@@ -1,0 +1,45 @@
+/**
+ * A generic function may stand wherever a function is expected (design principles 2.10): the
+ * compiler builds the instance once the position fixes its type variables. That happens
+ * while the program is compiled; the graph holds the instances and nothing else.
+ */
+module values
+
+import { reverse } from array
+
+func apply(f: (x: typeas T) => typeas U, x: T): U { return f(x) }
+func id(x: typeas A): A { return x }
+func pair(x: typeas A): (A, A) { return (x, x) }
+func first(xs: (typeas T)[]): T { return xs[0] }
+func left(p: (typeas A, typeas B)): A { return p.0 }
+func twice(f: (x: int) => int, x: int): int { return f(f(x)) }
+func compose(f: (x: typeas A) => typeas B, g: (y: B) => typeas C, x: A): C { return g(f(x)) }
+func or_zero(x: (typeas T)?, d: T): T { return x ?? d }
+func add(a: typeas N, b: N): N { return a + b }
+func longer(a: (typeas T)[], x: T): T[] { return concat(a, [x]) }
+func is_small(x: typeas T): bool { return string(x) < '3' }
+func pick(): (x: string) => string { return id }
+func each(xs: (typeas T)[], f: (x: T) => typeas U): U[] { return xs->map<f> }
+
+func main(): int sync {
+    // passed to another generic function: its other arguments fix the types
+    println(apply(id, 3), apply(id, 'a'), apply(pair, 2), apply(first, [7, 8]))
+    // two of them in one call, the second waiting for the first
+    println(compose(pair, left, 9), compose(id, id, 1.5), compose(first, pair, ['x']))
+    // passed to an ordinary function: its parameter says which instance
+    println(twice(id, 5))
+    // handed to the built-in higher-order operators
+    let xss = [[1, 2], [3, 4]]
+    println(xss->map<reverse>, xss->map<first>, [1, 2]->map<id>, [1, 2]->map<pair>)
+    println([1, 2, 3]->reduce<add, 0>, ['a', 'b']->reduce<add, ''>, [1, 2]->reduce<longer, [0]>)
+    println([1, 5, 2]->filter<is_small>)
+    // a generic function that hands its argument on to an operator
+    println(each([1, 2], pair), each(['a'], id))
+    // a declared type, a declared return type
+    let f: (x: int) => int = id
+    let g: (xs: float[]) => float = first
+    println(f(4), g([2.5]), pick()('s'))
+    // a variable that its `typeas` position leaves open takes its type elsewhere
+    println(or_zero(null, 4), or_zero(7, 4))
+    return 0
+}

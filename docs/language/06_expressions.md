@@ -22,7 +22,8 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 
 - 数组字面量的元素类型必须相同。空数组 `[]` 的元素类型来自上下文：`let xs: int[] = []`、`[] as Map<string, int>`。
 - 结构体字面量的键是标识符。
-- 列表推导 `[e for x in xs if c]` 与展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `xs->filter<...>->map<...>` 与 `concat(xs, ys)`。
+- **列表推导** `[e for x in xs if c]` 就是 `xs->filter<(x) => c>->map<(x) => e>`：`x` 的类型是 `xs` 的元素类型，`if c` 可以省略，结果是 `e` 的数组。图上与手写这两个调用完全相同（两个算子节点，各带一张元素函数的子图），所以它的性质也相同：元素之间没有顺序约定（并行调度器可以并发地算），`e`、`c` 里的副作用与 `map`、`filter` 的元素函数里的一样处理（[6.10](#610-高阶算子)）。可以嵌套，也可以出现在任何需要表达式的位置。`xs` 不是数组是 `SemanticDiag::ComprehensionSourceRefused`。
+- 展开 `...xs` 保留，尚未实现（`SemanticDiag::ConstructNotSupported`）。写成 `concat(xs, ys)`。
 
 ## 6.3 访问与下标
 
@@ -58,8 +59,13 @@ func main(): int sync {
 ```
 
 - 普通实参写在圆括号里，`with` 实参写在尖括号里；两者都必须紧贴函数名。函数没有 `with` 形参时不写尖括号。
-- 实参按位置对应形参，类型必须完全一致（不做隐式转换）。不匹配是 `SemanticDiag::NoMatchingFunction` 或 `SemanticDiag::ArgumentsMismatch`，诊断里列出可用的签名。
+- 实参按位置对应形参，类型必须一致：数值之间不做隐式转换；只有进入 `T?`、`T!` 形参的值会自动装入（[3.4](03_data_model.md)）。不匹配是 `SemanticDiag::NoMatchingFunction` 或 `SemanticDiag::ArgumentsMismatch`，诊断里列出可用的签名。
 - 同名函数有多个时按重载规则选择（[7.4.3](07_statements.md#743-重载)）。
+- **`f<w>` 是部分应用。** 不带圆括号的 `f<w>` 是一个值：一个已经配好上下文参数的函数。`let g = inc<1>` 之后 `g(2)` 等同 `inc<1>(2)`；`w` 在写下 `f<w>` 的地方求值一次。它可以绑定到名字、作实参、作返回值，也可以直接交给高阶算子（`xs->map<inc<10>>`）。
+  - 只配了前几个上下文参数时，剩下的仍是结果的上下文参数：`let above = clamp<0>` 之后写 `above<5>(9)`。已经配齐的函数不能再配（`g<2>` 是错误）。
+  - `f` 必须是能由这些实参确定的一个函数。同名函数有多个时，取唯一一个接受这些上下文实参的；仍有多个时由所在位置的函数类型（形参）决定，都定不下来是 `SemanticDiag::PartialApplicationRefused`。
+  - 图上它是一个携带了捕获值的函数值，与闭包同构：自己的一张子图，配好的实参通过端口进入，没有新增节点种类。
+  - 尚未支持：带 `var` 上下文参数的函数（`SemanticDiag::ConstructNotSupported`）、类型规则随实参变化的内建算子（如 `len`；`SemanticDiag::FunctionNameAsValue`）。这两种情形把调用写在 lambda 里。
 - 关键字实参 `f(a: 1)` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。
 - 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
 - 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->`、`?->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) ?-> (x: int): int => x * 2`。
@@ -98,7 +104,7 @@ total = 35
 
 ```cml
 func half(x: int): int! {
-    return if x % 2 == 0 then { return x / 2 } else { throw error('Odd', 'not even') }
+    return if x % 2 == 0 then x / 2 else { throw error('Odd', 'not even') }
 }
 
 func main(): int sync {
@@ -116,6 +122,7 @@ func main(): int sync {
 ```
 
 - 右侧只在被选中时求值。
+- **右侧可以是可空的。** `a ?? b` 的 `b` 是 `T` 时结果是 `T`；`b` 是 `T?` 时结果是 `T?`。所以 `a ?? b ?? 9` 是“先试 `a`，再试 `b`，最后给默认值”，不论怎样加括号结果都一样。`!!` 同理（`b` 是 `T!` 时结果是 `T!`）。图上每个 `??` 仍是一个分支。右侧是 `[]` 时取左侧的元素类型。
 - `??`、`!!` 的右侧一直延伸到表达式结束：`x ?? 0 + 1` 是 `x ?? (0 + 1)`。要先取值再运算，加括号：`(x ?? 0) + 1`。
 - 左侧不是所要求的形式（对普通的 `int` 用 `??`，对 `T?` 用 `!!` 或 `?->`），或右侧类型不对，是 `SemanticDiag::TaggedOperandMismatch`。
 
@@ -152,29 +159,13 @@ func main(): int sync {
   - 浮点元素按浮点的规则：含 `nan` 的数组不等于它自己，`[0.0] == [-0.0]`。
   - `T?`、`T!` 本身（不在数组、元组、结构体里）仍然没有 `==`，先用 `??`、`!!` 或 `match` 拆开。
 - `<`、`>`、`<=`、`>=`：数值与 `string`（按字节）。比较不能连写：`1 < 2 < 3` 是类型错误。
-- `===`、`!==` 是同一性比较：对数值与 `bool` 比较值；对数组、元组、结构体、字符串等对象，比较两边是不是**同一个对象**。
-
-```cml
-func main(): int sync {
-    let a = [1, 2]
-    let b = [1, 2]
-    let c = a
-    println(a === c, a === b, 1 === 1)
-    return 0
-}
-```
-
-```text
-true false true
-```
-
-`===` 对字符串比较的也是对象而不是内容（`'a' === 'a'` 是 `false`）；比较内容用 `==`。
+- `===`、`!==` 暂不支持：词法上认得这两个记号，写了是带位置的编译期错误 `SemanticDiag::ConstructNotSupported`。比较值用 `==`、`!=`。
 
 ### 6.7.4 类型转换 `as`
 
 `e as T` 用于：
 
-- 进入可空或可能出错的形式：`5 as int?`、`null as int?`、`v as int!`；
+- 进入可空或可能出错的形式：`5 as int?`、`null as int?`、`v as int!`（目标类型已知的位置不必写，见 [3.4](03_data_model.md)）；
 - 构造映射与集合：`[...] as Map<K, V>`、`[...] as Set<T>`；
 - 模块类型的检查式转换：`t as Tensor<f32, const [3]>`，在转换处检查形状；
 - 给 `json::decode` 等返回未定类型的结果指定类型：`decode(s) as int[]`。
@@ -197,7 +188,7 @@ func sign(x: int): string {
 }
 ```
 
-- 没有 `else` 的 `if` 没有值：它只能作语句，臂里做带副作用的事，并且通常要写在同步块里。这时臂必须是以 `return null` 结束的块：`if c then sync { println('x'); return null }`；臂有值时（`if c then println('x')`，`println` 的调用有值）是 `SemanticDiag::IfArmValueWithoutElse`。
+- **没有 `else` 的 `if` 本身没有值。** 它只能作语句；它的臂可以是任何类型，臂给出的值被丢弃：`if debug then println('checking')` 合法，不必再为了凑类型在臂里写 `return null`。把它用作值（`let x = if debug then 1`、作实参、作 `return` 的操作数）是编译期错误 `SemanticDiag::IfWithoutElseAsValue`。图上不变：一个分支加两条臂，没写的 `else` 是一条空臂，汇合处不取值；臂照常求值，所以臂里做带副作用的事时通常要写在同步块里。写了而留空的 `else {}` 与不写相同。
 - 条件的类型是 `bool`；没有“真值”转换。
 
 > **块里的 `return` 给出的是这个块的值，不是离开函数。**
@@ -239,7 +230,7 @@ warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 
 note: the value of this 'if' is not used
 ```
 
-所以 Camel 里没有“提前返回”：把分支写成函数体的最后一个表达式，或在它前面写 `return`。多个条件依次判断时，把 `if ... else if ... else ...` 连成一个表达式。警告可用 `-Wno-exit-in-unused-branch` 关闭；`return null` 与不带值的 `return` 不报。
+所以 Camel 里没有“提前返回”：把分支写成函数体的最后一个表达式，或在它前面写 `return`。多个条件依次判断时，把 `if ... else if ... else ...` 连成一个表达式。警告可用 `-Wno-exit-in-unused-branch` 关闭。`return null` 与不带值的 `return` 同样会报：臂不需要靠它来凑类型，写了多半是以为它能提前离开函数。
 
 ### 6.8.2 `match`
 
@@ -294,7 +285,7 @@ func report(r: int!): string {
 }
 
 func main(): int sync {
-    println(show(5 as int?), show(null as int?))
+    println(show(5), show(null))
     println(report(parse_int('7')), report(parse_int('x')))
     return 0
 }
@@ -302,7 +293,7 @@ func main(): int sync {
 
 缺分支、多分支或混入字面量分支是 `SemanticDiag::TaggedMatchCases`。
 
-**没有 `case _` 的 `match`（当前实现的行为，尚待确定）。** 是否必须写 `case _` 还没有裁定。目前可以不写，编译器给出警告 `SemanticDiag::MatchWithoutDefault`；运行时遇到没有任何分支匹配的值是故障 `RuntimeDiag::MatchNotExhaustive`，消息里带上那个值。对 `bool` 写全了 `case true` 与 `case false` 的 `match` 是完整的，不警告。
+**`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。两种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
 
 元组模式、结构体模式，以及对普通类型的值的标识符模式（`case n => ...`）保留，尚未实现（`SemanticDiag::ConstructNotSupported`）；用 `if` 链或先取成员再匹配。
 
@@ -384,7 +375,7 @@ item 5
 
 `foreach` 的元素函数若要产生副作用，函数体必须是同步块（`=> sync { ... }`），理由见 [4.3.2](04_execution_model.md#432-函数的行为由它自己决定)。带 `var` 形参的函数不能交给这些算子。
 
-### 6.10.1 故障隔离 `attempt`（名称暂定）
+### 6.10.1 故障隔离 `attempt`
 
 错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值；除零、下标越界、递归过深等是故障，带位置终止程序，`!!` 接不住它。`attempt(f, a, b)` 调用函数值 `f`，实参是 `a, b`；这次调用里（包括它直接或间接调用的一切）发生的故障，在 `attempt` 处变成一个错误值，再用 `!!`、`?->` 或 `match ... case error e` 处理。任意表达式用闭包包起来：`attempt(() => expr)`。
 
@@ -431,6 +422,8 @@ DivisionByZero at main.cml:1:38
   | `&=`、`\|=` | `bool`（`a = a && b`、`a = a \|\| b`） |
   | `@=` | 内建类型都没有 |
 
+- **复合赋值不原地修改。** `x op= e` 是算出新值再让 `x` 重新绑定到它。模块定义的类型（如张量）没有自己的复合赋值算子，对它们 `t += u` 就是 `t = t + u`（`-=`、`*=`、`/=`、`%=`、`@=`、`^=` 同理，只要对应的二元运算符对这些类型有定义）：`let a = t` 之后再写 `t += u`，`a` 不变。要原地修改用显式的算子。
+
 - `wait e` 见 [4.4](04_execution_model.md#44-var引用与-wait)。
 
 ## 6.12 运算符优先级
@@ -443,7 +436,7 @@ DivisionByZero at main.cml:1:38
 | 2 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | 不能连写 |
 | 3 | `\|\|` | 左结合 |
 | 4 | `&&` | 左结合 |
-| 5 | `==` `!=` `===` `!==` | |
+| 5 | `==` `!=`（`===` `!==` 暂不支持） | |
 | 6 | `<` `>` `<=` `>=` | |
 | 7 | `+` `-` | 左结合 |
 | 8 | `*` `/` `%` `^` `@` | 左结合；`^` 与 `*` 同级 |

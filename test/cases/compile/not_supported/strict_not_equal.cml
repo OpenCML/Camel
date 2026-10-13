@@ -1,0 +1,9 @@
+module strict_not_equal
+
+func main(): int sync {
+    let xs = [1, 2]
+    let ys = [1, 2]
+    println(xs !== ys)
+    println('never printed')
+    return 0
+}

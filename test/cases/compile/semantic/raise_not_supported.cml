@@ -1,9 +1,0 @@
-/**
- * `raise` is in the grammar but exceptions are not implemented. It is a compile-time error at
- * the statement (line 8); nothing of the program runs.
- */
-module raise_not_supported
-
-func main(): int sync {
-    raise 'failed'
-}

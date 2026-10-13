@@ -249,7 +249,6 @@ bool isIsolatableFault(RuntimeDiag diag) {
     case RuntimeDiag::ConversionOutOfRange:
     case RuntimeDiag::KeyNotFound:
     case RuntimeDiag::FieldNotFound:
-    case RuntimeDiag::MatchNotExhaustive:
     // Checked before the call that does not fit: unwinding gives everything back.
     case RuntimeDiag::MaxRecursionDepthExceeded:
     // An operator refused its operands.

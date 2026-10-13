@@ -26,8 +26,8 @@
  * member names after a dot, the keys of struct literals and types, and the tokens. Each
  * reference is then resolved by the scoping rules of the language as far as the text allows.
  *
- * It needs no successful compilation: the tree ANTLR recovers from a file with syntax errors
- * is enough (CamelParser::syntaxTree), so a file being edited keeps its outline, its local
+ * It needs no successful compilation: the tree the parser returns for a file with syntax
+ * errors is enough (CamelParser::tree), so a file being edited keeps its outline, its local
  * names and its completions. What only the compiler knows (types, the overload a call chose,
  * what an imported name is) is joined to these records by source range in model.h.
  *
@@ -41,12 +41,9 @@
 #include <string_view>
 #include <vector>
 
-namespace antlr4 {
-class Token;
-namespace tree {
-class ParseTree;
+namespace camel::parse::syntax {
+class Tree;
 }
-} // namespace antlr4
 
 namespace camel::service::semantic {
 
@@ -156,7 +153,7 @@ struct FieldKey {
 
 struct TokenInfo {
     Range range;
-    uint16_t type    = 0; // OpenCMLLexer token type
+    uint16_t type    = 0; // camel::parse::syntax::TokenKind
     uint8_t channel  = 0; // 0 default, 2 command, 3 line comment, 4 block comment
     uint32_t line    = 0; // 0-based line of the first character
 };
@@ -190,12 +187,10 @@ struct SyntaxIndex {
 };
 
 /**
- * Builds the index of one file. `tree` is the `program` context (complete or recovered),
- * `tokens` the token stream of the lexer, `text` the UTF-8 text the tokens index into (by
- * code point, which is converted here). A null tree gives an index with only the tokens.
+ * Builds the index of one file from its concrete syntax tree: that of a correct text
+ * (`complete`) or what the parser recovered from a text with errors. A null tree gives an
+ * empty index.
  */
-SyntaxIndex buildSyntaxIndex(
-    antlr4::tree::ParseTree *tree, const std::vector<antlr4::Token *> &tokens,
-    std::string_view text, bool complete);
+SyntaxIndex buildSyntaxIndex(const camel::parse::syntax::Tree *tree, bool complete);
 
 } // namespace camel::service::semantic

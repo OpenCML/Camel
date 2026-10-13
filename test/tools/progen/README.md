@@ -203,8 +203,9 @@ the rewrite sequence it was found with and under `std::inline`, `std::opt`,
   `string(bool)` were left out for findings F27, F28, F29 and F26 and are generated since
   those were fixed (`generate.VERSION` 2); an ordering comparison is no longer parenthesized
   for F30. A statement-form `if` without `else` is always
-  written with `return null` in its arm, and a block arm always ends in `return`: other forms
-  were rejected by the type checker or misread by the parser.
+  written with a block arm that ends in `null` (it used to be `return null`, which the warning
+  ExitInUnusedBranch now reports; since the ruling of 2026-10-12 the arm may be of any type,
+  and the generator could write other forms).
 - Integers near the 64-bit range (programs are discarded when a value leaves +-2^62), bit
   operators, `^`, `i32` / `f32`, `as` / `is`, list comprehensions, slices with a step.
 

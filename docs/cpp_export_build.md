@@ -72,7 +72,7 @@ clang++ -std=c++23 -O2 `
   -I"$CAMEL_ROOT/include" `
   -I"$CAMEL_ROOT/src" `
   -I"$CAMEL_ROOT" `
-  -DANTLR4CPP_STATIC -DPLATFORM_WINDOWS `
+  -DPLATFORM_WINDOWS `
   "$GEN_CPP" `
   -o "$BUILD/cpp_gen.exe" `
   -L"$BUILD/Release" -lcamel `

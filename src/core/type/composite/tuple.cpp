@@ -19,6 +19,7 @@
 
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/typevar.h"
@@ -471,4 +472,65 @@ Type *TupleType::widened() const {
         changed = changed || types.back() != typesPtr_[i];
     }
     return changed ? TupleType::create(std::move(types)) : const_cast<TupleType *>(this);
+}
+
+namespace {
+
+bool isEmptyArrayLiteralType(Type *type) {
+    return type != nullptr && type->code() == TypeCode::Array &&
+           static_cast<ArrayType *>(type)->elemType()->code() == TypeCode::Void;
+}
+
+} // namespace
+
+bool camel::core::type::entersImplicitly(Type *target, Type *source) {
+    if (target == nullptr || source == nullptr) {
+        return false;
+    }
+    // `void` (and so `void[]`, the type of `[]`) is assignable from anything; nothing enters
+    // "no value", and nothing but `[]` is a `[]`.
+    if (target->code() == TypeCode::Void || isEmptyArrayLiteralType(target)) {
+        return target->equals(source);
+    }
+    if (target->assignableFrom(source)) {
+        return true;
+    }
+    if (TupleType *tagged = asTagged(target)) {
+        if (tagged->isNullable() && source->code() == TypeCode::Void) {
+            return true; // null
+        }
+        // A tagged value of the same form with another payload is not put into the form
+        // again: `int?` does not enter `float?`, and never `int??`.
+        if (TupleType *from = asTagged(source);
+            from != nullptr && from->isNullable() == tagged->isNullable()) {
+            return false;
+        }
+        return entersImplicitly(tagged->payloadType(), source);
+    }
+    return target->code() == TypeCode::Array && isEmptyArrayLiteralType(source);
+}
+
+Type *camel::core::type::joinTypes(Type *a, Type *b) {
+    if (a == nullptr || b == nullptr) {
+        return nullptr;
+    }
+    if (Type *unified = a->unify(b)) {
+        return unified;
+    }
+    // A value and `null`: the value's type, nullable. (Asked first: `void` is assignable
+    // from anything, which is not what joining with `null` means.)
+    // DESIGN-QUESTION(void-as-null): `null` has the type `void`, and so has every expression
+    // without a value (a call of a function that returns nothing). All of them join as
+    // `null` does. The alternative is to accept the literal only.
+    if (a->code() == TypeCode::Void || b->code() == TypeCode::Void) {
+        Type *value = a->code() == TypeCode::Void ? b : a;
+        return asNullable(value) != nullptr ? value : TupleType::nullable(value);
+    }
+    if (entersImplicitly(a, b)) {
+        return a;
+    }
+    if (entersImplicitly(b, a)) {
+        return b;
+    }
+    return nullptr;
 }

@@ -87,12 +87,6 @@ jobs:
         shell: pwsh
         run: git config --global core.longpaths true
 
-      - name: Set up Java (ANTLR)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -169,21 +163,10 @@ jobs:
       - name: Conan default profile
         run: conan profile detect --force
 
-      - name: Ensure ANTLR jar
-        run: |
-          mkdir -p antlr
-          if [ ! -f antlr/antlr-4.13.1-complete.jar ]; then
-            curl -fsSL -o antlr/antlr-4.13.1-complete.jar \
-              https://www.antlr.org/download/antlr-4.13.1-complete.jar
-          fi
-
       - name: Install npm dependencies (skip husky / postinstall conan wipe)
         run: npm ci --ignore-scripts
         env:
           HUSKY: "0"
-
-      - name: Generate ANTLR C++ sources
-        run: npm run psrgen
 
       - name: Native Release build + wheel
         run: npm run pypi:rollup

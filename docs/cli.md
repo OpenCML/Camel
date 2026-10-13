@@ -321,6 +321,7 @@ Errors are printed on standard output and warnings on standard error, in the sam
 
 - `-t`, `-T`, `--tok`, `--token-stream`: Print lexical tokens  
 - `-s`, `-S`, `--cst`, `--concrete-syntax-tree`: Print Concrete Syntax Tree (CST)  
+  Tokens are printed one per line: index, `line:column`, what precedes the token (`n` a line break, `s` white space or a comment, `-` nothing), kind, text; comments are tokens too. The tree names its nodes after the productions of the grammar; a level that only passes on leaves no node (`a + b` is an `AdditiveExpr` directly over two `RefData`).
 - `-a`, `-A`, `--ast`, `--abstract-syntax-tree`: Print Abstract Syntax Tree (AST)  
 - `-c`, `-C`, `--gct`, `--graph-construct-tree`: Print Graph Construction Tree (GCT)  
 - `-g`, `-G`, `--gir`, `--graph-ir`: Print Graph Intermediate Representation (GIR)  

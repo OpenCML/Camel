@@ -632,7 +632,7 @@ const diags = JSON.parse(input.stderr)
 const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
 const ignored = diags.filter(d => d.data.name === 'SemanticDiag::IgnoredSideEffect').map(d => at(d) + ' ' + d.message)
 const want = [
-    "40:20 The call of 'write_a: () => i64' is neither waited nor in a sync block, and it writes the captured variable 'a'.",
+    "40:20 The call of 'write_a: () => int' is neither waited nor in a sync block, and it writes the captured variable 'a'.",
     "59:13 The branch is neither waited nor in a sync block, and an arm writes the captured variable 'c'.",
 ]
 assert(JSON.stringify(ignored) === JSON.stringify(want), 'IgnoredSideEffect: ' + ignored.join(' | '))

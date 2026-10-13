@@ -445,6 +445,155 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     return true;
 }
 
+void collectTypeVars(Type *type, std::vector<std::string> &names) {
+    if (type == nullptr) {
+        return;
+    }
+    const auto among = [&](std::span<Type *const> types) {
+        for (Type *member : types) {
+            collectTypeVars(member, names);
+        }
+    };
+    switch (type->code()) {
+    case TypeCode::TypeVar: {
+        const std::string &name = asVar(type)->name();
+        if (std::find(names.begin(), names.end(), name) == names.end()) {
+            names.push_back(name);
+        }
+        return;
+    }
+    case TypeCode::Array:
+        collectTypeVars(static_cast<ArrayType *>(type)->elemType(), names);
+        return;
+    case TypeCode::Tuple:
+        among(static_cast<TupleType *>(type)->types());
+        return;
+    case TypeCode::Struct:
+        among(static_cast<StructType *>(type)->types());
+        return;
+    case TypeCode::Function: {
+        auto *func = static_cast<FunctionType *>(type);
+        among(func->withTypesSpan());
+        among(func->normTypesSpan());
+        if (func->hasExitType()) {
+            collectTypeVars(func->exitType(), names);
+        }
+        return;
+    }
+    case TypeCode::Union:
+        for (Type *member : static_cast<UnionType *>(type)->types()) {
+            collectTypeVars(member, names);
+        }
+        return;
+    default:
+        break;
+    }
+    if (OtherType *applied = asTypeApplication(type)) {
+        among(applied->paramsSpan());
+    }
+}
+
+bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
+    if (pattern == nullptr || actual == nullptr) {
+        return true;
+    }
+    if (const TypeVarType *var = asVar(pattern)) {
+        if (findTypeBinding(bindings, var->name()) == nullptr && !containsTypeVar(actual)) {
+            bindings.emplace_back(var->name(), actual);
+        }
+        return true;
+    }
+    // Nothing left to learn below, or nothing known on the other side.
+    std::vector<std::string> names;
+    collectTypeVars(pattern, names);
+    if (std::all_of(names.begin(), names.end(), [&](const std::string &name) {
+            return findTypeBinding(bindings, name) != nullptr;
+        }) ||
+        actual->code() == TypeCode::TypeVar) {
+        return true;
+    }
+    // A value that is not of the form of a `T?` / `T!` parameter enters it: its type is the
+    // payload's. `null` says nothing about the payload.
+    if (TupleType *tagged = asTagged(pattern)) {
+        TupleType *have = asTagged(actual);
+        if (have == nullptr || have->tag() != tagged->tag()) {
+            if (tagged->isNullable() && actual->code() == TypeCode::Void) {
+                return true;
+            }
+            return unifyTypeVars(tagged->payloadType(), actual, bindings);
+        }
+    }
+    if (pattern->code() != actual->code()) {
+        return false;
+    }
+    switch (pattern->code()) {
+    case TypeCode::Array:
+        return unifyTypeVars(
+            static_cast<ArrayType *>(pattern)->elemType(),
+            static_cast<ArrayType *>(actual)->elemType(),
+            bindings);
+    case TypeCode::Tuple: {
+        auto *want = static_cast<TupleType *>(pattern);
+        auto *have = static_cast<TupleType *>(actual);
+        if (want->size() != have->size() || want->isCell() != have->isCell() ||
+            want->tag() != have->tag()) {
+            return false;
+        }
+        bool ok = true;
+        for (size_t i = 0; i < want->size(); ++i) {
+            ok = unifyTypeVars(want->typeAt(i), have->typeAt(i), bindings) && ok;
+        }
+        return ok;
+    }
+    case TypeCode::Struct: {
+        auto *want = static_cast<StructType *>(pattern);
+        auto *have = static_cast<StructType *>(actual);
+        bool ok    = true;
+        for (size_t i = 0; i < want->size(); ++i) {
+            const auto field = have->findField(want->fieldName(i));
+            if (!field.has_value()) {
+                return false;
+            }
+            ok = unifyTypeVars(want->typeAt(i), have->typeAt(*field), bindings) && ok;
+        }
+        return ok;
+    }
+    case TypeCode::Function: {
+        auto *want = static_cast<FunctionType *>(pattern);
+        auto *have = static_cast<FunctionType *>(actual);
+        if (want->withTypesCount() != have->withTypesCount() ||
+            want->normTypesCount() != have->normTypesCount()) {
+            return false;
+        }
+        bool ok = true;
+        for (size_t i = 0; i < want->withTypesCount(); ++i) {
+            ok = unifyTypeVars(want->withTypeAt(i), have->withTypeAt(i), bindings) && ok;
+        }
+        for (size_t i = 0; i < want->normTypesCount(); ++i) {
+            ok = unifyTypeVars(want->normTypeAt(i), have->normTypeAt(i), bindings) && ok;
+        }
+        if (want->hasExitType() && have->hasExitType()) {
+            ok = unifyTypeVars(want->exitType(), have->exitType(), bindings) && ok;
+        }
+        return ok;
+    }
+    default:
+        break;
+    }
+    if (OtherType *want = asTypeApplication(pattern)) {
+        auto *have = static_cast<OtherType *>(actual);
+        if (have->paramCount() != want->paramCount()) {
+            return false;
+        }
+        bool ok = true;
+        for (size_t i = 0; i < want->paramCount(); ++i) {
+            ok = unifyTypeVars(want->params()[i], have->params()[i], bindings) && ok;
+        }
+        return ok;
+    }
+    return true;
+}
+
 void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names) {
     if (pattern == nullptr) {
         return;

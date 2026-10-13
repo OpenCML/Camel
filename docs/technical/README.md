@@ -42,6 +42,7 @@
 | [31_map_and_set.md](31_map_and_set.md) | The built-in `Map<K, V>` and `Set<T>`: the two implementation routes and the one taken, key types, key order, the run-time table and how the collector traces it, the operators, typed JSON decoding, measurements, and the questions left to the language author |
 | [32_semantic_query_layer.md](32_semantic_query_layer.md) | How a tool asks the compiler about a source text by position: the syntactic index, the facts the builders report to a recorder, the join, generic instances and overloads, what is available in text with errors, rename, and the measured cost |
 | [33_fault_isolation.md](33_fault_isolation.md) | The fault-isolation operator `attempt` (name provisional): its type and graph form, which faults it isolates, how each back end returns to the boundary and what is restored, parallel siblings, release of external resources when a run ends, and the questions left to the language author |
+| [34_handwritten_parser.md](34_handwritten_parser.md) | 手写的词法分析器、解析器与具体语法树：两条排版规则（尖括号紧贴、换行结束语句）、文法判定表、错误恢复、与 ANTLR 解析器的差分结果、性能数据 |
 | [nn-autograd.md](nn-autograd.md) | `nn` / `tensor` 自动求导架构：`nn.apply_gradients` 的图合成、helper 调用与参数别名、公共 API、内置 VJP 覆盖范围与已知限制 |
 | [jit/README.md](jit/README.md) | FastVM JIT 实现级注解的目录索引 |
 | [jit/bytecode-to-asm.md](jit/bytecode-to-asm.md) | JIT 字节码到机器码翻译注解：槽模型、调用约定、逐条字节码经 MIR（V* 虚拟寄存器）与寄存器分配生成 x64 汇编 |

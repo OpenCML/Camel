@@ -34,6 +34,8 @@ file(GLOB_RECURSE _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
     "${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
+# Older checkouts may still hold ignored ANTLR outputs. The handwritten frontend does not use them.
+list(FILTER _ALL_SRC EXCLUDE REGEX "/src/parse/antlr/")
 set(LIBCAMEL_SRC ${_ALL_SRC})
 
 find_package(fmt REQUIRED)
@@ -95,8 +97,6 @@ target_compile_options(libcamel PRIVATE
     -Wno-nested-anon-types
     -Wno-unused-private-field
     -Wno-gnu-label-as-value # for Computed Goto
-    -Wno-language-extension-token # for antlr4-runtime
-    -Wno-dollar-in-identifier-extension # for antlr4-runtime
     -Wno-nan-infinity-disabled
     -fcolor-diagnostics
     -fansi-escape-codes # windows only
@@ -109,7 +109,7 @@ target_link_options(libcamel PRIVATE
     $<$<AND:$<CONFIG:RelWithDebInfo>,$<NOT:$<PLATFORM_ID:Windows>>>:-no-pie>
 )
 
-target_compile_definitions(libcamel PRIVATE ANTLR4CPP_STATIC CAMEL_DLL_EXPORTS)
+target_compile_definitions(libcamel PRIVATE CAMEL_DLL_EXPORTS)
 
 target_include_directories(libcamel PUBLIC
     ${PROJECT_SOURCE_DIR}/include
@@ -117,7 +117,6 @@ target_include_directories(libcamel PUBLIC
 target_include_directories(libcamel PRIVATE
     ${PROJECT_SOURCE_DIR}/src
     ${PROJECT_SOURCE_DIR}/third_party
-    ${PROJECT_SOURCE_DIR}/third_party/antlr4-runtime
     ${PROJECT_SOURCE_DIR}
 )
 

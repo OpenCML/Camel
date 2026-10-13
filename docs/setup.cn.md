@@ -4,7 +4,7 @@
 
 ## 1. 项目简介
 
-Camel 是一个采用现代 C++ 技术栈构建的 AI 编程语言，前端基于 Antlr4 实现（需要 Java 环境支持），并整合了 Python 和 Node.js 工具链以实现跨平台开发。本指南旨在帮助开发者快速搭建 Camel 项目的开发环境。
+Camel 是一个采用现代 C++ 技术栈构建的 AI 编程语言，前端是手写的词法分析器与解析器（构建不需要 Java），并整合了 Python 和 Node.js 工具链以实现跨平台开发。本指南旨在帮助开发者快速搭建 Camel 项目的开发环境。
 
 ---
 
@@ -16,7 +16,6 @@ Camel 是一个采用现代 C++ 技术栈构建的 AI 编程语言，前端基�
 | ------- | -------- | -------- | ------------------ |
 | Python  | 3.9      | 3.11     | `python --version` |
 | Node.js | 18       | 20 LTS   | `node -v`          |
-| Java    | 11       | 21       | `java -version`    |
 | Clang   | 19       | 20       | `clang --version`  |
 | CMake   | 3.20     | 3.28     | `cmake --version`  |
 | Conan   | 2.10     | 2.12     | `conan --version`  |
@@ -50,15 +49,6 @@ Camel 是一个采用现代 C++ 技术栈构建的 AI 编程语言，前端基�
    ```bash
    node --version
    npm --version
-   ```
-
-#### 3.1.3 安装 Java
-
-1. 可从 [Oracle 官网](https://www.oracle.com/java/technologies/javase-jdk11-downloads.html) 或 [AdoptOpenJDK](https://adoptopenjdk.net/) 下载并安装 Java。
-2. 配置 `JAVA_HOME` 和 `PATH` 环境变量。
-3. 打开终端，运行以下命令确认安装：
-   ```bash
-   java -version
    ```
 
 ---
@@ -189,11 +179,6 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
    npm run init
    ```
 
-3. 若 Antlr4 语法定义有变更，重新生成解析器：
-   ```bash
-   npm run psrgen
-   ```
-
 4. 对于VSCode用户，推荐执行以下命令修复Intellisense报错：
    ```bash
    npm run fix:vsc
@@ -261,4 +246,3 @@ code --install-extension camel-lang-0.1.0.vsix
 4. [Node.js 官方文档](https://nodejs.org/en/docs/)
 5. [Python 官方文档](https://docs.python.org/3/)
 6. [Ninja 构建系统](https://ninja-build.org/manual.html)
-7. [Antlr4 官方文档](https://www.antlr.org/)

@@ -259,7 +259,9 @@ def block(n: N, ind: int) -> str:
     if n.c[1] is not None:
         lines.append(IND * (ind + 1) + "return " + ex(n.c[1], ind + 1, True) + ";")
     elif n.a.get("null"):
-        lines.append(IND * (ind + 1) + "return null;")
+        # An arm that gives nothing ends in `null`. (`return null` there is now reported by
+        # ExitInUnusedBranch: an arm needs no value to compile, design principles 2.10.)
+        lines.append(IND * (ind + 1) + "null;")
     lines.append(IND * ind + "}")
     return "\n".join(lines)
 

@@ -33,7 +33,6 @@ function(add_camel_module)
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/third_party
-    ${CMAKE_SOURCE_DIR}/third_party/antlr4-runtime
     ${CMAKE_SOURCE_DIR}
     ${ARG_EXTRA_INCLUDES}
   )

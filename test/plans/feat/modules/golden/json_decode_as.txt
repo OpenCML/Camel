@@ -14,7 +14,7 @@ error JsonParseError: parse error at line 1, column 8: syntax error while parsin
 error JsonTypeError: at $: expected an object, found an array
 error JsonTypeError: at $.k.x: expected an integer, found a number
 error JsonTypeError: at $: the member 'y' is missing
-error JsonTypeError: at $: the member 'z' is not a field of { x: i64, y: i64 }
+error JsonTypeError: at $: the member 'z' is not a field of { x: int, y: int }
 error JsonTypeError: at $: expected an array of 2 element(s), found an array
 error JsonTypeError: at $: expected an integer, found null
 JsonTypeError: at $[1]: expected an integer, found a string ok

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-123 diagnostics: 112 errors, 11 warnings.
+128 diagnostics: 118 errors, 10 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -36,6 +36,9 @@ prints one entry.
 | `0x02000009` | [SyntaxDiag::MissingToken](#missingtoken) | Error |
 | `0x0200000A` | [SyntaxDiag::UnexpectedToken](#unexpectedtoken) | Error |
 | `0x0200000B` | [SyntaxDiag::UnexpectedEndOfFile](#unexpectedendoffile) | Error |
+| `0x0200000C` | [SyntaxDiag::ComparisonNeedsSpace](#comparisonneedsspace) | Error |
+| `0x0200000D` | [SyntaxDiag::AngleCloseAfterSpace](#anglecloseafterspace) | Error |
+| `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
 | `0x03000000` | [SemanticDiag::UnknownSemanticError](#unknownsemanticerror) | Error |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
@@ -73,7 +76,6 @@ prints one entry.
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
 | `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
-| `0x03000024` | [SemanticDiag::IfArmValueWithoutElse](#ifarmvaluewithoutelse) | Error |
 | `0x03000025` | [SemanticDiag::ImportCycle](#importcycle) | Error |
 | `0x03000026` | [SemanticDiag::ImportedFunctionUsesModuleValue](#importedfunctionusesmodulevalue) | Error |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
@@ -97,12 +99,16 @@ prints one entry.
 | `0x03000080` | [SemanticDiag::ImportedModuleHasErrors](#importedmodulehaserrors) | Error |
 | `0x030000A0` | [SemanticDiag::CollectionKeyNotAllowed](#collectionkeynotallowed) | Error |
 | `0x030000A1` | [SemanticDiag::DuplicateCollectionKey](#duplicatecollectionkey) | Error |
+| `0x030000B0` | [SemanticDiag::MatchWithoutDefault](#matchwithoutdefault) | Error |
+| `0x030000B1` | [SemanticDiag::IfWithoutElseAsValue](#ifwithoutelseasvalue) | Error |
+| `0x030000B2` | [SemanticDiag::EmptyArrayWithoutType](#emptyarraywithouttype) | Error |
+| `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error |
+| `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
-| `0x03100091` | [SemanticDiag::MatchWithoutDefault](#matchwithoutdefault) | Warn |
 | `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
@@ -138,7 +144,6 @@ prints one entry.
 | `0x04000050` | [RuntimeDiag::ConversionOutOfRange](#conversionoutofrange) | Error |
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
-| `0x04000090` | [RuntimeDiag::MatchNotExhaustive](#matchnotexhaustive) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 
@@ -498,6 +503,60 @@ Something opened earlier is not finished: check the last declaration of the file
 
 *No example: no test small enough to show raises it.*
 
+### ComparisonNeedsSpace
+
+`0x0200000C` · Error · `SyntaxDiag::ComparisonNeedsSpace`
+
+**Message**
+
+```text
+This '<' touches {0}, so it opens an angle-bracket argument list, which {1} does not continue.
+```
+
+**Help**
+
+```text
+A '<' directly after a name, a literal or a closing bracket starts '<...>' arguments, as in f<a>(x). If a comparison is meant, put a space before the '<': a < b.
+```
+
+*No example: no test small enough to show raises it.*
+
+### AngleCloseAfterSpace
+
+`0x0200000D` · Error · `SyntaxDiag::AngleCloseAfterSpace`
+
+**Message**
+
+```text
+This '>' follows a space and is read as the comparison operator, so the angle-bracket list it was meant to close is still open at {0}.
+```
+
+**Help**
+
+```text
+The '>' that closes '<...>' touches the last item or starts its line: f<a, b>. Directly inside '<...>', a '>' after a space is a comparison (xs->filter<(x: int) => x > 1>).
+```
+
+*No example: no test small enough to show raises it.*
+
+### LineStartsWithOperator
+
+`0x0200000E` · Error · `SyntaxDiag::LineStartsWithOperator`
+
+**Message**
+
+```text
+A statement cannot start with '{0}': the line break before it ended the statement of the line above.
+```
+
+**Help**
+
+```text
+A line break ends a statement unless the line is visibly unfinished. To continue an expression on the next line, end the line with the operator ('a +', then 'b'). An operator that can only be binary ('*', '->', '&&', '==', ...) also continues the expression when it starts the next line.
+```
+
+*No example: no test small enough to show raises it.*
+
 ### ComparisonAcrossLines
 
 `0x02100001` · Warn · `SyntaxDiag::ComparisonAcrossLines`
@@ -511,15 +570,15 @@ This '>' is read as a comparison with the next line, which starts with {0}: two 
 **Help**
 
 ```text
-A newline does not end a statement, and a '>' followed by an expression is the comparison operator. If this '>' was meant to close '<...>' arguments and the next line to be a new statement, write ';' after the '>'.
+A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.
 ```
 
-**Example** (`test/cases/compile/surface/angle_then_string_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_string_line.cml`)
+**Example** (`test/cases/compile/surface/angle_then_name_line.cml`, run as `camel -E short test/cases/compile/surface/angle_then_name_line.cml`)
 
 ```camel
 func main(): int sync {
     let total = [1, 2]->reduce<(acc: int, x: int): int => acc + x, 0>
-    'total = {}'->format<total>->println
+    total->format<total>->println
     return 0
 }
 ```
@@ -1337,13 +1396,14 @@ func main(): int sync {
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/semantic/raise_not_supported.cml`, run as `camel test/cases/compile/semantic/raise_not_supported.cml`)
+**Example** (`test/cases/compile/module_imports/d2_value.cml`, run as `camel -E short test/cases/compile/module_imports/d2_value.cml`)
 
 ```camel
-module raise_not_supported
+import { pi } from mi_values
 
 func main(): int sync {
-    raise 'failed'
+    println(pi)
+    return 0
 }
 ```
 
@@ -1466,32 +1526,6 @@ A literal that its type cannot hold is not wrapped around or cut off. Write a va
 ```camel
 func main(): int sync {
     println(9223372036854775808)
-    return 0
-}
-```
-
-### IfArmValueWithoutElse
-
-`0x03000024` · Error · `SemanticDiag::IfArmValueWithoutElse`
-
-**Message**
-
-```text
-This 'if' has no 'else' arm with a value, but its 'then' arm gives a value of type '{0}' (in function '{1}').
-```
-
-**Help**
-
-```text
-An 'if' without 'else' gives nothing when its condition is false, so its arm must give nothing either. A call such as 'println(...)' has a value. When the 'if' is a statement run for its effect, end the arm with 'return null': 'if c then sync { println(x); return null }'. When its value is wanted, add an 'else' arm of the same type.
-```
-
-**Example** (`test/cases/compile/surface/if_without_else.cml`, run as `camel -E short test/cases/compile/surface/if_without_else.cml`)
-
-```camel
-func main(): int sync {
-    let a = 1
-    if a < 2 then println('lt')
     return 0
 }
 ```
@@ -1721,7 +1755,7 @@ The generic function '{0}' cannot be called with argument types {1}: {2}.
 **Help**
 
 ```text
-A type variable is bound once, at its 'typeas' position, from the type of the argument found there; every other parameter is then checked against its type with the variables replaced. Nothing is converted implicitly. Signature: {3}
+A type variable takes the type of the argument found at its 'typeas' position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
 ```
 
 **Example** (`test/cases/compile/generics/err_mismatch.cml`, run as `camel test/cases/compile/generics/err_mismatch.cml`)
@@ -1746,13 +1780,13 @@ func main(): int sync {
 **Message**
 
 ```text
-The generic function '{0}' is used as a value, but it is only a template until it is called with arguments that fix its type variables.
+The generic function '{0}' cannot be given its types here: {1}.
 ```
 
 **Help**
 
 ```text
-Call it directly, or wrap the call in a function whose parameter types are written out, e.g. '(x: int) => {0}(x)'.
+A generic function may stand wherever a function is expected, also as an argument of another generic function. It is a template: the compiler builds the instance once the position fixes its type variables (a parameter of function type, a declared type, the other arguments of the call). Here they are not fixed. Signature: {2}
 ```
 
 **Example** (`test/cases/compile/generics/err_as_value.cml`, run as `camel test/cases/compile/generics/err_as_value.cml`)
@@ -2081,7 +2115,7 @@ func main(): int sync {
 **Help**
 
 ```text
-'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T'. 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T'. 'x ?-> f' needs 'x' of type 'T!' and a function 'f' that takes a 'T'.
+'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'. 'x ?-> f' needs 'x' of type 'T!' and a function 'f' that takes a 'T'.
 ```
 
 **Example** (`test/cases/compile/tagged/err_plain_left.cml`, run as `camel test/cases/compile/tagged/err_plain_left.cml`)
@@ -2213,6 +2247,143 @@ module main
 func main(): int sync {
     let m = [("a", 1), ("b", 2), ("a", 3)] as Map<string, int>
     println("never printed")
+    return 0
+}
+```
+
+### MatchWithoutDefault
+
+`0x030000B0` · Error · `SemanticDiag::MatchWithoutDefault`
+
+**Message**
+
+```text
+This 'match' on a value of type '{0}' has no 'case _'.
+```
+
+**Help**
+
+```text
+A 'match' must have a default case: add 'case _ => ...' for the values the cases do not list. A 'match' on a bool that has both 'case true' and 'case false' is complete, and so is one over 'T?' or 'T!' with its two fixed patterns.
+```
+
+**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
+
+```camel
+module no_case_matches_string
+
+func f(s: string): int {
+    return match s {
+        case 'a' => 1
+        case 'b' => 2
+    }
+}
+
+func main(): int sync {
+    println(f('a'), f('b'))
+    return 0
+}
+```
+
+### IfWithoutElseAsValue
+
+`0x030000B1` · Error · `SemanticDiag::IfWithoutElseAsValue`
+
+**Message**
+
+```text
+This 'if' has no 'else' and is used as a value.
+```
+
+**Help**
+
+```text
+An 'if' without 'else' has no value: its arm may be of any type and what the arm gives is dropped. It can only stand as a statement. Where a value is wanted, add an 'else' arm of the same type ('if c then 1 else 0'), or make the result nullable ('if c then 1 else null').
+```
+
+**Example** (`test/cases/consistency/if_without_else/as_value_let.cml`, run as `camel -E short test/cases/consistency/if_without_else/as_value_let.cml`)
+
+```camel
+func main(): int sync {
+    let debug = true
+    let x = if debug then 1
+    println(x)
+    return 0
+}
+```
+
+### EmptyArrayWithoutType
+
+`0x030000B2` · Error · `SemanticDiag::EmptyArrayWithoutType`
+
+**Message**
+
+```text
+'{0}' is bound to an empty array '[]' that has no element type.
+```
+
+**Help**
+
+```text
+The empty array literal takes its element type from where it stands: a declared type, a parameter, the other arm of a branch, an 'as'. Here there is none. Write the type: 'let {0}: int[] = []'.
+```
+
+**Example** (`test/cases/consistency/entering/err_empty_array_untyped.cml`, run as `camel -E short test/cases/consistency/entering/err_empty_array_untyped.cml`)
+
+```camel
+func main(): int sync {
+    let ys = []
+    println(ys)
+    return 0
+}
+```
+
+### PartialApplicationRefused
+
+`0x030000B3` · Error · `SemanticDiag::PartialApplicationRefused`
+
+**Message**
+
+```text
+The context arguments <{0}> cannot be bound to '{1}' as a value: {2}.
+```
+
+**Help**
+
+```text
+'f<w>' used as a value is a partial application: a function that already has its context ('with') arguments, 'let g = inc<1>' then 'g(2)'. It needs 'f' to be one function that takes these arguments. Called in place, 'f<w>(x)', the arguments of the call choose the function.
+```
+
+**Example** (`test/cases/compile/surface/name_as_value_bound_operator.cml`, run as `camel -E short test/cases/compile/surface/name_as_value_bound_operator.cml`)
+
+```camel
+func main(): int sync {
+    println(len<1>)
+    return 0
+}
+```
+
+### ComprehensionSourceRefused
+
+`0x030000B4` · Error · `SemanticDiag::ComprehensionSourceRefused`
+
+**Message**
+
+```text
+The source of this list comprehension has type '{0}', which has no elements to take.
+```
+
+**Help**
+
+```text
+A list comprehension '[e for x in xs if c]' is 'xs->filter<(x) => c>->map<(x) => e>': 'xs' must be an array (or another value 'map' and 'filter' accept), and 'x' has the type of its elements.
+```
+
+**Example** (`test/cases/consistency/comprehension/err_not_an_array.cml`, run as `camel -E short test/cases/consistency/comprehension/err_not_an_array.cml`)
+
+```camel
+func main(): int sync {
+    println([x + 1 for x in 5])
     return 0
 }
 ```
@@ -2370,40 +2541,22 @@ This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: i
 An arm of an 'if' or 'match' is a graph of its own: '{0}' in an arm ends the arm and gives the value of the branch, as it does in any block. Here the branch is a statement whose value nothing takes, so the '{0}' has no effect and the function goes on with the next statement. To return from the function through a branch, make the '{1}' the last expression of the function body, or write 'return' in front of it ('return if ... then ... else ...').
 ```
 
-*No example: no test small enough to show raises it.*
-
-### MatchWithoutDefault
-
-`0x03100091` · Warn · `SemanticDiag::MatchWithoutDefault`
-
-**Message**
-
-```text
-This 'match' on a value of type '{0}' has no 'case _': a value that none of its cases matches stops the program.
-```
-
-**Help**
-
-```text
-Add 'case _ => ...' for the values the cases do not list. Without it, meeting such a value is a fault at run time (RuntimeDiag::MatchNotExhaustive). A 'match' on a bool that has both 'case true' and 'case false' is complete and is not reported.
-```
-
-**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
+**Example** (`test/cases/consistency/if_without_else/return_null_in_arm.cml`, run as `camel -E short test/cases/consistency/if_without_else/return_null_in_arm.cml ${backend}`)
 
 ```camel
-module no_case_matches_string
+module return_null_in_arm
 
-func f(s: string): int {
-    return match s {
-        case 'a' => 1
-        case 'b' => 2
+func f(x: int): int sync {
+    if x > 2 then sync {
+        println('big')
+        return null
     }
+    println('after')
+    return x
 }
 
 func main(): int sync {
-    println(f('a'), f('b'))
-    println(f('zzz'))
-    println('not reached')
+    println(f(9))
     return 0
 }
 ```
@@ -3104,10 +3257,8 @@ module main
 // appended to, so the conversion is a fault with its position, on every back end.
 
 func main(): int sync {
-    var xs = []
-    xs->append<1>
     println("before")
-    let s = xs as Set<int>
+    let s = ([]->append<1>) as Set<int>
     println(s)
     println("never printed")
     return 0
@@ -3339,42 +3490,6 @@ func main(): int sync {
     let xs = [10, 20, 30]
     println(head(xs, 2))
     println(head(xs, 7))
-    println('not reached')
-    return 0
-}
-```
-
-### MatchNotExhaustive
-
-`0x04000090` · Error · `RuntimeDiag::MatchNotExhaustive`
-
-**Message**
-
-```text
-No case of this 'match' matches the value {0}.
-```
-
-**Help**
-
-```text
-A 'match' takes the first case whose pattern equals the value, and this one has no 'case _' for the values it does not list. Add 'case _ => ...'.
-```
-
-**Example** (`test/cases/consistency/match/no_case_matches_string.cml`, run as `camel `)
-
-```camel
-module no_case_matches_string
-
-func f(s: string): int {
-    return match s {
-        case 'a' => 1
-        case 'b' => 2
-    }
-}
-
-func main(): int sync {
-    println(f('a'), f('b'))
-    println(f('zzz'))
     println('not reached')
     return 0
 }

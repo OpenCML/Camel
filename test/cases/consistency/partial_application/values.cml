@@ -1,0 +1,57 @@
+/**
+ * `f<w>` used as a value is a partial application (design principles 2.10): a function that
+ * already has its context (`with`) arguments. On the graph it is a function value that
+ * carries the captured arguments, the same shape a closure has; no node kind is added and
+ * nothing refers to a node of another graph.
+ */
+module values
+
+with <step: int>
+func inc(x: int): int { return x + step }
+
+with <lo: int, hi: int>
+func clamp(x: int): int { return if x < lo then lo else if x > hi then hi else x }
+
+with <k: float>
+func scale(x: float): float { return x * k }
+with <k: int>
+func scale(x: int): int { return x * k }
+
+func apply(f: (x: int) => int, x: int): int { return f(x) }
+func twice(f: (x: int) => int): (x: int) => int { return (x: int): int => f(f(x)) }
+
+with <tag: string>
+sync func log(x: int): int sync { println(tag, x); return x }
+
+
+// a function value that still has a context parameter can be configured in turn
+func configure(f: <step: int> (x: int) => int, by: int): (x: int) => int {
+    return f<by>
+}
+
+func main(): int sync {
+    let g = inc<1>
+    println(g(2), inc<1>(2))
+    // the argument is evaluated once, where the application is written
+    let n = 10
+    let h = inc<n * 2>
+    println(h(1), h(2))
+    // only some of the context parameters: the rest stay context parameters
+    let above = clamp<0>
+    let a9 = above<5>(9)
+    let a3 = above<5>(-3)
+    let both = clamp<0, 5>(9)
+    println(a9, a3, both)
+    let unit = clamp<0, 1>
+    println(unit(7), unit(-7))
+    // as an argument, returned, through map
+    println(apply(inc<5>, 1), twice(inc<3>)(0), configure(inc, 7)(1))
+    println([1, 2, 3]->map<inc<10>>)
+    // overloads: chosen by the context argument, or by the parameter it is passed to
+    let half = scale<0.5>
+    println(half(3.0), apply(scale<3>, 4))
+    // an effectful function: the effect happens at each call of the result
+    let l = log<'v'>
+    println(l(1) + l(2))
+    return 0
+}

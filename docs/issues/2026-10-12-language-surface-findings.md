@@ -79,60 +79,7 @@ func main(): int sync { println(show(2)); return 0 }
 
 ## 11.（已处理，见文末）
 
-## 12. 尖括号的歧义（语法层面，一组）
-
-这一组是同一个语法问题的几种表现：`with` 实参的尖括号与比较运算符 `<`、`>` 用同一对记号，换行又不结束语句，解析器在几种写法下把尖括号读成了比较。它不是某个遍或某个算子的缺陷。
-
-**(a) 以 `>` 结尾的语句，下一行以字符串字面量开头：**
-
-```cml
-func main(): int sync {
-    let total = [1, 2]->reduce<(acc: int, x: int): int => acc + x, 0>
-    'total = {}'->format<total>->println
-    return 0
-}
-```
-
-当前：`[Error]: No matching function found for argument types: <> (i64, string); operator '>' is not defined for these operand types.`（`0> 'total = {}'->format<total>` 被读成比较。）
-
-**(b) 同上，下一行以标识符开头：**
-
-```cml
-func main(): int sync {
-    let total = [1, 2]->reduce<(acc: int, x: int): int => acc + x, 0>
-    total->format<total>->println
-    return 0
-}
-```
-
-当前：`(main)t.cml:3:5: [Error]: Unresolved reference: 'total'.`（第 3 行被并进了第 2 行的初值，此时 `total` 还没有声明。）下一行不含尖括号时（`total->println`）没有问题。
-
-**(c) 同一个实参表里有两个带尖括号的调用：**
-
-```cml
-with <k: int>
-func scale(x: int): int { return x * k }
-func main(): int sync {
-    println(scale<2>(1), scale<3>(1))
-    return 0
-}
-```
-
-当前：`[Error]: No matching function found for argument types: <> (<k: i64> (x: i64) => i64, i64); operator '<' is not defined for these operand types.`
-
-**(d) 带尖括号的调用后面再接带尖括号的管道：**
-
-```cml
-import { zip_with, all } from array
-func main(): int sync {
-    println(zip_with<(x: int, y: int) => x == y>([1, 2], [1, 2])->all<(e: bool) => e>)
-    return 0
-}
-```
-
-当前：`[Error]: The generic function 'zip_with' is used as a value ... (name=SemanticDiag::GenericFunctionAsValue)`。拆成两条语句（先 `let equal = zip_with<...>(a, b)`，再 `equal->all<...>`）可以通过。
-
-期望：需要裁定换行是否结束语句，以及 `with` 实参的尖括号如何与比较区分；在此之前，这几种写法至少应得到指向歧义的诊断。**与未决问题有关**：设计原则 2.9 认定“类型位置上的尖括号与 `with` 参数的尖括号没有歧义”，没有涉及表达式位置上尖括号与比较的歧义。
+## 12.（已解决，见文末）
 
 ## 13. 带类型的声明：函数类型与可空元素
 
@@ -250,7 +197,7 @@ func main(): int sync {
 - 第 20 条 `camel check`：发现错误时退出码为 1；`-i` 只做词法分析，`-s` 做到语法树为止。
 - 第 22 条 入口的两处细节：语法错误诊断里的模块名现在是文件声明的名字；未声明返回类型、以 `println(...)` 结尾的 `main` 返回被打印的值是现有规则的结果（函数体没有 `return` 时取最后一条语句的值，而 `println(x)` 的值是 `x`），已写进语言参考 7.4.1 与 4.1，行为未改，两条规则是否保留见下面“待裁定”。
 - 其他工作线记录的几条：`zip` 传三个数组时只用前两个（并且按三元组的类型读两元素的元组）——现在按数组个数构造元组；`head([])` 返回零值——现在是 `RuntimeDiag::IndexOutOfRange`；模块导入自身时段错误——现在是 `SemanticDiag::ImportCycle`。
-- 第 12 条 (a)(b)：语法未改；在被读成比较的那个 `>` 处增加了警告 `SyntaxDiag::ComparisonAcrossLines`，指出两条语句可能被连成了一条。(c)(d) 不变。
+- 第 12 条 尖括号的歧义（四种表现）：由两条已裁定的排版规则解决（设计原则 2.10；`docs/technical/34_handwritten_parser.md`）。尖括号实参必须紧贴前一个记号，比较运算符 `<` 前要有空格；换行结束语句。(a)(b) 以 `>` 结尾的语句后面跟一行以字符串或名字开头的语句，现在是两条语句；(c) `println(scale<2>(1), scale<3>(1))`、(d) `zip_with<f>(a, b)->all<p>` 现在按写出来的样子读。`i<n` 这样紧贴的比较是 `SyntaxDiag::ComparisonNeedsSpace`。测试：`test/plans/feat/compile/surface.plan.toml` 的 `surface.angle_then_*`，探针 `test/tools/parsecheck/probes.py`。
 
 ## 待裁定（修复这批缺陷时遇到的）
 

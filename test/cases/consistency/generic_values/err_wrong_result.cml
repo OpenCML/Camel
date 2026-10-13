@@ -1,0 +1,6 @@
+func id(x: typeas A): A { return x }
+func keep(p: (x: typeas T) => bool, x: T): bool { return p(x) }
+func main(): int sync {
+    println(keep(id, 3))
+    return 0
+}

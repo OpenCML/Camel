@@ -68,8 +68,8 @@ std::optional<std::string> formatSource(const std::string &path, const std::stri
             return std::nullopt;
         }
         Formatter::Options options;
-        Formatter formatter(parser->getTokens(), options);
-        return std::any_cast<std::string>(formatter.visit(parser->cst()));
+        Formatter formatter(*parser->tree(), options);
+        return formatter.format();
     } catch (...) {
         return std::nullopt;
     }

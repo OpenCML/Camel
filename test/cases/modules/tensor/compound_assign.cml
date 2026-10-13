@@ -1,0 +1,38 @@
+/**
+ * `t += u` on a tensor computes the new tensor and binds `t` to it, as for a number (design
+ * principles 2.10): nothing is changed in place, so another name of the old tensor keeps
+ * its value. Likewise `-=`, `*=`, `/=`, with a tensor or a scalar on the right.
+ */
+module compound_assign
+
+import { Tensor, ones, sum } from tensor
+
+func bump(var w: Tensor, d: float): float sync {
+    w += d
+    return sum(w)
+}
+
+func main(): int sync {
+    var t = ones([2])
+    let a = t
+    let u = ones([2])
+    t += u
+    println(sum(t), sum(a))
+    t -= u
+    println(sum(t), sum(a))
+    t *= u + u
+    println(sum(t), sum(a))
+    t /= u + u
+    println(sum(t), sum(a))
+    t += 2.0
+    println(sum(t), sum(a))
+    t *= 3.0
+    println(sum(t), sum(a))
+    t -= 1.0
+    println(sum(t), sum(a))
+    t /= 2.0
+    println(sum(t), sum(a))
+    // through a var parameter: the caller's variable is the one rebound
+    println(bump(t, 1.0), sum(t), sum(a))
+    return 0
+}

@@ -145,7 +145,7 @@ function main() {
     codeRows.sort((a, b) => linesOf(b) - linesOf(a))
 
     const byFolder = aggregateByFolder(data)
-    const folderOrder = ['src', 'include', 'tools', 'scripts', 'test', 'docs', 'cmake', 'antlr', 'pypi', 'assets', 'root']
+    const folderOrder = ['src', 'include', 'tools', 'scripts', 'test', 'docs', 'cmake', 'pypi', 'assets', 'root']
     const allFolders = [...new Set([...folderOrder, ...byFolder.keys()])].filter((f) => byFolder.has(f))
 
     const foldersWithLines = allFolders

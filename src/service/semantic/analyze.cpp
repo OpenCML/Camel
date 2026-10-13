@@ -175,44 +175,10 @@ std::string normalPath(const std::string &path) {
     return p.lexically_normal().generic_string();
 }
 
-// A type as the compiler prints it, in the spelling of source text: the compiler names the
-// types by their width, programs by `int` and `float`.
+// Types print themselves in the spelling of source text; a signature written by hand as text
+// (an operator's) goes through the same mapping (camel::core::type::sourceTypeSpelling).
 std::string sourceSpelling(const std::string &text) {
-    static const std::pair<std::string_view, std::string_view> names[] = {
-        {"i64", "int"},
-        {"f64", "float"},
-    };
-    std::string out;
-    out.reserve(text.size());
-    size_t i = 0;
-    const auto isWord = [](char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
-               c == '_';
-    };
-    while (i < text.size()) {
-        if (isWord(text[i]) && (i == 0 || !isWord(text[i - 1]))) {
-            size_t end = i;
-            while (end < text.size() && isWord(text[end])) {
-                ++end;
-            }
-            std::string_view word(text.data() + i, end - i);
-            bool replaced = false;
-            for (const auto &[from, to] : names) {
-                if (word == from) {
-                    out += to;
-                    replaced = true;
-                    break;
-                }
-            }
-            if (!replaced) {
-                out += word;
-            }
-            i = end;
-            continue;
-        }
-        out += text[i++];
-    }
-    return out;
+    return camel::core::type::sourceTypeSpelling(text);
 }
 
 } // namespace
@@ -232,7 +198,7 @@ class ModelBuilder {
         }
         if (model_->files_.empty()) {
             // Nothing could be set up: the model still has the text and its tokens.
-            addFile(normalPath(options_.path), options_.text, nullptr, {}, false, 0);
+            addFile(normalPath(options_.path), options_.text, nullptr, false, 0);
         }
         if (options_.previous) {
             inherit(*options_.previous);
@@ -258,15 +224,15 @@ class ModelBuilder {
     }
 
     uint32_t addFile(
-        const std::string &path, const std::string &text, antlr4::tree::ParseTree *tree,
-        const std::vector<antlr4::Token *> &tokens, bool parsed, uint32_t sourceFileId) {
+        const std::string &path, const std::string &text,
+        const camel::parse::syntax::Tree *tree, bool parsed, uint32_t sourceFileId) {
         const uint32_t index = static_cast<uint32_t>(model_->files_.size());
         model_->files_.emplace_back();
         FileModel &file = model_->files_.back();
         file.path       = path;
         file.text       = text;
         file.parsed     = parsed;
-        file.syntax     = buildSyntaxIndex(tree, tokens, file.text, parsed);
+        file.syntax     = buildSyntaxIndex(tree, parsed);
         file.declFacts.resize(file.syntax.decls.size());
         file.refFacts.resize(file.syntax.refs.size());
         for (const Decl &decl : file.syntax.decls) {
@@ -519,13 +485,11 @@ class ModelBuilder {
         ctx->setSemanticRecorder(nullptr);
 
         // Files: the entry first, then every module compiled from source.
-        const auto mainTokens = parser->getTokens();
         addFile(
             path,
             options_.text,
-            parser->syntaxTree(),
-            mainTokens,
-            parser->cst() != nullptr,
+            parser->tree(),
+            parser->parsed(),
             parser->sourceFileId());
         std::vector<std::shared_ptr<UserDefinedModule>> modules;
         for (const auto &mod : ctx->allUserModules()) {
@@ -538,13 +502,11 @@ class ModelBuilder {
             if (source == nullptr) {
                 continue;
             }
-            const auto tokens = ud->parser()->getTokens();
             const uint32_t index = addFile(
                 normalPath(ud->path()),
                 source->content,
-                ud->parser()->syntaxTree(),
-                tokens,
-                ud->parser()->cst() != nullptr,
+                ud->parser()->tree(),
+                ud->parser()->parsed(),
                 fileId);
             model_->files_[index].compiled = ud->diagnostics() && !ud->diagnostics()->hasErrors();
             modules.push_back(ud);
@@ -560,12 +522,12 @@ class ModelBuilder {
         }
 
         // Diagnostics: the parser's and the entry module's share one container.
-        collectDiagnostics(*diagnostics, mainTokens, 0);
+        collectDiagnostics(*diagnostics, parser->tokenPositions(), 0);
         for (size_t i = 0; i < modules.size(); ++i) {
             if (modules[i]->diagnostics()) {
                 collectDiagnostics(
                     *modules[i]->diagnostics(),
-                    modules[i]->parser()->getTokens(),
+                    modules[i]->parser()->tokenPositions(),
                     static_cast<uint32_t>(i + 1));
             }
         }
@@ -587,9 +549,8 @@ class ModelBuilder {
         addFile(
             path,
             options_.text,
-            parser->syntaxTree(),
-            parser->getTokens(),
-            parser->cst() != nullptr,
+            parser->tree(),
+            parser->parsed(),
             0);
     }
 
@@ -624,7 +585,7 @@ class ModelBuilder {
     }
 
     void collectDiagnostics(
-        Diagnostics &diags, const std::vector<antlr4::Token *> &tokens, uint32_t file) {
+        Diagnostics &diags, const camel::core::error::TokenPositions &tokens, uint32_t file) {
         diags.fetchAll(tokens);
         std::set<std::string> seen;
         const auto add = [&](const Diagnostic &d) {

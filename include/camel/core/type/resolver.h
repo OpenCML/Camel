@@ -132,7 +132,7 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
     DynamicFuncTypeResolver(
         const std::pair<var_declare_t, var_declare_t> &&vars, const std::string &&signature,
         const ResolverFunc &&resolver)
-        : signature_(std::move(signature)), resolver_(std::move(resolver)) {
+        : signature_(sourceTypeSpelling(signature)), resolver_(std::move(resolver)) {
         withVars_ = std::move(vars.first);
         normVars_ = std::move(vars.second);
         if (withVars_.first != -1 && withVars_.first != static_cast<int>(withVars_.second.size())) {

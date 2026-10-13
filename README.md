@@ -133,4 +133,3 @@ Hello, Camel!
 
 Code written by this project's contributors is licensed under the [MIT License](LICENSE).
 
-Third-party code from antlr4 is licensed under the BSD-3-Clause License.

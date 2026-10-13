@@ -366,15 +366,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::MatchNotExhaustive,
-            {
-                "MatchNotExhaustive",
-                "No case of this 'match' matches the value {0}.",
-                "A 'match' takes the first case whose pattern equals the value, and this one "
-                "has no 'case _' for the values it does not list. Add 'case _ => ...'.",
-            },
-        },
-        {
             RuntimeDiag::OperatorNotImplemented,
             {
                 "OperatorNotImplemented",

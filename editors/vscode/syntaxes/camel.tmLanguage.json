@@ -4,7 +4,7 @@
   "scopeName": "source.camel",
   "fileTypes": ["cml"],
   "information_for_contributors": [
-    "Derived from antlr/OpenCMLLex.g4 (tokens) and antlr/OpenCML.g4 (literal tokens, contexts).",
+    "Kept in step with include/camel/parse/syntax/token_kinds.def (keywords, operators) and the grammar of the language reference (contexts).",
     "scripts/check-grammar.mjs checks the keyword, operator and built-in type tables against",
     "those files: the 'keywords', 'builtin-types', 'operators' and 'punctuation' rules below must",
     "stay lists of plain 'match' patterns, keywords as \\b(?:a|b|c)\\b alternations."
@@ -354,7 +354,7 @@
       }
     },
     "keywords": {
-      "comment": "Every keyword token of antlr/OpenCMLLex.g4, each exactly once (checked by scripts/check-grammar.mjs).",
+      "comment": "Every keyword of include/camel/parse/syntax/token_kinds.def, each exactly once (checked by scripts/check-grammar.mjs).",
       "patterns": [
         {
           "name": "keyword.control.conditional.camel",
@@ -370,7 +370,7 @@
         },
         {
           "name": "keyword.control.flow.camel",
-          "match": "\\b(?:return|throw|raise|wait)\\b"
+          "match": "\\b(?:return|throw|wait)\\b"
         },
         {
           "name": "keyword.control.import.camel",
@@ -534,7 +534,7 @@
       ]
     },
     "operators": {
-      "comment": "The literal tokens of antlr/OpenCML.g4, longest first (checked by scripts/check-grammar.mjs).",
+      "comment": "The operators and separators of include/camel/parse/syntax/token_kinds.def, longest first (checked by scripts/check-grammar.mjs).",
       "patterns": [
         { "name": "keyword.operator.spread.camel", "match": "\\.\\.\\." },
         { "name": "keyword.operator.compose.camel", "match": "\\?\\.\\.|\\.\\." },

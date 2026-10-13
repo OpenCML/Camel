@@ -1,0 +1,6 @@
+func f(x: int): int { return x }
+func main(): int sync {
+    let x: int? = 5
+    println(f(x))
+    return 0
+}

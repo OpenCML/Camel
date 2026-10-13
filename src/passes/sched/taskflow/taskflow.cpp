@@ -499,21 +499,84 @@ bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
     return heavy;
 }
 
+uint64_t TaskflowExecSchedPass::nextPlanEpoch() {
+    static std::atomic<uint64_t> next{1};
+    return next.fetch_add(1, std::memory_order_relaxed);
+}
+
 TaskflowExecSchedPass::GraphPlan *TaskflowExecSchedPass::planFor(GCGraph *graph) {
     ASSERT(graph != nullptr, "Taskflow plan lookup requires a runtime graph.");
+    // Every call looks the plan of its callee up. The plans a thread used last are remembered
+    // per thread, so that the table and its lock, which all workers share, are only reached
+    // the first time a thread meets a graph in a run.
+    struct CachedPlan {
+        uint64_t epoch  = 0;
+        GCGraph *graph  = nullptr;
+        GraphPlan *plan = nullptr;
+    };
+    thread_local std::array<CachedPlan, 128> cache{};
+    const auto key     = reinterpret_cast<uintptr_t>(graph);
+    CachedPlan &cached = cache[(key >> 4 ^ key >> 11 ^ key >> 18) % cache.size()];
+    if (cached.epoch == planEpoch_ && cached.graph == graph) [[likely]] {
+        return cached.plan;
+    }
+    GraphPlan *plan = nullptr;
     {
         std::shared_lock lock(plansMutex_);
         if (auto it = plans_.find(graph); it != plans_.end()) {
-            return it->second.get();
+            plan = it->second.get();
         }
     }
-    // Built outside the lock; two workers that meet a graph for the first time may both build
-    // it, and the first to publish wins. A published plan is never changed or removed.
-    auto built = buildGraphPlan(graph);
-    std::unique_lock lock(plansMutex_);
-    auto [it, inserted] = plans_.try_emplace(graph, std::move(built));
-    (void)inserted;
-    return it->second.get();
+    if (plan == nullptr) {
+        // Built outside the lock; two workers that meet a graph for the first time may both
+        // build it, and the first to publish wins. A published plan is never changed or
+        // removed while the run lasts.
+        auto built = buildGraphPlan(graph);
+        std::unique_lock lock(plansMutex_);
+        auto [it, inserted] = plans_.try_emplace(graph, std::move(built));
+        (void)inserted;
+        plan = it->second.get();
+    }
+    cached = {planEpoch_, graph, plan};
+    return plan;
+}
+
+bool TaskflowExecSchedPass::boundedLight(GraphPlan &plan) {
+    if (const int8_t known = plan.boundedLightState.load(std::memory_order_relaxed); known >= 0) {
+        return known != 0;
+    }
+    // Light (graphIsHeavy) and without a cycle of calls. Two workers may both work it out;
+    // they find the same.
+    bool bounded = !graphIsHeavy(plan.graph);
+    if (bounded) {
+        // 1: being visited (reaching it again is a recursion), 2: done.
+        std::unordered_map<GCGraph *, uint8_t> state;
+        std::function<bool(GCGraph *)> acyclic = [&](GCGraph *current) {
+            if (state.size() > 256) {
+                return false; // not worth more: taken as unbounded
+            }
+            state[current] = 1;
+            for (auto it = current->nodes().begin(); it != current->nodes().end(); ++it) {
+                const auto *node = *it;
+                if (node == nullptr || node->kind != GCNodeKind::Func) {
+                    continue;
+                }
+                GCGraph *callee = current->directCalleeGraphOf(it.ref());
+                if (callee == nullptr) {
+                    return false;
+                }
+                const auto found = state.find(callee);
+                if (found == state.end() ? !acyclic(callee) : found->second == 1) {
+                    return false;
+                }
+            }
+            state[current] = 2;
+            return true;
+        };
+        bounded = acyclic(plan.graph);
+    }
+    plan.boundedLightState.store(bounded ? 1 : 0, std::memory_order_relaxed);
+    return bounded;
 }
 
 std::unique_ptr<TaskflowExecSchedPass::GraphPlan>
@@ -553,6 +616,28 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
         plan->tailCalls.erase(
             std::unique(plan->tailCalls.begin(), plan->tailCalls.end()),
             plan->tailCalls.end());
+    }
+
+    // Where each operator of the graph reads its arguments, and room for the operator itself
+    // once it has been resolved (executePreparedOperator).
+    plan->opers.resize(graph->nodeBlockCount());
+    plan->resolvedOpers =
+        std::make_unique<std::atomic<operator_t>[]>(graph->nodeBlockCount());
+    for (gc_node_ref_t ref : plan->topo) {
+        if (ref >= plan->opers.size() || requireNode(graph, ref)->kind != GCNodeKind::Oper) {
+            continue;
+        }
+        PreparedOper &oper = plan->opers[ref];
+        oper.withBegin     = static_cast<uint32_t>(plan->operArgs.size());
+        for (gc_node_ref_t inputRef : graph->withInputsOf(ref)) {
+            plan->operArgs.push_back(dataIndexOf(graph, inputRef));
+        }
+        oper.normBegin = static_cast<uint32_t>(plan->operArgs.size());
+        for (gc_node_ref_t inputRef : graph->normInputsOf(ref)) {
+            plan->operArgs.push_back(dataIndexOf(graph, inputRef));
+        }
+        oper.end      = static_cast<uint32_t>(plan->operArgs.size());
+        oper.prepared = true;
     }
 
     if (!forceLinear_) {
@@ -714,6 +799,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                 const auto *body = graph->nodeBodyAs<GCOperBody>(ref);
                 item.kind =
                     body->uri().starts_with(":mark/") ? ItemKind::Mark : ItemKind::Leaf;
+                item.leaveAfter = !body->uri().starts_with(":");
                 break;
             }
             default:
@@ -974,6 +1060,7 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     {
         std::unique_lock lock(plansMutex_);
         plans_.clear();
+        planEpoch_ = nextPlanEpoch();
     }
     linearArmEntryCache_.clear();
     const bool gcStats = envSwitch("CAMEL_TF_GC_STATS");
@@ -1006,8 +1093,9 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     if (gcStats) {
         TaskflowGcGate::instance().reportStats(std::cerr);
         std::cerr << std::format(
-            "[taskflow] run: task_graphs={}\n",
-            taskGraphsRun_.load(std::memory_order_relaxed));
+            "[taskflow] run: task_graphs={} workers={}\n",
+            taskGraphsRun_.load(std::memory_order_relaxed),
+            executor_.num_workers());
     }
     return nullptr;
 }
@@ -1018,18 +1106,44 @@ slot_t TaskflowExecSchedPass::evalGraphTF(GCGraph *graph, Frame *frame) {
     return evalGraph(graph, frame, region);
 }
 
-slot_t TaskflowExecSchedPass::evalGraph(GCGraph *graph, Frame *frame, TaskflowGcRegion &region) {
+slot_t TaskflowExecSchedPass::evalGraph(
+    GCGraph *graph, Frame *frame, TaskflowGcRegion &region, GraphPlan *plan) {
     ASSERT(graph != nullptr, "Taskflow evaluation requires a runtime graph.");
-    Frame *rootFrame = frame;
     Frame *currFrame = frame;
-    Frame *twinFrame = nullptr;
-    GraphPlan *plan  = planFor(graph);
+    if (plan == nullptr) {
+        plan = planFor(graph);
+    }
     std::atomic<uint32_t> tailNode{kInvalidNodeRef};
+
+    // The frames this activation runs tail calls in, one per graph, with the plan of the graph:
+    // [0] is the caller's frame, the others were taken here and go back to the pool when the
+    // activation ends. Graphs that tail-call each other in a cycle (a recursive function whose
+    // `if` arms are graphs of their own makes a cycle of three or four) then alternate between
+    // the frames they already have. With a single spare frame every step of a cycle of three
+    // gave a frame back and took another, and looked its plan up again: two mutexes of the
+    // pool and the lock of the plan table per tail call, shared by all workers.
+    struct TailFrames {
+        struct Entry {
+            GCGraph *graph  = nullptr;
+            Frame *frame    = nullptr;
+            GraphPlan *plan = nullptr;
+        };
+        TaskflowFramePool &pool;
+        std::array<Entry, 4> entries{};
+        size_t count  = 0;
+        size_t victim = 0;
+        ~TailFrames() {
+            for (size_t i = 1; i < count; ++i) {
+                pool.release(entries[i].frame);
+            }
+        }
+    } tailFrames{.pool = framePool_};
+    tailFrames.entries[0] = {graph, frame, plan};
+    tailFrames.count      = 1;
 
     for (;;) {
         // Nothing of this graph instance is in flight here: every live value is in a frame.
-        region.leave();
-        region.poll("taskflow graph boundary");
+        region.safepoint("taskflow graph boundary");
 
         if (plan->structured) {
             runScope(*plan, *plan->scopes.front(), currFrame, tailNode, region);
@@ -1054,31 +1168,40 @@ slot_t TaskflowExecSchedPass::evalGraph(GCGraph *graph, Frame *frame, TaskflowGc
             camel::execute::fillFrameForDirectInvoke(lastFrame, currFrame, callerGraph, tailRef);
             continue;
         }
-        plan = planFor(target);
-        if (twinFrame && twinFrame->runtimeGraph() == target) {
-            currFrame = twinFrame;
-            twinFrame = lastFrame;
-        } else {
-            if (twinFrame != nullptr && twinFrame != rootFrame) {
-                framePool_.release(twinFrame);
+        TailFrames::Entry *entry = nullptr;
+        for (size_t i = 0; i < tailFrames.count; ++i) {
+            if (tailFrames.entries[i].graph == target) {
+                entry = &tailFrames.entries[i];
+                break;
             }
-            twinFrame = currFrame;
-            currFrame = framePool_.acquire(target);
         }
+        if (entry == nullptr) {
+            if (tailFrames.count < tailFrames.entries.size()) {
+                entry = &tailFrames.entries[tailFrames.count];
+            } else {
+                // Full: replace one that is neither the caller's frame nor the frame the
+                // arguments are about to be read from.
+                do {
+                    tailFrames.victim = tailFrames.victim % (tailFrames.entries.size() - 1) + 1;
+                    entry             = &tailFrames.entries[tailFrames.victim];
+                } while (entry->frame == lastFrame);
+                framePool_.release(entry->frame);
+                // Keep the table consistent should the two calls below throw.
+                *entry = tailFrames.entries[tailFrames.count - 1];
+                --tailFrames.count;
+                entry = &tailFrames.entries[tailFrames.count];
+            }
+            GraphPlan *targetPlan = planFor(target);
+            *entry                = {target, framePool_.acquire(target), targetPlan};
+            ++tailFrames.count;
+        }
+        plan      = entry->plan;
+        currFrame = entry->frame;
         camel::execute::fillFrameForDirectInvoke(lastFrame, currFrame, callerGraph, tailRef);
     }
 
     region.enter();
-    slot_t result = camel::execute::readRuntimeGraphReturn(plan->graph, currFrame);
-    if (twinFrame != nullptr) {
-        if (currFrame != rootFrame) {
-            framePool_.release(currFrame);
-        }
-        if (twinFrame != rootFrame) {
-            framePool_.release(twinFrame);
-        }
-    }
-    return result;
+    return camel::execute::readRuntimeGraphReturn(plan->graph, currFrame);
 }
 
 void TaskflowExecSchedPass::runScope(
@@ -1168,10 +1291,10 @@ void TaskflowExecSchedPass::runItems(
                 continue;
             }
             region.enter();
-            (void)executeLinearNode(graph, item.node, frame);
-            if (requireNode(graph, item.node)->kind == GCNodeKind::Oper) {
-                // An operator can run for long; do not keep a collector waiting for the
-                // next one as well.
+            (void)executeLinearNode(graph, item.node, frame, &plan);
+            if (item.leaveAfter) {
+                // An operator of a module can run for long; do not keep a collector waiting
+                // for the next one as well.
                 region.leave();
             }
             break;
@@ -1189,8 +1312,7 @@ void TaskflowExecSchedPass::runItems(
             break;
         case ItemKind::Branch: {
             const PlanBranch &branch = plan.branches[item.branch];
-            region.leave();
-            region.poll("taskflow branch boundary");
+            region.safepoint("taskflow branch boundary");
             region.enter();
             const size_t arm = camel::execute::selectRuntimeBranchArm(graph, branch.brch, frame);
             frame->set(dataIndexOf(graph, branch.brch), static_cast<Int32>(arm));
@@ -1293,12 +1415,12 @@ void TaskflowExecSchedPass::runLinearBody(
                 break;
             }
             region.enter();
-            (void)executeLinearNode(graph, nodeRef, frame);
+            (void)executeLinearNode(graph, nodeRef, frame, &plan);
             region.leave();
             break;
         default:
             region.enter();
-            (void)executeLinearNode(graph, nodeRef, frame);
+            (void)executeLinearNode(graph, nodeRef, frame, &plan);
             break;
         }
     }
@@ -1381,12 +1503,11 @@ void TaskflowExecSchedPass::executeCallNode(
 
 template <typename FillArgs, typename Sink>
 void TaskflowExecSchedPass::callClosure(
-    const ElementCallSite &site, GCGraph *targetGraph, Frame *funcFrame,
-    camel::runtime::gc_data_idx_t funcIdx, size_t argCount, FillArgs &&fillArgs, Sink &&sink) {
+    TaskflowGcRegion &region, const ElementCallSite &site, GCGraph *targetGraph,
+    GraphPlan *targetPlan, Frame *funcFrame, camel::runtime::gc_data_idx_t funcIdx,
+    size_t argCount, FillArgs &&fillArgs, Sink &&sink) {
     std::array<slot_t, 2> args{NullSlot, NullSlot};
     ASSERT(argCount <= args.size(), "Taskflow closure call takes at most two arguments.");
-    TaskflowGcRegion region;
-    InheritedDepth inherited(region.thread(), site.depth, site.domain);
     requireCallRoom(region.thread(), site.graph, site.node);
     OpenCall openCall(region.thread().callDepth);
     region.enter();
@@ -1397,7 +1518,7 @@ void TaskflowExecSchedPass::callClosure(
         std::span<const slot_t>(args.data(), argCount));
     slot_t result = NullSlot;
     try {
-        result = evalGraph(targetGraph, callee, region);
+        result = evalGraph(targetGraph, callee, region, targetPlan);
     } catch (...) {
         framePool_.release(callee);
         throw;
@@ -1442,36 +1563,31 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     if (camel::execute::isFaultIsolationUri(graph->nodeBodyAs<GCOperBody>(nodeRef)->uri())) {
         return executeIsolateNode(graph, nodeRef, frame);
     }
-    tf::Taskflow flow;
-    const uint32_t depth        = TaskflowGcGate::instance().self().callDepth;
-    TaskflowFaultDomain *domain = TaskflowGcGate::instance().self().faultDomain;
-    flow.emplace([this, graph, nodeRef, frame, depth, domain](tf::Subflow &sf) {
-        InheritedDepth inherited(TaskflowGcGate::instance().self(), depth, domain);
-        const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
-        const std::string uri(body->uri());
-        if (uri == ":mark/map_arr") {
-            mark_map_arr(graph, nodeRef, frame, sf);
-        } else if (uri == ":mark/apply_arr") {
-            mark_apply_arr(graph, nodeRef, frame, sf);
-        } else if (uri == ":mark/filter_arr") {
-            mark_filter_arr(graph, nodeRef, frame, sf);
-        } else if (uri == ":mark/reduce_arr") {
-            mark_reduce_arr(graph, nodeRef, frame, sf);
-        } else if (uri == ":mark/unordered_reduce_arr") {
-            mark_unordered_reduce_arr(graph, nodeRef, frame, sf);
-        } else if (uri == ":mark/foreach_arr") {
-            mark_foreach_arr(graph, nodeRef, frame, sf);
-        } else if (uri == ":mark/unordered_foreach_arr") {
-            mark_unordered_foreach_arr(graph, nodeRef, frame, sf);
-        }
-    });
-    runOnExecutor(flow);
+    // On the calling thread: an operator decides itself whether its elements are worth
+    // tasks (runElements). A task graph per operator, as before, cost more than a `reduce`
+    // over a handful of elements.
+    const std::string_view uri = graph->nodeBodyAs<GCOperBody>(nodeRef)->uri();
+    if (uri == ":mark/map_arr") {
+        mark_map_arr(graph, nodeRef, frame);
+    } else if (uri == ":mark/apply_arr") {
+        mark_apply_arr(graph, nodeRef, frame);
+    } else if (uri == ":mark/filter_arr") {
+        mark_filter_arr(graph, nodeRef, frame);
+    } else if (uri == ":mark/reduce_arr") {
+        mark_reduce_arr(graph, nodeRef, frame);
+    } else if (uri == ":mark/unordered_reduce_arr") {
+        mark_unordered_reduce_arr(graph, nodeRef, frame);
+    } else if (uri == ":mark/foreach_arr") {
+        mark_foreach_arr(graph, nodeRef, frame);
+    } else if (uri == ":mark/unordered_foreach_arr") {
+        mark_unordered_foreach_arr(graph, nodeRef, frame);
+    }
     const auto *node = requireNode(graph, nodeRef);
     return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
 }
 
-slot_t
-TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+slot_t TaskflowExecSchedPass::executeLinearNode(
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
     const auto *node = requireNode(graph, nodeRef);
 
     switch (node->kind) {
@@ -1607,7 +1723,7 @@ TaskflowExecSchedPass::executeLinearNode(GCGraph *graph, gc_node_ref_t nodeRef, 
         if (body->uri().starts_with(":mark/")) {
             return executeLinearMarkedOperator(graph, nodeRef, frame);
         }
-        const slot_t result = executePreparedOperator(graph, nodeRef, frame);
+        const slot_t result = executePreparedOperator(graph, nodeRef, frame, plan);
         frame->set(node->dataIndex, result);
         return result;
     }
@@ -1680,15 +1796,47 @@ Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
 }
 
 slot_t TaskflowExecSchedPass::executePreparedOperator(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, const GraphPlan *plan) {
     ASSERT(graph != nullptr, "Taskflow operator execution requires a graph.");
     ASSERT(frame != nullptr, "Taskflow operator execution requires a frame.");
+
+    // An operator that ran before on this plan: its function and the places of its arguments
+    // are known. Looking the operator up by URI on every execution (two string copies, two
+    // hash lookups and the read lock of the executor table, which all workers share) cost more
+    // than a built-in operator itself.
+    const bool prepared =
+        plan != nullptr && nodeRef < plan->opers.size() && plan->opers[nodeRef].prepared;
+    if (prepared) {
+        if (const operator_t resolved =
+                plan->resolvedOpers[nodeRef].load(std::memory_order_acquire)) {
+            const PreparedOper &oper = plan->opers[nodeRef];
+            const data_arr_t wargs{
+                plan->operArgs.data() + oper.withBegin,
+                oper.normBegin - oper.withBegin};
+            const data_arr_t nargs{
+                plan->operArgs.data() + oper.normBegin,
+                oper.end - oper.normBegin};
+            FrameArgsView withView(*frame, wargs);
+            FrameArgsView normView(*frame, nargs);
+            if (camel::core::effect_trace::enabled()) [[unlikely]] {
+                camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
+            }
+            try {
+                return resolved(withView, normView, *context_);
+            } catch (const RuntimeFault &fault) {
+                raiseFault(fault, graph, nodeRef);
+            }
+        }
+    }
 
     const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
     const std::string uri(body->uri());
     auto opFunc = context_->execMgr().find(uri);
     if (!opFunc) {
         raiseFault(RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri), graph, nodeRef);
+    }
+    if (prepared) {
+        plan->resolvedOpers[nodeRef].store(*opFunc, std::memory_order_release);
     }
 
     std::vector<runtime_data_idx_t> withIndices;
@@ -1890,19 +2038,19 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
         const std::string uri(body->uri());
         if (uri == ":mark/map_arr") {
-            mark_map_arr(graph, nodeRef, frame, sf);
+            mark_map_arr(graph, nodeRef, frame);
         } else if (uri == ":mark/apply_arr") {
-            mark_apply_arr(graph, nodeRef, frame, sf);
+            mark_apply_arr(graph, nodeRef, frame);
         } else if (uri == ":mark/filter_arr") {
-            mark_filter_arr(graph, nodeRef, frame, sf);
+            mark_filter_arr(graph, nodeRef, frame);
         } else if (uri == ":mark/reduce_arr") {
-            mark_reduce_arr(graph, nodeRef, frame, sf);
+            mark_reduce_arr(graph, nodeRef, frame);
         } else if (uri == ":mark/unordered_reduce_arr") {
-            mark_unordered_reduce_arr(graph, nodeRef, frame, sf);
+            mark_unordered_reduce_arr(graph, nodeRef, frame);
         } else if (uri == ":mark/foreach_arr") {
-            mark_foreach_arr(graph, nodeRef, frame, sf);
+            mark_foreach_arr(graph, nodeRef, frame);
         } else if (uri == ":mark/unordered_foreach_arr") {
-            mark_unordered_foreach_arr(graph, nodeRef, frame, sf);
+            mark_unordered_foreach_arr(graph, nodeRef, frame);
         } else if (camel::execute::isFaultIsolationUri(uri)) {
             return executeIsolateNode(graph, nodeRef, frame);
         } else {
@@ -2215,9 +2363,34 @@ gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
 // ---------------------------------------------------------------------------------------------
 // Higher-order operators
 //
-// Each keeps its own fan-out (one task per element, chained where the operator is ordered).
-// What an element produces is stored where the collector finds it before the element's region
-// ends: in the result array, in the node's own slot, or in a rooted scratch array.
+// An operator runs on the thread that reaches it. What an element produces is stored where
+// the collector finds it before the element's region is left: in the result array, in the
+// node's own slot, or in a rooted scratch array.
+//
+// The ordered operators (`reduce`, `foreach`) call their function element after element on
+// that thread: a chain of tasks, one per element, was the same order at the price of a task
+// each.
+//
+// The unordered ones (`map`, `apply`, `filter`, `unordered_foreach`) go through runElements.
+// A task per element is right when an element is a module operator of milliseconds and wrong
+// when it is three built-in operators; which it is cannot be read off the graph (a light graph
+// can recurse for seconds, a built-in operator can build a large array), so it is measured:
+//
+//   - The elements are claimed in chunks from a shared counter by whoever works on the
+//     operator. A chunk starts at one element; every finished chunk sets the size of the next
+//     ones to what fits kChunkNs at the pace just measured (at most four times the last size,
+//     at most an eighth of an even share, so that the last chunks cannot leave one worker
+//     with much more than the others).
+//   - When the element function is bounded and light (boundedLight: built-in operators and
+//     calls without recursion), the calling thread starts alone and asks for help only when
+//     what it has measured says the rest is worth it (kSpawnNs). A `map` over a few small
+//     elements then never leaves its thread.
+//   - Otherwise the helpers start at once, so that elements of seconds each run side by side
+//     from the first one on.
+//   - With one worker, or one element, everything runs on the calling thread.
+//
+// Helpers are tasks of the shared executor; the thread that started the operator waits for
+// them (running one itself when it is a worker).
 // ---------------------------------------------------------------------------------------------
 
 namespace {
@@ -2264,10 +2437,110 @@ struct ElementFaults {
     }
 };
 
+// Aim for chunks of this long: long against the cost of claiming one (a shared counter and
+// two clock reads), short against what one worker may be left with at the end.
+constexpr int64_t kChunkNs = 50'000;
+// A bounded light element function: how long the calling thread works alone before it
+// considers help, and how much work must be left (at the measured pace) to ask for it.
+constexpr int64_t kProbeNs = 20'000;
+constexpr int64_t kSpawnNs = 200'000;
+
 } // namespace
 
-void TaskflowExecSchedPass::mark_map_arr(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+template <typename Body>
+void TaskflowExecSchedPass::runElements(
+    const ElementCallSite &site, GraphPlan *targetPlan, size_t n, Body &&body) {
+    if (n == 0) {
+        return;
+    }
+    // The counter every worker of the operator writes and the chunk size they mostly read, on
+    // lines of their own.
+    struct Shared {
+        alignas(64) std::atomic<size_t> next{0};
+        alignas(64) std::atomic<size_t> grain{1};
+    } shared;
+    // Elements are claimed in rising order, so once a claim starts above the smallest
+    // faulting index nothing that may still start is left.
+    ElementFaults faults;
+    const size_t workers  = executor_.num_workers();
+    const size_t maxGrain = std::max<size_t>(1, n / (workers * 8));
+
+    // What the calling thread measured while it worked alone: the time and the chunks so far,
+    // and how long the rest would take at the pace of the last chunk. The first chunk is not
+    // taken as the pace (it pays for whatever the element function does once: resolving its
+    // operators, building the plans of the graphs it calls) unless it took milliseconds.
+    int64_t probedNs    = 0;
+    size_t probedChunks = 0;
+    int64_t probedLeft  = 0;
+
+    // Claims and runs chunks on the calling thread until none is left. With `probing`,
+    // returns false as soon as the rest is worth helpers.
+    const auto drain = [&](bool probing) {
+        TaskflowGcRegion region;
+        InheritedDepth inherited(region.thread(), site.depth, site.domain);
+        for (;;) {
+            const size_t grain = shared.grain.load(std::memory_order_relaxed);
+            const size_t begin = shared.next.fetch_add(grain, std::memory_order_relaxed);
+            if (begin >= n || faults.lowest.load(std::memory_order_acquire) < begin) {
+                return true;
+            }
+            const size_t end   = std::min(n, begin + grain);
+            const int64_t from = steadyNowNs();
+            for (size_t i = begin; i < end; ++i) {
+                // Nothing escapes: an element that faults is kept in `faults`, and the
+                // elements after it in this chunk are skipped there.
+                faults.run(i, [&] { body(region, i); });
+            }
+            const int64_t took = std::max<int64_t>(1, steadyNowNs() - from);
+            const size_t count = end - begin;
+            const auto fits    = static_cast<size_t>(
+                std::min<int64_t>(kChunkNs * static_cast<int64_t>(count) / took, 1 << 20));
+            shared.grain.store(
+                std::clamp<size_t>(fits, 1, std::min(maxGrain, grain * 4)),
+                std::memory_order_relaxed);
+            if (probing) {
+                probedNs += took;
+                ++probedChunks;
+                const size_t claimed = shared.next.load(std::memory_order_relaxed);
+                if (claimed >= n) {
+                    return true;
+                }
+                probedLeft =
+                    took * static_cast<int64_t>(n - claimed) / static_cast<int64_t>(count);
+                if (probedLeft >= kSpawnNs && probedNs >= kProbeNs &&
+                    (probedChunks >= 2 || took >= 10 * kSpawnNs)) {
+                    return false;
+                }
+            }
+        }
+    };
+
+    bool done = false;
+    if (workers <= 1 || n == 1) {
+        done = drain(false);
+    } else if (boundedLight(*targetPlan)) {
+        done = drain(true);
+    }
+    if (!done) {
+        const size_t claimed = std::min(n, shared.next.load(std::memory_order_relaxed));
+        size_t helpers       = std::min(workers, n - claimed);
+        if (probedChunks != 0) {
+            // As many as the work left can keep busy for kSpawnNs each.
+            helpers = std::min(
+                helpers,
+                static_cast<size_t>(std::max<int64_t>(2, probedLeft / kSpawnNs)));
+        }
+        tf::Taskflow flow;
+        for (size_t helper = 0; helper < helpers; ++helper) {
+            flow.emplace([&drain]() { (void)drain(false); }).name("ELEMENTS");
+        }
+        taskGraphsRun_.fetch_add(1, std::memory_order_relaxed);
+        runOnExecutor(flow);
+    }
+    faults.rethrow();
+}
+
+void TaskflowExecSchedPass::mark_map_arr(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     TaskflowGcRegion region;
     const ElementCallSite site{
         graph,
@@ -2279,6 +2552,7 @@ void TaskflowExecSchedPass::mark_map_arr(
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     const auto resIdx  = dataIndexOf(graph, nodeRef);
     GCGraph *target    = makeHigherOrderCallSite(frame->get<Function *>(funcIdx)).runtimeGraph;
+    GraphPlan *plan    = planFor(target);
     const size_t n     = arrayAt(frame, arrIdx)->size();
     auto *resultType   = frame->typeAt<ArrayType>(resIdx);
     {
@@ -2292,29 +2566,21 @@ void TaskflowExecSchedPass::mark_map_arr(
     }
     region.leave();
 
-    ElementFaults faults;
-    for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, site, i, frame, arrIdx, funcIdx, resIdx, resultType, target, &faults]() {
-              faults.run(i, [&] {
-                  callClosure(
-                      site,
-                      target,
-                      frame,
-                      funcIdx,
-                      1,
-                      [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
-                      [&](slot_t value) {
-                          arrayAt(frame, resIdx)->set<slot_t>(i, value, resultType);
-                      });
-              });
-          }).name("MAP_ELEM");
-    }
-    sf.join();
-    faults.rethrow();
+    runElements(site, plan, n, [&](TaskflowGcRegion &elementRegion, size_t i) {
+        callClosure(
+            elementRegion,
+            site,
+            target,
+            plan,
+            frame,
+            funcIdx,
+            1,
+            [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
+            [&](slot_t value) { arrayAt(frame, resIdx)->set<slot_t>(i, value, resultType); });
+    });
 }
 
-void TaskflowExecSchedPass::mark_apply_arr(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+void TaskflowExecSchedPass::mark_apply_arr(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     TaskflowGcRegion region;
     const ElementCallSite site{
         graph,
@@ -2325,6 +2591,7 @@ void TaskflowExecSchedPass::mark_apply_arr(
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     GCGraph *target    = makeHigherOrderCallSite(frame->get<Function *>(funcIdx)).runtimeGraph;
+    GraphPlan *plan    = planFor(target);
     const size_t n     = arrayAt(frame, arrIdx)->size();
     auto *arrType      = frame->typeAt<ArrayType>(arrIdx);
     // Every element is computed from the array as it was; the results wait in a rooted
@@ -2339,25 +2606,18 @@ void TaskflowExecSchedPass::mark_apply_arr(
     }
     region.leave();
 
-    ElementFaults faults;
-    for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, site, i, frame, arrIdx, funcIdx, arrType, target, &resultsRoot, &faults]() {
-              faults.run(i, [&] {
-                  callClosure(
-                      site,
-                      target,
-                      frame,
-                      funcIdx,
-                      1,
-                      [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
-                      [&](slot_t value) {
-                          resultsRoot.getAs<Array>()->set<slot_t>(i, value, arrType);
-                      });
-              });
-          }).name("APPLY_ELEM");
-    }
-    sf.join();
-    faults.rethrow();
+    runElements(site, plan, n, [&](TaskflowGcRegion &elementRegion, size_t i) {
+        callClosure(
+            elementRegion,
+            site,
+            target,
+            plan,
+            frame,
+            funcIdx,
+            1,
+            [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
+            [&](slot_t value) { resultsRoot.getAs<Array>()->set<slot_t>(i, value, arrType); });
+    });
 
     region.enter();
     Array *arr     = arrayAt(frame, arrIdx);
@@ -2368,8 +2628,7 @@ void TaskflowExecSchedPass::mark_apply_arr(
     frame->set(dataIndexOf(graph, nodeRef), arr);
 }
 
-void TaskflowExecSchedPass::mark_filter_arr(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+void TaskflowExecSchedPass::mark_filter_arr(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     TaskflowGcRegion region;
     const ElementCallSite site{
         graph,
@@ -2380,29 +2639,25 @@ void TaskflowExecSchedPass::mark_filter_arr(
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     GCGraph *target    = makeHigherOrderCallSite(frame->get<Function *>(funcIdx)).runtimeGraph;
+    GraphPlan *plan    = planFor(target);
     const size_t n     = arrayAt(frame, arrIdx)->size();
     region.leave();
 
     // One byte per element: the predicates run concurrently, and the bits of a
     // std::vector<bool> share words.
     std::vector<uint8_t> keep(n, 0);
-    ElementFaults faults;
-    for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, site, i, frame, arrIdx, funcIdx, target, &keep, &faults]() {
-              faults.run(i, [&] {
-                  callClosure(
-                      site,
-                      target,
-                      frame,
-                      funcIdx,
-                      1,
-                      [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
-                      [&](slot_t value) { keep[i] = fromSlot<bool>(value) ? 1 : 0; });
-              });
-          }).name("FILTER_PRED");
-    }
-    sf.join();
-    faults.rethrow();
+    runElements(site, plan, n, [&](TaskflowGcRegion &elementRegion, size_t i) {
+        callClosure(
+            elementRegion,
+            site,
+            target,
+            plan,
+            frame,
+            funcIdx,
+            1,
+            [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
+            [&](slot_t value) { keep[i] = fromSlot<bool>(value) ? 1 : 0; });
+    });
 
     region.enter();
     Array *arr       = arrayAt(frame, arrIdx);
@@ -2418,8 +2673,7 @@ void TaskflowExecSchedPass::mark_filter_arr(
     filtered->shrinkToFit(resultType);
 }
 
-void TaskflowExecSchedPass::mark_reduce_arr(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+void TaskflowExecSchedPass::mark_reduce_arr(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     TaskflowGcRegion region;
     const ElementCallSite site{
         graph,
@@ -2431,43 +2685,31 @@ void TaskflowExecSchedPass::mark_reduce_arr(
     const auto withInputs = graph->withInputsOf(nodeRef);
     const auto funcIdx    = dataIndexOf(graph, withInputs[0]);
     GCGraph *target       = makeHigherOrderCallSite(frame->get<Function *>(funcIdx)).runtimeGraph;
+    GraphPlan *plan       = planFor(target);
     const auto accIdx     = dataIndexOf(graph, nodeRef);
     const size_t n        = arrayAt(frame, arrIdx)->size();
     // The accumulator lives in the node's own slot between two steps.
     frame->set(accIdx, frame->get<slot_t>(dataIndexOf(graph, withInputs[1])));
-    region.leave();
-    if (n == 0) {
-        return;
-    }
 
-    tf::Task prev;
-    bool hasPrev = false;
     for (size_t i = 0; i < n; ++i) {
-        tf::Task step = sf.emplace([this, site, i, arrIdx, funcIdx, frame, accIdx, target]() {
-                              callClosure(
-                                  site,
-                                  target,
-                                  frame,
-                                  funcIdx,
-                                  2,
-                                  [&](std::span<slot_t> args) {
-                                      args[0] = frame->get<slot_t>(accIdx);
-                                      args[1] = arrayAt(frame, arrIdx)->get<slot_t>(i);
-                                  },
-                                  [&](slot_t value) { frame->set(accIdx, value); });
-                          }).name("REDUCE_STEP");
-        if (hasPrev) {
-            step.succeed(prev);
-        }
-        prev    = step;
-        hasPrev = true;
+        callClosure(
+            region,
+            site,
+            target,
+            plan,
+            frame,
+            funcIdx,
+            2,
+            [&](std::span<slot_t> args) {
+                args[0] = frame->get<slot_t>(accIdx);
+                args[1] = arrayAt(frame, arrIdx)->get<slot_t>(i);
+            },
+            [&](slot_t value) { frame->set(accIdx, value); });
     }
-    sf.join();
 }
 
 void TaskflowExecSchedPass::mark_unordered_reduce_arr(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
-    (void)sf;
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     TaskflowGcRegion region;
     const uint32_t depth        = region.thread().callDepth;
     TaskflowFaultDomain *domain = region.thread().faultDomain;
@@ -2578,8 +2820,7 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
     frame->set(dataIndexOf(graph, nodeRef), acc);
 }
 
-void TaskflowExecSchedPass::mark_foreach_arr(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+void TaskflowExecSchedPass::mark_foreach_arr(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     TaskflowGcRegion region;
     const ElementCallSite site{
         graph,
@@ -2590,36 +2831,27 @@ void TaskflowExecSchedPass::mark_foreach_arr(
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     GCGraph *target    = makeHigherOrderCallSite(frame->get<Function *>(funcIdx)).runtimeGraph;
+    GraphPlan *plan    = planFor(target);
     const size_t n     = arrayAt(frame, arrIdx)->size();
-    region.leave();
 
-    tf::Task prev;
-    bool hasPrev = false;
     for (size_t i = 0; i < n; ++i) {
-        tf::Task step = sf.emplace([this, site, i, frame, arrIdx, funcIdx, target]() {
-                              callClosure(
-                                  site,
-                                  target,
-                                  frame,
-                                  funcIdx,
-                                  1,
-                                  [&](std::span<slot_t> args) {
-                                      args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i);
-                                  },
-                                  [](slot_t) {});
-                          }).name("FOREACH_ELEM");
-        if (hasPrev) {
-            step.succeed(prev);
-        }
-        prev    = step;
-        hasPrev = true;
+        callClosure(
+            region,
+            site,
+            target,
+            plan,
+            frame,
+            funcIdx,
+            1,
+            [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
+            [](slot_t) {});
     }
-    sf.join();
+    region.enter();
     frame->set(dataIndexOf(graph, nodeRef), NullSlot);
 }
 
 void TaskflowExecSchedPass::mark_unordered_foreach_arr(
-    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame, tf::Subflow &sf) {
+    GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     TaskflowGcRegion region;
     const ElementCallSite site{
         graph,
@@ -2630,26 +2862,23 @@ void TaskflowExecSchedPass::mark_unordered_foreach_arr(
     const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
     const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
     GCGraph *target    = makeHigherOrderCallSite(frame->get<Function *>(funcIdx)).runtimeGraph;
+    GraphPlan *plan    = planFor(target);
     const size_t n     = arrayAt(frame, arrIdx)->size();
     region.leave();
 
-    ElementFaults faults;
-    for (size_t i = 0; i < n; ++i) {
-        sf.emplace([this, site, i, frame, arrIdx, funcIdx, target, &faults]() {
-              faults.run(i, [&] {
-                  callClosure(
-                      site,
-                      target,
-                      frame,
-                      funcIdx,
-                      1,
-                      [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
-                      [](slot_t) {});
-              });
-          }).name("FOREACH_ELEM");
-    }
-    sf.join();
-    faults.rethrow();
+    runElements(site, plan, n, [&](TaskflowGcRegion &elementRegion, size_t i) {
+        callClosure(
+            elementRegion,
+            site,
+            target,
+            plan,
+            frame,
+            funcIdx,
+            1,
+            [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
+            [](slot_t) {});
+    });
+    region.enter();
     frame->set(dataIndexOf(graph, nodeRef), NullSlot);
 }
 

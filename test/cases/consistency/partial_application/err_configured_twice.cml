@@ -1,0 +1,8 @@
+with <step: int>
+func inc(x: int): int { return x + step }
+func main(): int sync {
+    let g = inc<1>
+    let h = g<2>
+    println(h(2))
+    return 0
+}

@@ -323,6 +323,7 @@
 
 - `-t`, `-T`, `--tok`, `--token-stream`：打印词法记号  
 - `-s`, `-S`, `--cst`, `--concrete-syntax-tree`：打印具体语法树（CST）  
+  记号一行一个：序号、`行:列`、它前面有什么（`n` 换行、`s` 空白或注释、`-` 紧贴）、种类、文本；注释也是记号。语法树按产生式命名节点，只做转交的层级不产生节点（`a + b` 是一个 `AdditiveExpr`，下面直接是两个 `RefData`）。
 - `-a`, `-A`, `--ast`, `--abstract-syntax-tree`：打印抽象语法树（AST）  
 - `-c`, `-C`, `--gct`, `--graph-construct-tree`：打印图构造树（GCT）  
 - `-g`, `-G`, `--gir`, `--graph-ir`：打印图中间表示（GIR）  

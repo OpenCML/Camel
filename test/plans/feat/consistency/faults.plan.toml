@@ -260,7 +260,7 @@ expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 36
 expect_stdout_starts_with = "12\n"
-expect_output_contains = ["Cannot convert the string '12abc' to i64."]
+expect_output_contains = ["Cannot convert the string '12abc' to int."]
 
 [[tests]]
 name = "fault.int_text_blank"
@@ -269,7 +269,7 @@ case = "../../../cases/consistency/faults/int_text_blank.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidNumberText"
 expect_diagnostic_line = 6
 expect_stdout_starts_with = "7\n"
-expect_output_contains = ["Cannot convert the string ' 7' to i64."]
+expect_output_contains = ["Cannot convert the string ' 7' to int."]
 
 [[tests]]
 name = "fault.float_to_int_range"
@@ -279,7 +279,7 @@ expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
 expect_diagnostic_code = "0x04000050"
 expect_diagnostic_line = 6
 expect_stdout_starts_with = "before\n9000000000000000000\n"
-expect_output_contains = ["Cannot convert 1e+30 to i64: the value is outside the range of i64 (-9223372036854775808 to 9223372036854775807)."]
+expect_output_contains = ["Cannot convert 1e+30 to int: the value is outside the range of int (-9223372036854775808 to 9223372036854775807)."]
 
 [[tests]]
 name = "fault.float_nan_to_int"
@@ -288,7 +288,7 @@ case = "../../../cases/consistency/faults/float_nan_to_int.cml"
 expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
 expect_diagnostic_line = 6
 expect_stdout_starts_with = "2\n"
-expect_output_contains = ["Cannot convert nan to i64: NaN is not a number an integer can hold."]
+expect_output_contains = ["Cannot convert nan to int: NaN is not a number an integer can hold."]
 
 [[tests]]
 name = "fault.i32_out_of_range"

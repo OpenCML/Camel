@@ -10,11 +10,11 @@ module inline_dce_arm_effect_lost
 
 func main(): int sync {
     if false then sync {
-        return null;
+        null;
     } else sync {
         var v71 = float(0);
         println('');
-        return null;
+        null;
     };
     return 0;
 }

@@ -1,0 +1,21 @@
+/**
+ * A function imported by name is a value like a function of this module: it can be handed to
+ * a higher-order operator, bound to a name, passed and returned. It used to be counted twice
+ * (once for the import by name, once for the module's default names) and so had "2
+ * functions of that name" and no value.
+ */
+module by_name
+
+import { twice, area } from lib
+
+func apply(f: (x: int) => int, x: int): int { return f(x) }
+func pick(): (x: int) => int { return twice }
+
+func main(): int sync {
+    println([1, 2, 3]->map<twice>)
+    let f = twice
+    println(f(4), apply(twice, 5), pick()(6))
+    // an imported name with two functions: the parameter says which is meant
+    println(apply(area, 3), area(2, 5))
+    return 0
+}
