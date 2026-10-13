@@ -22,7 +22,6 @@
 #include "camel/core/module/userdef.h"
 #include "core/module/userdef_internal.h"
 
-
 #include "camel/compile/gir/encode.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/parse/parse.h"
@@ -147,9 +146,8 @@ bool UserDefinedModule::compile(CompileStage till) {
                     "gct.nodes",
                     countNodes(gct_ ? gct_->root() : GCT::node_ptr_t()));
             }
-            EXEC_WHEN_DEBUG({
-                camel::DebugBreakpoint::Hit("GCT", gct_ ? gct_->root().get() : nullptr);
-            });
+            EXEC_WHEN_DEBUG(
+                { camel::DebugBreakpoint::Hit("GCT", gct_ ? gct_->root().get() : nullptr); });
             if (diagnostics_->hasErrors()) {
                 CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GCT", name_);
                 return false;

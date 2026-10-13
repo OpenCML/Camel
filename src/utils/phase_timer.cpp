@@ -65,9 +65,9 @@ using AllocSnapshotFn = void (*)(AllocCounters *);
 struct Phase {
     std::string name;
     std::string detail;
-    uint32_t depth = 0; // number of phases open when this one was opened
+    uint32_t depth  = 0; // number of phases open when this one was opened
     int64_t startNs = 0;
-    int64_t wallNs  = -1;     // -1 while open
+    int64_t wallNs  = -1;    // -1 while open
     AllocCounters atStart{}; // totals when the phase was opened
     AllocCounters atEnd{};
 };

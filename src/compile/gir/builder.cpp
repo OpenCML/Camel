@@ -575,7 +575,7 @@ gctSemantic(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
         return nullptr;
     }
     auto sourceContext = context->sourceContext();
-    return sourceContext ? sourceContext->gctSemantic(gct->load()->origin()) : nullptr;
+    return sourceContext ? sourceContext->gctSemantic(gct->origin()) : nullptr;
 }
 
 inline camel::source::origin_id_t deriveGirOrigin(
@@ -592,7 +592,7 @@ inline camel::source::origin_id_t deriveGirOrigin(
     if (!sourceContext) {
         return camel::source::kInvalidOriginId;
     }
-    auto origin = gct->load()->origin();
+    auto origin = gct->origin();
     if (origin == camel::source::kInvalidOriginId) {
         return camel::source::kInvalidOriginId;
     }
@@ -936,7 +936,7 @@ void Builder::rejectRedeclaredFunction(
     for (const auto &graph : *graphs.value()) {
         if (sameParameters(graph->funcType(), funcType)) {
             redeclaredFuncTypes_.insert(funcType);
-            diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(name);
+            diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
             throw BuildAbortException();
         }
     }
@@ -1105,13 +1105,13 @@ void reportFunctionReference(
             }
         }
     }
-    recorder->functionReferenced(gct->load()->origin(), name, std::move(ids));
+    recorder->functionReferenced(gct->origin(), name, std::move(ids));
 }
 } // namespace
 
 void Builder::recordDeclaration(
     const std::string &name, node_handle_t node, const GCT::node_ptr_t &decl) {
-    const auto origin                    = decl->load()->origin();
+    const auto origin                    = decl->origin();
     declOrigins_[nodeScope_.get()][name] = origin;
     recorder_->valueDeclared(origin, name, valueTypeOf(nodeTypeOf(node)), isVariable(node));
     recorder_->valueBound(
@@ -1147,7 +1147,7 @@ void Builder::recordResult(const GCT::node_ptr_t &gct, const std::any &res) {
     if (node == nullptr || nodeIsKind(node, runtime::GCNodeKind::Dref)) {
         return;
     }
-    recorder_->expressionTyped(gct->load()->origin(), valueTypeOf(nodeTypeOf(node)));
+    recorder_->expressionTyped(gct->origin(), valueTypeOf(nodeTypeOf(node)));
 }
 
 any Builder::visit(const GCT::node_ptr_t &node) {
@@ -1164,8 +1164,7 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
     case GCT::LoadType::DECL:
         return visitDeclNode(node);
     case GCT::LoadType::FUNC:
-        if (node->loadAs<GCT::FuncLoad>()->name().empty() &&
-            isGenericHere(node->atAs<GCT::TypeLoad>(0)->loadAs<GCT::TypeLoad>()->dataType())) {
+        if (node->name().empty() && isGenericHere(node->at(0)->dataType())) {
             return anonymousTemplateOf(node);
         }
         return visitFuncNode(node);
@@ -1207,11 +1206,10 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
 
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
-    const auto &declLoad     = gct->loadAs<GCT::DeclLoad>();
-    GCT::node_ptr_t typeNode = gct->atAs<GCT::TypeLoad>(0);
-    Type *type               = typeNode->loadAs<GCT::TypeLoad>()->dataType();
-    if (!declLoad->isFunc()) {
-        typeDecls_[declLoad->ref()] = type;
+    GCT::node_ptr_t typeNode = gct->at(0);
+    Type *type               = typeNode->dataType();
+    if (!gct->isFunc()) {
+        typeDecls_[Reference(gct->name())] = type;
         LEAVE("DECL");
         return nullptr;
     }
@@ -1222,8 +1220,8 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
     FunctionType *funcType    = tt::as_ptr<FunctionType>(type);
-    rejectRedeclaredFunction(declLoad->ref().toString(), funcType, gct);
-    compile_graph_ptr_t graph = enterScope(funcType, declLoad->ref().toString());
+    rejectRedeclaredFunction(gct->name(), funcType, gct);
+    compile_graph_ptr_t graph = enterScope(funcType, gct->name());
     leaveScope();
 
     LEAVE("DECL");
@@ -1232,9 +1230,9 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 
 compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
-    std::string name         = gct->loadAs<GCT::FuncLoad>()->name();
-    GCT::node_ptr_t typeLoad = gct->atAs<GCT::TypeLoad>(0);
-    Type *type               = typeLoad->loadAs<GCT::TypeLoad>()->dataType();
+    std::string name         = gct->name();
+    GCT::node_ptr_t typeLoad = gct->at(0);
+    Type *type               = typeLoad->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
     if (isGenericHere(type)) {
         // A generic function: registered as a template when its block was entered
@@ -1298,12 +1296,12 @@ void Builder::buildFuncBody(
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;
-        setBodyResult(graph, visitBodyNode(gct->atAs<GCT::ExecLoad>(1)));
+        setBodyResult(graph, visitBodyNode(gct->at(1)));
         bodyStates_[graph.get()] = BodyState::Built;
-        builtFunctions_.push_back({graph.get(), gct->load()->origin(), name});
+        builtFunctions_.push_back({graph.get(), gct->origin(), name});
         builtBodies_.push_back(graph);
         if (recorder_) {
-            recorder_->functionBuilt(gct->load()->origin(), name, graph->stableId(), funcType);
+            recorder_->functionBuilt(gct->origin(), name, graph->stableId(), funcType);
         }
     } catch (const camel::core::mm::MemoryExhausted &e) {
         // Say which function was being compiled; the allocator does not know.
@@ -1311,7 +1309,7 @@ void Builder::buildFuncBody(
         leaveScope();
         throw e.during(
             std::format("compiling function '{}'", name.empty() ? graph->name() : name),
-            gct->load()->origin());
+            gct->origin());
     } catch (...) {
         // The caller entered the scope of `graph`; an error leaves it on the way out.
         bodyStates_[graph.get()] = BodyState::Built;
@@ -1328,8 +1326,8 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         if (child->type() != GCT::LoadType::FUNC) {
             continue;
         }
-        const std::string name = child->loadAs<GCT::FuncLoad>()->name();
-        Type *type             = child->atAs<GCT::TypeLoad>(0)->loadAs<GCT::TypeLoad>()->dataType();
+        const std::string name = child->name();
+        Type *type             = child->at(0)->dataType();
         if (!name.empty() && !isGenericHere(type)) {
             plainNames.insert(name);
         }
@@ -1339,21 +1337,21 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         if (child->type() != GCT::LoadType::FUNC) {
             continue;
         }
-        const std::string name = child->loadAs<GCT::FuncLoad>()->name();
-        Type *type             = child->atAs<GCT::TypeLoad>(0)->loadAs<GCT::TypeLoad>()->dataType();
+        const std::string name = child->name();
+        Type *type             = child->at(0)->dataType();
         if (name.empty() || !isGenericHere(type)) {
             continue;
         }
         // One name is either a generic function or a set of ordinary ones: which of two
         // generic functions, or of a generic and an ordinary one, a call means is not defined.
         if (templateScope_->has(name, false) || plainNames.contains(name)) {
-            diags_->of(SemanticDiag::Redeclaration).atOrigin(child->load()->origin()).commit(name);
+            diags_->of(SemanticDiag::Redeclaration).atOrigin(child->origin()).commit(name);
             continue;
         }
         for (size_t k = 2; k < child->size(); ++k) {
             if (child->at(k) && child->at(k)->type() == GCT::LoadType::ANNO) {
                 diags_->of(SemanticDiag::GenericFunctionUnsupported)
-                    .atOrigin(child->load()->origin())
+                    .atOrigin(child->origin())
                     .commit(name, "decorated: a decorator takes a function value");
                 break;
             }
@@ -1375,7 +1373,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
 }
 
 node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
-    Type *type           = func->atAs<GCT::TypeLoad>(0)->loadAs<GCT::TypeLoad>()->dataType();
+    Type *type             = func->at(0)->dataType();
     auto tmpl            = std::make_shared<GenericTemplate>();
     tmpl->func           = func;
     tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
@@ -1399,7 +1397,7 @@ node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
 void Builder::rejectGenericValue(
     const template_ptr_t &tmpl, const GCT::node_ptr_t &origin, const std::string &why) {
     diags_->of(SemanticDiag::GenericFunctionAsValue)
-        .atOrigin(origin->load()->origin())
+        .atOrigin(origin->origin())
         .commit(tmpl->name, why, tmpl->name + ": " + tmpl->funcType->toString());
     throw BuildAbortException();
 }
@@ -1475,7 +1473,7 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
     }
     if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
-            .atOrigin(origin->load()->origin())
+            .atOrigin(origin->origin())
             .commit(
                 repeated->toString(),
                 asTagged(repeated->payloadType())->payloadType()->toString());
@@ -1485,7 +1483,7 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, origin);
     if (!graph->funcType()->hasExitType()) {
         diags_->of(SemanticDiag::CallingIncompleteFunction)
-            .atOrigin(origin->load()->origin())
+            .atOrigin(origin->origin())
             .commit(graph->name(), graph->funcType()->toString());
         throw BuildAbortException();
     }
@@ -1567,7 +1565,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     };
     const auto reject = [&](const std::string &why) {
         diags_->of(SemanticDiag::GenericArgumentsMismatch)
-            .atOrigin(call->load()->origin())
+            .atOrigin(call->origin())
             .commit(tmpl->name, argTypesStr(), why, tmpl->name + ": " + signature->toString());
         throw BuildAbortException();
     };
@@ -1734,7 +1732,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     // is allowed, `int??` and `int!!` are not).
     if (TupleType *repeated = findRepeatedMark(substituteTypeVars(signature, bindings))) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
-            .atOrigin(call->load()->origin())
+            .atOrigin(call->origin())
             .commit(
                 repeated->toString(),
                 asTagged(repeated->payloadType())->payloadType()->toString());
@@ -1987,7 +1985,7 @@ void Builder::settleGenericOperatorArguments(
             // The element function of a list comprehension: nothing to take `x` from.
             Type *source = !normTypes.empty() ? valueTypeOf(normTypes.front()) : nullptr;
             diags_->of(SemanticDiag::ComprehensionSourceRefused)
-                .atOrigin(call->load()->origin())
+                .atOrigin(call->origin())
                 .commit(source != nullptr ? source->toString() : std::string("void"));
             throw BuildAbortException();
         }
@@ -2023,7 +2021,7 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
     }
     Type *keyType = invalid->params()[0];
     diags_->of(SemanticDiag::CollectionKeyNotAllowed)
-        .atOrigin(at->load()->origin())
+        .atOrigin(at->origin())
         .commit(keyType->toString(), invalid->toString(), collectionKeyProblem(keyType));
     throw BuildAbortException();
 }
@@ -2067,7 +2065,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     if (tmpl->openInstances >= kMaxOpenInstancesOfOne ||
         instantiationDepth_ >= kMaxInstantiationDepth) {
         diags_->of(SemanticDiag::GenericInstantiationTooDeep)
-            .atOrigin(call->load()->origin())
+            .atOrigin(call->origin())
             .commit(
                 tmpl->name,
                 typeBindingsToString(bindings),
@@ -2085,7 +2083,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     // a secondary location at the call. The one-line format prints it after the message as
     // " [in the instance ..., instantiated by the call at line:col]".
     const DiagLabel instanceLabel{
-        SourceRange{call->load()->origin()},
+        SourceRange{call->origin()},
         tmpl->name.empty()
             ? std::format(
                   "in a list comprehension whose elements have type '{}'",
@@ -2209,8 +2207,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
 
 node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     ENTER("DATA");
-    const auto &dataLoad   = gct->loadAs<GCT::DataLoad>();
-    const data_ptr_t &data = dataLoad->data();
+    const data_ptr_t &data = gct->data();
 
     node_handle_t node{};
     TypeCode dataType = data->type()->code();
@@ -2334,14 +2331,14 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
 
 Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     ENTER("TYPE");
-    Type *type = boundType(gct->loadAs<GCT::TypeLoad>()->dataType());
+    Type *type = boundType(gct->dataType());
     LEAVE("TYPE");
     return type;
 }
 
 node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
-    const string &ident = gct->loadAs<GCT::NRefLoad>()->ref();
+    const string &ident = gct->name();
     // Names declared inside the initializer are not part of this declaration.
     const bool isVar   = std::exchange(declaresVariable_, false);
     // A function named as the initializer is bound as its function value (`let g = f`), so
@@ -2385,7 +2382,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void && !ident.empty() &&
         !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
         diags_->of(SemanticDiag::EmptyArrayWithoutType)
-            .atOrigin(gct->at(0)->load()->origin())
+            .atOrigin(gct->at(0)->origin())
             .commit(ident);
         if (!declScope->has(ident, false)) {
             poisonedNames_[declScope].insert(ident);
@@ -2401,7 +2398,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     }
     bool success        = insertNode(ident, bound);
     if (!success) {
-        diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->load()->origin()).commit(ident);
+        diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(ident);
         throw BuildAbortException();
     }
     if (recorder_ && !nodeIsKind(bound, runtime::GCNodeKind::Dref)) {
@@ -2799,8 +2796,7 @@ constexpr std::string_view kBuiltinPrefix = "$builtin::";
 } // namespace
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
-    if (const std::string written = gct->loadAs<GCT::DRefLoad>()->ref().toString();
-        written.starts_with(kBuiltinPrefix)) {
+    if (const std::string written = gct->name(); written.starts_with(kBuiltinPrefix)) {
         ENTER("DREF");
         genericCalleeAllowed_   = false;
         const std::string plain = written.substr(kBuiltinPrefix.size());
@@ -2816,7 +2812,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return drefNode;
     }
     ENTER("DREF");
-    const string name = gct->loadAs<GCT::DRefLoad>()->ref().toString();
+    const string name     = gct->name();
     genericCalleeAllowed_ = false;
     auto optNode      = nodeAt(name);
     if (optNode.has_value()) {
@@ -2831,7 +2827,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         if (recorder_ && !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
             recorder_->valueReferenced(
-                gct->load()->origin(),
+                gct->origin(),
                 name,
                 declarationOf(name),
                 valueTypeOf(nodeTypeOf(node)));
@@ -2851,10 +2847,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         genericDrefs_[drefNode] = optTemplate.value();
         registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
         if (recorder_) {
-            recorder_->genericReferenced(
-                gct->load()->origin(),
-                name,
-                optTemplate.value()->func->load()->origin());
+            recorder_->genericReferenced(gct->origin(), name, optTemplate.value()->func->origin());
         }
         LEAVE("DREF");
         return drefNode;
@@ -2895,9 +2888,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         // need to check here.
         const auto &opt = module_->getImportedEntity(name);
         if (!opt.has_value()) {
-            diags_->of(SemanticDiag::ImportNameNotExported)
-                .atOrigin(gct->load()->origin())
-                .commit(name);
+            diags_->of(SemanticDiag::ImportNameNotExported).atOrigin(gct->origin()).commit(name);
             throw BuildAbortException();
         }
         const auto &e = opt.value();
@@ -2906,7 +2897,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             // graph of this program (the roots of modules are not merged yet). Using it as a
             // node of the current graph crashed the compiler.
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .atOrigin(gct->load()->origin())
+                .atOrigin(gct->origin())
                 .commit(
                     name,
                     "a value exported by another module cannot be used yet; only functions, "
@@ -2928,7 +2919,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         } else if (camel::core::module::detail::EntityAccess::isGraphSet(e)) {
             auto graphs = asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(e));
             for (const auto &imported : *graphs) {
-                importedUseOrigins_[imported.get()] = gct->load()->origin();
+                importedUseOrigins_[imported.get()] = gct->origin();
             }
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
@@ -2948,18 +2939,18 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
                 for (const auto &[uri, resolver] : ops->resolvers()) {
                     signatures.push_back(resolver->signature());
                 }
-                recorder_->operatorReferenced(gct->load()->origin(), name, std::move(signatures));
+                recorder_->operatorReferenced(gct->origin(), name, std::move(signatures));
             }
             LEAVE("DREF");
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isDecoratedGraph(e)) {
             auto decorated = camel::core::module::detail::EntityAccess::decoratedGraph(e);
-            importedUseOrigins_[decorated.get()] = gct->load()->origin();
+            importedUseOrigins_[decorated.get()] = gct->origin();
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{decorated})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
             if (recorder_) {
-                recorder_->functionReferenced(gct->load()->origin(), name, {});
+                recorder_->functionReferenced(gct->origin(), name, {});
             }
             LEAVE("DREF");
             return drefNode;
@@ -2968,41 +2959,38 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (isPoisonedName(name)) {
         throw BuildAbortException();
     }
-    diags_->of(SemanticDiag::UnresolvedReference).atOrigin(gct->load()->origin()).commit(name);
+    diags_->of(SemanticDiag::UnresolvedReference).atOrigin(gct->origin()).commit(name);
     throw BuildAbortException();
 }
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
     if (const auto &operand = gct->at(0);
-        operand->type() == GCT::LoadType::DATA &&
-        containsTypeVar(gct->loadAs<GCT::CastLoad>()->targetType()) &&
-        asTagged(gct->loadAs<GCT::CastLoad>()->targetType()) == nullptr &&
-        asCollectionTypeOrPrototype(gct->loadAs<GCT::CastLoad>()->targetType()) == nullptr) {
+        operand->type() == GCT::LoadType::DATA && containsTypeVar(gct->targetType()) &&
+        asTagged(gct->targetType()) == nullptr &&
+        asCollectionTypeOrPrototype(gct->targetType()) == nullptr) {
         // A literal converted to a type written with a type variable (`let zero: T = 0`,
         // `0 as T`). The GCT converts a literal to a concrete type itself; here the type is
         // only known now, so the same conversion is applied now.
-        const auto &castLoad   = gct->loadAs<GCT::CastLoad>();
-        const data_ptr_t &data = operand->loadAs<GCT::DataLoad>()->data();
-        Type *targetType       = boundType(castLoad->targetType());
+        const data_ptr_t &data = operand->data();
+        Type *targetType       = boundType(gct->targetType());
         const bool literal     = !isComposite(data->type()->code()) ||
                                  tt::as_shared<CompositeData>(data)->resolved();
         if (literal) {
             data_ptr_t converted;
-            if (castLoad->annotation() ||
-                targetType->castSafetyFrom(data->type()) == CastSafety::Safe) {
+            if (gct->annotation() || targetType->castSafetyFrom(data->type()) == CastSafety::Safe) {
                 converted = data->convertTo(targetType);
             }
             if (!converted) {
                 if (const std::string limits = literalRangeViolation(data, targetType);
                     !limits.empty()) {
                     diags_->of(SemanticDiag::LiteralOutOfRange)
-                        .atOrigin(gct->load()->origin())
+                        .atOrigin(gct->origin())
                         .commit(literalValueText(data), targetType->toString(), limits);
                     throw BuildAbortException();
                 }
                 diags_->of(SemanticDiag::LiteralStaticCastFailed)
-                    .atOrigin(gct->load()->origin())
+                    .atOrigin(gct->origin())
                     .commit(data->toString(), targetType->toString());
                 throw BuildAbortException();
             }
@@ -3017,8 +3005,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return node;
         }
     }
-    const auto &castLoad = gct->loadAs<GCT::CastLoad>();
-    Type *targetType     = boundType(castLoad->targetType());
+    Type *targetType = boundType(gct->targetType());
     if (targetType != nullptr && targetType->code() == TypeCode::Function) {
         // A function type written for a function: it says which function a name stands for
         // (the instance of a generic function, one of several overloads, a partial
@@ -3043,7 +3030,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
         Type *actual = valueTypeOf(nodeTypeOf(node));
         if (!targetType->assignableFrom(actual)) {
             diags_->of(SemanticDiag::DynamicCastForbidden)
-                .atOrigin(gct->load()->origin())
+                .atOrigin(gct->origin())
                 .commit(actual->toString(), targetType->toString());
             throw BuildAbortException();
         }
@@ -3057,20 +3044,19 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
         tagged != nullptr && gct->at(0)->type() == GCT::LoadType::DATA) {
         // A literal put into `T?` / `T!`: it is first the literal of the payload type, by the
         // rule for any annotated literal (`let x: float? = 1`); `null` stays `null`.
-        data_ptr_t data = gct->at(0)->loadAs<GCT::DataLoad>()->data();
+        data_ptr_t data    = gct->at(0)->data();
         const bool literal = !isComposite(data->type()->code()) ||
                              tt::as_shared<CompositeData>(data)->resolved();
         Type *payload      = tagged->payloadType();
         if (literal && data->type()->code() != TypeCode::Void && !payload->equals(data->type()) &&
-            (castLoad->annotation() ||
-             payload->castSafetyFrom(data->type()) == CastSafety::Safe)) {
+            (gct->annotation() || payload->castSafetyFrom(data->type()) == CastSafety::Safe)) {
             if (data_ptr_t converted = data->convertTo(payload)) {
                 valueNode = currGraph_->addStaticDataNode(converted);
                 registerNodeOrigin(context_, valueNode, gct->at(0), "gir.data");
             } else if (const std::string limits = literalRangeViolation(data, payload);
                        !limits.empty()) {
                 diags_->of(SemanticDiag::LiteralOutOfRange)
-                    .atOrigin(gct->load()->origin())
+                    .atOrigin(gct->origin())
                     .commit(literalValueText(data), payload->toString(), limits);
                 throw BuildAbortException();
             }
@@ -3100,7 +3086,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     if (safety != CastSafety::Safe &&
         !(safety == CastSafety::Unsafe && targetType->isOtherType())) {
         diags_->of(SemanticDiag::DynamicCastForbidden)
-            .atOrigin(gct->load()->origin())
+            .atOrigin(gct->origin())
             .commit(sourceType->toString(), targetType->toString());
         throw BuildAbortException();
     }
@@ -3170,9 +3156,8 @@ node_handle_t Builder::elementNodeOf(const std::string &name, const GCT::node_pt
     } else {
         // Not a value that was bound: the name of a function (`[inc, dec]`), looked up as
         // the name is anywhere else. An unknown name is reported at the literal.
-        const auto dref =
-            std::make_shared<GCT::Node>(std::make_shared<GCT::DRefLoad>(Reference(name)));
-        dref->load()->setOrigin(literal->load()->origin());
+        const GCT::node_ptr_t dref = tree_->makeDRef(name);
+        dref->setOrigin(literal->origin());
         node = visitDRefNode(dref);
     }
     return namedValueOf(node, name, literal);
@@ -3410,9 +3395,7 @@ void Builder::rejectNameWithoutValue(
                 sigs);
         }
     }
-    diags_->of(SemanticDiag::FunctionNameAsValue)
-        .atOrigin(origin->load()->origin())
-        .commit(name, what);
+    diags_->of(SemanticDiag::FunctionNameAsValue).atOrigin(origin->origin()).commit(name, what);
     throw BuildAbortException();
 }
 
@@ -3794,7 +3777,7 @@ node_handle_t Builder::partialApplicationOf(
             // the function value a writer of a captured variable; whether that is meant has
             // not been decided, so it is refused rather than guessed.
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .atOrigin(origin->load()->origin())
+                .atOrigin(origin->origin())
                 .commit(
                     "f<w> as a value",
                     "a partial application is implemented for functions without 'var' "
@@ -3811,18 +3794,16 @@ node_handle_t Builder::partialApplicationOf(
     for (const Argument &arg : bound) {
         boundNames.push_back(bindTemporary(valueOf(arg.node)));
     }
-    const auto make = [&](GCT::load_ptr_t load) {
-        load->setOrigin(origin->load()->origin());
-        return std::make_shared<GCT::Node>(std::move(load));
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(origin->origin());
+        return node;
     };
-    const auto nameNode = [&](const std::string &name) {
-        return make(std::make_shared<GCT::DRefLoad>(Reference(name)));
-    };
+    const auto nameNode = [&](const std::string &name) { return make(tree_->makeDRef(name)); };
     GCT::node_ptr_t callee;
     if (nodeIsKind(target, runtime::GCNodeKind::Dref)) {
         const auto known = boundWithCallee_.find(target);
         ASSERT(known != boundWithCallee_.end(), "A bound callee has its expression recorded.");
-        callee = known->second->clone();
+        callee = tree_->clone(known->second);
     } else {
         callee = nameNode(bindTemporary(target));
     }
@@ -3861,7 +3842,7 @@ node_handle_t Builder::partialApplicationOf(
     try {
         bodyStates_[graph.get()] = BodyState::Open;
         // Its body is the one call `f<bound..., rest...>(args...)`, built as any call is.
-        GCT::node_ptr_t with = make(std::make_shared<GCT::WithLoad>(withCount));
+        GCT::node_ptr_t with = make(tree_->makeWith(withCount));
         *with << callee;
         for (const std::string &name : boundNames) {
             *with << nameNode(name);
@@ -3872,8 +3853,7 @@ node_handle_t Builder::partialApplicationOf(
             nodeScope_->insert(name, graph->draft().node(port));
             *with << nameNode(name);
         }
-        GCT::node_ptr_t call =
-            make(std::make_shared<GCT::LinkLoad>(calleeType->normTypesCount()));
+        GCT::node_ptr_t call = make(tree_->makeLink(calleeType->normTypesCount()));
         *call << with;
         index = 0;
         for (draft_node_ref_t port : graph->draft().normPorts()) {
@@ -3914,18 +3894,17 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     if (target == nullptr || !target->isOtherType()) {
         return nullptr;
     }
-    const auto make = [&](GCT::load_ptr_t load) {
-        load->setOrigin(gct->load()->origin());
-        return std::make_shared<GCT::Node>(std::move(load));
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(gct->origin());
+        return node;
     };
     // The right operand is evaluated once: it was built already, and is named here.
     const std::string right = bindTemporary(valueOf(operands[1].node));
-    GCT::node_ptr_t value   = make(std::make_shared<GCT::LinkLoad>(2));
-    *value << make(std::make_shared<GCT::DRefLoad>(Reference(plain->second)))
-           << operands[0].expr->clone() << make(std::make_shared<GCT::DRefLoad>(Reference(right)));
-    GCT::node_ptr_t assign = make(std::make_shared<GCT::LinkLoad>(2));
-    *assign << make(std::make_shared<GCT::DRefLoad>(Reference("__assn__")))
-            << operands[0].expr->clone() << value;
+    GCT::node_ptr_t value   = make(tree_->makeLink(2));
+    *value << make(tree_->makeDRef(plain->second)) << tree_->clone(operands[0].expr)
+           << make(tree_->makeDRef(right));
+    GCT::node_ptr_t assign = make(tree_->makeLink(2));
+    *assign << make(tree_->makeDRef("__assn__")) << tree_->clone(operands[0].expr) << value;
     return visitLinkNode(assign);
 }
 
@@ -3942,7 +3921,7 @@ void Builder::rejectLiteralConversion(
     // program and the conversion is known not to fit, so it is refused here as a literal
     // given a type it cannot have is (`let b: i32 = 3000000000`). A computed argument stays
     // a fault when the program runs.
-    const data_ptr_t data = operands[0].expr->loadAs<GCT::DataLoad>()->data();
+    const data_ptr_t data = operands[0].expr->data();
     Type *target          = funcType->exitType();
     if (data == nullptr) {
         return;
@@ -3979,7 +3958,7 @@ void Builder::rejectLiteralConversion(
     }
     if (text) {
         diags_->of(SemanticDiag::LiteralStaticCastFailed)
-            .atOrigin(call->load()->origin())
+            .atOrigin(call->origin())
             .commit(data->toString(), target->toString());
     } else {
         std::string limits = literalRangeViolation(data, target);
@@ -3990,7 +3969,7 @@ void Builder::rejectLiteralConversion(
                                                          : "the value does not fit the type";
         }
         diags_->of(SemanticDiag::LiteralOutOfRange)
-            .atOrigin(call->load()->origin())
+            .atOrigin(call->origin())
             .commit(literalValueText(data), target->toString(), limits);
     }
     throw BuildAbortException();
@@ -4008,7 +3987,7 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     std::string name = "the function";
     if (const auto callee = boundWithCallee_.find(node);
         callee != boundWithCallee_.end() && callee->second->type() == GCT::LoadType::DREF) {
-        name = callee->second->loadAs<GCT::DRefLoad>()->ref().toString();
+        name = callee->second->name();
     }
     std::string why;
     if (genericDrefs_.contains(node)) {
@@ -4048,7 +4027,7 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     boundWithArgs_.erase(node);
     boundWithCallee_.erase(node);
     diags_->of(SemanticDiag::PartialApplicationRefused)
-        .atOrigin(origin->load()->origin())
+        .atOrigin(origin->origin())
         .commit(given, name, why);
     throw BuildAbortException();
 }
@@ -4132,11 +4111,9 @@ Builder::applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcV
     nodeScope_                     = nodeScope_->enter(tmpScopeName);
     nodeScope_->insert(tmpRefName, funcValueNode);
 
-    GCT::node_ptr_t linkNode = std::make_shared<GCT::Node>(
-        std::dynamic_pointer_cast<GCT::Load>(std::make_shared<GCT::LinkLoad>(1)));
-    *linkNode << decorator->clone();
-    *linkNode << std::make_shared<GCT::Node>(std::dynamic_pointer_cast<GCT::Load>(
-        std::make_shared<GCT::DRefLoad>(Reference(tmpRefName))));
+    GCT::node_ptr_t linkNode = tree_->makeLink(1);
+    *linkNode << tree_->clone(decorator);
+    *linkNode << tree_->makeDRef(tmpRefName);
 
     node_handle_t decoratedValue = visitLinkNode(linkNode);
     nodeScope_                   = nodeScope_->leave();
@@ -4173,7 +4150,7 @@ compile_graph_ptr_t Builder::buildDecoratedGraph(
 
     if (nodeTypeOf(decoratedValue)->code() != TypeCode::Function) {
         diags_->of(SemanticDiag::ArgumentsMismatch)
-            .atOrigin(annoNodes.front()->load()->origin())
+            .atOrigin(annoNodes.front()->origin())
             .commit("decorator must return function", nodeTypeOf(decoratedValue)->toString());
         throw BuildAbortException();
     }
@@ -4208,7 +4185,7 @@ node_handle_t Builder::lowerDecoratedGraphValue(
     if (!decoratedGraph->funcType()->hasExitType() ||
         decoratedGraph->funcType()->exitType()->code() != TypeCode::Function) {
         diags_->of(SemanticDiag::ArgumentsMismatch)
-            .atOrigin(origin->load()->origin())
+            .atOrigin(origin->origin())
             .commit(
                 "decorated graph should return function",
                 decoratedGraph->funcType()->toString());
@@ -4292,7 +4269,7 @@ std::string Builder::sourceTextOf(const GCT::node_ptr_t &expr) const {
         if (node == nullptr || depth > 32) {
             return;
         }
-        const auto *record = sourceContext->origin(node->load()->origin());
+        const auto *record = sourceContext->origin(node->origin());
         const auto *span   = record ? sourceContext->span(record->primarySpan) : nullptr;
         if (span != nullptr && span->valid() && span->endOffset > span->startOffset) {
             if (fileId == camel::source::kInvalidSourceFileId) {
@@ -4372,12 +4349,12 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
 
 node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call) {
     if (expr->type() == GCT::LoadType::DREF) {
-        const std::string name = expr->loadAs<GCT::DRefLoad>()->ref().toString();
+        const std::string name = expr->name();
         if (nodeAt(name).has_value()) {
             if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
                 if (recorder_) {
                     recorder_->valueReferenced(
-                        expr->load()->origin(),
+                        expr->origin(),
                         name,
                         declarationOf(name),
                         valueTypeOf(nodeTypeOf(node)));
@@ -4397,7 +4374,7 @@ std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr)
     if (!root || root->type() != GCT::LoadType::DREF) {
         return std::nullopt;
     }
-    const std::string name = root->loadAs<GCT::DRefLoad>()->ref().toString();
+    const std::string name = root->name();
     // A name without a node is a function or an operator.
     const auto node = nodeAt(name);
     if (!node.has_value() || isVariable(*node)) {
@@ -4409,7 +4386,7 @@ std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr)
 void Builder::requireMutableArgument(const Argument &arg, const std::string &callee) {
     if (auto name = immutableNameOf(arg.expr)) {
         diags_->of(SemanticDiag::ImmutablePassedToVarParam)
-            .atOrigin(arg.expr->load()->origin())
+            .atOrigin(arg.expr->origin())
             .commit(*name, callee);
         throw BuildAbortException();
     }
@@ -4478,9 +4455,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<oper_group_ptr_t>(drefTarget) &&
             std::get<oper_group_ptr_t>(drefTarget)->name() == "error") {
-            node_handle_t location = currGraph_->addStaticDataNode(
-                tt::as_shared<Data>(std::make_shared<StringData>(
-                    sourceLocationOf(gct->at(0)->load()->origin()))));
+            node_handle_t location = currGraph_->addStaticDataNode(tt::as_shared<Data>(
+                std::make_shared<StringData>(sourceLocationOf(gct->at(0)->origin()))));
             registerNodeOrigin(context_, location, gct, "gir.data");
             normInputs.push_back({location, gct});
             normInputTypes.push_back(Type::String());
@@ -4515,9 +4491,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             while (at && at->type() == GCT::LoadType::WITH && at->size() > 0) {
                 at = at->at(0);
             }
-            return at && at->type() == GCT::LoadType::DREF
-                       ? at->loadAs<GCT::DRefLoad>()->ref().toString()
-                       : std::string("the name");
+            return at && at->type() == GCT::LoadType::DREF ? at->name() : std::string("the name");
         };
         const auto settle = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
             for (size_t i = 0; i < inputs.size(); ++i) {
@@ -4670,7 +4644,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 normInputTypes,
                 gct);
             diags_->of(SemanticDiag::ArgumentsMismatch)
-                .atOrigin(gct->load()->origin())
+                .atOrigin(gct->origin())
                 .commit(
                     factoryType->toString(),
                     std::format(
@@ -4698,7 +4672,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             gct);
         if (!targetGraph->funcType()->hasExitType()) {
             diags_->of(SemanticDiag::CallingIncompleteFunction)
-                .atOrigin(gct->load()->origin())
+                .atOrigin(gct->origin())
                 .commit(targetGraph->name(), targetGraph->funcType()->toString());
             throw BuildAbortException();
         }
@@ -4740,7 +4714,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         throw BuildAbortException();
                     }
                     diags_->of(SemanticDiag::CallingIncompleteFunction)
-                        .atOrigin(gct->load()->origin())
+                        .atOrigin(gct->origin())
                         .commit(g->name(), funcType->toString());
                     throw BuildAbortException();
                 }
@@ -4795,7 +4769,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         }) +
                     "\n";
                 diags_->of(SemanticDiag::NoMatchingFunction)
-                    .atOrigin(gct->load()->origin())
+                    .atOrigin(gct->origin())
                     .commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
@@ -4821,9 +4795,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (nodeIsKind(input.node, runtime::GCNodeKind::Dref)) {
                         rejectNameWithoutValue(
                             input.node,
-                            input.expr->type() == GCT::LoadType::DREF
-                                ? input.expr->loadAs<GCT::DRefLoad>()->ref().toString()
-                                : std::string("the name"),
+                            input.expr->type() == GCT::LoadType::DREF ? input.expr->name()
+                                                                      : std::string("the name"),
                             input.expr);
                     }
                 }
@@ -4866,7 +4839,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 if (!reasons.empty()) {
                     diags_->of(SemanticDiag::ArgumentsRejected)
-                        .atOrigin(gct->load()->origin())
+                        .atOrigin(gct->origin())
                         .commit(ops->name(), argTypesStr, strutil::join(reasons, "; "));
                     throw BuildAbortException();
                 }
@@ -4907,7 +4880,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         }) +
                     "\n";
                 diags_->of(SemanticDiag::NoMatchingFunction)
-                    .atOrigin(gct->load()->origin())
+                    .atOrigin(gct->origin())
                     .commit(argTypesStr, overloadsStr);
                 throw BuildAbortException();
             }
@@ -4941,7 +4914,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     Type *type = valueTypeOf(nodeTypeOf(input.node));
                     if (callsArguments && takesVariable(type)) {
                         diags_->of(SemanticDiag::ArgumentsRejected)
-                            .atOrigin(input.expr->load()->origin())
+                            .atOrigin(input.expr->origin())
                             .commit(
                                 ops->name(),
                                 type->toString(),
@@ -5006,7 +4979,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
                 strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
             diags_->of(SemanticDiag::ArgumentsMismatch)
-                .atOrigin(gct->load()->origin())
+                .atOrigin(gct->origin())
                 .commit(funcType->toString(), argTypesStr);
             throw BuildAbortException();
         }
@@ -5032,8 +5005,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     if (recorder_) {
         recorder_->callResolved(
-            gct->load()->origin(),
-            gct->at(0)->load()->origin(),
+            gct->origin(),
+            gct->at(0)->origin(),
             targetGraph ? targetGraph->stableId() : std::string(),
             targetOperator ? targetOperator->uri() : std::string(),
             targetFuncType);
@@ -5067,7 +5040,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // would be lost without a trace.
             if (!named && targetOperator != nullptr) {
                 diags_->of(SemanticDiag::AssignmentTargetNotVariable)
-                    .atOrigin(arg.expr->load()->origin())
+                    .atOrigin(arg.expr->origin())
                     .commit();
                 throw BuildAbortException();
             }
@@ -5128,11 +5101,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             std::format("The call of '{}: {}'", targetName, targetFuncType->toString());
         if (hasVarArgument) {
             diags_->of(SemanticDiag::IgnoredSideEffect)
-                .atOrigin(gct->load()->origin())
+                .atOrigin(gct->origin())
                 .commit(subject, "it takes a var argument");
         } else if (!capturedWrites.empty()) {
             pendingIgnoredWrites_.push_back(
-                {{targetGraph.get()}, capturedWrites, gct->load()->origin(), subject, "it writes"});
+                {{targetGraph.get()}, capturedWrites, gct->origin(), subject, "it writes"});
         }
     }
     for (const Passed &arg : passed) {
@@ -5188,19 +5161,18 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     ASSERT(tgtNode != nullptr, "Access node target is null.");
     if (!nodeTypeOf(tgtNode)->isComposite()) {
         diags_->of(SemanticDiag::TypeNotIndexable)
-            .atOrigin(gct->load()->origin())
+            .atOrigin(gct->origin())
             .commit(nodeTypeOf(tgtNode)->toString());
         throw BuildAbortException();
     }
 
     const auto tgtType   = nodeTypeOf(tgtNode);
-    const auto &accsLoad = gct->loadAs<GCT::AccsLoad>();
     Type *elemType       = nullptr;
     if (asTagged(tgtType) != nullptr) {
         // A `T?` / `T!` has the layout of a tuple and is not one: its parts are reached by
         // `??`, `!!`, `?->` and `match` only (design principles 2.9).
         diags_->of(SemanticDiag::TaggedValueNotOpened)
-            .atOrigin(gct->load()->origin())
+            .atOrigin(gct->origin())
             .commit(tgtType->toString(), "a member cannot be read from it");
         throw BuildAbortException();
     }
@@ -5210,13 +5182,13 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
         // A tuple has a fixed length: an element past its end is a compile-time error (it was
         // read unchecked, which crashed the compiler in release builds).
-        if (accsLoad->index<size_t>() >= tupleType->size()) {
+        if (gct->accessIndex() >= tupleType->size()) {
             diags_->of(SemanticDiag::InvalidAccessIndex)
-                .atOrigin(gct->load()->origin())
-                .commit(std::to_string(accsLoad->index<size_t>()));
+                .atOrigin(gct->origin())
+                .commit(std::to_string(gct->accessIndex()));
             throw BuildAbortException();
         }
-        elemType = tupleType->typeAt(accsLoad->index<size_t>());
+        elemType = tupleType->typeAt(gct->accessIndex());
         break;
     }
     case TypeCode::Array: {
@@ -5224,17 +5196,17 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         // implements either: the array was read as if it were a tuple, without a bounds
         // check, and the program printed whatever was there. An element is read with `[N]`.
         diags_->of(SemanticDiag::TypeNotIndexable)
-            .atOrigin(gct->load()->origin())
+            .atOrigin(gct->origin())
             .commit(tgtType->toString());
         throw BuildAbortException();
     }
     case TypeCode::Struct: {
         const auto *strTy    = tt::as_ptr<camel::core::type::StructType>(tgtType);
-        const auto &optIndex = strTy->findField(accsLoad->index<std::string>());
+        const auto &optIndex = strTy->findField(gct->accessKey());
         if (!optIndex.has_value()) {
             diags_->of(SemanticDiag::InvalidAccessIndex)
-                .atOrigin(gct->load()->origin())
-                .commit(accsLoad->index<std::string>());
+                .atOrigin(gct->origin())
+                .commit(gct->accessKey());
             throw BuildAbortException();
         }
         elemType = strTy->typeAt(optIndex.value());
@@ -5245,11 +5217,10 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     }
 
     node_handle_t accsNode{};
-    if (std::holds_alternative<size_t>(accsLoad->index())) {
-        accsNode =
-            currGraph_->addAccsNode(elemType, static_cast<uint32_t>(accsLoad->index<size_t>()));
+    if (gct->accessByIndex()) {
+        accsNode = currGraph_->addAccsNode(elemType, static_cast<uint32_t>(gct->accessIndex()));
     } else {
-        accsNode = currGraph_->addAccsNode(elemType, accsLoad->index<std::string>());
+        accsNode = currGraph_->addAccsNode(elemType, gct->accessKey());
     }
     linkNodes(LinkType::Norm, tgtNode, accsNode);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs");
@@ -5291,13 +5262,12 @@ node_handle_t Builder::applyTagOperator(
     const char *op, const std::string &name, const GCT::node_ptr_t &origin) {
     // An ordinary call, built from a synthesized GCT so that capturing the operand from an
     // enclosing graph, overload resolution and origins are what they are for any call.
-    const auto make = [&](GCT::load_ptr_t load) {
-        load->setOrigin(origin->load()->origin());
-        return std::make_shared<GCT::Node>(std::move(load));
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(origin->origin());
+        return node;
     };
-    GCT::node_ptr_t call = make(std::make_shared<GCT::LinkLoad>(1));
-    *call << make(std::make_shared<GCT::DRefLoad>(Reference(op)))
-          << make(std::make_shared<GCT::DRefLoad>(Reference(name)));
+    GCT::node_ptr_t call = make(tree_->makeLink(1));
+    *call << make(tree_->makeDRef(op)) << make(tree_->makeDRef(name));
     return visitLinkNode(call);
 }
 
@@ -5377,9 +5347,8 @@ Type *Builder::declaredExitTypeHere() const {
 node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value) {
     Type *declared   = declaredExitTypeHere();
     Type *valueType  = valueTypeOf(nodeTypeOf(value));
-    const auto where = gct->load()->origin() != 0 ? gct->load()->origin()
-                                                  : gct->at(0)->load()->origin();
-    if (gct->loadAs<GCT::ExitLoad>()->exitType() == ExitType::Throw) {
+    const auto where = gct->origin() != 0 ? gct->origin() : gct->at(0)->origin();
+    if (gct->exitType() == ExitType::Throw) {
         // `throw e`: the exit `return` is, with the failed form of the declared `T!` as its
         // value (design principles 2.9). OPER __throw__ makes the failed value, the CAST
         // gives it the declared type; both are the same object.
@@ -5450,8 +5419,8 @@ compile_graph_ptr_t Builder::buildArmGraph(
 }
 
 node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
-    using Kind         = GCT::BrchLoad::Kind;
-    const Kind kind    = gct->loadAs<GCT::BrchLoad>()->kind();
+    using Kind         = GCT::BranchKind;
+    const Kind kind    = gct->branchKind();
     const bool onNull  = kind == Kind::NullThen;
     const char *symbol = onNull ? "??" : kind == Kind::ErrorThen ? "!!" : "?->";
 
@@ -5461,7 +5430,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     if (tagged == nullptr || tagged->isNullable() != onNull) {
         // DESIGN-QUESTION(nullable-error) Q6: `?->` is defined for errors only.
         diags_->of(SemanticDiag::TaggedOperandMismatch)
-            .atOrigin(gct->load()->origin())
+            .atOrigin(gct->origin())
             .commit(
                 symbol,
                 "its left side has type '" + subjectType->toString() + "', which is not a '" +
@@ -5497,14 +5466,13 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         } else if (chained) {
             coerceArmExit(arms[0], subjectType, gct);
             arms[1] = buildArmGraph(exec, [&] {
-                const auto dref = std::make_shared<GCT::Node>(
-                    std::make_shared<GCT::DRefLoad>(Reference(name)));
-                dref->load()->setOrigin(gct->load()->origin());
+                const GCT::node_ptr_t dref = tree_->makeDRef(name);
+                dref->setOrigin(gct->origin());
                 return visitDRefNode(dref);
             });
         } else {
             diags_->of(SemanticDiag::TaggedOperandMismatch)
-                .atOrigin(gct->load()->origin())
+                .atOrigin(gct->origin())
                 .commit(
                     symbol,
                     "its right side has type '" +
@@ -5534,10 +5502,9 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         resultType = TupleType::fallible(type);
         return castNodeTo(result, resultType, gct);
     });
-    arms[0] = buildArmGraph(exec, [&] {
-        const auto dref = std::make_shared<GCT::Node>(
-            std::make_shared<GCT::DRefLoad>(Reference(name)));
-        dref->load()->setOrigin(gct->load()->origin());
+    arms[0]          = buildArmGraph(exec, [&] {
+        const GCT::node_ptr_t dref = tree_->makeDRef(name);
+        dref->setOrigin(gct->origin());
         node_handle_t failed = visitDRefNode(dref);
         return resultType->equals(subjectType) ? failed : castNodeTo(failed, resultType, gct);
     });
@@ -5546,10 +5513,10 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitTaggedMatch(
     const GCT::node_ptr_t &gct, node_handle_t scrutinee, TupleType *type) {
-    using CaseType = GCT::CaseLoad::CaseType;
+    using CaseType       = GCT::CaseType;
     const auto malformed = [&](const std::string &why) {
         diags_->of(SemanticDiag::TaggedMatchCases)
-            .atOrigin(gct->load()->origin())
+            .atOrigin(gct->origin())
             .commit(type->toString(), why);
         throw BuildAbortException();
     };
@@ -5557,10 +5524,10 @@ node_handle_t Builder::visitTaggedMatch(
     GCT::node_ptr_t taggedCase, restCase;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
-        const auto caseType  = caseNode->loadAs<GCT::CaseLoad>()->caseType();
-        const bool isNull =
-            caseType == CaseType::Value && caseNode->at(0)->type() == GCT::LoadType::DATA &&
-            caseNode->at(0)->loadAs<GCT::DataLoad>()->data()->type()->code() == TypeCode::Void;
+        const auto caseType  = caseNode->caseType();
+        const bool isNull    = caseType == CaseType::Value &&
+                            caseNode->at(0)->type() == GCT::LoadType::DATA &&
+                            caseNode->at(0)->data()->type()->code() == TypeCode::Void;
         if (isNull || caseType == CaseType::Error) {
             if (isNull != type->isNullable()) {
                 malformed(
@@ -5596,17 +5563,14 @@ node_handle_t Builder::visitTaggedMatch(
     std::vector<compile_graph_ptr_t> arms(2);
     arms[0] = buildArmGraph(taggedExec, [&] {
         if (type->isFallible()) {
-            insertNode(
-                taggedCase->loadAs<GCT::CaseLoad>()->binding(),
-                applyTagOperator("__error_info__", name, taggedCase));
+            insertNode(taggedCase->binding(), applyTagOperator("__error_info__", name, taggedCase));
         }
         return visitBodyNode(taggedExec);
     });
     arms[1] = buildArmGraph(restExec, [&] {
-        const auto &restLoad = restCase->loadAs<GCT::CaseLoad>();
-        if (restLoad->caseType() == CaseType::Bind) {
+        if (restCase->caseType() == CaseType::Bind) {
             insertNode(
-                restLoad->binding(),
+                restCase->binding(),
                 applyTagOperator(
                     type->isNullable() ? "__null_value__" : "__error_value__",
                     name,
@@ -5619,7 +5583,7 @@ node_handle_t Builder::visitTaggedMatch(
 
 node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
-    if (gct->loadAs<GCT::BrchLoad>()->kind() != GCT::BrchLoad::Kind::Cond) {
+    if (gct->branchKind() != GCT::BranchKind::Cond) {
         node_handle_t node = visitTaggedBrchNode(gct);
         LEAVE("BRCH");
         return node;
@@ -5634,16 +5598,16 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         node = visitTaggedMatch(gct, condNode, tagged);
     } else {
         for (size_t i = 1; i < gct->size(); ++i) {
-            const auto &caseLoad = gct->at(i)->loadAs<GCT::CaseLoad>();
-            if (caseLoad->caseType() == GCT::CaseLoad::CaseType::Bind ||
-                caseLoad->caseType() == GCT::CaseLoad::CaseType::Error) {
+            const GCT::node_ptr_t &boundCase = gct->at(i);
+            if (boundCase->caseType() == GCT::CaseType::Bind ||
+                boundCase->caseType() == GCT::CaseType::Error) {
                 // The two patterns that bind are defined over `T?` / `T!` only. What an
                 // identifier pattern means over any other type has not been decided.
-                const bool isError = caseLoad->caseType() == GCT::CaseLoad::CaseType::Error;
+                const bool isError = boundCase->caseType() == GCT::CaseType::Error;
                 diags_->of(SemanticDiag::ConstructNotSupported)
-                    .atOrigin(gct->at(i)->load()->origin())
+                    .atOrigin(boundCase->origin())
                     .commit(
-                        (isError ? "error " : "") + caseLoad->binding(),
+                        (isError ? "error " : "") + boundCase->binding(),
                         std::string(isError ? "the pattern 'error e'" : "an identifier pattern") +
                             " is implemented only for a value of type 'T?' or 'T!'; over '" +
                             nodeTypeOf(condNode)->toString() +
@@ -5659,11 +5623,11 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 }
 
 void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
-    using CaseType = GCT::CaseLoad::CaseType;
+    using CaseType    = GCT::CaseType;
     bool hasValueCase = false, hasTrue = false, hasFalse = false;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
-        const auto caseType  = caseNode->loadAs<GCT::CaseLoad>()->caseType();
+        const auto caseType  = caseNode->caseType();
         if (caseType == CaseType::Else) {
             return;
         }
@@ -5672,8 +5636,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
         }
         hasValueCase = true;
         if (caseNode->at(0)->type() == GCT::LoadType::DATA) {
-            const auto literal = std::dynamic_pointer_cast<BoolData>(
-                caseNode->at(0)->loadAs<GCT::DataLoad>()->data());
+            const auto literal = std::dynamic_pointer_cast<BoolData>(caseNode->at(0)->data());
             if (literal) {
                 (literal->data() ? hasTrue : hasFalse) = true;
             }
@@ -5689,9 +5652,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
     // Design principles 2.10: a `match` must have a default case, and the compiler adds no
     // arm the program does not show. A `match` without `case _` is therefore refused here
     // (the fixed patterns over `T?` / `T!` never reach this function).
-    diags_->of(SemanticDiag::MatchWithoutDefault)
-        .atOrigin(gct->load()->origin())
-        .commit(type->toString());
+    diags_->of(SemanticDiag::MatchWithoutDefault).atOrigin(gct->origin()).commit(type->toString());
     throw BuildAbortException();
 }
 
@@ -5785,7 +5746,7 @@ node_handle_t Builder::buildBranch(
             }
             if (unified == nullptr) {
                 diags_->of(SemanticDiag::BranchReturnTypeMismatch)
-                    .atOrigin(gct->load()->origin())
+                    .atOrigin(gct->origin())
                     .commit(
                         currGraph_->name() + ": " + currGraph_->funcType()->toString(),
                         joinType->toString(),
@@ -5805,23 +5766,22 @@ node_handle_t Builder::buildBranch(
             // Arms the caller built (the tagged forms): a boolean condition and two arms.
             subGraph = (*arms)[i - 1];
         } else {
-            const auto &caseNode         = gct->atAs<GCT::CaseLoad>(i);
-            const auto &caseLoad         = caseNode->loadAs<GCT::CaseLoad>();
+            const auto &caseNode         = gct->at(i);
             GCT::node_ptr_t caseExecNode = nullptr;
 
-            switch (caseLoad->caseType()) {
-            case GCT::CaseLoad::CaseType::True:
+            switch (caseNode->caseType()) {
+            case GCT::CaseType::True:
                 ASSERT(caseNode->size() == 1, "True case should have only one child.");
-                caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                caseExecNode = caseNode->at(0);
                 ifArmSeen    = true;
                 break;
-            case GCT::CaseLoad::CaseType::Else:
+            case GCT::CaseType::Else:
                 ASSERT(i == gct->size() - 1, "Else case should be the last case.");
                 ASSERT(caseNode->size() == 1, "Else case should have only one child.");
-                caseExecNode = caseNode->atAs<GCT::ExecLoad>(0);
+                caseExecNode = caseNode->at(0);
                 absentElse   = ifArmSeen && caseExecNode->size() == 0;
                 break;
-            case GCT::CaseLoad::CaseType::Value: {
+            case GCT::CaseType::Value: {
                 ASSERT(caseNode->size() == 2, "Value case should have two children.");
                 any res = visit(caseNode->at(0));
                 ASSERT(
@@ -5829,7 +5789,7 @@ node_handle_t Builder::buildBranch(
                     "Unexpected result type from visiting the case node.");
                 node_handle_t valueNode = any_cast<node_handle_t>(res);
                 linkNodes(LinkType::With, valueNode, brchNode);
-                caseExecNode = caseNode->atAs<GCT::ExecLoad>(1);
+                caseExecNode = caseNode->at(1);
                 break;
             }
             default:
@@ -5961,7 +5921,7 @@ node_handle_t Builder::buildBranch(
     }
     if (!capturedWrites.empty() && !waited_ && !synced_) {
         pendingIgnoredWrites_.push_back(
-            {armGraphs, capturedWrites, gct->load()->origin(), "The branch", "an arm writes"});
+            {armGraphs, capturedWrites, gct->origin(), "The branch", "an arm writes"});
     }
     for (const CapturedUse &use : captured) {
         if (use.written) {
@@ -6002,9 +5962,8 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         const auto &returned = gct->at(0);
         rejectNameWithoutValue(
             resNode,
-            returned->type() == GCT::LoadType::DREF
-                ? returned->loadAs<GCT::DRefLoad>()->ref().toString()
-                : std::string("the returned name"),
+            returned->type() == GCT::LoadType::DREF ? returned->name()
+                                                    : std::string("the returned name"),
             gct);
     }
     // A function that declares T? or T! returns its plain value boxed (see adaptExitValue).
@@ -6028,7 +5987,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
-    checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->load()->origin(), gct->at(0));
+    checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
     setGraphReturnFromResult(
         currGraph_,
         nodeIdOf(outputAnchor),
@@ -6153,7 +6112,7 @@ void Builder::reportConversionGaps(
         return;
     }
     diags_->of(SemanticDiag::ArgumentNeedsConversion)
-        .atOrigin(call->load()->origin())
+        .atOrigin(call->origin())
         .commit(
             (target->first.empty() ? "" : target->first + ": ") + target->second->toString(),
             what,
@@ -6212,16 +6171,15 @@ void Builder::checkDeclaredReturn(
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
-    const auto &execLoad      = gct->loadAs<GCT::ExecLoad>();
     bool old                  = synced_;
     node_handle_t oldFuncNode = lastSyncedNode_;
     // A scope the lowering introduced (the operands of a composite literal, the names of a
     // declaration) is not a block: in a sync block it continues the chain, in written order,
     // like the arguments of a call statement. So does a sync block written inside a sync
     // block: its expressions are expressions of the enclosing block, in the same order.
-    const bool operands = execLoad->operands() || (synced_ && execLoad->synced());
+    const bool operands = gct->operands() || (synced_ && gct->synced());
     if (!operands) {
-        synced_         = execLoad->synced();
+        synced_         = gct->synced();
         lastSyncedNode_ = {};
     }
     registerGenericTemplates(gct);
@@ -6275,7 +6233,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
                 res = any_cast<node_handle_t>(result);
             } else if (
                 result.type() == typeid(graph_ptr_t) && child->type() == GCT::LoadType::FUNC &&
-                child->loadAs<GCT::FuncLoad>()->name().empty()) {
+                child->name().empty()) {
                 // A function literal is a value like any other expression, e.g. a branch arm.
                 res = valueNodeOf(result);
             }
@@ -6294,7 +6252,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
         // of a branch arm (`if c then inc else dec`), of a block, of a function body. Left a
         // name, it gave the block the type void.
         const auto &last = gct->at(gct->size() - 1);
-        res = namedValueOf(res, last->loadAs<GCT::DRefLoad>()->ref().toString(), last);
+        res              = namedValueOf(res, last->name(), last);
     }
     if (!operands) {
         // A sync block that is not part of an enclosing chain: whoever takes its value takes
@@ -6319,9 +6277,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
 
 void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     ENTER("EXPT");
-    const auto &exptLoad = gct->loadAs<GCT::ExptLoad>();
-    const auto &exports  = exptLoad->exports();
-    for (const Reference &ref : exports) {
+    for (size_t i = 0; i < gct->exportCount(); ++i) {
+        const Reference ref(gct->exportName(i));
         auto optType = typeDecls_.find(ref);
         if (optType != typeDecls_.end()) {
             module_->exportType(ref, optType->second);
@@ -6334,7 +6291,7 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
             // both has no exported form yet. Exporting the decorated one alone dropped the
             // others without a word.
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .atOrigin(gct->load()->origin())
+                .atOrigin(gct->origin())
                 .commit(
                     ref.toString(),
                     "a decorated function that has overloads cannot be exported yet");
@@ -6378,7 +6335,7 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         diags_->of(SemanticDiag::UnresolvedReference)
-            .atOrigin(gct->load()->origin())
+            .atOrigin(gct->origin())
             .commit(ref.toString());
         throw BuildAbortException();
     }
