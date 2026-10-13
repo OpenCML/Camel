@@ -2,7 +2,9 @@
 #
 # Jobs
 #   build-test   Linux x64 and Windows x64 are required; macOS is experimental (never validated, does
-#                not fail the run).
+#                not fail the run). linux-x64-nojit is the Linux build with ENABLE_FASTVM_JIT off: the
+#                build every processor but x86-64 gets (std::jit runs the bytecode interpreter), which
+#                no x86-64 build compiles otherwise.
 #   sanitizers   Manual only (Run workflow -> sanitizers): ASan + UBSan Debug build on Linux, smoke plan.
 #
 # Toolchain follows docs/setup.en.md (Clang >= 19, CMake, Ninja, Conan >= 2.10, Node 20).
@@ -54,6 +56,11 @@ jobs:
             slug: linux-x64
             arch: x86-64-v2
             experimental: false
+          - runner: ubuntu-24.04
+            slug: linux-x64-nojit
+            arch: x86-64-v2
+            experimental: false
+            nojit: true
           # Pinned: Conan maps this Clang to Visual Studio 17, which newer images no longer carry.
           - runner: windows-2022
             slug: win-x64
@@ -180,8 +187,23 @@ jobs:
       - name: Conan install (Release, Debug, RelWithDebInfo)
         run: node scripts/install.js
 
+      # scripts/cmake-opts.js reads the build options from .camel-opts.json.
+      - name: Switch the JIT off (no-JIT build)
+        if: matrix.cfg.nojit
+        run: echo '{ "ENABLE_FASTVM_JIT": "OFF" }' > .camel-opts.json
+
       - name: Build (Release)
         run: npm run build
+
+      # The precondition of the tests that need compiled code must say "no JIT" here: otherwise
+      # this job would test the ordinary build a second time.
+      - name: Check that the build has no JIT (no-JIT build)
+        if: matrix.cfg.nojit
+        run: |
+          if node test/tools/have-native-jit.mjs; then
+            echo "::error::the no-JIT build reports a JIT"
+            exit 1
+          fi
 
       - name: Test (smoke + feat)
         run: node scripts/test.js

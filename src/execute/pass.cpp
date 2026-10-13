@@ -75,6 +75,19 @@ using PassScopePtr = scope_ptr_t<std::string, PassFactory, std::string>;
 namespace {
 
 FastVMConfig makeDefaultFastVmJitConfig() {
+#if !ENABLE_FASTVM_JIT
+    // The JIT has a code generator for x86-64 only; in a build without it std::jit is the
+    // bytecode interpreter of std::fvm, with the same results. Said once per process, in the log
+    // (-v) and not as a warning: the same command line must run on every platform, also under
+    // -Werror.
+    static std::once_flag said;
+    std::call_once(said, [] {
+        CAMEL_LOG_WARN_S(
+            "JIT",
+            "std::jit: this build has no native code generator (x86-64 only); the program runs "
+            "on the bytecode interpreter, as under std::fvm.");
+    });
+#endif
     FastVMConfig config{};
     config.jitMode           = FastVMConfig::JitMode::OnDemand;
     config.jitHotThreshold   = 1;

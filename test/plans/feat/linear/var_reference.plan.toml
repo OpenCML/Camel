@@ -2894,6 +2894,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_param_jit"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "std::inline std::jit compiles a function that passes its var parameter on (200000-deep tail recursion); a function that reads the variable stays in the interpreter because :var/get is a generic operator (current limit, update when it is lowered)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_jit.cml"
