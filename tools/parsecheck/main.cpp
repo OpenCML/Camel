@@ -36,6 +36,7 @@
 #include "modes.h"
 
 #include "../format/fmt.h"
+#include "camel/init.h"
 #include "camel/parse/parse.h"
 
 #include <fstream>
@@ -50,7 +51,18 @@ std::string readFile(const std::string &path) {
     std::ifstream in(path, std::ios::binary);
     std::stringstream buffer;
     buffer << in.rdbuf();
-    return buffer.str();
+    // Git may check the corpus out with CRLF on Windows. Snapshots include byte offsets
+    // and string contents, so use the committed LF representation on every platform.
+    const std::string text = buffer.str();
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\r' && i + 1 < text.size() && text[i + 1] == '\n') {
+            continue;
+        }
+        normalized += text[i];
+    }
+    return normalized;
 }
 
 std::vector<std::string> readList(const std::string &path) {
@@ -108,6 +120,7 @@ int usage() {
 } // namespace
 
 int main(int argc, char **argv) {
+    camel::ScopedRuntime camelRuntime;
     std::vector<std::string> args(argv + 1, argv + argc);
     if (args.empty()) {
         return usage();
