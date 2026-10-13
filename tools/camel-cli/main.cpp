@@ -35,6 +35,7 @@
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
+#include "camel/utils/phase_timer.h"
 #include "check.h"
 #include "config.h"
 #include "passes/trans/dot/graphviz.h"
@@ -51,6 +52,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::context;
@@ -148,7 +150,13 @@ std::optional<bool> entryDeclaresReturnType(const AST::node_ptr_t &node, int dep
 
 } // namespace
 
-int main(int argc, char *argv[]) {
+namespace phase = camel::utils::phase;
+
+/// The whole of a `camel` command. main() is only the frame around it that the phase report
+/// (camel/utils/phase_timer.h) needs: the report is written when everything this function
+/// owns has been destroyed, so that the teardown of a run is a phase like the others.
+int runCommand(int argc, char *argv[]) {
+    std::optional<phase::Scope> startupPhase(std::in_place, "startup");
     camel::ScopedRuntime camelRuntime;
     if (!parseArgs(argc, argv))
         return exitCode;
@@ -198,9 +206,12 @@ int main(int argc, char *argv[]) {
     }
 
     // Initialize memory management subsystems before any run-mode graph work.
-    (void)mm::autoSpace();
-    (void)mm::metaSpace();
-    (void)mm::permSpace();
+    {
+        phase::Scope phaseScope("mm_init");
+        (void)mm::autoSpace();
+        (void)mm::metaSpace();
+        (void)mm::permSpace();
+    }
 
     if (selectedCommand == Command::Run && Run::timeitEnabled) {
         return runTimeitMode(os, useJsonFormat);
@@ -235,6 +246,7 @@ int main(int argc, char *argv[]) {
             searchPaths);
     }
 
+    std::optional<phase::Scope> contextPhase(std::in_place, "context");
     context_ptr_t ctx = Context::create(
         EntryConfig{
             .entryDir          = entryDir,
@@ -256,6 +268,14 @@ int main(int argc, char *argv[]) {
     parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
     auto mainModule     = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
     ctx->setMainModule(mainModule);
+    contextPhase.reset();
+    startupPhase.reset();
+    // Declared after everything a run owns (the context, the parser, the entry module), so it
+    // is destroyed before them, on whichever path the function is left: the phase it opens
+    // then covers their destruction, and main() closes it.
+    struct TeardownPhase {
+        ~TeardownPhase() { phase::open("teardown"); }
+    } teardownPhase;
 
     // Printed after the compile diagnostics in the text formats meant for a person: how many
     // there were, and whether the compiler stopped at the limit.
@@ -286,7 +306,10 @@ int main(int argc, char *argv[]) {
     };
 
     try {
-        if (!parser->parse(*input)) {
+        std::optional<phase::Scope> parsePhase(std::in_place, "parse", "main");
+        const bool parsedOk = parser->parse(*input);
+        parsePhase.reset();
+        if (!parsedOk) {
             // Syntax errors: nothing after the parser can run, and compiling the module would
             // only read and parse the file a second time.
             ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
@@ -330,6 +353,7 @@ int main(int argc, char *argv[]) {
                 mainModule->compile(CompileStage::Done);
             }
         } else {
+            phase::Scope phaseScope("compile", "main");
             mainModule->compile(CompileStage::Done);
         }
 
@@ -419,6 +443,13 @@ int main(int argc, char *argv[]) {
                     requireKnownPasses(Run::resolvedPassList, ctx);
                     requireKnownPasses(Run::fallbackPasses, ctx);
                     auto *graph = ctx->runtimeRootGraph();
+                    if (phase::enabled()) {
+                        // The size of the program as the passes receive it.
+                        const GraphStats stats = collectGraphStats(ctx, graph);
+                        phase::count("graph.graphs", stats.graphs);
+                        phase::count("graph.nodes", stats.nodes);
+                        phase::count("graph.edges", stats.edges);
+                    }
                     // The values given for the parameters of `main` become constants of the
                     // entry graph before the first pass sees it.
                     graph = camel::execute::bindEntryArgumentSpecs(ctx, graph, Run::entryArgs);
@@ -593,4 +624,19 @@ int main(int argc, char *argv[]) {
     }
 
     return 0;
+}
+
+int main(int argc, char *argv[]) {
+    phase::enableFromEnvironment();
+    // The option is looked for here, ahead of the argument parser (which checks it and puts
+    // it in the help), so that the report covers the start of the run as well.
+    for (int i = 1; i + 1 < argc; ++i) {
+        if (std::string_view(argv[i]) == "--time-phases") {
+            phase::enable(argv[i + 1]);
+        }
+    }
+    const int code = runCommand(argc, argv);
+    phase::closeOpen();
+    phase::report();
+    return code;
 }

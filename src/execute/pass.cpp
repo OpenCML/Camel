@@ -48,6 +48,7 @@
 #include "passes/trans/tns/topo_node_seq.h"
 
 #include "camel/utils/log.h"
+#include "camel/utils/phase_timer.h"
 
 #include <algorithm>
 #include <atomic>
@@ -808,6 +809,7 @@ PassApplyResult applyPassesDetailed(
         if (factory) {
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph); });
+            camel::utils::phase::Scope phaseScope("pass", p);
             auto pass = factory(ctx);
             // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
             // pass (the program executes), "pass:<name>" for rewrite and translation passes.

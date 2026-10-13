@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <tuple>
 #include <unordered_set>
 
 #include "camel/core/context/context.h"
@@ -33,6 +34,7 @@
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
+#include "camel/utils/phase_timer.h"
 #include "camel/utils/str.h"
 #include "core/module/userdef_internal.h"
 
@@ -137,6 +139,7 @@ std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
     auto factoryIt = builtinModuleFactories.find(name);
     if (factoryIt != builtinModuleFactories.end()) {
         EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Loading built-in module: <{}>", name));
+        camel::utils::phase::Scope phaseScope("builtin_module", name);
         module_ptr_t module = factoryIt->second(shared_from_this());
         module->load(); // instantly load the builtin module
         builtinModules_[name] = module;
@@ -376,6 +379,7 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
             if (!module->loaded()) {
                 loadingModules_.push_back(name);
                 bool loadedOk = false;
+                camel::utils::phase::Scope phaseScope("import", name);
                 try {
                     loadedOk = module->load();
                 } catch (...) {
@@ -637,10 +641,16 @@ bool Context::moduleFileExists(const std::string &moduleName) {
 }
 
 module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
-    auto [path, isCmo] = getModulePathAndKind(moduleName);
+    std::string path;
+    bool isCmo = false;
+    {
+        camel::utils::phase::Scope phaseScope("resolve", moduleName);
+        std::tie(path, isCmo) = getModulePathAndKind(moduleName);
+    }
     if (path.empty())
         return nullptr;
     if (isCmo) {
+        camel::utils::phase::Scope phaseScope("cmo_load", moduleName);
         std::string err;
         module_ptr_t mod = loadCmoModule(moduleName, path, shared_from_this(), &err);
         if (!mod && !err.empty())
@@ -659,6 +669,7 @@ camel::runtime::GCGraph *Context::materializeRuntimeRoot() {
     runtimeGraphMgr_->clear();
     ASSERT(mainModule_ != nullptr, "Main module is not set in context.");
     auto rootModule = tt::as_shared<UserDefinedModule>(mainModule_);
+    camel::utils::phase::Scope phaseScope("encode");
     camel::runtime::GCGraph *runtimeRoot =
         camel::core::module::detail::UserDefinedModuleAccess::encodeRuntimeGraph(*rootModule);
     runtimeGraphMgr_->adoptRoot(runtimeRoot);

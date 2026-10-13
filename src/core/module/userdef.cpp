@@ -32,7 +32,9 @@
 #include "camel/core/error/diagnostics.h"
 
 #include "camel/utils/log.h"
+#include "camel/utils/phase_timer.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 
@@ -43,6 +45,19 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::error;
 using namespace camel::parse;
+
+namespace {
+
+/// Number of nodes of a tree (AST or GCT), for the phase report.
+template <typename NodePtr> uint64_t countNodes(const NodePtr &root) {
+    uint64_t count = 0;
+    if (root) {
+        root->traverse([&](const auto &) { ++count; });
+    }
+    return count;
+}
+
+} // namespace
 
 UserDefinedModule::UserDefinedModule(
     const std::string &name, const std::string &path, context_ptr_t ctx, parser_ptr_t parser)
@@ -93,6 +108,7 @@ bool UserDefinedModule::compile(CompileStage till) {
 
     if (stage_ == CompileStage::None && till > CompileStage::None) {
         if (!parser_->ast()) {
+            camel::utils::phase::Scope phaseScope("parse", name_);
             std::ifstream ifs(path_);
             if (!ifs.good()) {
                 throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
@@ -115,9 +131,17 @@ bool UserDefinedModule::compile(CompileStage till) {
 
     if (stage_ < CompileStage::AST && till >= CompileStage::AST) {
         if (!gct_) {
-            auto ast        = parser_->ast();
-            auto gctBuilder = GCT::Builder(context_, shared_from_this());
-            gct_            = gctBuilder.build(ast, diagnostics_);
+            auto ast = parser_->ast();
+            {
+                camel::utils::phase::Scope phaseScope("gct", name_);
+                auto gctBuilder = GCT::Builder(context_, shared_from_this());
+                gct_            = gctBuilder.build(ast, diagnostics_);
+            }
+            if (camel::utils::phase::enabled()) {
+                camel::utils::phase::count("modules", 1);
+                camel::utils::phase::count("ast.nodes", countNodes(ast));
+                camel::utils::phase::count("gct.nodes", countNodes(gct_));
+            }
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GCT", gct_.get()); });
             if (diagnostics_->hasErrors()) {
                 CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GCT", name_);
@@ -133,6 +157,7 @@ bool UserDefinedModule::compile(CompileStage till) {
 
     if (stage_ < CompileStage::GIR && till >= CompileStage::GIR) {
         if (!compileGraph_) {
+            camel::utils::phase::Scope phaseScope("gir", name_);
             auto girBuilder = camel::compile::gir::Builder(context_, shared_from_this());
             compileGraph_   = girBuilder.build(gct_, diagnostics_);
             if (diagnostics_->hasErrors()) {

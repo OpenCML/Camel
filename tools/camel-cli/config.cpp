@@ -271,6 +271,7 @@ string timeitPass               = "";
 unsigned int timeitIterations   = 0;
 bool timeitEnabled              = false;
 string dumpAfterEachPassDir     = "";
+string timePhasesPath           = "";
 vector<string> entryArgs        = {};
 
 bool profile      = false;
@@ -586,6 +587,9 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--dump-after-each-pass") & value("dir", dumpAfterEachPassDir)) %
              "write the graph (readable DOT + stats JSON) before the first pass and after each "
              "pass that returns a graph",
+         (option("--time-phases") & value("file", timePhasesPath)) %
+             "write the time (and, under the counting allocator shim, the allocations) of each "
+             "phase of the run as JSON to the file ('-': stderr); also CAMEL_TIME_PHASES",
          repeatable(option("--arg") & value("name=value", entryArgs)) %
              "value of a parameter of main (repeatable): a literal for a scalar, a .npy file for "
              "a tensor, a directory of .npy files for a struct of tensors",
