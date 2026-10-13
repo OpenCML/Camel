@@ -343,6 +343,11 @@ cab3302faced01db ok test/cases/compile/generics/type_import.cml
 601fed65ec23c1f8 ok test/cases/compile/generics/type_lib.cml
 ba61c070244c5f96 ok test/cases/compile/generics/unused_body.cml
 3a423094a1d9c289 ok test/cases/compile/gir/sync_ctrl_dedup.cml
+d685c612531f9d8b ok test/cases/compile/literals/convert_fits.cml
+cccd95ec8b3cccd3 ok test/cases/compile/literals/convert_float_to_int.cml
+3cf27dd300ecdf3a ok test/cases/compile/literals/convert_int_to_i32.cml
+d2e5ff1f70fd2565 ok test/cases/compile/literals/convert_text_to_float.cml
+dd122058fbbdf90e ok test/cases/compile/literals/convert_text_to_int.cml
 f2090dca344cbe23 ok test/cases/compile/literals/f32_too_large.cml
 e6044490abc2a5d4 ok test/cases/compile/literals/float_too_large.cml
 42bab9b1f2857216 ok test/cases/compile/literals/i32_nullable_too_large.cml
@@ -453,6 +458,7 @@ e5afa424ceb062fa ok test/cases/compile/surface/if_without_else_ok.cml
 65087e7ab5ed8658 ok test/cases/compile/surface/name_as_value_operator.cml
 39e0930be0ece06e ok test/cases/compile/surface/name_as_value_overloads.cml
 5481fe37dcd27a4f ok test/cases/compile/surface/name_as_value_user_overloads.cml
+238a48d64d17d4f9 ok test/cases/compile/surface/reserved_function_name.cml
 1b9660f135ace5e0 ok test/cases/compile/surface/self_import.cml
 34ddb217f8f6443f ok test/cases/compile/tagged/combined.cml
 754e8ac88b1c9ae7 ok test/cases/compile/tagged/err_argument.cml
@@ -513,7 +519,9 @@ ac58c56706f35039 ok test/cases/consistency/comprehension/err_condition_type.cml
 bfe952aab58fc622 ok test/cases/consistency/comprehension/err_not_an_array.cml
 b5415a5a0dff0ad2 ok test/cases/consistency/comprehension/graph_comprehension.cml
 c9b03fe8ec99d6da ok test/cases/consistency/comprehension/graph_written_out.cml
+f79e8ead285be9fc ok test/cases/consistency/comprehension/shadowed.cml
 4452f8cec07c8705 ok test/cases/consistency/comprehension/values.cml
+75883233dd95e8ca ok test/cases/consistency/entering/arms_folded.cml
 6fa20605b76648e2 ok test/cases/consistency/entering/empty_array.cml
 62e4bf813ec58f31 ok test/cases/consistency/entering/err_arg_reverse.cml
 b535b9ada4055d80 ok test/cases/consistency/entering/err_arms_unrelated.cml
@@ -577,10 +585,12 @@ b89ebde2afe3f501 ok test/cases/consistency/faults/zip_many_lengths.cml
 ca93a059d62cf78c ok test/cases/consistency/generic_values/err_declared_type.cml
 5d04bf402fc4eed5 ok test/cases/consistency/generic_values/err_each_waits.cml
 9a490e563442502e ok test/cases/consistency/generic_values/err_no_context.cml
+33da266a488ee32b ok test/cases/consistency/generic_values/err_no_overload_fits.cml
 3a419085fd17b88d ok test/cases/consistency/generic_values/err_null_only.cml
 a65d001220bdbc22 ok test/cases/consistency/generic_values/err_operator_no_hint.cml
 e84624c0e7d8e7d0 ok test/cases/consistency/generic_values/err_wrong_result.cml
 b7701241b998d2db ok test/cases/consistency/generic_values/graph.cml
+2bc4080520074f85 ok test/cases/consistency/generic_values/overloads_to_operators.cml
 5ac9a9f4747b5bff ok test/cases/consistency/generic_values/values.cml
 47669052609b68fe ok test/cases/consistency/if_without_else/as_statement_graph.cml
 c1c4cd916184e41d ok test/cases/consistency/if_without_else/as_value_argument.cml
@@ -1062,6 +1072,7 @@ d566fbd173dc45f9 ok test/cases/opt/inline/specialized_arg_keeps_order.cml
 7efe4f52e585292b ok test/cases/opt/progen/findings/const_graph_capacity.cml
 24f5ec71ade68920 ok test/cases/opt/progen/findings/fold_inline_env_value.cml
 ec5093050923e6a1 ok test/cases/opt/progen/findings/fold_inline_match_arm_value.cml
+457a79d0ffd9ada3 ok test/cases/opt/progen/findings/fold_joined_arm_slot.cml
 5436b784d0486906 ok test/cases/opt/progen/findings/inline_branch_value_null.cml
 874bf69d10ee334b ok test/cases/opt/progen/findings/inline_crash_capturing_lambda.cml
 85a394a8711a65b5 ok test/cases/opt/progen/findings/inline_crash_function_argument.cml
@@ -1102,6 +1113,7 @@ bf5077f961a64e7b ok test/cases/opt/progen/findings/string_ordering.cml
 21615aedc56c2a48 ok test/cases/opt/progen/findings/tuple_comparison_parse.cml
 a8e29c466a2c0f6a ok test/cases/opt/progen/judgement/bare_arm_var_call_warning.cml
 cfc6f022c68bcd7c ok test/cases/opt/progen/judgement/macro_builtin_refused.cml
+c03fc5f818bb04d6 ok test/cases/opt/progen/judgement/short_circuit_fault.cml
 2fb2fc40fc35b91b ok test/cases/opt/progen/judgement/string_of_float_format.cml
 220a37913a7e9693 ok test/cases/para/core/arm_reads_outer_value.cml
 3b0e0563cd10ad3b ok test/cases/para/core/asian_option_mc.cml
@@ -1140,6 +1152,18 @@ f7282e239e9b6bc9 ok test/cases/perf/gc/fib.cml
 3bf44e76d6935b32 ok test/cases/perf/gc/map_chain.cml
 a3872dff9491d245 ok test/cases/smoke/core/fib10_pipeline.cml
 4f768199400dac2f ok test/cases/smoke/core/prl_scheduler.cml
+c75f6a4154956a5e ok test/cases/tools/debugger/fixtures/branch.cml
+d29e1d868c4ce8cc ok test/cases/tools/debugger/fixtures/broken.cml
+171d1cbe28f121eb ok test/cases/tools/debugger/fixtures/calls.cml
+7e1a9682585b8b8a ok test/cases/tools/debugger/fixtures/closures.cml
+8b036e968f8e9a48 ok test/cases/tools/debugger/fixtures/exit_code.cml
+0abba5230f5ac082 ok test/cases/tools/debugger/fixtures/faults.cml
+1e1df3e53bc679d5 ok test/cases/tools/debugger/fixtures/generic.cml
+6f155654657abc2e ok test/cases/tools/debugger/fixtures/loop_forever.cml
+0ad36696c2c83012 ok test/cases/tools/debugger/fixtures/order.cml
+667c9face5d5496f ok test/cases/tools/debugger/fixtures/recursion.cml
+de2b4111ac30bce6 ok test/cases/tools/debugger/fixtures/unhandled.cml
+68fd33d4d67653d8 ok test/cases/tools/debugger/fixtures/values.cml
 05b30664084fc8d7 ok test/cases/tools/grammar/comments.cml
 6aad29dc1f920033 ok test/cases/tools/grammar/functions.cml
 a50e8a7a8fa883a0 no test/cases/tools/grammar/keywords.cml
