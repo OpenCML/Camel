@@ -1,0 +1,15 @@
+module t19_misc_positions
+
+// Other places an `any` value can go: a typed element after it in a literal the other way
+// round, a struct field, a `with` parameter, a function-typed value.
+func wrap_s(x: string): any { return x }
+with <tag: any>
+func tagged(x: int): any { return tag }
+func main(): int sync {
+    let f: (x: string) => any = wrap_s
+    let v = f('p' + 'q')
+    let w = tagged<v>(1)
+    let s = { a: 1, b: v }
+    println(w as string, s.b as string)
+    return 0
+}

@@ -1,0 +1,14 @@
+module t05e_generic
+// A generic function instantiated with T = any.
+func first(xs: (typeas T)[]): T { return xs[0] }
+func same(x: typeas T): T { return x }
+func boxed(i: int): any { return 't' + string(i) }
+func main(): int sync {
+    let n = 1 + 1
+    let xs = range(0, 2)->map<boxed>
+    let f = first(xs)
+    let g = same(n as any)
+    println(f, g)
+    println(f as string, g as int)
+    return 0
+}

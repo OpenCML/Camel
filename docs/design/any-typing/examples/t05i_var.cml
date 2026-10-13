@@ -1,0 +1,12 @@
+module t05i_var
+// A `var` of type `any` assigned values of two different types.
+func wrap_i(x: int): any { return x }
+func wrap_s(x: string): any { return x }
+func main(): int sync {
+    var v = wrap_i(7)
+    println(v as int)
+    v = wrap_s('se' + 'ven')
+    println(v as string)
+    println(v as int)
+    return 0
+}

@@ -1,0 +1,16 @@
+module t20_default_collector
+
+// The default collector (mark-sweep), no environment settings: the strings reachable only
+// through `any` elements are freed by the first major collection and their memory is handed
+// to later strings. n must be large enough for a major collection to run (about 1,500,000).
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>) }
+func make(n: int): any[] {
+    return range(0, n)->map<(i: int): any => ('a-long-payload-string-number-' + string(i)) as any>
+}
+func main(n: int): int sync {
+    let xs = make(3)
+    let c1 = churn(n)
+    let c2 = churn(n)
+    println(c1 + c2, xs[0] as string, xs[1] as string, xs[2] as string)
+    return 0
+}

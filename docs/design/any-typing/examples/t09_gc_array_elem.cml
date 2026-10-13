@@ -1,0 +1,11 @@
+module t09_gc_array_elem
+
+// A typed array (`any[]`, itself traced) whose elements are references the collector skips.
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>) }
+func make(n: int): any[] { return range(0, n)->map<(i: int): any => ('v' + string(i)) as any> }
+func main(n: int): int sync {
+    let xs = make(3)
+    let c = churn(n)
+    println(c, xs[0] as string, xs[1] as string, xs[2] as string)
+    return 0
+}

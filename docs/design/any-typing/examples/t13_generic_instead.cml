@@ -1,0 +1,15 @@
+module t13_generic_instead
+
+// What `keep(x: any): any` of t11 is as a generic function: T is string here, the slot is
+// traced, no `as` is needed.
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>) }
+func keep(x: typeas T, n: int): T {
+    let c = churn(n)
+    return if c > 0 then x else x
+}
+func main(n: int): int sync {
+    let v = keep('abc' + string(1), n)
+    let c = churn(n)
+    println(c, v)
+    return 0
+}

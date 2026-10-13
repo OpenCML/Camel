@@ -1,0 +1,12 @@
+module t07_gc_frame
+import { decode } from json
+
+// A reference held in a frame slot typed `any` across allocation (docs/technical/37, 6.4).
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>) }
+func main(n: int): int sync {
+    let d = decode('["alpha", "beta", "gamma"]')
+    let c = churn(n)
+    let xs = d as string[]
+    println(c, xs)
+    return 0
+}
