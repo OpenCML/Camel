@@ -130,6 +130,12 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     setJitCompileFailedOf(camel::runtime::GCGraph *graph, bool failed, bool resetReport = false);
     bool jitFailureReportedOf(camel::runtime::GCGraph *graph) const;
     void setJitFailureReportedOf(camel::runtime::GCGraph *graph, bool reported);
+#else
+    // A build without the JIT (ENABLE_FASTVM_JIT=0: every processor but x86-64). The two
+    // interpreter loops name these in their indirect call outside any #if; with them the loops
+    // compile unchanged and the call goes to the interpreter (see invokeCallOrJit below).
+    void *currentJitCtx_{};
+    constexpr bool jitEnabled() const { return false; }
 #endif
 
     // The interpreter's own call stack: a direct call (FUNC) pushes its return pc and frame
@@ -231,7 +237,8 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     size_t graphEntryPc(camel::runtime::GCGraph *graph);
     uint32_t noteIndirectCall(camel::runtime::GCGraph *graph) const;
 
-#if ENABLE_FASTVM_JIT
+    // Frames of direct calls and tail calls: used by the interpreter loops with and without
+    // the JIT, and by compiled code.
     inline ctx::Frame *acquireFrameForCall(camel::runtime::GCGraph *graph) {
         ASSERT(graph != nullptr, "Runtime graph is null.");
         return framePool_.acquire(graph);
@@ -251,6 +258,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
         if (framePool_.isActive(frame))
             framePool_.release(frame);
     }
+#if ENABLE_FASTVM_JIT
     slot_t invokeOwnedJitFrame(jit::JitEntryFn fn, ctx::Frame *frame, void *jitCtx);
     /// Raises the located diagnostic of the fault compiled code recorded in the JitContext
     /// before it returned (`frame` is the frame it was entered on).
@@ -260,5 +268,11 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     slot_t invokeCallOrJit(
         size_t pc, camel::runtime::GCGraph *runtimeGraph, ctx::Frame *frame, void *jitCtx,
         uint32_t callCount = 0);
+#else
+    /// Without the JIT a call is a call of the interpreter.
+    inline slot_t invokeCallOrJit(
+        size_t pc, camel::runtime::GCGraph *, ctx::Frame *frame, void *, uint32_t = 0) {
+        return call(pc, frame);
+    }
 #endif
 };

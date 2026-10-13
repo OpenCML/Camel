@@ -83,6 +83,7 @@ inline void setFastVmGraphLengthOf(camel::runtime::GCGraph *graph, size_t length
         graph->setExtraSlot(kFastVmGraphLengthSlot, static_cast<uintptr_t>(length) + 1);
 }
 
+#if ENABLE_FASTVM_JIT
 inline jit::JitEntryFn fastVmJitEntryOf(camel::runtime::GCGraph *graph) {
     return graph ? reinterpret_cast<jit::JitEntryFn>(graph->extraSlot(kFastVmJitEntrySlot))
                  : nullptr;
@@ -92,6 +93,7 @@ inline void setFastVmJitEntryOf(camel::runtime::GCGraph *graph, jit::JitEntryFn 
     if (graph)
         graph->setExtraSlot(kFastVmJitEntrySlot, reinterpret_cast<uintptr_t>(fn));
 }
+#endif
 
 inline uintptr_t fastVmFlagsOf(camel::runtime::GCGraph *graph) {
     return graph ? graph->extraSlot(kFastVmFlagsSlot) : 0;
@@ -942,6 +944,9 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
     return bc;
 }
 
+#endif // ENABLE_FASTVM_JIT
+
+// The four functions below are the interpreter's own: a build without the JIT needs them too.
 slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 #if ENABLE_FASTVM_COMPUTED_GOTO
     // With an execution observer (a debugger) installed, the activation is reported and runs
@@ -983,6 +988,8 @@ size_t FastVMSchedPass::graphEntryPc(camel::runtime::GCGraph *graph) {
 uint32_t FastVMSchedPass::noteIndirectCall(camel::runtime::GCGraph *graph) const {
     return incFastVmIndirectCallCountOf(graph);
 }
+
+#if ENABLE_FASTVM_JIT
 
 slot_t FastVMSchedPass::invokeCallOrJit(
     size_t pc, camel::runtime::GCGraph *runtimeGraph, Frame *frame, void *jitCtx,
