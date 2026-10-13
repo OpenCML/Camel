@@ -1,0 +1,41 @@
+/**
+ * Soak: a program that allocates and drops without end while what it keeps stays the same.
+ *
+ * A table of `rows` rows stays alive throughout. Each of the `reps` steps builds a fresh window
+ * of 48 strings and a record around it, drops the previous one, and folds a checksum over the
+ * new one, so the volume allocated grows with `reps` and the volume alive does not. The memory
+ * the collector holds must not depend on `reps`.
+ */
+module gc_soak
+
+type Rec = {
+    id: int,
+    tag: string,
+    words: string[]
+}
+
+func word(i: int, j: int): string { return 'w' + string(i) + '-' + string(j) }
+
+func window(i: int): Rec {
+    return { id: i, tag: 'step' + string(i), words: range(0, 48)->map<(j: int): string => word(i, j)> }
+}
+
+func weight(r: Rec): int {
+    return r.words->reduce<(acc: int, s: string): int => acc + len(s), len(r.tag)> + r.id % 7
+}
+
+func table(n: int): int[][] {
+    return range(0, n)->map<(i: int): int[] => [i, i + 1, i + 2, i + 3]>
+}
+
+func run(keep: int[][], prev: Rec, left: int, total: int): int {
+    return if left == 0
+        then total + weight(prev) + keep[len(keep) - 1][3]
+        else run(keep, window(left), left - 1, (total + weight(prev)) % 1000000007)
+}
+
+func main(rows: int, reps: int): int sync {
+    let keep = table(rows)
+    println('gc_soak total={}'->format<run(keep, window(0), reps, 0)>)
+    return 0
+}

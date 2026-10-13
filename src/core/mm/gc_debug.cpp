@@ -19,6 +19,9 @@
 
 #include "camel/core/mm/gen.h"
 
+#include "camel/core/mm/poison.h"
+#include "camel/core/mm/root_handle.h"
+
 #include <algorithm>
 #include <format>
 #include <mutex>
@@ -36,13 +39,24 @@ namespace camel::core::mm {
 
 void GenerationalAllocatorWithGC::configureDebug(DebugConfig config) {
     std::lock_guard<std::mutex> lock(mutex_);
+    if (config.poisonAtSafepoints) {
+        if (!enableYoungGenCopying_) {
+            throw std::runtime_error(
+                "safepoint poisoning needs the moving collector (CAMEL_GC_POISON implies "
+                "CAMEL_GC_GENERATIONAL when it is read from the environment)");
+        }
+        poison::install();
+        // Nothing is promoted by age: an object in the elder space no longer moves, and a
+        // stale pointer to it would go unnoticed. (A survivor space that is full still
+        // promotes.)
+        promotionAgeThreshold_ = 16;
+    }
     debugConfig_                = config;
+    recordLayouts_              = recordLayouts_ || config.verifyBeforeGC || config.verifyAfterGC;
     pendingSafepointCollection_ = CollectionKind::None;
     // GC stress deliberately turns normal safepoints into collection opportunities. Keep the
     // runtime-visible slow-path flag in sync so schedulers can stay cheap when diagnostics are off.
-    detail::autoSpaceSafepointSlowPath.store(
-        debugConfig_.stressEveryNAllocations != 0 || debugConfig_.stressEveryNSafepoints != 0,
-        std::memory_order_release);
+    publishSafepointSlowPathUnlocked();
 }
 
 GenerationalAllocatorWithGC::DebugConfig GenerationalAllocatorWithGC::debugConfig() const {
@@ -56,6 +70,13 @@ GenerationalAllocatorWithGC::RuntimeStats GenerationalAllocatorWithGC::stats() c
     result.largeLiveBytes     = largeLiveBytes_;
     result.largeBudgetBytes   = largeObjBudget_;
     result.largeGrowthPercent = largeObjGrowthPercent_;
+    result.elderLiveBytes     = elderLiveBytes_;
+    result.elderBudgetBytes   = elderBudget_;
+    {
+        const SpaceUsage elder    = elderGenSpace_.usage();
+        result.elderReservedBytes = elder.reservedBytes;
+        result.elderSegments      = elder.segments;
+    }
     result.rememberedSetSize  = rememberedSet_.size();
     result.rootSourceCount    = rootSourceCountUnlocked();
     return result;
@@ -69,6 +90,9 @@ std::vector<std::string> GenerationalAllocatorWithGC::rootSourceDescriptions() c
     }
     for (const auto &entry : externalRootTracers_) {
         sources.push_back(entry.name);
+    }
+    for (RootHandle *handle = rootHandles_; handle != nullptr; handle = handle->next_) {
+        sources.push_back(handle->name());
     }
     return sources;
 }
@@ -85,7 +109,7 @@ void GenerationalAllocatorWithGC::verifyHeapOrThrow(std::string_view where) {
 }
 
 size_t GenerationalAllocatorWithGC::rootSourceCountUnlocked() const {
-    return (rootObjectSet_ ? 1 : 0) + externalRootTracers_.size();
+    return (rootObjectSet_ ? 1 : 0) + externalRootTracers_.size() + rootHandleCount_;
 }
 
 std::string
@@ -155,6 +179,21 @@ bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
     if (!allocator.contains(object)) {
         return false;
     }
+    if (!allocator.containsAllocated(object)) {
+        // The space was emptied since this address was handed out: the object moved or died.
+        issues.push_back(makeIssue(
+            std::format(
+                "Reference points into an evacuated part of a young space (stale pointer; the "
+                "word before it reads {:#x})",
+                headerOf(object)->raw_),
+            std::string(path),
+            {},
+            {},
+            std::string(regionName),
+            0,
+            reinterpret_cast<uintptr_t>(object)));
+        return true;
+    }
 
     ObjectHeader *header = headerOf(object);
     if (!allocator.contains(header)) {
@@ -193,7 +232,8 @@ bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
 }
 
 bool GenerationalAllocatorWithGC::autoRegionContainsPayload(
-    const FreeListAllocator &allocator, rtdata::Object *object, std::string_view regionName,
+    const GrowableFreeListAllocator &allocator, rtdata::Object *object,
+    std::string_view regionName,
     AllocRegion expectedRegion, std::vector<HeapVerificationIssue> &issues,
     std::string_view path) const {
     if (!allocator.contains(object)) {
@@ -339,7 +379,7 @@ void GenerationalAllocatorWithGC::validateAllocatedHeaders(
 }
 
 void GenerationalAllocatorWithGC::validateAllocatedHeaders(
-    std::vector<HeapVerificationIssue> &issues, const FreeListAllocator &allocator,
+    std::vector<HeapVerificationIssue> &issues, const GrowableFreeListAllocator &allocator,
     std::string_view regionName, AllocRegion expectedRegion) const {
     allocator.iterateAllocated([&](ObjectHeader *header) {
         if (!header->isValid()) {
@@ -392,6 +432,9 @@ void GenerationalAllocatorWithGC::validateAllocatedHeaders(
 std::vector<GenerationalAllocatorWithGC::HeapVerificationIssue>
 GenerationalAllocatorWithGC::verifyHeapUnlocked() {
     std::vector<HeapVerificationIssue> issues;
+    // From the first verification on, layouts are recorded: the remembered-set check needs
+    // them for the old objects this walk and the later collections reach.
+    recordLayouts_ = true;
 
     if (!elderGenSpace_.validate()) {
         issues.push_back(
@@ -431,6 +474,7 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
             return nullptr;
         }
 
+        const size_t issuesBefore = issues.size();
         if (!knownObjectPointer(ref, issues, path)) {
             issues.push_back(makeIssue(
                 "GC-traced slot points outside managed object regions",
@@ -440,6 +484,13 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
                 {},
                 0,
                 reinterpret_cast<uintptr_t>(ref)));
+            return ref;
+        }
+        if (issues.size() != issuesBefore) {
+            // The reference is broken (a stale address, a bad header): say where it was found
+            // and do not walk into what it points at.
+            issues.back().owner    = info.describe();
+            issues.back().slotType = refType ? refType->toString() : std::string{"<unknown>"};
             return ref;
         }
 
@@ -469,20 +520,21 @@ GenerationalAllocatorWithGC::verifyHeapUnlocked() {
         }
     }
 
-    for (const auto &entry : externalRootTracers_) {
-        entry.tracer(
-            [&](rtdata::Object *ref,
-                const type::Type *refType,
-                const rtdata::RefTraceInfo &info) -> rtdata::Object * {
-                std::string path = entry.name;
-                std::string edge = info.describe();
-                if (!edge.empty()) {
-                    path += " -> ";
-                    path += edge;
-                }
-                return validateRef(ref, refType, info, std::move(path));
-            });
-    }
+    forEachRootSourceUnlocked(
+        [&](std::string_view name, const std::function<void(const RefRelocator &)> &trace) {
+            trace(
+                [&](rtdata::Object *ref,
+                    const type::Type *refType,
+                    const rtdata::RefTraceInfo &info) -> rtdata::Object * {
+                    std::string path(name);
+                    std::string edge = info.describe();
+                    if (!edge.empty()) {
+                        path += " -> ";
+                        path += edge;
+                    }
+                    return validateRef(ref, refType, info, std::move(path));
+                });
+        });
 
     while (!stack.empty()) {
         PendingTrace current = std::move(stack.back());
@@ -519,12 +571,22 @@ void GenerationalAllocatorWithGC::verifyRememberedSetUnlocked(
     }
 
     auto verifyOldRegion = [&](const auto &allocator, std::string_view regionName) {
-        allocator.iterateAllocated([&](ObjectHeader *header) {
+        // The space is walked first and its objects examined afterwards: the walk holds the
+        // lock of the space, and examining an object asks the spaces which of them holds what
+        // it refers to (for the large-object space that is the same lock).
+        std::vector<ObjectHeader *> headers;
+        allocator.iterateAllocated([&](ObjectHeader *header) { headers.push_back(header); });
+        const auto examine = [&](ObjectHeader *header) {
             if (!header || !header->isValid()) {
                 return;
             }
             const type::Type *objectType = knownObjectTypeUnlocked(header);
             if (!objectType) {
+                return;
+            }
+            // An object born old since the last minor collection is filled by its creator
+            // without barriers; that collection scans it (see freshOld_).
+            if (freshOld_.contains(header)) {
                 return;
             }
             rtdata::Object *object = payloadOf<rtdata::Object>(header);
@@ -542,7 +604,10 @@ void GenerationalAllocatorWithGC::verifyRememberedSetUnlocked(
                         reinterpret_cast<uintptr_t>(edge.target)));
                 }
             }
-        });
+        };
+        for (ObjectHeader *header : headers) {
+            examine(header);
+        }
     };
 
     verifyOldRegion(elderGenSpace_, "auto.elder");

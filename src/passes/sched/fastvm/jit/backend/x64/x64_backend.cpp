@@ -27,6 +27,7 @@
 #include "../../runtime/jit_debug_trace.h"
 #include "../../runtime/trampoline.h"
 #include "camel/core/context/frame.h"
+#include "camel/core/mm/gen.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/utils/assert.h"
@@ -105,6 +106,25 @@ isTrapFreeConstDivisor(const Bytecode &bc, const camel::runtime::GCGraph *graph,
 std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
     if (unit.graphLength == 0)
         return "graph bytecode span is empty";
+    // Compiled code has no stack maps: the collector neither sees nor updates what a native
+    // frame or a register holds. Two things keep that sound with the moving collector.
+    //
+    // 1. No collection runs while a native frame exists. What passes the checks below never
+    //    calls into C++ and contains no safepoint poll, so between the entry into compiled
+    //    code and the return from it the collector cannot run (std::jit is single-threaded).
+    //    A native frame may therefore hold object references, e.g. a var parameter that a
+    //    self call passes on. The allocator refuses a safepoint reached under a native frame
+    //    (mm::detail::nativeCodeDepth), which is what keeps this from being broken silently
+    //    by a later lowering that does call out.
+    // 2. A static slot that the code reads is baked into it as an immediate
+    //    (emitLoadStaticConst): for an object constant that is the address the object had at
+    //    compile time, and it outlives any number of collections. A graph with an object
+    //    constant in its static area is therefore not compiled when objects can move.
+    if (camel::core::mm::autoSpace().youngGenCopyingEnabled() && unit.runtimeGraph != nullptr) {
+        const auto *staticLayout = unit.runtimeGraph->staticDataType();
+        if (staticLayout != nullptr && staticLayout->refCount() != 0)
+            return "the graph has object constants (moving collector)";
+    }
     const size_t graphEnd = unit.entryPc + unit.graphLength;
     ASSERT(
         graphEnd <= unit.bytecodes.size(),

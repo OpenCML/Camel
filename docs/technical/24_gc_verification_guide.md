@@ -86,7 +86,11 @@ Use these controls for deterministic GC validation:
 | `CAMEL_GC_STRESS_SAFEPOINT=N` | Request collection every `N` runtime safepoints. |
 | `CAMEL_GC_STRESS_MODE=minor|major|both` | Select the requested stress collection kind. |
 | `CAMEL_GC_LOG_MOVES=1` | Log object movement in the young-copying path. |
-| `CAMEL_GC_ENABLE_YOUNG_COPYING=1` | Enable the experimental young-generation copying path. |
+| `CAMEL_GC=generational` (`--gc generational`) | Run the generational collector: young objects are copied. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and is still read. |
+| `CAMEL_GC_POISON=1` | Safepoint poisoning: every safepoint moves every young object and poisons where it was (`36_gc_handle_rules.md` section 8). Implies the generational collector. |
+| `CAMEL_GC_PROMOTION_AGE=N` | Minor collections an object survives before promotion (1 to 15, default 4). |
+| `CAMEL_GC_LARGE_THRESHOLD_KB=N`, `CAMEL_GC_NURSERY_MB=N` | Size above which an object is born old (default 4 KB with mark-sweep, 64 KB generational), and the size of the birth space (default 4 MB). |
+| `CAMEL_GC_HEAP_LIMIT_MB=N` | Limit on what the elder and large-object spaces hold; reaching it is `RuntimeDiag::MemoryExhausted` (`docs/cli.md`, "The collector"). |
 | `CAMEL_GC_PRINT_CONFIG=1` | Print the effective GC diagnostic configuration to stderr at allocator initialization. |
 | `CAMEL_GC_LARGE_BUDGET_MB=N` | Floor (MB) of the large-object allocation between collections; default 4. It is in force only while the growth setting gives less. Not a diagnostic switch: it tunes production pacing. |
 | `CAMEL_GC_GROWTH_PERCENT=N` | Large-object allocation between collections, in percent of the volume the last sweep left alive; default 100 (the space doubles). Lower: less garbage held, more collections, in proportion. Not a diagnostic switch: it tunes production pacing. |
@@ -111,6 +115,30 @@ The poll is the same single atomic load, so recursive-call benchmarks keep their
 long-running FVM programs still service deferred collections (for example the large-object budget).
 JIT-compiled code does not poll; collections requested there run at the next interpreter call or
 pass boundary.
+
+## Stress Modes And What Each One Finds
+
+| Mode | Settings | Finds |
+|---|---|---|
+| Collection stress | `CAMEL_GC_STRESS_SAFEPOINT=1` (and `_ALLOC=N`), `CAMEL_GC_STRESS_MODE=major` | a value that no root reaches: it is freed and its memory reused |
+| Moving stress | the same with `CAMEL_GC=generational CAMEL_GC_STRESS_MODE=minor` or `both`, `CAMEL_GC_VERIFY=both` | a root that is not updated; with the default promotion age objects stop moving after four collections, so a raw pointer that is held for longer than that is not found |
+| Safepoint poisoning | `CAMEL_GC_POISON=1` | a raw pointer kept across any safepoint: nothing is promoted by age, every safepoint moves everything young, and the old addresses read as an unmapped page until the space has been walked once. This is the mode to run a new operator or scheduler change under |
+| Tenuring stress | `CAMEL_GC=generational CAMEL_GC_PROMOTION_AGE=1 CAMEL_GC_STRESS_SAFEPOINT=1 CAMEL_GC_STRESS_MODE=minor CAMEL_GC_VERIFY=both` | a missing write barrier: everything is old after one collection, and the verifier reports an old object that points at a young one without being remembered |
+
+The first two existed before the handle rules; they left two gaps that poisoning closes: an
+object that had been promoted no longer moved, and the address an object moved away from kept
+its old contents until something else was allocated there, so a stale read usually still gave
+the right answer. Whole plans are run under a mode with
+`CAMEL_TEST_TIMEOUT_SCALE=20 node scripts/test.js <plans>`; `mm.gc_poison_sweep` runs the
+module, compile, linear, para, trans and smoke plans under poisoning as part of the default
+set.
+
+Soak and scale: `gc_soak.*` (a steady live set under continuous allocation; the memory the
+collector holds must not depend on the number of steps), `gc_live_large.*` (a live set far
+larger than the first elder segment), `gc_prl_blocked_worker.*` (the handshake of the parallel
+scheduler when one worker sits in a long operator); the minute-long versions are in
+`test/plans/perf/gc.plan.toml`. `python3 test/tools/gcbench/gcbench.py` compares the two
+collectors on allocation benchmarks.
 
 ## Standard Verification Commands
 

@@ -1,0 +1,23 @@
+/**
+ * Allocation benchmark: chains of map / filter / reduce over arrays of boxed values. Every stage
+ * makes a new array of new small objects; only the last result of a round is used.
+ */
+module map_chain
+
+func round(n: int, k: int): int {
+    return range(0, n)
+        ->map<(i: int): (int, int) => (i, i * k)>
+        ->map<(p: (int, int)): int[] => [p.0, p.1, p.0 + p.1]>
+        ->filter<(xs: int[]): bool => xs[2] % 3 != 0>
+        ->map<(xs: int[]): string => string(xs[2])>
+        ->reduce<(acc: int, s: string): int => acc + len(s), 0>
+}
+
+func run(n: int, left: int, total: int): int {
+    return if left == 0 then total else run(n, left - 1, total + round(n, left))
+}
+
+func main(n: int, reps: int): int sync {
+    println('map_chain total={}'->format<run(n, reps, 0)>)
+    return 0
+}

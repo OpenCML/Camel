@@ -1,0 +1,464 @@
+id = "mm.gc_soak"
+order = 368
+tier = "feat"
+tags = ["feat", "mm", "gc", "soak"]
+desc = """
+Soak and scale tests of both collectors, in the sizes that fit the default test set (the
+minute-long ones are in test/plans/perf/gc.plan.toml).
+
+gc_soak allocates and drops without end around a live set that stays the same; the memory the
+collector holds, read from its statistics line (CAMEL_GC_STATS=1), must not depend on how long
+the program runs. gc_live_large keeps tens of megabytes of small objects alive, more than the
+first elder segment holds. gc_prl_blocked_worker runs a parallel map in which one worker sits
+in a long operator, so the stop-the-world handshake gives up, while the others allocate far
+more than the birth space holds. The last tests set a heap limit that the program exceeds and
+check the diagnostic.
+"""
+
+[[tests]]
+name = "gc_soak.generational.3000.nvm"
+desc = "3000 steps around a live table of 20,000 rows with the generational collector (nvm): the elder space stays at its first segment, and nearly nothing is promoted beyond the table."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_soak.cml"
+args = ["${case}", "--arg", "rows=20000", "--arg", "reps=3000", "${run_nvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_soak total=1120992"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('minor') >= 5, `minor collections ran: ${line[0]}`)
+assert(field('elder_reserved_mb') <= 32, `the elder space did not grow: ${line[0]}`)
+assert(field('elder_live_mb') <= 8 && field('large_high_water_mb') <= 4, `no growth of the old spaces: ${line[0]}`)
+assert(field('promoted') <= 60000, `only the live table is promoted, whatever the number of steps: ${line[0]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_soak.mark_sweep.3000.nvm"
+desc = "3000 steps around a live table of 20,000 rows with the default collector (nvm): the elder space holds the table plus one budget of garbage, at most two segments."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_soak.cml"
+args = ["${case}", "--arg", "rows=20000", "--arg", "reps=3000", "${run_nvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_soak total=1120992"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_reserved_mb') <= 64, `the elder space is bounded by the live set plus one budget: ${line[0]}`)
+assert(field('minor') === 0, `the default collector does not copy: ${line[0]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_soak.generational.3000.fvm"
+desc = "3000 steps around a live table of 20,000 rows with the generational collector (fvm): the elder space stays at its first segment, and nearly nothing is promoted beyond the table."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_soak.cml"
+args = ["${case}", "--arg", "rows=20000", "--arg", "reps=3000", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_soak total=1120992"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('minor') >= 5, `minor collections ran: ${line[0]}`)
+assert(field('elder_reserved_mb') <= 32, `the elder space did not grow: ${line[0]}`)
+assert(field('elder_live_mb') <= 8 && field('large_high_water_mb') <= 4, `no growth of the old spaces: ${line[0]}`)
+assert(field('promoted') <= 60000, `only the live table is promoted, whatever the number of steps: ${line[0]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_soak.mark_sweep.3000.fvm"
+desc = "3000 steps around a live table of 20,000 rows with the default collector (fvm): the elder space holds the table plus one budget of garbage, at most two segments."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_soak.cml"
+args = ["${case}", "--arg", "rows=20000", "--arg", "reps=3000", "${run_fvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_soak total=1120992"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_reserved_mb') <= 64, `the elder space is bounded by the live set plus one budget: ${line[0]}`)
+assert(field('minor') === 0, `the default collector does not copy: ${line[0]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_soak.generational.3000.prl"
+desc = "3000 steps around a live table of 20,000 rows with the generational collector (prl): the elder space stays at its first segment, and nearly nothing is promoted beyond the table."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_soak.cml"
+args = ["${case}", "--arg", "rows=20000", "--arg", "reps=3000", "${run_prl}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_soak total=1120992"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('minor') >= 5, `minor collections ran: ${line[0]}`)
+assert(field('elder_reserved_mb') <= 32, `the elder space did not grow: ${line[0]}`)
+assert(field('elder_live_mb') <= 8 && field('large_high_water_mb') <= 4, `no growth of the old spaces: ${line[0]}`)
+assert(field('promoted') <= 60000, `only the live table is promoted, whatever the number of steps: ${line[0]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_soak.mark_sweep.3000.prl"
+desc = "3000 steps around a live table of 20,000 rows with the default collector (prl): the elder space holds the table plus one budget of garbage, at most two segments."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_soak.cml"
+args = ["${case}", "--arg", "rows=20000", "--arg", "reps=3000", "${run_prl}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_soak total=1120992"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_reserved_mb') <= 64, `the elder space is bounded by the live set plus one budget: ${line[0]}`)
+assert(field('minor') === 0, `the default collector does not copy: ${line[0]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_soak.generational.12000.fvm"
+desc = "12000 steps around a live table of 20,000 rows with the generational collector (fvm): the elder space stays at its first segment, and nearly nothing is promoted beyond the table."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_soak.cml"
+args = ["${case}", "--arg", "rows=20000", "--arg", "reps=12000", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_soak total=4684040"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('minor') >= 5, `minor collections ran: ${line[0]}`)
+assert(field('elder_reserved_mb') <= 32, `the elder space did not grow: ${line[0]}`)
+assert(field('elder_live_mb') <= 8 && field('large_high_water_mb') <= 4, `no growth of the old spaces: ${line[0]}`)
+assert(field('promoted') <= 60000, `only the live table is promoted, whatever the number of steps: ${line[0]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_soak.mark_sweep.12000.fvm"
+desc = "12000 steps around a live table of 20,000 rows with the default collector (fvm): the elder space holds the table plus one budget of garbage, at most two segments."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_soak.cml"
+args = ["${case}", "--arg", "rows=20000", "--arg", "reps=12000", "${run_fvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_soak total=4684040"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_reserved_mb') <= 64, `the elder space is bounded by the live set plus one budget: ${line[0]}`)
+assert(field('minor') === 0, `the default collector does not copy: ${line[0]}`)
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gc_live_large.generational.nvm"
+desc = "48 MB of small objects kept alive while temporaries are built and dropped (generational, nvm): the elder space grows beyond its first segment and is collected."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=48", "--arg", "reps=10", "${run_nvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_large blocks=81 total=339135"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_segments') >= 2, `the elder space grew: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_live_large.mark_sweep.nvm"
+desc = "48 MB of small objects kept alive while temporaries are built and dropped (mark-sweep, nvm): the elder space grows beyond its first segment and is collected."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=48", "--arg", "reps=10", "${run_nvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_large blocks=81 total=339135"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_segments') >= 2, `the elder space grew: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_live_large.generational.fvm"
+desc = "48 MB of small objects kept alive while temporaries are built and dropped (generational, fvm): the elder space grows beyond its first segment and is collected."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=48", "--arg", "reps=10", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_large blocks=81 total=339135"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_segments') >= 2, `the elder space grew: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_live_large.mark_sweep.fvm"
+desc = "48 MB of small objects kept alive while temporaries are built and dropped (mark-sweep, fvm): the elder space grows beyond its first segment and is collected."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=48", "--arg", "reps=10", "${run_fvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_large blocks=81 total=339135"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_segments') >= 2, `the elder space grew: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_live_large.generational.prl"
+desc = "48 MB of small objects kept alive while temporaries are built and dropped (generational, prl): the elder space grows beyond its first segment and is collected."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=48", "--arg", "reps=10", "${run_prl}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_large blocks=81 total=339135"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_segments') >= 2, `the elder space grew: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_live_large.mark_sweep.prl"
+desc = "48 MB of small objects kept alive while temporaries are built and dropped (mark-sweep, prl): the elder space grows beyond its first segment and is collected."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=48", "--arg", "reps=10", "${run_prl}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_large blocks=81 total=339135"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line of the allocator in stderr: ${input.normalized.stderr}`)
+const field = (name) => {
+    const m = new RegExp(name + '=([0-9.]+)').exec(line[0])
+    assert(m !== null, `no ${name} in: ${line[0]}`)
+    return Number(m[1])
+}
+assert(field('elder_segments') >= 2, `the elder space grew: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_prl_blocked_worker.generational"
+desc = "One worker of a parallel map sleeps 1.2 s inside an operator while five allocate 150 MB (generational, two threads): the collector gives up waiting for it and the others go on allocating; nothing fails or waits for the sleeper."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_prl_blocked_worker.cml"
+args = ["-t", "2", "${case}", "--arg", "millis=1200", "--arg", "rounds=4000", "${run_prl}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_STATS=1", "CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_prl_blocked_worker sums=[1, 260000, 264000, 256000, 260000, 264000]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_prl_blocked_worker.mark_sweep"
+desc = "One worker of a parallel map sleeps 1.2 s inside an operator while five allocate 150 MB (mark-sweep, two threads): the collector gives up waiting for it and the others go on allocating; nothing fails or waits for the sleeper."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_prl_blocked_worker.cml"
+args = ["-t", "2", "${case}", "--arg", "millis=1200", "--arg", "rounds=4000", "${run_prl}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_STATS=1", "CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_prl_blocked_worker sums=[1, 260000, 264000, 256000, 260000, 264000]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_heap_limit.generational.nvm"
+desc = "A live set of 256 MB under a heap limit of 64 MB (generational, nvm): the program stops with MemoryExhausted, which names the space, the usage, the limit and the variable that raises it."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_nvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_HEAP_LIMIT_MB=64"]
+expect_exit = 1
+expect_output_contains = ["MemoryExhausted", "The auto space (run-time values) is exhausted", "of the limit of 64.0 MB are in use", "CAMEL_GC_HEAP_LIMIT_MB"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_heap_limit.generational.fvm"
+desc = "A live set of 256 MB under a heap limit of 64 MB (generational, fvm): the program stops with MemoryExhausted, which names the space, the usage, the limit and the variable that raises it."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_HEAP_LIMIT_MB=64"]
+expect_exit = 1
+expect_output_contains = ["MemoryExhausted", "The auto space (run-time values) is exhausted", "of the limit of 64.0 MB are in use", "CAMEL_GC_HEAP_LIMIT_MB"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_heap_limit.generational.fits"
+desc = "16 MB alive and 300 rounds of garbage under the same limit (generational): the limit bounds what is alive, not what is allocated."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=16", "--arg", "reps=300", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_HEAP_LIMIT_MB=64"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_large blocks=27 total=236916"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_heap_limit.mark_sweep.nvm"
+desc = "A live set of 256 MB under a heap limit of 64 MB (mark-sweep, nvm): the program stops with MemoryExhausted, which names the space, the usage, the limit and the variable that raises it."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_nvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_HEAP_LIMIT_MB=64"]
+expect_exit = 1
+expect_output_contains = ["MemoryExhausted", "The auto space (run-time values) is exhausted", "of the limit of 64.0 MB are in use", "CAMEL_GC_HEAP_LIMIT_MB"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_heap_limit.mark_sweep.fvm"
+desc = "A live set of 256 MB under a heap limit of 64 MB (mark-sweep, fvm): the program stops with MemoryExhausted, which names the space, the usage, the limit and the variable that raises it."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=256", "--arg", "reps=10", "${run_fvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_HEAP_LIMIT_MB=64"]
+expect_exit = 1
+expect_output_contains = ["MemoryExhausted", "The auto space (run-time values) is exhausted", "of the limit of 64.0 MB are in use", "CAMEL_GC_HEAP_LIMIT_MB"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_heap_limit.mark_sweep.fits"
+desc = "16 MB alive and 300 rounds of garbage under the same limit (mark-sweep): the limit bounds what is alive, not what is allocated."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_live_large.cml"
+args = ["${case}", "--arg", "mb=16", "--arg", "reps=300", "${run_fvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_HEAP_LIMIT_MB=64"]
+expect_exit = 0
+expect_stdout_contains = ["gc_live_large blocks=27 total=236916"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

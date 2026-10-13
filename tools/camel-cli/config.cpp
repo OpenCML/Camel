@@ -29,6 +29,7 @@
 
 #include "build_config.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/mm.h"
 #include "camel/execute/limits.h"
 #include "camel/utils/log.h"
 #include "camel/utils/str.h"
@@ -278,6 +279,7 @@ int maxThreads    = -1; // -1 means use the maximum number of threads
 
 string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
 string maxMacroDepthOpt     = ""; // raw --max-macro-depth
+string gcModeOpt            = ""; // raw --gc
 size_t maxRecursionDepth    = 0;  // 0: not given on the command line
 size_t maxMacroDepth        = 0;
 } // namespace Run
@@ -559,6 +561,9 @@ bool parseArgs(int argc, char *argv[]) {
          (option("--max-macro-depth") & value("calls", maxMacroDepthOpt)) %
              "limit on nested calls while std::macro evaluates a call (default: 64; also "
              "CAMEL_MAX_MACRO_DEPTH)",
+         (option("--gc") & value("collector", gcModeOpt)) %
+             "collector of run-time values: mark-sweep (default; objects keep their address) or "
+             "generational (young objects are copied); also CAMEL_GC",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
@@ -761,6 +766,20 @@ bool parseArgs(int argc, char *argv[]) {
                 camel::execute::kMaxMacroDepthEnvVar,
                 Run::maxMacroDepth)) {
             std::exit(1);
+        }
+
+        // The collector: the option, else the environment (read by the allocator itself).
+        if (!Run::gcModeOpt.empty()) {
+            const auto mode = camel::core::mm::parseCollectorMode(Run::gcModeOpt);
+            if (!mode) {
+                std::cerr << "Error: --gc " << Run::gcModeOpt
+                          << " is not a collector; give mark-sweep or generational." << std::endl;
+                std::exit(1);
+            }
+            if (!camel::core::mm::selectCollectorMode(*mode)) {
+                std::cerr << "Error: --gc was read after the run-time heap was set up." << std::endl;
+                std::exit(1);
+            }
         }
 
         if (Run::timeitEnabled && Run::profile) {
