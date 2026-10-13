@@ -40,12 +40,15 @@
 
 #include <httplib.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <sstream>
