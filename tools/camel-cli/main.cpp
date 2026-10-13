@@ -14,10 +14,9 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 01, 2023
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
-
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics.h"
@@ -36,6 +35,7 @@
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
+#include "check.h"
 #include "config.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/stats/stats.h"
@@ -193,6 +193,10 @@ int main(int argc, char *argv[]) {
 
     bool useJsonFormat = (errorFormat == "json");
 
+    if (selectedCommand == Command::Check && (Check::lexical || Check::syntaxOnly)) {
+        return checkFrontend(*input, diagnostics, Check::lexical, useJsonFormat, os);
+    }
+
     // Initialize memory management subsystems before any run-mode graph work.
     (void)mm::autoSpace();
     (void)mm::metaSpace();
@@ -233,10 +237,10 @@ int main(int argc, char *argv[]) {
 
     context_ptr_t ctx = Context::create(
         EntryConfig{
-            .entryDir    = entryDir,
-            .entryFile   = targetFile,
-            .searchPaths = std::move(searchPaths),
-            .maxThreads  = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
+            .entryDir          = entryDir,
+            .entryFile         = targetFile,
+            .searchPaths       = std::move(searchPaths),
+            .maxThreads        = Run::maxThreads > 0 ? static_cast<size_t>(Run::maxThreads) : 0,
             .maxRecursionDepth = Run::maxRecursionDepth,
             .maxMacroDepth     = Run::maxMacroDepth,
         },
@@ -282,28 +286,12 @@ int main(int argc, char *argv[]) {
     };
 
     try {
-        if (selectedCommand == Command::Check && Check::lexical) {
-            // `check -i`: the tokens only. Nothing is parsed, so only lexical errors (an
-            // illegal character, an unclosed string) can be reported.
-            if (!parser->lex(*input)) {
-                ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
-                compileSummary(false);
-                return 1;
-            }
-            return 0;
-        }
         if (!parser->parse(*input)) {
             // Syntax errors: nothing after the parser can run, and compiling the module would
             // only read and parse the file a second time.
             ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
             compileSummary(false);
             return 1;
-        }
-        if (selectedCommand == Command::Check && Check::syntaxOnly) {
-            // `check -s`: the file was read into a syntax tree; names, types and imports are
-            // not looked at.
-            ctx->dumpModuleWarnings(std::cerr, useJsonFormat, {});
-            return 0;
         }
         CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", targetFile);
 
@@ -446,7 +434,7 @@ int main(int argc, char *argv[]) {
                     camel::execute::writeEntryResultTo(
                         ctx,
                         Run::outputFile.empty() || Run::outputFile == "stdout" ? std::string()
-                                                                      : Run::outputFile,
+                                                                               : Run::outputFile,
                         useJsonFormat);
                     static PassDumpState passDump;
                     if (!Run::dumpAfterEachPassDir.empty()) {

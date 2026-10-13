@@ -1,0 +1,2 @@
+module lexical_limits
+func main() { $; $; $; $ }

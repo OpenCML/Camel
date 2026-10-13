@@ -324,6 +324,8 @@ Related settings, all environment variables:
 
 ## check: Code Health Checker
 
+`-i` and `-s` use the frontend directly, without initializing managed runtime heaps, an execution context or built-in modules. Diagnostic formats, positions and error limits remain the same. Plain `check` still performs semantic checks.
+
     camel check [options] <cml file or directory>
 
 - `-i`, `--lexical-only`: Lexical analysis only: only lexical errors (an illegal character, an unclosed string) are reported, nothing is parsed  
