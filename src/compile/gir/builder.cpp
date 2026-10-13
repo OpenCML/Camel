@@ -19,6 +19,7 @@
 
 #include "builder.h"
 
+#include "camel/core/numeric_convert.h"
 #include "camel/compile/gir/static_function.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/graph.h"
@@ -3819,6 +3820,73 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     return visitLinkNode(assign);
 }
 
+void Builder::rejectLiteralConversion(
+    const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
+    const GCT::node_ptr_t &call) {
+    static const std::unordered_set<std::string> kConversions = {
+        "int", "i64", "i32", "float", "f64", "f32"};
+    if (!kConversions.contains(group) || operands.size() != 1 || funcType == nullptr ||
+        !funcType->hasExitType() || operands[0].expr->type() != GCT::LoadType::DATA) {
+        return;
+    }
+    // `int(1.0e30)`, `i32(5000000000)`, `int('12abc')`: the argument is written in the
+    // program and the conversion is known not to fit, so it is refused here as a literal
+    // given a type it cannot have is (`let b: i32 = 3000000000`). A computed argument stays
+    // a fault when the program runs.
+    const data_ptr_t data = operands[0].expr->loadAs<GCT::DataLoad>()->data();
+    Type *target          = funcType->exitType();
+    if (data == nullptr) {
+        return;
+    }
+    const bool text = data->type()->code() == TypeCode::String;
+    if (!text && !data->type()->isPrimitive()) {
+        return;
+    }
+    try {
+        if (text) {
+            // The rule of the conversion itself (camel/core/numeric_convert.h).
+            const std::string &written = std::dynamic_pointer_cast<StringData>(data)->data();
+            switch (target->code()) {
+            case TypeCode::Int32:
+                (void)camel::core::integerFromText<int32_t>(written, "i32");
+                break;
+            case TypeCode::Int64:
+                (void)camel::core::integerFromText<int64_t>(written, "int");
+                break;
+            case TypeCode::Float32:
+                (void)camel::core::floatFromText<float>(written, "f32");
+                break;
+            case TypeCode::Float64:
+                (void)camel::core::floatFromText<double>(written, "float");
+                break;
+            default:
+                break;
+            }
+        } else if (const auto value = staticArgOf(operands[0].node).value) {
+            (void)target->castSlotFrom(*value, data->type());
+        }
+        return;
+    } catch (const camel::core::error::RuntimeFault &) {
+    }
+    if (text) {
+        diags_->of(SemanticDiag::LiteralStaticCastFailed)
+            .atOrigin(call->load()->origin())
+            .commit(data->toString(), target->toString());
+    } else {
+        std::string limits = literalRangeViolation(data, target);
+        if (limits.empty()) {
+            limits = target->code() == TypeCode::Int32   ? "-2147483648 to 2147483647"
+                     : target->code() == TypeCode::Int64 ? "-9223372036854775808 to "
+                                                           "9223372036854775807"
+                                                         : "the value does not fit the type";
+        }
+        diags_->of(SemanticDiag::LiteralOutOfRange)
+            .atOrigin(call->load()->origin())
+            .commit(literalValueText(data), target->toString(), limits);
+    }
+    throw BuildAbortException();
+}
+
 void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &origin) {
     const auto boundIt = boundWithArgs_.find(node);
     if (boundIt == boundWithArgs_.end()) {
@@ -4712,6 +4780,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
+            rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
             // An operator calls a function argument with values. A function with a `var`
             // parameter needs a variable there, which an operator does not have. A macro
             // operator (grad, value_and_grad, ...) does not call its argument: it rewrites the

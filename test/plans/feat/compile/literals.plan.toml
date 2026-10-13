@@ -371,3 +371,68 @@ assert(warnings[0].includes(':2:13:'), warnings[0])
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "literal_conversion.float_to_int"
+desc = "A conversion whose argument is a literal that does not fit is refused when the program is compiled, as a literal given such a type is; it was a fault at run time (and a warning of the folding pass)."
+kind = "negative"
+case = "../../../cases/compile/literals/convert_float_to_int.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_output_contains = ["The literal '1e+30' is out of the range of type 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_conversion.int_to_i32"
+desc = "A conversion whose argument is a literal that does not fit is refused when the program is compiled, as a literal given such a type is; it was a fault at run time (and a warning of the folding pass)."
+kind = "negative"
+case = "../../../cases/compile/literals/convert_int_to_i32.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralOutOfRange"
+expect_diagnostic_line = 2
+expect_output_contains = ["The literal '5000000000' is out of the range of type 'i32'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_conversion.text_to_int"
+desc = "A conversion whose argument is a literal that does not fit is refused when the program is compiled, as a literal given such a type is; it was a fault at run time (and a warning of the folding pass)."
+kind = "negative"
+case = "../../../cases/compile/literals/convert_text_to_int.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralStaticCastFailed"
+expect_diagnostic_line = 2
+expect_output_contains = ["to type 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_conversion.text_to_float"
+desc = "A conversion whose argument is a literal that does not fit is refused when the program is compiled, as a literal given such a type is; it was a fault at run time (and a warning of the folding pass)."
+kind = "negative"
+case = "../../../cases/compile/literals/convert_text_to_float.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralStaticCastFailed"
+expect_diagnostic_line = 2
+expect_output_contains = ["to type 'float'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "literal_conversion.fits"
+desc = "Literals that fit convert as before; a computed argument that does not fit is still a fault at run time (isolated here with attempt)."
+kind = "behavior"
+case = "../../../cases/compile/literals/convert_fits.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "2 7 3.0 42 1.5\nConversionOutOfRange\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
