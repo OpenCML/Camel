@@ -251,7 +251,7 @@ What the notation leaves awkward or open (for the language author):
    restricted to `logicalOrExpr` and anything else goes in parentheses. `loop a = x ?? 0 while …`
    therefore reads the `??` operand as `0`, then expects the clause: it works, but only because
    the right side of `??` stops at `while`; `loop a = x ?? if c then 1 else 2 while …` does not.
-3. **`loop` and `while` as keywords** take two common names away. 17 files of the repository (54 places)
+3. **`loop` and `while` as keywords** take two common names away. 18 files of the repository (57 places)
    named a function `loop` (the usual name of a tail-recursive helper); they were renamed to `spin`.
 4. **A loop without a state** (`loop for x in xs { println(x) }`) is not in the notation: the
    ruling says effects are iterated with `foreach`.
