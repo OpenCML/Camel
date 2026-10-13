@@ -138,13 +138,13 @@ await runTest(async (t) => {
             const armLocals = await dap.variables(stop.frames[1].id)
             checkEq(armLocals?.n?.value, '2', on('an arm sees the n of its function'))
 
-            // loop(5, 0): the recursion is a tail call; the frame is replaced, the stack stays flat.
+            // spin(5, 0): the recursion is a tail call; the frame is replaced, the stack stays flat.
             await dap.request('continue', { threadId: 1 })
             const loopDepths = []
             const accs = []
             for (let i = 0; i < 3; i++) {
                 stop = await dap.waitStop()
-                check(/^loop( \(tail call, \d+ frames? replaced\))?$/.test(stop?.name || ''), on(`iteration ${i + 1} of loop stops in loop`), at(stop))
+                check(/^spin( \(tail call, \d+ frames? replaced\))?$/.test(stop?.name || ''), on(`iteration ${i + 1} of loop stops in loop`), at(stop))
                 loopDepths.push(stop?.frames.length)
                 accs.push((await dap.variables(stop.top.id)).acc?.value)
                 await dap.request('continue', { threadId: 1 })
