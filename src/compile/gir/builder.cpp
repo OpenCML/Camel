@@ -1747,7 +1747,20 @@ void Builder::settleGenericOperatorArguments(
     const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
     const GCT::node_ptr_t &call) {
-    const auto isWaiting = [&](const Argument &arg) { return genericDrefs_.contains(arg.node); };
+    // A name that still has no function value: a generic function, or a name with several
+    // functions (overloads of the program, an operator with several signatures).
+    const auto isOverloaded = [&](const Argument &arg) {
+        if (arg.node == nullptr || !nodeIsKind(arg.node, runtime::GCNodeKind::Dref) ||
+            genericDrefs_.contains(arg.node) || boundWithArgs_.contains(arg.node)) {
+            return false;
+        }
+        const auto &target = nodeGraphOf(arg.node)->drefTarget(arg.node);
+        return std::holds_alternative<graph_vec_ptr_t>(target) ||
+               std::holds_alternative<oper_group_ptr_t>(target);
+    };
+    const auto isWaiting = [&](const Argument &arg) {
+        return genericDrefs_.contains(arg.node) || isOverloaded(arg);
+    };
     // The types to try for a parameter of the function: what the other arguments are made
     // of (the element type of an array, of a set, the key and value types of a map and their
     // pair), then those arguments' own types.
@@ -1803,7 +1816,79 @@ void Builder::settleGenericOperatorArguments(
         }
         return ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
     };
+    // A name with several functions: the one the operator accepts, when it is exactly one
+    // (`xs->map<abs>`, `xs->reduce<max, 0>`). The operator is asked about each candidate's
+    // type; none or several accepted leave the name without a value, and the diagnostic of
+    // that lists the candidates.
+    const auto settleOverloaded = [&](Argument &arg, Type *&type) {
+        Type *saved        = type;
+        const auto &target = nodeGraphOf(arg.node)->drefTarget(arg.node);
+        std::vector<compile_graph_ptr_t> graphs;
+        std::vector<oper_idx_ptr_t> operators;
+        const auto accepts = [&](FunctionType *candidate) {
+            if (candidate == nullptr || !candidate->hasExitType()) {
+                return false;
+            }
+            type          = candidate;
+            const bool ok = accepted();
+            type          = saved;
+            return ok;
+        };
+        if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+            if (auto all = asCompileGraphVec(target)) {
+                for (const auto &g : *all) {
+                    if (!decoratedOf_.contains(g.get()) && accepts(g->funcType())) {
+                        graphs.push_back(g);
+                    }
+                }
+            }
+        } else {
+            const auto &group = std::get<oper_group_ptr_t>(target);
+            const auto add    = [&](const std::string &uri, FunctionType *candidate) {
+                for (const auto &known : operators) {
+                    if (known->uri() == uri && known->funcType()->equals(candidate)) {
+                        return;
+                    }
+                }
+                if (accepts(candidate)) {
+                    operators.push_back(
+                        std::make_shared<OperatorIndex>(group->name(), candidate, uri));
+                }
+            };
+            for (const auto &[uri, resolver] : group->resolvers()) {
+                if (auto fixed = std::dynamic_pointer_cast<StaticFuncTypeResolver>(resolver)) {
+                    add(uri, fixed->funcType());
+                    continue;
+                }
+                // A signature computed from the argument types: asked for the candidate
+                // types, one and two parameters.
+                for (Type *first : candidates) {
+                    if (auto one = resolver->resolve({}, {first}, Modifier::None)) {
+                        add(uri, *one);
+                    }
+                    for (Type *second : candidates) {
+                        if (auto two = resolver->resolve({}, {first, second}, Modifier::None)) {
+                            add(uri, *two);
+                        }
+                    }
+                }
+            }
+        }
+        if (graphs.size() + operators.size() != 1) {
+            return; // stays a name: rejectNameWithoutValue lists what it stands for
+        }
+        compile_graph_ptr_t chosen =
+            !graphs.empty() ? graphs.front() : operatorValueGraphOf(operators.front(), arg.expr);
+        if (chosen != nullptr) {
+            arg.node = createFuncDataNode(chosen, true, false);
+            type     = valueTypeOf(nodeTypeOf(arg.node));
+        }
+    };
     const auto settleOne = [&](Argument &arg, Type *&type) {
+        if (isOverloaded(arg)) {
+            settleOverloaded(arg, type);
+            return;
+        }
         const template_ptr_t tmpl = genericDrefs_.find(arg.node)->second;
         FunctionType *signature   = tmpl->funcType;
         const size_t params       = signature->normTypesCount();
@@ -4469,6 +4554,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         tt::as_ptr<FunctionType>(expected),
                         inputs[i].expr);
                 }
+                if (chosen == nullptr && !boundWithArgs_.contains(node) &&
+                    nodeIsKind(targetNode, runtime::GCNodeKind::Dref) &&
+                    !genericDrefs_.contains(targetNode) &&
+                    std::holds_alternative<oper_group_ptr_t>(
+                        nodeGraphOf(targetNode)->drefTarget(targetNode))) {
+                    // A built-in operator cannot say which function it expects: it is asked
+                    // about each function the name stands for
+                    // (settleGenericOperatorArguments).
+                    continue;
+                }
                 if (chosen == nullptr) {
                     rejectNameWithoutValue(node, nameOf(inputs[i].expr), inputs[i].expr);
                 }
@@ -4696,6 +4791,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 withInputTypes,
                 normInputTypes,
                 gct);
+            // A name the operator did not settle has no value.
+            for (auto *inputs : {&withInputs, &normInputs}) {
+                for (Argument &input : *inputs) {
+                    if (nodeIsKind(input.node, runtime::GCNodeKind::Dref)) {
+                        rejectNameWithoutValue(
+                            input.node,
+                            input.expr->type() == GCT::LoadType::DREF
+                                ? input.expr->loadAs<GCT::DRefLoad>()->ref().toString()
+                                : std::string("the name"),
+                            input.expr);
+                    }
+                }
+            }
             // Constant arguments (shape literals, axes) let operators refine their result type.
             std::vector<StaticArg> normStatics;
             normStatics.reserve(normInputs.size());
