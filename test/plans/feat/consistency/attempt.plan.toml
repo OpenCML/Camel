@@ -103,8 +103,6 @@ assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify
 [[tests]]
 name = "attempt.compiled.jit_log"
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
-# Asserts which graphs std::jit compiles; with a collector that moves objects it leaves graphs with
-# object constants to the interpreter.
 # Asserts which graphs std::jit compiles and why it leaves the others: with a collector that moves
 # objects the graphs that hold the `attempt` node are refused earlier, for their object constants,
 # and the log never says "contains OPER". The test therefore names the default collector.
