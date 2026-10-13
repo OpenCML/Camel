@@ -19,6 +19,7 @@
 
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
@@ -90,8 +91,7 @@ StructType *StructType::create() {
         "StructType",
         "Allocating StructType: (), size: {} bytes",
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
-    ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
+    void *mem = allocTypeStorage<StructType>(TypeStorageKind::Struct, layout.totalSize);
     return new (mem) StructType(layout, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
@@ -141,8 +141,7 @@ StructType *StructType::fromFactoryData(
         size,
         refCount,
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
-    ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
+    void *mem = allocTypeStorage<StructType>(TypeStorageKind::Struct, layout.totalSize);
     return new (mem) StructType(
         layout,
         types.data(),

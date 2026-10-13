@@ -19,6 +19,7 @@
 
 #include "camel/core/type/composite/union.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
@@ -73,8 +74,7 @@ UnionType *UnionType::create() {
         "UnionType",
         "Allocating UnionType: (), size: {} bytes",
         sizeof(UnionType)));
-    void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
-    ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
+    void *mem = allocTypeStorage<UnionType>(TypeStorageKind::Union);
     return new (mem) UnionType();
 }
 
@@ -83,8 +83,7 @@ UnionType *UnionType::create(Type *lhs, Type *rhs) {
         "UnionType",
         "Allocating UnionType: (lhs, rhs), size: {} bytes",
         sizeof(UnionType)));
-    void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
-    ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
+    void *mem = allocTypeStorage<UnionType>(TypeStorageKind::Union);
     return new (mem) UnionType(lhs, rhs);
 }
 
@@ -94,8 +93,7 @@ UnionType *UnionType::create(const std::initializer_list<Type *> &types) {
         "Allocating UnionType: (initializer_list, size={}), size: {} bytes",
         types.size(),
         sizeof(UnionType)));
-    void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
-    ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
+    void *mem = allocTypeStorage<UnionType>(TypeStorageKind::Union);
     return new (mem) UnionType(types);
 }
 
@@ -105,8 +103,7 @@ UnionType *UnionType::create(const std::vector<Type *> &types) {
         "Allocating UnionType: (vector, size={}), size: {} bytes",
         types.size(),
         sizeof(UnionType)));
-    void *mem = mm::permSpace().alloc(sizeof(UnionType), alignof(UnionType));
-    ASSERT(mem != nullptr, "Failed to allocate UnionType from permSpace");
+    void *mem = allocTypeStorage<UnionType>(TypeStorageKind::Union);
     return new (mem) UnionType(types);
 }
 

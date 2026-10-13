@@ -19,6 +19,7 @@
 
 #include "camel/core/type/composite/func.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
@@ -72,8 +73,7 @@ FunctionMetaInfo::create(std::vector<std::string> argNames, std::vector<std::str
         "FunctionMetaInfo",
         "Allocating FunctionMetaInfo: size: {} bytes",
         sizeof(FunctionMetaInfo)));
-    void *mem = mm::permSpace().alloc(sizeof(FunctionMetaInfo), alignof(FunctionMetaInfo));
-    ASSERT(mem != nullptr, "Failed to allocate FunctionMetaInfo");
+    void *mem = allocTypeStorage<FunctionMetaInfo>(TypeStorageKind::FunctionMeta);
     return new (mem) FunctionMetaInfo(std::move(argNames), std::move(closureRefs));
 }
 
@@ -321,8 +321,7 @@ FunctionType *FunctionType::create(
         withTypes.size(),
         normTypes.size(),
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
-    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
+    void *mem = allocTypeStorage<FunctionType>(TypeStorageKind::Function, layout.totalSize);
     return new (mem)
         FunctionType(layout, withTypes, normTypes, returnType, ImplMark::Graph, modifiers);
 }
@@ -351,8 +350,7 @@ FunctionType *FunctionType::fromFactory(FunctionTypeFactory &factory) {
         withCount,
         normCount,
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
-    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
+    void *mem = allocTypeStorage<FunctionType>(TypeStorageKind::Function, layout.totalSize);
     return new (mem) FunctionType(
         factory,
         layout,
@@ -375,8 +373,7 @@ FunctionType *FunctionType::fromData(
         withCount,
         normCount,
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(FunctionType));
-    ASSERT(mem != nullptr, "Failed to allocate FunctionType from permSpace");
+    void *mem = allocTypeStorage<FunctionType>(TypeStorageKind::Function, layout.totalSize);
     return new (mem) FunctionType(
         layout,
         withCount,

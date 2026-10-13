@@ -19,6 +19,7 @@
 
 #include "camel/core/type/base.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
@@ -470,8 +471,7 @@ Type *Type::create(TypeCode code) {
         "Allocating Type: {}, size: {} bytes",
         typeCodeToString(code),
         sizeof(Type)));
-    void *mem = mm::permSpace().alloc(sizeof(Type), alignof(Type));
-    ASSERT(mem != nullptr, "Failed to allocate Type from permSpace");
+    void *mem = allocTypeStorage<Type>(TypeStorageKind::Primitive);
     return new (mem) Type(code);
 }
 

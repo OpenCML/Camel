@@ -25,6 +25,7 @@
 #include "camel/core/type/typevar.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
@@ -123,8 +124,7 @@ TupleType *TupleType::create() {
         "TupleType",
         "Allocating TupleType: (), size: {} bytes",
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
-    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    void *mem = allocTypeStorage<TupleType>(TypeStorageKind::Tuple, layout.totalSize);
     return new (mem) TupleType(layout, nullptr, nullptr, nullptr);
 }
 
@@ -141,8 +141,7 @@ TupleType *TupleType::create(const std::vector<Type *> &types) {
         layout.size,
         layout.refCount,
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
-    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    void *mem = allocTypeStorage<TupleType>(TypeStorageKind::Tuple, layout.totalSize);
     return new (mem) TupleType(layout, types);
 }
 
@@ -242,8 +241,7 @@ TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
         layout.size,
         layout.refCount,
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
-    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    void *mem = allocTypeStorage<TupleType>(TypeStorageKind::Tuple, layout.totalSize);
     return new (mem) TupleType(factory, layout);
 }
 
@@ -257,8 +255,7 @@ TupleType *TupleType::fromFactoryData(
         size,
         refCount,
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
-    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    void *mem = allocTypeStorage<TupleType>(TypeStorageKind::Tuple, layout.totalSize);
     return new (mem) TupleType(layout, types, typeCodes, refs);
 }
 

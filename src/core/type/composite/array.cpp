@@ -20,6 +20,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
@@ -48,8 +49,7 @@ ArrayType *ArrayType::create(Type *elemType) {
         elemType->toString(),
         sizeof(ArrayType)));
 
-    void *mem = mm::permSpace().alloc(sizeof(ArrayType), alignof(ArrayType));
-    ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
+    void *mem = allocTypeStorage<ArrayType>(TypeStorageKind::Array);
     return new (mem) ArrayType(elemType);
 }
 
@@ -71,8 +71,7 @@ ArrayType *ArrayType::fromData(Type *elemType) {
         elemType->toString(),
         sizeof(ArrayType)));
 
-    void *mem = mm::permSpace().alloc(sizeof(ArrayType), alignof(ArrayType));
-    ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
+    void *mem = allocTypeStorage<ArrayType>(TypeStorageKind::Array);
     return new (mem) ArrayType(elemType);
 }
 

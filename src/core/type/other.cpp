@@ -19,6 +19,7 @@
 
 #include "camel/core/type/other.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 
 #include <span>
@@ -65,8 +66,7 @@ Type **OtherType::copyParams(std::span<Type *const> params) {
     if (params.empty())
         return nullptr;
     size_t n     = params.size();
-    void *arrMem = mm::permSpace().alloc(n * sizeof(Type *), alignof(Type *));
-    ASSERT(arrMem != nullptr, "Failed to allocate params array from permSpace");
+    void *arrMem = allocTypeStorage(TypeStorageKind::Params, n * sizeof(Type *), alignof(Type *));
     Type **p = static_cast<Type **>(arrMem);
     for (size_t i = 0; i < n; ++i)
         p[i] = params[i];

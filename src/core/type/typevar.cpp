@@ -24,6 +24,7 @@
 #include "camel/core/type/typevar.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -41,8 +42,7 @@ TypeVarType::TypeVarType(const std::string &name, bool binder)
     : Type(TypeCode::TypeVar), name_(name), binder_(binder) {}
 
 TypeVarType *TypeVarType::create(const std::string &name, bool binder) {
-    void *mem = mm::permSpace().alloc(sizeof(TypeVarType), alignof(TypeVarType));
-    ASSERT(mem != nullptr, "Failed to allocate TypeVarType from permSpace");
+    void *mem = allocTypeStorage<TypeVarType>(TypeStorageKind::TypeVar);
     return new (mem) TypeVarType(name, binder);
 }
 
@@ -85,8 +85,7 @@ TypeFunctionType::TypeFunctionType(
 
 TypeFunctionType *
 TypeFunctionType::create(const std::string &name, std::vector<std::string> params, Type *body) {
-    void *mem = mm::permSpace().alloc(sizeof(TypeFunctionType), alignof(TypeFunctionType));
-    ASSERT(mem != nullptr, "Failed to allocate TypeFunctionType from permSpace");
+    void *mem = allocTypeStorage<TypeFunctionType>(TypeStorageKind::TypeVar);
     return new (mem) TypeFunctionType(name, std::move(params), body);
 }
 
