@@ -86,13 +86,23 @@ class FuncDeclLoad : public StmtLoad {
 
     const Reference &ref() const { return ref_; }
 
+    /// An operator overload, `func operator +(...)` (design principles 2.12): the symbol as
+    /// written (`+`, `[]`); empty for an ordinary function. ref() is then the reserved name of
+    /// the operator's function (`__add__`), or `operator <symbol>` when the symbol cannot be
+    /// overloaded with that many parameters, which the GCT builder reports.
+    const std::string &operatorSymbol() const { return operatorSymbol_; }
+    void setOperatorSymbol(std::string symbol) { operatorSymbol_ = std::move(symbol); }
+
     const std::string toString() const override {
-        return "FuncDecl: " + ref_.toString() + docSuffix();
+        return "FuncDecl: " + ref_.toString() +
+               (operatorSymbol_.empty() ? std::string() : " (operator " + operatorSymbol_ + ")") +
+               docSuffix();
     }
     const std::string geneCode() const override;
 
   private:
     Reference ref_;
+    std::string operatorSymbol_;
 };
 
 class TypeDeclLoad : public StmtLoad {

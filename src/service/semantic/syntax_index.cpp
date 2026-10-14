@@ -464,7 +464,12 @@ class Walker {
         const Range whole        = rangeOf(ctx);
         int32_t self             = -1;
         const auto block         = ctx.get<cst::StmtBlock>();
-        if (const syn::TokenRef name = lastNameOf(ctx.get<cst::IdentRef>())) {
+        // An operator overload (`func operator +(...)`) is named by its `operator` token.
+        syn::Node nameNode = ctx.get<cst::IdentRef>();
+        if (!nameNode) {
+            nameNode = ctx.get<cst::OperatorName>();
+        }
+        if (const syn::TokenRef name = lastNameOf(nameNode)) {
             Decl &decl    = declare(DeclKind::Function, name, whole, whole);
             decl.exported = ctx.has(TK::KwExport);
             if (auto modifiers = ctx.get<cst::Modifiers>()) {

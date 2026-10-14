@@ -161,6 +161,45 @@ int 1 string a
 | `macro` | 可以被 `std::macro` 遍提前求值（[4.5](04_execution_model.md#45-macro-函数)） |
 | `atomic`、`shared`、`inner`、`outer` | 保留：能被解析，没有任何语义 |
 
+### 7.4.5 运算符重载
+
+```
+func operator 运算符(形参): 返回类型 { 语句 }
+```
+
+（写法暂定。）运算符是函数的调用（`a + b` 是 `__add__(a, b)`，[2.4](02_lexical.md#24-关键字)），程序可以为自己的类型添加这些函数的重载：
+
+```cml
+type Vec = { x: float, y: float }
+type Mask = { bits: int }
+
+func operator +(a: Vec, b: Vec): Vec { return { x: a.x + b.x, y: a.y + b.y } }
+func operator -(a: Vec): Vec { return { x: 0.0 - a.x, y: 0.0 - a.y } }    // 一元
+func operator *(k: float, v: Vec): Vec { return { x: k * v.x, y: k * v.y } }
+func operator [](v: Vec, i: int): float { return if i == 0 then v.x else v.y }
+func operator &(a: Mask, b: Mask): Mask { return { bits: a.bits * b.bits } }
+
+func main(): int sync {
+    let v: Vec = { x: 1.0, y: 2.0 }
+    var acc: Vec = { x: 0.0, y: 0.0 }
+    acc += v                         // acc = acc + v
+    let w = 2.0 * (v + acc)
+    println(w.x, w[1], (-v).x, 1 + 2)
+    return 0
+}
+```
+
+```text
+4.0 8.0 -1.0 3
+```
+
+- **可以重载的**：二元的 `+` `-` `*` `/` `%` `^` `@` `==` `!=` `<` `<=` `>` `>=` `&` `|`，下标 `[]`（被取下标的值与至少一个下标），一元的 `-` `!` `~`。`-` 有一个形参是取负，两个是减法。
+- **不能重载的**：`&&`、`||`（分支）、`??`、`!!`、`?->`（对空值与错误的分支）、`->`（把值交给函数）、`..`、`as`、赋值，以及 `===`、`!==`。写了是 `SemanticDiag::OperatorNotOverloadable`，诊断给出原因。复合赋值没有自己的重载：`a += b` 就是 `a = a + b`，跟随 `+` 的重载。
+- 运算符的形参个数不对、带 `with` 形参或 `var` 形参，是 `SemanticDiag::OperatorOverloadInvalid`。泛型的重载用 `typeas` 写在形参的类型里（`func operator +(a: (typeas T)[], b: T[]): T[]`），不写在尖括号里：尖括号是 `with` 形参。
+- **各层的重载合成一组。** 其他名字只取最近的一层（局部 > 本模块 > 导入的 > 内建），运算符例外（设计原则 2.12）：本模块的、导入的模块导出的、内建的与 C++ 模块的重载是同一组，一次调用取接受这些操作数的那一个。有两个都接受时是 `SemanticDiag::AmbiguousOperatorCall`，诊断列出它们；声明一个内建或导入的重载已经接受的形参类型（如 `func operator +(a: int, b: int)`），是 `SemanticDiag::OperatorOverloadConflict`；同一模块里形参类型相同的两个重载是 `SemanticDiag::Redeclaration`。
+- **导出**：`export func operator +(...)`。导入一个模块（`import { V } from m`，或 `import m`）就带来它导出的全部运算符重载，与 C++ 模块的运算符一样，不必也不能按名字导入。
+- 运算符的重载在图上就是一次普通的函数调用。`__x__` 形式的名字仍是保留的，程序不直接写。
+
 ## 7.5 泛型函数
 
 在形参类型里第一次出现类型变量的位置写 `typeas T`，把那个位置上的类型绑定为 `T`；之后（其余形参、返回类型、函数体）直接写 `T`。

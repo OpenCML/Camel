@@ -1,0 +1,21 @@
+/**
+ * An operand enters a `T?` parameter of an overload of the program, as an argument of a
+ * function does (design principles 2.10); an exact overload is preferred.
+ */
+module entering
+
+type V = { x: int }
+
+func operator +(a: V, b: V): V { return { x: a.x + b.x } }
+func operator +(a: V?, b: V): V {
+    let fallback: V = { x: 100 }
+    return { x: (a ?? fallback).x + b.x }
+}
+
+func main(): int sync {
+    let a: V = { x: 1 }
+    let none: V? = null
+    let some: V? = a
+    println((a + a).x, (none + a).x, (some + a).x)
+    return 0
+}

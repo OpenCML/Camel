@@ -1,0 +1,11 @@
+/**
+ * An import of a module brings its operator overloads (design principles 2.12): here an import
+ * by name of another name of the module.
+ */
+import { mk } from base
+import { zero } from plus_a
+func main(): int sync {
+    let s = mk(1) + mk(10)
+    println(s.x, (-s).x, (s + zero()).x, [1, 2] == 2, [1, 2] == 5, 1 == 1)
+    return 0
+}

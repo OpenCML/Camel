@@ -22,6 +22,7 @@
 
 #include "camel/compile/semantic_recorder.h"
 #include "camel/core/module/userdef.h"
+#include "camel/core/operator_names.h"
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
@@ -1054,6 +1055,49 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     return res;
 }
 
+void Builder::checkOperatorDeclaration(
+    const std::string &symbol, const AST::node_ptr_t &funcData, const AST::node_ptr_t &decl) {
+    const auto at = decl->load()->tokenRange();
+    if (const auto reason = camel::core::whyNotOverloadable(symbol)) {
+        diags_->of(SemanticDiag::OperatorNotOverloadable).at(at).commit(symbol, *reason);
+        throw BuildAbortException();
+    }
+    // FuncData: FuncType (with-parameters, parameters, return type), then the body.
+    const auto &funcType   = funcData->atAs<AST::FuncTypeLoad>(0);
+    const auto &withParams = funcType->atAs<AST::RepeatedLoad>(0);
+    const auto &normParams = funcType->atAs<AST::RepeatedLoad>(1);
+    if (!camel::core::overloadableOperatorGroup(symbol, normParams->size())) {
+        diags_->of(SemanticDiag::OperatorOverloadInvalid)
+            .at(at)
+            .commit(
+                symbol,
+                std::format(
+                    "it takes {}, and this declaration has {}",
+                    camel::core::arityOf(symbol),
+                    normParams->size()));
+        throw BuildAbortException();
+    }
+    // `a + b` has nowhere to give a with-argument, and does not write its operands.
+    if (withParams->size() > 0) {
+        diags_->of(SemanticDiag::OperatorOverloadInvalid)
+            .at(at)
+            .commit(
+                symbol,
+                "an operator has no with-parameters: its operands are all it is given (a "
+                "type variable is written 'typeas T' in a parameter's type, not in angle "
+                "brackets)");
+        throw BuildAbortException();
+    }
+    for (const auto &param : *normParams) {
+        if (param->loadAs<AST::NamedPairLoad>()->isVar()) {
+            diags_->of(SemanticDiag::OperatorOverloadInvalid)
+                .at(param->load()->tokenRange())
+                .commit(symbol, "an operator does not change its operands: no var parameters");
+            throw BuildAbortException();
+        }
+    }
+}
+
 /*
 FuncDecl(Ref ref) : FuncAnno* anno, FuncData ;
 */
@@ -1063,11 +1107,17 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->size() >= 1, "FuncDecl AST should have at least one child.");
 
     const auto &funcDataNode = ast->atAs<AST::FuncDataLoad>(ast->size() - 1);
-    // The names of the form `__x__` are the compiler's: the operators are functions of such
-    // names (`a + b` is `__add__(a, b)`), and code the compiler writes itself refers to them
-    // (`t += u` on a tensor, the tag operators of `??`). A `let` could not take one; a
-    // function could, and `func __add__` then replaced `+` in the whole module.
-    if (!validateIdent(funcDataNode->loadAs<AST::FuncDataLoad>()->ref().ident())) {
+    const auto &declLoad     = ast->loadAs<AST::FuncDeclLoad>();
+    if (!declLoad->operatorSymbol().empty()) {
+        // `func operator +(a: V, b: V): V` (design principles 2.12): the function of the
+        // operator's reserved name, which the parser and the AST builder chose.
+        checkOperatorDeclaration(declLoad->operatorSymbol(), funcDataNode, ast);
+    } else if (!validateIdent(funcDataNode->loadAs<AST::FuncDataLoad>()->ref().ident())) {
+        // The names of the form `__x__` are the compiler's: the operators are functions of
+        // such names (`a + b` is `__add__(a, b)`), and code the compiler writes itself refers
+        // to them (`t += u` on a tensor, the tag operators of `??`). A `let` could not take
+        // one; a function could, and `func __add__` then replaced `+` in the whole module. A
+        // program overloads an operator with `func operator +` instead.
         diags_->of(SemanticDiag::ReservedIdentifier).at(ast->load()->tokenRange()).commit();
         throw BuildAbortException();
     }

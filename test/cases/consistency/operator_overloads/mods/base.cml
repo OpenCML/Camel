@@ -1,0 +1,3 @@
+module base
+export type V = { x: int }
+export func mk(x: int): V { return { x: x } }

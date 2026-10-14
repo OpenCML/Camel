@@ -1,0 +1,12 @@
+/**
+ * Refused declaration of an operator overload (design principles 2.12): an operator has no
+ * with-parameters.
+ */
+module with_param
+
+type M = { v: int }
+
+with <k: int>
+func operator +(a: M, b: M): M { return a }
+
+func main(): int { return 0 }

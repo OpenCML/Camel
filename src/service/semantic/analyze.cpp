@@ -734,6 +734,11 @@ class ModelBuilder {
                     }
                 } else if (!fact.uri.empty()) {
                     file.operatorCalls.emplace_back(where->range, type);
+                } else if (auto target = functionOfGraph(fact.graph)) {
+                    // An operator that took an overload of the program: its call has no
+                    // name, the operator stands for the declaration.
+                    file.operatorCalls.emplace_back(where->range, type);
+                    file.operatorTargets.emplace_back(where->range, *target);
                 }
                 break;
             }

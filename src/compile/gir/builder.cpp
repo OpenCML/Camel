@@ -21,6 +21,7 @@
 #include "builder_support.h"
 
 #include "camel/core/numeric_convert.h"
+#include "camel/core/operator_names.h"
 #include "camel/compile/gir/static_function.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/graph.h"
@@ -398,25 +399,10 @@ compile_graph_ptr_t createCompileGraph(
     return graph;
 }
 
-/// How a program writes the operator behind an operator group (`__assn_add__` is `+=`);
-/// null for a group that is not an operator of the language.
-const char *operatorSymbolOf(std::string_view group) {
-    static const std::unordered_map<std::string_view, const char *> symbols = {
-        {"__assn__", "="},        {"__assn_add__", "+="},  {"__assn_sub__", "-="},
-        {"__assn_mul__", "*="},   {"__assn_div__", "/="},  {"__assn_mod__", "%="},
-        {"__assn_mat__", "@="},   {"__assn_pow__", "^="},  {"__assn_and__", "&="},
-        {"__assn_or__", "|="},    {"__or__", "|"},         {"__and__", "&"},
-        {"__eq__", "=="},         {"__neq__", "!="},       {"__lt__", "<"},
-        {"__le__", "<="},
-        {"__gt__", ">"},          {"__ge__", ">="},        {"__add__", "+"},
-        {"__sub__", "-"},         {"__mul__", "*"},        {"__div__", "/"},
-        {"__mod__", "%"},         {"__mat__", "@"},        {"__pow__", "^"},
-        {"__idx__", "[]"},        {"__not__", "!"},        {"__neg__", "-"},
-        {"__inv__", "~"},
-    };
-    const auto it = symbols.find(group);
-    return it == symbols.end() ? nullptr : it->second;
-}
+// How a program writes the operator behind an operator group (`__assn_add__` is `+=`), the
+// table of the operators that are calls of a function.
+using camel::core::displayNameOf;
+using camel::core::operatorSymbolOf;
 } // namespace
 
 inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
@@ -980,6 +966,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     }
     FunctionType *funcType    = tt::as_ptr<FunctionType>(type);
     rejectRedeclaredFunction(gct->name(), funcType, gct);
+    rejectOperatorConflict(gct->name(), funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, gct->name());
     leaveScope();
 
@@ -1006,6 +993,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         funcType = instantiateFunctionType(funcType, typeBindings_);
     }
     rejectRedeclaredFunction(name, funcType, gct);
+    rejectOperatorConflict(name, funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, name);
     buildFuncBody(gct, graph, funcType, name);
     leaveScope();
@@ -1106,7 +1094,10 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         }
         // One name is either a generic function or a set of ordinary ones: which of two
         // generic functions, or of a generic and an ordinary one, a call means is not defined.
-        if (templateScope_->has(name, false) || plainNames.contains(name)) {
+        // An operator is the exception: its overloads, generic or not, are one set, and a call
+        // that more than one of them accepts is an error (chooseOperatorOverload).
+        const bool isOperator = camel::core::isOverloadableOperatorGroup(name);
+        if (!isOperator && (templateScope_->has(name, false) || plainNames.contains(name))) {
             diags_->of(SemanticDiag::Redeclaration).atOrigin(child->origin()).commit(name);
             continue;
         }
@@ -1119,7 +1110,9 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             }
         }
         auto tmpl            = std::make_shared<GenericTemplate>();
-        tmpl->name           = name;
+        // An operator's template is named as the program writes it (`operator +`), in its
+        // diagnostics and in the names of its instances.
+        tmpl->name           = isOperator ? displayNameOf(name) : name;
         tmpl->func           = child;
         tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
         tmpl->outerBindings  = typeBindings_;
@@ -1136,7 +1129,11 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         if (const auto *usings = GCT::Tree::of(child)->usingsOf(child)) {
             tmpl->usingFrames.push_back(usings);
         }
-        templateScope_->insert(name, tmpl);
+        if (isOperator) {
+            operatorTemplates_[name].push_back({templateScope_, tmpl});
+        } else {
+            templateScope_->insert(name, tmpl);
+        }
     }
 }
 
@@ -1949,10 +1946,13 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         tmpl->instances.push_back({bindings, graph, false});
         // Scopes are kept by name under the scope they were entered from, here the scope the
         // function was declared in: two functions written in place, which have no name to
-        // tell them apart, need two scopes.
+        // tell them apart, need two scopes; so do two generic overloads of one operator,
+        // which share their name.
+        const bool sharedName =
+            tmpl->name.empty() || camel::core::isOverloadableOperatorGroup(tmpl->func->name());
         enterGraphScope(
             graph,
-            tmpl->name.empty()
+            sharedName
                 ? std::format("{}@{:p}", instanceName, static_cast<void *>(tmpl.get()))
                 : instanceName);
         buildFuncBody(tmpl->func, graph, funcType, instanceName);
@@ -2764,6 +2764,13 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     const string name     = moduleLevelName(written);
     genericCalleeAllowed_ = false;
     refOrigin_            = gct->origin();
+    if (camel::core::isOverloadableOperatorGroup(written)) {
+        // An operator (`a + b` is `__add__(a, b)`): its overloads from every layer are one
+        // set (design principles 2.12), not those of the first layer that has the name.
+        node_handle_t drefNode = operatorDrefOf(written, gct);
+        LEAVE("DREF");
+        return drefNode;
+    }
     auto optNode      = nodeAt(name);
     if (optNode.has_value()) {
         node_handle_t node = optNode.value();
@@ -2964,6 +2971,355 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     diags_->of(SemanticDiag::UnresolvedReference).atOrigin(gct->origin()).commit(name);
     throw BuildAbortException();
+}
+
+// ---- Operator overloads of the program (design principles 2.12) --------------------------
+//
+// Where this meets the resolution of names: an operator is the one kind of name that does not
+// take the first layer having it (visitDRefNode, "local > this module > imported > using >
+// built-in"); operatorOverloadsOf gathers every layer instead. The layers it reads are the
+// graph scopes of this module (local functions and the module's own), the module's generic
+// operator templates, and Module::importedOperatorOverloads (every import of a module brings
+// its operator overloads, as for a C++ module's operators). Nothing else of the name lookup
+// is involved, so the lookup can change around it as long as those three stay reachable.
+
+Builder::OperatorOverloads
+Builder::operatorOverloadsOf(const std::string &group) {
+    OperatorOverloads set;
+    const auto addGraph = [&](const compile_graph_ptr_t &graph, const std::string &module) {
+        if (graph && std::ranges::find(set.graphs, graph) == set.graphs.end()) {
+            set.graphs.push_back(graph);
+            if (!module.empty()) {
+                set.moduleOf[graph.get()] = module;
+            }
+        }
+    };
+    // The program's own, from the innermost scope out: every layer, not the first one that has
+    // the name.
+    for (graph_scope_ptr_t scope = graphScope_; scope; scope = scope->outer()) {
+        if (auto graphs = scope->get(group, false); graphs.has_value() && graphs.value()) {
+            for (const auto &graph : *graphs.value()) {
+                addGraph(graph, {});
+            }
+        }
+    }
+    if (auto it = operatorTemplates_.find(group); it != operatorTemplates_.end()) {
+        for (const auto &[declaredIn, tmpl] : it->second) {
+            for (template_scope_ptr_t scope = templateScope_; scope; scope = scope->outer()) {
+                if (scope == declaredIn) {
+                    set.templates.push_back(tmpl);
+                    break;
+                }
+            }
+        }
+    }
+    // Imported (the same at every use: the imports of a module are complete before its graphs
+    // are built).
+    const OperatorOverloads &imported = importedOperatorOverloadsOf(group);
+    for (const auto &graph : imported.graphs) {
+        addGraph(graph, imported.moduleOf.at(graph.get()));
+    }
+    for (const auto &tmpl : imported.templates) {
+        if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
+            set.templates.push_back(tmpl);
+            set.moduleOf[tmpl.get()] = imported.moduleOf.at(tmpl.get());
+        }
+    }
+    set.ops = imported.ops;
+    return set;
+}
+
+const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std::string &group) {
+    const auto key = std::make_pair(static_cast<const void *>(module_.get()), group);
+    if (auto it = importedOperators_.find(key); it != importedOperators_.end()) {
+        return it->second;
+    }
+    // The operator groups of the built-in module and of the C++ modules merge into one group;
+    // the overloads of modules written in Camel are functions and templates.
+    OperatorOverloads set;
+    std::vector<std::pair<std::string, resolver_ptr_t>> resolvers;
+    for (const auto &imported : module_->importedOperatorOverloads(group)) {
+        const auto &ent = imported.overloads;
+        if (ent.isOperGroup()) {
+            if (const auto &ops = ent.operGroup()) {
+                for (const auto &overload : ops->resolvers()) {
+                    const bool known = std::ranges::any_of(resolvers, [&](const auto &have) {
+                        return have.first == overload.first && have.second == overload.second;
+                    });
+                    if (!known) {
+                        resolvers.push_back(overload);
+                    }
+                }
+            }
+        } else if (camel::core::module::detail::EntityAccess::isGraphSet(ent)) {
+            for (const auto &graph :
+                 *asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(ent))) {
+                if (std::ranges::find(set.graphs, graph) == set.graphs.end()) {
+                    set.graphs.push_back(graph);
+                    set.moduleOf[graph.get()] = imported.mod->name();
+                }
+            }
+        } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(ent)) {
+            auto tmpl = std::static_pointer_cast<GenericTemplate>(
+                camel::core::module::detail::EntityAccess::genericTemplate(ent));
+            if (std::ranges::find(set.templates, tmpl) == set.templates.end()) {
+                set.templates.push_back(tmpl);
+                set.moduleOf[tmpl.get()] = imported.mod->name();
+            }
+        }
+    }
+    set.ops = OperatorGroup::create(group, std::move(resolvers));
+    return importedOperators_.emplace(key, std::move(set)).first->second;
+}
+
+bool Builder::hasProgramOperatorOverloads(const std::string &group) {
+    if (!camel::core::isOverloadableOperatorGroup(group)) {
+        return false;
+    }
+    for (graph_scope_ptr_t scope = graphScope_; scope; scope = scope->outer()) {
+        if (auto graphs = scope->get(group, false); graphs.has_value() && graphs.value() &&
+                                                     !graphs.value()->empty()) {
+            return true;
+        }
+    }
+    if (auto it = operatorTemplates_.find(group); it != operatorTemplates_.end() &&
+                                                   !it->second.empty()) {
+        return true;
+    }
+    const OperatorOverloads &imported = importedOperatorOverloadsOf(group);
+    return !imported.graphs.empty() || !imported.templates.empty();
+}
+
+node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct) {
+    OperatorOverloads set = operatorOverloadsOf(group);
+    ASSERT(set.ops != nullptr, "An operator has no group.");
+    node_handle_t drefNode{currGraph_->addDrefNode(
+        std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{set.ops})};
+    registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+    if (recorder_) {
+        std::vector<std::string> signatures;
+        for (const auto &[uri, resolver] : set.ops->resolvers()) {
+            signatures.push_back(resolver->signature());
+        }
+        for (const auto &graph : set.graphs) {
+            signatures.push_back(graph->funcType()->toString());
+        }
+        recorder_->operatorReferenced(gct->origin(), group, std::move(signatures));
+    }
+    if (!set.graphs.empty() || !set.templates.empty()) {
+        operatorOverloads_[drefNode] = std::move(set);
+    }
+    return drefNode;
+}
+
+bool Builder::genericOperatorAccepts(const template_ptr_t &tmpl, const type_vec_t &normTypes) {
+    FunctionType *signature = tmpl->funcType;
+    if (signature->withTypesCount() != 0 || signature->normTypesCount() != normTypes.size()) {
+        return false;
+    }
+    // As resolveGenericCall: the binding occurrences, then the others, then each argument
+    // against its parameter with the variables replaced.
+    type_bindings_t bindings;
+    for (size_t i = 0; i < normTypes.size(); ++i) {
+        if (!bindTypeVars(signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings)) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < normTypes.size(); ++i) {
+        unifyTypeVars(signature->normTypeAt(i), valueTypeOf(normTypes[i]), bindings);
+    }
+    for (size_t i = 0; i < normTypes.size(); ++i) {
+        Type *wanted = substituteTypeVars(signature->normTypeAt(i), bindings);
+        if (containsTypeVar(wanted) || !entersImplicitly(wanted, valueTypeOf(normTypes[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+compile_graph_ptr_t Builder::chooseOperatorOverload(
+    const OperatorOverloads &set, std::vector<Argument> &withInputs,
+    std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
+    const GCT::node_ptr_t &call, const std::function<bool(FunctionType *, bool)> &accepts) {
+    if (!withTypes.empty()) {
+        return nullptr; // an operator is never given with-arguments; the group reports it
+    }
+    const char *symbol = operatorSymbolOf(set.ops->name());
+    std::vector<StaticArg> statics;
+    for (const Argument &input : normInputs) {
+        statics.push_back(staticArgOf(input.node));
+    }
+    const bool builtinAccepts =
+        set.ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+    const auto where = [&](const void *overload) {
+        const auto it = set.moduleOf.find(overload);
+        return it == set.moduleOf.end() ? std::string(" (this module)")
+                                        : std::format(" (module '{}')", it->second);
+    };
+    // Exactly as given first, then with the arguments entering `T?` / `T!` parameters (as for
+    // a call of a function, visitLinkNode). The built-in overloads take only the first.
+    for (const bool entering : {false, true}) {
+        std::vector<compile_graph_ptr_t> graphs;
+        std::vector<template_ptr_t> templates;
+        for (const auto &graph : set.graphs) {
+            if (accepts(graph->funcType(), entering)) {
+                graphs.push_back(graph);
+            }
+        }
+        if (!entering) {
+            for (const auto &tmpl : set.templates) {
+                if (genericOperatorAccepts(tmpl, normTypes)) {
+                    templates.push_back(tmpl);
+                }
+            }
+        }
+        const size_t fits = graphs.size() + templates.size() + (builtinAccepts && !entering);
+        if (fits == 0) {
+            continue;
+        }
+        if (fits > 1) {
+            // One line, as every diagnostic message is: the overloads separated by `;`.
+            std::vector<std::string> overloads;
+            for (const auto &graph : graphs) {
+                overloads.push_back(std::format(
+                    "operator {}: {}{}",
+                    symbol,
+                    graph->funcType()->toString(),
+                    where(graph.get())));
+            }
+            for (const auto &tmpl : templates) {
+                overloads.push_back(std::format(
+                    "operator {}: {}{}",
+                    symbol,
+                    tmpl->funcType->toString(),
+                    where(tmpl.get())));
+            }
+            if (builtinAccepts && !entering) {
+                for (const auto &[uri, resolver] : set.ops->resolvers()) {
+                    if (resolver->resolve(withTypes, normTypes, Modifier::None).has_value()) {
+                        overloads.push_back(std::format(
+                            "the built-in or module operator <{}>: {}",
+                            uri,
+                            resolver->signature()));
+                    }
+                }
+            }
+            // At the operator: the origin of a binary call is its right operand.
+            diags_->of(SemanticDiag::AmbiguousOperatorCall)
+                .atOrigin(call->at(0)->origin())
+                .commit(
+                    symbol,
+                    strutil::join(normTypes, ", ", [](Type *t) { return t->toString(); }),
+                    strutil::join(overloads, "; ", [](const std::string &o) { return o; }));
+            throw BuildAbortException();
+        }
+        if (builtinAccepts && !entering) {
+            return nullptr;
+        }
+        if (!templates.empty()) {
+            return resolveGenericCall(
+                templates.front(),
+                withInputs,
+                normInputs,
+                withTypes,
+                normTypes,
+                call);
+        }
+        const compile_graph_ptr_t &chosen = graphs.front();
+        if (!chosen->funcType()->hasExitType()) {
+            if (failedBodies_.contains(chosen.get())) {
+                throw BuildAbortException(); // its body is in error, reported there
+            }
+            diags_->of(SemanticDiag::CallingIncompleteFunction)
+                .atOrigin(call->origin())
+                .commit(displayNameOf(chosen->name()), chosen->funcType()->toString());
+            throw BuildAbortException();
+        }
+        return chosen;
+    }
+    return nullptr;
+}
+
+void Builder::rejectOperatorConflict(
+    const std::string &group, FunctionType *funcType, const GCT::node_ptr_t &gct) {
+    if (!camel::core::isOverloadableOperatorGroup(group) ||
+        !checkedOperatorSignatures_.insert(funcType).second) {
+        return;
+    }
+    type_vec_t params;
+    for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
+        params.push_back(funcType->normTypeAt(i));
+        if (containsTypeVar(funcType->normTypeAt(i))) {
+            // A generic overload: which arguments it takes is known at a call
+            // (chooseOperatorOverload reports when it and another one both take them).
+            return;
+        }
+    }
+    const std::string symbol = operatorSymbolOf(group);
+    const std::string types =
+        strutil::join(params, ", ", [](Type *t) { return t->toString(); });
+    const OperatorOverloads set = operatorOverloadsOf(group);
+    const std::vector<StaticArg> statics(params.size());
+    if (set.ops->resolve({}, params, statics, Modifier::None).has_value()) {
+        diags_->of(SemanticDiag::OperatorOverloadConflict)
+            .atOrigin(gct->origin())
+            .commit(symbol, types, " by the built-in operator or by an operator of a C++ module");
+        throw BuildAbortException();
+    }
+    // An overload of another module with the same parameters (those of this module are a
+    // Redeclaration, reported by rejectRedeclaredFunction).
+    for (const auto &graph : set.graphs) {
+        const auto module = set.moduleOf.find(graph.get());
+        FunctionType *other = graph->funcType();
+        if (module == set.moduleOf.end() || other->normTypesCount() != params.size() ||
+            other->withTypesCount() != 0) {
+            continue;
+        }
+        bool same = true;
+        for (size_t i = 0; same && i < params.size(); ++i) {
+            same = other->normTypeAt(i)->equals(params[i]);
+        }
+        if (same) {
+            diags_->of(SemanticDiag::OperatorOverloadConflict)
+                .atOrigin(gct->origin())
+                .commit(symbol, types, std::format(" by module '{}'", module->second));
+            throw BuildAbortException();
+        }
+    }
+}
+
+void Builder::exportOperatorOverloads(const std::string &group, const GCT::node_ptr_t &gct) {
+    bool exported = false;
+    if (auto graphs = graphScope_->get(group, false); graphs.has_value() && graphs.value() &&
+                                                      !graphs.value()->empty()) {
+        module_->exportEntity(
+            Reference(group),
+            camel::core::module::detail::EntityAccess::makeGraphSet(
+                eraseCompileGraphSet(graphs.value())));
+        exported = true;
+    }
+    // Each generic overload under a name of its own (`__add__#0`): an exported name holds one
+    // entity, and a template is not a graph a set could hold.
+    if (auto it = operatorTemplates_.find(group); it != operatorTemplates_.end()) {
+        size_t index = 0;
+        for (const auto &[declaredIn, tmpl] : it->second) {
+            if (declaredIn != templateScope_) {
+                continue; // declared inside a function: not the module's
+            }
+            const Reference ref(std::format("{}#{}", group, index++));
+            module_->exportEntity(
+                ref,
+                camel::core::module::detail::EntityAccess::makeGenericTemplate(
+                    std::static_pointer_cast<void>(tmpl)));
+            exported = true;
+        }
+    }
+    if (!exported) {
+        diags_->of(SemanticDiag::UnresolvedReference)
+            .atOrigin(gct->origin())
+            .commit(displayNameOf(group));
+        throw BuildAbortException();
+    }
 }
 
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
@@ -3809,7 +4165,7 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     static const std::unordered_map<std::string, std::string> kPlainOperator = {
         {"__assn_add__", "__add__"}, {"__assn_sub__", "__sub__"}, {"__assn_mul__", "__mul__"},
         {"__assn_div__", "__div__"}, {"__assn_mod__", "__mod__"}, {"__assn_mat__", "__mat__"},
-        {"__assn_pow__", "__pow__"},
+        {"__assn_pow__", "__pow__"}, {"__assn_and__", "__and__"}, {"__assn_or__", "__or__"},
     };
     const auto plain = kPlainOperator.find(group);
     if (plain == kPlainOperator.end() || operands.size() != 2) {
@@ -3817,8 +4173,11 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     }
     // Only for a type a module defines. The built-in types have their own operators, and
     // where one is missing (`%=` on a float, `+=` on an array) that stays an error.
+    // Or for any type when the program overloads the plain operator: `m &= n` on a type of
+    // the program is `m = m & n` through its `operator &` (design principles 2.11, 2.12).
     Type *target = valueTypeOf(nodeTypeOf(operands[0].node));
-    if (target == nullptr || !target->isOtherType()) {
+    if (target == nullptr ||
+        (!target->isOtherType() && !hasProgramOperatorOverloads(plain->second))) {
         return nullptr;
     }
     const auto make = [&](GCT::node_ptr_t node) {
@@ -4742,7 +5101,25 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         targetFuncType = factoryType;
     };
 
-    if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
+    // An operator with overloads of the program: one of them, or the built-in group below.
+    compile_graph_ptr_t operatorOverload = nullptr;
+    if (auto overloads = operatorOverloads_.find(targetNode);
+        overloads != operatorOverloads_.end()) {
+        operatorOverload = chooseOperatorOverload(
+            overloads->second,
+            withInputs,
+            normInputs,
+            withInputTypes,
+            normInputTypes,
+            gct,
+            accepts);
+    }
+    if (operatorOverload != nullptr) {
+        targetGraph = operatorOverload;
+        currGraph_->addDependencyGraph(targetGraph);
+        targetNode     = createFuncDataNode(targetGraph, false, true);
+        targetFuncType = targetGraph->funcType();
+    } else if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
         // A call of a generic function: the argument types select (and, the first time,
         // build) the instance, which is then called like any other function.
         targetGraph = resolveGenericCall(
@@ -4974,6 +5351,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             return "<" + p.first + ">: " + p.second->signature();
                         }) +
                     "\n";
+                // The overloads of the program are part of the set (design principles 2.12).
+                if (auto overloads = operatorOverloads_.find(targetNode);
+                    overloads != operatorOverloads_.end()) {
+                    for (const auto &graph : overloads->second.graphs) {
+                        overloadsStr += "    " + displayNameOf(graph->name()) + ": " +
+                                        graph->funcType()->toString() + "\n";
+                    }
+                    for (const auto &tmpl : overloads->second.templates) {
+                        overloadsStr += "    " + displayNameOf(tmpl->name) + ": " +
+                                        tmpl->funcType->toString() + "\n";
+                    }
+                }
                 diags_->of(SemanticDiag::NoMatchingFunction)
                     .atOrigin(gct->origin())
                     .commit(argTypesStr, overloadsStr);
@@ -6735,6 +7124,12 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         const Reference ref(gct->exportName(i));
         const std::string name = ref.toString();
         if (isDecorated(name) != decorated) {
+            continue;
+        }
+        if (ref.plain() && camel::core::isOverloadableOperatorGroup(ref.ident())) {
+            // `export func operator +`: every module that imports this one receives its
+            // overloads (Module::importedOperatorOverloads).
+            exportOperatorOverloads(ref.ident(), gct);
             continue;
         }
         if (decorated) {

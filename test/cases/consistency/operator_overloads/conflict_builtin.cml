@@ -1,0 +1,10 @@
+/**
+ * Refused declaration of an operator overload (design principles 2.12).
+ */
+module conflict_builtin
+
+type M = { v: int }
+
+func operator +(a: int, b: int): int { return 99 }
+
+func main(): int { return 0 }
