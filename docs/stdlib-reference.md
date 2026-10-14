@@ -1901,6 +1901,14 @@ primitive behind `sort_by` of the `array` module.
 One generator for the whole process. Every function reads or advances it and is declared with
 effects; none is ever folded or merged by a pass.
 
+After a seed the numbers are the same on every platform. The generator is the 64-bit Mersenne
+Twister (std::mt19937_64, seeded with the value as an unsigned 64-bit integer), and the draws
+are made by the project's own code (include/camel/utils/random.h), not by the C++ library's
+distributions, which differ between libraries: a float in [0, 1) is the generator's 64 bits
+times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
+method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
+output modulo the number of places left.
+
 #### `seed`
 
 ```camel

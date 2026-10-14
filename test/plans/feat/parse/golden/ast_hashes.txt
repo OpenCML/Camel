@@ -313,7 +313,7 @@ c3bf5e20624214d1 no stdlib/signatures/globals.cml
 1e1105a248f53ad6 ok stdlib/signatures/math.cml
 f8d330763bbcd3e8 ok stdlib/signatures/os.cml
 cc33c44661bbf49e ok stdlib/signatures/para.cml
-23cbbd4f8ecc687f ok stdlib/signatures/random.cml
+6a8195e842fe8298 ok stdlib/signatures/random.cml
 e54705fa2863341a ok stdlib/signatures/re.cml
 3504466199f7686d ok stdlib/signatures/statistics.cml
 4ced8b2221689de9 no stdlib/signatures/str.cml

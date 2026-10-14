@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,8 @@
 #include "layout.h"
 
 #include "parallel.h"
+
+#include "camel/utils/random.h"
 
 #include <algorithm>
 #include <cstring>
@@ -327,11 +329,11 @@ randomUniform(std::span<const int64_t> shape, double low, double high, mm::IAllo
         std::swap(low, high);
     }
     TensorObject *out = TensorObject::create(TypeCode::Float32, shape, allocator);
-    std::uniform_real_distribution<float> dist(static_cast<float>(low), static_cast<float>(high));
+    const float lo = static_cast<float>(low), hi = static_cast<float>(high);
     std::lock_guard guard(rngMutex());
     float *values = out->dataAs<float>();
     for (uint64_t i = 0; i < out->numel(); ++i) {
-        values[i] = dist(rng());
+        values[i] = camel::utils::random::uniformFloat(rng(), lo, hi);
     }
     return out;
 }
@@ -339,11 +341,12 @@ randomUniform(std::span<const int64_t> shape, double low, double high, mm::IAllo
 TensorObject *randomNormal(
     std::span<const int64_t> shape, double mean, double stddev, mm::IAllocator &allocator) {
     TensorObject *out = TensorObject::create(TypeCode::Float32, shape, allocator);
-    std::normal_distribution<float> dist(static_cast<float>(mean), static_cast<float>(stddev));
+    const float mu = static_cast<float>(mean), sigma = static_cast<float>(stddev);
+    camel::utils::random::NormalSource<float> normal;
     std::lock_guard guard(rngMutex());
     float *values = out->dataAs<float>();
     for (uint64_t i = 0; i < out->numel(); ++i) {
-        values[i] = dist(rng());
+        values[i] = normal(rng(), mu, sigma);
     }
     return out;
 }
