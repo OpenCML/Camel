@@ -168,9 +168,11 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     std::vector<ctx::Frame *> frameStack_ = std::vector<ctx::Frame *>(
         camel::execute::kDefaultMaxRecursionDepth + camel::execute::kEntryCalls);
     size_t stackDepth_ = 0;
+#if ENABLE_FASTVM_JIT
     // For an entry of pcStack_ pushed by the driver of framed code: where the caller's code
     // continues (JitContext::resumeAddr). Grown with pcStack_ by the driver.
     std::vector<uint64_t> resumeStack_;
+#endif
     // Calls that do nest on the native stack: a call through a function value (CALL) and each
     // element call of a higher-order operator run in a nested call(). They are open calls like
     // the ones on pcStack_, and the limit is on the sum.

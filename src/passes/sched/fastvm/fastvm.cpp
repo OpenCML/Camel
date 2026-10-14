@@ -57,7 +57,6 @@ constexpr size_t kFastVmIndirectCallCountSlot  = 5;
 constexpr size_t kFastVmGraphLengthSlot        = 6;
 constexpr uintptr_t kFastVmFlagCompileFailed   = 1u << 0;
 constexpr uintptr_t kFastVmFlagFailureReported = 1u << 1;
-constexpr uintptr_t kFastVmFlagJitFramed       = 1u << 2; // the JIT entry is framed code
 
 inline std::optional<size_t> fastVmEntryPcOf(camel::runtime::GCGraph *graph) {
     if (!graph)
@@ -127,6 +126,9 @@ inline void setFastVmJitFailureReportedOf(camel::runtime::GCGraph *graph, bool r
     graph->setExtraSlot(kFastVmFlagsSlot, flags);
 }
 
+#if ENABLE_FASTVM_JIT
+constexpr uintptr_t kFastVmFlagJitFramed = 1u << 2; // the JIT entry is framed code
+
 inline bool fastVmJitFramedOf(camel::runtime::GCGraph *graph) {
     return (fastVmFlagsOf(graph) & kFastVmFlagJitFramed) != 0;
 }
@@ -138,6 +140,7 @@ inline void setFastVmJitFramedOf(camel::runtime::GCGraph *graph, bool framed) {
     flags           = framed ? (flags | kFastVmFlagJitFramed) : (flags & ~kFastVmFlagJitFramed);
     graph->setExtraSlot(kFastVmFlagsSlot, flags);
 }
+#endif
 
 inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
     if (!graph) {

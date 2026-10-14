@@ -59,6 +59,8 @@ backends = ["fvm", "jit", "inline_jit"]
 envs = ["CAMEL_GC_STRESS_SAFEPOINT=7", "CAMEL_GC_VERIFY=1"]
 sweep = false
 timeout_ms = 240000
+expect_exit = 0
+expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmean 3.875\nweigh 3210\nwalk 5050 -100\nswap_sum 1\nparity true false\nfib 6765\ntwice 284626\ntotals 14415\n"
 
 [[tests]]
 name = "framed.operators.moving"
@@ -72,7 +74,7 @@ expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmea
 
 [[tests]]
 name = "framed.operators.moving.compiled"
-desc = "With the generational collector every function is still compiled; the graphs that hold an object constant (a string) are framed code instead of frameless code."
+desc = "With the generational collector every function is still compiled, as the same kind of code as with mark-sweep: compiled code reads object constants from the static area instead of containing their addresses."
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
@@ -81,8 +83,6 @@ envs = ["CAMEL_GC=generational"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'fib' as frameless code", "weigh 3210", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
-expect_exit = 0
-expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmean 3.875\nweigh 3210\nwalk 5050 -100\nswap_sum 1\nparity true false\nfib 6765\ntwice 284626\ntotals 14415\n"
 
 # --- faults -----------------------------------------------------------------------------------
 
