@@ -476,7 +476,6 @@ class Formatter {
 
     std::any visitTypeDecl(cst::TypeDecl context);
 
-    std::any visitUseDecl(cst::UseDecl context);
 
     std::any visitRetStmt(cst::RetStmt context);
 

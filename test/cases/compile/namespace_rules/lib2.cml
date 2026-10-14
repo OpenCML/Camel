@@ -1,0 +1,5 @@
+module lib2
+
+namespace Tools {
+    export func inc(x: int): int { return x + 100 }
+}

@@ -1,0 +1,7 @@
+// Naming something of the module itself through the module's name.
+module p18_self_module
+func f(): int { return 6 }
+func main(): int sync {
+    println(p18_self_module::f())
+    return 0
+}

@@ -1,0 +1,7 @@
+// import { ... } from m::N: names of a namespace of the module (design principles 2.12, N6).
+import { inc, dec as down } from lib::Tools
+
+func main(): int sync {
+    println(inc(1), down(1))
+    return 0
+}

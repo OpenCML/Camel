@@ -186,7 +186,6 @@ class ParserImpl {
     void parseFuncDecl();
     void parseDataDecl();
     void parseTypeDecl();
-    void parseUseDecl();
     void parseRetStmt();
     void parseImplMark();
     void parseModifiers();

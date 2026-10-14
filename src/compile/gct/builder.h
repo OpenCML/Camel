@@ -76,6 +76,22 @@ class Builder {
     // type is reported at all.
     std::unordered_set<std::string> poisonedTypes_;
     bool wholeImportFailed_ = false;
+    // Namespaces (design principles 2.12). The namespace path of the top-level declaration
+    // being lowered (`A::B` for `A::B::f`): a type name written in it is looked up there, then
+    // in the enclosing namespaces, then at the top level. The `using namespace` in force, one
+    // frame per block (the module's, a namespace block's, a block of a function body). The
+    // namespaces the module declares (prefixes of its qualified names).
+    std::vector<std::string> namespacePath_;
+    std::vector<std::vector<Reference>> usingFrames_;
+    std::unordered_set<std::string> ownNamespaces_;
+    // The type a name written in a type position stands for, by the one rule of precedence:
+    // the module's types (from the innermost namespace out; the module's own name may qualify
+    // them), then imported by name, then through a `using namespace`, then built in. Reports
+    // and throws when there is none, or when two `using` give different types (AmbiguousName).
+    Type *lookupType(const Reference &ref, const AST::node_ptr_t &ast);
+    // Whether `ref` names a namespace a `using namespace` can open: one of the module (also
+    // relative to the namespace being lowered) or one bound by an import.
+    bool usableNamespace(const Reference &ref) const;
     // The names the module exports (visitModule), and the modules its imports bound, with the
     // import that bound each (compileImportedModules).
     std::unordered_set<std::string> exportedRefs_;
@@ -180,7 +196,6 @@ class Builder {
     node_ptr_t visitDataDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
-    node_ptr_t visitNameDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitUsingNamespaceDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitExprStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitExitStmt(const AST::node_ptr_t &ast);

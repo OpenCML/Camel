@@ -69,6 +69,18 @@ Tree::~Tree() {
     }
 }
 
+void Tree::addUsings(const Node *node, const std::vector<Reference> &usings) {
+    if (!usings.empty()) {
+        auto &known = usings_[node];
+        known.insert(known.end(), usings.begin(), usings.end());
+    }
+}
+
+const std::vector<Reference> *Tree::usingsOf(const Node *node) const {
+    const auto it = usings_.find(node);
+    return it == usings_.end() ? nullptr : &it->second;
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))

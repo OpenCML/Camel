@@ -1129,6 +1129,13 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
         tmpl->templateScope  = templateScope_;
+        // A generic function of a namespace (registered at the top level) is in that
+        // namespace; one written in a body is where the body is.
+        tmpl->namespacePath  = currGraph_ == rootGraph_ ? Reference(name).paths() : namespacePath_;
+        tmpl->usingFrames    = usingFrames_;
+        if (const auto *usings = GCT::Tree::of(child)->usingsOf(child)) {
+            tmpl->usingFrames.push_back(usings);
+        }
         templateScope_->insert(name, tmpl);
     }
 }
@@ -1145,6 +1152,8 @@ node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
     tmpl->graphScope     = graphScope_;
     tmpl->decoratedScope = decoratedScope_;
     tmpl->templateScope  = templateScope_;
+    tmpl->namespacePath  = namespacePath_;
+    tmpl->usingFrames    = usingFrames_;
     node_handle_t drefNode = currGraph_->addDrefNode(
         std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
             std::make_shared<graph_set_t>()});
@@ -1866,19 +1875,24 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         bool waited, synced, varied, declaresVariable, calleeAllowed;
         node_handle_t lastSynced;
         camel::core::module::module_ptr_t module;
+        std::vector<std::string> namespacePath;
+        std::vector<const std::vector<Reference> *> usingFrames;
         GenericTemplate &opened;
         BuildState(Builder &b, GenericTemplate &t)
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
               bindings(b.typeBindings_), waited(b.waited_), synced(b.synced_), varied(b.varied_),
               declaresVariable(b.declaresVariable_), calleeAllowed(b.genericCalleeAllowed_),
-              lastSynced(b.lastSyncedNode_), module(b.module_), opened(t) {
+              lastSynced(b.lastSyncedNode_), module(b.module_), namespacePath(b.namespacePath_),
+              usingFrames(b.usingFrames_), opened(t) {
             ++self.instantiationDepth_;
             ++opened.openInstances;
         }
         ~BuildState() {
             --opened.openInstances;
             self.module_               = module;
+            self.namespacePath_        = std::move(namespacePath);
+            self.usingFrames_          = std::move(usingFrames);
             self.currGraph_            = graph;
             self.nodeScope_            = nodeScope;
             self.graphScope_           = graphScope;
@@ -1901,8 +1915,10 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     compile_graph_ptr_t graph;
     try {
         BuildState saved(*this, *tmpl);
-        currGraph_ = tmpl->ownerGraph;
-        module_    = tmpl->module;
+        currGraph_     = tmpl->ownerGraph;
+        module_        = tmpl->module;
+        namespacePath_ = tmpl->namespacePath;
+        usingFrames_   = tmpl->usingFrames;
         nodeScope_      = tmpl->nodeScope;
         graphScope_     = tmpl->graphScope;
         decoratedScope_ = tmpl->decoratedScope;
@@ -1919,6 +1935,11 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings);
         graph = tmpl->name.empty() ? createCompileGraph(funcType, currGraph_)
                                    : createCompileGraph(funcType, currGraph_, instanceName);
+        if (const auto declaring = units_.find(tmpl->module.get());
+            declaring != units_.end() && !tmpl->name.empty()) {
+            // Shown with the module that declares it (design principles 2.12).
+            graph->setName(qualifiedName(*declaring->second, instanceName));
+        }
         if (currGraph_ == rootGraph_) {
             // The instance of a top-level generic function belongs to the module declaring it.
             const auto declaring = units_.find(tmpl->module.get());
@@ -2719,7 +2740,10 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return drefNode;
     }
     ENTER("DREF");
-    const string name     = gct->name();
+    // The name as written, and the name of the module it stands for when it is one (from the
+    // innermost namespace out; design principles 2.12, layers 1 and 2).
+    const string written  = gct->name();
+    const string name     = moduleLevelName(written);
     genericCalleeAllowed_ = false;
     refOrigin_            = gct->origin();
     auto optNode      = nodeAt(name);
@@ -2806,11 +2830,44 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         }
     }
-    if (module_->hasImportedRef(name)) {
-        // hasImportedRef only means the user declared an import for this name.
-        // It does not imply the imported module exported that name, so we still
-        // need to check here.
-        const auto &opt = module_->getImportedEntity(name);
+    // Layers 3 to 5 (design principles 2.12): imported by name (or through a module or
+    // namespace prefix), then through a `using namespace`, then what comes along unasked.
+    // Operators take their overloads from every layer.
+    std::optional<camel::core::module::entity> opt;
+    bool importedName = false;
+    // A layer has the name when it brings something of it: an import by name of a name the
+    // module does not export leaves the name to the next layers (and is reported only when
+    // none has it).
+    std::optional<camel::core::module::entity> named;
+    if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
+        importedName = true;
+        named        = module_->getImportedEntity(written, ImportLayer::Named);
+    }
+    if (isOperatorName(written) || (named.has_value() && named->isOperGroup())) {
+        // Operator groups (`+`, and the operators a module of operators brings) take their
+        // overloads from every layer (design principles 2.12; the graph model, N3).
+        importedName = importedName || module_->hasImportedRef(written);
+        if (importedName) {
+            opt = module_->getImportedEntity(written);
+        }
+    } else if (named.has_value()) {
+        opt = named;
+    } else if (auto match = throughUsing(written, gct)) {
+        if (!match->ownName.empty()) {
+            // A name of this module, opened by a `using namespace` of one of its namespaces.
+            GCT::node_ptr_t resolved = tree_->makeDRef(match->ownName);
+            resolved->setOrigin(gct->origin());
+            LEAVE("DREF");
+            return visitDRefNode(resolved);
+        }
+        importedName = true;
+        opt          = match->entity;
+    } else if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
+        importedName = true;
+        opt          = module_->getImportedEntity(written, ImportLayer::Ambient);
+    }
+    if (importedName) {
+        // An import of this name does not imply that the imported module exported it.
         if (!opt.has_value()) {
             diags_->of(SemanticDiag::ImportNameNotExported).atOrigin(gct->origin()).commit(name);
             throw BuildAbortException();
@@ -3080,8 +3137,8 @@ node_handle_t Builder::valueNodeOf(const std::any &res) {
 node_handle_t Builder::elementNodeOf(const std::string &name, const GCT::node_ptr_t &literal) {
     node_handle_t node{};
     refOrigin_ = literal->origin();
-    if (nodeAt(name).has_value()) {
-        node = valueOf(resolveNodeByRef(name));
+    if (const std::string own = moduleLevelName(name); nodeAt(own).has_value()) {
+        node = valueOf(resolveNodeByRef(own));
     } else {
         // Not a value that was bound: the name of a function (`[inc, dec]`), looked up as
         // the name is anywhere else. An unknown name is reported at the literal.
@@ -3373,8 +3430,8 @@ void Builder::reportImportNameConflicts() {
         for (size_t later = 1; later < imports.size(); ++later) {
             bool reported = false;
             for (size_t earlier = 0; earlier < later && !reported; ++earlier) {
-                const auto first  = imports[earlier].mod->getExportedEntity(ref);
-                const auto second = imports[later].mod->getExportedEntity(ref);
+                const auto first  = imports[earlier].mod->getExportedEntity(imports[earlier].remote);
+                const auto second = imports[later].mod->getExportedEntity(imports[later].remote);
                 if (!first || !second) {
                     continue;
                 }
@@ -4199,7 +4256,7 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
 
 node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call) {
     if (expr->type() == GCT::NodeKind::DREF) {
-        const std::string name = expr->name();
+        const std::string name = moduleLevelName(expr->name());
         refOrigin_             = expr->origin();
         if (nodeAt(name).has_value()) {
             if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
@@ -4225,7 +4282,7 @@ std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr)
     if (!root || root->type() != GCT::NodeKind::DREF) {
         return std::nullopt;
     }
-    const std::string name = root->name();
+    const std::string name = moduleLevelName(root->name());
     // A name without a node is a function or an operator.
     const auto node = nodeAt(name);
     if (!node.has_value() || isVariable(*node)) {
@@ -6365,6 +6422,8 @@ void Builder::checkDeclaredReturn(
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
+    // The `using namespace` written in this block are in force in it (design principles 2.12).
+    UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));
     bool old                  = synced_;
     node_handle_t oldFuncNode = lastSyncedNode_;
     // A scope the lowering introduced (the operands of a composite literal, the names of a

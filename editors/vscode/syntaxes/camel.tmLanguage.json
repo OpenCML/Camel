@@ -379,7 +379,7 @@
         },
         {
           "name": "keyword.control.import.camel",
-          "match": "\\b(?:module|import|export|from|use|using)\\b"
+          "match": "\\b(?:module|import|export|from|using)\\b"
         },
         {
           "name": "storage.type.function.camel",

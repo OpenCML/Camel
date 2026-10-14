@@ -45,6 +45,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <format>
 #include <functional>
 #include <unordered_set>
 
@@ -69,7 +70,8 @@ class Builder::UnitContext {
           synced_(builder.synced_), varied_(builder.varied_),
           declaresVariable_(builder.declaresVariable_),
           calleeAllowed_(builder.genericCalleeAllowed_), lastSynced_(builder.lastSyncedNode_),
-          refOrigin_(builder.refOrigin_) {
+          refOrigin_(builder.refOrigin_), namespacePath_(builder.namespacePath_),
+          usingFrames_(builder.usingFrames_) {
         builder.unit_                 = &unit;
         builder.module_               = unit.module;
         builder.diags_                = unit.diags;
@@ -87,6 +89,14 @@ class Builder::UnitContext {
         builder.declaresVariable_     = false;
         builder.genericCalleeAllowed_ = false;
         builder.lastSyncedNode_       = {};
+        builder.namespacePath_.clear();
+        // The `using namespace` of the module's top level are in force everywhere in it.
+        builder.usingFrames_.clear();
+        if (unit.tree != nullptr && unit.tree->root() != nullptr) {
+            if (const auto *usings = unit.tree->usingsOf(unit.tree->root())) {
+                builder.usingFrames_.push_back(usings);
+            }
+        }
     }
     ~UnitContext() {
         self_.unit_                 = unit_;
@@ -107,6 +117,8 @@ class Builder::UnitContext {
         self_.genericCalleeAllowed_ = calleeAllowed_;
         self_.lastSyncedNode_       = lastSynced_;
         self_.refOrigin_            = refOrigin_;
+        self_.namespacePath_        = std::move(namespacePath_);
+        self_.usingFrames_          = std::move(usingFrames_);
     }
     UnitContext(const UnitContext &)            = delete;
     UnitContext &operator=(const UnitContext &) = delete;
@@ -127,7 +139,16 @@ class Builder::UnitContext {
     bool waited_, synced_, varied_, declaresVariable_, calleeAllowed_;
     node_handle_t lastSynced_;
     camel::source::origin_id_t refOrigin_;
+    std::vector<std::string> namespacePath_;
+    std::vector<const std::vector<Reference> *> usingFrames_;
 };
+
+namespace {
+/// The namespaces of a qualified name (`A::B` of `A::B::f`).
+std::vector<std::string> namespacesOf(const std::string &name) {
+    return Reference(name).paths();
+}
+} // namespace
 
 namespace {
 
@@ -162,6 +183,10 @@ bool isWrittenName(const std::string &name) {
 }
 
 } // namespace
+
+std::string Builder::qualifiedName(const ModuleUnit &unit, const std::string &name) {
+    return unit.entry ? name : std::format("{}::{}", unit.module->name(), name);
+}
 
 Builder &Builder::of(const context_ptr_t &context) {
     ASSERT(context != nullptr, "The graph builder of a program needs its context.");
@@ -251,6 +276,11 @@ void Builder::declareModule(
                     continue; // its declaration was refused
                 }
                 declaration->names = {child->name()};
+                if (!unit.entry) {
+                    // Shown with its module wherever it is shown (dumps, diagnostics, the
+                    // debugger), unless it is the entry module's (design principles 2.12).
+                    declaration->graph->setName(qualifiedName(unit, child->name()));
+                }
                 topLevelFunctions_[declaration->graph.get()] = declaration.get();
                 unit.declarations.push_back(std::move(declaration));
                 continue;
@@ -339,6 +369,9 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
     declaration.state = BuildState::Building;
     buildStack_.push_back(&declaration);
     UnitContext context(*this, *declaration.unit);
+    // Built in the namespace it is declared in, with the `using namespace` of its blocks.
+    namespacePath_ = namespacesOf(declaration.names.front());
+    UsingScope usings(*this, declaration.unit->tree->usingsOf(declaration.gct));
     const size_t firstNode = rootGraph_->draft().nodeSlotCount();
     try {
         (void)visit(declaration.gct);
@@ -386,6 +419,8 @@ void Builder::ensureFunctionBuilt(const compile_graph_ptr_t &graph) {
     buildStack_.push_back(&declaration);
     {
         UnitContext context(*this, *declaration.unit);
+        namespacePath_ = namespacesOf(declaration.names.front());
+        UsingScope usings(*this, declaration.unit->tree->usingsOf(declaration.gct));
         try {
             (void)visitFuncNode(declaration.gct);
             declaration.state = BuildState::Built;

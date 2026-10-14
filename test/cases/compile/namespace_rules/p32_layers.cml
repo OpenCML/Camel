@@ -1,0 +1,8 @@
+// One rule of precedence (N3): a name imported by name comes before what the built-in module
+// brings (`len` here is lib2's), the module's own before both.
+import { len } from lens
+
+func main(): int sync {
+    println(len([1, 2, 3]))
+    return 0
+}

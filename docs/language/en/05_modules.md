@@ -16,18 +16,18 @@ module shapes
 
 ## 5.2 Imports
 
-Three forms:
-
 ```cml
-import { sqrt, floor } from math     // bring in the listed names
-import sqrt from math                // bring in one name
-import math                          // bring in only the module's namespace: access with math::sqrt
+import { sqrt, floor } from math     // bring in the names listed
+import sqrt from math                // bring in one name, the same as import { sqrt } from math
+import math                          // bring in the module only: reached as math::sqrt
+import math as m                     // the module under another name: reached as m::sqrt
+import { inc } from lib::Tools       // bring in names of a namespace of the module
 ```
 
-- `import module` does not inject the names in the module directly into the current module; access them through `module::name`, or additionally write `using namespace module` to inject all the names it exports.
+- `import module` does not put the module's names into the current module; they are reached as `module::name`, or put in scope with `using namespace module` ([5.4](#54-namespaces)).
 - **Modules can import each other** (`a` imports `b` and `b` imports `a`, or a longer ring): their functions can call each other and their values and types can be used by each other, as long as the top-level values do not depend on each other in a ring ([5.7](#57-loading-modules)). A module that is not found is `SemanticDiag::ModuleNotFound`, located at the `import`; where a module in error is imported, that is `SemanticDiag::ImportedModuleHasErrors`.
-- **A name can be renamed when it is imported**: `import { find as str_find } from str` brings the `find` of the module in under the name `str_find`; renamed and plain names may stand in one import (`import { find as str_find, trim } from str`). After a renaming the original name is not visible in this module. When two modules have a function of the same name, rename one of them, or import one and use the qualified name for the other (`import array`, then `array::find`). Renaming a whole module (`import m as n`) is undecided and not supported.
-- Two imports by name that bring functions of the same name and the same parameter types are `SemanticDiag::ImportNameConflict`, located at the later `import` and pointing to the earlier one; neither is chosen silently. Functions of the same name and different parameter types currently form one set of overloads, chosen by the argument types (whether this stays is undecided).
+- **A name can be renamed when it is imported**: `import { find as str_find } from str` brings the `find` of the module in under the name `str_find`; renamed and plain names may stand in one import (`import { find as str_find, trim } from str`). After a renaming the original name is not visible in this module. When two modules have a function of the same name, rename one of them, or import one and use the qualified name for the other (`import array`, then `array::find`). A single name can be renamed too (`import find as str_find from str`), and a whole module is renamed with `import m as n`.
+- Two imports by name that bring functions of the same name and the same parameter types are `SemanticDiag::ImportNameConflict`, located at the later `import` and pointing to the earlier one; neither is chosen silently. Functions of the same name and different parameter types form one set of overloads, chosen by the argument types (functions of one name in one layer are one set of overloads, [5.4](#54-namespaces)).
 - **Search order**: `.cml` files in the same directory as the entry file, the directories given by `-I <dir>`, the directories listed in the environment variable `CAMEL_PACKAGES`, and the modules installed with Camel.
 
 ```cml
@@ -170,38 +170,62 @@ An exported value is that very node of the common `__root__` graph: the importin
 
 ## 5.4 Namespaces
 
-`namespace name { ... }` places a group of functions and types under one qualified name; inside the block one can write `func`, `type`, nested `namespace`, `import`, `export` and `using namespace`:
+`namespace name { ... }` puts a group of declarations under a qualified name. A block can contain `func`, `type`, `let`, `var`, nested `namespace`, `import`, `export` and `using namespace`:
 
 ```cml
 type Counter = { n: int }
 
 namespace Counter {
-    func new(): Counter { return { n: 0 } }
+    let start = 0
+    func new(): Counter { return { n: start } }
     func next(c: Counter): Counter { return { n: c.n + 1 } }
+    func twice(c: Counter): Counter { return next(next(c)) }   // names of the block need no prefix
 }
 
 func main(): int sync {
-    let c = Counter::next(Counter::new())
+    let c = Counter::twice(Counter::new())
     println(c.n)
     return 0
 }
 ```
 
 ```text
-1
+2
 ```
 
-- A namespace can have the same name as a type, so `Type::function` becomes the idiomatic way to write the constructors and utility functions of that type (the same holds for types provided by modules: `Tensor::ones([2, 2])`).
-- A name exported inside a namespace keeps its qualified name: `namespace Tools { export func inc(...) }` is `module::Tools::inc` in another module.
-- `using namespace module::Tools` injects only the names in one nested namespace.
+- A namespace is not an object: it is a path in a name. An `f` declared in `namespace A { namespace B { ... } }` is `A::B::f`; one namespace can be written in several blocks.
+- **Unqualified names in a block**: a name written in a namespace is looked up in that namespace, then in the enclosing namespaces, then at the top level of the module, and the first one found is taken; types too (`namespace Models { type Box = ...; func mk(): Box }`).
+- **A namespace can hold values**: `namespace Config { export let limit = 10 }`, used as `Config::limit`. It differs from a top-level `let` only by the path in its name. A `var` can be written, not exported.
+- **A module can qualify its own names with its own name**: in `module shapes`, `shapes::area` is the same as `area` (also when the file name is the module name).
+- A namespace may share its name with a type, which makes `Type::function` the usual way to write the constructors and helpers of a type (types provided by modules too: `Tensor::ones([2, 2])`).
+- A name exported inside a namespace keeps its qualified name: `namespace Tools { export func inc(...) }` is `module::Tools::inc` in other modules, and `import { inc } from module::Tools` imports it.
+- Diagnostics, the debugger and the graphs show full names: a function of another module is shown as `module::path::name`; the entry module's own names are shown without the module.
 
-## 5.5 `use`
+**`using namespace`** lets the names of a namespace be written without their prefix:
 
-`use name = qualified-name` is reserved, not implemented (`SemanticDiag::FeatureNotSupported`). Alternatives:
+```cml
+import lib
+using namespace lib::Tools          // the whole module may write inc
 
-- Bring the name in directly: `import { sqrt } from math`.
-- To give it another name, use `let`: `let sq = math::sqrt`.
-- A name that stands for a group of overloads has no single function value and cannot be bound with `let`; in that case write a lambda: `let sq = (x: float): float => math::sqrt(x)`.
+namespace A {
+    using namespace Inner           // only for the declarations of this block (Inner is A::Inner)
+}
+
+func f(): int {
+    using namespace lib             // only in this function
+    return root()
+}
+```
+
+- What it opens can be an imported module or a namespace of one, or a namespace of this module.
+- **It applies to the block it is written in**: at the top level of the module to the whole module, in a namespace block to the declarations of that block, in a function body (or a block of it) only there. Its position in the block does not matter.
+- When two `using` bring things of one name that cannot be told apart (functions of the same parameter types, values, types), that is `SemanticDiag::AmbiguousName` **where the name is used**, listing the sources; write the qualified name. Functions of one name with different parameter types form one set of overloads.
+
+**There is one rule of precedence for names**: local names > the module's own names (the namespace written in, the enclosing namespaces, the top level) > names imported by name (including those reached through a `module::` prefix) > names a `using namespace` brings > built-in names. The first layer that has the name is taken; within a layer, functions of one name form a set of overloads; nothing is merged across layers (so the module's own `inc(string)` hides an `inc(int)` a `using` brings). Operators are the exception: their overloads come from every layer.
+
+## 5.5 `use` (retired)
+
+`use` is no longer a reserved word. To bring in one name write `import { name } from module` or `import { name } from module::namespace`; to rename it, `import { name as new_name } from module`.
 
 ## 5.6 Standard library
 

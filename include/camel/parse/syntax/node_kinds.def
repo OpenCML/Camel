@@ -34,7 +34,6 @@ CAMEL_NODE(FuncAnno, Other)            // '@' identRef angledValues?
 CAMEL_NODE(FuncDecl, Other)            // funcAnno* ('with' angledParams)? 'export'? implMark? modifiers? 'func' identRef parentParams (':' typeExpr)? stmtBlock
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
 CAMEL_NODE(TypeDecl, Other)            // implMark? 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING)
-CAMEL_NODE(UseDecl, Other)             // 'use' (identDef '=')? identRef
 CAMEL_NODE(RetStmt, Other)             // ('return' | 'throw') dataList
 CAMEL_NODE(ImplMark, Other)            // 'inner' | 'outer'
 CAMEL_NODE(Modifiers, Other)           // ('atomic' | 'shared' | 'sync' | 'macro')+

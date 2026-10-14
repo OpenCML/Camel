@@ -19,21 +19,14 @@
 #                  ^^^^ keyword.control.import.from.camel
 #                       ^ punctuation.separator.module.relative.camel
 #                        ^^^^^^^^^^^ entity.name.namespace.module.camel
+>import os as system
+#^^^^^^ keyword.control.import.camel
+#       ^^ entity.name.namespace.module.camel
+#          ^^ keyword.operator.expression.camel
 >export { helper }
 #^^^^^^ keyword.control.import.camel
 #       ^ meta.block.camel punctuation.section.block.begin.camel
 #                ^ meta.block.camel punctuation.section.block.end.camel
->use short = some::long::name
-#^^^ keyword.control.import.camel
-#          ^ keyword.operator.assignment.camel
-#            ^^^^ entity.name.namespace.camel
-#                ^^ punctuation.separator.namespace.camel
-#                  ^^^^ entity.name.namespace.camel
-#                      ^^ punctuation.separator.namespace.camel
->use other::name
-#^^^ keyword.control.import.camel
-#    ^^^^^ entity.name.namespace.camel
-#         ^^ punctuation.separator.namespace.camel
 >using namespace std::io
 #^^^^^ keyword.control.import.camel
 #      ^^^^^^^^^ storage.type.namespace.camel

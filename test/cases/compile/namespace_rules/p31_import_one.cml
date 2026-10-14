@@ -1,0 +1,8 @@
+// `import a from m` brings the one name `a` (N4); `import m as x` names the module (N4).
+import root from lib
+import lib as L
+
+func main(): int sync {
+    println(root(), L::Tools::inc(1))
+    return 0
+}

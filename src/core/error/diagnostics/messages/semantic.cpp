@@ -629,6 +629,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::AmbiguousName,
+            {
+                "AmbiguousName",
+                "The name '{0}' is ambiguous here: {1}.",
+                "Two 'using namespace' in force bring something of this name that cannot be told "
+                "apart (design principles 2.12): a value or a type from each, or functions of the "
+                "same parameter types. Write the qualified name of the one meant.",
+            },
+        },
+        {
             SemanticDiag::CaptureAfterRecursiveCall,
             {
                 "CaptureAfterRecursiveCall",

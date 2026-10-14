@@ -136,7 +136,13 @@ void Module::importDefaultRefsFromMod(const module_ptr_t &mod) {
     // has none, and is not compiled here (it may be importing this module).
     mod->declareDefaultRefs();
     for (const auto &ref : mod->defaultImportedRefs()) {
-        markImportedRefFromMod(ref, mod);
+        markImportedRefFromMod(ref, ref, mod, true);
+    }
+}
+
+void Module::clearImportedEntityCache() {
+    for (auto &cache : importedEntityCache_) {
+        cache.clear();
     }
 }
 
@@ -144,12 +150,15 @@ void Module::importAllRefsFromMod(const module_ptr_t &mod) {
     if (!mod->loaded()) {
         mod->load();
     }
-    auto appendModForRef = [this, &mod](const Reference &ref) { markImportedRefFromMod(ref, mod); };
-    auto typeNS          = mod->exportedTypeNS();
+    // Everything of the module, brought along: the built-in module (the last layer of names).
+    auto appendModForRef = [this, &mod](const Reference &ref) {
+        markImportedRefFromMod(ref, ref, mod, true);
+    };
+    auto typeNS = mod->exportedTypeNS();
     typeNS->forEach([&](const Reference &ref, Type *) { appendModForRef(ref); });
     auto entNS = mod->exportedEntityNS();
     entNS->forEach([&](const Reference &ref, const entity &) { appendModForRef(ref); });
-    importedEntityCache_.clear();
+    clearImportedEntityCache();
 }
 
 bool Module::imports(const module_ptr_t &mod) const {
@@ -177,15 +186,21 @@ void Module::markImportedRefFromMod(const Reference &ref, const module_ptr_t &mo
 }
 
 void Module::markImportedRefFromMod(
-    const Reference &localRef, const Reference &remoteRef, const module_ptr_t &mod) {
+    const Reference &localRef, const Reference &remoteRef, const module_ptr_t &mod,
+    bool ambient) {
     auto &vec = importedRefMap_[localRef];
     auto it   = std::find_if(vec.begin(), vec.end(), [&](const ImportedRefBinding &binding) {
         return binding.mod == mod && binding.remoteRef == remoteRef;
     });
     if (it == vec.end()) {
-        vec.push_back(ImportedRefBinding{mod, remoteRef});
+        vec.push_back(ImportedRefBinding{mod, remoteRef, ambient});
+    } else {
+        // Asked for by name as well: it is a named import.
+        it->ambient = it->ambient && ambient;
     }
-    importedEntityCache_.erase(localRef);
+    for (auto &cache : importedEntityCache_) {
+        cache.erase(localRef);
+    }
 }
 
 void Module::markImportedNamespaceFromMod(const Reference &localPrefix, const module_ptr_t &mod) {
@@ -204,7 +219,7 @@ void Module::markImportedNamespaceFromMod(const Reference &localPrefix, const mo
     if (it == importedNamespaceBindings_.end()) {
         importedNamespaceBindings_.push_back(std::move(binding));
     }
-    importedEntityCache_.clear();
+    clearImportedEntityCache();
 }
 
 void Module::markImportedNamespaceFromMod(
@@ -224,14 +239,22 @@ void Module::markImportedNamespaceFromMod(
     if (it == importedNamespaceBindings_.end()) {
         importedNamespaceBindings_.push_back(std::move(binding));
     }
-    importedEntityCache_.clear();
+    clearImportedEntityCache();
 }
 
-std::vector<Module::ImportedRefBinding> Module::importedBindingsForRef(const Reference &ref) const {
+std::vector<Module::ImportedRefBinding>
+Module::importedBindingsForRef(const Reference &ref, ImportLayer layer) const {
     std::vector<ImportedRefBinding> result;
     auto exact = importedRefMap_.find(ref);
     if (exact != importedRefMap_.end()) {
-        result.insert(result.end(), exact->second.begin(), exact->second.end());
+        for (const ImportedRefBinding &binding : exact->second) {
+            if (layer == ImportLayer::All || binding.ambient == (layer == ImportLayer::Ambient)) {
+                result.push_back(binding);
+            }
+        }
+    }
+    if (layer == ImportLayer::Ambient) {
+        return result; // a prefix is always written in an import
     }
 
     const auto parts = refParts(ref);
@@ -300,9 +323,9 @@ void Module::noteImport(
 }
 
 void Module::noteNamedImport(
-    const Reference &ref, const module_ptr_t &mod, camel::source::origin_id_t origin,
-    size_t tokenStart, size_t tokenEnd) {
-    namedImports_.emplace_back(ref, NamedImport{mod, origin, tokenStart, tokenEnd});
+    const Reference &ref, const Reference &remote, const module_ptr_t &mod,
+    camel::source::origin_id_t origin, size_t tokenStart, size_t tokenEnd) {
+    namedImports_.emplace_back(ref, NamedImport{mod, remote, origin, tokenStart, tokenEnd});
 }
 
 std::vector<std::pair<Reference, std::vector<Module::NamedImport>>>
@@ -324,8 +347,19 @@ Module::namesImportedMoreThanOnce() const {
     return result;
 }
 
-bool Module::hasImportedRef(const Reference &ref) const {
-    return !importedBindingsForRef(ref).empty();
+bool Module::hasImportedRef(const Reference &ref, ImportLayer layer) const {
+    return !importedBindingsForRef(ref, layer).empty();
+}
+
+bool Module::hasImportedPrefix(const Reference &prefix) const {
+    const auto parts = refParts(prefix);
+    for (const auto &binding : importedNamespaceBindings_) {
+        if (startsWith(parts, binding.localPrefixParts) ||
+            startsWith(binding.localPrefixParts, parts)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Module::exportDefaultImportRef(const Reference &ref) {
@@ -345,8 +379,8 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
     return exportedEntityNS_->insert(ref, ent);
 }
 
-std::optional<Type *> Module::getImportedType(const Reference &ref) const {
-    auto bindings = importedBindingsForRef(ref);
+std::optional<Type *> Module::getImportedType(const Reference &ref, ImportLayer layer) const {
+    auto bindings = importedBindingsForRef(ref, layer);
     if (bindings.empty()) {
         return std::nullopt;
     }
@@ -362,14 +396,15 @@ std::optional<Type *> Module::getImportedType(const Reference &ref) const {
     return std::nullopt;
 }
 
-std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
-    auto bindings = importedBindingsForRef(ref);
+std::optional<entity> Module::getImportedEntity(const Reference &ref, ImportLayer layer) const {
+    auto bindings = importedBindingsForRef(ref, layer);
     if (bindings.empty()) {
         return std::nullopt;
     }
     // Return the cached result directly to avoid repeated merges.
-    auto cacheIt = importedEntityCache_.find(ref);
-    if (cacheIt != importedEntityCache_.end()) {
+    auto &cache  = importedEntityCache_[static_cast<size_t>(layer)];
+    auto cacheIt = cache.find(ref);
+    if (cacheIt != cache.end()) {
         return cacheIt->second;
     }
     std::vector<entity> collected;
@@ -383,7 +418,7 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
     }
     auto merged = mergeImportedEntities(collected);
     if (merged) {
-        importedEntityCache_[ref] = *merged;
+        cache[ref] = *merged;
     }
     return merged;
 }

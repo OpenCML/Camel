@@ -313,8 +313,6 @@ class Walker {
             return dataDecl(cst::DataDecl(node));
         case NK::TypeDecl:
             return typeDecl(cst::TypeDecl(node));
-        case NK::UseDecl:
-            return useDecl(cst::UseDecl(node));
         case NK::KeyTypePair:
             addKey(node.get<cst::IdentDef>(), true);
             return walk(node.type());
@@ -389,11 +387,15 @@ class Walker {
         const auto moduleName  = ctx.get<cst::ModuleName>();
         const std::string from = moduleName ? textOf(rangeOf(moduleName)) : std::string();
         const Range whole      = rangeOf(ctx);
-        const auto single      = ctx.get<cst::IdentDef>();
+        const auto alias       = ctx.get<cst::IdentDef>();
+        const auto single      = ctx.get<cst::ImportItem>();
         const auto braced      = ctx.get<cst::BracedImports>();
-        if (!ctx.has(TK::KwFrom) && !single && !braced) {
-            // `import a.b`: the module is known by its last name.
-            if (const syn::TokenRef last = lastNameOf(moduleName)) {
+        if (!ctx.has(TK::KwFrom)) {
+            // `import a.b`: the module is known by its last name; `import a.b as x` by x.
+            if (alias && nameOf(alias)) {
+                Decl &decl        = declare(DeclKind::Module, nameOf(alias), whole, whole);
+                decl.importedFrom = from;
+            } else if (const syn::TokenRef last = lastNameOf(moduleName)) {
                 Decl &decl        = declare(DeclKind::Module, last, whole, whole);
                 decl.importedFrom = from;
             }
@@ -401,7 +403,9 @@ class Walker {
         }
         std::vector<cst::IdentDef> names;
         if (single) {
-            names.push_back(single);
+            // `import a from m` is `import { a } from m` (design principles 2.12).
+            const auto local = single.get<cst::IdentDef>(1);
+            names.push_back(local ? local : single.get<cst::IdentDef>(0));
         }
         // `{ find as str_find }` declares str_find; the name in the module is not visible.
         for (const auto item : braced.all<cst::ImportItem>()) {
@@ -612,14 +616,6 @@ class Walker {
         }
         walk(ctx.type());
         popScope();
-    }
-
-    void useDecl(cst::UseDecl ctx) {
-        addRef(ctx.get<cst::IdentRef>(), RefKind::Namespace);
-        const Range whole = rangeOf(ctx);
-        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
-            declare(DeclKind::Alias, nameOf(ident), whole, whole);
-        }
     }
 
     void matchCase(cst::MatchCase ctx) {

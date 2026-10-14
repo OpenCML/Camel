@@ -110,6 +110,7 @@ enum class SemanticDiag : uint32_t {
     ExportedVariable             = 0x0000D0,
     ModuleValueCycle             = 0x0000D1,
     CaptureAfterRecursiveCall    = 0x0000D2,
+    AmbiguousName                = 0x0000D3,
     // `any` (design principles 2.11, 2.12), 0xE0 and up. 0xE0 (AnyUncheckedCast) and 0xE1
     // (AnyBranchSubject) reported reading a slot typed `any`; with the type gone they are
     // retired, and their codes are not reused.

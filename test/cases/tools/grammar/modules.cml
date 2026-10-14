@@ -7,6 +7,8 @@ import ...pkg.deep.name
 import { now, sleep } from time
 import { zen, } from this
 import tensor from .local.tensor
+import ..sibling as near
+import { helper as dist } from shapes::detail::impl
 
 namespace shapes {
     type Point = { x: int, y: int }
@@ -26,7 +28,6 @@ namespace shapes {
 }
 
 using namespace shapes
-use dist = shapes::detail::impl::helper
 
 export let ORIGIN = shapes::origin()
 export type P = shapes::Point

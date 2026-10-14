@@ -291,9 +291,11 @@ any Formatter::visitImportDecl(cst::ImportDecl context) {
     const string path        = any_cast<string>(visitModuleName(context->get<cst::ModuleName>()));
     const auto &identDef     = context->get<cst::IdentDef>();
     const auto braced        = context->get<cst::BracedImports>();
+    const auto single        = context->get<cst::ImportItem>();
     if (context->tok(TK::KwFrom)) {
-        if (identDef) {
-            result += any_cast<string>(visitIdentDef(identDef));
+        if (single) {
+            // `import a from m`, `import a as b from m`: one name.
+            result += any_cast<string>(visit(single));
         } else if (braced->all<cst::ImportItem>().empty()) {
             result += "{}";
         } else {
@@ -309,6 +311,10 @@ any Formatter::visitImportDecl(cst::ImportDecl context) {
         result += " from " + path;
     } else {
         result += path;
+        if (identDef) {
+            // `import m as x`: the module under another name.
+            result += " as " + any_cast<string>(visitIdentDef(identDef));
+        }
     }
     return result;
 }
@@ -563,18 +569,6 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
         result += formatStringLiteral(context->tok(TK::String)->text());
     }
     return result;
-}
-
-/*
-useDecl    : USE (identDef '=')? identRef ;
-*/
-any Formatter::visitUseDecl(cst::UseDecl context) {
-    string result        = "use ";
-    const auto &identDef = context->get<cst::IdentDef>();
-    if (identDef) {
-        result += any_cast<string>(visitIdentDef(identDef)) + " = ";
-    }
-    return result + any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
 }
 
 /*
@@ -1329,7 +1323,6 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(DataDecl)
         CAMEL_FORMAT(TypeDecl)
-        CAMEL_FORMAT(UseDecl)
         CAMEL_FORMAT(RetStmt)
         CAMEL_FORMAT(ImplMark)
         CAMEL_FORMAT(Modifiers)

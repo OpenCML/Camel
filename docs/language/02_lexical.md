@@ -48,7 +48,7 @@ let c = a + b
 | 控制 | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `macro` `loop` `while` |
 | 类型与转换 | `as` `typeas` `const` |
 | 字面量 | `null` `true` `false` |
-| 保留，尚未实现 | `is` `use` `enum` `for` `in` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
+| 保留，尚未实现 | `is` `enum` `for` `in` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
 
 最后一行的词各自的状态见 [8.6](08_top_level_and_grammar.md#86-保留但尚未实现的写法)。
 

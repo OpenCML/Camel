@@ -147,6 +147,9 @@ class Builder {
     std::vector<const ModuleUnit *> rootNodeOwners_;
     // The modules in the order they were declared.
     std::vector<ModuleUnit *> unitOrder_;
+    // The full name of `name` of `unit`: `module::path::name`, without the module for the
+    // entry module (design principles 2.12: the module is left out where it is not needed).
+    static std::string qualifiedName(const ModuleUnit &unit, const std::string &name);
     // The top-level functions of every module by their graphs.
     std::unordered_map<DraftGraphBuilder *, TopLevelDeclaration *> topLevelFunctions_;
     // The module of each graph made directly under the root graph (a top-level function, a
@@ -160,6 +163,54 @@ class Builder {
     // Where the name being resolved is written: a diagnostic about what resolving it found
     // (a cycle, a late capture) is reported there.
     camel::source::origin_id_t refOrigin_ = camel::source::kInvalidOriginId;
+    // ---- Names (names.cpp; design principles 2.12) ----
+    // The namespace path of the top-level declaration being built (`A::B` for `A::B::f`; for
+    // a generic instance, its template's): a name written in it is looked up there first.
+    std::vector<std::string> namespacePath_;
+    // The `using namespace` in force, one frame per block (the module's, the namespace blocks
+    // of the declaration, the blocks of the body down to the current one).
+    std::vector<const std::vector<Reference> *> usingFrames_;
+    // What a name a `using namespace` brings stands for: a name of the module itself, or an
+    // entity of an imported module; `shown` is the qualified name for diagnostics.
+    struct UsingMatch {
+        std::string ownName;
+        std::optional<camel::core::module::entity> entity;
+        std::string shown;
+    };
+    static bool isOperatorName(const std::string &name);
+    static bool sameParameterTypes(FunctionType *a, FunctionType *b);
+    // The unit of the module whose names are being resolved (module_).
+    ModuleUnit *currentModuleUnit() const;
+    // Whether `name` is declared in a scope below the module's top level (layer 1).
+    bool declaredLocally(const std::string &name) const;
+    // Whether `name` (with its namespaces) is declared at the top level of `unit`.
+    bool declaredAtTopLevel(const ModuleUnit &unit, const std::string &name) const;
+    // The name to look up in the scopes for `written` (layers 1 and 2): `written` itself when
+    // it is local or not the module's; else the module's name it stands for, from the
+    // innermost namespace out, the module's own name stripped from it (N1, N7).
+    std::string moduleLevelName(const std::string &written) const;
+    // Layer 4: what the `using namespace` in force bring under the name `written`; null when
+    // none does. Reports AmbiguousName at `at` when two bring things that cannot be told apart.
+    std::optional<UsingMatch> throughUsing(const std::string &written, const GCT::node_ptr_t &at);
+    // Enters the frame of `using namespace` of `node` (a block, a top-level declaration) for as
+    // long as it lives.
+    struct UsingScope {
+        Builder &self;
+        bool pushed = false;
+        UsingScope(Builder &b, const std::vector<Reference> *usings) : self(b) {
+            if (usings != nullptr) {
+                self.usingFrames_.push_back(usings);
+                pushed = true;
+            }
+        }
+        ~UsingScope() {
+            if (pushed) {
+                self.usingFrames_.pop_back();
+            }
+        }
+        UsingScope(const UsingScope &)            = delete;
+        UsingScope &operator=(const UsingScope &) = delete;
+    };
     // Switches the builder to the top level of a module for as long as it lives, and back.
     class UnitContext;
     friend class UnitContext;
@@ -453,6 +504,10 @@ class Builder {
         graph_scope_ptr_t graphScope;
         decorated_scope_ptr_t decoratedScope;
         std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
+        // The namespace and the `using namespace` in force where it was declared: its body
+        // resolves its names as if it were built there.
+        std::vector<std::string> namespacePath;
+        std::vector<const std::vector<Reference> *> usingFrames;
         std::vector<GenericInstance> instances;
         // Instances whose bodies are being built right now, one inside another.
         size_t openInstances = 0;

@@ -1,0 +1,8 @@
+// A using-directive and a local declaration with another signature: one overload set?
+import lib
+using namespace lib::Tools
+func inc(x: string): string { return x + '!' }
+func main(): int sync {
+    println(inc(1), inc('a'))
+    return 0
+}

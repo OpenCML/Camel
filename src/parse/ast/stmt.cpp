@@ -175,10 +175,6 @@ const std::string TypeDeclLoad::geneCode() const {
     return result;
 }
 
-const std::string NameDeclLoad::geneCode() const {
-    return "name " + ref_.toString() + " as " + alias_.toString();
-}
-
 const std::string UsingNamespaceLoad::geneCode() const {
     return "using namespace " + ref_.toString();
 }

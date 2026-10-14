@@ -345,6 +345,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type
     ASSERT(ast->type() == AST::LoadType::Module, "Expected ModuleLoad type");
 
+    module_->setDeclaredName(ast->loadAs<AST::ModuleLoad>()->getModuleNameOrEmpty());
     // Extract different parts of the module node
     auto importNodes   = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
@@ -382,6 +383,87 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
 
     node_ptr_t root = tree_->makeExec();
 
+    // The namespaces the module declares, and the `using namespace` of its top level, which
+    // apply to the whole module whatever their position (design principles 2.12).
+    ownNamespaces_.clear();
+    namespacePath_.clear();
+    usingFrames_.clear();
+    std::vector<Reference> moduleUsings;
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt) {
+            continue;
+        }
+        const auto &load = stmt->loadAs<AST::StmtLoad>();
+        std::vector<std::string> path;
+        switch (load->stmtType()) {
+        case AST::StmtType::Func:
+            path = stmt->loadAs<AST::FuncDeclLoad>()->ref().paths();
+            break;
+        case AST::StmtType::Type:
+            path = stmt->loadAs<AST::TypeDeclLoad>()->ref().paths();
+            break;
+        case AST::StmtType::Data:
+            if (!stmt->loadAs<AST::DataDeclLoad>()->refs().empty()) {
+                path = stmt->loadAs<AST::DataDeclLoad>()->refs().front().paths();
+            }
+            break;
+        case AST::StmtType::UsingNamespace:
+            moduleUsings.push_back(stmt->loadAs<AST::UsingNamespaceLoad>()->ref());
+            break;
+        default:
+            break;
+        }
+        std::string prefix;
+        for (const std::string &part : path) {
+            prefix += (prefix.empty() ? "" : "::") + part;
+            ownNamespaces_.insert(prefix);
+        }
+    }
+    usingFrames_.push_back(moduleUsings);
+    tree_->addUsings(root, moduleUsings);
+    // A top-level declaration is lowered in its namespace, with the `using namespace` of the
+    // namespace blocks it is written in; the GIR builder finds them on its node.
+    const auto visitTopLevel = [&](const AST::node_ptr_t &stmt) {
+        std::vector<std::string> path;
+        std::vector<Reference> usings;
+        if (stmt->type() == AST::LoadType::Stmt) {
+            const auto &load = stmt->loadAs<AST::StmtLoad>();
+            usings           = load->scopeUsings();
+            if (load->stmtType() == AST::StmtType::Func) {
+                path = stmt->loadAs<AST::FuncDeclLoad>()->ref().paths();
+            } else if (load->stmtType() == AST::StmtType::Type) {
+                path = stmt->loadAs<AST::TypeDeclLoad>()->ref().paths();
+            } else if (load->stmtType() == AST::StmtType::Data &&
+                       !stmt->loadAs<AST::DataDeclLoad>()->refs().empty()) {
+                path = stmt->loadAs<AST::DataDeclLoad>()->refs().front().paths();
+            }
+        }
+        struct Scope {
+            Builder &self;
+            std::vector<std::string> path;
+            Scope(Builder &b, std::vector<std::string> p, const std::vector<Reference> &u)
+                : self(b), path(std::move(b.namespacePath_)) {
+                self.namespacePath_ = std::move(p);
+                self.usingFrames_.push_back(u);
+            }
+            ~Scope() {
+                self.namespacePath_ = std::move(path);
+                self.usingFrames_.pop_back();
+            }
+        } scope(*this, path, usings);
+        for (const Reference &using_ : usings) {
+            if (!usableNamespace(using_)) {
+                diags_->of(SemanticDiag::UnresolvedReference)
+                    .at(stmt->load()->tokenRange())
+                    .commit(using_.toString());
+                throw BuildAbortException();
+            }
+        }
+        node_ptr_t node = visitStmt(stmt);
+        tree_->addUsings(node, usings);
+        return node;
+    };
+
     // The statements in two passes, types first; the results are put back in source order.
     const auto isTypeDecl = [](const AST::node_ptr_t &stmt) {
         return stmt->type() == AST::LoadType::Stmt &&
@@ -395,7 +477,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             continue;
         }
         try {
-            visited[i] = visitStmt(stmt);
+            visited[i] = visitTopLevel(stmt);
         } catch (const BuildAbortException &) {
             failed[i] = true;
         }
@@ -406,7 +488,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             continue;
         }
         try {
-            visited[i] = visitStmt(stmtNodes->at(i));
+            visited[i] = visitTopLevel(stmtNodes->at(i));
         } catch (const BuildAbortException &) {
             failed[i] = true;
         }
@@ -504,9 +586,30 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Import, "Expected ImportLoad type");
 
     // Extract the import load details
-    const auto &load = ast->loadAs<AST::ImportLoad>();
-    const auto &path = load->getPath();
-    const auto &refs = load->refs();
+    const auto &load     = ast->loadAs<AST::ImportLoad>();
+    const auto &fullPath = load->getPath();
+    const auto &refs     = load->refs();
+    // `from m::N`: the module `m`, and the namespace `N` of it the names are taken from
+    // (design principles 2.12).
+    const size_t nsAt = fullPath.find("::");
+    const std::string path =
+        nsAt == std::string::npos ? fullPath : fullPath.substr(0, nsAt);
+    std::vector<std::string> nsPath;
+    if (nsAt != std::string::npos) {
+        const Reference ns(fullPath.substr(nsAt + 2));
+        nsPath = ns.paths();
+        nsPath.push_back(ns.ident());
+    }
+    // A name of the module as the import names it: under the namespace, when there is one.
+    const auto inModule = [&](const Reference &ref) {
+        if (nsPath.empty()) {
+            return ref;
+        }
+        std::vector<std::string> parts = nsPath;
+        parts.insert(parts.end(), ref.paths().begin(), ref.paths().end());
+        parts.push_back(ref.ident());
+        return Reference(parts);
+    };
 
     // Attempt to import the module (importModule throws ModuleNotFound with detail on failure).
     // The failure is reported at the import, and what the import would have declared is
@@ -548,20 +651,29 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     // in name/operator resolution after a normal import.
     if (refs.empty()) {
         module_->importDefaultRefsFromMod(mod);
-        const Reference localNamespace =
-            load->hasAs() ? load->getAs() : defaultImportNamespace(path);
-        module_->markImportedNamespaceFromMod(localNamespace, mod);
+        // `import m` binds `m`, `import m as x` binds `x` (design principles 2.12), `import
+        // m::N` binds `N` to that namespace of the module.
+        if (nsPath.empty()) {
+            const Reference localNamespace =
+                load->hasAs() ? load->getAs() : defaultImportNamespace(path);
+            module_->markImportedNamespaceFromMod(localNamespace, mod);
+        } else {
+            const Reference localNamespace =
+                load->hasAs() ? load->getAs() : Reference(nsPath.back());
+            module_->markImportedNamespaceFromMod(localNamespace, Reference(nsPath), mod);
+        }
     } else {
         module_->importDefaultRefsFromMod(mod);
         // Import specific references
         for (size_t i = 0; i < refs.size(); ++i) {
             // `import { find as str_find }`: the entity `find` of the module under the
             // local name `str_find`; without `as` the two are the same.
-            const Reference &ref   = refs[i];
+            const Reference ref    = inModule(refs[i]);
             const Reference &local = load->localOf(i);
             module_->markImportedRefFromMod(local, ref, mod);
             module_->noteNamedImport(
                 local,
+                ref,
                 mod,
                 ast->load()->origin(),
                 load->tokenRange().start,
@@ -649,9 +761,6 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
         break;
     case AST::StmtType::Type:
         stmtNode = visitTypeDecl(ast);
-        break;
-    case AST::StmtType::Name:
-        stmtNode = visitNameDecl(ast);
         break;
     case AST::StmtType::UsingNamespace:
         stmtNode = visitUsingNamespaceDecl(ast);
@@ -807,8 +916,9 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 ASSERT(
                     dataASTNode->type() == AST::LoadType::Data,
                     "Tuple unpacking requires Data type nodes");
-                // Create a reference node and link the data node to it
-                node_ptr_t nRefNode = tree_->makeNRef(ref.ident());
+                // Create a reference node and link the data node to it. A value of a
+                // namespace block is named with its namespaces (`Config::limit`).
+                node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
                 *nRefNode << dataNode;
                 setOriginFromOrigin(
                     context_,
@@ -886,7 +996,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                             .commit();
                         throw BuildAbortException();
                     }
-                    node_ptr_t nRefNode = tree_->makeNRef(ref.ident());
+                    node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
                     node_ptr_t accsNode = tree_->makeAccs(i);
                     *accsNode << tree_->clone(dRefNode);
                     *nRefNode << accsNode;
@@ -1054,27 +1164,15 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
 }
 
 /*
-NameDecl(Ref ref, Ref alias) ;
-*/
-node_ptr_t Builder::visitNameDecl(const AST::node_ptr_t &ast) {
-    ENTER("NameDecl");
-    ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for NameDecl");
-    diags_->of(SemanticDiag::FeatureNotSupported)
-        .at(ast->load()->tokenRange())
-        .commit("Name Redeclaration");
-    throw BuildAbortException();
-    LEAVE("NameDecl");
-    return nullptr;
-}
-
-/*
 UsingNamespace(Ref ref) ;
 */
 node_ptr_t Builder::visitUsingNamespaceDecl(const AST::node_ptr_t &ast) {
     ENTER("UsingNamespaceDecl");
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for UsingNamespace");
     const auto &load = ast->loadAs<AST::UsingNamespaceLoad>();
-    if (!module_->importAllRefsFromImportedNamespace(load->ref())) {
+    // It applies to the block it is written in (visitStmtBlock, visitModule), and what it
+    // names is found where a name is used (design principles 2.12); here it is only checked.
+    if (!usableNamespace(load->ref())) {
         diags_->of(SemanticDiag::UnresolvedReference)
             .at(ast->load()->tokenRange())
             .commit(load->ref().toString());
@@ -1205,6 +1303,23 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
 
     // Push a new scope for the statement block
     pushScope();
+    // The `using namespace` written in the block apply to the whole block, and to it only
+    // (design principles 2.12).
+    std::vector<Reference> blockUsings;
+    for (const auto &stmt : *ast->atAs<AST::RepeatedLoad>(0)) {
+        if (stmt->type() == AST::LoadType::Stmt &&
+            stmt->loadAs<AST::StmtLoad>()->stmtType() == AST::StmtType::UsingNamespace) {
+            blockUsings.push_back(stmt->loadAs<AST::UsingNamespaceLoad>()->ref());
+        }
+    }
+    tree_->addUsings(execNode, blockUsings);
+    struct UsingFrame {
+        std::vector<std::vector<Reference>> &frames;
+        UsingFrame(std::vector<std::vector<Reference>> &f, std::vector<Reference> u) : frames(f) {
+            frames.push_back(std::move(u));
+        }
+        ~UsingFrame() { frames.pop_back(); }
+    } usingFrame(usingFrames_, blockUsings);
 
     // Whether anything takes the value of this block (see ValueUse). The value of a block is
     // that of its last statement; the value of any other statement nothing takes.
@@ -3306,40 +3421,112 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     auto const &typeLoad = ast->loadAs<AST::RefTypeLoad>();
     const Reference &ref = typeLoad->ref();
 
-    // Attempt to resolve the type from the current scope
-    const auto &type = typeScope_->get(ref);
+    Type *type = lookupType(ref, ast);
+    LEAVE("RefType");
+    return type;
+}
 
-    if (type) {
+bool Builder::usableNamespace(const Reference &ref) const {
+    std::string written = ref.toString();
+    for (size_t depth = namespacePath_.size() + 1; depth-- > 0;) {
+        std::string candidate;
+        for (size_t i = 0; i < depth; ++i) {
+            candidate += namespacePath_[i] + "::";
+        }
+        if (ownNamespaces_.contains(candidate + written)) {
+            return true;
+        }
+    }
+    return module_->hasImportedPrefix(ref);
+}
+
+Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
+    const std::string written = ref.toString();
+    // The module's own name may qualify its names (design principles 2.12).
+    std::string own = written;
+    for (const std::string &self : {module_->name(), module_->declaredName()}) {
+        if (!self.empty() && own.starts_with(self + "::")) {
+            own = own.substr(self.size() + 2);
+            break;
+        }
+    }
+    // Layer 1 and 2: the types of the enclosing scopes and of the module, from the innermost
+    // namespace out. The built-in type names (`int`, `Map`, ...) are at the top of the scopes.
+    std::optional<Type *> found;
+    for (size_t depth = namespacePath_.size() + 1; depth-- > 0 && !found;) {
+        std::vector<std::string> parts(namespacePath_.begin(), namespacePath_.begin() + depth);
+        const Reference candidate(own);
+        parts.insert(parts.end(), candidate.paths().begin(), candidate.paths().end());
+        parts.push_back(candidate.ident());
+        found = typeScope_->get(Reference(parts));
+    }
+    if (found) {
         // An imported type named `Map` or `Set` comes before the built-in of that name.
-        if (isCollectionPrototype(type.value())) {
+        if (isCollectionPrototype(found.value())) {
             if (const auto imported = module_->getImportedType(ref); imported.has_value()) {
-                LEAVE("RefType");
                 return imported.value();
             }
         }
-        // If the type is found in the current scope, return it
-        LEAVE("RefType");
-        return type.value();
+        return found.value();
     }
-
-    // Attempt to resolve the type from imported modules
-    const auto &importedType = module_->getImportedType(ref);
-
-    if (!importedType.has_value()) {
-        if (wholeImportFailed_ || poisonedTypes_.contains(ref.toString())) {
-            throw BuildAbortException();
+    // Layer 3: imported by name, or through a module or namespace prefix.
+    if (const auto imported = module_->getImportedType(ref, ImportLayer::Named)) {
+        return imported.value();
+    }
+    // Layer 4: through a `using namespace` in force; two that give different types are an
+    // error where the name is used.
+    std::vector<std::pair<std::string, Type *>> viaUsing;
+    for (const auto &frame : usingFrames_) {
+        for (const Reference &using_ : frame) {
+            const std::string prefixed = using_.toString() + "::" + written;
+            Type *type                 = nullptr;
+            for (size_t depth = namespacePath_.size() + 1; depth-- > 0 && type == nullptr;) {
+                std::string candidate;
+                for (size_t i = 0; i < depth; ++i) {
+                    candidate += namespacePath_[i] + "::";
+                }
+                if (auto own = typeScope_->get(Reference(candidate + prefixed))) {
+                    type = own.value();
+                }
+            }
+            if (type == nullptr) {
+                if (auto imported = module_->getImportedType(Reference(prefixed), ImportLayer::Named)) {
+                    type = imported.value();
+                }
+            }
+            if (type != nullptr &&
+                std::ranges::none_of(viaUsing, [&](const auto &have) { return have.second == type; })) {
+                viaUsing.emplace_back(prefixed, type);
+            }
         }
-        if (ref.plain() && ref.ident() == "any") {
-            reportAnyType(ast);
+    }
+    if (viaUsing.size() == 1) {
+        return viaUsing.front().second;
+    }
+    if (viaUsing.size() > 1) {
+        std::string sources;
+        for (const auto &[name, type] : viaUsing) {
+            sources += (sources.empty() ? "" : ", ") + name;
         }
-        // If the type cannot be resolved, log a diagnostic and throw an exception
-        diags_->of(SemanticDiag::UnresolvedTypeReference)
+        diags_->of(SemanticDiag::AmbiguousName)
             .at(ast->load()->tokenRange())
-            .commit(ref.toString());
+            .commit(written, sources);
         throw BuildAbortException();
     }
-
-    LEAVE("RefType");
-    return importedType.value();
+    // Layer 5: what the built-in module and the modules of operators bring along.
+    if (const auto ambient = module_->getImportedType(ref, ImportLayer::Ambient)) {
+        return ambient.value();
+    }
+    if (wholeImportFailed_ || poisonedTypes_.contains(written)) {
+        throw BuildAbortException();
+    }
+    if (ref.plain() && ref.ident() == "any") {
+        // `any` is no longer a type: say so rather than that the name is unknown.
+        reportAnyType(ast);
+    }
+    diags_->of(SemanticDiag::UnresolvedTypeReference)
+        .at(ast->load()->tokenRange())
+        .commit(written);
+    throw BuildAbortException();
 }
 } // namespace camel::compile::gct

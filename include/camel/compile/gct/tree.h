@@ -58,6 +58,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -110,6 +111,13 @@ class Tree {
     /// The tree as indented text, one node per line (`camel inspect --gct`).
     void print(std::ostream &os) const;
 
+    /// The `using namespace` in force in `node` (design principles 2.12): for the root, those
+    /// of the module; for an EXEC that is a block, those written in the block; for a top-level
+    /// declaration, those of the namespace blocks it is written in. What they name is found
+    /// where a name is used. Null when there are none.
+    void addUsings(const Node *node, const std::vector<Reference> &usings);
+    const std::vector<Reference> *usingsOf(const Node *node) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -159,6 +167,7 @@ class Tree {
     std::unordered_set<std::string, NameHash, std::equal_to<>> names_;
     // A deque: an element keeps its address while others are added.
     std::deque<data_ptr_t> constants_;
+    std::unordered_map<const Node *, std::vector<Reference>> usings_;
 };
 
 } // namespace camel::compile::gct

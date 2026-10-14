@@ -16,18 +16,18 @@ module shapes
 
 ## 5.2 导入
 
-三种写法：
-
 ```cml
 import { sqrt, floor } from math     // 引入列出的名字
-import sqrt from math                // 引入一个名字
-import math                          // 只引入模块的命名空间：用 math::sqrt 访问
+import sqrt from math                // 引入一个名字，与 import { sqrt } from math 相同
+import math                          // 只引入模块：用 math::sqrt 访问
+import math as m                     // 给模块起别名：用 m::sqrt 访问
+import { inc } from lib::Tools       // 引入模块里某个命名空间中的名字
 ```
 
-- `import 模块` 不把模块里的名字直接注入当前模块；通过 `模块::名字` 访问，或再写 `using namespace 模块` 把它导出的名字全部注入。
+- `import 模块` 不把模块里的名字直接注入当前模块；通过 `模块::名字` 访问，或再写 `using namespace 模块`（[5.4](#54-命名空间)）。
 - **模块可以互相导入**（`a` 导入 `b`、`b` 又导入 `a`，或更长的环）：两边的函数可以互相调用，值与类型可以互相使用，只要顶层的值之间不成环（[5.7](#57-模块的加载)）。找不到模块是 `SemanticDiag::ModuleNotFound`，定位在那条 `import`；被导入的模块有错误时，导入它的地方是 `SemanticDiag::ImportedModuleHasErrors`。
-- **导入时可以改名**：`import { find as str_find } from str` 把模块里的 `find` 以 `str_find` 这个名字引入；改名的与不改名的可以写在同一条里（`import { find as str_find, trim } from str`）。改名之后原名在本模块不可见。两个模块有同名函数时，给其中一个改名，或只导入一个、另一个用限定名（`import array` 后写 `array::find`）。整个模块的改名（`import m as n`）尚未裁定，不支持。
-- 两条按名字的导入带来同名、参数类型也相同的函数，是 `SemanticDiag::ImportNameConflict`，定位在后一条 `import`，并指出前一条；不会悄悄取其中一个。同名而参数类型不同的函数目前合成一组重载，按实参类型选择（这一点是否保留尚未确定）。
+- **导入时可以改名**：`import { find as str_find } from str` 把模块里的 `find` 以 `str_find` 这个名字引入；改名的与不改名的可以写在同一条里（`import { find as str_find, trim } from str`），单个名字也可以（`import find as str_find from str`）。改名之后原名在本模块不可见。两个模块有同名函数时，给其中一个改名，或只导入一个、另一个用限定名（`import array` 后写 `array::find`）。整个模块的别名写 `import m as n`。
+- 两条按名字的导入带来同名、参数类型也相同的函数，是 `SemanticDiag::ImportNameConflict`，定位在后一条 `import`，并指出前一条；不会悄悄取其中一个。同名而参数类型不同的函数合成一组重载，按实参类型选择（同一层里的同名函数是一个重载集，[5.4](#54-命名空间)）。
 - **查找顺序**：与入口文件同目录的 `.cml` 文件、`-I <目录>` 给出的目录、环境变量 `CAMEL_PACKAGES` 列出的目录，以及随 Camel 安装的模块。
 
 ```cml
@@ -170,38 +170,62 @@ func main(): int sync {
 
 ## 5.4 命名空间
 
-`namespace 名字 { ... }` 把一组函数与类型放在一个限定名下，块内可以写 `func`、`type`、嵌套的 `namespace`、`import`、`export`、`using namespace`：
+`namespace 名字 { ... }` 把一组声明放在一个限定名下。块内可以写 `func`、`type`、`let`、`var`、嵌套的 `namespace`、`import`、`export`、`using namespace`：
 
 ```cml
 type Counter = { n: int }
 
 namespace Counter {
-    func new(): Counter { return { n: 0 } }
+    let start = 0
+    func new(): Counter { return { n: start } }
     func next(c: Counter): Counter { return { n: c.n + 1 } }
+    func twice(c: Counter): Counter { return next(next(c)) }   // 同一块里的名字不必带前缀
 }
 
 func main(): int sync {
-    let c = Counter::next(Counter::new())
+    let c = Counter::twice(Counter::new())
     println(c.n)
     return 0
 }
 ```
 
 ```text
-1
+2
 ```
 
+- 命名空间不是一种对象：它是名字里的路径。声明在 `namespace A { namespace B { ... } }` 里的 `f` 叫 `A::B::f`；同一个命名空间可以写成几块。
+- **块内不带前缀的名字**：在命名空间里写的名字依次在所在的命名空间、外层的命名空间、模块顶层里找，取第一个找到的；类型也一样（`namespace Models { type Box = ...; func mk(): Box }`）。
+- **命名空间里可以有值**：`namespace Config { export let limit = 10 }`，用 `Config::limit`。它与模块顶层的 `let` 只差名字里的路径。`var` 可以写，不能导出。
+- **模块可以用自己的名字限定自己的东西**：`module shapes` 里写 `shapes::area` 与写 `area` 相同（文件名作为模块名时也一样）。
 - 命名空间可以与类型同名，于是 `类型::函数` 成为这个类型的构造函数与工具函数的惯用写法（模块提供的类型也是如此：`Tensor::ones([2, 2])`）。
-- 在命名空间里导出的名字保留限定名：`namespace Tools { export func inc(...) }` 在别的模块里是 `模块::Tools::inc`。
-- `using namespace 模块::Tools` 只注入某个嵌套命名空间里的名字。
+- 在命名空间里导出的名字保留限定名：`namespace Tools { export func inc(...) }` 在别的模块里是 `模块::Tools::inc`，也可以 `import { inc } from 模块::Tools`。
+- 诊断、调试器与图里显示完整的名字：别的模块的函数显示为 `模块::路径::名字`，入口模块自己的省略模块名。
 
-## 5.5 `use`
+**`using namespace`** 让一个命名空间里的名字可以不带前缀使用：
 
-`use 名字 = 限定名` 保留，尚未实现（`SemanticDiag::FeatureNotSupported`）。替代写法：
+```cml
+import lib
+using namespace lib::Tools          // 整个模块都可以写 inc
 
-- 直接引入这个名字：`import { sqrt } from math`。
-- 要换一个名字时用 `let`：`let sq = math::sqrt`。
-- 代表一组重载的名字没有单一的函数值，不能用 `let` 绑定；这时写一个 lambda：`let sq = (x: float): float => math::sqrt(x)`。
+namespace A {
+    using namespace Inner           // 只对这个块里的声明生效（Inner 是本模块的 A::Inner）
+}
+
+func f(): int {
+    using namespace lib             // 只对这个函数生效
+    return root()
+}
+```
+
+- 对象可以是导入的模块或其中的命名空间，也可以是本模块的命名空间。
+- **只在它所在的块里生效**：写在模块顶层对整个模块生效，写在命名空间块里对那一块的声明生效，写在函数体（或其中的块）里只对那里生效。块里的位置不影响。
+- 两条 `using` 带来同名、无法区分的东西（同名同签名的函数、值、类型）时，**在使用处**报 `SemanticDiag::AmbiguousName`，消息列出各个来源；写限定名即可。参数类型不同的同名函数合成一组重载。
+
+**名字的优先级只有一条规则**：局部的名字 > 本模块的名字（所在命名空间、外层命名空间、模块顶层）> 按名字导入的（包括经 `模块::` 前缀访问的）> `using namespace` 带来的 > 内建的。取第一个有这个名字的层；同一层里同名的函数合成重载集，跨层不合并（所以本模块的 `inc(string)` 会挡住 `using` 带来的 `inc(int)`）。运算符例外，它的重载来自各层。
+
+## 5.5 `use`（已退役）
+
+`use` 不再是保留字。要引入一个名字写 `import { 名字 } from 模块` 或 `import { 名字 } from 模块::命名空间`；要换一个名字写 `import { 名字 as 新名字 } from 模块`。
 
 ## 5.6 标准库
 

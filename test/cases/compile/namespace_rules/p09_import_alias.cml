@@ -1,0 +1,6 @@
+// `import <name> from <module>`: what does the single name mean?
+import T from lib
+func main(): int sync {
+    println(T::root())
+    return 0
+}

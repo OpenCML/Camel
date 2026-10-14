@@ -99,9 +99,11 @@ class Builder {
     Value visitFuncAnno(syntax::cst::FuncAnno context);
     Value visitFuncDecl(syntax::cst::FuncDecl context);
     Value visitNamespaceDecl(syntax::cst::NamespaceDecl context);
-    Value visitDataDecl(syntax::cst::DataDecl context);
+    /// `topLevel`: a declaration of the module or of a namespace block, whose names take the
+    /// path of the enclosing namespaces (`namespace Config { let limit = 10 }` declares
+    /// `Config::limit`, design principles 2.12); a local declaration does not.
+    Value visitDataDecl(syntax::cst::DataDecl context, bool topLevel = false);
     Value visitTypeDecl(syntax::cst::TypeDecl context);
-    Value visitUseDecl(syntax::cst::UseDecl context);
     Value visitRetStmt(syntax::cst::RetStmt context);
     Value visitSpreadValue(syntax::cst::SpreadValue context);
     Value visitKeyTypePair(syntax::cst::KeyTypePair context);

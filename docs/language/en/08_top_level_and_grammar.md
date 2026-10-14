@@ -93,23 +93,23 @@ Every production of the language, one for one with the parser: each production i
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | dataDecl | funcDecl | typeDecl | useDecl
-stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt
+                     | dataDecl | funcDecl | typeDecl
+stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt
 blockStmt          : 'wait'? stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
-moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
+moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
 moduleDecl         : 'module' identDef
-importDecl         : 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
+importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from' moduleName)
 bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
 importItem         : identDef ('as' identDef)?
 exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | useDecl
+                     | typeDecl | dataDecl
 funcAnno           : '@' identRef angledValues?
 funcDecl           : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
                      'func' identRef parentParams (':' typeExpr)? stmtBlock
@@ -119,7 +119,6 @@ carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : implMark? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
-useDecl            : 'use' (identDef '=')? identRef
 retStmt            : ('return' | 'throw') dataList
 implMark           : 'inner' | 'outer'
 modifiers          : ('atomic' | 'shared' | 'sync' | 'macro')+
@@ -249,7 +248,6 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Struct destructuring `let { x, y } = p`, array destructuring `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring is available) |
 | Keyword arguments `f(a: 1)` | `FeatureNotSupported` | Pass by position |
 | Parameter default values `b: int = 5` | `FeatureNotSupported` | Overloading; `with` parameters |
-| `use name = qualified-name` | `FeatureNotSupported` | `import { name } from module`; to rename, use `let new-name = module::name` ([5.5](05_modules.md#55-use)) |
 | Slice subscripts `xs[a:b]`, `xs[a:b:c]` | `SemanticDiag::NoMatchingFunction` (there is no dedicated diagnostic: it is reported as "the subscript operator has no overload that accepts these arguments") | `xs->slice<a, b>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
 | `typeof e`, `T ? U`, `name of T` | `FeatureNotSupported` | None |

@@ -1,0 +1,18 @@
+// `using namespace` of a namespace of the module, written in a function body, nested names
+// found relative to the enclosing namespace, and the module's own name as a qualifier.
+module p30_using_own_nested
+
+namespace Shapes {
+    namespace Area {
+        func square(s: int): int { return s * s }
+    }
+    func both(s: int): int {
+        using namespace Area
+        return square(s) + Area::square(s) + p30_using_own_nested::Shapes::Area::square(s)
+    }
+}
+
+func main(): int sync {
+    println(Shapes::both(2))
+    return 0
+}

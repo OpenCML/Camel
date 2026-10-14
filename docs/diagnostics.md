@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-133 diagnostics: 122 errors, 11 warnings.
+134 diagnostics: 123 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -105,6 +105,7 @@ prints one entry.
 | `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error |
 | `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error |
 | `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error |
+| `0x030000D3` | [SemanticDiag::AmbiguousName](#ambiguousname) | Error |
 | `0x030000E2` | [SemanticDiag::AnyNotAllowed](#anynotallowed) | Error |
 | `0x030000E3` | [SemanticDiag::ConditionNotBool](#conditionnotbool) | Error |
 | `0x030000E4` | [SemanticDiag::MatchCaseTypeMismatch](#matchcasetypemismatch) | Error |
@@ -1151,7 +1152,16 @@ Reference '{0}' is declared as imported but is not exported by its module.
 Check that the module exports the name '{0}' or remove the import declaration.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/namespace_rules/p09_import_alias.cml`, run as `camel -E short test/cases/compile/namespace_rules/p09_import_alias.cml`)
+
+```camel
+// `import <name> from <module>`: what does the single name mean?
+import T from lib
+func main(): int sync {
+    println(T::root())
+    return 0
+}
+```
 
 ### LiteralStaticCastFailed
 
@@ -2454,6 +2464,36 @@ sync func walk(n: int): int sync {
 
 func main(): int sync {
     println(walk(3))
+    return 0
+}
+```
+
+### AmbiguousName
+
+`0x030000D3` · Error · `SemanticDiag::AmbiguousName`
+
+**Message**
+
+```text
+The name '{0}' is ambiguous here: {1}.
+```
+
+**Help**
+
+```text
+Two 'using namespace' in force bring something of this name that cannot be told apart (design principles 2.12): a value or a type from each, or functions of the same parameter types. Write the qualified name of the one meant.
+```
+
+**Example** (`test/cases/compile/namespace_rules/p14_using_conflict.cml`, run as `camel -E short test/cases/compile/namespace_rules/p14_using_conflict.cml`)
+
+```camel
+// Two using-directives that bring the same name with the same signature.
+import lib
+import lib2
+using namespace lib::Tools
+using namespace lib2::Tools
+func main(): int sync {
+    println(inc(1))
     return 0
 }
 ```

@@ -334,8 +334,8 @@ Value Builder::visitProgram(cst::Program context) {
 
 /*
 decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-     | dataDecl | funcDecl | typeDecl | useDecl ;
-namespaceItem : the same without moduleDecl and dataDecl.
+     | dataDecl | funcDecl | typeDecl ;
+namespaceItem : the same without moduleDecl.
 The tree has no node for either rule: the declaration itself is the child.
 */
 Value Builder::visitDecl(syn::Node context) {
@@ -351,21 +351,18 @@ Value Builder::visitDecl(syn::Node context) {
     case NK::UsingNamespaceDecl:
         return visitUsingNamespaceDecl(cst::UsingNamespaceDecl(context));
     case NK::DataDecl:
-        return visitDataDecl(cst::DataDecl(context));
+        return visitDataDecl(cst::DataDecl(context), true);
     case NK::FuncDecl:
         return visitFuncDecl(cst::FuncDecl(context));
     case NK::TypeDecl:
         return visitTypeDecl(cst::TypeDecl(context));
-    case NK::UseDecl:
-        return visitUseDecl(cst::UseDecl(context));
     default:
         return Value();
     }
 }
 
 /*
-stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt
-     | blockStmt ;
+stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt | blockStmt ;
 The tree has no node for the rule: the statement itself is the child.
 */
 Value Builder::visitStmt(syn::Node context) {
@@ -385,8 +382,6 @@ Value Builder::visitStmt(syn::Node context) {
         return visitTypeDecl(cst::TypeDecl(context));
     case NK::UsingNamespaceDecl:
         return visitUsingNamespaceDecl(cst::UsingNamespaceDecl(context));
-    case NK::UseDecl:
-        return visitUseDecl(cst::UseDecl(context));
     case NK::RetStmt:
         return visitRetStmt(cst::RetStmt(context));
     case NK::BlockStmt:
@@ -431,7 +426,7 @@ Value Builder::visitModuleDecl(cst::ModuleDecl context) {
 }
 
 /*
-importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
+importDecl : IMPORT (moduleName (AS identDef)? | (importItem | bracedImports) FROM moduleName) ;
 */
 Value Builder::visitImportDecl(cst::ImportDecl context) {
     ENTER("ImportDecl");
@@ -442,14 +437,18 @@ Value Builder::visitImportDecl(cst::ImportDecl context) {
         import_->setPath(context->get<cst::ModuleName>()->text());
     }
     if (context->get<cst::IdentDef>()) {
+        // `import m as x`: the module under another name (design principles 2.12).
         import_->setAs(Reference(context->get<cst::IdentDef>()->text()));
-    } else if (context->get<cst::BracedImports>()) {
+    } else if (context->get<cst::BracedImports>() || context->get<cst::ImportItem>()) {
         // importItem : identDef ('as' identDef)? -- the name in the module, then the name
-        // it has here.
+        // it has here. `import a from m` is `import { a } from m` (design principles 2.12).
         std::vector<Reference> refs;
         std::vector<Reference> locals;
         bool renamed = false;
-        for (const auto item : context->get<cst::BracedImports>()->all<cst::ImportItem>()) {
+        const auto items = context->get<cst::BracedImports>()
+                               ? context->get<cst::BracedImports>()->all<cst::ImportItem>()
+                               : context->all<cst::ImportItem>();
+        for (const auto item : items) {
             const auto name  = item->get<cst::IdentDef>(0);
             const auto local = item->get<cst::IdentDef>(1);
             if (!name) {
@@ -476,7 +475,7 @@ Value Builder::visitExportDecl(cst::ExportDecl context) {
     ENTER("ExportDecl");
     node_ptr_t res = nullptr;
     if (context->get<cst::DataDecl>()) {
-        res                  = any2node(visitDataDecl(context->get<cst::DataDecl>()));
+        res                  = any2node(visitDataDecl(context->get<cst::DataDecl>(), true));
         const auto &dataDecl = res->loadAs<DataDeclLoad>();
         for (const auto &ref : dataDecl->refs()) {
             export_->addRef(ref);
@@ -502,7 +501,8 @@ usingNamespaceDecl : USING NAMESPACE identRef ;
 */
 Value Builder::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
     ENTER("UsingNamespaceDecl");
-    Reference ref        = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
+    // As written: what it names is found where it is used (design principles 2.12).
+    Reference ref        = value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>()));
     node_ptr_t usingNode = createNodeAs<UsingNamespaceLoad>(ref);
     setNodeTokenRangeByContext(usingNode, context);
     LEAVE("UsingNamespaceDecl");
@@ -835,9 +835,19 @@ Value Builder::visitNamespaceDecl(cst::NamespaceDecl context) {
     const size_t previousSize = namespaceStack_.size();
     pushNamespace(nsRef);
 
+    // The `using namespace` of the block apply to the declarations of the block (design
+    // principles 2.12), wherever in the block they are written: each declaration carries them,
+    // and they are not declarations of the module.
+    std::vector<Reference> usings;
+    for (const syn::Node item : context->nodes()) {
+        if (item.is(NK::UsingNamespaceDecl)) {
+            const auto using_ = cst::UsingNamespaceDecl(item);
+            usings.push_back(value_cast<Reference>(visitIdentRef(using_->get<cst::IdentRef>())));
+        }
+    }
     std::vector<node_ptr_t> nodes;
     for (const syn::Node item : context->nodes()) {
-        if (item.is(NK::Error) || item.is(NK::IdentRef)) {
+        if (item.is(NK::Error) || item.is(NK::IdentRef) || item.is(NK::UsingNamespaceDecl)) {
             continue;
         }
         Value res = visitDecl(item);
@@ -855,6 +865,13 @@ Value Builder::visitNamespaceDecl(cst::NamespaceDecl context) {
         }
     }
 
+    if (!usings.empty()) {
+        for (const node_ptr_t &node : nodes) {
+            if (node->load()->type() == LoadType::Stmt) {
+                node->loadAs<StmtLoad>()->addScopeUsings(usings);
+            }
+        }
+    }
     popNamespace(previousSize);
     LEAVE("NamespaceDecl");
     return nodes;
@@ -868,7 +885,7 @@ Value Builder::visitNamespaceDecl(cst::NamespaceDecl context) {
 /*
 dataDecl   : (LET | VAR) carrier (':' typeList)? '=' dataList ;
 */
-Value Builder::visitDataDecl(cst::DataDecl context) {
+Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
     ENTER("DataDecl");
     bool isVar = false;
     if (context->tok(TK::KwVar)) {
@@ -889,7 +906,7 @@ Value Builder::visitDataDecl(cst::DataDecl context) {
     vector<Reference> refs;
     std::vector<cst::IdentDef> bindingIdents;
     for (const auto ident : identList->all<cst::IdentDef>()) {
-        refs.emplace_back(ident->text());
+        refs.push_back(topLevel ? qualifyRef(Reference(ident->text())) : Reference(ident->text()));
         bindingIdents.push_back(ident);
     }
     node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(isVar, type, refs);
@@ -982,22 +999,6 @@ Value Builder::visitTypeDecl(cst::TypeDecl context) {
     *typeDeclNode << typeOptNode;
     LEAVE("TypeDecl");
     return typeDeclNode;
-}
-
-/*
-useDecl    : USE (identDef '=')? identRef ;
-*/
-Value Builder::visitUseDecl(cst::UseDecl context) {
-    ENTER("UseDecl");
-    Reference ref;
-    if (context->get<cst::IdentDef>()) {
-        ref.parse(context->get<cst::IdentDef>()->text());
-    }
-    Reference alias(context->get<cst::IdentRef>()->text());
-    node_ptr_t nameDeclNode = createNodeAs<NameDeclLoad>(ref, alias);
-    setNodeTokenRangeByContext(nameDeclNode, context);
-    LEAVE("UseDecl");
-    return nameDeclNode;
 }
 
 /*

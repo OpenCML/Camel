@@ -93,23 +93,23 @@ primaryType : 名字 | '(' 类型 ')' | '(' 类型, ... ')' | '{' 名字: 类型
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | dataDecl | funcDecl | typeDecl | useDecl
-stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt
+                     | dataDecl | funcDecl | typeDecl
+stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt
 blockStmt          : 'wait'? stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
-moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
+moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
 moduleDecl         : 'module' identDef
-importDecl         : 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
+importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from' moduleName)
 bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
 importItem         : identDef ('as' identDef)?
 exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | useDecl
+                     | typeDecl | dataDecl
 funcAnno           : '@' identRef angledValues?
 funcDecl           : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
                      'func' identRef parentParams (':' typeExpr)? stmtBlock
@@ -119,7 +119,6 @@ carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : implMark? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
-useDecl            : 'use' (identDef '=')? identRef
 retStmt            : ('return' | 'throw') dataList
 implMark           : 'inner' | 'outer'
 modifiers          : ('atomic' | 'shared' | 'sync' | 'macro')+
@@ -249,7 +248,6 @@ typeList           : typeExpr (',' typeExpr)*
 | 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |
 | 关键字实参 `f(a: 1)` | `FeatureNotSupported` | 按位置传 |
 | 形参默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参 |
-| `use 名字 = 限定名` | `FeatureNotSupported` | `import { 名字 } from 模块`；换名用 `let 新名 = 模块::名字`（[5.5](05_modules.md#55-use)） |
 | 切片下标 `xs[a:b]`、`xs[a:b:c]` | `SemanticDiag::NoMatchingFunction`（没有专门的诊断：按“下标运算符没有接受这些实参的重载”报告） | `xs->slice<a, b>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`T ? U`、`名字 of T` | `FeatureNotSupported` | 无 |
