@@ -24,8 +24,12 @@
 
 #pragma once
 
+#include "camel/standalone/array.h"
 #include "camel/standalone/core.h"
+#include "camel/standalone/fn.h"
 #include "camel/standalone/format.h"
+#include "camel/standalone/hof.h"
 #include "camel/standalone/library.h"
 #include "camel/standalone/num.h"
+#include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"

@@ -956,7 +956,7 @@ bebf1bae4470f510 ok test/cases/consistency/attempt/not_isolated_exit.cml
 f04bd93f3d285034 ok test/cases/consistency/attempt/pipelines.cml
 5a47562760be2532 ok test/cases/consistency/attempt/places.cml
 e26c13de2c23fc2b ok test/cases/consistency/attempt/refuse_grad.cml
-3ccdcbf3c48f2d7f ok test/cases/consistency/attempt/refuse_translate.cml
+c3fd86550424cd17 ok test/cases/consistency/attempt/refuse_translate.cml
 900d812181b2c866 ok test/cases/consistency/attempt/resource_release.cml
 e2fac34cf74a3fb9 ok test/cases/consistency/attempt/siblings.cml
 99a6a700d932849b ok test/cases/consistency/cleanup/exit_in_map.cml
@@ -1720,11 +1720,15 @@ b4c8a24177615791 ok test/cases/tools/lsp/fixtures/main.cml
 2ac9ffbf1479b5ef ok test/cases/trans/cpp/refuse_tensor.cml
 cf57643df47bb00e ok test/cases/trans/cpp/unary_scalar.cml
 7c8e91fcce1d27ca ok test/cases/trans/cpp/exec/branches.cml
+3919eeb6277dfc2b ok test/cases/trans/cpp/exec/composites.cml
 3a02833f9072052e ok test/cases/trans/cpp/exec/faults.cml
+fc3f5a807ef6f0ac ok test/cases/trans/cpp/exec/functions.cml
 fa55cb6ca13acda7 ok test/cases/trans/cpp/exec/recursion_limit.cml
 b51151106e56a3ff ok test/cases/trans/cpp/exec/scalars.cml
 b6e07599df719cc2 ok test/cases/trans/cpp/exec/strings.cml
+b921cf1be7fa5c67 ok test/cases/trans/cpp/exec/tagged.cml
 5d15a2912c2a2402 ok test/cases/trans/cpp/exec/tail_calls.cml
+ca63e013e863f440 ok test/cases/trans/cpp/exec/variables.cml
 9a77ce915c807446 ok test/cases/trans/effect_trace/macro_effect.cml
 af9b7b7b3dbd7a22 ok test/cases/trans/macro/basic.cml
 53dae2a4ab0b7dc5 ok test/cases/trans/macro/branch_chain.cml

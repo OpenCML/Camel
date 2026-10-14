@@ -344,17 +344,15 @@ golden = "golden/attempt_nested.txt"
 # --- other libraries ----------------------------------------------------------------------
 
 [[tests]]
-name = "attempt.refuse.cpp"
-desc = "std::cpp refuses a graph with a fault boundary, at the `attempt`."
-kind = "negative"
+name = "attempt.translate.cpp"
+desc = "std::cpp translates a fault boundary: `attempt` is rt::attempt, a C++ try around the call that makes a fault the failed value, and `!!` a branch on it (it used to refuse the graph at the `attempt`; that the program prints what std::fvm prints is checked by trans.cpp.agree_with_fvm)."
+kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/refuse_translate.cml"
 args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 11
-expect_output_contains = ["std::cpp"]
-expect_output_not_contains = ["Segmentation fault", "dumped core"]
+expect_exit = 0
+expect_output_contains = ["rt::attempt<double>(depth, at_11_12, rt::Fn<double(double)>(\"Function(graph=risky, tupleSlots=0)\"", "if (v1_attempt.failed()) {"]
+expect_output_not_contains = ["TranslationRefused", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "attempt.refuse.onnx"

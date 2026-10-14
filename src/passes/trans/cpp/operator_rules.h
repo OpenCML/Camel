@@ -31,6 +31,7 @@
 #include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/type/base.h"
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
@@ -46,6 +47,8 @@ using camel::core::type::Type;
 struct CppValue {
     std::string text;
     bool literal = false;
+    /// The value of a `var`'s cell: the C++ local it is, or an rt::Cell (design note 5.3).
+    enum class Cell : uint8_t { None, Local, Shared } cell = Cell::None;
 };
 
 /// One application of an operator, as a rule sees it.
@@ -65,6 +68,8 @@ class OperatorCall {
     /// SiteTable::siteFor.
     virtual std::string site(
         camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args) = 0;
+    /// The C++ type of `type` ("void" when it has none).
+    virtual std::string cppType(const Type *type) const = 0;
 
     /// The C++ text of argument `i` to pass to an overloaded runtime function: a bare literal
     /// is written with its type when every argument is one (camel/standalone/num.h).

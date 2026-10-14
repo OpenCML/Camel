@@ -20,6 +20,13 @@
 #include "function_emitter.h"
 
 #include "camel/core/type/composite/func.h"
+#include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 
 #include <algorithm>
@@ -68,6 +75,21 @@ std::string withoutParentheses(const std::string &text) {
         }
     }
     return text.substr(1, text.size() - 2);
+}
+
+/// Whether every user of `ref` takes it as the template of a construction (FILL, Norm 0).
+bool onlyTemplate(const GCGraph *graph, gc_node_ref_t ref) {
+    if (!graph->withOutputsOf(ref).empty() || graph->normOutputsOf(ref).empty()) {
+        return false;
+    }
+    for (gc_node_ref_t user : graph->normOutputsOf(ref)) {
+        const auto *node = graph->node(user);
+        if (node == nullptr || node->kind != GCNodeKind::Fill ||
+            graph->normInputsOf(user).front() != ref) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// `ref` seen through the GATEs that only order it.
@@ -150,7 +172,7 @@ FunctionEmitter::FunctionEmitter(
 void FunctionEmitter::collectParameters(Member &member) {
     GCGraph *graph     = member.graph;
     const Type *result = graph->funcType()->exitType();
-    if (!cppTypeOf(result)) {
+    if (!program_.values.type(result)) {
         throw Refusal{
             graph,
             graph->returnNodeRef(),
@@ -161,10 +183,10 @@ void FunctionEmitter::collectParameters(Member &member) {
                 kTranslatedTypes),
             true};
     }
-    member.result = *cppTypeOf(result);
+    member.result = *program_.values.type(result);
     auto add      = [&](gc_node_ref_t port, const char *what) {
         const Type *type = graph->node(port)->dataType;
-        if (!cppTypeOf(type) || isVoid(type)) {
+        if (!program_.values.type(type) || isVoid(type)) {
             refuse(
                 graph,
                 port,
@@ -180,7 +202,7 @@ void FunctionEmitter::collectParameters(Member &member) {
         const std::string base = parameterName(graph, port);
         member.params.push_back(Parameter{
             port,
-            *cppTypeOf(type),
+            *program_.values.type(type),
             base,
             group_.empty() ? locals_.unique(base) : locals_.unique(member.name + "_" + base)});
     };
@@ -231,7 +253,7 @@ std::string FunctionEmitter::parameterName(const GCGraph *graph, gc_node_ref_t p
 }
 
 std::string FunctionEmitter::cppType(const GCGraph *graph, gc_node_ref_t ref, const Type *type) {
-    if (auto t = cppTypeOf(type)) {
+    if (auto t = program_.values.type(type)) {
         return *t;
     }
     refuse(
@@ -287,7 +309,10 @@ Block FunctionEmitter::lowerMember(const Member &member) {
     current_ = &member;
     Frame top{member.graph, {}, {}, {}};
     for (const Parameter &p : member.params) {
-        top.values[p.port] = CppValue{p.local, false};
+        // A `var` parameter or a captured variable is the variable's cell.
+        const bool cell = p.type.starts_with("rt::Cell<");
+        top.values[p.port] =
+            CppValue{p.local, false, cell ? CppValue::Cell::Shared : CppValue::Cell::None};
     }
     Block body = lowerSequence(
         top,
@@ -400,12 +425,26 @@ Block FunctionEmitter::lowerSequenceBody(
     Frame &frame, const std::vector<gc_node_ref_t> &order, gc_node_ref_t result, Tail tail) {
     Block out;
     bool done = false;
-    for (size_t i = 0; i < order.size() && !done; ++i) {
+    for (size_t i = 0; i < order.size(); ++i) {
         const gc_node_ref_t ref = order[i];
         if (frame.consumed.contains(ref)) {
             continue;
         }
         const auto *node = frame.graph->node(ref);
+        if (done) {
+            // The sequence has ended (a tail call, a branch that returns), and only nodes that
+            // write nothing can follow (nothingAfter). They still give values: an arm laid out
+            // after another one reads the gates the order put at the end of the other. A gate
+            // of the value that ended the sequence (a tail call has none) gives nothing.
+            const bool forwards = node->kind == GCNodeKind::Gate || node->kind == GCNodeKind::Copy;
+            const bool valueOnly = forwards || node->kind == GCNodeKind::Data ||
+                                   node->kind == GCNodeKind::Port || node->kind == GCNodeKind::Sync;
+            const auto inputs = frame.graph->normInputsOf(ref);
+            if (valueOnly && (!forwards || (!inputs.empty() && frame.values.contains(inputs.front())))) {
+                lowerNode(frame, ref, out, false, Tail{});
+            }
+            continue;
+        }
         if (node->kind == GCNodeKind::Brch) {
             // The branch is the sequence's last word when its JOIN gives the result and only
             // order follows it: its arms then end with what the sequence would end with.
@@ -460,10 +499,11 @@ const CppValue &FunctionEmitter::valueOf(Frame &frame, gc_node_ref_t ref) {
             ref,
             std::format(
                 "{} uses a value std::cpp has not computed at that point (node {} of graph "
-                "'{}'); this is an error of the translation",
+                "'{}', of kind {}); this is an error of the translation",
                 describeFunction(frame.graph),
                 ref,
-                frame.graph->name()));
+                frame.graph->name(),
+                static_cast<int>(frame.graph->node(ref)->kind)));
     }
     return it->second;
 }
@@ -501,8 +541,17 @@ bool FunctionEmitter::lowerNode(
     switch (node->kind) {
     case GCNodeKind::Data: {
         const Type *type = node->dataType;
-        auto text =
-            cppConstant(g->staticArea()->get<slot_t>(-node->dataIndex), type, program_.strings);
+        std::optional<std::string> text;
+        if (GCGraph *function = functionConstantOf(g, ref)) {
+            text = functionValue(function, {});
+        } else {
+            text = program_.values.constant(g->staticArea()->get<slot_t>(-node->dataIndex), type);
+        }
+        if (!text && onlyTemplate(g, ref)) {
+            // The template of constructions (FILL): they read its constant elements themselves.
+            frame.values[ref] = CppValue{"", false};
+            return false;
+        }
         if (!text) {
             // A function used as a value is reported where it is used (its constant carries
             // the position of the function's definition).
@@ -542,6 +591,8 @@ bool FunctionEmitter::lowerNode(
         const auto inputs = g->normInputsOf(ref);
         if (!inputs.empty()) {
             if (node->kind == GCNodeKind::Copy) {
+                // A copy of a value is that value: values have no identity (design principles
+                // 2.12), and every holder of a shared array sees it unchanged (array.h).
                 cppType(g, ref, node->dataType);
             }
             frame.values[ref] = valueOf(frame, inputs.front());
@@ -550,15 +601,18 @@ bool FunctionEmitter::lowerNode(
     }
     case GCNodeKind::Sync:
         return false; // only order: the statements are already in it
-    case GCNodeKind::Cast: {
-        const gc_node_ref_t input = g->normInputsOf(ref).front();
-        const std::string to      = cppType(g, ref, node->dataType);
-        const std::string from    = cppType(g, input, g->node(input)->dataType);
-        const CppValue &value     = valueOf(frame, input);
-        frame.values[ref] =
-            to == from ? value : CppValue{std::format("static_cast<{}>({})", to, value.text), false};
+    case GCNodeKind::Cast:
+        lowerCast(frame, ref);
         return false;
-    }
+    case GCNodeKind::Fill:
+        lowerFill(frame, ref, out);
+        return false;
+    case GCNodeKind::Accs:
+        lowerAccess(frame, ref);
+        return false;
+    case GCNodeKind::Call:
+        lowerCallValue(frame, ref, out);
+        return false;
     case GCNodeKind::Oper:
         lowerOperator(frame, ref, out);
         return false;
@@ -571,19 +625,10 @@ bool FunctionEmitter::lowerNode(
         return lowerBranch(frame, ref, {}, out, false, tail);
     case GCNodeKind::Join:
         refuse(g, ref, std::format("a JOIN of {} is not reached from its BRCH", describeFunction(g)));
-    case GCNodeKind::Call:
-    case GCNodeKind::Fill:
-    case GCNodeKind::Accs:
-    case GCNodeKind::Bind:
-    case GCNodeKind::Dref:
     default: {
-        const char *construct =
-            node->kind == GCNodeKind::Call   ? "a call of a function value"
-            : node->kind == GCNodeKind::Fill ? "the construction of a struct, tuple, array or "
-                                               "closure value"
-            : node->kind == GCNodeKind::Accs ? "an access to an element or a field"
-            : node->kind == GCNodeKind::Bind ? "a function bound to its 'with' arguments"
-                                             : "a read through a reference";
+        const char *construct = node->kind == GCNodeKind::Bind
+                                    ? "a function bound to its 'with' arguments"
+                                    : "a read through a reference";
         refuse(
             g,
             ref,
@@ -604,16 +649,6 @@ void FunctionEmitter::lowerCall(
     GCGraph *callee  = g->directCalleeGraphOf(ref);
     if (callee == nullptr) {
         refuse(g, ref, std::format("a call in {} has no callee", describeFunction(g)));
-    }
-    if (!callee->closureNodes().empty()) {
-        refuse(
-            g,
-            ref,
-            std::format(
-                "{} calls {}, which captures variables of the function around it; std::cpp "
-                "does not translate closures yet",
-                describeFunction(g),
-                describeFunction(callee)));
     }
     auto name = program_.functionNames.find(callee);
     if (name == program_.functionNames.end()) {
@@ -697,10 +732,12 @@ class NodeCall final : public OperatorCall {
     NodeCall(
         std::string uri, std::vector<CppValue> norm, std::vector<CppValue> with,
         std::vector<const Type *> normTypes, std::vector<const Type *> withTypes,
-        const Type *result, std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site)
+        const Type *result,
+        std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site,
+        std::function<std::string(const Type *)> cppType)
         : uri_(std::move(uri)), norm_(std::move(norm)), with_(std::move(with)),
           normTypes_(std::move(normTypes)), withTypes_(std::move(withTypes)), result_(result),
-          site_(std::move(site)) {}
+          site_(std::move(site)), cppType_(std::move(cppType)) {}
 
     std::string_view uri() const override { return uri_; }
     size_t normCount() const override { return norm_.size(); }
@@ -713,6 +750,7 @@ class NodeCall final : public OperatorCall {
     std::string site(RuntimeDiag kind, const std::vector<std::string> &args) override {
         return site_(kind, args);
     }
+    std::string cppType(const Type *type) const override { return cppType_(type); }
 
   private:
     std::string uri_;
@@ -720,6 +758,7 @@ class NodeCall final : public OperatorCall {
     std::vector<const Type *> normTypes_, withTypes_;
     const Type *result_;
     std::function<std::string(RuntimeDiag, const std::vector<std::string> &)> site_;
+    std::function<std::string(const Type *)> cppType_;
 };
 
 } // namespace
@@ -728,7 +767,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     const GCGraph *g      = frame.graph;
     const auto *node      = g->node(ref);
     const std::string uri = operatorUri(g, ref);
-    if (!cppTypeOf(node->dataType)) {
+    if (!program_.values.type(node->dataType)) {
         refuse(
             g,
             ref,
@@ -745,7 +784,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                        std::vector<const Type *> &types) {
         for (gc_node_ref_t input : inputs) {
             const Type *type = g->node(input)->dataType;
-            if (!cppTypeOf(type)) {
+            if (!program_.values.type(type)) {
                 refuse(
                     g,
                     ref,
@@ -763,13 +802,46 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     collect(g->normInputsOf(ref), norm, normTypes);
     collect(g->withInputsOf(ref), with, withTypes);
 
+    if (lowerVariable(frame, ref, uri, out) || lowerHigherOrder(frame, ref, uri, out)) {
+        return;
+    }
     const OperatorRule *rule = findOperatorRule(uri);
     if (rule == nullptr) {
+        for (const auto types : {&normTypes, &withTypes}) {
+            for (const Type *t : *types) {
+                if (!bridgeCarries(t)) {
+                    refuse(
+                        g,
+                        ref,
+                        std::format(
+                            "{} uses the operator '{}' on a value of type '{}', which has no "
+                            "translation in std::cpp yet",
+                            describeFunction(g),
+                            uri,
+                            typeName(t)));
+                }
+            }
+        }
+        if (!bridgeCarries(node->dataType)) {
+            refuse(
+                g,
+                ref,
+                std::format(
+                    "{} uses the operator '{}', whose result of type '{}' has no translation in "
+                    "std::cpp yet",
+                    describeFunction(g),
+                    uri,
+                    typeName(node->dataType)));
+        }
         // No standalone translation: the operator of the runtime module runs through the
         // bridge (camel/standalone/bridge.h), and the program links libcamel.
         auto [it, added] = program_.bridgedOperators.try_emplace(uri, std::string());
         if (added) {
             it->second = std::format("op_{}", cppIdentifier(uri));
+        }
+        if (program_.firstBridgedGraph == nullptr) {
+            program_.firstBridgedGraph = g;
+            program_.firstBridgedNode  = ref;
         }
         auto values = [&](const std::vector<CppValue> &args, const std::vector<const Type *> &types) {
             std::string out;
@@ -785,7 +857,7 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         std::string expr = std::format(
             "{}.call<{}>({}, {}, {})",
             it->second,
-            *cppTypeOf(node->dataType),
+            *program_.values.type(node->dataType),
             program_.sites.placeFor(g, ref),
             values(norm, normTypes),
             values(with, withTypes));
@@ -801,7 +873,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
         node->dataType,
         [&](RuntimeDiag kind, const std::vector<std::string> &args) {
             return program_.sites.siteFor(g, ref, kind, args);
-        });
+        },
+        [&](const Type *t) { return program_.values.type(t).value_or("void"); });
     auto expr = rule->emit(call);
     if (!expr) {
         refuse(
@@ -833,7 +906,8 @@ bool FunctionEmitter::lowerBranch(
     // Where the arms put the value of the branch.
     Tail armTail{Tail::Kind::Discard, {}};
     if (joinIsTail) {
-        armTail = tail;
+        armTail            = tail;
+        frame.values[join] = CppValue{"", false}; // the arms end the sequence themselves
     } else if (!isVoid(joinNode->dataType) && liveUses(g, join) > 0) {
         const std::string type = cppType(g, join, joinNode->dataType);
         const std::string name = locals_.unique(std::format("v{}_branch", nextValue_++));
@@ -956,6 +1030,466 @@ Block FunctionEmitter::lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail
         tail);
     prefix.insert(prefix.end(), std::make_move_iterator(body.begin()), std::make_move_iterator(body.end()));
     return prefix;
+}
+
+// ---- Composite values (design note, section 4) ----
+
+/// The bridge carries numbers, booleans and strings (bridge.h).
+bool FunctionEmitter::bridgeCarries(const Type *type) {
+    using camel::core::type::TypeCode;
+    switch (type != nullptr ? type->code() : TypeCode::Void) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::Bool:
+    case TypeCode::String:
+    case TypeCode::Void:
+        return true;
+    default:
+        return false;
+    }
+}
+
+GCGraph *FunctionEmitter::functionConstantOf(const GCGraph *graph, gc_node_ref_t ref) {
+    const auto *node = graph->node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType == nullptr ||
+        node->dataType->code() != camel::core::type::TypeCode::Function) {
+        return nullptr;
+    }
+    auto *function = camel::core::rtdata::fromSlot<::Function *>(
+        graph->staticArea()->get<slot_t>(-node->dataIndex));
+    return function != nullptr ? function->graph() : nullptr;
+}
+
+std::optional<std::string>
+FunctionEmitter::functionValue(GCGraph *function, const std::vector<std::string> &captures) {
+    // A function value is the graph and the values it captured (design principles, section
+    // 1): a lambda that calls the graph's function with the arguments, then the captures.
+    auto name = program_.functionNames.find(function);
+    auto type = program_.values.type(function->funcType());
+    if (name == program_.functionNames.end() || !type) {
+        return std::nullopt;
+    }
+    std::string params, args;
+    size_t i = 0;
+    for (const auto ports : {function->normPorts(), function->withPorts()}) {
+        for (gc_node_ref_t port : ports) {
+            auto t = program_.values.type(function->node(port)->dataType);
+            if (!t) {
+                return std::nullopt;
+            }
+            params += std::format(", {} a{}", *t, i);
+            args += std::format(", a{}", i);
+            ++i;
+        }
+    }
+    std::string capture, captured;
+    for (size_t k = 0; k < captures.size(); ++k) {
+        capture += std::format("{}c{} = {}", k ? ", " : "", k, captures[k]);
+        captured += std::format(", c{}", k);
+    }
+    const std::string text = std::format(
+        "Function(graph={}, tupleSlots={})",
+        function->name(),
+        function->closureNodes().size());
+    return std::format(
+        "{}({}, [{}](rt::Depth depth{}) {{ return {}(depth{}{}); }})",
+        *type,
+        cppStringLiteral(text),
+        capture,
+        params,
+        name->second,
+        args,
+        captured);
+}
+
+void FunctionEmitter::lowerFill(Frame &frame, gc_node_ref_t ref, Block &out) {
+    const GCGraph *g = frame.graph;
+    const auto *node = g->node(ref);
+    const auto *body = g->nodeBodyAs<camel::runtime::GCFillBody>(ref);
+    const auto norm  = g->normInputsOf(ref);
+    const auto with  = g->withInputsOf(ref);
+    if (norm.empty()) {
+        refuse(g, ref, std::format("a construction in {} has no template", describeFunction(g)));
+    }
+    const gc_node_ref_t templ = norm.front();
+    const auto slots          = body->slots();
+
+    if (body->fillKind == camel::runtime::GCFillKind::FunctionClosure) {
+        // A closure: the function constant and the values it captures, slot i of the closure
+        // being the i-th captured port of the function's graph.
+        GCGraph *function = functionConstantOf(g, templ);
+        std::vector<std::string> captures(function != nullptr ? function->closureNodes().size() : 0);
+        for (size_t i = 0; i < with.size() && i < slots.size(); ++i) {
+            const auto at = static_cast<size_t>(slots[i]);
+            if (at < captures.size()) {
+                captures[at] = valueOf(frame, with[i]).text;
+            }
+        }
+        auto value = function != nullptr ? functionValue(function, captures) : std::nullopt;
+        if (!value) {
+            refuse(
+                g,
+                ref,
+                std::format(
+                    "{} makes a function value of type '{}' std::cpp does not translate yet",
+                    describeFunction(g),
+                    typeName(node->dataType)));
+        }
+        bind(frame, ref, std::move(*value), true, out, "closure");
+        return;
+    }
+
+    // A tuple, struct or array: the template's constant elements, with the computed ones in
+    // their places.
+    const Type *type          = node->dataType;
+    const std::string cppName = cppType(g, ref, type);
+    const slot_t constant     = g->staticArea()->get<slot_t>(-g->node(templ)->dataIndex);
+    std::vector<std::string> items;
+    std::vector<const Type *> itemTypes;
+    using camel::core::type::TypeCode;
+    if (type->code() == TypeCode::Array) {
+        const auto *array = camel::core::rtdata::fromSlot<::Array *>(constant);
+        const Type *elem  = static_cast<const camel::core::type::ArrayType *>(type)->elemType();
+        for (size_t i = 0; array != nullptr && i < array->size(); ++i) {
+            itemTypes.push_back(elem);
+            items.push_back("");
+        }
+    } else if (type->code() == TypeCode::Tuple) {
+        const auto *tuple = static_cast<const camel::core::type::TupleType *>(type);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            itemTypes.push_back(tuple->typeAt(i));
+            items.push_back("");
+        }
+    } else if (type->code() == TypeCode::Struct) {
+        const auto *record = static_cast<const camel::core::type::StructType *>(type);
+        for (size_t i = 0; i < record->size(); ++i) {
+            itemTypes.push_back(record->typeAt(i));
+            items.push_back("");
+        }
+    }
+    for (size_t i = 0; i < with.size() && i < slots.size(); ++i) {
+        const auto at = static_cast<size_t>(slots[i]);
+        if (at < items.size()) {
+            items[at] = valueOf(frame, with[i]).text;
+        }
+    }
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (!items[i].empty()) {
+            continue;
+        }
+        // An element the template holds: the constant's own.
+        slot_t element = 0;
+        if (type->code() == TypeCode::Array) {
+            element = camel::core::rtdata::fromSlot<::Array *>(constant)->get<slot_t>(i);
+        } else if (type->code() == TypeCode::Tuple) {
+            element = camel::core::rtdata::fromSlot<::Tuple *>(constant)->get<slot_t>(i);
+        } else {
+            element = camel::core::rtdata::fromSlot<::Struct *>(constant)->get<slot_t>(i);
+        }
+        auto text = program_.values.constant(element, itemTypes[i]);
+        if (!text) {
+            refuse(
+                g,
+                ref,
+                std::format(
+                    "{} builds a value of type '{}', and std::cpp cannot write one of its "
+                    "elements",
+                    describeFunction(g),
+                    typeName(type)));
+        }
+        items[i] = *text;
+    }
+    std::string list;
+    for (size_t i = 0; i < items.size(); ++i) {
+        list += (i ? ", " : "") + items[i];
+    }
+    bind(frame, ref, std::format("{}{{{}}}", cppName, list), true, out, "value");
+}
+
+void FunctionEmitter::lowerAccess(Frame &frame, gc_node_ref_t ref) {
+    const GCGraph *g          = frame.graph;
+    const gc_node_ref_t input = g->normInputsOf(ref).front();
+    const Type *type          = g->node(input)->dataType;
+    const auto *body          = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
+    cppType(g, input, type);
+    size_t index = body->value;
+    if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
+        const auto *record = static_cast<const camel::core::type::StructType *>(type);
+        const auto found   = record->findField(body->key());
+        if (!found) {
+            refuse(g, ref, std::format("a field of {} is not in its struct", describeFunction(g)));
+        }
+        index = *found;
+    }
+    frame.values[ref] = CppValue{
+        std::format("{}.{}", valueOf(frame, input).text, program_.values.fieldName(type, index)),
+        false};
+}
+
+void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out) {
+    // A call of a function value (design principles, section 1): with input 0 is the value,
+    // the other `with` inputs and the normal ones its arguments.
+    const GCGraph *g = frame.graph;
+    const auto with  = g->withInputsOf(ref);
+    if (with.empty()) {
+        refuse(g, ref, std::format("a call in {} has no function", describeFunction(g)));
+    }
+    cppType(g, with.front(), g->node(with.front())->dataType);
+    const std::string site = program_.sites.siteFor(
+        g,
+        ref,
+        RuntimeDiag::MaxRecursionDepthExceeded,
+        {g->name(), SiteTable::valueMark(0)});
+    std::string expr =
+        std::format("{}(rt::call(depth, {})", valueOf(frame, with.front()).text, site);
+    for (gc_node_ref_t arg : g->normInputsOf(ref)) {
+        expr += ", " + valueOf(frame, arg).text;
+    }
+    for (size_t i = 1; i < with.size(); ++i) {
+        expr += ", " + valueOf(frame, with[i]).text;
+    }
+    bind(frame, ref, expr + ")", false, out, "call");
+}
+
+void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
+    // A value entering `T?` or `T!` (design principles 2.10), `null` entering `T?`, a failed
+    // value passed on with another payload (`?->`), a conversion between numbers.
+    const GCGraph *g          = frame.graph;
+    const gc_node_ref_t input = g->normInputsOf(ref).front();
+    const Type *toType        = g->node(ref)->dataType;
+    const Type *fromType      = g->node(input)->dataType;
+    const std::string to      = cppType(g, ref, toType);
+    const CppValue &value     = valueOf(frame, input);
+    const std::string from    = isVoid(fromType) ? "void" : cppType(g, input, fromType);
+    using camel::core::type::TupleType;
+    using camel::core::type::TypeCode;
+    const auto *target = toType->code() == TypeCode::Tuple ? static_cast<const TupleType *>(toType)
+                                                           : nullptr;
+    const auto *source = fromType != nullptr && fromType->code() == TypeCode::Tuple
+                             ? static_cast<const TupleType *>(fromType)
+                             : nullptr;
+    std::string text;
+    if (to == from) {
+        frame.values[ref] = value;
+        return;
+    } else if (target != nullptr && target->isNullable() && (isVoid(fromType) || value.text == "rt::Unit{}")) {
+        text = std::format("{}{{}}", to); // null
+    } else if (target != nullptr && target->isFallible() && source != nullptr &&
+               source->isFallible()) {
+        text = std::format("rt::retag<{}>({})", to, value.text);
+    } else if (target != nullptr && (target->isNullable() || target->isFallible())) {
+        text = std::format("{}({})", to, value.text);
+    } else if (fromType != nullptr && fromType->code() <= TypeCode::Bool &&
+               toType->code() <= TypeCode::Bool) {
+        text = std::format("static_cast<{}>({})", to, value.text);
+    } else {
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} converts a value of type '{}' to '{}', which std::cpp does not translate yet",
+                describeFunction(g),
+                typeName(fromType),
+                typeName(toType)));
+    }
+    frame.values[ref] = CppValue{text, false};
+}
+
+// ---- `var` variables (design note 5.3) ----
+
+namespace {
+
+/// Whether `uri` reads or writes a variable it is given first: :var/get and the assignments.
+bool isVariableAccess(std::string_view uri) {
+    return uri == ":var/get" || uri.starts_with(":op/assn");
+}
+
+/// The operator an assignment `x op= v` computes `x op v` with (":op/assn_add_l" gives
+/// ":op/add_l"); a plain assignment has none.
+std::string assignedOperator(std::string_view uri) {
+    const std::string_view rest = uri.substr(std::string_view(":op/assn").size());
+    if (rest.empty() || rest == "_i" || rest == "_l" || rest == "_f" || rest == "_d" ||
+        rest == "_s" || rest == "_b") {
+        return "";
+    }
+    if (rest == "_and") {
+        return ":op/and";
+    }
+    if (rest == "_or") {
+        return ":op/or";
+    }
+    return std::string(":op/") + std::string(rest.substr(1)); // _add_l -> add_l
+}
+
+} // namespace
+
+bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
+    // A variable stays a C++ local while everything that has its cell reads or writes it, in
+    // this function or an arm lowered into it.
+    for (const auto users : {graph->normOutputsOf(cell), graph->withOutputsOf(cell)}) {
+        for (gc_node_ref_t user : users) {
+            const auto *node = graph->node(user);
+            if (node == nullptr) {
+                continue;
+            }
+            if (node->kind == GCNodeKind::Oper && isVariableAccess(operatorUri(graph, user)) &&
+                graph->normInputsOf(user).front() == cell) {
+                continue;
+            }
+            if (node->kind == GCNodeKind::Gate) {
+                if (cellEscapes(graph, user)) {
+                    return true;
+                }
+                continue;
+            }
+            if (node->kind == GCNodeKind::Func && isArmCall(graph, user)) {
+                // The arm's port that receives the cell must stay inside the arm too.
+                const GCGraph *arm = graph->directCalleeGraphOf(user);
+                const auto args    = graph->withInputsOf(user);
+                const auto ports   = arm->withPorts();
+                for (size_t i = 0; i < args.size() && i < ports.size(); ++i) {
+                    if (args[i] == cell && cellEscapes(arm, ports[i])) {
+                        return true;
+                    }
+                }
+                const auto normArgs  = graph->normInputsOf(user);
+                const auto normPorts = arm->normPorts();
+                for (size_t i = 0; i < normArgs.size() && i < normPorts.size(); ++i) {
+                    if (normArgs[i] == cell && cellEscapes(arm, normPorts[i])) {
+                        return true;
+                    }
+                }
+                continue;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+bool FunctionEmitter::lowerVariable(
+    Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
+    const GCGraph *g = frame.graph;
+    if (uri == ":var/new") {
+        const gc_node_ref_t init = g->normInputsOf(ref).front();
+        const Type *valueType    = g->node(init)->dataType;
+        const std::string type   = cppType(g, init, valueType);
+        const std::string name   = locals_.unique(std::format("var{}", nextValue_++));
+        if (cellEscapes(g, ref)) {
+            out.push_back(Stmt::line(std::format(
+                "const rt::Cell<{}> {}{{{}}};",
+                type,
+                name,
+                withoutParentheses(valueOf(frame, init).text))));
+            frame.values[ref] = CppValue{name, false, CppValue::Cell::Shared};
+        } else {
+            out.push_back(Stmt::line(
+                std::format("{} {} = {};", type, name, withoutParentheses(valueOf(frame, init).text))));
+            frame.values[ref] = CppValue{name, false, CppValue::Cell::Local};
+        }
+        return true;
+    }
+    if (!isVariableAccess(uri)) {
+        return false;
+    }
+    const auto norm        = g->normInputsOf(ref);
+    const CppValue &cell   = valueOf(frame, norm.front());
+    const bool local       = cell.cell == CppValue::Cell::Local;
+    const std::string read = local ? cell.text : cell.text + ".get()";
+    const Type *type       = g->node(ref)->dataType;
+    if (uri == ":var/get") {
+        // Read now: a later assignment must not change what this read gave.
+        bind(frame, ref, read, false, out, "read");
+        return true;
+    }
+    // An assignment: `x = v`, or `x = x op v` computed as the operator `op` is.
+    std::string value = valueOf(frame, norm[1]).text;
+    if (const std::string op = assignedOperator(uri); !op.empty()) {
+        const OperatorRule *rule = findOperatorRule(op);
+        if (rule == nullptr) {
+            refuse(g, ref, std::format("{} uses the assignment '{}'", describeFunction(g), uri));
+        }
+        NodeCall call(
+            op,
+            {CppValue{read, false}, valueOf(frame, norm[1])},
+            {},
+            {type, g->node(norm[1])->dataType},
+            {},
+            type,
+            [&](RuntimeDiag kind, const std::vector<std::string> &args) {
+                return program_.sites.siteFor(g, ref, kind, args);
+            },
+            [&](const Type *t) { return program_.values.type(t).value_or("void"); });
+        value = rule->emit(call).value_or(value);
+    }
+    if (local) {
+        out.push_back(Stmt::line(std::format("{} = {};", cell.text, withoutParentheses(value))));
+    } else {
+        out.push_back(Stmt::line(std::format("{}.set({});", cell.text, withoutParentheses(value))));
+    }
+    // What the assignment gives: the value stored.
+    bind(frame, ref, read, false, out, "assigned");
+    return true;
+}
+
+// ---- Operators that call function values (hof.h) ----
+
+bool FunctionEmitter::lowerHigherOrder(
+    Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
+    static const std::unordered_map<std::string, std::string> kOperators = {
+        {":mark/map_arr", "map"},
+        {":mark/apply_arr", "map"},
+        {":mark/filter_arr", "filter"},
+        {":mark/reduce_arr", "reduce"},
+        {":mark/foreach_arr", "foreach"},
+        {":mark/unordered_reduce_arr", "reduce"},
+        {":mark/unordered_foreach_arr", "foreach"},
+        {":mark/isolate", "attempt"},
+    };
+    auto it = kOperators.find(uri);
+    if (it == kOperators.end()) {
+        return false;
+    }
+    const GCGraph *g = frame.graph;
+    // Each call of the element function counts as an open call made here.
+    const std::string site = program_.sites.siteFor(
+        g,
+        ref,
+        RuntimeDiag::MaxRecursionDepthExceeded,
+        {g->name(), SiteTable::valueMark(0)});
+    const auto norm = g->normInputsOf(ref);
+    const auto with = g->withInputsOf(ref);
+    std::string expr;
+    if (it->second == "attempt") {
+        // attempt(f, args...): the result's payload type is the C++ type of the `T!`'s T.
+        const Type *result = g->node(ref)->dataType;
+        const auto *tagged = static_cast<const camel::core::type::TupleType *>(result);
+        const Type *payload = tagged->payloadType();
+        const std::string payloadType = isVoid(payload) ? "rt::Unit" : cppType(g, ref, payload);
+        expr = std::format("rt::attempt<{}>(depth, {}", payloadType, site);
+        for (gc_node_ref_t input : norm) {
+            expr += ", " + valueOf(frame, input).text;
+        }
+        expr += ")";
+    } else {
+        expr = std::format(
+            "rt::{}{}(depth, {}, {}, {}",
+            it->second,
+            it->second == "reduce"
+                ? std::format("<{}>", cppType(g, ref, g->node(ref)->dataType))
+                : std::string(),
+            site,
+            valueOf(frame, norm.front()).text,
+            valueOf(frame, with.front()).text);
+        for (size_t i = 1; i < with.size(); ++i) {
+            expr += ", " + valueOf(frame, with[i]).text; // the initial value of reduce
+        }
+        expr += ")";
+    }
+    bind(frame, ref, std::move(expr), false, out, it->second);
+    return true;
 }
 
 } // namespace camel::passes::cpp

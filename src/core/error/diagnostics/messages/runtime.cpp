@@ -180,6 +180,17 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::TranslationLinksRuntime,
+            {
+                "TranslationLinksRuntime",
+                "std::cpp has no standalone translation of {0}: the program it writes calls the "
+                "Camel runtime there and is built with libcamel.",
+                "Every other operator is translated into C++ that needs only the standard "
+                "library (docs/cpp_export_build.md). The comment at the top of the C++ file "
+                "gives the command that builds it with the runtime.",
+            },
+        },
+        {
             RuntimeDiag::ConstantExpressionFaults,
             {
                 "ConstantExpressionFaults",

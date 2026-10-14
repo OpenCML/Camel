@@ -114,7 +114,9 @@ class Operator {
             }
             std::string brief = std::string(place.where) + ": [Error]: " + f.message + " " +
                                 f.suggestion + " (name=" + f.name + ", code=" + f.code + ")";
-            throw Fault(std::move(text), std::move(brief));
+            std::string kind = f.name.substr(f.name.rfind(':') + 1);
+            throw Fault(Fault::Texts{
+                std::move(text), std::move(brief), std::move(kind), f.message, place.location});
         }
         if constexpr (std::is_same_v<R, void>) {
             return;

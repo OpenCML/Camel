@@ -1,0 +1,30 @@
+/// Function values: functions passed and returned, closures that capture values and variables,
+/// calls through a value, and the operators that call them (map, filter, reduce, foreach).
+module functions
+
+func adder(k: int): (x: int) => int {
+    return (x: int): int => x + k
+}
+
+func twice(f: (x: int) => int, v: int): int {
+    return f(f(v))
+}
+
+func compose(f: (x: int) => int, g: (x: int) => int): (x: int) => int {
+    return (x: int): int => g(f(x))
+}
+
+func square(x: int): int { return x * x }
+
+func main(): int sync {
+    let add3 = adder(3)
+    println(twice(add3, 1), twice(square, 3), compose(add3, square)(2))
+    let xs = [1, 2, 3, 4, 5, 6]
+    println(xs->map<(x: int): int => x * 10>)
+    println(xs->filter<(x: int): bool => x % 2 == 0>)
+    println(xs->reduce<(acc: int, x: int): int => acc * 10 + x, 0>)
+    xs->foreach<(x: int): int => println(x * x)>
+    let words = ['camel', 'graph'][0]->contains<'mel'>
+    println(words, square)
+    return 0
+}

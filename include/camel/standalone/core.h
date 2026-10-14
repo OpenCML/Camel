@@ -61,17 +61,22 @@ namespace camel::standalone {
 // ---- Faults ----
 
 /// A place where a fault can happen, and what a fault there reports (see the file comment).
+/// An `attempt` turns the fault into an error value of kind, message and location.
 struct Site {
-    const char *text;  // the report in the default format
-    const char *brief; // the report in the one-line format
+    const char *text;     // the report in the default format
+    const char *brief;    // the report in the one-line format
+    const char *kind;     // the diagnostic's name without its prefix: "DivisionByZero"
+    const char *message;  // its message
+    const char *location; // `file.cml:line:col`, the file without its directory
 };
 
 /// A place where an operator of a runtime module runs (bridge.h): what kind of fault it raises
 /// is known only when it does, so the report is put together then from the diagnostic the
-/// runtime gives and these two parts, rendered by the compiler like a Site.
+/// runtime gives and these parts, rendered by the compiler like a Site.
 struct Place {
-    const char *excerpt; // the source excerpt of the default format: `  --> file:line:col` ...
-    const char *where;   // the start of the one-line format: `(module)file:line:col`
+    const char *excerpt;  // the source excerpt of the default format: `  --> file:line:col` ...
+    const char *where;    // the start of the one-line format: `(module)file:line:col`
+    const char *location; // `file.cml:line:col`, the file without its directory
 };
 
 /// The byte that, followed by a digit, stands for a value only known when the fault happens.
@@ -95,22 +100,38 @@ inline std::string withValues(std::string_view text, const std::vector<std::stri
     return out;
 }
 
-/// A fault: it ends the program with a located report unless an `attempt` catches it.
+/// A fault: it ends the program with a located report unless an `attempt` catches it, which
+/// makes it an error value of its kind, message and location.
 class Fault {
   public:
-    Fault(std::string text, std::string brief) : text_(std::move(text)), brief_(std::move(brief)) {}
+    struct Texts {
+        std::string text;     // the report in the default format
+        std::string brief;    // the report in the one-line format
+        std::string kind;     // for an error value
+        std::string message;  // for an error value
+        std::string location; // for an error value
+    };
+
+    explicit Fault(Texts texts) : texts_(std::move(texts)) {}
 
     /// The report in the default format, or in the one-line format.
-    const std::string &report(bool brief) const { return brief ? brief_ : text_; }
+    const std::string &report(bool brief) const { return brief ? texts_.brief : texts_.text; }
+    const std::string &kind() const { return texts_.kind; }
+    const std::string &message() const { return texts_.message; }
+    const std::string &location() const { return texts_.location; }
 
   private:
-    std::string text_;
-    std::string brief_;
+    Texts texts_;
 };
 
 /// Raises a fault at `site`; `values` are the texts the report's marks stand for.
 [[noreturn]] inline void fault(const Site &site, const std::vector<std::string> &values = {}) {
-    throw Fault(withValues(site.text, values), withValues(site.brief, values));
+    throw Fault(Fault::Texts{
+        withValues(site.text, values),
+        withValues(site.brief, values),
+        site.kind,
+        withValues(site.message, values),
+        site.location});
 }
 
 /// `exit(n)`: the program ends with exit code `n` once the output is written. A C++ exception,

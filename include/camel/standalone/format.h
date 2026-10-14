@@ -38,7 +38,10 @@
 
 #pragma once
 
+#include "camel/standalone/array.h"
 #include "camel/standalone/core.h"
+#include "camel/standalone/fn.h"
+#include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"
 #include "camel/utils/number_text.h"
 
@@ -65,6 +68,54 @@ inline void appendText(std::string &out, double v) { out += camel::utils::floatT
 inline void appendText(std::string &out, float v) { out += camel::utils::floatText(v); }
 inline void appendText(std::string &out, bool v) { out += v ? "true" : "false"; }
 inline void appendText(std::string &out, const Str &v) { out += v.view(); }
+inline void appendText(std::string &out, const Unit &) { out += "null"; }
+
+/// `[a, b, c]`.
+template <typename T> void appendText(std::string &out, const Array<T> &xs) {
+    out += '[';
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        if (i > 0) {
+            out += ", ";
+        }
+        appendText(out, xs[i]);
+    }
+    out += ']';
+}
+
+/// The payload, or `null`.
+template <typename T> void appendText(std::string &out, const Opt<T> &v) {
+    if (v.hasValue()) {
+        appendText(out, v.value());
+    } else {
+        out += "null";
+    }
+}
+
+/// The payload, or `error Kind: message` (camel/core/rtdata/tagged.cpp, printTaggedSlots).
+template <typename T> void appendText(std::string &out, const Fallible<T> &v) {
+    if (v.failed()) {
+        out += "error ";
+        out += v.error().kind.view();
+        out += ": ";
+        out += v.error().message.view();
+    } else {
+        appendText(out, v.value());
+    }
+}
+
+/// The error structure as a struct: `{ kind: K, message: M, location: L }`.
+inline void appendText(std::string &out, const Error &e) {
+    out += "{ kind: ";
+    out += e.kind.view();
+    out += ", message: ";
+    out += e.message.view();
+    out += ", location: ";
+    out += e.location.view();
+    out += " }";
+}
+
+/// A function value as the runtime writes it: `Function(graph=f, tupleSlots=0)`.
+template <typename S> void appendText(std::string &out, const Fn<S> &f) { out += f.text(); }
 
 /// `string(x)` (:op/itos, :op/ltos, :op/ftos, :op/dtos, :op/atos): the text of `x`.
 template <typename T> Str toText(const T &value) {

@@ -38,3 +38,11 @@ test/cases/linear/nvm/mutual_tail.cml
 # Operators of runtime modules (the program links libcamel).
 test/cases/compile/diag_render/runtime_regex.cml
 test/cases/modules/stdlib/fault_substr_start.cml
+
+# Composite values, function values, T? and T!, var variables.
+test/cases/consistency/values/structs_tuples.cml
+test/cases/consistency/values/higher_order.cml
+test/cases/consistency/entry/error_thrown.cml
+test/cases/consistency/entry/fallible_ok.cml
+test/cases/consistency/attempt/refuse_translate.cml
+test/cases/linear/nvm/var_params.cml

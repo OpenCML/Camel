@@ -73,6 +73,10 @@ class SiteTable {
     /// to which the generated program adds the runtime's diagnostic when the operator faults.
     std::string placeFor(const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t node);
 
+    /// A Site of a diagnostic that is not located in the program (the report of an error
+    /// value nobody handled: what the value says is its location is put in when it happens).
+    std::string unlocated(camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
+
     /// The definitions of the sites asked for, in that order.
     std::string definitions() const;
     bool empty() const { return sites_.empty(); }
@@ -84,7 +88,14 @@ class SiteTable {
         std::string brief;
         std::string comment; // where it is, for the reader of the generated file
         bool place = false;  // a Place: `text` is the excerpt and `brief` the start
+        std::string kind;     // for an error value (attempt): the name without its prefix
+        std::string message;  // for an error value: the message
+        std::string location; // for an error value: `file.cml:line:col`
     };
+
+    /// `file.cml:line:col` of `d`'s range, the file without its directory (as an error value
+    /// names it, src/execute/fault_isolation.cpp).
+    static std::string locationOf(const camel::core::error::Diagnostic &d);
 
     camel::core::context::context_ptr_t context_;
     std::map<std::tuple<const void *, uint16_t, uint32_t>, size_t> index_;

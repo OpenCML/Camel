@@ -68,13 +68,17 @@ struct Refusal {
 
 /// What every function of a program shares while it is written.
 struct ProgramParts {
-    StringPool strings;
+    ProgramValues values;
     SiteTable sites;
     /// The C++ name of each graph that is a function of the generated program.
     std::unordered_map<const GCGraph *, std::string> functionNames;
     /// Operators that go through the runtime module that implements them, by URI: the name
     /// of the generated accessor. Empty while the program is standalone.
     std::unordered_map<std::string, std::string> bridgedOperators;
+    /// Where the first of them is used: the warning that the program links the runtime is
+    /// located there.
+    const GCGraph *firstBridgedGraph = nullptr;
+    gc_node_ref_t firstBridgedNode   = camel::runtime::kInvalidNodeRef;
 
     explicit ProgramParts(camel::core::context::context_ptr_t context)
         : sites(std::move(context)) {}
@@ -162,6 +166,22 @@ class FunctionEmitter {
     void lowerCall(Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
                    bool &handled);
     void lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out);
+    void lowerFill(Frame &frame, gc_node_ref_t ref, Block &out);
+    void lowerAccess(Frame &frame, gc_node_ref_t ref);
+    void lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out);
+    void lowerCast(Frame &frame, gc_node_ref_t ref);
+    /// `:var/new`, `:var/get` and the assignments; false for any other operator.
+    bool lowerVariable(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
+    /// `map`, `filter`, `reduce`, `foreach`, `attempt`; false for any other operator.
+    bool lowerHigherOrder(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
+    /// Whether the variable whose cell is `cell` is used outside this function (design note
+    /// 5.3): then it is an rt::Cell, else a C++ local.
+    bool cellEscapes(const GCGraph *graph, gc_node_ref_t cell);
+    /// The function value of `function` with `captures`, as a C++ expression.
+    std::optional<std::string>
+    functionValue(GCGraph *function, const std::vector<std::string> &captures);
+    static GCGraph *functionConstantOf(const GCGraph *graph, gc_node_ref_t ref);
+    static bool bridgeCarries(const Type *type);
     /// The statements of an arm graph called by the FUNC node `call` of `frame`.
     Block lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail);
 

@@ -23,6 +23,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
+#include "camel/execute/pass/warnings.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -49,7 +50,8 @@ bool isAnonymous(const std::string &name) {
 /// The graph of a function constant (`Function(graph=main, ...)`) in a DATA node of `graph`.
 GCGraph *functionConstant(const GCGraph *graph, gc_node_ref_t ref) {
     const auto *node = graph->node(ref);
-    if (node == nullptr || node->kind != GCNodeKind::Data) {
+    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType == nullptr ||
+        node->dataType->code() != TypeCode::Function) {
         return nullptr;
     }
     auto *function = camel::core::rtdata::fromSlot<::Function *>(
@@ -99,8 +101,16 @@ ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {
     // The root graph ends with the call of `main`: through a closure (FILL) when main captures
     // values of the top level, else through the function constant itself.
     Entry entry;
-    const gc_node_ref_t call = root->returnNodeRef();
-    const auto *callNode     = root->node(call);
+    // The call is the root's result; when main gives nothing, only its completion point.
+    gc_node_ref_t call = root->returnNodeRef();
+    for (gc_node_ref_t candidate : {root->returnNodeRef(), root->exitNodeRef(), root->outputNodeRef()}) {
+        const auto *node = candidate != kInvalidNodeRef ? root->node(candidate) : nullptr;
+        if (node != nullptr && node->kind == GCNodeKind::Call) {
+            call = candidate;
+            break;
+        }
+    }
+    const auto *callNode = call != kInvalidNodeRef ? root->node(call) : nullptr;
     if (callNode == nullptr || callNode->kind != GCNodeKind::Call || root->withInputsOf(call).empty()) {
         throw Refusal{root, call, "the program has no call of 'main' std::cpp can find", false};
     }
@@ -127,10 +137,18 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
     std::unordered_set<const GCGraph *> seen;
     std::vector<GCGraph *> work(roots.rbegin(), roots.rend());
 
-    // The graphs a graph calls directly, looking through the arms lowered in place.
+    // The graphs a graph calls directly or uses as values, looking through the arms lowered
+    // in place.
     std::function<void(GCGraph *)> scan = [&](GCGraph *graph) {
         for (gc_node_ref_t ref : camel::execute::buildReachableExecutionTopoIndices(graph)) {
             const auto *node = graph->node(ref);
+            if (node->kind == GCNodeKind::Data) {
+                if (GCGraph *function = functionConstant(graph, ref);
+                    function != nullptr && !seen.contains(function)) {
+                    work.push_back(function);
+                }
+                continue;
+            }
             if (node->kind != GCNodeKind::Func) {
                 continue;
             }
@@ -154,7 +172,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
         }
         functions.push_back(graph);
         const std::string &name = graph->name();
-        std::string base        = isAnonymous(name) ? "function" : name.substr(0, name.find('$'));
+        std::string base        = isAnonymous(name) ? "lambda" : name.substr(0, name.find('$'));
         parts_.functionNames[graph] = globals_.unique(cppIdentifier(base));
         scan(graph);
     }
@@ -179,7 +197,7 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
         for (const GCGraph *callee : probes[i]->tailCallees()) {
             calls[graph].push_back(const_cast<GCGraph *>(callee));
         }
-        result[graph] = cppTypeOf(graph->funcType()->exitType()).value_or("");
+        result[graph] = parts_.values.type(graph->funcType()->exitType()).value_or("");
     }
 
     // The strongly connected components of "calls in tail position" (Tarjan).
@@ -254,10 +272,9 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
         const auto *node = root->node(arg);
         std::optional<std::string> value;
         if (node->kind == GCNodeKind::Data) {
-            value = cppConstant(
+            value = parts_.values.constant(
                 root->staticArea()->get<slot_t>(-node->dataIndex),
-                node->dataType,
-                parts_.strings);
+                node->dataType);
         }
         if (!value) {
             throw Refusal{
@@ -273,18 +290,34 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     call += ")";
 
     // Only a `main` that declares its return type gives the program a result (design
-    // principles 2.10): an integer or a bool is the exit code, any other value is printed.
+    // principles 2.10): an integer or a bool is the exit code, any other value is printed. A
+    // declared `T!` that failed is an error nobody handled: reported on standard error, exit
+    // code 1 (src/execute/entry_args.cpp, writeEntryResultTo).
     const Type *type    = entry.main->funcType()->exitType();
     const bool declared = context_->entryResultDeclared();
     std::string body;
+    std::string value = call;
+    if (declared && type != nullptr && type->code() == TypeCode::Tuple &&
+        static_cast<const camel::core::type::TupleType *>(type)->isFallible()) {
+        const std::string unhandled = parts_.sites.unlocated(
+            camel::core::error::RuntimeDiag::UnhandledError,
+            {SiteTable::valueMark(0), SiteTable::valueMark(1)});
+        body += std::format(
+            "    const auto result = {};\n    if (result.failed()) {{\n"
+            "        return rt::unhandled({}, result.error());\n    }}\n",
+            call,
+            unhandled);
+        value = "result.value()";
+        type  = static_cast<const camel::core::type::TupleType *>(type)->payloadType();
+    }
     if (!declared || type == nullptr || isVoid(type)) {
-        body = std::format("    {};\n    return 0;\n", call);
+        body += value == call ? std::format("    {};\n    return 0;\n", call) : "    return 0;\n";
     } else if (type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64) {
-        body = std::format("    return static_cast<int>({});\n", call);
+        body += std::format("    return static_cast<int>({});\n", value);
     } else if (type->code() == TypeCode::Bool) {
-        body = std::format("    return {} ? 1 : 0;\n", call);
+        body += std::format("    return {} ? 1 : 0;\n", value);
     } else {
-        body = std::format("    rt::println({});\n    return 0;\n", call);
+        body += std::format("    rt::println({});\n    return 0;\n", value);
     }
     return "/// Runs `main` and gives the exit code of the program.\nint entry() {\n" + body + "}\n";
 }
@@ -304,7 +337,7 @@ std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
 
 std::string ProgramEmitter::emit(GCGraph *root) {
     const bool program = mode_ == CppEmitMode::Plain || mode_ == CppEmitMode::Bench;
-    for (const char *reserved : {"entry", "rt", "std", "main", "depth"}) {
+    for (const char *reserved : {"entry", "rt", "std", "main", "depth", "lit", "program"}) {
         globals_.reserve(reserved);
     }
 
@@ -324,6 +357,9 @@ std::string ProgramEmitter::emit(GCGraph *root) {
         });
     }
     const std::vector<GCGraph *> functions = collectFunctions(roots);
+    for (const auto &[graph, name] : parts_.functionNames) {
+        parts_.values.reserve(name);
+    }
 
     std::vector<std::string> declarations, definitions;
     for (const std::vector<GCGraph *> &group : tailCallGroups(functions)) {
@@ -355,7 +391,6 @@ std::string ProgramEmitter::emit(GCGraph *root) {
     if (auto module = context_->mainModule()) {
         source = module->path();
         stem   = std::filesystem::path(source).stem().string();
-        ns     = cppIdentifier(stem);
     }
     const size_t limit = camel::execute::recursionLimit(*context_).frames;
 
@@ -380,6 +415,16 @@ std::string ProgramEmitter::emit(GCGraph *root) {
         for (const auto &uri : uris) {
             list += (list.empty() ? "" : ", ") + uri;
         }
+        // Said where the first of them is used: the program is not standalone.
+        std::string named;
+        for (const auto &uri : uris) {
+            named += (named.empty() ? "'" : ", '") + uri + "'";
+        }
+        ::raisePassWarning(
+            *context_,
+            camel::core::error::RuntimeDiag::TranslationLinksRuntime,
+            nodeOriginNear(parts_.firstBridgedGraph, parts_.firstBridgedNode),
+            (uris.size() == 1 ? "the operator " : "the operators ") + named);
         out += "// The program uses operators of runtime modules that std::cpp has no standalone\n";
         out += std::format("// translation for ({}), so it links the Camel runtime:\n", list);
         out += std::format(
@@ -391,9 +436,15 @@ std::string ProgramEmitter::emit(GCGraph *root) {
     }
     out += "#include \"camel/standalone/runtime.h\"\n";
     out += bridged ? "#include \"camel/standalone/bridge.h\"\n\n" : "\n";
-    out += std::format("namespace {} {{\n\nnamespace rt = camel::standalone;\n\n", ns);
-    if (!parts_.strings.empty()) {
-        out += "// ---- String constants ----\n\n" + parts_.strings.definitions() + "\n";
+    out += std::format("namespace {} {{\n\nnamespace rt = camel::standalone;\n", ns);
+    // The text of a value of a struct declared here calls appendText on its members: the
+    // runtime's overloads are found next to the file's own.
+    out += "using camel::standalone::appendText;\n\n";
+    if (const std::string types = parts_.values.typeDeclarations(); !types.empty()) {
+        out += "// ---- Tuples and structs ----\n\n" + types;
+    }
+    if (const std::string constants = parts_.values.constantDefinitions(); !constants.empty()) {
+        out += "// ---- Constants ----\n\nnamespace lit {\n" + constants + "} // namespace lit\n\n";
     }
     if (bridged) {
         std::vector<std::pair<std::string, std::string>> operators(

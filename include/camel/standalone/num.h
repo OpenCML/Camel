@@ -38,6 +38,8 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/opt.h"
+#include "camel/standalone/str.h"
 #include "camel/utils/int_div.h"
 #include "camel/utils/number_text.h"
 
@@ -212,6 +214,45 @@ To floatFromText(std::string_view text, const char *target, const Site &site) {
     default:
         fault(site, {std::string(text), target, "a number"});
     }
+}
+
+// ---- Text to number, as a `T!` (:op/parse_int, :op/parse_float; tagged.cpp parseNumber) ----
+
+namespace detail {
+
+template <typename T>
+Fallible<T> parseNumber(const Str &text, const char *what, const char *where) {
+    T value{};
+    camel::utils::NumberTextStatus status;
+    if constexpr (std::is_floating_point_v<T>) {
+        status = camel::utils::parseWholeFloat<T>(text.view(), value);
+    } else {
+        status = camel::utils::parseWholeInteger<T>(text.view(), value);
+    }
+    switch (status) {
+    case camel::utils::NumberTextStatus::Ok:
+        return Fallible<T>(value);
+    case camel::utils::NumberTextStatus::OutOfRange:
+        return Fallible<T>::failure(Error{
+            Str("ParseError"),
+            Str("'" + text.str() + "' is out of the range of " + what),
+            Str(where)});
+    default:
+        return Fallible<T>::failure(
+            Error{Str("ParseError"), Str("'" + text.str() + "' is not " + what), Str(where)});
+    }
+}
+
+} // namespace detail
+
+/// `parse_int(s)`: the integer the whole of `s` writes, or a ParseError.
+inline Fallible<int64_t> parseInt(const Str &text) {
+    return detail::parseNumber<int64_t>(text, "an integer", "<parse_int>");
+}
+
+/// `parse_float(s)`: the number the whole of `s` writes, or a ParseError.
+inline Fallible<double> parseFloat(const Str &text) {
+    return detail::parseNumber<double>(text, "a number", "<parse_float>");
 }
 
 } // namespace camel::standalone

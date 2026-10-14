@@ -45,16 +45,12 @@ namespace camel::passes::cpp {
 
 using camel::core::type::Type;
 
-/// The C++ type of a value of `type`, or nothing when std::cpp does not translate it yet.
-/// `void` is "void": the value of a node of that type is not kept.
-std::optional<std::string> cppTypeOf(const Type *type);
-
 bool isVoid(const Type *type);
 
 /// What the refusals say std::cpp translates.
 inline constexpr const char *kTranslatedTypes =
-    "std::cpp translates values of the types int32, int64, float32, float64, bool, string and "
-    "void only";
+    "std::cpp translates numbers, bool, string, arrays, tuples, structs, T?, T!, functions and "
+    "var variables of these, and void";
 
 /// A C++ string literal of `bytes`: printable ASCII as it is, everything else as an octal
 /// escape (an octal escape takes at most three digits, so a digit after it stays a digit).
@@ -83,23 +79,42 @@ class NameScope {
     std::set<std::string> used_;
 };
 
-/// The string constants of a program: each distinct text becomes one namespace-scope
-/// `const rt::Str`, built once when the program starts.
-class StringPool {
+/// The types and constants of a program as the generated file writes them: the C++ type of
+/// each Camel type (declaring a struct for each tuple and struct type), and the C++ text of
+/// each constant (a string or a composite constant is one namespace-scope `const`, built once
+/// when the program starts; copying it counts a reference).
+class ProgramValues {
   public:
-    /// The name of the constant holding `text`.
-    std::string nameFor(std::string_view text);
-    /// The definitions, in the order the texts were first asked for.
-    std::string definitions() const;
-    bool empty() const { return order_.empty(); }
+    /// The C++ type of a value of `type`, or nothing when std::cpp does not translate it yet.
+    /// `void` is "void": the value of a node of that type is not kept.
+    std::optional<std::string> type(const Type *type);
+
+    /// The C++ name of element `i` of a tuple (`_0`, `_1`, ...) or field `i` of a struct type.
+    std::string fieldName(const Type *type, size_t i) const;
+
+    /// The C++ text of the constant in `slot` of type `type`, or nothing when it has none.
+    std::optional<std::string> constant(slot_t slot, const Type *type);
+
+    /// The name of the constant holding the string `text`.
+    std::string string(std::string_view text);
+
+    /// Keeps `name` (a function of the program) from being the name of a declared type.
+    void reserve(const std::string &name) { names_.reserve(name); }
+
+    /// The struct declarations, each after the ones it uses.
+    std::string typeDeclarations() const { return declarations_; }
+    /// The constants, each after the ones it uses; they belong in a namespace `lit`.
+    std::string constantDefinitions() const { return constants_; }
 
   private:
-    std::map<std::string, std::string, std::less<>> names_;
-    std::vector<std::pair<std::string, std::string>> order_; // name, text
-    NameScope scope_;
-};
+    std::string hoist(const std::string &type, const std::string &expr, const std::string &hint);
 
-/// The C++ text of the constant in `slot` of type `type`, or nothing when it has none (yet).
-std::optional<std::string> cppConstant(slot_t slot, const Type *type, StringPool &strings);
+    std::map<std::string, std::string> types_;     // the type's mangled name -> C++ type
+    std::map<std::string, std::string> constants;  // C++ expression -> name of the constant
+    std::string declarations_;
+    std::string constants_;
+    NameScope names_;         // the declared types
+    NameScope constantNames_; // the constants, in namespace lit
+};
 
 } // namespace camel::passes::cpp

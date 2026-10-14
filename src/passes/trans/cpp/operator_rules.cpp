@@ -128,6 +128,26 @@ OperatorRule faultingFunction(const char *name, RuntimeDiag kind, size_t values)
     };
 }
 
+/// `rt::name(x, w)`: the value and the one `with` argument (`xs->append<x>`).
+OperatorRule withArgument(const char *name) {
+    return {
+        [name](OperatorCall &c) -> std::optional<std::string> {
+            return std::format("rt::{}({}, {})", name, c.norm(0).text, c.with(0).text);
+        },
+        true,
+    };
+}
+
+/// `x.name()`: a part of a tagged value (opt.h).
+OperatorRule method(const char *name) {
+    return {
+        [name](OperatorCall &c) -> std::optional<std::string> {
+            return std::format("{}.{}()", c.norm(0).text, name);
+        },
+        true,
+    };
+}
+
 OperatorRule cast(const char *type) {
     return {
         [type](OperatorCall &c) -> std::optional<std::string> {
@@ -299,6 +319,54 @@ Rules buildRules() {
         },
         false,
     };
+
+    // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
+    r[":op/idx_arr"]         = faultingFunction("at", RuntimeDiag::IndexOutOfRange, 3);
+    r[":struct/len_arr"]     = runtimeFunction("length");
+    r[":struct/head_arr"]    = faultingFunction("head", RuntimeDiag::IndexOutOfRange, 3);
+    r[":struct/tail_arr"]    = runtimeFunction("tail");
+    r[":struct/concat_arr"]  = runtimeFunction("concat");
+    r[":struct/append_arr"]  = withArgument("append");
+    r[":struct/extend_arr"]  = withArgument("concat");
+    r[":struct/contains_arr"] = withArgument("contains");
+    r[":struct/slice_arr"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            return std::format(
+                "rt::slice({}, {}, {}, {})",
+                c.norm(0).text,
+                c.with(0).text,
+                c.with(1).text,
+                c.site(RuntimeDiag::SliceOutOfRange, marks(4)));
+        },
+        false,
+    };
+    r[":struct/range"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            return std::format(
+                "rt::range({}, {}, {}, {})",
+                c.norm(0).text,
+                c.norm(1).text,
+                c.normCount() > 2 ? c.norm(2).text : std::string("1"),
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
+
+    // ---- T?, T! and the error value (tagged.cpp) ----
+    r[":op/tag_is_null"]     = method("isNull");
+    r[":op/tag_null_value"]  = method("value");
+    r[":op/tag_is_error"]    = method("failed");
+    r[":op/tag_error_value"] = method("value");
+    r[":op/tag_error_info"]  = method("error");
+    r[":op/tag_throw"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            return std::format("{}::failure({})", c.cppType(c.resultType()), c.norm(0).text);
+        },
+        true,
+    };
+    r[":op/error_new"]   = runtimeFunction("makeError");
+    r[":op/parse_int"]   = runtimeFunction("parseInt", false);
+    r[":op/parse_float"] = runtimeFunction("parseFloat", false);
 
     // ---- Modules with a standalone translation ----
     r["time:now"]    = runtimeFunction("now", false);

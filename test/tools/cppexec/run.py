@@ -45,6 +45,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 EXE = ".exe" if os.name == "nt" else ""
 CAMEL = os.environ.get("CAMEL", os.path.join(ROOT, "out", "latest", "bin", "camel" + EXE))
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
+# A statement that is only `x->append<...>` or `x->extend<...>`: it relies on the change in place.
+IN_PLACE = re.compile(r"^\s*[\w.\[\]]+->(append|extend)<.*>\s*$", re.M)
 
 
 def find_compiler():
@@ -151,6 +153,12 @@ def check(program, workdir, args):
         rec["detail"] = "timed out" if ccode is None else "signal %d" % -ccode
     elif fout == xout and fcode == ccode:
         rec["outcome"] = "same"
+    elif IN_PLACE.search(open(program, encoding="utf-8", errors="replace").read()):
+        # Design principles 2.12: `append` returns a new array; the runtime still changes the
+        # array in place, and a program that relies on it (the result of a statement
+        # `xs->append<x>` unused) is to become a compile-time error.
+        rec["outcome"] = "differs: in-place append (2.12)"
+        rec["detail"] = first_difference(fout, xout) if fout != xout else "exit codes"
     else:
         rec["outcome"] = "differs"
         rec["detail"] = ("exit fvm %s, cpp %s; " % (fcode, ccode)) + (

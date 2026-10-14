@@ -74,6 +74,19 @@ uint64_t graphOriginOf(const camel::core::context::Context &context, const GCGra
     return camel::source::kInvalidOriginId;
 }
 
+std::string SiteTable::locationOf(const Diagnostic &d) {
+    const auto range = camel::core::error::resolveSourceRange(d.range, d.sourceContext);
+    if (!range) {
+        return "";
+    }
+    std::string path   = camel::core::error::diagnosticPath(d);
+    const size_t slash = path.find_last_of("/\\");
+    if (slash != std::string::npos) {
+        path.erase(0, slash + 1);
+    }
+    return std::format("{}:{}:{}", path, range->start.line + 1, range->start.character + 1);
+}
+
 std::string SiteTable::valueMark(size_t k) {
     return std::string(1, '\x1f') + static_cast<char>('0' + k);
 }
@@ -120,12 +133,43 @@ std::string SiteTable::siteFor(
     }
 
     Site site{
-        .name    = names_.unique(base),
-        .text    = camel::core::error::renderDiagnostic(d, rich),
-        .brief   = camel::core::error::renderDiagnostic(d, brief),
-        .comment = std::format("{} at {}", d.name, where),
+        .name     = names_.unique(base),
+        .text     = camel::core::error::renderDiagnostic(d, rich),
+        .brief    = camel::core::error::renderDiagnostic(d, brief),
+        .comment  = std::format("{} at {}", d.name, where),
+        .place    = false,
+        .kind     = d.name.substr(d.name.rfind(':') + 1),
+        .message  = d.message,
+        .location = locationOf(d),
     };
     index_.emplace(key, sites_.size());
+    sites_.push_back(std::move(site));
+    return sites_.back().name;
+}
+
+std::string SiteTable::unlocated(RuntimeDiag kind, const std::vector<std::string> &args) {
+    std::array<std::string, 10> a;
+    for (size_t i = 0; i < args.size() && i < a.size(); ++i) {
+        a[i] = args[i];
+    }
+    Diagnostic d = DiagnosticBuilder::of(kind, nullptr)
+                       .commit(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
+    RenderOptions rich;
+    rich.format    = DiagFormat::Rich;
+    rich.color     = false;
+    rich.wrapWidth = 0;
+    RenderOptions brief = rich;
+    brief.format        = DiagFormat::Short;
+    Site site{
+        .name     = names_.unique("unlocated"),
+        .text     = camel::core::error::renderDiagnostic(d, rich),
+        .brief    = camel::core::error::renderDiagnostic(d, brief),
+        .comment  = d.name + ", located by the value it reports",
+        .place    = false,
+        .kind     = d.name.substr(d.name.rfind(':') + 1),
+        .message  = d.message,
+        .location = "",
+    };
     sites_.push_back(std::move(site));
     return sites_.back().name;
 }
@@ -168,8 +212,11 @@ std::string SiteTable::placeFor(const GCGraph *graph, gc_node_ref_t node) {
         .name    = names_.unique(base),
         .text    = firstBreak == std::string::npos ? std::string() : text.substr(firstBreak + 1),
         .brief   = startEnd == std::string::npos ? line : line.substr(0, startEnd),
-        .comment = "a call of an operator of a runtime module",
-        .place   = true,
+        .comment  = "a call of an operator of a runtime module",
+        .place    = true,
+        .kind     = "",
+        .message  = "",
+        .location = locationOf(d),
     };
     index_.emplace(key, sites_.size());
     sites_.push_back(std::move(site));
@@ -179,13 +226,25 @@ std::string SiteTable::placeFor(const GCGraph *graph, gc_node_ref_t node) {
 std::string SiteTable::definitions() const {
     std::string out;
     for (const Site &site : sites_) {
+        if (site.place) {
+            out += std::format(
+                "// {}\nconst rt::Place {}{{\n    {},\n    {},\n    {}}};\n",
+                site.comment,
+                site.name,
+                cppStringLiteral(site.text),
+                cppStringLiteral(site.brief),
+                cppStringLiteral(site.location));
+            continue;
+        }
         out += std::format(
-            "// {}\nconst rt::{} {}{{\n    {},\n    {}}};\n",
+            "// {}\nconst rt::Site {}{{\n    {},\n    {},\n    {},\n    {},\n    {}}};\n",
             site.comment,
-            site.place ? "Place" : "Site",
             site.name,
             cppStringLiteral(site.text),
-            cppStringLiteral(site.brief));
+            cppStringLiteral(site.brief),
+            cppStringLiteral(site.kind),
+            cppStringLiteral(site.message),
+            cppStringLiteral(site.location));
     }
     return out;
 }
