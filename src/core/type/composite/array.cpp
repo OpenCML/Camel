@@ -81,9 +81,7 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
 
     Type *newElemType = elemType_;
     for (const auto &type : typeList) {
-        // Void and Ref stand for "no element seen yet". `any` is an element type like the
-        // others: an `any` element next to an `int` one is a mismatch, not an `int` (its slot
-        // would be read as an `int` unchecked).
+        // Void and Ref stand for "no element seen yet".
         if (newElemType->code() == TypeCode::Void || newElemType->code() == TypeCode::Ref) {
             newElemType = type;
         } else if (Type *joined = newElemType->unify(type)) {
@@ -127,8 +125,8 @@ bool ArrayType::equals(Type *other) const {
 }
 
 CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
-        return *r;
+    if (sourceType == nullptr)
+        return CastSafety::Forbidden;
     if (this == sourceType)
         return CastSafety::Safe;
     return CastSafety::Forbidden;

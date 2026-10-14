@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-135 diagnostics: 124 errors, 11 warnings.
+133 diagnostics: 122 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -105,8 +105,6 @@ prints one entry.
 | `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error |
 | `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error |
 | `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error |
-| `0x030000E0` | [SemanticDiag::AnyUncheckedCast](#anyuncheckedcast) | Error |
-| `0x030000E1` | [SemanticDiag::AnyBranchSubject](#anybranchsubject) | Error |
 | `0x030000E2` | [SemanticDiag::AnyNotAllowed](#anynotallowed) | Error |
 | `0x030000E3` | [SemanticDiag::ConditionNotBool](#conditionnotbool) | Error |
 | `0x030000E4` | [SemanticDiag::MatchCaseTypeMismatch](#matchcasetypemismatch) | Error |
@@ -2459,42 +2457,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### AnyUncheckedCast
-
-`0x030000E0` · Error · `SemanticDiag::AnyUncheckedCast`
-
-**Message**
-
-```text
-A value of static type 'any' cannot be converted to '{0}' with 'as': nothing records what the value was, so the conversion could not be checked.
-```
-
-**Help**
-
-```text
-The one operator that gives a value of type 'any' is 'decode' of the json module. Decode JSON whose shape is known with 'decode_as(text, shape)', which checks the shape and gives a 'T!'.
-```
-
-*No example: no test small enough to show raises it.*
-
-### AnyBranchSubject
-
-`0x030000E1` · Error · `SemanticDiag::AnyBranchSubject`
-
-**Message**
-
-```text
-A value of static type 'any' cannot be the {0}: nothing records what the value is, so it could not be {1}.
-```
-
-**Help**
-
-```text
-The one operator that gives a value of type 'any' is 'decode' of the json module. Decode the JSON with 'decode_as(text, shape)', which gives a typed value, and branch on that.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### AnyNotAllowed
 

@@ -772,9 +772,6 @@ class Builder {
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
-    /// Refuses the `if` or `match` `gct` whose condition or subject has static type `any`
-    /// (AnyBranchSubject, design principles 2.12): nothing records what the slot holds.
-    void rejectAnySubject(const GCT::node_ptr_t &gct, node_handle_t subject);
     /// The subgraph of one branch arm. Its body is the block `exec`, or what `body` builds
     /// (called inside the arm's scope) when given; `exec` then only locates the arm.
     compile_graph_ptr_t buildArmGraph(

@@ -126,6 +126,10 @@ void validateRuntimeGraphPayload(const GCGraph *graph);
 /// 4.1): between a BRCH and its JOIN every executed node belongs to exactly one arm. Part of
 /// validateRuntimeGraphPayload; throws std::runtime_error naming the graph, the node and the arms.
 void validateRuntimeBranchArms(const GCGraph *graph);
+/// The type invariant (graph_types.cpp): no type on the graph (function type, runtime, static
+/// and closure slots, at any depth) is an auxiliary type of the compiler. Part of
+/// validateRuntimeGraphPayload; throws std::runtime_error naming the graph and the type.
+void validateRuntimeGraphTypes(const GCGraph *graph);
 /// The check that needs the callees encoded: every direct call passes as many arguments as its
 /// callee has ports. Run on each graph once the whole set of a commit is encoded.
 void validateRuntimeGraphCalls(const GCGraph *graph);

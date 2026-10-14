@@ -80,7 +80,8 @@ enum class TypeCode : uint32_t {
     Struct   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00A),
     Function = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00B),
     Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00C),
-    Any      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00D),
+    // 0x00D was `any`, removed (design principles 2.11, 2.12): no value has a type that is
+    // undetermined after compilation.
     Union    = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00E),
     // Compile-time only (camel/core/type/typevar.h): a type variable of a generic function
     // or of a parameterised type declaration, and a parameterised type declaration itself.
@@ -155,10 +156,6 @@ class Type {
     // Set once by the TypeTable, before the object is handed to anyone else.
     TypeId typeId_ = kNoTypeId;
 
-  protected:
-    /** Any-cast rule: converting between Any and any other type is always Safe. */
-    static std::optional<CastSafety> checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType);
-
   public:
     Type() = delete;
     Type(TypeCode type);
@@ -217,7 +214,6 @@ class Type {
     static Type *Void();
     static Type *String();
     static Type *Ref();
-    static Type *Any();
 };
 
 } // namespace camel::core::type

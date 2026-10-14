@@ -175,8 +175,8 @@ bool UnionType::equals(Type *other) const {
 }
 
 CastSafety UnionType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
-        return *r;
+    if (sourceType == nullptr)
+        return CastSafety::Forbidden;
     if (this == sourceType)
         return CastSafety::Safe;
     return CastSafety::Forbidden;

@@ -104,7 +104,7 @@ written `Map` or `Set` alone is an `InvalidTypeArgument` error.
   use of one variable mangle alike).
 - **Assignability**: `Map<K, V>` from `Map<K, V>` only. No variance: `Map<string, int>` is
   not a `Map<string, int?>`.
-- **`any`**: a collection converts to `any` like every value; `any as Map<...>` is refused
+- **`any`** (removed since, design principles 2.12): a collection converted to `any` like every value; `any as Map<...>` was refused
   (nothing at run time could check it).
 - **Generics**: `func get_or_else(m: Map<typeas K, typeas V>, k: K, d: V): V` binds `K` and
   `V` from the argument's type and instantiates per pair, like any generic function. A key
@@ -470,7 +470,7 @@ Strings are not quoted, as in an array or a struct.
 
 ## 7. JSON (`DESIGN-QUESTION(json-typed-decode)`)
 
-`json::decode` is unchanged (`any`). The typed entry is `json::decode_as`:
+`json::decode` gives a `Json` (design principles 2.12; it gave an `any` when this was written). The typed entry is `json::decode_as`:
 
 ```camel
 let r = json::decode_as<[] as Map<string, int>>('{"b": 2, "a": 1}')    // Map<string, int>!
@@ -494,7 +494,7 @@ that does not have the shape of `T` one of kind `JsonTypeError` whose message na
 | `{ f: A, g: B }` | an object with exactly those members |
 | `T?` | `null`, or a `T` |
 
-A shape whose type has no JSON form (a function, `any`, a map with another key type) is
+A shape whose type has no JSON form (a function, a map with another key type) is
 rejected when the call is compiled. `json::encode` writes a `Map<string, T>` as an object
 and a `Set<T>` as an array, in key order.
 

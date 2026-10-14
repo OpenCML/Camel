@@ -84,8 +84,6 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
             return json::array();
         const ArrayType *arrayType = static_cast<const ArrayType *>(t);
         Type *elemType             = arrayType->elemType();
-        if (!elemType)
-            elemType = Type::Any();
         json jarr = json::array();
         for (size_t i = 0; i < arr->size(); ++i) {
             auto elem = camelToJson(elemType, arr->data()[i], ctx);
@@ -103,8 +101,6 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         json jarr                  = json::array();
         for (size_t i = 0; i < tupleType->size(); ++i) {
             Type *elemType = tupleType->typeAt(i);
-            if (!elemType)
-                elemType = Type::Any();
             auto elem = camelToJson(elemType, tuple->data()[i], ctx);
             if (!elem)
                 return std::nullopt;
@@ -120,8 +116,6 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         json jobj;
         for (size_t i = 0; i < structType->size(); ++i) {
             Type *fieldType = structType->typeAt(i);
-            if (!fieldType)
-                fieldType = Type::Any();
             auto val = camelToJson(fieldType, st->data()[i], ctx);
             if (!val)
                 return std::nullopt;

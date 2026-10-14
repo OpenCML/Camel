@@ -40,11 +40,9 @@ namespace {
 
 /// Whether a value of type `type` exists at run time, so that an operator taking a value of
 /// every type (`string(x)`) may take it: not `void`, not a type the compiler uses on its own
-/// (a type variable, a union, a reference). This is what a parameter typed `any` used to accept,
-/// `any` itself included for as long as values of that type exist.
+/// (a type variable, a union, a reference). This is what a parameter typed `any` used to accept.
 bool isConcreteValueType(Type *type) {
-    return type != nullptr && type->code() != TypeCode::Void &&
-           (!isAuxiliary(type->code()) || type->code() == TypeCode::Any);
+    return type != nullptr && type->code() != TypeCode::Void && !isAuxiliary(type->code());
 }
 
 } // namespace

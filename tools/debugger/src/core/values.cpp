@@ -235,10 +235,6 @@ Rendered render(const ValueView &original, size_t limit) {
         break;
     }
     const TypeCode code = view.type->code();
-    if (code == TypeCode::Any) {
-        out.value = "<any>"; // no static type to read the slot with (design principles 2.7)
-        return out;
-    }
     if (isGCTraced(code) && view.slot == NullSlot) {
         out.value = "null";
         return out;

@@ -1174,8 +1174,9 @@ void emitDraftNativePayload(
 
 void validateRuntimeGraphPayload(const GCGraph *graph) {
     validateRuntimeGraphPayloadImpl(graph);
-    // The references are sound; now what the back ends assume about branches.
+    // The references are sound; now what the back ends assume about branches and types.
     validateRuntimeBranchArms(graph);
+    validateRuntimeGraphTypes(graph);
 }
 
 void validateRuntimeGraphCalls(const GCGraph *graph) {

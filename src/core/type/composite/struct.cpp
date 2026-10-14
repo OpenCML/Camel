@@ -303,8 +303,8 @@ bool StructType::equals(Type *type) const {
 }
 
 CastSafety StructType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
-        return *r;
+    if (sourceType == nullptr)
+        return CastSafety::Forbidden;
     return CastSafety::Forbidden;
 }
 

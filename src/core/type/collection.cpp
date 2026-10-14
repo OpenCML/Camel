@@ -79,8 +79,6 @@ std::string collectionKeyProblem(Type *type) {
         return "a struct is not a key type; use a tuple of its fields";
     case TypeCode::Function:
         return "a function has no equality";
-    case TypeCode::Any:
-        return "a value of type 'any' has no type to compare by";
     default:
         break;
     }

@@ -250,7 +250,6 @@ of the node or slot, and values are printed with it, by the program's own printi
 | `Map`, `Set` | the printed form |
 | tensor and other module types | the type with its static shape, and the printed form cut at a length |
 | function value | its graph and number of captured values |
-| `any` | `<any>` |
 
 Printing is cut at a fixed length. Whether a node has run is tracked by the debugger per frame
 (the slot the previous node wrote), so a slot that was never written is never dereferenced.

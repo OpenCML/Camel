@@ -3007,15 +3007,6 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return entered;
         }
     }
-    // A slot typed `any` carries no record of what entered it, so `as T` out of `any` would
-    // read its bits as a `T` unchecked (`12345 as any as string` followed the integer as an
-    // address). Design principles 2.12: a compile-time error.
-    if (sourceType->code() == TypeCode::Any && targetType->code() != TypeCode::Any) {
-        diags_->of(SemanticDiag::AnyUncheckedCast)
-            .atOrigin(gct->origin())
-            .commit(targetType->toString());
-        throw BuildAbortException();
-    }
     // Safe conversions always; an Unsafe one only into a module type, which then checks the
     // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
     // that may lose information stay refused.
@@ -5782,7 +5773,6 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         res.type() == typeid(node_handle_t),
         "Unexpected result type from Enter the child of BRCH node.");
     node_handle_t condNode = any_cast<node_handle_t>(res);
-    rejectAnySubject(gct, condNode);
     node_handle_t node{};
     if (TupleType *tagged = asTagged(valueTypeOf(nodeTypeOf(condNode)))) {
         node = visitTaggedMatch(gct, condNode, tagged);
@@ -5810,24 +5800,6 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     }
     LEAVE("BRCH");
     return node;
-}
-
-void Builder::rejectAnySubject(const GCT::node_ptr_t &gct, node_handle_t subject) {
-    if (valueTypeOf(nodeTypeOf(subject))->code() != TypeCode::Any) {
-        return;
-    }
-    // An `if` has only `case true` arms; a `match` compares with value cases. Either would read
-    // the untyped slot: as a bool, or bit for bit against the literals (a string by address).
-    bool isMatch = false;
-    for (size_t i = 1; i < gct->size(); ++i) {
-        isMatch |= gct->at(i)->caseType() == GCT::CaseType::Value;
-    }
-    diags_->of(SemanticDiag::AnyBranchSubject)
-        .atOrigin(gct->at(0)->origin())
-        .commit(
-            isMatch ? "subject of a 'match'" : "condition of an 'if'",
-            isMatch ? "compared with the cases" : "read as a bool");
-    throw BuildAbortException();
 }
 
 void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {

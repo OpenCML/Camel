@@ -90,8 +90,6 @@ bool PyObjectType::equals(Type *type) const {
 }
 
 CastSafety PyObjectType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code_, sourceType))
-        return *r;
     return sourceType && sourceType->code() == code_ ? CastSafety::Safe : CastSafety::Forbidden;
 }
 

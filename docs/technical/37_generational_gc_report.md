@@ -33,10 +33,11 @@ and only the comparison between the two collectors within one row means anything
   constant. Of the 93 graphs it compiles in the test programs examined, 9 are lost; a hot
   function that is lost runs at interpreter speed (21 times slower in the worst case built
   for this report).
-- Two defects that exist with both collectors were met while measuring and are not fixed: a
-  reference held in a slot typed `any` is not seen by the collector, and allocation in the
-  mark-sweep collector can stall after a sweep (both in section 6.4). The first is
-  far easier to hit with the generational collector, the second does not occur with it.
+- Two defects that exist with both collectors were met while measuring: a reference held in
+  a slot typed `any` was not seen by the collector, and allocation in the mark-sweep collector
+  can stall after a sweep (both in section 6.4). The first was far easier to hit with the
+  generational collector and is gone (`any` is removed, design principles 2.12); the second
+  does not occur with it.
 
 ## 2. What the option is
 
@@ -368,8 +369,13 @@ a module outside it has been checked by nobody.
 
 ### 6.4 Known problems, not fixed
 
-**A reference in a slot typed `any` is invisible to the collector (both collectors).** Recorded
-as an open question in `36_gc_handle_rules.md` section 9; reproduced for this report:
+**A reference in a slot typed `any` is invisible to the collector (both collectors).** Fixed
+since by removing `any` (design principles 2.12; `docs/design/any-typing/README.cn.md`): no
+type on a committed graph is undetermined, and `json.decode` gives a `Json`, an object that
+describes itself and is traced through the types its kinds fix. The program below no longer
+compiles (`d as string[]`); written with `decode_as` or the `Json` accessors it is correct in
+all the settings of the table (`test/plans/feat/modules/json_value.plan.toml`). As it was
+reproduced for this report:
 
 ```camel
 module anyref
@@ -459,8 +465,8 @@ The facts, from the sections above:
 4. For tensor work and for code that does not allocate there is no measured difference.
 5. (Superseded since, see 6.1.) `std::jit` loses 9 of 93 compiled graphs in the test programs (none after `std::inline`),
    and a hot function that returns or uses an object constant can lose a factor of 20.
-6. The `any` defect turns from "wrong only under stress" into "wrong output, exit code 0" in
-   a ten-line program that uses `json.decode` (6.4).
+6. The `any` defect turned from "wrong only under stress" into "wrong output, exit code 0" in
+   a ten-line program that uses `json.decode` (6.4). Closed: `any` is removed.
 7. Mark-sweep has a stall of its own (6.4) that the generational collector does not have.
 8. C++ modules outside this repository have never run under a collector that moves objects.
 9. Only one platform was run, on a loaded machine.
@@ -468,11 +474,9 @@ The facts, from the sections above:
 Recommendation: **not yet; keep mark-sweep as the default for now and make the switch after
 two things are settled.**
 
-- The `any` question (6.4, and section 9 of the handle rules). As long as a slot typed `any`
-  can hold a reference that the collector neither traces nor updates, making the generational
-  collector the default would turn a rare crash into silent wrong output for programs that
-  keep a decoded JSON value. This is a language question (a run-time tag, or `any` replaced by
-  generics), not a collector one, and it is the author's to decide.
+- The `any` question (6.4, and section 9 of the handle rules). Settled by design principles
+  2.12 and closed: `any` is removed and `json.decode` gives a self-describing `Json`, so no
+  slot holds a reference the collector cannot trace.
 - A run on the other platforms the project supports, Windows at least, with the default test
   set in both modes.
 
@@ -481,5 +485,4 @@ the first costs nothing after `std::inline` in the programs examined and has a k
 the second is the ordinary price of a copying young generation (a lower
 `CAMEL_GC_PROMOTION_AGE` should reduce it; that was not measured). The measurements argue for the switch once the two points above are
 closed, and the stall of the mark-sweep allocator argues for not staying with it indefinitely.
-Until then the option is safe to recommend to users whose programs do not hold `any` values:
-`--gc generational`.
+Until then the option is safe to recommend: `--gc generational`.

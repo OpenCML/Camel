@@ -117,8 +117,6 @@ string typeCodeToString(TypeCode code) {
         return "function";
     case TypeCode::Ref:
         return "ref";
-    case TypeCode::Any:
-        return "any";
     case TypeCode::Union:
         return "union";
     case TypeCode::TypeVar:
@@ -159,8 +157,6 @@ std::string Type::mangle() const {
         return "s";
     case TypeCode::Ref:
         return "r";
-    case TypeCode::Any:
-        return "a";
     default:
         ASSERT(false, "Unknown TypeCode");
         return "";
@@ -187,33 +183,16 @@ Type *Type::unify(Type *other) const { return equals(other) ? const_cast<Type *>
 
 Type *Type::widened() const { return const_cast<Type *>(this); }
 
-std::optional<CastSafety> Type::checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType) {
-    if (!sourceType)
-        return CastSafety::Forbidden;
-    // Every value may enter `any`: its slot is passed on as it is.
-    if (targetCode == TypeCode::Any)
-        return CastSafety::Safe;
-    // Nothing may leave it: an `any` slot does not record what entered it, so reading it as
-    // another type could not be checked (design principles 2.12). `any` into `any?` / `any!`
-    // enters a form rather than leaving `any`; TupleType::castSafetyFrom allows that itself.
-    if (sourceType->code() == TypeCode::Any)
-        return CastSafety::Forbidden;
-    return std::nullopt;
-}
-
 CastSafety Type::castSafetyFrom(Type *sourceType) const {
     ASSERT(
         !camel::core::type::isComposite(code_),
         "Composite type cannot call Type::castSafetyFrom");
     ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::castSafetyFrom");
 
-    if (auto r = checkCastSafetyWithAny(code_, sourceType))
-        return *r;
-
     if (!sourceType)
         return CastSafety::Forbidden;
 
-    // Exclude auxiliary types first (Any is already handled by checkCastSafetyWithAny).
+    // Exclude auxiliary types first.
     if (camel::core::type::isAuxiliary(code_) ||
         camel::core::type::isAuxiliary(sourceType->code())) {
         return CastSafety::Forbidden;
@@ -237,11 +216,6 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
-    // A value entering `any` keeps its slot. This must happen before all ASSERTs to support
-    // composite sources. (Leaving `any` is Forbidden: see checkCastSafetyWithAny.)
-    if (code_ == TypeCode::Any)
-        return value;
-
     ASSERT(
         !camel::core::type::isComposite(code_),
         "castSlotFrom not implemented for composite types");
@@ -446,13 +420,6 @@ bool Type::assignableFrom(Type *from) const {
     if (from->code_ == TypeCode::Void)
         return false;
 
-    // Any can receive assignment from any type (Any as the target accepts any source).
-    if (to->code_ == TypeCode::Any)
-        return true;
-    // Any cannot be assigned to other types (source is Any while target is not Any).
-    if (from->code_ == TypeCode::Any)
-        return false;
-
     // Third-party types rely on their own overridden assignableFrom. This must be
     // checked before the composite flag: an Other type may also be flagged
     // Composite (e.g. Tensor) but is never a CompositeType object.
@@ -538,11 +505,6 @@ Type *Type::String() {
 
 Type *Type::Ref() {
     static Type *type = primitiveSingleton(TypeCode::Ref);
-    return type;
-}
-
-Type *Type::Any() {
-    static Type *type = primitiveSingleton(TypeCode::Any);
     return type;
 }
 

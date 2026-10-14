@@ -332,9 +332,6 @@ bool TupleType::equals(Type *other) const {
 }
 
 CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
-    // No Type::checkCastSafetyWithAny here: a tuple is never `any`, and the only conversion
-    // out of `any` into a tuple type is `any` entering `any?` / `any!`, which the payload rule
-    // below allows (and castSlotFrom boxes). Every other one is Forbidden.
     if (this == sourceType)
         return CastSafety::Safe;
     if (isTagged() && sourceType != nullptr) {

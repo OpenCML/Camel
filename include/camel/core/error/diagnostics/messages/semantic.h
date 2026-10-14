@@ -110,10 +110,9 @@ enum class SemanticDiag : uint32_t {
     ExportedVariable             = 0x0000D0,
     ModuleValueCycle             = 0x0000D1,
     CaptureAfterRecursiveCall    = 0x0000D2,
-    // `any` (design principles 2.11, 2.12): a value whose static type is `any` is an untyped
-    // slot, so nothing may read it as a type of its own. 0xE0 and up.
-    AnyUncheckedCast             = 0x0000E0,
-    AnyBranchSubject             = 0x0000E1,
+    // `any` (design principles 2.11, 2.12), 0xE0 and up. 0xE0 (AnyUncheckedCast) and 0xE1
+    // (AnyBranchSubject) reported reading a slot typed `any`; with the type gone they are
+    // retired, and their codes are not reused.
     AnyNotAllowed                = 0x0000E2,
     // The condition and the cases of a branch (found with the `any` cases above).
     ConditionNotBool             = 0x0000E3,

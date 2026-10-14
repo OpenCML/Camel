@@ -222,8 +222,10 @@ root tracers), and nothing read before a call is used after it.
 - Roots are updated in place: frame slots, static areas of graphs (roots, and graphs reached
   through function values), `RootHandle`s, the evaluator's value roots, registered tracers.
 - Objects carry no type. The collector traces an object with the static type of the slot it
-  was reached through, so a reference in a slot typed `any` is neither traced nor updated (see
-  the open question in section 9).
+  was reached through, or, for an object that describes itself (a function value, a tensor, a
+  foreign wrapper, a `Json`), with the types the object itself knows. Every slot has a
+  determined type (graph invariant, `src/runtime/graph_types.cpp`): `any`, which a slot could
+  have and the collector could not trace, is removed (section 9).
 - An object born old (large, or small while the birth space was full) is tracked until the
   next minor collection and scanned when a typed reference reaches it, so its creator may fill
   it with plain stores (rule 6). After that collection it is an ordinary old object.
@@ -273,7 +275,7 @@ generational collector as it was.
 | 18 | `src/compile/gir/builder.cpp` (`typeFoldedValues_`) | raw copy next to its `RootHandle` | none today | — | no; latent | — |
 | 19 | `rtdata/foreign.h` `movable` / `pinned` flags | never read | — | — | no; both descriptors use the defaults | left; a pinned wrapper needs `ForeignPinnedHandle` |
 | 20 | `rtdata/collection.cpp` (`compareKeys` default) | would order keys by address | — | unreachable: key types are restricted | no; latent | — |
-| 21 | slots typed `any` (frame, array element, tuple field) | a reference the collector does not see | any collection | large heap, rare collections | **use after free with both collectors** | not fixed: section 9 |
+| 21 | slots typed `any` (frame, array element, tuple field) | a reference the collector does not see | any collection | large heap, rare collections | **use after free with both collectors** | fixed: `any` removed, `json.decode` gives a self-describing `Json` (section 9) |
 
 Found clean: every `onMoved` (arrays re-derive `dataPtr_`, tensors their shape and data
 pointers; the others have no pointer into themselves); every `updateRefs` for typed slots; no
@@ -302,7 +304,7 @@ here and left to the standard-library work:
 | # | Where | What | Effect |
 |---|---|---|---|
 | 22 | `modules/algo/sequence.cpp` (`unique`, composite elements) | `equals(..., deep=false)` compares nested references by address | two equal `(string, int)` or `string[]` elements are both kept; built-in `==` and `contains` on such values do the same |
-| 23 | `modules/algo/sequence.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` are deduplicated by address (an instance of 21) |
+| 23 | `modules/algo/sequence.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` were deduplicated by address (an instance of 21); gone with `any` |
 | 24 | `rtdata/collection.cpp` (`Table::equals`, `deep == false`) | values compared with `memcmp` | reachable through 22 and through `contains` on an array of maps |
 
 ## 8. Tools
@@ -322,18 +324,16 @@ a stale pointer that is never used again; code that no test runs.
 
 ## 9. Open questions (for the language author)
 
-- **`any`.** A slot typed `any` may hold a reference (`json.decode` returns one), but the
-  collector, which knows values only by static type, neither traces nor updates it. With both
-  collectors a value kept in an `any` variable across a collection is freed while in use
-  (`let d = decode(s); f(); d as string[]`), and what a typed value refers to through an `any`
-  element or field is not kept alive either. Converting at once (`decode(s) as T`) is **not**
-  safe either, contrary to what this section said before: `CAST` is a pure node without a
-  control edge, so a back end runs it where its result is used, not right after `decode`, and
-  the result waits in the `any` slot across whatever runs in between
-  (`docs/design/any-typing/examples/t21_cast_at_once.cml` fails on all four back ends under
-  forced collection). `decode_as` is safe: it builds a typed value inside the operator.
-  Design principles 2.11 and 2.12 settle the question: no value has a type that is still
-  undetermined at run time, `any` is tightened step by step, and `as T` out of `any` is a
-  compile-time error (`AnyUncheckedCast`). The plan is in `docs/design/any-typing/README.cn.md`.
+- **`any`** (settled). A slot typed `any` could hold a reference (`json.decode` returned
+  one) that the collector, which knows values only by static type, neither traced nor updated:
+  a value kept in an `any` variable across a collection was freed while in use, and what a
+  typed value referred to through an `any` element or field was not kept alive either.
+  Converting at once (`decode(s) as T`) was not safe either, contrary to what this section once
+  said: `CAST` is a pure node without a control edge, so a back end runs it where its result is
+  used, not right after `decode` (`docs/design/any-typing/examples/t21_cast_at_once.cml` failed
+  on all four back ends under forced collection). Design principles 2.11 and 2.12 settled it:
+  `any` is removed from the language and from the type system, `json.decode` gives a `Json`
+  (`modules/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
+  function value or a tensor), and a commit refuses a graph with an undetermined type.
 - **Whether the generational collector becomes the default** (measurements in
   `37_generational_gc_report.md`).
