@@ -1,0 +1,6 @@
+// A value that cannot be null is not compared with `null`.
+func main(): int sync {
+    let a = 1
+    println(a == null)
+    return 0
+}

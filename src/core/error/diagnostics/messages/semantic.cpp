@@ -673,6 +673,18 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::LogicalOperandNotBool,
+            {
+                "LogicalOperandNotBool",
+                "The {1} side of '{0}' has type '{2}', not 'bool'.",
+                "'&&' and '||' are branches on a 'bool': 'a && b' is 'if a then b else false', "
+                "'a || b' is 'if a then true else b'. The right side is evaluated only when "
+                "the left side does not decide, both sides are 'bool', and neither operator "
+                "can be overloaded. For logic that evaluates both sides (element-wise logic "
+                "on tensors, an operator of a type of your own) use '&' and '|'.",
+            },
+        },
+        {
             SemanticDiag::IntegerLiteralTruncated,
             {
                 "IntegerLiteralTruncated",

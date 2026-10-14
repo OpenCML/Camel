@@ -575,9 +575,11 @@ class Builder {
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
     /// No arm is added to those the program wrote (design principles 2.10).
+    /// `valueless` (with `arms`): the branch is an `if` without `else`, whose join takes no
+    /// value from its arms.
     node_handle_t buildBranch(
         const GCT::node_ptr_t &gct, node_handle_t condNode,
-        const std::vector<compile_graph_ptr_t> *arms = nullptr);
+        const std::vector<compile_graph_ptr_t> *arms = nullptr, bool valueless = false);
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
@@ -594,6 +596,19 @@ class Builder {
     /// `match x { case null => ..  case v => .. }` and `case error e` over a tagged `x`.
     node_handle_t visitTaggedMatch(
         const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::TupleType *type);
+    // ---- Conditions (design principles 2.11, 2.12). `&&` and `||` are branches; a `T?` can
+    // be compared with `null`; and where such a comparison is the condition (or an operand
+    // `&&` joins in it), the name is a `T` in the arm that excludes null. Each is the
+    // BRCH/JOIN pair the equivalent `if` or `match` gives: nothing here adds a node kind. ----
+    /// The branch of `a && b`, `a || b`, or of an `if` whose condition compares names with
+    /// `null`. nullptr (nothing built) for any other branch, which visitBrchNode builds.
+    node_handle_t visitConditionBrchNode(const GCT::node_ptr_t &gct);
+    /// `x == null` / `x != null` (either order) where `x` is a `T?`: the test of its tag, a
+    /// `bool`. nullptr when the call `gct` of the operator group `group` is not that.
+    node_handle_t nullComparison(
+        const std::string &group, const GCT::node_ptr_t &gct,
+        const std::vector<Argument> &operands, const camel::core::type::type_vec_t &types);
+
     /// Binds `node` to a fresh name no program can write, so that arms can capture it.
     std::string bindTemporary(node_handle_t node);
     /// The call `op(<name>)` of one of the built-in operators over tagged values.

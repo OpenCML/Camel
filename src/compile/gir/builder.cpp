@@ -510,7 +510,7 @@ const char *operatorSymbolOf(std::string_view group) {
         {"__assn__", "="},        {"__assn_add__", "+="},  {"__assn_sub__", "-="},
         {"__assn_mul__", "*="},   {"__assn_div__", "/="},  {"__assn_mod__", "%="},
         {"__assn_mat__", "@="},   {"__assn_pow__", "^="},  {"__assn_and__", "&="},
-        {"__assn_or__", "|="},    {"__or__", "||"},        {"__and__", "&&"},
+        {"__assn_or__", "|="},    {"__or__", "|"},         {"__and__", "&"},
         {"__eq__", "=="},         {"__neq__", "!="},       {"__strict_eq__", "==="},
         {"__strict_neq__", "!=="}, {"__lt__", "<"},        {"__le__", "<="},
         {"__gt__", ">"},          {"__ge__", ">="},        {"__add__", "+"},
@@ -4810,6 +4810,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             const auto &res =
                 ops->resolve(withInputTypes, normInputTypes, normStatics, Modifier::None);
             if (!res.has_value() && withInputs.empty()) {
+                // `x == null` / `x != null` over a `T?`: the tag of `x`, not a comparison of
+                // two values (design principles 2.11).
+                if (node_handle_t test =
+                        nullComparison(ops->name(), gct, normInputs, normInputTypes)) {
+                    LEAVE("LINK");
+                    return test;
+                }
+            }
+            if (!res.has_value() && withInputs.empty()) {
                 // `t += u` on a tensor: no operator changes the tensor in place; the new
                 // tensor is computed and `t` bound to it, as for a number.
                 if (node_handle_t rebound =
@@ -5581,10 +5590,326 @@ node_handle_t Builder::visitTaggedMatch(
     return buildBranch(gct, tagNode, &arms);
 }
 
+// ---- Conditions (design principles 2.11) ----
+
+namespace {
+
+bool isNullLiteral(const GCT::node_ptr_t &expr) {
+    return expr->type() == GCT::NodeKind::DATA &&
+           expr->data()->type()->code() == TypeCode::Void;
+}
+
+bool isLogicalBranch(const GCT::node_ptr_t &expr, GCT::BranchKind kind) {
+    return expr->type() == GCT::NodeKind::BRCH && expr->branchKind() == kind;
+}
+
+/// The right side of the `&&` / `||` branch `brch` (see GCT::BranchKind for its layout).
+GCT::node_ptr_t rightSideOf(const GCT::node_ptr_t &brch) {
+    const bool isAnd = brch->branchKind() == GCT::BranchKind::LogicalAnd;
+    return brch->at(isAnd ? 1 : 2)->at(0)->at(0);
+}
+
+/// One comparison of a name with `null` inside a condition.
+struct NullTest {
+    std::string name;
+    GCT::node_ptr_t expr;    // the comparison
+    GCT::node_ptr_t subject; // the name in it
+    /// The name is not null where the condition the test is part of holds (`x != null`), as
+    /// opposed to where it does not (`x == null`).
+    bool nonNullWhenTrue;
+    /// Not under a `!` (`!(x == null)` is not one of the forms narrowing follows).
+    bool direct;
+};
+
+/// `expr` as the comparison of a name with `null`, in either order.
+std::optional<NullTest> nullTestOf(const GCT::node_ptr_t &expr) {
+    if (expr->type() != GCT::NodeKind::LINK || expr->size() != 3 ||
+        expr->at(0)->type() != GCT::NodeKind::DREF) {
+        return std::nullopt;
+    }
+    const std::string op = expr->at(0)->name();
+    if (op != "__eq__" && op != "__neq__") {
+        return std::nullopt;
+    }
+    const bool nullFirst     = isNullLiteral(expr->at(1));
+    const auto &subject      = expr->at(nullFirst ? 2 : 1);
+    const auto &comparedWith = expr->at(nullFirst ? 1 : 2);
+    if (!isNullLiteral(comparedWith) || subject->type() != GCT::NodeKind::DREF) {
+        return std::nullopt;
+    }
+    return NullTest{
+        subject->name(),
+        expr,
+        subject,
+        op == "__neq__",
+        true};
+}
+
+/// Every comparison of a name with `null` the condition `expr` is made of, looking through
+/// `&&`, `||` and `!`. This is wider than what narrowing follows (see conjunctsOf): the
+/// tests found here and not followed are the ones a diagnostic explains.
+void collectNullTests(const GCT::node_ptr_t &expr, bool negated, std::vector<NullTest> &tests) {
+    if (auto test = nullTestOf(expr)) {
+        test->nonNullWhenTrue = test->nonNullWhenTrue != negated;
+        test->direct          = test->direct && !negated;
+        tests.push_back(std::move(*test));
+    } else if (
+        expr->type() == GCT::NodeKind::LINK && expr->size() == 2 &&
+        expr->at(0)->type() == GCT::NodeKind::DREF &&
+        expr->at(0)->name() == "__not__") {
+        collectNullTests(expr->at(1), !negated, tests);
+    } else if (
+        isLogicalBranch(expr, GCT::BranchKind::LogicalAnd) ||
+        isLogicalBranch(expr, GCT::BranchKind::LogicalOr)) {
+        collectNullTests(expr->at(0), negated, tests);
+        collectNullTests(rightSideOf(expr), negated, tests);
+    }
+}
+
+/// The operands that `&&` joins in `expr` (`expr` itself when it is not an `&&`). Each of
+/// them holds where `expr` does: a test against null among them narrows the then arm
+/// (design principles 2.12).
+void conjunctsOf(const GCT::node_ptr_t &expr, std::vector<const GCT::Node *> &conjuncts) {
+    if (isLogicalBranch(expr, GCT::BranchKind::LogicalAnd)) {
+        conjunctsOf(expr->at(0), conjuncts);
+        conjunctsOf(rightSideOf(expr), conjuncts);
+    } else {
+        conjuncts.push_back(expr);
+    }
+}
+
+/// Whether the name is written as a DREF anywhere in `node`. A use of another declaration of
+/// the same name counts too, and a name kept in a constant (an element of an array literal)
+/// is not seen: the answer only decides whether a diagnostic gets a note.
+bool mentionsName(const GCT::node_ptr_t &node, const std::string &name) {
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->type() == GCT::NodeKind::DREF &&
+        node->name() == name) {
+        return true;
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        if (mentionsName(node->at(i), name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+node_handle_t Builder::nullComparison(
+    const std::string &group, const GCT::node_ptr_t &gct, const std::vector<Argument> &operands,
+    const type_vec_t &types) {
+    if ((group != "__eq__" && group != "__neq__") || operands.size() != 2) {
+        return nullptr;
+    }
+    const bool nullFirst = isNullLiteral(operands[0].expr);
+    if (nullFirst == isNullLiteral(operands[1].expr)) {
+        return nullptr; // no `null` written, or two
+    }
+    // Only a `T?` has the tag asked about. Two `T?` values are not compared, and neither is
+    // any other value with `null`: those stay the errors they were.
+    const size_t subject = nullFirst ? 1 : 0;
+    if (asNullable(types[subject]) == nullptr) {
+        return nullptr;
+    }
+    node_handle_t isNull =
+        applyTagOperator("__is_null__", bindTemporary(valueOf(operands[subject].node)), gct);
+    return group == "__eq__" ? isNull : applyTagOperator("__not__", bindTemporary(isNull), gct);
+}
+
+node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
+    using Kind         = GCT::BranchKind;
+    using CaseType     = GCT::CaseType;
+    const Kind kind    = gct->branchKind();
+    const bool logical = kind == Kind::LogicalAnd || kind == Kind::LogicalOr;
+    if (gct->size() != 3 || gct->at(1)->caseType() != CaseType::True ||
+        gct->at(2)->caseType() != CaseType::Else) {
+        ASSERT(!logical, "'&&' and '||' are lowered with a true arm and an else arm.");
+        return nullptr; // a `match`
+    }
+    const GCT::node_ptr_t &cond = gct->at(0);
+    std::vector<NullTest> tests;
+    collectNullTests(cond, false, tests);
+    if (!logical && tests.empty()) {
+        return nullptr; // an `if` that tests no name against null
+    }
+
+    // Narrowing (design principles 2.11, 2.12). In the arm of `if x != null then A else B`
+    // that excludes null, `x` is a `T`: the arm starts by taking the value out of `x`, and
+    // the name `x` stands for that value inside the arm, as `v` does in
+    // `match x { case null => B  case v => A }`. The value is taken out inside the arm
+    // because doing so has a meaning only where the arm is selected.
+    //
+    // It applies to a name bound by `let` or a parameter (a `var` may be rewritten between
+    // the test and the use), and to the direct forms only: `x != null` or `null != x` that
+    // is the whole condition or one of the operands `&&` joins narrows the then arm
+    // (`if x != null && ready then ...`); `x == null` or `null == x` that is the whole
+    // condition narrows the else arm. Nothing under `!` or `||` narrows the arms of the `if`,
+    // and the else arm of a conjunction learns nothing. A test that is found but not
+    // followed is kept as the explanation of an error in the arm it would have narrowed.
+    struct Opened {
+        std::string name;
+        GCT::node_ptr_t subject; // the name as the condition wrote it
+        std::string temporary;   // what the arm captures (bindTemporary)
+    };
+    struct Refused {
+        std::string name;
+        std::string type;
+        DiagLabel label;
+    };
+    struct Arm {
+        GCT::node_ptr_t exec;
+        std::vector<Opened> opened;
+        std::vector<Refused> refused;
+    };
+    Arm thenArm{gct->at(1)->at(0), {}, {}}, elseArm{gct->at(2)->at(0), {}, {}};
+    const std::optional<NullTest> whole = nullTestOf(cond);
+    std::vector<const GCT::Node *> conjuncts;
+    conjunctsOf(cond, conjuncts);
+    for (const NullTest &test : tests) {
+        const auto bound    = nodeAt(test.name);
+        TupleType *nullable = bound.has_value() && *bound != nullptr
+                                  ? asNullable(valueTypeOf(nodeTypeOf(*bound)))
+                                  : nullptr;
+        if (nullable == nullptr) {
+            continue; // not a `T?`: nothing to narrow (and the comparison itself is an error)
+        }
+        Arm &arm                  = test.nonNullWhenTrue ? thenArm : elseArm;
+        const bool conjunct       = std::ranges::find(conjuncts, test.expr) != conjuncts.end();
+        const bool follows        = test.direct && conjunct &&
+                                    (test.nonNullWhenTrue || conjuncts.size() == 1);
+        const bool mutableName    = isVariable(*bound);
+        if (follows && !mutableName) {
+            if (std::ranges::find(arm.opened, test.name, &Opened::name) == arm.opened.end()) {
+                arm.opened.push_back({test.name, test.subject, {}});
+            }
+            continue;
+        }
+        const char *why =
+            mutableName
+                ? "a 'var' may be rewritten between the test and the use (bind its value "
+                  "with 'let' and test that)"
+                : test.direct && conjunct
+                      ? "where the operands of '&&' do not all hold, nothing is known about "
+                        "any one of them"
+                      : "narrowing follows a test that is the whole condition or an operand "
+                        "of '&&', not one under '||' or '!'";
+        arm.refused.push_back(
+            {test.name,
+             nullable->toString(),
+             DiagLabel{
+                 SourceRange{test.subject->origin()},
+                 std::format(
+                     "'{}' still has the type '{}' in this arm; the test of it against null "
+                     "does not narrow it: {}",
+                     test.name,
+                     nullable->toString(),
+                     why),
+                 ""}});
+    }
+
+    // The condition. One followed test that is the whole condition selects the arm by the
+    // tag itself, which is the branch of the `match` above: arm 0 is the null arm. Any other
+    // condition is a bool as in every `if`: arm 0 is the then arm.
+    const bool byTag = whole.has_value() && thenArm.opened.size() + elseArm.opened.size() == 1;
+    for (Arm *arm : {&thenArm, &elseArm}) {
+        for (Opened &opened : arm->opened) {
+            opened.temporary = bindTemporary(valueNodeOf(visit(opened.subject)));
+        }
+    }
+    node_handle_t condNode =
+        byTag ? applyTagOperator(
+                    "__is_null__",
+                    (thenArm.opened.empty() ? elseArm : thenArm).opened.front().temporary,
+                    cond)
+              : valueNodeOf(visit(cond));
+
+    const char *symbol     = kind == Kind::LogicalAnd ? "&&" : "||";
+    // Reported at the operand that is not a bool.
+    const auto requireBool = [&](Type *type, const char *side, const GCT::node_ptr_t &operand) {
+        type = valueTypeOf(type);
+        if (type == nullptr || type->code() != TypeCode::Bool) {
+            const auto origin = operand->origin();
+            diags_->of(SemanticDiag::LogicalOperandNotBool)
+                .atOrigin(origin != 0 ? origin : gct->origin())
+                .commit(symbol, side, type != nullptr ? type->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+    };
+    if (logical) {
+        requireBool(nodeTypeOf(condNode), "left", cond);
+    }
+
+    const auto buildArm = [&](const Arm &arm) {
+        const size_t errorsBefore = diags_->count(Severity::Error);
+        const size_t diagsBefore  = diags_->count();
+        try {
+            if (arm.opened.empty()) {
+                return buildArmGraph(arm.exec);
+            }
+            return buildArmGraph(arm.exec, [&] {
+                for (const Opened &opened : arm.opened) {
+                    // Opened whether or not the arm seems to use the name: a name can be
+                    // written where no DREF shows it (the elements of an array literal are
+                    // names kept in the constant), and an unused node costs nothing at run
+                    // time, as nothing depends on it.
+                    [[maybe_unused]] const bool bound = insertNode(
+                        opened.name,
+                        applyTagOperator("__null_value__", opened.temporary, opened.subject));
+                    ASSERT(bound, "A narrowed name is the first name of its arm.");
+                }
+                return visitBodyNode(arm.exec);
+            });
+        } catch (const BuildAbortException &) {
+            // An error in an arm that uses a name the condition tested without narrowing it,
+            // and that speaks of the name's type: most likely the name was used as a `T`.
+            const auto errors = diags_->errors();
+            const auto first =
+                errors.begin() + static_cast<std::ptrdiff_t>(std::min(errorsBefore, errors.size()));
+            for (const Refused &refused : arm.refused) {
+                if (mentionsName(arm.exec, refused.name) &&
+                    std::any_of(first, errors.end(), [&](const Diagnostic *d) {
+                        return d->message.find(refused.type) != std::string::npos;
+                    })) {
+                    diags_->addRelatedToErrorsFrom(diagsBefore, refused.label, 3);
+                }
+            }
+            throw;
+        }
+    };
+    // Arm 0 is the one the condition selects first: the null arm by tag, the then arm else.
+    const bool thenFirst = !byTag || thenArm.opened.empty();
+    std::vector<compile_graph_ptr_t> arms(2);
+    arms[thenFirst ? 0 : 1] = buildArm(thenArm);
+    arms[thenFirst ? 1 : 0] = buildArm(elseArm);
+    if (logical) {
+        // The right side is the then arm of `&&` and the else arm of `||`.
+        const bool rightIsThen = kind == Kind::LogicalAnd;
+        requireBool(
+            arms[rightIsThen == thenFirst ? 0 : 1]->funcType()->exitType(),
+            "right",
+            rightSideOf(gct));
+    }
+    // An `if` without `else` has no value (design principles 2.10; see buildBranch).
+    const bool valueless = !logical && elseArm.exec->size() == 0;
+    return buildBranch(gct, condNode, &arms, valueless);
+}
+
 node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
-    if (gct->branchKind() != GCT::BranchKind::Cond) {
+    const auto kind = gct->branchKind();
+    if (kind == GCT::BranchKind::NullThen || kind == GCT::BranchKind::ErrorThen ||
+        kind == GCT::BranchKind::ErrorPass) {
         node_handle_t node = visitTaggedBrchNode(gct);
+        LEAVE("BRCH");
+        return node;
+    }
+    // `&&`, `||`, and an `if` whose condition compares names with `null` (design principles
+    // 2.11). Any other `if`, and every `match`, is built below.
+    if (node_handle_t node = visitConditionBrchNode(gct)) {
         LEAVE("BRCH");
         return node;
     }
@@ -5658,7 +5983,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
 
 node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode,
-    const std::vector<compile_graph_ptr_t> *arms) {
+    const std::vector<compile_graph_ptr_t> *arms, bool valueless) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, {}, nullptr);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
@@ -5675,8 +6000,10 @@ node_handle_t Builder::buildBranch(
         {});
 
     Type *joinType = nullptr;
-    // The arm being added is the one an `if` without `else` has in its place.
-    bool absentElse = false;
+    // The arm being added is the one an `if` without `else` has in its place. With arms the
+    // caller built, the caller says whether the branch is such an `if` (`valueless`): the
+    // join then takes nothing from any of them.
+    bool absentElse = valueless;
     bool ifArmSeen  = false;
 
     linkNodes(LinkType::Norm, condNode, brchNode);

@@ -338,6 +338,10 @@ std::string Node::toString() const {
             return "BRCH: !!";
         case BranchKind::ErrorPass:
             return "BRCH: ?->";
+        case BranchKind::LogicalAnd:
+            return "BRCH: &&";
+        case BranchKind::LogicalOr:
+            return "BRCH: ||";
         default:
             return "BRCH";
         }

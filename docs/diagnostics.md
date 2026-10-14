@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-128 diagnostics: 118 errors, 10 warnings.
+129 diagnostics: 119 errors, 10 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -104,6 +104,7 @@ prints one entry.
 | `0x030000B2` | [SemanticDiag::EmptyArrayWithoutType](#emptyarraywithouttype) | Error |
 | `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error |
 | `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error |
+| `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -2398,6 +2399,32 @@ A list comprehension '[e for x in xs if c]' is 'xs->filter<(x) => c>->map<(x) =>
 ```camel
 func main(): int sync {
     println([x + 1 for x in 5])
+    return 0
+}
+```
+
+### LogicalOperandNotBool
+
+`0x030000C0` · Error · `SemanticDiag::LogicalOperandNotBool`
+
+**Message**
+
+```text
+The {1} side of '{0}' has type '{2}', not 'bool'.
+```
+
+**Help**
+
+```text
+'&&' and '||' are branches on a 'bool': 'a && b' is 'if a then b else false', 'a || b' is 'if a then true else b'. The right side is evaluated only when the left side does not decide, both sides are 'bool', and neither operator can be overloaded. For logic that evaluates both sides (element-wise logic on tensors, an operator of a type of your own) use '&' and '|'.
+```
+
+**Example** (`test/cases/consistency/logical/left_not_bool.cml`, run as `camel -E short test/cases/consistency/logical/left_not_bool.cml`)
+
+```camel
+func main(): int sync {
+    let n = 3
+    println(n && true)
     return 0
 }
 ```

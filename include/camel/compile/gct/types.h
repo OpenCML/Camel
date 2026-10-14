@@ -65,7 +65,13 @@ std::string to_string(NodeKind kind);
 ///  - ErrorThen: `a !! b`. Children: a, CASE(True)[EXEC b].
 ///  - ErrorPass: `x ?-> f`. Children: x, CASE(Else)[EXEC call], where the call takes
 ///    DREF kPassedValueName as its argument.
-enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, ErrorPass };
+///  - LogicalAnd: `a && b`, which is `if a then b else false` (design principles 2.11).
+///    Children: a, CASE(True)[EXEC b], CASE(Else)[EXEC false].
+///  - LogicalOr: `a || b`, which is `if a then true else b`.
+///    Children: a, CASE(True)[EXEC true], CASE(Else)[EXEC b].
+///    Both have exactly the children of that `if`; the kind only records what was written,
+///    so that the operands are required to be `bool` and reported as operands.
+enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, ErrorPass, LogicalAnd, LogicalOr };
 
 /// The pattern of a CASE node.
 ///  - Value: a value the scrutinee is compared with. Children: the value, the body.

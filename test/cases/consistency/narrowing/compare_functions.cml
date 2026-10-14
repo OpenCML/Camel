@@ -1,0 +1,10 @@
+// Function values cannot be compared.
+func inc(x: int): int { return x + 1 }
+func dec(x: int): int { return x - 1 }
+
+func main(): int sync {
+    let f = inc
+    let g = dec
+    println(f == g)
+    return 0
+}

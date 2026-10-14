@@ -102,6 +102,8 @@ enum class SemanticDiag : uint32_t {
     EmptyArrayWithoutType        = 0x0000B2,
     PartialApplicationRefused    = 0x0000B3,
     ComprehensionSourceRefused   = 0x0000B4,
+    // Rulings of 2026-10-13 (design principles 2.11): 0xC0 and up.
+    LogicalOperandNotBool        = 0x0000C0,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

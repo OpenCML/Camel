@@ -1326,11 +1326,16 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     case AST::BinaryDataOp::AssignOr: {
         opNode = tree_->makeDRef("__assn_or__");
     } break;
-    case AST::BinaryDataOp::LogicalOr: // to become a branch; both sides evaluated for now
+    case AST::BinaryDataOp::LogicalOr:
+    case AST::BinaryDataOp::LogicalAnd: {
+        // `||` and `&&` are branches, not operators (design principles 2.11).
+        node_ptr_t res = visitLogicalExpr(ast);
+        LEAVE("BinaryExpr");
+        return res;
+    }
     case AST::BinaryDataOp::Or: {
         opNode = tree_->makeDRef("__or__");
     } break;
-    case AST::BinaryDataOp::LogicalAnd: // as LogicalOr
     case AST::BinaryDataOp::And: {
         opNode = tree_->makeDRef("__and__");
     } break;
@@ -1466,6 +1471,62 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         res = waitNode;
     }
     LEAVE("BinaryExpr");
+    return res;
+}
+
+/*
+`a && b` is `if a then b else false`, `a || b` is `if a then true else b` (design principles
+2.11): a branch on the left side with the right side as one arm, so the right side is
+evaluated only when the left does not decide. The node built has the children the `if` would
+have; its kind keeps what was written (see BranchKind). Neither can be overloaded: no
+name is looked up for them. The eager, overloadable pair is `&` and `|` (`__and__`,
+`__or__`).
+*/
+node_ptr_t Builder::visitLogicalExpr(const AST::node_ptr_t &ast) {
+    ENTER("LogicalExpr");
+    const auto &logicalExpr = ast->loadAs<AST::BinaryExprLoad>();
+    const bool isAnd        = logicalExpr->op() == AST::BinaryDataOp::LogicalAnd;
+
+    node_ptr_t brchNode = tree_->makeBrch(isAnd ? BranchKind::LogicalAnd : BranchKind::LogicalOr);
+    // Located where the binary expression is, like the operators `&` and `|`.
+    setOriginFromAst(context_, brchNode, ast, camel::source::OriginKind::GctNode, "gct.logical");
+
+    node_ptr_t lhsNode = visitData(ast->atAs<AST::DataLoad>(0));
+    node_ptr_t rhsNode = visitData(ast->atAs<AST::DataLoad>(1));
+    // The arm that is not the right side: the value the left side has already decided.
+    node_ptr_t decidedNode =
+        tree_->makeData(tt::as_shared<Data>(make_shared<PrimaryData<bool>>(!isAnd)));
+    setOriginFromAst(
+        context_,
+        decidedNode,
+        ast,
+        camel::source::OriginKind::GctNode,
+        "gct.logical.decided");
+
+    const auto armOf = [&](CaseType caseType, node_ptr_t value) {
+        node_ptr_t execNode = tree_->makeExec();
+        setOriginFromOrigin(
+            context_,
+            execNode,
+            nodeOrigin(value),
+            camel::source::OriginKind::GctNode,
+            "gct.logical.arm");
+        *execNode << value;
+        node_ptr_t caseNode = tree_->makeCase(caseType);
+        *caseNode << execNode;
+        return caseNode;
+    };
+    *brchNode << lhsNode << armOf(CaseType::True, isAnd ? rhsNode : decidedNode)
+              << armOf(CaseType::Else, isAnd ? decidedNode : rhsNode);
+
+    node_ptr_t res = brchNode;
+    if (logicalExpr->waited()) {
+        node_ptr_t waitNode = tree_->makeWait();
+        *waitNode << res;
+        setOriginFromAst(context_, waitNode, ast, camel::source::OriginKind::GctNode, "gct.wait");
+        res = waitNode;
+    }
+    LEAVE("LogicalExpr");
     return res;
 }
 

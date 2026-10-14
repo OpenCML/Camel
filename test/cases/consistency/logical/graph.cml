@@ -1,0 +1,8 @@
+// `a && b` on the graph: a branch on `a` whose arm 0 is `b` and whose arm 1 is `false`.
+func both(a: bool, b: int): bool {
+    return a && b > 1
+}
+
+func main(): bool {
+    return both(true, 2)
+}

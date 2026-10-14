@@ -157,6 +157,8 @@ class Builder {
     node_ptr_t visitData(const AST::node_ptr_t &ast);
     node_ptr_t visitUnaryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitBinaryExpr(const AST::node_ptr_t &ast);
+    /// `a && b` / `a || b`: the branch they stand for (design principles 2.11).
+    node_ptr_t visitLogicalExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitReservedExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);
