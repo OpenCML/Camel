@@ -56,7 +56,7 @@ func main(): int sync {
 | `random` | `seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle` |
 | `time` | `now`、`strftime`、`strptime` |
 | `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk` |
-| `json` | `encode`、`decode`、`decode_as` |
+| `json` | 类型 `Json`；`encode`、`decode`、`decode_as`；`kind`、`is_null`、`get`、`as_bool`、`as_int`、`as_float`、`as_string`、`as_array`、`as_object` |
 | `os`、`sys` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
 | `re` | `test` |
 | `crypto` | `sha256`、`sha256_rounds` |

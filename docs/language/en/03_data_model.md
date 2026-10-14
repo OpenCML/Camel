@@ -36,6 +36,7 @@ There is no type `any`: after compilation every value has a definite type (desig
 | `e as any` | nothing: the value keeps its own type |
 | values of different types side by side (`any[]`, `(int, any)`) | a tuple or a struct: `(int, string)`, `{ id: int, name: string }` |
 | JSON of a known shape | `json::decode_as(text, shape)`, whose result is a `T!` |
+| JSON of an unknown shape | `json::decode(text)` gives a `Json`: its type is definite, its content known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none), as in `j->get<'server'>->get<'port'>->as_int ?? 8080` |
 
 The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 

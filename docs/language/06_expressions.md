@@ -195,7 +195,7 @@ false
 - 构造映射与集合：`[...] as Map<K, V>`、`[...] as Set<T>`；
 - 模块类型的检查式转换：`t as Tensor<f32, const [3]>`，在转换处检查形状。
 
-`as` 不会不经检查地改变一个值的类型：从 `json::decode` 的结果读出别的类型（`decode(s) as int[]`）是编译期错误 `SemanticDiag::AnyUncheckedCast`。已知形状的 JSON 用 `json::decode_as(s, [0])`，它在解码时检查形状，结果是 `T!`。
+`as` 不会不经检查地改变一个值的类型。`json::decode` 的结果是 `Json`，不能 `as` 成别的类型；已知形状的 JSON 用 `json::decode_as(s, [0])`，它在解码时检查形状，结果是 `T!`。
 
 数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`e is T` 保留，尚未实现（运行时没有类型信息；`SemanticDiag::ConstructNotSupported`）。后缀的非空断言 `x!` 同样保留未实现；用 `x ?? 默认值`。
 

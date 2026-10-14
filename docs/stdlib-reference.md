@@ -42,7 +42,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [fs](#fs) | `import { ... } from fs` | C++ | 10 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
 | [sys](#sys) | `import { ... } from sys` | C++ | 2 |
-| [json](#json) | `import { ... } from json` | C++ | 3 |
+| [json](#json) | `import { ... } from json` | C++ | 12 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
 | [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
@@ -2318,27 +2318,143 @@ line.
 #### `decode`
 
 ```camel
-decode: (text: string) => any
+decode: (text: string) => Json
 ```
 
-The value a JSON text describes. Its static type is `any`.
+The value a JSON text describes, as a `Json`: a value of a definite type whose content is
+known only when the program runs. Look into it with get, as_int, as_array and the other
+operators below, each of which gives a value of a definite type; read a part whose shape is
+known with decode_as. Prints as its JSON text.
 
 - Pure.
 - Failure: fault `JsonDecodeFailed` when the text is not JSON.
-- Example: `decode('[1, 2]')` gives `an array of 1 and 2, typed any`
+- Example: `decode('{"port": 80}')->get<'port'>->as_int ?? 0` gives `80`
 
 #### `decode_as`
 
 ```camel
-decode_as: <shape: T> (text: string) => T!
+decode_as: <shape: T> (text: string | Json) => T!
 ```
 
-The value a JSON text describes, decoded to the type of shape; the value of shape is not
-read. The result is an error value when the text does not have that type.
+The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
+the value of shape is not read. The result is an error value when the JSON does not have
+that type. A part of the shape typed `Json` takes whatever is there.
 
 - Pure.
 - Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON.
 - Example: `decode_as<[] as Map<string, int>>('{"a": 1}')` gives `{a: 1}`
+
+#### `kind`
+
+```camel
+kind: (j: Json) => string
+```
+
+The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
+
+- Pure.
+- Example: `kind(decode('[1]'))` gives `'array'`
+
+#### `is_null`
+
+```camel
+is_null: (j: Json) => bool
+```
+
+Whether a Json is the JSON null.
+
+- Pure.
+- Example: `is_null(decode('null'))` gives `true`
+
+#### `get`
+
+```camel
+get: <key: string> (j: Json | Json?) => Json?
+```
+
+The member key of an object; null when j is not an object, has no such member, or is null
+itself (so that calls chain: j->get<'a'>->get<'b'>).
+
+- Pure.
+- Example: `decode('{"a": 1}')->get<'a'>` gives `1, a Json?`
+
+#### `get`
+
+```camel
+get: <index: int> (j: Json | Json?) => Json?
+```
+
+The element index of an array; null when j is not an array, the index is out of range, or j
+is null itself.
+
+- Pure.
+- Example: `decode('[5, 6]')->get<1>->as_int ?? 0` gives `6`
+
+#### `as_bool`
+
+```camel
+as_bool: (j: Json | Json?) => bool?
+```
+
+The bool a Json holds; null for any other kind.
+
+- Pure.
+- Example: `decode('true')->as_bool ?? false` gives `true`
+
+#### `as_int`
+
+```camel
+as_int: (j: Json | Json?) => int?
+```
+
+The integer a Json holds; null for any other kind (a number with a fraction is not an int).
+
+- Pure.
+- Example: `decode('42')->as_int ?? 0` gives `42`
+
+#### `as_float`
+
+```camel
+as_float: (j: Json | Json?) => float?
+```
+
+The number a Json holds, an integer included; null for any other kind.
+
+- Pure.
+- Example: `decode('2')->as_float ?? 0.0` gives `2.0`
+
+#### `as_string`
+
+```camel
+as_string: (j: Json | Json?) => string?
+```
+
+The string a Json holds; null for any other kind.
+
+- Pure.
+- Example: `decode('"hi"')->as_string ?? ''` gives `'hi'`
+
+#### `as_array`
+
+```camel
+as_array: (j: Json | Json?) => Json[]?
+```
+
+The elements of a JSON array; null for any other kind.
+
+- Pure.
+- Example: `len(decode('[1, "a"]')->as_array ?? [])` gives `2`
+
+#### `as_object`
+
+```camel
+as_object: (j: Json | Json?) => Map<string, Json>?
+```
+
+The members of a JSON object, by name; null for any other kind.
+
+- Pure.
+- Example: `keys(decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>))` gives `['a', 'b']`
 
 <a id="re"></a>
 

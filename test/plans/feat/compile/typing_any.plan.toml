@@ -10,46 +10,46 @@ tags = ["feat", "compile", "diagnostics", "any"]
 
 [[tests]]
 name = "any_typing.cast_out"
-desc = "`as T` out of `any` is a compile-time error; reading the decoded 12345 as a string (or `12345 as any as string`) used to follow the integer as an address (segmentation fault). `decode` of the json module is the one operator that gives an `any` now."
+desc = "Nothing reads a decoded value as another type unchecked. `decode(text) as string` was `any` read as a string: the decoded 12345 was followed as an address (segmentation fault; `12345 as any as string` alike). decode gives a `Json` now, which converts to nothing."
 kind = "negative"
 case = "../../../cases/compile/any_typing/cast_out.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyUncheckedCast"
-expect_diagnostic_code = "0x030000E0"
-expect_diagnostic_line = 10
+expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
+expect_diagnostic_code = "0x03000017"
+expect_diagnostic_line = 11
 expect_diagnostic_column = 13
-expect_output_contains = ["A value of static type 'any' cannot be converted to 'string' with 'as'"]
+expect_output_contains = ["Dynamic cast from 'Json' to 'string' is not allowed."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.if_condition"
-desc = "An `any` value as the condition of an `if` is a compile-time error (defect D5: the slot was read as a bool)."
+desc = "A decoded value as the condition of an `if` (defect D5: as an `any` its slot was read as a bool). It is a `Json` now, and a condition is a bool."
 kind = "negative"
 case = "../../../cases/compile/any_typing/if_condition.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyBranchSubject"
-expect_diagnostic_code = "0x030000E1"
+expect_diagnostic_name = "SemanticDiag::ConditionNotBool"
+expect_diagnostic_code = "0x030000E3"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 16
-expect_output_contains = ["cannot be the condition of an 'if'"]
+expect_output_contains = ["The condition of this 'if' has type 'Json'; a condition is a 'bool'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.match_subject"
-desc = "An `any` value as the subject of a `match` is a compile-time error (defect D5: compared bit for bit, a string by address, so `'ab'` fell to `case _`)."
+desc = "A decoded value as the subject of a `match` on literals (defect D5: as an `any` it was compared bit for bit, a string by address). It is a `Json` now, and a case has the type of the value matched."
 kind = "negative"
 case = "../../../cases/compile/any_typing/match_subject.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::AnyBranchSubject"
-expect_diagnostic_code = "0x030000E1"
-expect_diagnostic_line = 10
-expect_diagnostic_column = 19
-expect_output_contains = ["cannot be the subject of a 'match'"]
+expect_diagnostic_name = "SemanticDiag::MatchCaseTypeMismatch"
+expect_diagnostic_code = "0x030000E4"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+expect_output_contains = ["This case of a 'match' on a value of type 'Json' is a value of type 'int'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -61,20 +61,20 @@ case = "../../../cases/compile/any_typing/array_literal.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 10
 expect_diagnostic_column = 15
-expect_output_contains = ["Cannot insert data of type 'any' into a(n) array with element type 'int'."]
+expect_output_contains = ["Cannot insert data of type 'Json' into a(n) array with element type 'int'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.nullable_box"
-desc = "An `any` value entering `any?` is boxed, so `??` opens a real box (defect D1: it was passed on unboxed and `??` read 7 as the address of a box, segmentation fault)."
+desc = "A value entering a `T?` is boxed, so `??` opens a real box (defect D1: an `any` entering `any?` was passed on unboxed and `??` read 7 as the address of a box, segmentation fault). decode gives a `Json` now."
 kind = "behavior"
 case = "../../../cases/compile/any_typing/nullable_box.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_starts_with = "<any>\n"
+expect_stdout_starts_with = "7"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

@@ -2476,23 +2476,7 @@ A value of static type 'any' cannot be converted to '{0}' with 'as': nothing rec
 The one operator that gives a value of type 'any' is 'decode' of the json module. Decode JSON whose shape is known with 'decode_as(text, shape)', which checks the shape and gives a 'T!'.
 ```
 
-**Example** (`test/cases/compile/any_typing/cast_out.cml`, run as `camel test/cases/compile/any_typing/cast_out.cml`)
-
-```camel
-module cast_out
-
-import { decode } from json
-
-// `as T` out of `any` is refused: the slot does not record what entered it. Reading the
-// decoded 12345 back as a string followed it as an address (segmentation fault;
-// docs/design/any-typing, t03 and t06d).
-func main(): int sync {
-    let a = decode('12345')
-    let s = a as string
-    println(s)
-    return 0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### AnyBranchSubject
 
@@ -2510,21 +2494,7 @@ A value of static type 'any' cannot be the {0}: nothing records what the value i
 The one operator that gives a value of type 'any' is 'decode' of the json module. Decode the JSON with 'decode_as(text, shape)', which gives a typed value, and branch on that.
 ```
 
-**Example** (`test/cases/compile/any_typing/if_condition.cml`, run as `camel test/cases/compile/any_typing/if_condition.cml`)
-
-```camel
-module if_condition
-
-import { decode } from json
-
-// An `any` value as the condition of an `if` is refused: its slot used to be read as a bool
-// (docs/design/any-typing, defect D5).
-func main(): int sync {
-    let a = decode('true')
-    println(if a then 1 else 2)
-    return 0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### AnyNotAllowed
 
@@ -2574,16 +2544,18 @@ The condition of this 'if' has type '{0}'; a condition is a 'bool'.
 There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 'x != null').
 ```
 
-**Example** (`test/cases/compile/any_typing/if_condition_string.cml`, run as `camel test/cases/compile/any_typing/if_condition_string.cml`)
+**Example** (`test/cases/compile/any_typing/if_condition.cml`, run as `camel test/cases/compile/any_typing/if_condition.cml`)
 
 ```camel
-module if_condition_string
+module if_condition
 
-// The condition of an `if` is a bool (language reference 6.8.1). A string used to be compared
-// bit for bit with `true`, and the `else` arm was taken without a word.
+import { decode } from json
+
+// A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
+// bool (docs/design/any-typing, defect D5). It is a `Json` now, and a condition is a bool.
 func main(): int sync {
-    let s = 'a' + 'b'
-    println(if s then 1 else 2)
+    let a = decode('true')
+    println(if a then 1 else 2)
     return 0
 }
 ```
@@ -2604,20 +2576,24 @@ This case of a 'match' on a value of type '{0}' is a value of type '{1}'.
 A case is compared with the value matched, so it must have the same type. Write the case as a value of that type, or convert the value matched first.
 ```
 
-**Example** (`test/cases/compile/any_typing/match_case_type.cml`, run as `camel test/cases/compile/any_typing/match_case_type.cml`)
+**Example** (`test/cases/compile/any_typing/match_subject.cml`, run as `camel test/cases/compile/any_typing/match_subject.cml`)
 
 ```camel
-module match_case_type
+module match_subject
 
-// A case of a `match` has the type of the value matched. `case 1` on a string used to be
-// compared as a string, reading the integer 1 as its address (segmentation fault).
+import { decode } from json
+
+// A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
+// bit, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing, defect D5). It
+// is a `Json` now, and a case has the type of the value matched.
 func main(): int sync {
-    let s = 'a' + 'b'
-    println(match s {
+    let v = decode('"ab"')
+    let r = match v {
         case 1 => 'one'
         case 'ab' => 'ab'
         case _ => 'other'
-    })
+    }
+    println(r)
     return 0
 }
 ```

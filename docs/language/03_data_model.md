@@ -36,6 +36,7 @@
 | `e as any` | 去掉，值保持自己的类型 |
 | 不同类型的值并排放（`any[]`、`(int, any)`） | 元组或结构体：`(int, string)`、`{ id: int, name: string }` |
 | 形状事先知道的 JSON | `json::decode_as(text, shape)`，结果是 `T!` |
+| 形状事先不知道的 JSON | `json::decode(text)` 给出 `Json`：类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），例如 `j->get<'server'>->get<'port'>->as_int ?? 8080` |
 
 标准库签名说明里的 `T`、`U...`（如 `println: (x: T, ...rest: U...) => T`）只是说明的记法：这些算子由类型规则按实参的类型检查，图上只有具体类型。
 

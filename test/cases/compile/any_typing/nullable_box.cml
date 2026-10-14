@@ -2,10 +2,10 @@ module nullable_box
 
 import { decode } from json
 
-// An `any` value entering `any?` is boxed like every other payload, so `??` opens a real box.
-// It used to be passed on unboxed and `??` read the integer 7 as the address of a box
-// (segmentation fault; docs/design/any-typing, defect D1). `decode` is the one operator that
-// gives an `any`; a branch with a `null` arm puts it into `any?`.
+// A value entering a `T?` is boxed, so `??` opens a real box. An `any` value entering `any?`
+// used to be passed on unboxed and `??` read the integer 7 as the address of a box
+// (segmentation fault; docs/design/any-typing, defect D1). `decode` gives a `Json` now; the
+// branch with a `null` arm makes it a `Json?`.
 func main(): int sync {
     let n = len('ab')
     let a = if n > 0 then decode('7') else null
