@@ -110,6 +110,10 @@ enum class SemanticDiag : uint32_t {
     ExportedVariable             = 0x0000D0,
     ModuleValueCycle             = 0x0000D1,
     CaptureAfterRecursiveCall    = 0x0000D2,
+    // `any` (design principles 2.11, 2.12): a value whose static type is `any` is an untyped
+    // slot, so nothing may read it as a type of its own. 0xE0 and up.
+    AnyUncheckedCast             = 0x0000E0,
+    AnyBranchSubject             = 0x0000E1,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

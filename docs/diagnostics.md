@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-130 diagnostics: 119 errors, 11 warnings.
+132 diagnostics: 121 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -105,6 +105,8 @@ prints one entry.
 | `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error |
 | `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error |
 | `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error |
+| `0x030000E0` | [SemanticDiag::AnyUncheckedCast](#anyuncheckedcast) | Error |
+| `0x030000E1` | [SemanticDiag::AnyBranchSubject](#anybranchsubject) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -2451,6 +2453,69 @@ sync func walk(n: int): int sync {
 
 func main(): int sync {
     println(walk(3))
+    return 0
+}
+```
+
+### AnyUncheckedCast
+
+`0x030000E0` · Error · `SemanticDiag::AnyUncheckedCast`
+
+**Message**
+
+```text
+A value of static type 'any' cannot be converted to '{0}' with 'as': nothing records what the value was, so the conversion could not be checked.
+```
+
+**Help**
+
+```text
+Give the value its type where it is made instead of reading it back: a type parameter ('func f(x: typeas T): T') in place of an 'any' parameter, the type itself in place of an 'any' return type. For JSON whose shape is known use 'decode_as(text, shape)' of the json module, which checks the shape and gives a 'T!'.
+```
+
+**Example** (`test/cases/compile/any_typing/cast_out.cml`, run as `camel test/cases/compile/any_typing/cast_out.cml`)
+
+```camel
+module cast_out
+
+// `as T` out of `any` is refused: the slot does not record what entered it. Reading 12345 back
+// as a string followed it as an address (segmentation fault; docs/design/any-typing, t03).
+func main(): int sync {
+    let n = 12345
+    let a = n as any
+    let s = a as string
+    println(s)
+    return 0
+}
+```
+
+### AnyBranchSubject
+
+`0x030000E1` · Error · `SemanticDiag::AnyBranchSubject`
+
+**Message**
+
+```text
+A value of static type 'any' cannot be the {0}: nothing records what the value is, so it could not be {1}.
+```
+
+**Help**
+
+```text
+Give the value its type where it is made (a type parameter, 'func f(x: typeas T): T', or the type itself in place of 'any'), then branch on it.
+```
+
+**Example** (`test/cases/compile/any_typing/if_condition.cml`, run as `camel test/cases/compile/any_typing/if_condition.cml`)
+
+```camel
+module if_condition
+
+// An `any` value as the condition of an `if` is refused: its slot used to be read as a bool
+// (docs/design/any-typing, defect D5).
+func main(): int sync {
+    let t = 1 < 2
+    let a = t as any
+    println(if a then 1 else 2)
     return 0
 }
 ```

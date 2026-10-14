@@ -1,0 +1,11 @@
+module array_literal
+
+// An `any` element next to an `int` one is an element type mismatch. The literal used to take
+// the type of the later element, so the string's address became an `int` that could be added
+// to (docs/design/any-typing, defect D2).
+func wrap_s(x: string): any { return x }
+func main(): int sync {
+    let xs = [wrap_s('a' + 'b'), 5]
+    println(xs[0] + xs[1] > 1000)
+    return 0
+}

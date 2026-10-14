@@ -326,9 +326,14 @@ a stale pointer that is never used again; code that no test runs.
   collector, which knows values only by static type, neither traces nor updates it. With both
   collectors a value kept in an `any` variable across a collection is freed while in use
   (`let d = decode(s); f(); d as string[]`), and what a typed value refers to through an `any`
-  element or field is not kept alive either. Converting at once (`decode(s) as T`,
-  `decode_as`) is safe on `std::nvm` and `std::fvm`, where no safepoint lies between the two
-  nodes. Making `any` sound needs either a run-time tag on such values or their removal in
-  favour of generics; design principles section 6 lists the position of `any` as undecided.
+  element or field is not kept alive either. Converting at once (`decode(s) as T`) is **not**
+  safe either, contrary to what this section said before: `CAST` is a pure node without a
+  control edge, so a back end runs it where its result is used, not right after `decode`, and
+  the result waits in the `any` slot across whatever runs in between
+  (`docs/design/any-typing/examples/t21_cast_at_once.cml` fails on all four back ends under
+  forced collection). `decode_as` is safe: it builds a typed value inside the operator.
+  Design principles 2.11 and 2.12 settle the question: no value has a type that is still
+  undetermined at run time, `any` is tightened step by step, and `as T` out of `any` is a
+  compile-time error (`AnyUncheckedCast`). The plan is in `docs/design/any-typing/README.cn.md`.
 - **Whether the generational collector becomes the default** (measurements in
   `37_generational_gc_report.md`).

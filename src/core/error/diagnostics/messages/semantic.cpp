@@ -653,6 +653,29 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::AnyUncheckedCast,
+            {
+                "AnyUncheckedCast",
+                "A value of static type 'any' cannot be converted to '{0}' with 'as': nothing "
+                "records what the value was, so the conversion could not be checked.",
+                "Give the value its type where it is made instead of reading it back: a type "
+                "parameter ('func f(x: typeas T): T') in place of an 'any' parameter, the type "
+                "itself in place of an 'any' return type. For JSON whose shape is known use "
+                "'decode_as(text, shape)' of the json module, which checks the shape and gives "
+                "a 'T!'.",
+            },
+        },
+        {
+            SemanticDiag::AnyBranchSubject,
+            {
+                "AnyBranchSubject",
+                "A value of static type 'any' cannot be the {0}: nothing records what the "
+                "value is, so it could not be {1}.",
+                "Give the value its type where it is made (a type parameter, 'func f(x: "
+                "typeas T): T', or the type itself in place of 'any'), then branch on it.",
+            },
+        },
+        {
             SemanticDiag::PartialApplicationRefused,
             {
                 "PartialApplicationRefused",

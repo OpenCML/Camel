@@ -81,8 +81,10 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
 
     Type *newElemType = elemType_;
     for (const auto &type : typeList) {
-        if (newElemType->code() == TypeCode::Void || newElemType->code() == TypeCode::Any ||
-            newElemType->code() == TypeCode::Ref) {
+        // Void and Ref stand for "no element seen yet". `any` is an element type like the
+        // others: an `any` element next to an `int` one is a mismatch, not an `int` (its slot
+        // would be read as an `int` unchecked).
+        if (newElemType->code() == TypeCode::Void || newElemType->code() == TypeCode::Ref) {
             newElemType = type;
         } else if (Type *joined = newElemType->unify(type)) {
             // Elements of refinement-carrying types (e.g. tensors of different shapes) share

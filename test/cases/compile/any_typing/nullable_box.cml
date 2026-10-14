@@ -1,0 +1,13 @@
+module nullable_box
+
+// An `any` value entering `any?` is boxed like every other payload, so `??` opens a real box.
+// It used to be passed on unboxed and `??` read the integer 7 as the address of a box
+// (segmentation fault; docs/design/any-typing, defect D1).
+func wrap(x: int): any { return x }
+func opt(x: any): any? { return x }
+func main(): int sync {
+    let a = opt(wrap(7))
+    let v = a ?? wrap(0)
+    println(v)
+    return 0
+}

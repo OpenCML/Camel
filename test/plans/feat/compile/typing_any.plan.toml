@@ -1,0 +1,91 @@
+id = "compile.typing_any"
+order = 140
+tier = "feat"
+tags = ["feat", "compile", "diagnostics", "any"]
+
+# `any` (design principles 2.11, 2.12; docs/design/any-typing/README.cn.md). A slot typed `any`
+# records nothing about what entered it, so nothing may read it as a type of its own. Each
+# case is a reproducer of a defect of the study (appendix B) that used to crash or retype a
+# value silently.
+
+[[tests]]
+name = "any_typing.cast_out"
+desc = "`as T` out of `any` is a compile-time error; `12345 as any as string` used to follow the integer as an address (segmentation fault)."
+kind = "negative"
+case = "../../../cases/compile/any_typing/cast_out.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AnyUncheckedCast"
+expect_diagnostic_code = "0x030000E0"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_output_contains = ["A value of static type 'any' cannot be converted to 'string' with 'as'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.if_condition"
+desc = "An `any` value as the condition of an `if` is a compile-time error (defect D5: the slot was read as a bool)."
+kind = "negative"
+case = "../../../cases/compile/any_typing/if_condition.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AnyBranchSubject"
+expect_diagnostic_code = "0x030000E1"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_output_contains = ["cannot be the condition of an 'if'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.match_subject"
+desc = "An `any` value as the subject of a `match` is a compile-time error (defect D5: compared bit for bit, a string by address, so `'ab'` fell to `case _`)."
+kind = "negative"
+case = "../../../cases/compile/any_typing/match_subject.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AnyBranchSubject"
+expect_diagnostic_code = "0x030000E1"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 19
+expect_output_contains = ["cannot be the subject of a 'match'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.array_literal"
+desc = "A computed element whose type is not the one the literal elements fixed is an element type mismatch, reported at the element (defect D2: `[wrap_s('ab'), 5]` was an `int[]` whose first element was the string's address; the same held for a `string` element)."
+kind = "negative"
+case = "../../../cases/compile/any_typing/array_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 21
+expect_output_contains = ["Cannot insert data of type 'any' into a(n) array with element type 'int'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.nullable_box"
+desc = "An `any` value entering `any?` is boxed, so `??` opens a real box (defect D1: it was passed on unboxed and `??` read 7 as the address of a box, segmentation fault)."
+kind = "behavior"
+case = "../../../cases/compile/any_typing/nullable_box.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "<any>\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.array_literal_string"
+desc = "Defect D2 without `any`: `[s, 5]` with `s: string` is an element type mismatch; it was an `int[]` holding the string's address."
+kind = "negative"
+case = "../../../cases/compile/any_typing/array_literal_string.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
+expect_output_contains = ["Cannot insert data of type 'string' into a(n) array with element type 'int'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

@@ -322,6 +322,12 @@ e54705fa2863341a ok stdlib/signatures/re.cml
 f8689d2103eb80fb ok stdlib/signatures/sys.cml
 add801d463271a35 ok stdlib/signatures/this.cml
 6a55ba468ecb6a13 ok stdlib/signatures/time.cml
+9081ab46b7504bc5 ok test/cases/compile/any_typing/array_literal.cml
+323766122163d50b ok test/cases/compile/any_typing/array_literal_string.cml
+c1591e8f11fff298 ok test/cases/compile/any_typing/cast_out.cml
+27f9da8311c2c831 ok test/cases/compile/any_typing/if_condition.cml
+e4e3ea473e94d746 ok test/cases/compile/any_typing/match_subject.cml
+b37945cea7b1c2dc ok test/cases/compile/any_typing/nullable_box.cml
 8c00b899961f49e6 ok test/cases/compile/bounds/array_member_access.cml
 239a7cf810cc8951 ok test/cases/compile/bounds/tuple_index.cml
 5b8ff4b0267d37a0 ok test/cases/compile/branch_exit/unused_arm_exit.cml
@@ -1098,7 +1104,7 @@ d91092e026f0f841 ok test/cases/modules/onnx/refusals/var_arm.cml
 3666dc6396a32e7d ok test/cases/modules/std/crypto/basic.cml
 a7b5a28524abc91f ok test/cases/modules/std/fs/basic.cml
 801f5bc8610ae608 ok test/cases/modules/std/io/basic.cml
-e9644c29b8b6f59a ok test/cases/modules/std/json/decode.cml
+e2139f77a26c1fad ok test/cases/modules/std/json/decode.cml
 9b636268c8987df2 ok test/cases/modules/std/json/decode_as.cml
 22357b32863c475e ok test/cases/modules/std/json/encode.cml
 2dc3822374b0f772 ok test/cases/modules/std/json/err_decode_as_shape.cml

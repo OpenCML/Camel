@@ -190,9 +190,14 @@ Type *Type::widened() const { return const_cast<Type *>(this); }
 std::optional<CastSafety> Type::checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType) {
     if (!sourceType)
         return CastSafety::Forbidden;
-    // Generic rule: any type <-> Any is Safe.
-    if (targetCode == TypeCode::Any || sourceType->code() == TypeCode::Any)
+    // Every value may enter `any`: its slot is passed on as it is.
+    if (targetCode == TypeCode::Any)
         return CastSafety::Safe;
+    // Nothing may leave it: an `any` slot does not record what entered it, so reading it as
+    // another type could not be checked (design principles 2.12). `any` into `any?` / `any!`
+    // enters a form rather than leaving `any`; TupleType::castSafetyFrom allows that itself.
+    if (sourceType->code() == TypeCode::Any)
+        return CastSafety::Forbidden;
     return std::nullopt;
 }
 
@@ -232,9 +237,9 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
-    // When Any converts to or from any other type, pass the slot value through
-    // directly. This must happen before all ASSERTs to support composite types.
-    if (code_ == TypeCode::Any || sourceType->code() == TypeCode::Any)
+    // A value entering `any` keeps its slot. This must happen before all ASSERTs to support
+    // composite sources. (Leaving `any` is Forbidden: see checkCastSafetyWithAny.)
+    if (code_ == TypeCode::Any)
         return value;
 
     ASSERT(

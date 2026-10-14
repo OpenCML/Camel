@@ -1,27 +1,30 @@
 /**
  * Exercises JSON decoding across primitives, arrays, and structs, including an encode-decode round trip.
+ * The text has a known shape, so it is decoded with `decode_as`, which checks it against the
+ * type of the shape argument (`decode(text) as T` read the untyped result unchecked and is a
+ * compile-time error now: design principles 2.12).
  */
 module main
 
-import { encode, decode } from json
+import { encode, decode_as } from json
 
 func main(): int sync {
     println("=== JSON decode tests ===")
 
     println("\n[1] decode string")
-    let decStr = decode("\"hello\"") as string
+    let decStr = decode_as("\"hello\"", "") !! ""
     println("  decode('\"hello\"') =", decStr)
 
     println("\n[2] decode number")
-    let decNum = decode("42") as int
+    let decNum = decode_as("42", 0) !! -1
     println("  decode('42') =", decNum)
 
     println("\n[3] decode array")
-    let decArr = decode("[1,2,3]") as int[]
+    let decArr = decode_as("[1,2,3]", [0]) !! []
     println("  decode('[1,2,3]') =", decArr)
 
     println("\n[4] decode object")
-    let decObj = decode("{\"a\":1,\"b\":\"x\"}") as { a: int, b: string }
+    let decObj = decode_as("{\"a\":1,\"b\":\"x\"}", { a: 0, b: "" }) !! { a: -1, b: "" }
     println("  decode('{\"a\":1,\"b\":\"x\"}') =", decObj)
     println("  .a =", decObj.a, ", .b =", decObj.b)
 
@@ -29,10 +32,9 @@ func main(): int sync {
     let orig = { id: 1, name: "test", vals: [10, 20] }
     let jsonStr = encode(orig)
     println("  encode(orig) =", jsonStr)
-    let restored = decode(jsonStr) as { id: int, name: string, vals: int[] }
+    let restored = decode_as(jsonStr, orig) !! { id: -1, name: "", vals: [0] }
     println("  decode(...).id =", restored.id, ", .name =", restored.name, ", .vals =", restored.vals)
 
     println("\n=== JSON decode tests completed ===")
     return 0
 }
-
