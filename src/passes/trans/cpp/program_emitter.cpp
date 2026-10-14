@@ -129,6 +129,7 @@ ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {
     if (entry.main == nullptr) {
         throw Refusal{root, call, "the program has no call of 'main' std::cpp can find", false};
     }
+    entry.call = call;
     return entry;
 }
 
@@ -139,6 +140,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
 
     // The graphs a graph calls directly or uses as values, looking through the arms lowered
     // in place.
+    std::unordered_set<const GCGraph *> scanning;
     std::function<void(GCGraph *)> scan = [&](GCGraph *graph) {
         for (gc_node_ref_t ref : camel::execute::buildReachableExecutionTopoIndices(graph)) {
             const auto *node = graph->node(ref);
@@ -156,8 +158,12 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
             if (callee == nullptr) {
                 continue;
             }
-            if (isArmCall(graph, ref)) {
+            // An arm is lowered in place, unless it is already being lowered further out (a
+            // rewrite can leave an arm graph that reaches itself): then it is a function.
+            if (isArmCall(graph, ref) && !scanning.contains(callee)) {
+                scanning.insert(callee);
                 scan(callee);
+                scanning.erase(callee);
             } else if (!seen.contains(callee)) {
                 work.push_back(callee);
             }
@@ -171,9 +177,12 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
             continue;
         }
         functions.push_back(graph);
-        const std::string &name = graph->name();
-        std::string base        = isAnonymous(name) ? "lambda" : name.substr(0, name.find('$'));
-        parts_.functionNames[graph] = globals_.unique(cppIdentifier(base));
+        scanning = {graph};
+        if (!parts_.functionNames.contains(graph)) {
+            const std::string &name = graph->name();
+            std::string base = isAnonymous(name) ? "lambda" : name.substr(0, name.find('$'));
+            parts_.functionNames[graph] = globals_.unique(cppIdentifier(base));
+        }
         scan(graph);
     }
     return functions;
@@ -268,7 +277,11 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
 
 std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     std::string call = std::format("{}(0", parts_.functionNames.at(entry.main));
-    for (gc_node_ref_t arg : entry.args) {
+    if (parts_.root != nullptr) {
+        // The root computes values of the top level and calls main with them.
+        call = std::format("{}(0", parts_.functionNames.at(root));
+    }
+    for (gc_node_ref_t arg : parts_.root != nullptr ? std::vector<gc_node_ref_t>{} : entry.args) {
         const auto *node = root->node(arg);
         std::optional<std::string> value;
         if (node->kind == GCNodeKind::Data) {
@@ -345,6 +358,19 @@ std::string ProgramEmitter::emit(GCGraph *root) {
     Entry entry;
     if (program) {
         entry = findEntry(root);
+        // Values of the top level that are computed (`let k = f()`, design principles 2.11:
+        // before main starts): the root graph is a function of the program that computes
+        // them and calls main.
+        const bool computed = std::any_of(entry.args.begin(), entry.args.end(), [&](gc_node_ref_t arg) {
+            return root->node(arg)->kind != GCNodeKind::Data;
+        });
+        if (computed) {
+            parts_.root      = root;
+            parts_.entryCall = entry.call;
+            parts_.entryMain = entry.main;
+            parts_.functionNames[root] = globals_.unique("top_level");
+            roots.push_back(root);
+        }
         roots.push_back(entry.main);
     } else {
         for (GCGraph *graph : root->subGraphs()) {

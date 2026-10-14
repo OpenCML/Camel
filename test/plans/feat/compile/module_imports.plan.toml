@@ -213,14 +213,13 @@ expect_stdout_exact = "2\n"
 
 [[tests]]
 name = "imports.d4_cpp_computed"
-desc = "std::cpp writes what `main` is given as an expression; a top-level value that is computed has none and the emitter crashed. TranslationRefused at the value."
-kind = "negative"
+desc = "A top-level value that is computed (`let k = seven()`) is computed before main starts (design principles 2.11): std::cpp makes the root graph a function of the program, `top_level`, that computes it and calls main with it; neither call counts towards the recursion limit (it crashed the old emitter, and was then refused)."
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_computed.cml"
-args = ["-E", "short", "${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 5
-expect_output_contains = ["std::cpp translates only literal top-level values yet"]
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_output_contains = ["const int64_t v1_seven = seven(depth);", "const int64_t v2_main_ = main_(depth, v1_seven);", "return static_cast<int>(top_level(0));"]
+expect_output_not_contains = ["TranslationRefused"]
 
 [[tests]]
 name = "imports.d4_cpp_literal"

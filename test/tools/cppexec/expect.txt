@@ -46,3 +46,5 @@ test/cases/consistency/entry/error_thrown.cml
 test/cases/consistency/entry/fallible_ok.cml
 test/cases/consistency/attempt/refuse_translate.cml
 test/cases/linear/nvm/var_params.cml
+test/cases/compile/module_imports/d4_cpp_computed.cml
+test/cases/consistency/faults/top_level_fault.cml

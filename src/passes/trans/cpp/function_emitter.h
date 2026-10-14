@@ -75,6 +75,13 @@ struct ProgramParts {
     /// Operators that go through the runtime module that implements them, by URI: the name
     /// of the generated accessor. Empty while the program is standalone.
     std::unordered_map<std::string, std::string> bridgedOperators;
+    /// The root graph when it is a function of the program (it computes values of the top
+    /// level before it calls `main`), and its call of `main`. Neither that call nor a call
+    /// that computes a top-level value counts towards the recursion limit
+    /// (camel/execute/limits.h, kEntryCalls).
+    const GCGraph *root     = nullptr;
+    gc_node_ref_t entryCall = camel::runtime::kInvalidNodeRef;
+    const GCGraph *entryMain = nullptr;
     /// Where the first of them is used: the warning that the program links the runtime is
     /// located there.
     const GCGraph *firstBridgedGraph = nullptr;
@@ -182,6 +189,9 @@ class FunctionEmitter {
     functionValue(GCGraph *function, const std::vector<std::string> &captures);
     static GCGraph *functionConstantOf(const GCGraph *graph, gc_node_ref_t ref);
     static bool bridgeCarries(const Type *type);
+    /// The count of open calls a call at `ref` passes: `rt::call(depth, site)`, which checks
+    /// the limit, or `depth` for a call of the entry.
+    std::string callDepth(const GCGraph *graph, gc_node_ref_t ref);
     /// The statements of an arm graph called by the FUNC node `call` of `frame`.
     Block lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail);
 
@@ -207,6 +217,10 @@ class FunctionEmitter {
     NameScope locals_;
     size_t nextValue_ = 1;
     bool loops_       = false; // a tail call jumps back: the body is a loop
+    /// The arm graphs being lowered in place, outermost first: an arm that reaches one of
+    /// them again is called as a function instead.
+    std::unordered_set<const GCGraph *> inlining_;
+    std::unordered_set<const GCGraph *> escapeWalk_; // the same for cellEscapes
     std::unordered_map<const GCGraph *, std::vector<gc_node_ref_t>> orders_;
     std::unordered_map<const GCGraph *, std::unordered_map<gc_node_ref_t, size_t>> uses_;
 };

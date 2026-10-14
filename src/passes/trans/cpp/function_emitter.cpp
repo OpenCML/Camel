@@ -30,6 +30,7 @@
 #include "camel/execute/graph_runtime_support.h"
 
 #include <algorithm>
+#include <cctype>
 #include <format>
 
 namespace camel::passes::cpp {
@@ -90,6 +91,25 @@ bool onlyTemplate(const GCGraph *graph, gc_node_ref_t ref) {
         }
     }
     return true;
+}
+
+/// `text` with its one occurrence of the identifier `name` as `std::move(name)`; unchanged
+/// when it occurs other than once.
+std::string movedOnce(const std::string &text, const std::string &name) {
+    auto isIdent = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    size_t found = std::string::npos, count = 0;
+    for (size_t at = text.find(name); at != std::string::npos; at = text.find(name, at + 1)) {
+        const bool before = at > 0 && (isIdent(text[at - 1]) || text[at - 1] == ':' || text[at - 1] == '.');
+        const bool after  = at + name.size() < text.size() && isIdent(text[at + name.size()]);
+        if (!before && !after) {
+            found = at;
+            ++count;
+        }
+    }
+    if (count != 1 || text == name) {
+        return text == name ? "std::move(" + name + ")" : text;
+    }
+    return text.substr(0, found) + "std::move(" + name + ")" + text.substr(found + name.size());
 }
 
 /// `ref` seen through the GATEs that only order it.
@@ -249,6 +269,12 @@ std::string FunctionEmitter::parameterName(const GCGraph *graph, gc_node_ref_t p
     if (argIndex && *argIndex < type->argNamesCount() && !type->argNameAt(*argIndex).empty()) {
         return cppIdentifier(type->argNameAt(*argIndex));
     }
+    // A captured value of a function value: named by what it captures.
+    for (size_t i = 0; i < graph->closureNodes().size(); ++i) {
+        if (graph->closureNodes()[i] == port && i < captured.size()) {
+            return cppIdentifier(captured[i]);
+        }
+    }
     return "arg";
 }
 
@@ -307,6 +333,7 @@ FunctionEmitter::refuse(const GCGraph *graph, gc_node_ref_t ref, std::string rea
 
 Block FunctionEmitter::lowerMember(const Member &member) {
     current_ = &member;
+    inlining_.insert(member.graph);
     Frame top{member.graph, {}, {}, {}};
     for (const Parameter &p : member.params) {
         // A `var` parameter or a captured variable is the variable's cell.
@@ -320,6 +347,7 @@ Block FunctionEmitter::lowerMember(const Member &member) {
         resultOf(member.graph),
         Tail{Tail::Kind::Return, {}});
     current_ = nullptr;
+    inlining_.erase(member.graph);
     return body;
 }
 
@@ -684,6 +712,21 @@ void FunctionEmitter::lowerCall(
                 types.push_back(p.type);
             }
         }
+        // A parameter that gets a new value is dead once the new values are computed: the
+        // one place they read it moves it, so an operator that gives a new array or string
+        // (`acc->append<x>`, `acc + s`) finds it unshared and works in place (design note 5.2).
+        // A parameter read in more than one of them, or one that keeps its value, is not moved.
+        for (auto &[param, value] : changes) {
+            std::string all;
+            for (const auto &[other, expr] : changes) {
+                all += expr + " ";
+            }
+            if (movedOnce(all, param) != all) {
+                for (auto &[other, expr] : changes) {
+                    expr = movedOnce(expr, param);
+                }
+            }
+        }
         if (changes.size() == 1) {
             out.push_back(Stmt::line(std::format("{} = {};", changes[0].first, changes[0].second)));
         } else if (!changes.empty()) {
@@ -709,14 +752,7 @@ void FunctionEmitter::lowerCall(
         tailCallees_.insert(callee);
     }
 
-    // The count of open calls goes one up, checked against the limit at this call; the
-    // report names the graph the call is written in (camel/execute/limits.h).
-    const std::string site = program_.sites.siteFor(
-        g,
-        ref,
-        RuntimeDiag::MaxRecursionDepthExceeded,
-        {g->name(), SiteTable::valueMark(0)});
-    std::string expr = std::format("{}(rt::call(depth, {})", name->second, site);
+    std::string expr = std::format("{}({}", name->second, callDepth(g, ref));
     for (const std::string &a : args) {
         expr += ", " + a;
     }
@@ -963,7 +999,8 @@ bool FunctionEmitter::lowerBranch(
     branch.kind = Stmt::Kind::Branch;
     for (size_t k = 0; k < arms.size(); ++k) {
         Block body;
-        if (arms[k].head == arms[k].tail && isArmCall(g, arms[k].head)) {
+        if (arms[k].head == arms[k].tail && isArmCall(g, arms[k].head) &&
+            !inlining_.contains(g->directCalleeGraphOf(arms[k].head))) {
             // The front end's form: the arm is a graph of its own, lowered here.
             body = lowerArmGraph(frame, arms[k].head, armTail);
             frame.consumed.insert(arms[k].head);
@@ -1023,13 +1060,30 @@ Block FunctionEmitter::lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail
     bindPorts(arm->normPorts(), g->normInputsOf(call));
     bindPorts(arm->withPorts(), g->withInputsOf(call));
 
+    inlining_.insert(arm);
     Block body = lowerSequence(
         inner,
         camel::execute::buildReachableExecutionTopoIndices(arm),
         resultOf(arm),
         tail);
+    inlining_.erase(arm);
     prefix.insert(prefix.end(), std::make_move_iterator(body.begin()), std::make_move_iterator(body.end()));
     return prefix;
+}
+
+std::string FunctionEmitter::callDepth(const GCGraph *graph, gc_node_ref_t ref) {
+    if (graph == program_.root) {
+        return "depth"; // a call the entry makes is not counted (kEntryCalls)
+    }
+    // The count of open calls goes one up, checked against the limit at this call; the
+    // report names the graph the call is written in (camel/execute/limits.h).
+    return std::format(
+        "rt::call(depth, {})",
+        program_.sites.siteFor(
+            graph,
+            ref,
+            RuntimeDiag::MaxRecursionDepthExceeded,
+            {graph->name(), SiteTable::valueMark(0)}));
 }
 
 // ---- Composite values (design note, section 4) ----
@@ -1236,14 +1290,26 @@ void FunctionEmitter::lowerCallValue(Frame &frame, gc_node_ref_t ref, Block &out
     if (with.empty()) {
         refuse(g, ref, std::format("a call in {} has no function", describeFunction(g)));
     }
+    if (g == program_.root && ref == program_.entryCall) {
+        // The root's call of `main`: a direct call, with the values main captures from the
+        // top level (the closure the root builds of them, a FILL).
+        const gc_node_ref_t closure = with.front();
+        std::string expr =
+            std::format("{}(depth", program_.functionNames.at(program_.entryMain));
+        for (gc_node_ref_t arg : g->normInputsOf(ref)) {
+            expr += ", " + valueOf(frame, arg).text;
+        }
+        if (g->node(closure)->kind == GCNodeKind::Fill) {
+            for (gc_node_ref_t captured : g->withInputsOf(closure)) {
+                expr += ", " + valueOf(frame, captured).text;
+            }
+        }
+        bind(frame, ref, expr + ")", false, out, "main");
+        return;
+    }
     cppType(g, with.front(), g->node(with.front())->dataType);
-    const std::string site = program_.sites.siteFor(
-        g,
-        ref,
-        RuntimeDiag::MaxRecursionDepthExceeded,
-        {g->name(), SiteTable::valueMark(0)});
     std::string expr =
-        std::format("{}(rt::call(depth, {})", valueOf(frame, with.front()).text, site);
+        std::format("{}({}", valueOf(frame, with.front()).text, callDepth(g, ref));
     for (gc_node_ref_t arg : g->normInputsOf(ref)) {
         expr += ", " + valueOf(frame, arg).text;
     }
@@ -1344,9 +1410,16 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
                 }
                 continue;
             }
-            if (node->kind == GCNodeKind::Func && isArmCall(graph, user)) {
+            if (node->kind == GCNodeKind::Func && isArmCall(graph, user) &&
+                !escapeWalk_.contains(graph->directCalleeGraphOf(user))) {
                 // The arm's port that receives the cell must stay inside the arm too.
                 const GCGraph *arm = graph->directCalleeGraphOf(user);
+                escapeWalk_.insert(arm);
+                struct Leave {
+                    std::unordered_set<const GCGraph *> &walk;
+                    const GCGraph *arm;
+                    ~Leave() { walk.erase(arm); }
+                } leave{escapeWalk_, arm};
                 const auto args    = graph->withInputsOf(user);
                 const auto ports   = arm->withPorts();
                 for (size_t i = 0; i < args.size() && i < ports.size(); ++i) {
@@ -1411,9 +1484,15 @@ bool FunctionEmitter::lowerVariable(
         if (rule == nullptr) {
             refuse(g, ref, std::format("{} uses the assignment '{}'", describeFunction(g), uri));
         }
+        // `x op= v` on a local: x is overwritten by the result, so the operator may take it
+        // (a string or array it holds alone is extended in place, design note 5.2).
         NodeCall call(
             op,
-            {CppValue{read, false}, valueOf(frame, norm[1])},
+            {CppValue{local && cppType(g, ref, type).starts_with("rt::")
+                          ? "std::move(" + cell.text + ")"
+                          : read,
+                      false},
+             valueOf(frame, norm[1])},
             {},
             {type, g->node(norm[1])->dataType},
             {},

@@ -83,7 +83,11 @@ template <typename T> class Array {
         if (rep_ != nullptr && rep_->references == 1 && rep_->capacity >= capacity) {
             return;
         }
-        Rep *fresh = allocate(std::max({capacity, size(), std::size_t{4}}));
+        // Growing a block of its own doubles it, so that adding one element at a time is
+        // linear; a shared block is copied at the size asked for.
+        const bool growing = rep_ != nullptr && rep_->references == 1;
+        Rep *fresh         = allocate(std::max(
+            {capacity, size(), growing ? rep_->capacity * 2 : std::size_t{0}, std::size_t{4}}));
         for (std::size_t i = 0; i < size(); ++i) {
             if (rep_->references == 1) {
                 new (fresh->items() + i) T(std::move(rep_->items()[i]));

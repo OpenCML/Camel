@@ -57,7 +57,8 @@ class ProgramEmitter {
   private:
     /// The graph of `main`, called by the root graph, and what the root passes it.
     struct Entry {
-        GCGraph *main = nullptr;
+        GCGraph *main      = nullptr;
+        gc_node_ref_t call = camel::runtime::kInvalidNodeRef; // the root's CALL of main
         std::vector<gc_node_ref_t> args; // nodes of the root: the captured values, in order
     };
 
