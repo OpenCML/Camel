@@ -151,10 +151,9 @@ multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-                     | ('!' | '~') linkExpr ('^' powerExpr)?
 linkExpr           : negExpr (('->' | '?->') compExpr)*
-negExpr            : '-' negPower | compExpr
-negPower           : '-' negPower | compExpr ('^' negPower)?
+negExpr            : ('-' | '!' | '~') negPower | compExpr
+negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)

@@ -316,21 +316,9 @@ void ParserImpl::parseNullable() {
 }
 
 /// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
-///           | ('!' | '~') linkExpr ('^' powerExpr)?
+/// (The prefix operators `-`, `!` and `~` are taken by negExpr, under `->`.)
 void ParserImpl::parseUnary() {
     const size_t m = mark();
-    if (cur_ == TK::Bang || cur_ == TK::Tilde) {
-        bump();
-        const size_t operand = mark();
-        parseLink();
-        // A prefix operator binds less tightly than `^`: `-x ^ 2` is `-(x ^ 2)`.
-        if (cur_ == TK::Caret && !panic_) {
-            bump();
-            parsePower();
-            close(operand, NK::PowerExpr);
-        }
-        return close(m, NK::UnaryExpr);
-    }
     parseLink();
     if ((cur_ == TK::KwAs || cur_ == TK::KwIs) && !panic_) {
         bump();
@@ -357,16 +345,18 @@ void ParserImpl::parseLink() {
     }
 }
 
-/// negExpr : '-' negPower | compExpr
-/// negPower : '-' negPower | compExpr ('^' negPower)?
+/// negExpr : ('-' | '!' | '~') negPower | compExpr
+/// negPower : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 /// The minus is always an operator, never part of a number, and reads the same before a
 /// literal and before a name: it binds less tightly than `^` and more tightly than `->` and
 /// every other binary operator. `-2 ^ 2` is `-(2 ^ 2)`, `-x->f` is `(-x)->f`, `-a * b` is
-/// `(-a) * b`. Under a minus the power is taken here; elsewhere it is powerExpr, whose right
-/// operand reaches this function too, so `2 ^ -1` has a signed exponent.
+/// `(-a) * b`. `!` and `~` are at the same level (design principles 2.12): `!x->f` is
+/// `(!x)->f`, `!a ^ b` is `!(a ^ b)`. Under a prefix operator the power is taken here;
+/// elsewhere it is powerExpr, whose right operand reaches this function too, so `2 ^ -1` has
+/// a signed exponent.
 void ParserImpl::parseNeg(bool underMinus) {
     const size_t m = mark();
-    if (cur_ == TK::Minus) {
+    if (cur_ == TK::Minus || cur_ == TK::Bang || cur_ == TK::Tilde) {
         Depth depth(*this);
         bump();
         parseNeg(true);

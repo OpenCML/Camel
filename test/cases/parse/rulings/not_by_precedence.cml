@@ -1,0 +1,18 @@
+// `!` and `~` are at the level of the unary minus (design principles 2.12): looser than `^`,
+// tighter than `->` and the other binary operators. `!x->f` negates first, then passes on.
+func show(b: bool): string {
+    return if b then 'yes' else 'no'
+}
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    let t = true
+    let n = 2
+    println(!t->show, (!t)->show, !(t->show == 'yes'))
+    println(~n->inc, ~(n->inc), ~n * 3, -~n)
+    println(!t == false, !false & t, !(!t))
+    return 0
+}

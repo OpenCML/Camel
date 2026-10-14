@@ -197,3 +197,16 @@ expect_diagnostic_name = "SemanticDiag::ReservedIdentifier"
 expect_diagnostic_line = 1
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "rulings.not_by_precedence"
+desc = "`!` and `~` are at the level of the unary minus (ruling of October 14): looser than `^`, tighter than `->` and the other binary operators. `!t->show` is `(!t)->show`, `~n->inc` is `(~n)->inc`, `~n * 3` is `(~n) * 3`."
+kind = "behavior"
+case = "../../../cases/parse/rulings/not_by_precedence.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["no no false\n-2 -4 -9 3\ntrue true true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
