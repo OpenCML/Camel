@@ -565,13 +565,21 @@ class Evaluator:
     def e_bin(self, n, env):
         op = n.a["op"]
         if op in ("&&", "||"):
-            # The value is the short-circuit one. Both operands are evaluated all the same:
-            # they are pure, so that cannot be seen, except by a fault in the operand the
-            # short circuit skips. Whether that operand runs is not settled (the language
-            # reference says no, the implementation evaluates it: judgement J4), so a program
-            # where it would fault is discarded (Reject) rather than given a reference.
+            # Branches (design principles 2.11): `a && b` is `if a then b else false`, so the
+            # right side, its effects and its faults included, is evaluated only when the left
+            # side does not decide.
+            left = bool(self.ev(n.c[0], env))
+            if left == (op == "||"):
+                return left
+            return bool(self.ev(n.c[1], env))
+        if op in ("&", "|"):
+            # Both sides evaluated, left first.
             left, right = bool(self.ev(n.c[0], env)), bool(self.ev(n.c[1], env))
-            return (left and right) if op == "&&" else (left or right)
+            return (left and right) if op == "&" else (left or right)
+        if op in ("==", "!=") and "null" in (n.c[0].k, n.c[1].k):
+            # The test of a `T?` against null (design principles 2.11).
+            v = self.ev(n.c[1] if n.c[0].k == "null" else n.c[0], env)
+            return (v is None) == (op == "==")
         a, b = self.ev(n.c[0], env), self.ev(n.c[1], env)
         return binop(op, a, b)
 
@@ -874,6 +882,14 @@ def effect_violations(prog: N) -> list:
                 arm(case.c[0], pos)
         elif k == "blk":
             blk(e, pos and bool(e.a.get("sync")))
+        elif k == "bin" and e.a["op"] in ("&&", "||"):
+            # The right side is an arm with one expression: entered, it is evaluated.
+            expr(e.c[0], False)
+            expr(e.c[1], pos)
+        elif k == "bin" and e.a["op"] in ("&", "|"):
+            # Both operands, in order, like the arguments of a call statement.
+            expr(e.c[0], pos)
+            expr(e.c[1], pos)
         elif k == "lam":
             body(e.c[0])
         else:
