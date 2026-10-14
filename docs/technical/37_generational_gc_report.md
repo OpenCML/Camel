@@ -305,6 +305,15 @@ time to say more than that nothing is wrong.
 
 ### 6.1 `std::jit` compiles fewer graphs
 
+**Superseded (2026-10-14).** `std::jit` no longer loses graphs to the moving collector: compiled
+code reads an object constant from the static area of its graph each time it uses it (the area
+is a root the collector updates in place) instead of containing its address, and graphs that
+need the runtime are compiled as framed code (`07_jit_architecture.md`, 17.4). Over the
+repository's programs the same graphs are compiled under both collectors, and
+`jit_const(36)` under `std::inline std::jit` takes 0.101 s with the generational collector
+against 0.102 s with mark-sweep (2.74 s on `std::inline std::fvm`). What follows is the state
+this report measured.
+
 With the generational collector a graph whose static area holds an object constant (a string
 literal, a constant array) is left to the interpreter; the log says "the
 graph has object constants (moving collector)". Frames of compiled code may hold references.
@@ -448,7 +457,7 @@ The facts, from the sections above:
 3. For data that is built and kept it is 10 to 45 % slower and is stopped two to three times
    as long in total; the longest single stop is about the same.
 4. For tensor work and for code that does not allocate there is no measured difference.
-5. `std::jit` loses 9 of 93 compiled graphs in the test programs (none after `std::inline`),
+5. (Superseded since, see 6.1.) `std::jit` loses 9 of 93 compiled graphs in the test programs (none after `std::inline`),
    and a hot function that returns or uses an object constant can lose a factor of 20.
 6. The `any` defect turns from "wrong only under stress" into "wrong output, exit code 0" in
    a ten-line program that uses `json.decode` (6.4).

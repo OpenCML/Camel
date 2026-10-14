@@ -91,11 +91,12 @@ extern "C" slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Byt
 // JitContext::pending with faultKind = PendingException, and the code that called leaves through
 // its fault exit. None of them reaches a safepoint of the collector or calls a Camel function
 // (those bytecodes are left to the driver).
-// DESIGN-QUESTION(jit-safepoint-under-framed-code): an operator that reaches a safepoint itself
-// does so with the framed code that called jitHelperOper on the machine stack. That code holds
-// nothing the collector would have to see (everything is in its pool frame), so this is sound;
-// whether the rule "no safepoint under compiled code" of the collector is to be read as "under
-// frameless code" or such operators are to be run by the driver is not decided here.
+// An operator that reaches a safepoint itself does so with the framed code that called
+// jitHelperOper on the machine stack. That is allowed: the code holds nothing the collector
+// would have to see or update (everything is in its pool frame, and it reads the frame again
+// after the call). The collector's rule "no safepoint under compiled code" is a rule about
+// frameless code, and the count that enforces it (mm::detail::nativeCodeDepth) is taken around
+// the entry into frameless code only (docs/technical/36_gc_handle_rules.md, section 4).
 // OPER: calls the operator, stores and returns its result.
 extern "C" slot_t jitHelperOper(slot_t *slots, void *ctx, size_t pc);
 // CAST, COPY, ACCS, FILL, and a JOIN of more than two arms: runs the bytecode on the frame.

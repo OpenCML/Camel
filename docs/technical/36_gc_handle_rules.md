@@ -52,8 +52,10 @@ safepoints and nowhere else. A safepoint is reached by exactly these:
 - **An operator call.** An operator (`slot_t op(ArgsView &with, ArgsView &norm, Context &)`)
   runs from entry to return without a safepoint, unless it does one of the things in the table
   itself (rule 5). Under the parallel scheduler an operator runs inside a region.
-- **JIT-compiled code.** It neither calls out nor polls; a safepoint reached while compiled code
-  is on the stack is refused (`GC invariant violated: ... JIT-compiled code is on the stack`).
+- **Frameless JIT-compiled code** (a graph that needs nothing of the runtime). It neither calls
+  out nor polls; a safepoint reached while it is on the stack is refused (`GC invariant
+  violated: ... JIT-compiled code is on the stack`). Framed code, the other kind `std::jit`
+  makes, reaches safepoints where the interpreter does (section 4).
 
 **A call**, in "across calls": one invocation of an operator, one node of the macro evaluator,
 one step of a pass.
@@ -190,12 +192,24 @@ root tracers), and nothing read before a call is used after it.
   up to 500 ms, gives up and retries at a later poll with a growing back-off; nothing fails
   meanwhile, because allocation never needs a collection (a full birth space sends new objects
   to the elder space, which grows).
-- **`std::jit`.** Compiled code has no stack maps. It is sound because no collection can run
-  while a native frame exists (compiled code calls nothing and polls nothing; the allocator
-  refuses a safepoint under a native frame), and because, when objects can move, a graph whose
-  static area holds an object constant is not compiled: the code would contain the constant's
-  address as an immediate. Turning on lowerings that call out of compiled code (operators,
-  indirect calls) requires stack maps first; this is stages 3 and 4 of the ruling.
+- **`std::jit`.** Compiled code has no stack maps, and each of its two kinds
+  (`docs/technical/07_jit_architecture.md`, section 17) is sound without them for its own
+  reason.
+  *Frameless code* keeps frames on the machine stack and values in registers, which the
+  collector neither sees nor updates; no collection can run while it is on the stack (it calls
+  nothing and polls nothing, and the allocator refuses a safepoint under it:
+  `mm::detail::nativeCodeDepth`, counted around the entry into frameless code in
+  `FastVMSchedPass::invokeOwnedJitFrame`).
+  *Framed code* calls operators through C++ helpers and hands calls of Camel functions to its
+  driver. Every activation of it has a pool frame, a registered root, and at each point where
+  a collection can run (a helper call, an exit to the driver, the poll of a self tail call) no
+  value is live in a register or on the machine stack: the register allocator refuses a value
+  that lives across one, and the code reads the frame again afterwards. Its stack map at those
+  points is empty, so a safepoint under it is allowed, including one reached by an operator it
+  called.
+  Neither kind contains the address of an object when objects can move: an object constant is
+  read from the static area of the graph, a root that is updated in place (section 5), each
+  time it is used. With mark-sweep frameless code still has such constants as immediates.
 - **The macro pass** evaluates all candidates of a round before it opens a graph draft: a draft
   holds plain copies of static slots, and evaluation reaches safepoints. Any pass that
   evaluates and rewrites must keep that order, or root what its drafts hold.
@@ -251,7 +265,7 @@ generational collector as it was.
 | 10 | `gen.cpp` minor collection, `rtdata/func.cpp` | static area of a graph reached only through a `Function` | — | nothing moved | yes | fixed: such graphs are traced once per minor collection |
 | 11 | `gen.cpp` scan of copied objects | an object copied without a static type was not scanned | — | — | yes for self-describing objects (tensor views, optimizer state, functions) | fixed |
 | 12 | `gen.cpp` promotion | `std::bad_alloc` when the elder space was full | — | — | yes: the program ended | fixed: the elder space grows |
-| 13 | `fastvm/jit/backend/x64` (`emitLoadStaticConst`) | an object constant baked into machine code as its address | every later collection | constants never moved | yes | fixed: such a graph is not compiled when objects move; a safepoint under a native frame is refused |
+| 13 | `fastvm/jit/backend/x64` (`emitLoadStaticConst`) | an object constant baked into machine code as its address | every later collection | constants never moved | yes | fixed: when objects move the code reads the constant from the static area each time; a safepoint under frameless code is refused |
 | 14 | `modules/onnx/module.cpp`, `exporter.cpp` | function, path, examples, constants as raw slots; `unordered_map<slot_t, ...>` keyed by address | macro expansion inside the operator | nothing moved | yes | `NoCollectionScope` around the export |
 | 15 | `rtdata/foreign.cpp`, `modules/python/operators.cpp` | deleter ran inside the collection, allocator locked, and took the GIL | — | one thread | deadlock with a thread that holds the GIL and allocates; self-deadlock for a deleter that allocates (both collectors) | fixed: releases run after the collection, unlocked |
 | 16 | `modules/onnx/emitter.cpp`, `autodiff/pullback.cpp` | rooted, but the raw slot is what is read later | none today | no safepoint inside translate / rewrite | no; latent | rule 2 applies if a safepoint is ever added there |
