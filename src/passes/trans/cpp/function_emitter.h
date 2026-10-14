@@ -156,7 +156,9 @@ class FunctionEmitter {
     /// did what `tail` asks (a branch whose arms end the function, a tail call).
     bool lowerNode(
         Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail);
-    bool lowerBranch(Frame &frame, gc_node_ref_t brch, Block &out, bool joinIsTail, const Tail &tail);
+    bool lowerBranch(
+        Frame &frame, gc_node_ref_t brch, const std::vector<gc_node_ref_t> &order, Block &out,
+        bool joinIsTail, const Tail &tail);
     void lowerCall(Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
                    bool &handled);
     void lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out);

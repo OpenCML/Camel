@@ -5,11 +5,12 @@
     python3 test/tools/cppexec/run.py --expect test/tools/cppexec/expect.txt
     python3 test/tools/cppexec/run.py --have-compiler
 
-For every program: `camel <program> [--passes ...] std::cpp` writes a C++ file; the C++ compiler
+For every program: `camel <program> [passes] std::cpp` writes a C++ file; the C++ compiler
 ($CXX, else clang++, g++ or c++) builds it with the headers of the repository (include/, where
-camel/standalone/ lives); the executable runs; `camel <program> std::fvm` runs too. The two
-agree when their standard output and exit code are the same (a fault's report is on standard
-output in both, design note docs/design/cpp-standalone/README.cn.md 7.1).
+camel/standalone/ lives); the executable runs; `camel <program> [passes] std::fvm` runs too
+(after the same passes, so on the same graph). The two agree when their standard output and
+exit code are the same (a fault's report is on standard output in both, design note
+docs/design/cpp-standalone/README.cn.md 7.1).
 
 Each program ends in one of these outcomes:
 
@@ -91,7 +92,9 @@ def first_difference(a, b):
         x = la[i] if i < len(la) else "<end>"
         y = lb[i] if i < len(lb) else "<end>"
         if x != y:
-            return "line %d: fvm %r, cpp %r" % (i + 1, x[:70], y[:70])
+            col = next((k for k in range(min(len(x), len(y))) if x[k] != y[k]), min(len(x), len(y)))
+            start = max(0, col - 30)
+            return "line %d, column %d: fvm %r, cpp %r" % (i + 1, col + 1, x[start:start + 70], y[start:start + 70])
     return "same lines, different line ends or trailing text"
 
 
@@ -136,7 +139,7 @@ def check(program, workdir, args):
         rec["detail"] = (errors[0] if errors else (cout + cerr).strip()[-200:])[:200]
         return rec
 
-    fcode, fout, ferr, _ = run([CAMEL, rel, "std::fvm"], args.timeout, env)
+    fcode, fout, ferr, _ = run([CAMEL, rel] + args.passes + ["std::fvm"], args.timeout, env)
     if fcode is None:
         rec["outcome"] = "not a program"
         rec["detail"] = "std::fvm does not finish within %s s" % args.timeout

@@ -70,6 +70,18 @@ std::string withoutParentheses(const std::string &text) {
     return text.substr(1, text.size() - 2);
 }
 
+/// `ref` seen through the GATEs that only order it.
+gc_node_ref_t resultThrough(const GCGraph *graph, gc_node_ref_t ref) {
+    while (ref != kInvalidNodeRef) {
+        const auto *node = graph->node(ref);
+        if (node == nullptr || node->kind != GCNodeKind::Gate || graph->normInputsOf(ref).empty()) {
+            break;
+        }
+        ref = graph->normInputsOf(ref).front();
+    }
+    return ref;
+}
+
 /// The last part of a URI as a name hint: ":op/sub_l" gives "sub".
 std::string operatorHint(std::string_view uri) {
     std::string_view tail = uri.substr(uri.find_last_of(":/") + 1);
@@ -402,7 +414,7 @@ Block FunctionEmitter::lowerSequenceBody(
             const bool joinIsTail    = join == result && tail.kind != Tail::Kind::Discard &&
                                     at != order.end() &&
                                     nothingAfter(frame, order, static_cast<size_t>(at - order.begin()));
-            done = lowerBranch(frame, ref, out, joinIsTail, tail);
+            done = lowerBranch(frame, ref, order, out, joinIsTail, tail);
             continue;
         }
         const bool isTailResult =
@@ -556,7 +568,7 @@ bool FunctionEmitter::lowerNode(
         return handled;
     }
     case GCNodeKind::Brch:
-        return lowerBranch(frame, ref, out, false, tail);
+        return lowerBranch(frame, ref, {}, out, false, tail);
     case GCNodeKind::Join:
         refuse(g, ref, std::format("a JOIN of {} is not reached from its BRCH", describeFunction(g)));
     case GCNodeKind::Call:
@@ -804,7 +816,8 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
 }
 
 bool FunctionEmitter::lowerBranch(
-    Frame &frame, gc_node_ref_t brch, Block &out, bool joinIsTail, const Tail &tail) {
+    Frame &frame, gc_node_ref_t brch, const std::vector<gc_node_ref_t> &order, Block &out,
+    bool joinIsTail, const Tail &tail) {
     GCGraph *g                 = frame.graph;
     const gc_node_ref_t join   = g->nodeBodyAs<GCBrchBody>(brch)->join;
     const auto *joinNode       = join != kInvalidNodeRef ? g->node(join) : nullptr;
@@ -831,6 +844,47 @@ bool FunctionEmitter::lowerBranch(
         frame.values[join] = CppValue{"", false};
     }
 
+    // The form std::inline leaves: an arm's nodes lie between the BRCH and the JOIN in the
+    // execution order, each arm as one piece starting at its entry (the node std::fvm jumps
+    // to, resolveRuntimeBranchArmEntry) and running to the next arm's entry or the JOIN.
+    const auto brchAt = std::find(order.begin(), order.end(), brch);
+    const auto joinAt = std::find(order.begin(), order.end(), join);
+    std::vector<size_t> entries(arms.size(), 0);
+    if (brchAt != order.end() && joinAt != order.end()) {
+        const size_t joinPos = static_cast<size_t>(joinAt - order.begin());
+        for (size_t k = 0; k < arms.size(); ++k) {
+            const gc_node_ref_t entry =
+                camel::execute::resolveRuntimeBranchArmEntry(g, brch, k, order);
+            const auto at = std::find(brchAt, joinAt, entry);
+            entries[k]    = at == joinAt ? joinPos : static_cast<size_t>(at - order.begin());
+        }
+        // What lies before the first entry holds no statement (constants, ports, gates): it
+        // gives values to the arms and is lowered here, before the branch.
+        const size_t first = *std::min_element(entries.begin(), entries.end());
+        for (size_t i = static_cast<size_t>(brchAt - order.begin()) + 1; i < first; ++i) {
+            if (!frame.consumed.contains(order[i])) {
+                lowerNode(frame, order[i], out, false, Tail{});
+                frame.consumed.insert(order[i]);
+            }
+        }
+    }
+    auto regionOf = [&](size_t k) {
+        std::vector<gc_node_ref_t> nodes;
+        if (brchAt == order.end() || joinAt == order.end()) {
+            return nodes;
+        }
+        size_t end = static_cast<size_t>(joinAt - order.begin());
+        for (size_t e : entries) {
+            if (e > entries[k] && e < end) {
+                end = e;
+            }
+        }
+        for (size_t i = entries[k]; i < end; ++i) {
+            nodes.push_back(order[i]);
+        }
+        return nodes;
+    };
+
     Stmt branch;
     branch.kind = Stmt::Kind::Branch;
     for (size_t k = 0; k < arms.size(); ++k) {
@@ -840,13 +894,9 @@ bool FunctionEmitter::lowerBranch(
             body = lowerArmGraph(frame, arms[k].head, armTail);
             frame.consumed.insert(arms[k].head);
         } else {
-            // The form std::inline leaves: the arm's nodes are between the BRCH and the JOIN.
-            const auto region = camel::execute::collectRuntimeBranchArmRegion(g, brch, k);
-            for (gc_node_ref_t n : region.topoIndices) {
-                frame.consumed.erase(n); // lowered now, in the arm's block
-            }
-            body = lowerSequence(frame, region.topoIndices, region.tailIndex, armTail);
-            for (gc_node_ref_t n : region.topoIndices) {
+            const std::vector<gc_node_ref_t> region = regionOf(k);
+            body = lowerSequence(frame, region, resultThrough(g, arms[k].tail), armTail);
+            for (gc_node_ref_t n : region) {
                 frame.consumed.insert(n);
             }
         }
