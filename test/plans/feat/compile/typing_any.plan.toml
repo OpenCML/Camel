@@ -241,3 +241,33 @@ expect_exit = 0
 expect_stdout_starts_with = "abc1 2.5\n(1, t) (2, [1, 2])\nn4 true\n3\n(1, one) pq\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.if_condition_string"
+desc = "The condition of an `if` is a bool (language reference 6.8.1). Found with defect D5: a string condition used to be compared bit for bit with `true`, silently."
+kind = "negative"
+case = "../../../cases/compile/any_typing/if_condition_string.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConditionNotBool"
+expect_diagnostic_code = "0x030000E3"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 16
+expect_output_contains = ["The condition of this 'if' has type 'string'; a condition is a 'bool'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.match_case_type"
+desc = "A case of a `match` has the type of the value matched. Found with defect D5: `case 1` on a string read the integer as a string's address (segmentation fault)."
+kind = "negative"
+case = "../../../cases/compile/any_typing/match_case_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::MatchCaseTypeMismatch"
+expect_diagnostic_code = "0x030000E4"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 14
+expect_output_contains = ["This case of a 'match' on a value of type 'string' is a value of type 'int'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

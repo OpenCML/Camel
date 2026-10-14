@@ -686,6 +686,24 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ConditionNotBool,
+            {
+                "ConditionNotBool",
+                "The condition of this 'if' has type '{0}'; a condition is a 'bool'.",
+                "There is no truth-value conversion: compare explicitly ('n != 0', "
+                "'len(s) > 0', 'x != null').",
+            },
+        },
+        {
+            SemanticDiag::MatchCaseTypeMismatch,
+            {
+                "MatchCaseTypeMismatch",
+                "This case of a 'match' on a value of type '{0}' is a value of type '{1}'.",
+                "A case is compared with the value matched, so it must have the same type. "
+                "Write the case as a value of that type, or convert the value matched first.",
+            },
+        },
+        {
             SemanticDiag::PartialApplicationRefused,
             {
                 "PartialApplicationRefused",

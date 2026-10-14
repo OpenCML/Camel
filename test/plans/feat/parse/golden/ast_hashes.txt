@@ -327,6 +327,8 @@ add801d463271a35 ok stdlib/signatures/this.cml
 7fd4bb296b649a86 ok test/cases/compile/any_typing/cast_out.cml
 53029e655c0f19ea ok test/cases/compile/any_typing/encode_function.cml
 421f7ed05546825f ok test/cases/compile/any_typing/if_condition.cml
+3506e85da9e9e6db ok test/cases/compile/any_typing/if_condition_string.cml
+9c041b336c8b8e35 ok test/cases/compile/any_typing/match_case_type.cml
 623144ae24382e00 ok test/cases/compile/any_typing/match_subject.cml
 5d42b60d5c59fc47 ok test/cases/compile/any_typing/nullable_box.cml
 8eea1e8feb6c9f72 ok test/cases/compile/any_typing/placeholders.cml

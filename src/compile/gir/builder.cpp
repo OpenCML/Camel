@@ -5971,11 +5971,21 @@ node_handle_t Builder::buildBranch(
             GCT::node_ptr_t caseExecNode = nullptr;
 
             switch (caseNode->caseType()) {
-            case GCT::CaseType::True:
+            case GCT::CaseType::True: {
                 ASSERT(caseNode->size() == 1, "True case should have only one child.");
+                // An `if`: the condition is a bool (language reference 6.8.1: no truth-value
+                // conversion). Anything else was compared bit for bit with `true`.
+                Type *condType = valueTypeOf(nodeTypeOf(condNode));
+                if (condType->code() != TypeCode::Bool) {
+                    diags_->of(SemanticDiag::ConditionNotBool)
+                        .atOrigin(gct->at(0)->origin())
+                        .commit(condType->toString());
+                    throw BuildAbortException();
+                }
                 caseExecNode = caseNode->at(0);
                 ifArmSeen    = true;
                 break;
+            }
             case GCT::CaseType::Else:
                 ASSERT(i == gct->size() - 1, "Else case should be the last case.");
                 ASSERT(caseNode->size() == 1, "Else case should have only one child.");
@@ -5989,6 +5999,17 @@ node_handle_t Builder::buildBranch(
                     res.type() == typeid(node_handle_t),
                     "Unexpected result type from visiting the case node.");
                 node_handle_t valueNode = any_cast<node_handle_t>(res);
+                // A case is compared with the value matched, by the comparison of that type:
+                // a case of another type was compared bit for bit (`case 1` on a string read
+                // the integer as a string, and crashed).
+                Type *subjectType = valueTypeOf(nodeTypeOf(condNode));
+                Type *caseType    = valueTypeOf(nodeTypeOf(valueNode));
+                if (!subjectType->assignableFrom(caseType)) {
+                    diags_->of(SemanticDiag::MatchCaseTypeMismatch)
+                        .atOrigin(caseNode->at(0)->origin())
+                        .commit(subjectType->toString(), caseType->toString());
+                    throw BuildAbortException();
+                }
                 linkNodes(LinkType::With, valueNode, brchNode);
                 caseExecNode = caseNode->at(1);
                 break;

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-133 diagnostics: 122 errors, 11 warnings.
+135 diagnostics: 124 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -108,6 +108,8 @@ prints one entry.
 | `0x030000E0` | [SemanticDiag::AnyUncheckedCast](#anyuncheckedcast) | Error |
 | `0x030000E1` | [SemanticDiag::AnyBranchSubject](#anybranchsubject) | Error |
 | `0x030000E2` | [SemanticDiag::AnyNotAllowed](#anynotallowed) | Error |
+| `0x030000E3` | [SemanticDiag::ConditionNotBool](#conditionnotbool) | Error |
+| `0x030000E4` | [SemanticDiag::MatchCaseTypeMismatch](#matchcasetypemismatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -2552,6 +2554,70 @@ func keep(x: any, n: int): any {
 }
 func main(): int sync {
     println(keep('abc', 3))
+    return 0
+}
+```
+
+### ConditionNotBool
+
+`0x030000E3` · Error · `SemanticDiag::ConditionNotBool`
+
+**Message**
+
+```text
+The condition of this 'if' has type '{0}'; a condition is a 'bool'.
+```
+
+**Help**
+
+```text
+There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 'x != null').
+```
+
+**Example** (`test/cases/compile/any_typing/if_condition_string.cml`, run as `camel test/cases/compile/any_typing/if_condition_string.cml`)
+
+```camel
+module if_condition_string
+
+// The condition of an `if` is a bool (language reference 6.8.1). A string used to be compared
+// bit for bit with `true`, and the `else` arm was taken without a word.
+func main(): int sync {
+    let s = 'a' + 'b'
+    println(if s then 1 else 2)
+    return 0
+}
+```
+
+### MatchCaseTypeMismatch
+
+`0x030000E4` · Error · `SemanticDiag::MatchCaseTypeMismatch`
+
+**Message**
+
+```text
+This case of a 'match' on a value of type '{0}' is a value of type '{1}'.
+```
+
+**Help**
+
+```text
+A case is compared with the value matched, so it must have the same type. Write the case as a value of that type, or convert the value matched first.
+```
+
+**Example** (`test/cases/compile/any_typing/match_case_type.cml`, run as `camel test/cases/compile/any_typing/match_case_type.cml`)
+
+```camel
+module match_case_type
+
+// A case of a `match` has the type of the value matched. `case 1` on a string used to be
+// compared as a string, reading the integer 1 as its address (segmentation fault).
+func main(): int sync {
+    let s = 'a' + 'b'
+    println(match s {
+        case 1 => 'one'
+        case 'ab' => 'ab'
+        case _ => 'other'
+    })
     return 0
 }
 ```

@@ -1,0 +1,9 @@
+module if_condition_string
+
+// The condition of an `if` is a bool (language reference 6.8.1). A string used to be compared
+// bit for bit with `true`, and the `else` arm was taken without a word.
+func main(): int sync {
+    let s = 'a' + 'b'
+    println(if s then 1 else 2)
+    return 0
+}

@@ -115,6 +115,9 @@ enum class SemanticDiag : uint32_t {
     AnyUncheckedCast             = 0x0000E0,
     AnyBranchSubject             = 0x0000E1,
     AnyNotAllowed                = 0x0000E2,
+    // The condition and the cases of a branch (found with the `any` cases above).
+    ConditionNotBool             = 0x0000E3,
+    MatchCaseTypeMismatch        = 0x0000E4,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,
