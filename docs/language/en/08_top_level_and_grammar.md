@@ -56,10 +56,10 @@ additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
-unary      : link (as type)? | ('!' | '~') link
+unary      : link (as type)?
 link       : neg (('->' | '?->') comp)*
-neg        : '-' negPower | comp
-negPower   : '-' negPower | comp ('^' negPower)?
+neg        : ('-' | '!' | '~') negPower | comp
+negPower   : ('-' | '!' | '~') negPower | comp ('^' negPower)?
 comp       : anno ('..' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda

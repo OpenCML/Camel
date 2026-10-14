@@ -34,7 +34,7 @@ let c = a + b
 
 ## 2.3 Identifiers
 
-An identifier starts with a letter or an underscore, followed by letters, digits and underscores: `[a-zA-Z_][a-zA-Z_0-9]*`. Identifiers are case-sensitive. A lone `_` is the wildcard pattern of `match`.
+An identifier starts with a letter or an underscore, followed by letters, digits and underscores: `[a-zA-Z_][a-zA-Z_0-9]*`. Identifiers are case-sensitive. A lone `_` is not a name: it is the wildcard pattern of `match`, and in `let _ = e` it says that the value of `e` is dropped on purpose ([7.2](07_statements.md#72-let-and-var)).
 
 A reference to a name may be qualified with `::`: `math::sqrt`, `Tensor::ones` (see chapter 5).
 
@@ -120,8 +120,8 @@ pi is about 3.14
 | `+` `-` `*` `/` `%` `^` `@` | Arithmetic: addition, subtraction, multiplication, division, remainder, power, matrix multiplication |
 | `==` `!=` `<` `>` `<=` `>=` | Comparison |
 | `===` `!==` | Reserved, not supported for now (compile-time error) |
-| `&&` `\|\|` `!` | Logical and, or, not; `&&` and `\|\|` are reserved operators and cannot be overloaded |
-| `&` `\|` | And, or with both sides evaluated; ordinary operators |
+| `&&` `\|\|` `!` | Logical and, or, not; `&&` and `\|\|` are branches (the right side is evaluated only when needed), reserved, and cannot be overloaded |
+| `&` `\|` | And, or with both sides evaluated; ordinary operators, which can be overloaded |
 | `~` | Bitwise not |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Assignment and compound assignment |
 | `??` `!!` `?->` | Unwrap a nullable value, unwrap a fallible value, pass the error on if there is one |

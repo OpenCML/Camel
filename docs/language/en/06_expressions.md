@@ -145,13 +145,36 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
 **Two places where mistakes are easy:**
 
 - `^` binds one level tighter than `*` and `/` and associates from right to left: `2 * 3 ^ 2` is `18`, and `2 ^ 3 ^ 2` is `2 ^ (3 ^ 2)`, that is `512`.
-- Unary `-` binds less tightly than `^` and more tightly than `->` and the other binary operators, before a literal as before a name: `-n ^ 2` is `-(n ^ 2)`, `-2 ^ 2` is `-4` (for `4` write `(-2) ^ 2`); `-n->f` is `(-n)->f`; `-a * b` is `(-a) * b`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`. `!` and `~` apply to the whole `->` chain and power after them: `!xs->empty` is `!(xs->empty)`.
+- Unary `-` binds less tightly than `^` and more tightly than `->` and the other binary operators, before a literal as before a name: `-n ^ 2` is `-(n ^ 2)`, `-2 ^ 2` is `-4` (for `4` write `(-2) ^ 2`); `-n->f` is `(-n)->f`; `-a * b` is `(-a) * b`. The right operand of `^` may carry a sign: `2.0 ^ -1.0`. `!` and `~` are at the level of the unary `-` (design principles 2.12): `!x->f` is `(!x)->f` and `!a ^ b` is `!(a ^ b)`; to negate the result of a chain write `!(xs->empty)`.
 
 ### 6.7.2 Logic
 
-`a && b`, `a || b`, `!a`; the operands are `bool`. `&&` and `||` short-circuit: the right side is evaluated only when needed; they are reserved operators and cannot be overloaded.
+`a && b`, `a || b`, `!a`; the operands are `bool`.
 
-`a & b` and `a | b` are and, or with both sides evaluated: ordinary binary operators (a function each, like the others). Precedence: `&` above `|`, both above `&&` and below the comparisons, so `a == b & c == d` is `(a == b) & (c == d)`.
+**`&&` and `||` are branches, not operators.** `a && b` is `if a then b else false`, and `a || b` is `if a then true else b`: the right side is an arm, evaluated only when the left side does not decide. Its effects do not happen and its faults are not reached otherwise (`n != 0 && 10 / n > 1` is safe). On the graph each is the `BRCH`/`JOIN` pair of that `if`, with the right side as a subgraph of its own. Both are reserved and cannot be overloaded; an operand that is not a `bool` is `SemanticDiag::LogicalOperandNotBool`. Because `a && b` is that `if`, a test against null on the left narrows the right side ([6.8.1](#681-if)): `x != null && x > 0`.
+
+```cml
+func noisy(tag: string, v: bool): bool sync {
+    println(tag)
+    return v
+}
+
+func main(): int sync {
+    println(noisy('l1', false) && noisy('r1', true))
+    println(noisy('l2', false) & noisy('r2', true))
+    return 0
+}
+```
+
+```text
+l1
+false
+l2
+r2
+false
+```
+
+**`a & b` and `a | b` evaluate both sides**: ordinary binary operators (a function each, like the others), which can be overloaded. Use them where a little logic needs no branch; element-wise logic on tensors and the operators of a type of your own are this pair as well. Precedence: `&` above `|`, both above `&&` and below the comparisons, so `a == b & c == d` is `(a == b) & (c == d)`.
 
 ### 6.7.3 Comparison
 
@@ -160,6 +183,7 @@ The two operands must have the same type. There are no bitwise and, or, xor or s
   - The element type must itself be comparable: numbers, `bool`, `string`, `Map`, `Set`, `T?`, `T!`, and arrays, tuples and structs of those. A value with a function in it (`[f] == [f]`) cannot be compared, which is a located compile-time error; tensors are not covered.
   - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
   - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
+- **`x == null` and `x != null`** are defined for an `x` of type `T?`, in either order, and give a `bool`: the test of the tag of `x`, not a comparison of two values (the same node `??` branches on). It is an ordinary expression: `let has = x != null`. A nullable function value is compared with `null` the same way. Any other value compared with `null` (an `int`, a `T!`) and two `T?` values compared with each other stay `SemanticDiag::NoMatchingFunction`; two function values cannot be compared.
 - `<`, `>`, `<=`, `>=`: numbers and `string` (by byte). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
 - `===` and `!==` are not supported for now: the lexer knows the two tokens, and writing one is a located compile-time error, `SemanticDiag::ConstructNotSupported`. Compare values with `==` and `!=`.
 
@@ -182,7 +206,7 @@ Conversions between numbers use functions such as `float(x)` ([3.2](03_data_mode
 if condition then arm else arm
 ```
 
-`if` is an expression. An arm can be an expression or a block (`{ ... }` or `sync { ... }`); the value of a block is given by the `return` in the block. The two arms must have the same type.
+`if` is an expression. An arm can be an expression or a block (`{ ... }` or `sync { ... }`); the value of a block is given by the `return` in the block. The two arms must have the same type, or one must enter the form of the other ([3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t)): an arm of type `T` and an arm that is `null` or has no value make the branch a `T?`.
 
 ```cml
 func sign(x: int): string {
@@ -192,6 +216,24 @@ func sign(x: int): string {
 
 - **An `if` without `else` has no value.** It can only be a statement; its arm may be of any type, and what the arm gives is dropped: `if debug then println('checking')` is legal, and an arm no longer needs `return null` to make the types fit. Using it as a value (`let x = if debug then 1`, as an argument, as the operand of `return`) is the compile-time error `SemanticDiag::IfWithoutElseAsValue`. Nothing changes on the graph: a branch with two arms, the `else` not written being an empty arm, and a join that takes no value; the arm is evaluated as usual, so an arm that does something with side effects usually has to be written in a sync block. An `else {}` written and left empty is the same as none.
 - The type of the condition is `bool`; there is no "truthiness" conversion.
+- **Narrowing.** In `if x != null then A else B`, `x` is a `T` inside `A`; in `if x == null then B else A` likewise. It is the same branch as `match x { case null => B  case v => A }`: the arm that excludes null starts by taking the value out of `x`, and inside that arm the name `x` stands for the value.
+
+  ```cml
+  func len_or_zero(s: string?): int {
+      return if s != null then len(s) else 0
+  }
+
+  func sum_or_minus(a: int?, b: int?): int {
+      return if a != null && b != null then a + b else -1
+  }
+  ```
+
+  The rule is deliberately small:
+  - only a name bound by `let` or a parameter is narrowed, not a `var` (it may be rewritten between the test and the use; bind its value with `let` first);
+  - only the direct forms count, in either order (`x != null`, `null != x`): a test that is the whole condition, or one of the operands `&&` joins, narrows the `then` arm (`if x != null && ready then ...`). The `else` arm is narrowed only by a whole condition `x == null`, never by a conjunction. A test under `||` or `!` (`x != null || ready`, `!(x == null)`) or kept in a `let` narrows nothing; nest the `if`s, or use `match` or `??`;
+  - only inside the arm: after the `if`, `x` is a `T?` again. Declaring the name again inside the arm (`let x = ...`) is a redeclaration.
+
+  Since `a && b` is `if a then b else false`, the right side of `x != null && ...` is such an arm, and so is the right side of `x == null || ...`. When a name is tested and then used as a `T` where narrowing does not apply, the error carries a note that says why.
 
 > **A `return` in a block gives the value of that block; it does not leave the function.**
 >
@@ -410,7 +452,7 @@ If the element function of `foreach` is to produce side effects, its body must b
   | `+=` | The four numeric types, `string` (concatenation) |
   | `-=`, `*=`, `/=`, `^=` | The four numeric types |
   | `%=` | `int`, `i32` |
-  | `&=`, `\|=` | `bool` (`a = a && b`, `a = a \|\| b`) |
+  | `&=`, `\|=` | `bool` (`a = a & b`, `a = a \| b`: the right side is always evaluated) |
   | `@=` | None of the built-in types |
 
 - **A compound assignment changes nothing in place.** `x op= e` computes the new value and binds `x` to it. A type defined by a module (a tensor) has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, wherever the binary operator is defined for the types): after `let a = t`, `t += u` leaves `a` unchanged. To change a value in place, use an explicit operator.
@@ -425,8 +467,8 @@ From lowest to highest:
 |---|---|---|
 | 1 | `wait` | Prefix; applies to the whole assignment expression |
 | 2 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Cannot be chained |
-| 3 | `\|\|` | Left-associative |
-| 4 | `&&` | Left-associative |
+| 3 | `\|\|` | Left-associative; a branch, the right side evaluated only when needed |
+| 4 | `&&` | Left-associative; a branch, the right side evaluated only when needed |
 | 4a | `\|` | Left-associative, both sides evaluated |
 | 4b | `&` | Left-associative, both sides evaluated |
 | 5 | `==` `!=` (`===` `!==` not supported for now) | |
@@ -435,9 +477,9 @@ From lowest to highest:
 | 8 | `*` `/` `%` `@` | Left-associative |
 | 8a | `^` | Right-associative, one level above the multiplicative operators |
 | 9 | `??` `!!` | The right side is a complete expression |
-| 10 | Unary `!` `~`; `as` | `!` and `~` apply to the `->` chain and the power after them |
+| 10 | `as` | |
 | 11 | `->` `?->` | Left-associative |
-| 11a | Unary `-` | Tighter than `->`, looser than `^`: `-a->f` is `(-a)->f`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike |
+| 11a | Unary `-` `!` `~` | Tighter than `->`, looser than `^`: `-a->f` is `(-a)->f`, `!a->f` is `(!a)->f`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike |
 | 12 | `..` `?..` | |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
 

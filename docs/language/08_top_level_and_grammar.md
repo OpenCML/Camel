@@ -56,10 +56,10 @@ additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
-unary      : link (as 类型)? | ('!' | '~') link
+unary      : link (as 类型)?
 link       : neg (('->' | '?->') comp)*
-neg        : '-' negPower | comp
-negPower   : '-' negPower | comp ('^' negPower)?
+neg        : ('-' | '!' | '~') negPower | comp
+negPower   : ('-' | '!' | '~') negPower | comp ('^' negPower)?
 comp       : anno ('..' anno)*
 anno       : primary ( '.'字段 | '[' 下标 ']' | '(' 实参 ')' | '<' with 实参 '>' )*
 primary    : 名字 | 字面量 | '[' 元素, ... ']' | '{' 键: 值, ... '}' | '(' 表达式, ... ')' | lambda

@@ -195,11 +195,13 @@ error DivByZero: the divisor is zero
 Rules:
 
 - `T?`, `T!` and `T` are different types. Values of these two kinds can be stored, passed, returned and printed, but **cannot be used as a `T`**: operators such as arithmetic and comparison, and functions that accept a `T`, do not accept them, and their members cannot be accessed. They can only be unwrapped with `??`, `!!`, `?->` ([6.6](06_expressions.md#66-operators-for-null-and-errors)) or with the fixed patterns of `match` ([6.8.2](06_expressions.md#682-match)).
+- **A `T?` can be compared with `null`**: `x == null` and `x != null` give a `bool`. Where such a comparison is the condition of an `if`, `x` is a `T` in the arm that excludes null ([6.8.1](06_expressions.md#681-if)). Two `T?` values are not compared with each other, and a `T!` is not compared at all.
+- **A `T!` that is evaluated and that nothing uses is a warning** (`SemanticDiag::UnusedFallibleValue`): the error it may hold would be lost without a trace. See [7.1](07_statements.md#71-expression-statements).
 - **A value that enters a `T?` or `T!` position is put into the form by itself**, wherever the target type is known; `null` likewise. The positions are:
   - an argument of a call: with a parameter `x: int?`, write `f(5)` or `f(null)`. Among overloads an exact match wins: `f(5)` takes `f(x: int)` when both it and `f(x: int?)` exist;
   - a declaration with a type, `let x: T? = v`;
   - the elements of an array: `let xs: (int?)[] = [1, null, 3]`; without a written type, an array literal with a `null` among its elements is an array of `T?` (`[1, null, 3]` is an `(int?)[]`);
-  - the two arms of a branch: when one arm is a `T` and the other is `null` or a `T?`, the branch is a `T?` (`if c then 1 else null` is an `int?`); likewise `T` and `T!`;
+  - the two arms of a branch: when one arm is a `T` and the other is `null` or a `T?`, the branch is a `T?` (`if c then 1 else null` is an `int?`); likewise `T` and `T!`. An arm that has no value at all (`void`: a call of a function that returns nothing, an empty block) counts as `null`: the branch is a `T?` and that arm gives `null`;
   - `return v` in a function whose return type is declared as `T?`/`T!` (`throw e` gives an error).
 
   `v as T?` can still be written. Several levels are entered at once: `let x: int?! = 5`. On the graph each level is a conversion node (`CAST`); the compiler adds the node a program would write with `as`, and the graph is the same.
@@ -212,7 +214,7 @@ Rules:
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
-**Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but not compared with `==`. The relation between the earlier reserved notation `T ? U` and `T!` is undecided, and using it is a compile-time error (`SemanticDiag::FeatureNotSupported`).
+**Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`. The relation between the earlier reserved notation `T ? U` and `T!` is undecided, and using it is a compile-time error (`SemanticDiag::FeatureNotSupported`).
 
 ## 3.5 Maps and sets
 
