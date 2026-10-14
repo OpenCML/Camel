@@ -314,7 +314,7 @@ def cmd_profile(args) -> int:
             env["CAMEL_ALLOCSHIM_CPU"], env["CAMEL_ALLOCSHIM_HZ"] = str(part), str(args.hz)
         else:
             env["CAMEL_ALLOCSHIM_SITES"], env["CAMEL_ALLOCSHIM_EVERY"] = str(part), str(args.every)
-        command = [str(home / "bin" / "camel"), source] + passes
+        command = [str(bench.tool_path(home, "camel")), source] + passes
         done = subprocess.run(command, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                               cwd=str(Path(source).parent))
         if done.returncode != 0 or not part.exists():

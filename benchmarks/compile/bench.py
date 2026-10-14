@@ -201,6 +201,12 @@ def build_shim(work: Path) -> Optional[Path]:
     return out
 
 
+def tool_path(home: Path, name: str) -> Path:
+    """An executable of the installation at `home` (`camel`, `camel-parsecheck`)."""
+    exe = home / "bin" / (name + ".exe")
+    return exe if exe.exists() else home / "bin" / name
+
+
 def camel_env(home: Path, extra: dict) -> dict:
     env = dict(os.environ)
     env["CAMEL_HOME"] = str(home)
@@ -212,7 +218,7 @@ def camel_env(home: Path, extra: dict) -> dict:
 def run_camel(home: Path, source: str, passes: List[str], env: dict, cpu: Optional[int], report: Path,
               preload: Optional[Path] = None, timeout: float = 600.0) -> Tuple[float, int, dict]:
     """One run. Returns (wall seconds of the child, exit code, phase report)."""
-    command = [str(home / "bin" / "camel"), "--time-phases", str(report), source] + passes
+    command = [str(tool_path(home, "camel")), "--time-phases", str(report), source] + passes
     if cpu is not None and shutil.which("taskset"):
         command = ["taskset", "-c", str(cpu)] + command
     if preload is not None:
@@ -256,7 +262,7 @@ def self_costs(report: dict) -> Dict[str, Dict[str, float]]:
 
 def parse_bench(home: Path, source: str, cpu: Optional[int], rounds: int) -> Optional[dict]:
     """Lexer / CST / AST split of one file in microseconds (min and median)."""
-    tool = home / "bin" / "camel-parsecheck"
+    tool = tool_path(home, "camel-parsecheck")
     if not tool.exists():
         return None
     command = [str(tool), "bench", source, str(rounds)]
@@ -517,7 +523,7 @@ def cmd_run(args) -> int:
     counts = [int(x) for x in args.modules.split(",")]
     versions = parse_versions(args.camel)
     for label, home in versions:
-        if not (home / "bin" / "camel").exists() and not (home / "bin" / "camel.exe").exists():
+        if not tool_path(home, "camel").exists():
             raise SystemExit(f"no camel under {home} ({label})")
     inputs = build_inputs(sets, work, counts, args.large_size)
     pipelines = args.pipelines.split(",")
@@ -570,7 +576,7 @@ def cmd_check(_args) -> int:
             problems.append("the Markdown report misses a section")
         # The environment variable asks for the report where the option cannot be given.
         by_env = work / "by_env.json"
-        subprocess.run([str(default_home() / "bin" / "camel"), inputs[0]["path"], "std::null"],
+        subprocess.run([str(tool_path(default_home(), "camel")), inputs[0]["path"], "std::null"],
                        env=camel_env(default_home(), {"CAMEL_TIME_PHASES": str(by_env)}),
                        stdout=subprocess.DEVNULL, cwd=tmp)
         if not by_env.exists() or "phases" not in json.loads(by_env.read_text(encoding="utf-8")):
