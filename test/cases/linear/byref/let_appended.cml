@@ -1,7 +1,8 @@
 /**
- * An in-place operator (`append`) applied to a `let` array.
- * Rejected at compile time (docs/design-principles.cn.md 2.5, 2.6: a side effect
- * must be declared, and only a `var` can be changed).
+ * `append` written as a statement on a `let` array. `append` returns a new array and changes
+ * nothing (docs/design-principles.cn.md 2.12), so the statement does nothing: a compile-time
+ * error (UnusedPureResult). It used to be refused because `append` changed its argument in
+ * place and `xs` is not a `var` (2.5, 2.6).
  */
 module let_appended
 

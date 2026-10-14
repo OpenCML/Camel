@@ -726,6 +726,18 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::UnusedPureResult,
+            {
+                "UnusedPureResult",
+                "The result of '{0}' is not used, and '{0}' changes nothing: it returns a new "
+                "value{1}.",
+                "The operations of the standard library return new values and leave their "
+                "arguments as they were: after 'let ys = xs->append<5>', 'xs' is unchanged. "
+                "To change a variable, bind it to the result, 'xs = xs->append<5>', as "
+                "'x = x + 1' does for a number.",
+            },
+        },
+        {
             SemanticDiag::UnusedFallibleValue,
             {
                 "UnusedFallibleValue",

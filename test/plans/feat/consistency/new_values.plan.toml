@@ -1,0 +1,163 @@
+id = "consistency.new_values"
+order = 364
+tier = "feat"
+tags = ["feat", "consistency", "compile", "collections", "gc"]
+desc = "Library operators return new values and leave their arguments unchanged (design principles 2.12): `append`, `extend`, `apply`, `algo`'s `sort`; the rebinding `acc = acc->append<v>` and its in-place implementation, under collection stress with both collectors; a pure operation whose result is unused is a compile-time error that gives the rebinding as the fix."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+timeout_ms = 20000
+
+[[tests]]
+name = "new_values.append_new"
+desc = "`let ys = xs->append<4>` leaves xs unchanged; `extend`, `apply`, `sort` likewise; a variable is changed by binding it to the result, and a value read from it before stays as it was; the value appended may be read from the variable itself. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/append_new.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[1, 2, 3] [1, 2, 3, 4] [1, 2, 3, 5]\n[1, 2, 3, 7, 8] [1, 2, 3]\n[10, 20, 30] [1, 2, 3]\n[1, 2, 3] [1, 2, 3] [3, 1, 2]\n[1, 2] [1, 2, 3, 4]\n[[0], [0], [2]]\n"
+
+[[tests]]
+name = "new_values.append_new.passes"
+desc = "The same program through std::inline, std::opt::simplify, std::jit."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/append_new.cml"
+args = ["${case}", "std::inline", "std::opt::simplify", "std::jit"]
+expect_exit = 0
+expect_stdout = "[1, 2, 3] [1, 2, 3, 4] [1, 2, 3, 5]\n[1, 2, 3, 7, 8] [1, 2, 3]\n[10, 20, 30] [1, 2, 3]\n[1, 2, 3] [1, 2, 3] [3, 1, 2]\n[1, 2] [1, 2, 3, 4]\n[[0], [0], [2]]\n"
+
+[[tests]]
+name = "new_values.rebinding_loop"
+desc = "`acc = acc->append<v>` in loops over a captured variable and through a var parameter, with reads between the appends and arrays of arrays and of structs as elements. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]\n"
+
+[[tests]]
+name = "new_values.rebinding_loop.passes"
+desc = "The same program through std::inline, std::opt::simplify, std::fvm."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "std::inline", "std::opt::simplify", "std::fvm"]
+expect_exit = 0
+expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]\n"
+
+[[tests]]
+name = "new_values.rebinding_loop.gc_mark_sweep_nvm"
+desc = "The rebinding loops on std::nvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.rebinding_loop.gc_mark_sweep_fvm"
+desc = "The rebinding loops on std::fvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.rebinding_loop.gc_mark_sweep_prl"
+desc = "The rebinding loops on std::prl with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.rebinding_loop.gc_generational_nvm"
+desc = "The rebinding loops on std::nvm with the generational collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.rebinding_loop.gc_generational_fvm"
+desc = "The rebinding loops on std::fvm with the generational collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.rebinding_loop.gc_generational_prl"
+desc = "The rebinding loops on std::prl with the generational collector, a collection of both kinds every third allocation and the heap verified around each: the arrays grown in place are kept alive and followed when they move."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "std::gc::verify", "${run_prl}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]"]
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.rebinding_loop.poison"
+desc = "The rebinding loops on std::fvm with safepoint poisoning: an address of an array kept across a safepoint by the in-place append would read the poison word."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["${case}", "${run_fvm}"]
+envs = ["CAMEL_GC_POISON=1", "CAMEL_GC_VERIFY=both"]
+expect_exit = 0
+expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]\n"
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.unused_var"
+desc = "`xs->append<5>` as a statement on a variable: a compile-time error whose message gives the rebinding `xs = xs->append<5>`."
+kind = "negative"
+case = "../../../cases/consistency/new_values/unused_var.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 5
+expect_output_contains = ["bind it to the result: 'xs = xs->append<5>'"]
+
+[[tests]]
+name = "new_values.unused_in_lambda"
+desc = "The old way of filling a captured variable in a foreach is the same error, with the rebinding as the fix."
+kind = "negative"
+case = "../../../cases/consistency/new_values/unused_in_lambda.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 9
+expect_output_contains = ["'out = out->append<i>'"]
+
+[[tests]]
+name = "new_values.unused_operator"
+desc = "Any operator declared pure as a statement is the same error (here `+`); the message says to use the result or drop it with `let _`."
+kind = "negative"
+case = "../../../cases/consistency/new_values/unused_operator.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["The result of '+' is not used", "'let _ = ...'"]

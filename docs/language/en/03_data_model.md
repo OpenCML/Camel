@@ -102,7 +102,7 @@ println(xs[0], len(xs), grid[0][1])
   | `zip(xs, ys)` | An array of `(x, y)` tuples; three or more arrays give tuples of that many elements (`zip(xs, ys, zs)`); the lengths must be equal |
   | `strs->join<sep>` | Joins a `string[]` into one string |
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
-  | `xs->append<v>`, `xs->extend<ys>` | **Modify in place**; `xs` must be a `var` (see 3.6) |
+  | `xs->append<v>`, `xs->extend<ys>` | A **new array** with `v` (or the elements of `ys`) at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.6) |
 
 - More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `any`, `all`, `count`, `sum`, `min`, `max`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
 
@@ -323,17 +323,23 @@ func main(): int sync {
 
     var xs = [1, 2]
     xs = concat(xs, [3])       // give the whole variable a new array
-    xs->append<4>              // modify in place: requires xs to be a var
-    println(xs)
+    let ys = xs->append<4>     // a new array; xs is unchanged
+    xs = xs->append<5>         // append to the variable: bind it to the new array, as x = x + 1 does
+    println(xs, ys)
     return 0
 }
 ```
 
 ```text
 11
-[1, 2, 3, 4]
+[1, 2, 3, 5] [1, 2, 3, 4]
 ```
 
-Camel favours immutability: `var` and assignment are only an opening left for convenience and should be used as little as possible. The in-place operators (`append`, `extend`) modify the object itself, and places that got the same object through another name see the change too; prefer `concat`, which returns a new value.
+Camel favours immutability: `var` and assignment are only an opening left for convenience and should be used as little as possible.
+
+**The operators of the standard library return new values and do not change their arguments** (design principles 2.12): `append`, `extend`, `apply`, the `sort` of the `algo` module and the others; after `let ys = xs->append<5>`, `xs` is unchanged. To "append to a variable" write `acc = acc->append<5>`, as with `x = x + 1`; there is no separate explicit in-place operator.
+
+- **An unused result of a pure operation is a compile-time error** (`SemanticDiag::UnusedPureResult`): `xs->append<5>` written as a statement does nothing, and the diagnostic suggests `xs = xs->append<5>` (when `xs` is not a variable, it suggests using the result, or `let _ = ...` to drop it on purpose). "Pure operation" means an operator declared pure in the operator table (the built-in operators and those of C++ modules; `camel inspect --ops` lists the purity) written as a statement that is not the last statement of its block; calls of the program's own functions are not covered. The last statement of a block is the value of the block and is not reported.
+- **Appending in place is an implementation detail, not part of the meaning.** When `acc = acc->append<v>` is a statement, `acc` is a variable and `append` is the built-in one, the compiler writes it with another implementation of the same rebinding: the array is grown where it is when the variable is the only reference to it (nothing has read `acc` since the previous in-place append), and copied (with room to grow) otherwise. So appending in a loop stays linear; a read of `acc` in between (`let snap = acc`) makes the next append copy, and `snap` keeps its value.
 
 For the relation between assignment and `wait` see [4.4](04_execution_model.md#44-var-references-and-wait).

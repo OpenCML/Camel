@@ -227,14 +227,15 @@ between plain runs too).
 Write rule shared by `fold` and `cse`: a node passed to a `var` parameter is not
 one value. It is a variable's cell (created by `:var/new`, read by `:var/get`,
 stored into by `:op/assn*`; see doc 18 section 8.1) or an object an operator
-changes in place. `isWrittenInPlace`
+changes in place (a module operator with a `var` parameter; no built-in or
+standard-library operator does that since design principles 2.12). `isWrittenInPlace`
 (`include/camel/runtime/draft_writes.h`) answers this from the callee's
 signature (operator overload, FUNC target, CALL callee type), through GATEs. A
 written node is never replaced by a constant or by another node, a tuple
 projection is not forwarded out of a written FILL, a written constant has no
 static value, and `cse` merges neither a written node nor an expression that
 reads one or reads what `:var/get` returned (`len(a)` before and after
-`arr->append<4>` are two values).
+`a = a->append<4>` are two values).
 
 ### 3.5 Module-contributed passes
 

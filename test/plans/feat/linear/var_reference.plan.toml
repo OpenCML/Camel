@@ -1229,29 +1229,29 @@ timeout_ms = 4000
 
 [[tests]]
 name = "let_appended"
-desc = "An in-place operator (`append`) applied to a `let` array. It is a compile-time error."
+desc = "`append` written as a statement on a `let` array: it returns a new array and changes nothing (design principles 2.12), so the statement does nothing. It is a compile-time error, which says to use the result."
 kind = "negative"
 case = "../../../cases/linear/byref/let_appended.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 10
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
-expect_output_contains = ["'xs' is immutable"]
+expect_output_contains = ["'append' changes nothing", "use the result"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
 name = "param_sorted"
-desc = "An in-place operator (`sort`) applied to a parameter declared without `var`. It is a compile-time error."
+desc = "`sort` written as a statement on a parameter: it returns a new array and changes nothing (design principles 2.12), so the statement does nothing. It is a compile-time error."
 kind = "negative"
 case = "../../../cases/linear/byref/param_sorted.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 15
-expect_output_contains = ["'xs' is immutable"]
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 5
+expect_output_contains = ["'sort' changes nothing"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

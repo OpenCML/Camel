@@ -3835,6 +3835,153 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     return visitLinkNode(assign);
 }
 
+node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
+    // The lowered form of `acc = acc->append<v>` (and of `acc = append<v>(acc)`):
+    //   LINK(DREF __assn__, DREF acc, LINK(WITH(DREF append, v), DREF acc))
+    const auto isDref = [](const GCT::node_ptr_t &node, std::string_view name = {}) {
+        return node != nullptr && node->type() == GCT::NodeKind::DREF &&
+               (name.empty() || node->name() == name);
+    };
+    if (gct->size() != 3 || !isDref(gct->at(0), "__assn__") || !isDref(gct->at(1))) {
+        return nullptr;
+    }
+    const GCT::node_ptr_t target = gct->at(1);
+    const GCT::node_ptr_t call   = gct->at(2);
+    if (call->type() != GCT::NodeKind::LINK || call->size() != 2 ||
+        !isDref(call->at(1), target->name())) {
+        return nullptr;
+    }
+    const GCT::node_ptr_t binding = call->at(0);
+    if (binding->type() != GCT::NodeKind::WITH || binding->size() != 2 ||
+        !isDref(binding->at(0), "append")) {
+        return nullptr;
+    }
+    // `acc` is a variable (one of this function or a captured one).
+    const std::string name = target->name();
+    if (!nodeAt(name).has_value() || !isVariable(resolveNodeByRef(name))) {
+        return nullptr;
+    }
+    // `append` is the built-in one: no declaration of the program, and no other module,
+    // gives the name another meaning here (the lookup order of visitDRefNode).
+    if (nodeAt("append").has_value() || templateScope_->get("append").has_value() ||
+        decoratedGraphAt("append").has_value()) {
+        return nullptr;
+    }
+    if (auto graphs = graphsAt("append"); graphs.has_value() && !graphs.value()->empty()) {
+        return nullptr;
+    }
+    const auto appendEntity = module_->getImportedEntity("append");
+    if (!appendEntity.has_value() || !appendEntity->isOperGroup() ||
+        std::ranges::none_of(appendEntity->operGroup()->resolvers(), [](const auto &overload) {
+            return overload.first == ":struct/append_arr";
+        })) {
+        return nullptr;
+    }
+    // A value that is still a name of a function, a binding or a lambda is settled by the
+    // call it is passed to (visitLinkNode); it is left to the call as written.
+    const GCT::node_ptr_t valueExpr = binding->at(1);
+    if ((isDref(valueExpr) && !nodeAt(valueExpr->name()).has_value()) ||
+        valueExpr->type() == GCT::NodeKind::WITH || valueExpr->type() == GCT::NodeKind::FUNC) {
+        return nullptr;
+    }
+
+    // The value first, as in the call as written (the with-argument is built before the
+    // operand); it is named so that the call below refers to it.
+    node_handle_t value = valueOf(visitOperand(valueExpr, binding));
+    if (nodeIsKind(value, runtime::GCNodeKind::Dref) || boundWithArgs_.contains(value)) {
+        rejectNameWithoutValue(value, "the value", valueExpr);
+    }
+    const std::string temporary = bindTemporary(value);
+    const auto make             = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {
+        node->setOrigin(at->origin());
+        return node;
+    };
+    if (recorder_) {
+        std::vector<std::string> signatures;
+        for (const auto &[uri, resolver] : appendEntity->operGroup()->resolvers()) {
+            signatures.push_back(resolver->signature());
+        }
+        recorder_->operatorReferenced(binding->at(0)->origin(), "append", std::move(signatures));
+    }
+
+    // The operator that grows the array in place takes exactly the types `append` takes
+    // for an array variable; any other combination is built as written, so that `append`
+    // reports what does not fit.
+    const auto group = context_->importModule("")->getExportedEntity(Reference("__assn_append__"));
+    ASSERT(group.has_value() && group->isOperGroup(), "The built-in __assn_append__ is missing.");
+    const std::vector<StaticArg> statics(2);
+    const bool fits = group->operGroup()
+                          ->resolve(
+                              {},
+                              {valueTypeOf(nodeTypeOf(resolveNodeByRef(name))),
+                               valueTypeOf(nodeTypeOf(value))},
+                              statics,
+                              Modifier::None)
+                          .has_value();
+    GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
+    if (fits) {
+        *rebinding << make(tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn_append__"), gct->at(0))
+                   << tree_->clone(target) << make(tree_->makeDRef(temporary), valueExpr);
+    } else {
+        GCT::node_ptr_t with = make(tree_->makeWith(1), binding);
+        *with << tree_->clone(binding->at(0)) << make(tree_->makeDRef(temporary), valueExpr);
+        GCT::node_ptr_t appended = make(tree_->makeLink(1), call);
+        *appended << with << tree_->clone(call->at(1));
+        *rebinding << tree_->clone(gct->at(0)) << tree_->clone(target) << appended;
+    }
+    return visitLinkNode(rebinding);
+}
+
+void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t node) {
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return;
+    }
+    const auto op = nodeGraphOf(node)->operTarget(node);
+    if (op == nullptr || !camel::core::OperatorTable::instance().isPure(op->uri())) {
+        return;
+    }
+    // The call as written: `wait` around it changes nothing about its value.
+    GCT::node_ptr_t call = stmt;
+    if (call->type() == GCT::NodeKind::WAIT && call->size() == 1) {
+        call = call->at(0);
+    }
+    if (call->type() != GCT::NodeKind::LINK || call->size() < 1) {
+        return;
+    }
+    // The name the program wrote: the operator's symbol, or the function's name.
+    GCT::node_ptr_t callee = call->at(0);
+    while (callee->type() == GCT::NodeKind::WITH && callee->size() > 0) {
+        callee = callee->at(0);
+    }
+    std::string written = callee->type() == GCT::NodeKind::DREF ? callee->name() : op->name();
+    if (const char *symbol = operatorSymbolOf(written)) {
+        written = symbol;
+    }
+    // When the operation is applied to a variable, the program most likely meant to change
+    // it, as `xs->append<5>` did before 2.12: the fix is to bind the variable to the result.
+    std::string fix;
+    const std::string text = sourceTextOf(call);
+    if (call->size() >= 2 && call->at(1)->type() == GCT::NodeKind::DREF &&
+        nodeAt(call->at(1)->name()).has_value() &&
+        isVariable(resolveNodeByRef(call->at(1)->name()))) {
+        const std::string variable = call->at(1)->name();
+        fix = text.empty() ? std::format(
+                                 "; to change the variable '{0}', bind it to the result: "
+                                 "'{0} = ...'",
+                                 variable)
+                           : std::format(
+                                 "; to change the variable '{0}', bind it to the result: "
+                                 "'{0} = {1}'",
+                                 variable,
+                                 text);
+    } else {
+        fix = "; use the result ('let ys = ...') or drop it on purpose with 'let _ = ...'";
+    }
+    diags_->of(SemanticDiag::UnusedPureResult).atOrigin(stmt->origin()).commit(written, fix);
+    // Reported here; it is not also an unused `T!` (reportUnusedFallibleValues).
+    discardedValues_.insert(node);
+}
+
 void Builder::rejectLiteralConversion(
     const std::string &group, FunctionType *funcType, const std::vector<Argument> &operands,
     const GCT::node_ptr_t &call) {
@@ -4320,6 +4467,15 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ENTER("LINK");
+    // Whether this call is a statement whose value nothing takes; the calls inside it are not.
+    const bool unusedStatement = gct == unusedStatement_;
+    unusedStatement_           = nullptr;
+    if (unusedStatement) {
+        if (node_handle_t rebound = rebindingAppendOf(gct)) {
+            LEAVE("LINK");
+            return rebound;
+        }
+    }
     genericCalleeAllowed_ =
         gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::WITH;
     any targetNodeRes     = visit(gct->at(0));
@@ -6495,11 +6651,21 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
         }
     };
     bool failed = false;
+    const GCT::Node *outerStatement = unusedStatement_;
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
         try {
             const auto &child = gct->at(i);
+            // Every statement but the last is one whose value nothing takes. The scopes the
+            // lowering introduced (operands of a literal, the names of a declaration) have
+            // no statements.
+            const bool unused = !operands && i + 1 < gct->size();
+            unusedStatement_  = unused ? child : nullptr;
             any result        = visit(child);
+            unusedStatement_  = nullptr;
+            if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
+                rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
+            }
             if (result.has_value() && result.type() == typeid(node_handle_t)) {
                 res = any_cast<node_handle_t>(result);
             } else if (
@@ -6510,10 +6676,12 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             }
         } catch (const BuildAbortException &e) {
             before.restore();
-            failed = true;
+            unusedStatement_ = nullptr;
+            failed           = true;
             continue;
         }
     }
+    unusedStatement_ = outerStatement;
     if (failed) {
         throw BuildAbortException();
     }

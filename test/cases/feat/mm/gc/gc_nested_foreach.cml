@@ -17,7 +17,7 @@ func add(a: int, b: int): int {
 func collect(n: int, k: int): Row[] sync {
     var out: Row[] = []
     range(0, n)->foreach<sync (i: int) => sync {
-        out->append<range(0, n)->map<(j: int): int => add(i + j, k)>>
+        out = out->append<range(0, n)->map<(j: int): int => add(i + j, k)>>
         return null
     }>
     return out
@@ -26,7 +26,7 @@ func collect(n: int, k: int): Row[] sync {
 func ends_of(n: int, i: int, k: int): int sync {
     var row: int[] = []
     range(0, n)->foreach<sync (j: int) => sync {
-        row->append<add(i + j, k)>
+        row = row->append<add(i + j, k)>
         return null
     }>
     return row[0] + row[n - 1] + len(row)

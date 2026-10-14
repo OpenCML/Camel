@@ -100,9 +100,6 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     __attribute__((noinline)) void evalMarkedOperator_map_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
-    __attribute__((noinline)) void evalMarkedOperator_apply_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-        ctx::Frame &currFrame);
     __attribute__((noinline)) void evalMarkedOperator_filter_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);

@@ -858,6 +858,23 @@ class Builder {
     void reportUnusedFallibleValues();
     /// Values dropped on purpose by `let _ = e`.
     std::unordered_set<node_handle_t> discardedValues_;
+
+    // ---- Collections are not changed in place (design principles 2.12) --------------------
+
+    /// The statement of the block being built whose value nothing takes: every statement but
+    /// the last (which is the block's value), while it is visited. A call that is this
+    /// statement may be the rebinding `acc = acc->append<v>` (rebindingAppendOf) or a pure
+    /// operation whose result is lost (rejectUnusedPureResult).
+    const GCT::Node *unusedStatement_ = nullptr;
+    /// `acc = acc->append<v>` as the statement `gct`, `acc` a variable and `append` the
+    /// built-in one: the same rebinding, written with the operator __assn_append__, which
+    /// grows the array in place while only the variable refers to it. Returns nullptr when
+    /// `gct` is not that form; the call is then built as written.
+    node_handle_t rebindingAppendOf(const GCT::node_ptr_t &gct);
+    /// UnusedPureResult at the statement `stmt` when it is a call of an operator declared
+    /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
+    /// nothing, so the statement does nothing. `node` is what the statement built.
+    void rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t node);
     /// Function graphs whose return type is not declared but taken from their body.
     std::unordered_set<DraftGraphBuilder *> inferredExitGraphs_;
 

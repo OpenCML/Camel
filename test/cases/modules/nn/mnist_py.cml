@@ -124,7 +124,7 @@ func main(): int sync {
     var pred_list: int[] = []
     sync func collect_pred(i: int): void {
         return if i >= viz_count then null else sync {
-            pred_list->append<int(pred[i])>
+            pred_list = pred_list->append<int(pred[i])>
             return collect_pred(i + 1)
         }
     }
