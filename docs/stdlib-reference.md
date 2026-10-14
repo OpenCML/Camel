@@ -135,7 +135,7 @@ x as a 32-bit float.
 #### `string`
 
 ```camel
-string: (x: any) => string
+string: (x: T) => string
 ```
 
 x as text, as println writes it. A float is written as the shortest text that reads back as
@@ -185,10 +185,12 @@ position of the call. `throw error(...)` returns it from a function declared `T!
 #### `print`
 
 ```camel
-print: (...args: any) => void
+print: (x: T, ...rest: U...) => T
 ```
 
-Writes the arguments, separated by spaces, without a line end.
+Writes the arguments, separated by spaces, without a line end, and gives back the first one
+(so that the write can be part of the data flow). The other arguments may each have a type
+of their own.
 
 - With effects: writes to standard output.
 - Example: `print('a', 1)` gives `a 1`
@@ -196,10 +198,12 @@ Writes the arguments, separated by spaces, without a line end.
 #### `println`
 
 ```camel
-println: (...args: any) => void
+println: (x: T, ...rest: U...) => T
 ```
 
-Writes the arguments, separated by spaces, and a line end.
+Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
+that the write can be part of the data flow). The other arguments may each have a type of
+their own.
 
 - With effects: writes to standard output.
 - Example: `println('a', 1)` gives `a 1`
@@ -243,7 +247,7 @@ Ends the program with the given exit code, after writing buffered output.
 #### `format`
 
 ```camel
-format: <...args: any> (fmt: string) => string
+format: <...args: T...> (fmt: string) => string
 ```
 
 The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
@@ -2289,26 +2293,26 @@ The current working directory.
 #### `encode`
 
 ```camel
-encode: (value: any) => string
+encode: (value: T) => string
 ```
 
-The JSON text of a value, on one line.
+The JSON text of a value, on one line. The type of the value must have a JSON form:
+numbers, bool, string, null, and arrays, tuples, structs, sets and maps with string keys
+of those; a function or a tensor is refused when the call is compiled.
 
 - Pure.
-- Failure: fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold.
 - Example: `encode([1, 2])` gives `'[1,2]'`
 
 #### `encode`
 
 ```camel
-encode: (value: any, indent: int) => string
+encode: (value: T, indent: int) => string
 ```
 
 The JSON text of a value, indented by indent spaces per level; a negative indent gives one
 line.
 
 - Pure.
-- Failure: fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold.
 - Example: `encode([1, 2], 2)` gives `'[\n  1,\n  2\n]'`
 
 #### `decode`
@@ -2326,15 +2330,14 @@ The value a JSON text describes. Its static type is `any`.
 #### `decode_as`
 
 ```camel
-decode_as: <shape: any> (text: string) => any
+decode_as: <shape: T> (text: string) => T!
 ```
 
 The value a JSON text describes, decoded to the type of shape; the value of shape is not
 read. The result is an error value when the text does not have that type.
-  the mismatch; error value `JsonDecodeFailed` when the text is not JSON
 
 - Pure.
-- Failure: error value `JsonTypeError` when the text is JSON of another type, with the path of.
+- Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON.
 - Example: `decode_as<[] as Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 <a id="re"></a>

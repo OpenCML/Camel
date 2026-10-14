@@ -474,6 +474,46 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
 
 bool jsonTypeHasForm(Type *type) { return type != nullptr && hasJsonForm(type); }
 
+bool jsonTypeEncodable(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    // The cases of camelToJson, which faults on anything else.
+    switch (type->code()) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::Bool:
+    case TypeCode::Byte:
+    case TypeCode::Void:
+    case TypeCode::String:
+        return true;
+    case TypeCode::Array:
+        return jsonTypeEncodable(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Tuple:
+        for (Type *member : static_cast<TupleType *>(type)->types()) {
+            if (!jsonTypeEncodable(member))
+                return false;
+        }
+        return true;
+    case TypeCode::Struct:
+        for (Type *member : static_cast<StructType *>(type)->types()) {
+            if (!jsonTypeEncodable(member))
+                return false;
+        }
+        return true;
+    default:
+        break;
+    }
+    if (const CollectionType *coll = asCollectionType(type)) {
+        if (!coll->isMap())
+            return jsonTypeEncodable(coll->keyType());
+        return coll->keyType()->code() == TypeCode::String && jsonTypeEncodable(coll->valueType());
+    }
+    return false;
+}
+
 // decode_as<shape>(text), decode_as(text, shape): the type of `shape` is the type decoded to;
 // its value is not read (DESIGN-QUESTION(json-typed-decode)). The result is a `T!`: text that
 // is not JSON, and JSON that does not have the shape of `T`, are error values, not faults.

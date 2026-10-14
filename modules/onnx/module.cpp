@@ -138,7 +138,7 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
             {{"onnx:export_model",
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
-                  "(fn: (...) => any, example: Tensor | tuple | struct, path: string, "
+                  "(fn: (...) => R, example: Tensor | tuple | struct, path: string, "
                   "dynamic_axes?: int[], target?: string) => void",
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> {

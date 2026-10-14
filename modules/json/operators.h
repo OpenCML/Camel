@@ -33,5 +33,7 @@ slot_t __json_decode__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 /// Whether decode_as can produce a value of `type`.
 bool jsonTypeHasForm(camel::core::type::Type *type);
+/// Whether encode can write a value of `type`: exactly the types camelToJson handles.
+bool jsonTypeEncodable(camel::core::type::Type *type);
 
 std::unordered_map<std::string, operator_t> getJsonOpsMap();

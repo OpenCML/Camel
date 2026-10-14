@@ -146,9 +146,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/ne_s", __builtin__ne__},
         {"op/ne", __builtin__ne__},
 
-        {"op/strict_eq", __builtin__strict_eq__},
-        {"op/strict_ne", __builtin__strict_ne__},
-
         {"op/lt_i", __builtin__lt__<Int32>},
         {"op/lt_l", __builtin__lt__<Int64>},
         {"op/lt_f", __builtin__lt__<Float32>},

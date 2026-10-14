@@ -483,20 +483,6 @@ slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot<Bool>(!valuesEqualByContent(norm.slot(0), norm.slot(1), norm.type(0)));
 }
 
-slot_t __builtin__strict_eq__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    slot_t lhs = norm.slot(0);
-    slot_t rhs = norm.slot(1);
-    Bool res   = (lhs == rhs);
-    return toSlot(res);
-}
-
-slot_t __builtin__strict_ne__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    slot_t lhs = norm.slot(0);
-    slot_t rhs = norm.slot(1);
-    Bool res   = (lhs != rhs);
-    return toSlot(res);
-}
-
 // Strings are ordered by their bytes (design principles 2.9); a proper prefix comes first.
 static int compareStrings(ArgsView &norm) {
     return norm.get<String *>(0)->compare(norm.get<String *>(1));

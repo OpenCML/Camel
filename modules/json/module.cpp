@@ -33,17 +33,29 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
+    // encode takes a value of every type that has a JSON form (a type rule, not a parameter
+    // of type `any`: design principles 2.12). A function or a tensor is refused when the call
+    // is compiled; it used to be the run-time fault JsonEncodeUnsupported.
+    const auto encodable = [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+        -> std::optional<Type *> {
+        if (!jsonTypeEncodable(norm[0]) ||
+            (norm.size() == 2 && norm[1]->code() != TypeCode::Int64)) {
+            return std::nullopt;
+        }
+        return Type::String();
+    };
     exportEntity(
         "encode",
         OperatorGroup::create(
             "encode",
             {{"json:encode",
-              StaticFuncTypeResolver::create({}, {{Type::Any(), false}}, Type::String())},
+              DynamicFuncTypeResolver::create({{0, {}}, {1, {false}}}, "(value: T) => string",
+                                              encodable)},
              {"json:encode",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::Any(), false}, {Type::Int(), false}},
-                  Type::String())}}));
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {2, {false, false}}},
+                  "(value: T, indent: int) => string",
+                  encodable)}}));
     exportEntity(
         "decode",
         OperatorGroup::create(

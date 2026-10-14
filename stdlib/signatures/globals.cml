@@ -66,7 +66,7 @@ inner func f32(x: i32 | int | f32 | float | string): f32 {
 /// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 /// @pure
 /// @example string(42)    // '42'
-inner func string(x: any): string {
+inner func string(x: T): string {
     return ':op/*tos'
 }
 
@@ -96,17 +96,21 @@ inner func error(kind: string, message: string): Error {
 
 // ---- input and output ----
 
-/// Writes the arguments, separated by spaces, without a line end.
+/// Writes the arguments, separated by spaces, without a line end, and gives back the first one
+/// (so that the write can be part of the data flow). The other arguments may each have a type
+/// of their own.
 /// @effect writes to standard output
 /// @example print('a', 1)    // a 1
-inner func print(...args: any): void {
+inner func print(x: T, ...rest: U...): T {
     return ':io/print'
 }
 
-/// Writes the arguments, separated by spaces, and a line end.
+/// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
+/// that the write can be part of the data flow). The other arguments may each have a type of
+/// their own.
 /// @effect writes to standard output
 /// @example println('a', 1)    // a 1
-inner func println(...args: any): void {
+inner func println(x: T, ...rest: U...): T {
     return ':io/println'
 }
 
@@ -139,7 +143,7 @@ inner func exit(code: int): void {
 /// @pure
 /// @fails fault `FormatFailed` when the placeholders and the arguments do not fit
 /// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
-with <...args: any>
+with <...args: T...>
 inner func format(fmt: string): string {
     return ':str/format'
 }

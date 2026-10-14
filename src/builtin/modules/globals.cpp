@@ -36,6 +36,19 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
 
+namespace {
+
+/// Whether a value of type `type` exists at run time, so that an operator taking a value of
+/// every type (`string(x)`) may take it: not `void`, not a type the compiler uses on its own
+/// (a type variable, a union, a reference). This is what a parameter typed `any` used to accept,
+/// `any` itself included for as long as values of that type exist.
+bool isConcreteValueType(Type *type) {
+    return type != nullptr && type->code() != TypeCode::Void &&
+           (!isAuxiliary(type->code()) || type->code() == TypeCode::Any);
+}
+
+} // namespace
+
 module_ptr_t GlobalsBuiltinModule::create(context_ptr_t ctx) {
     return std::make_shared<GlobalsBuiltinModule>(ctx);
 }
@@ -211,8 +224,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String()),
                 },
                 {
+                    // Every other type: the text println writes for the value. A type rule,
+                    // not a parameter of type `any` (design principles 2.12): the operator
+                    // reads the argument with the static type it has at the call.
                     ":op/atos",
-                    StaticFuncTypeResolver::create({}, {{Type::Any(), false}}, Type::String()),
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(x: T) => string",
+                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (!isConcreteValueType(norm[0])) {
+                                return nullopt;
+                            }
+                            return Type::String();
+                        }),
                 },
             }),
 
@@ -685,28 +710,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "__strict_eq__",
-            {
-                {
-                    ":op/strict_eq",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Any(), false}, {Type::Any(), false}},
-                        Type::Bool()),
-                },
-            }),
-        OperatorGroup::create(
-            "__strict_neq__",
-            {
-                {
-                    ":op/strict_ne",
-                    StaticFuncTypeResolver::create(
-                        {},
-                        {{Type::Any(), false}, {Type::Any(), false}},
-                        Type::Bool()),
-                },
-            }),
+        // `===` and `!==` are not supported for now (design principles 2.10): the front end
+        // refuses them, so there is no operator behind them.
         // <、<=、>、>=
         OperatorGroup::create(
             "__lt__",
@@ -1146,7 +1151,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":io/print",
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
-                        "<fmt?: string> (...args: any) => void",
+                        "<fmt?: string> (x: T, ...rest: U...) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (with.size() > 0 && with[0]->code() != TypeCode::String) {
@@ -1166,7 +1171,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":io/println",
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
-                        "<fmt?: string> (...args: any) => void",
+                        "<fmt?: string> (x: T, ...rest: U...) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (with.size() > 0 && with[0]->code() != TypeCode::String) {
@@ -1204,7 +1209,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":str/format",
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {1, {false}}},
-                        "<...args: any> (fmt: string) => string",
+                        "<...args: T...> (fmt: string) => string",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (!norm[0]->equals(Type::String()))

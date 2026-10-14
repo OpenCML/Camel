@@ -310,8 +310,8 @@ cd2479e5aabb7c48 ok stdlib/array.cml
 55c2951c797ac17b ok stdlib/signatures/algo.cml
 3f20be7d0332af35 ok stdlib/signatures/crypto.cml
 7b5ff78ccfa0d052 ok stdlib/signatures/fs.cml
-c3bf5e20624214d1 no stdlib/signatures/globals.cml
-5a6dffa3fed174ca ok stdlib/signatures/json.cml
+6a145b8a6723f853 no stdlib/signatures/globals.cml
+987e17fffb98e353 ok stdlib/signatures/json.cml
 1e1105a248f53ad6 ok stdlib/signatures/math.cml
 f8d330763bbcd3e8 ok stdlib/signatures/os.cml
 cc33c44661bbf49e ok stdlib/signatures/para.cml
@@ -325,9 +325,11 @@ add801d463271a35 ok stdlib/signatures/this.cml
 9081ab46b7504bc5 ok test/cases/compile/any_typing/array_literal.cml
 323766122163d50b ok test/cases/compile/any_typing/array_literal_string.cml
 c1591e8f11fff298 ok test/cases/compile/any_typing/cast_out.cml
+53029e655c0f19ea ok test/cases/compile/any_typing/encode_function.cml
 27f9da8311c2c831 ok test/cases/compile/any_typing/if_condition.cml
 e4e3ea473e94d746 ok test/cases/compile/any_typing/match_subject.cml
 b37945cea7b1c2dc ok test/cases/compile/any_typing/nullable_box.cml
+8eea1e8feb6c9f72 ok test/cases/compile/any_typing/placeholders.cml
 8c00b899961f49e6 ok test/cases/compile/bounds/array_member_access.cml
 239a7cf810cc8951 ok test/cases/compile/bounds/tuple_index.cml
 5b8ff4b0267d37a0 ok test/cases/compile/branch_exit/unused_arm_exit.cml

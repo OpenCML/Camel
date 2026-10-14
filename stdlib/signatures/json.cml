@@ -6,20 +6,20 @@
  * (scripts/stdlib-reference.mjs).
  */
 
-/// The JSON text of a value, on one line.
+/// The JSON text of a value, on one line. The type of the value must have a JSON form:
+/// numbers, bool, string, null, and arrays, tuples, structs, sets and maps with string keys
+/// of those; a function or a tensor is refused when the call is compiled.
 /// @pure
-/// @fails fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold
 /// @example encode([1, 2])    // '[1,2]'
-inner func encode(value: any): string {
+inner func encode(value: T): string {
     return 'json:encode'
 }
 
 /// The JSON text of a value, indented by indent spaces per level; a negative indent gives one
 /// line.
 /// @pure
-/// @fails fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold
 /// @example encode([1, 2], 2)    // '[\n  1,\n  2\n]'
-inner func encode(value: any, indent: int): string {
+inner func encode(value: T, indent: int): string {
     return 'json:encode'
 }
 
@@ -34,10 +34,9 @@ inner func decode(text: string): any {
 /// The value a JSON text describes, decoded to the type of shape; the value of shape is not
 /// read. The result is an error value when the text does not have that type.
 /// @pure
-/// @fails error value `JsonTypeError` when the text is JSON of another type, with the path of
-///   the mismatch; error value `JsonDecodeFailed` when the text is not JSON
+/// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON
 /// @example decode_as<[] as Map<string, int>>('{"a": 1}')    // {a: 1}
-with <shape: any>
-inner func decode_as(text: string): any {
+with <shape: T>
+inner func decode_as(text: string): T! {
     return 'json:decode_as'
 }

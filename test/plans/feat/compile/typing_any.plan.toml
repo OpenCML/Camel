@@ -89,3 +89,39 @@ expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
 expect_output_contains = ["Cannot insert data of type 'string' into a(n) array with element type 'int'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.encode_function"
+desc = "json encode takes the types with a JSON form by a type rule instead of a parameter of type `any` (design principles 2.12); a function is refused when the call is compiled. It used to compile and fault at run time."
+kind = "negative"
+case = "../../../cases/compile/any_typing/encode_function.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["encode_function.cml:10:19", "No matching function found for argument types: <> ((x: int) => int)", "<json:encode>: (value: T) => string", "name=SemanticDiag::NoMatchingFunction"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "any_typing.placeholders"
+desc = "string(x), println, format and json encode, whose signatures used `any` as a placeholder, take each argument with its own static type (type rules; the signature texts use type variables)."
+kind = "behavior"
+case = "../../../cases/compile/any_typing/placeholders.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  'true [1, 2] (1, a) { k: 2.5 }',
+  '41',
+  '42',
+  '[1] and (2, b)',
+  '{"a":[1,2],"b":[true,"x"]} [',
+  '  1.5',
+  ']',
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 4000
