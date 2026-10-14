@@ -76,6 +76,13 @@ class Builder {
     // type is reported at all.
     std::unordered_set<std::string> poisonedTypes_;
     bool wholeImportFailed_ = false;
+    // The names the module exports (visitModule), and the modules its imports bound, with the
+    // import that bound each (compileImportedModules).
+    std::unordered_set<std::string> exportedRefs_;
+    std::vector<std::pair<AST::node_ptr_t, camel::core::module::module_ptr_t>> importedModules_;
+    // Compiles the imported modules written in Camel as far as their declarations; one in
+    // error is reported at its import (ImportedModuleHasErrors).
+    void compileImportedModules();
     std::unordered_map<void *, FunctionType *> funcDecls_;
 
     camel::core::context::context_ptr_t context_;

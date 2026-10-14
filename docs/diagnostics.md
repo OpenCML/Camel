@@ -60,7 +60,6 @@ prints one entry.
 | `0x03000011` | [SemanticDiag::ReturnTypeMismatch](#returntypemismatch) | Error |
 | `0x03000012` | [SemanticDiag::ElementTypeMismatch](#elementtypemismatch) | Error |
 | `0x03000013` | [SemanticDiag::CallingIncompleteFunction](#callingincompletefunction) | Error |
-| `0x03000014` | [SemanticDiag::ClosureCaptureAfterSelfCall](#closurecaptureafterselfcall) | Error |
 | `0x03000015` | [SemanticDiag::ImportNameNotExported](#importnamenotexported) | Error |
 | `0x03000016` | [SemanticDiag::LiteralStaticCastFailed](#literalstaticcastfailed) | Error |
 | `0x03000017` | [SemanticDiag::DynamicCastForbidden](#dynamiccastforbidden) | Error |
@@ -76,7 +75,6 @@ prints one entry.
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
 | `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
-| `0x03000025` | [SemanticDiag::ImportCycle](#importcycle) | Error |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
@@ -105,6 +103,8 @@ prints one entry.
 | `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error |
 | `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error |
 | `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error |
+| `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error |
+| `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -1132,24 +1132,6 @@ func main(): int sync {
 }
 ```
 
-### ClosureCaptureAfterSelfCall
-
-`0x03000014` · Error · `SemanticDiag::ClosureCaptureAfterSelfCall`
-
-**Message**
-
-```text
-Closure variable '{0}' declared after the function '{1}' has already called itself.
-```
-
-**Help**
-
-```text
-All closure captures must be declared before the first call to the function. If the function is recursive, ensure closure captures are declared before any self-call to avoid changes in its calling convention.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### ImportNameNotExported
 
 `0x03000015` · Error · `SemanticDiag::ImportNameNotExported`
@@ -1550,33 +1532,6 @@ A literal that its type cannot hold is not wrapped around or cut off. Write a va
 ```camel
 func main(): int sync {
     println(9223372036854775808)
-    return 0
-}
-```
-
-### ImportCycle
-
-`0x03000025` · Error · `SemanticDiag::ImportCycle`
-
-**Message**
-
-```text
-The module '{0}' is imported while it is itself being loaded ({1}).
-```
-
-**Help**
-
-```text
-A module cannot import itself, directly or through the modules it imports. A file that imports a module of its own name imports itself. Move what the modules share into another module.
-```
-
-**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
-
-```camel
-import { even } from cyc_a
-
-func main(): int sync {
-    println(even(10))
     return 0
 }
 ```
@@ -2173,13 +2128,14 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
+**Example** (`test/cases/compile/module_load/value_cycle_modules.cml`, run as `camel -E short test/cases/compile/module_load/value_cycle_modules.cml`)
 
 ```camel
-import { even } from cyc_a
+// Values of two modules that depend on each other: ModuleValueCycle across the modules.
+import cycle_x
 
 func main(): int sync {
-    println(even(10))
+    println(cycle_x::x)
     return 0
 }
 ```
@@ -2430,6 +2386,71 @@ A 'var' of the top level of a module is read and written only by the module's ow
 import export_var_lib
 
 func main(): int sync {
+    return 0
+}
+```
+
+### ModuleValueCycle
+
+`0x030000D1` · Error · `SemanticDiag::ModuleValueCycle`
+
+**Message**
+
+```text
+The value '{0}' depends on itself: {1}.
+```
+
+**Help**
+
+```text
+The values of the top level of modules are computed before 'main' starts, each from the values it uses (design principles 2.11): directly, through the functions its initializer calls, and through the values those use, in any module. A value cannot be computed from itself. Compute one of the values in the chain without the other, or turn it into a function.
+```
+
+**Example** (`test/cases/compile/module_load/value_cycle.cml`, run as `camel -E short test/cases/compile/module_load/value_cycle.cml`)
+
+```camel
+// Top-level values that depend on each other: ModuleValueCycle, with the chain.
+let a = b + 1
+let b = c * 2
+let c = a - 3
+
+func main(): int sync {
+    println(a)
+    return 0
+}
+```
+
+### CaptureAfterRecursiveCall
+
+`0x030000D2` · Error · `SemanticDiag::CaptureAfterRecursiveCall`
+
+**Message**
+
+```text
+The function '{1}' uses '{0}' only after it is called in its own recursion, where the call could not pass it.
+```
+
+**Help**
+
+```text
+A function that calls itself, directly or through other functions, must use a variable it captures, or be complete, before the recursive call that would pass it: a call is ordered among the uses of the variables it was known to use, and a function value holds what the function captured when it was made. Use '{0}' before the recursive call, or pass it as a parameter.
+```
+
+**Example** (`test/cases/compile/module_load/recursive_late_var.cml`, run as `camel -E short test/cases/compile/module_load/recursive_late_var.cml`)
+
+```camel
+// A recursive function that uses a captured variable only after it calls itself: the call
+// could not pass it (CaptureAfterRecursiveCall).
+var count = 0
+
+sync func walk(n: int): int sync {
+    let rest = if n > 0 then walk(n - 1) else 0
+    wait count += 1
+    return rest + count
+}
+
+func main(): int sync {
+    println(walk(3))
     return 0
 }
 ```

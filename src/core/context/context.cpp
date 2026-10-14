@@ -346,25 +346,9 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
         auto it = modules_.find(name);
         if (it != modules_.end()) {
             EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Module '{}' found in cache.", name));
-            // The module being loaded names itself (a file `m.cml` with `import m`): it is
-            // in the cache, registered before its load, and not yet a module. Handing it out
-            // gave the importer a module without graphs, and the compiler crashed.
-            if (name == currentModuleName && !it->second->loaded() &&
-                std::dynamic_pointer_cast<UserDefinedModule>(it->second)) {
-                throw DiagnosticBuilder::of(SemanticDiag::ImportCycle)
-                    .commit(name, "file " + it->second->path());
-            }
-            // A module still being loaded is imported again by a module it imports
-            // (a imports b, b imports a; or a longer ring). It has no graphs yet, and handing
-            // it out crashed the compiler. Mutual import is not supported: say which ring.
-            if (auto at = std::find(loadingModules_.begin(), loadingModules_.end(), name);
-                at != loadingModules_.end()) {
-                std::string chain = "import cycle: ";
-                for (auto m = at; m != loadingModules_.end(); ++m) {
-                    chain += *m + " -> ";
-                }
-                throw DiagnosticBuilder::of(SemanticDiag::ImportCycle).commit(name, chain + name);
-            }
+            // Also a module being compiled right now: modules may import each other (design
+            // principles 2.11). Its declarations are complete before any function body of the
+            // program is built.
             return it->second;
         }
 
@@ -377,17 +361,13 @@ Context::importModule(const std::string &rawModuleName, const std::string &curre
                 module->path()));
             // Register before load so compile failures remain visible to dumpAllModuleDiagnostics.
             modules_[name] = module;
-            if (!module->loaded()) {
-                loadingModules_.push_back(name);
+            // A module written in Camel is compiled by the module that imports it, as far as
+            // its declarations, once that module has bound its imports and declared its types
+            // (GCT::Builder::visitModule), so that modules can import each other.
+            if (!module->loaded() && !std::dynamic_pointer_cast<UserDefinedModule>(module)) {
                 bool loadedOk = false;
                 camel::utils::phase::Scope phaseScope("import", name);
-                try {
-                    loadedOk = module->load();
-                } catch (...) {
-                    loadingModules_.pop_back();
-                    throw;
-                }
-                loadingModules_.pop_back();
+                loadedOk = module->load();
                 if (!loadedOk) {
                     // A module that was found and is in error is not a module that was not
                     // found: its own diagnostics say what is wrong with it.
@@ -524,18 +504,36 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
     /// Lookup order within directory D: 1) D/xx.cmo  2) D/xx.* (any text/source file with the
     /// same name)
     /// If D/xx is a directory, also search: 3) D/xx/xx.cmo  4) D/xx/xx.*
+    // A directory is listed once per context (doc 38, section 8 item 5): looking every
+    // module up by listing its directory again made N modules in one directory O(N^2).
     auto findModuleInDir = [&](const fs::path &dir) -> std::pair<std::string, bool> {
-        if (!fs::exists(dir) || !fs::is_directory(dir))
-            return {"", false};
-        fs::path cmoPath = dir / (stem + ".cmo");
-        if (fileExists(cmoPath.string()))
-            return {cmoPath.string(), true};
-        for (const auto &entry : fs::directory_iterator(dir)) {
-            if (!entry.is_regular_file())
-                continue;
-            fs::path p = entry.path();
-            if (p.stem() == stem)
-                return {p.string(), (p.extension() == ".cmo")};
+        const std::string key = dir.lexically_normal().string();
+        auto listing          = directoryListings_.find(key);
+        if (listing == directoryListings_.end()) {
+            DirectoryListing files;
+            std::error_code ec;
+            if (fs::is_directory(dir, ec)) {
+                for (const auto &entry : fs::directory_iterator(dir, ec)) {
+                    if (!entry.is_regular_file(ec)) {
+                        continue;
+                    }
+                    const fs::path p = entry.path();
+                    // The first file of a name in the order the directory lists them, as
+                    // before; a `.cmo` of the name comes first whatever the order.
+                    files.byStem.try_emplace(p.stem().string(), p.string());
+                    if (p.extension() == ".cmo") {
+                        files.cmo.insert(p.stem().string());
+                    }
+                }
+            }
+            listing = directoryListings_.emplace(key, std::move(files)).first;
+        }
+        const DirectoryListing &files = listing->second;
+        if (files.cmo.contains(stem)) {
+            return {(dir / (stem + ".cmo")).string(), true};
+        }
+        if (auto found = files.byStem.find(stem); found != files.byStem.end()) {
+            return {found->second, fs::path(found->second).extension() == ".cmo"};
         }
         return {"", false};
     };

@@ -83,9 +83,18 @@ node_handle_t Builder::captureInto(
     // A function value holds the captures its graph had when it was made; a direct call is
     // given a capture made later at the link step (linkCaptureSites), but not one of a
     // variable: the call has been ordered among the uses of the variables it was known to use
-    // (recordWrite), and that cannot be redone once the caller is built.
+    // (recordWrite), and that cannot be redone once the caller is built. Function bodies are
+    // built before they are used (ensureFunctionBuilt), so this is only met in recursion.
     if (valueUsedGraphs_.contains(graph.get()) || (graph->parameterized() && isVar)) {
-        diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall).commit(name, graph->name());
+        // Once per function and value: the next use of the value fails the same way.
+        if (!lateCaptures_.insert({graph.get(), origin}).second) {
+            throw BuildAbortException();
+        }
+        const std::string shownName =
+            captureNameOf(origin, name.empty() ? originNames_[origin] : name);
+        diags_->of(SemanticDiag::CaptureAfterRecursiveCall)
+            .atOrigin(refOrigin_)
+            .commit(shownName, graph->name());
         throw BuildAbortException();
     }
 

@@ -48,7 +48,8 @@ enum class SemanticDiag : uint32_t {
     ReturnTypeMismatch           = 0x000011,
     ElementTypeMismatch          = 0x000012,
     CallingIncompleteFunction    = 0x000013,
-    ClosureCaptureAfterSelfCall  = 0x000014,
+    // 0x000014 was ClosureCaptureAfterSelfCall, replaced by CaptureAfterRecursiveCall: with
+    // function bodies built when first needed it is only met in recursion.
     ImportNameNotExported        = 0x000015,
     LiteralStaticCastFailed      = 0x000016,
     DynamicCastForbidden         = 0x000017,
@@ -64,7 +65,7 @@ enum class SemanticDiag : uint32_t {
     ArgumentNeedsConversion      = 0x000021,
     ReturnNeedsConversion        = 0x000022,
     LiteralOutOfRange            = 0x000023,
-    ImportCycle                  = 0x000025,
+    // 0x000025 was ImportCycle: modules may import each other (design principles 2.11).
     // 0x000026 was ImportedFunctionUsesModuleValue: a function of another module may use the
     // top level of its own module since every module builds into one root graph.
     ImportNameConflict           = 0x000027,
@@ -107,6 +108,8 @@ enum class SemanticDiag : uint32_t {
     LogicalOperandNotBool        = 0x0000C0,
     // Modules and namespaces (design principles 2.11, 2.12): 0xD0 and up.
     ExportedVariable             = 0x0000D0,
+    ModuleValueCycle             = 0x0000D1,
+    CaptureAfterRecursiveCall    = 0x0000D2,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

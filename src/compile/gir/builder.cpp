@@ -95,10 +95,6 @@ camel::source::gir_draft_node_key_t draftDebugKey(node_handle_t node) {
     return node ? static_cast<camel::source::gir_draft_node_key_t>(node->header.selfId) : 0;
 }
 
-node_handle_t asCompileNode(camel::core::module::detail::EntityAccess::node_handle_t node) {
-    return static_cast<node_handle_t>(node);
-}
-
 compile_graph_ptr_t
 asCompileGraph(const camel::core::module::detail::EntityAccess::graph_handle_t &graph) {
     return graph;
@@ -680,7 +676,11 @@ void Builder::buildEntryCall() {
 compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
     std::string scopeName = name;
     if (name.empty()) {
-        currGraph_ = createCompileGraph(funcType, currGraph_);
+        const bool atRoot = currGraph_ == rootGraph_;
+        currGraph_        = createCompileGraph(funcType, currGraph_);
+        if (atRoot) {
+            rootSubGraphOwners_[currGraph_.get()] = unit_;
+        }
     } else {
         // The functions of one name declared in one block are overloads, one graph each. A
         // graph is found again (the forward declaration of a module-level function, then its
@@ -699,6 +699,9 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
         if (!found) {
             found = createCompileGraph(funcType, currGraph_, name);
             insertGraph(name, found);
+            if (currGraph_ == rootGraph_) {
+                rootSubGraphOwners_[found.get()] = unit_;
+            }
         }
         currGraph_ = found;
         // Each overload has its own scope: they may name their parameters alike.
@@ -950,7 +953,8 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
     case GCT::NodeKind::EXEC:
         return visitExecNode(node);
     case GCT::NodeKind::EXPT:
-        return visitExptNode(node);
+        // The export list is read when the module is declared (exportDeclarations).
+        return nullptr;
     case GCT::NodeKind::CAST:
         return visitCastNode(node);
     default:
@@ -1056,8 +1060,8 @@ void Builder::buildFuncBody(
         }
         setBodyResult(graph, visitBodyNode(gct->at(1)));
         bodyStates_[graph.get()] = BodyState::Built;
-        builtFunctions_.push_back({graph.get(), gct->origin(), name});
-        builtBodies_.push_back(graph);
+        unit_->builtFunctions.push_back({graph.get(), gct->origin(), name});
+        unit_->builtBodies.push_back(graph);
         if (recorder_) {
             recorder_->functionBuilt(gct->origin(), name, graph->stableId(), funcType);
         }
@@ -1915,6 +1919,12 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings);
         graph = tmpl->name.empty() ? createCompileGraph(funcType, currGraph_)
                                    : createCompileGraph(funcType, currGraph_, instanceName);
+        if (currGraph_ == rootGraph_) {
+            // The instance of a top-level generic function belongs to the module declaring it.
+            const auto declaring = units_.find(tmpl->module.get());
+            rootSubGraphOwners_[graph.get()] =
+                declaring != units_.end() ? declaring->second.get() : unit_;
+        }
         tmpl->instances.push_back({bindings, graph, false});
         // Scopes are kept by name under the scope they were entered from, here the scope the
         // function was declared in: two functions written in place, which have no name to
@@ -2323,7 +2333,7 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
 }
 
 void Builder::reportIgnoredCapturedWrites() {
-    for (const PendingIgnoredWrite &pending : pendingIgnoredWrites_) {
+    for (const PendingIgnoredWrite &pending : unit_->pendingIgnoredWrites) {
         std::set<node_handle_t> written;
         for (DraftGraphBuilder *graph : pending.graphs) {
             written.merge(capturedWritesOf(graph));
@@ -2347,7 +2357,7 @@ void Builder::reportIgnoredCapturedWrites() {
                     names.size() > 1 ? "s" : "",
                     strutil::join(names, ", ", [](const std::string &name) { return name; })));
     }
-    pendingIgnoredWrites_.clear();
+    unit_->pendingIgnoredWrites.clear();
 }
 
 void Builder::reportUndeclaredCapturedWrites() {
@@ -2356,7 +2366,7 @@ void Builder::reportUndeclaredCapturedWrites() {
     // (VarParamInAsyncFunction, in the GCT builder). A function that writes a variable it
     // captured, itself or through the functions it calls, has side effects as well. This is a
     // declaration check only: the modifier changes nothing in how calls are compiled.
-    for (const BuiltFunction &function : builtFunctions_) {
+    for (const BuiltFunction &function : unit_->builtFunctions) {
         if (function.graph->funcType()->modifiers().sync()) {
             continue;
         }
@@ -2377,7 +2387,7 @@ void Builder::reportUndeclaredCapturedWrites() {
                 names.size() > 1 ? "s" : "",
                 strutil::join(names, ", ", [](const std::string &name) { return name; }));
     }
-    builtFunctions_.clear();
+    unit_->builtFunctions.clear();
 }
 
 bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
@@ -2437,21 +2447,26 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
 }
 
-void Builder::reportDroppedEffectsOfBodies() {
-    // Whether a call is an effect depends on its callee's body, which may be written later in
-    // the file (or be the caller itself): the set of effectful graphs is the least fixpoint
-    // over all bodies, and only then are the warnings issued, in the order the bodies were
-    // built.
+void Builder::settleEffectfulGraphs() {
+    // Whether a call is an effect depends on its callee's body, which may be written later,
+    // in another module, or be the caller itself: the set of effectful graphs is the least
+    // fixpoint over the bodies of the whole program (a part of the link step), and only then
+    // are the warnings issued, per module, in the order its bodies were built.
     for (size_t known = effectfulGraphs_.size() + 1; known != effectfulGraphs_.size();) {
         known = effectfulGraphs_.size();
-        for (const compile_graph_ptr_t &graph : builtBodies_) {
-            reportDroppedEffects(graph, false);
+        for (const ModuleUnit *unit : unitOrder_) {
+            for (const compile_graph_ptr_t &graph : unit->builtBodies) {
+                reportDroppedEffects(graph, false);
+            }
         }
     }
-    for (const compile_graph_ptr_t &graph : builtBodies_) {
+}
+
+void Builder::reportDroppedEffectsOfBodies() {
+    for (const compile_graph_ptr_t &graph : unit_->builtBodies) {
         reportDroppedEffects(graph, true);
     }
-    builtBodies_.clear();
+    unit_->builtBodies.clear();
 }
 
 void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report) {
@@ -2587,7 +2602,7 @@ void Builder::reportUnusedFallibleValues() {
         }
     }
 
-    for (const compile_graph_ptr_t &graph : builtBodies_) {
+    for (const compile_graph_ptr_t &graph : unit_->builtBodies) {
         auto &draft = graph->draft();
         if (draft.exitNode() == runtime::kInvalidNodeRef) {
             continue; // the body did not build (an error was reported)
@@ -2680,6 +2695,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     ENTER("DREF");
     const string name     = gct->name();
     genericCalleeAllowed_ = false;
+    refOrigin_            = gct->origin();
     auto optNode      = nodeAt(name);
     if (optNode.has_value()) {
         node_handle_t node = optNode.value();
@@ -2716,6 +2732,23 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         LEAVE("DREF");
         return drefNode;
+    }
+    if (auto named = graphsAt(name); named.has_value() && !decoratedGraphAt(name).has_value()) {
+        // A function with decorators of the top level is what its decorators make of it,
+        // which exists once its body is built: built now when it is not.
+        for (const auto &candidate : **named) {
+            auto known = topLevelFunctions_.find(candidate.get());
+            if (known == topLevelFunctions_.end()) {
+                continue;
+            }
+            const auto &func = known->second->gct;
+            for (size_t k = 2; k < func->size(); ++k) {
+                if (func->at(k)->type() == GCT::NodeKind::ANNO) {
+                    ensureFunctionBuilt(candidate);
+                    break;
+                }
+            }
+        }
     }
     auto optDecorated = decoratedGraphAt(name);
     if (optDecorated.has_value() && overloadsOfDecorated(name, *optDecorated) != nullptr) {
@@ -2761,7 +2794,8 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             // A value exported by another module: a node of the root graph (design principles
             // 2.11), used like a value of this module's top level: on the root graph itself,
             // through a capture port in a function.
-            node_handle_t node = asCompileNode(camel::core::module::detail::EntityAccess::node(e));
+            node_handle_t node = exportedValueNode(*static_cast<ExportedValue *>(
+                camel::core::module::detail::EntityAccess::node(e)));
             if (nodeIsKind(node, runtime::GCNodeKind::Dref)) {
                 // A name bound to a set of overloads or to an operator has no value of its own.
                 rejectNameWithoutValue(node, name, gct);
@@ -3019,6 +3053,7 @@ node_handle_t Builder::valueNodeOf(const std::any &res) {
 
 node_handle_t Builder::elementNodeOf(const std::string &name, const GCT::node_ptr_t &literal) {
     node_handle_t node{};
+    refOrigin_ = literal->origin();
     if (nodeAt(name).has_value()) {
         node = valueOf(resolveNodeByRef(name));
     } else {
@@ -3146,7 +3181,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
         }
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
-        builtBodies_.push_back(graph);
+        unit_->builtBodies.push_back(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -3382,6 +3417,9 @@ node_handle_t Builder::createFuncDataNode(
         "Cannot enable both callableAsResult and allowParameterization options.");
     ASSERT(currGraph_ != nullptr, "Current owner graph is null when creating a function node.");
     ASSERT(graph != nullptr, "Target graph is null when creating a function node.");
+    // Its captures are known once its body is built: a function of the top level is built
+    // here unless it is (or it is being built: a recursive use).
+    ensureFunctionBuilt(graph);
 
     // Centralize dependency bookkeeping here so every FUNC node and static Function value obeys
     // the same graph-reference invariant. Self-dependency is intentional: a recursive graph lists
@@ -3655,7 +3693,7 @@ node_handle_t Builder::partialApplicationOf(
         node_handle_t value = visitLinkNode(call);
         setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
         restore();
-        builtBodies_.push_back(graph);
+        unit_->builtBodies.push_back(graph);
     } catch (...) {
         restore();
         leaveScope();
@@ -3873,7 +3911,7 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         (void)capturedUsesOf(target);
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), targetType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
-        builtBodies_.push_back(graph);
+        unit_->builtBodies.push_back(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -4136,6 +4174,7 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
 node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node_ptr_t &call) {
     if (expr->type() == GCT::NodeKind::DREF) {
         const std::string name = expr->name();
+        refOrigin_             = expr->origin();
         if (nodeAt(name).has_value()) {
             if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
                 if (recorder_) {
@@ -4490,6 +4529,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 if (!accepts(funcType, entering)) {
                     continue;
                 }
+                // A function of the top level not built yet is built now: its return type
+                // may come from its body, its decorated form exists once it is built (step
+                // two of loading builds on demand).
+                ensureFunctionBuilt(g);
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
                     chosenDecorated = it->second;
                     break;
@@ -4899,7 +4942,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 .atOrigin(gct->origin())
                 .commit(subject, "it takes a var argument");
         } else if (!capturedWrites.empty()) {
-            pendingIgnoredWrites_.push_back(
+            unit_->pendingIgnoredWrites.push_back(
                 {{targetGraph.get()}, capturedWrites, gct->origin(), subject, "it writes"});
         }
     }
@@ -5208,7 +5251,7 @@ compile_graph_ptr_t Builder::buildArmGraph(
     }
     restore();
     armGraphs_.insert(subGraph.get());
-    builtBodies_.push_back(subGraph);
+    unit_->builtBodies.push_back(subGraph);
     leaveScope();
     return subGraph;
 }
@@ -6024,7 +6067,7 @@ node_handle_t Builder::buildBranch(
         }
     }
     if (!capturedWrites.empty() && !waited_ && !synced_) {
-        pendingIgnoredWrites_.push_back(
+        unit_->pendingIgnoredWrites.push_back(
             {armGraphs, capturedWrites, gct->origin(), "The branch", "an arm writes"});
     }
     for (const CapturedUse &use : captured) {
@@ -6379,81 +6422,110 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     return res;
 }
 
-void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
-    ENTER("EXPT");
+void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
+    // Whether a top-level function of this name carries decorators: its exported form is the
+    // decorated function, which exists once its body is built (the second call).
+    const auto isDecorated = [&](const std::string &name) {
+        for (const auto &declaration : unit_->declarations) {
+            if (declaration->graph == nullptr || declaration->names.front() != name) {
+                continue;
+            }
+            for (size_t k = 2; k < declaration->gct->size(); ++k) {
+                if (declaration->gct->at(k)->type() == GCT::NodeKind::ANNO) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    bool failed = false;
     for (size_t i = 0; i < gct->exportCount(); ++i) {
         const Reference ref(gct->exportName(i));
-        auto optType = unit_->typeDecls.find(ref);
-        if (optType != unit_->typeDecls.end()) {
-            module_->exportType(ref, optType->second);
+        const std::string name = ref.toString();
+        if (isDecorated(name) != decorated) {
             continue;
         }
-        auto optDecorated = decoratedGraphAt(ref.toString());
-        if (optDecorated.has_value() &&
-            overloadsOfDecorated(ref.toString(), *optDecorated) != nullptr) {
-            // An exported name is one decorated function or a set of plain ones; the set of
-            // both has no exported form yet. Exporting the decorated one alone dropped the
-            // others without a word.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .atOrigin(gct->origin())
-                .commit(
-                    ref.toString(),
-                    "a decorated function that has overloads cannot be exported yet");
-            throw BuildAbortException();
-        }
-        if (optDecorated.has_value()) {
+        if (decorated) {
+            auto optDecorated = decoratedGraphAt(name);
+            if (!optDecorated.has_value()) {
+                continue; // its body is in error, which was reported
+            }
+            if (overloadsOfDecorated(name, *optDecorated) != nullptr) {
+                // An exported name is one decorated function or a set of plain ones; the set
+                // of both has no exported form yet. Exporting the decorated one alone dropped
+                // the others without a word.
+                diags_->of(SemanticDiag::ConstructNotSupported)
+                    .atOrigin(gct->origin())
+                    .commit(name, "a decorated function that has overloads cannot be exported yet");
+                failed = true;
+                continue;
+            }
             module_->exportEntity(
                 ref,
                 camel::core::module::detail::EntityAccess::makeDecoratedGraph(
                     eraseCompileGraph(optDecorated.value())));
             continue;
         }
-        auto optNode = nodeAt(ref);
-        if (optNode.has_value()) {
-            node_handle_t node = optNode.value();
-            if (isVariable(node)) {
-                // Design principles 2.11: a `var` of the top level is written by the module's
-                // own functions only, which are exported instead.
-                diags_->of(SemanticDiag::ExportedVariable)
-                    .atOrigin(node->header.origin != 0 ? node->header.origin : gct->origin())
-                    .commit(ref.toString());
-                throw BuildAbortException();
-            }
-            // A value of the top level is a node of the root graph, which every module of the
-            // program builds into: the importing module captures that very node.
-            module_->exportEntity(
-                ref,
-                camel::core::module::detail::EntityAccess::makeNode(
-                    static_cast<camel::core::module::detail::EntityAccess::node_handle_t>(node)));
+        if (auto optType = unit_->typeDecls.find(ref); optType != unit_->typeDecls.end()) {
+            module_->exportType(ref, optType->second);
             continue;
         }
-        auto optGraph = graphsAt(ref);
-        if (optGraph.has_value()) {
+        if (auto value = unit_->values.find(name); value != unit_->values.end()) {
+            TopLevelDeclaration &declaration = *value->second;
+            if (declaration.isVar) {
+                // Design principles 2.11: a `var` of the top level is written by the module's
+                // own functions only, which are exported instead.
+                camel::source::origin_id_t origin = gct->origin();
+                for (const auto &child : *declaration.gct) {
+                    if (child->type() == GCT::NodeKind::NREF && child->name() == name) {
+                        origin = child->origin();
+                    }
+                }
+                if (declaration.gct->type() == GCT::NodeKind::NREF) {
+                    origin = declaration.gct->origin();
+                }
+                diags_->of(SemanticDiag::ExportedVariable).atOrigin(origin).commit(name);
+                failed = true;
+                continue;
+            }
+            // A value of the top level is a node of the root graph, which every module of the
+            // program builds into: the importing module captures that very node, made when
+            // a module first uses it (exportedValueNode).
+            auto exported         = std::make_unique<ExportedValue>();
+            exported->name        = name;
+            exported->declaration = &declaration;
+            module_->exportEntity(
+                ref,
+                camel::core::module::detail::EntityAccess::makeNode(exported.get()));
+            unit_->exportedValues.push_back(std::move(exported));
+            continue;
+        }
+        if (auto optGraph = graphsAt(name); optGraph.has_value()) {
             module_->exportEntity(
                 ref,
                 camel::core::module::detail::EntityAccess::makeGraphSet(
                     eraseCompileGraphSet(optGraph.value())));
             continue;
         }
-        if (auto optTemplate = templateScope_->get(ref.toString()); optTemplate.has_value()) {
-            // DESIGN-QUESTION(generic-export): a generic function has no graph to export.
-            // The template is exported; each importing module builds the instances it calls.
+        if (auto optTemplate = templateScope_->get(name); optTemplate.has_value()) {
+            // A generic function has no graph to export: the template is exported, and there
+            // is one instance per set of types in the program (instantiateGeneric).
             module_->exportEntity(
                 ref,
                 camel::core::module::detail::EntityAccess::makeGenericTemplate(
                     std::static_pointer_cast<void>(optTemplate.value())));
             continue;
         }
-        if (isPoisonedName(ref.toString())) {
-            throw BuildAbortException();
+        if (isPoisonedName(name)) {
+            failed = true;
+            continue;
         }
-        diags_->of(SemanticDiag::UnresolvedReference)
-            .atOrigin(gct->origin())
-            .commit(ref.toString());
+        diags_->of(SemanticDiag::UnresolvedReference).atOrigin(gct->origin()).commit(name);
+        failed = true;
+    }
+    if (failed) {
         throw BuildAbortException();
     }
-    LEAVE("EXPT");
-    return nullptr;
 }
 
 } // namespace camel::compile::gir

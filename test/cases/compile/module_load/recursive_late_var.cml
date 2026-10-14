@@ -1,0 +1,14 @@
+// A recursive function that uses a captured variable only after it calls itself: the call
+// could not pass it (CaptureAfterRecursiveCall).
+var count = 0
+
+sync func walk(n: int): int sync {
+    let rest = if n > 0 then walk(n - 1) else 0
+    wait count += 1
+    return rest + count
+}
+
+func main(): int sync {
+    println(walk(3))
+    return 0
+}

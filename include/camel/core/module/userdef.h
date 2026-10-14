@@ -41,7 +41,12 @@ namespace detail {
 class UserDefinedModuleAccess;
 }
 
-enum class CompileStage { None, AST, GCT, GIR, Done };
+/// How far a module written in Camel is compiled. `Declared`: the program's graph builder
+/// knows its declarations and its exports are readable (the first of the three steps of
+/// loading, docs/design/graph-model/README.cn.md 3.9.4); `Done`: the program it belongs to is
+/// built and linked. A module other than the entry module reaches `Done` when the entry
+/// module's program is built.
+enum class CompileStage { None, AST, GCT, Declared, Done };
 
 class UserDefinedModule : public Module {
     friend class detail::UserDefinedModuleAccess;
@@ -53,6 +58,9 @@ class UserDefinedModule : public Module {
     camel::core::error::diagnostics_ptr_t diagnostics_;
     camel::parse::parser_ptr_t parser_;
     CompileStage stage_ = CompileStage::None;
+    // Set while compile() runs: a module imported back by a module it imports is not compiled
+    // again from inside its own compilation.
+    bool compiling_ = false;
 
   public:
     UserDefinedModule(
@@ -68,6 +76,16 @@ class UserDefinedModule : public Module {
     CompileStage stage() const { return stage_; }
 
     bool compile(CompileStage till = CompileStage::Done);
+    /// Whether compile() is running for this module.
+    bool compiling() const { return compiling_; }
+    /// Called by the program's graph builder once the program is built: `root` is its root
+    /// graph, and the module is done.
+    void setProgramGraph(const std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root);
+
+    void declareTypes() override;
+    void declareEntities() override;
+    // A module written in Camel brings no names along with an import of it.
+    void declareDefaultRefs() override {}
 
     static module_ptr_t fromFile(
         const std::string &name, const std::string &path, camel::core::context::context_ptr_t ctx);

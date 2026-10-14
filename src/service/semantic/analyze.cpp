@@ -32,6 +32,7 @@
 #include "camel/service/semantic/model.h"
 
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/compile/gir/value_entity.h"
 #include "camel/compile/semantic_recorder.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/abort.h"
@@ -801,9 +802,11 @@ class ModelBuilder {
                 ext.signatures.push_back(sourceSpelling(graph->funcType()->toString()));
             }
         } else if (EntityAccess::isNode(entity)) {
-            // An exported value (design principles 2.11): a node of the program's root graph.
-            ext.kind   = ExternalName::Kind::Value;
-            auto *node = static_cast<camel::runtime::DraftNode *>(EntityAccess::node(entity));
+            // An exported value (design principles 2.11): a node of the program's root graph,
+            // there once a module has used the value.
+            ext.kind    = ExternalName::Kind::Value;
+            auto *value = static_cast<camel::compile::gir::ExportedValue *>(EntityAccess::node(entity));
+            auto *node  = value != nullptr ? value->node : nullptr;
             if (node != nullptr && node->header.dataType != nullptr) {
                 ext.signatures.push_back(sourceSpelling(node->header.dataType->toString()));
             }

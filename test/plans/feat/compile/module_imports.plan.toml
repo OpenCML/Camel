@@ -129,33 +129,34 @@ expect_exit = 0
 expect_stdout_exact = "2\n"
 
 # ---- D3: modules that import each other ----
+# Supported (design principles 2.11): loading declares every module before any body is built.
 
 [[tests]]
 name = "imports.d3_mutual"
-desc = "a imports b, b imports a: the compiler crashed. ImportCycle at the import that closes the ring, with the ring."
-kind = "negative"
+desc = "a imports b, b imports a, their functions call each other (it crashed the compiler, then was ImportCycle)."
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d3_mutual.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_output_contains = ["cyc_b.cml:2:1: [Error]: The module 'cyc_a' is imported while it is itself being loaded (import cycle: cyc_a -> cyc_b -> cyc_a)", "name=SemanticDiag::ImportCycle", "name=SemanticDiag::ImportedModuleHasErrors", "d3_mutual.cml:1:1"]
+expect_exit = 0
+expect_stdout_exact = "true\n"
 
 [[tests]]
 name = "imports.d3_mutual_check"
-desc = "`camel check` on one module of the ring (it crashed too)."
-kind = "negative"
-case = "../../../cases/compile/module_imports/cyc_a.cml"
+desc = "`camel check` on the program: no diagnostic."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/d3_mutual.cml"
 args = ["check", "-O", "short", "${case}"]
-expect_exit = 1
-expect_output_contains = ["name=SemanticDiag::ImportCycle", "import cycle: cyc_b -> cyc_a -> cyc_b"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
 
 [[tests]]
 name = "imports.d3_ring"
 desc = "A ring of three modules."
-kind = "negative"
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d3_ring.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_output_contains = ["ring_c.cml:2:1: [Error]: The module 'ring_a' is imported while it is itself being loaded (import cycle: ring_a -> ring_b -> ring_c -> ring_a)", "name=SemanticDiag::ImportCycle"]
+expect_exit = 0
+expect_stdout_exact = "8\n"
 
 # ---- D5: two imports of one name ----
 

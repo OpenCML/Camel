@@ -1,0 +1,11 @@
+// A value computed by a function that uses the value: a cycle through the function.
+let total = compute()
+
+func compute(): int {
+    return total + 1
+}
+
+func main(): int sync {
+    println(total)
+    return 0
+}

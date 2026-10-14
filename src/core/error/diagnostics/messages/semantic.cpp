@@ -205,17 +205,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ClosureCaptureAfterSelfCall,
-            {
-                "ClosureCaptureAfterSelfCall",
-                "Closure variable '{0}' declared after the function '{1}' has already called "
-                "itself.",
-                "All closure captures must be declared before the first call to the function. "
-                "If the function is recursive, ensure closure captures are declared before any "
-                "self-call to avoid changes in its calling convention.",
-            },
-        },
-        {
             SemanticDiag::ImportNameNotExported,
             {
                 "ImportNameNotExported",
@@ -335,16 +324,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The literal '{0}' is out of the range of type '{1}' ({2}).",
                 "A literal that its type cannot hold is not wrapped around or cut off. Write a "
                 "value in the range, or give the literal a wider type.",
-            },
-        },
-        {
-            SemanticDiag::ImportCycle,
-            {
-                "ImportCycle",
-                "The module '{0}' is imported while it is itself being loaded ({1}).",
-                "A module cannot import itself, directly or through the modules it imports. A "
-                "file that imports a module of its own name imports itself. Move what the "
-                "modules share into another module.",
             },
         },
         {
@@ -635,6 +614,31 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "functions (design principles 2.11): export the functions that read and write it "
                 "('export sync func bump(): int sync {{ wait cnt += 1; return cnt }}'). A 'let' "
                 "can be exported.",
+            },
+        },
+        {
+            SemanticDiag::ModuleValueCycle,
+            {
+                "ModuleValueCycle",
+                "The value '{0}' depends on itself: {1}.",
+                "The values of the top level of modules are computed before 'main' starts, each "
+                "from the values it uses (design principles 2.11): directly, through the "
+                "functions its initializer calls, and through the values those use, in any "
+                "module. A value cannot be computed from itself. Compute one of the values in "
+                "the chain without the other, or turn it into a function.",
+            },
+        },
+        {
+            SemanticDiag::CaptureAfterRecursiveCall,
+            {
+                "CaptureAfterRecursiveCall",
+                "The function '{1}' uses '{0}' only after it is called in its own recursion, "
+                "where the call could not pass it.",
+                "A function that calls itself, directly or through other functions, must use a "
+                "variable it captures, or be complete, before the recursive call that would "
+                "pass it: a call is ordered among the uses of the variables it was known to "
+                "use, and a function value holds what the function captured when it was made. "
+                "Use '{0}' before the recursive call, or pass it as a parameter.",
             },
         },
         {

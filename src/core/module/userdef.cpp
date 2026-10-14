@@ -97,15 +97,22 @@ bool UserDefinedModule::compile(CompileStage till) {
     if (till <= stage_) {
         return true;
     }
-    if (stage_ == CompileStage::Done) {
-        CAMEL_LOG_WARN_S("Module", "Module '{}' already built", name_);
+    if (compiling_) {
+        // Asked for while it is being compiled: a module it imports imports it back (design
+        // principles 2.11 allows that). It has what it has declared so far; the rest of it is
+        // there before any function body of the program is built.
         return true;
     }
+    struct Compiling {
+        bool &flag;
+        explicit Compiling(bool &f) : flag(f) { flag = true; }
+        ~Compiling() { flag = false; }
+    } compiling(compiling_);
     if (stage_ == CompileStage::None) {
         CAMEL_LOG_INFO_S("Module", "Start compiling module '{}' from file '{}'.", name_, path_);
     }
 
-    if (stage_ == CompileStage::None && till > CompileStage::None) {
+    if (stage_ < CompileStage::AST) {
         if (!parser_->ast()) {
             camel::utils::phase::Scope phaseScope("parse", name_);
             std::ifstream ifs(path_);
@@ -121,64 +128,72 @@ bool UserDefinedModule::compile(CompileStage till) {
             CAMEL_LOG_INFO_S("Module", "Module '{}' failed to parse", name_);
             return false;
         }
-        if (till == CompileStage::AST) {
-            stage_ = CompileStage::AST;
-            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
-            return true;
-        }
+        stage_ = CompileStage::AST;
     }
 
-    if (stage_ < CompileStage::AST && till >= CompileStage::AST) {
-        if (!gct_) {
-            auto ast = parser_->ast();
-            {
-                camel::utils::phase::Scope phaseScope("gct", name_);
-                auto gctBuilder = GCT::Builder(context_, shared_from_this());
-                gct_            = gctBuilder.build(ast, diagnostics_);
-            }
-            if (camel::utils::phase::enabled()) {
-                // Counting walks both trees: a phase of its own, so that the cost of
-                // measuring is not read as a cost of compiling.
-                camel::utils::phase::Scope phaseScope("(counting)");
-                camel::utils::phase::count("modules", 1);
-                camel::utils::phase::count("ast.nodes", countNodes(ast));
-                camel::utils::phase::count("gct.nodes", gct_ ? gct_->nodeCount() : 0);
-            }
-            EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GCT", gct_ ? gct_->root() : nullptr); });
-            if (diagnostics_->hasErrors()) {
-                CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GCT", name_);
-                return false;
-            }
+    if (till > CompileStage::AST && stage_ < CompileStage::GCT) {
+        auto ast = parser_->ast();
+        {
+            camel::utils::phase::Scope phaseScope("gct", name_);
+            auto gctBuilder = GCT::Builder(context_, shared_from_this());
+            gct_            = gctBuilder.build(ast, diagnostics_);
         }
-        if (till == CompileStage::GCT) {
-            stage_ = CompileStage::GCT;
-            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
-            return true;
+        if (camel::utils::phase::enabled()) {
+            // Counting walks both trees: a phase of its own, so that the cost of
+            // measuring is not read as a cost of compiling.
+            camel::utils::phase::Scope phaseScope("(counting)");
+            camel::utils::phase::count("modules", 1);
+            camel::utils::phase::count("ast.nodes", countNodes(ast));
+            camel::utils::phase::count("gct.nodes", gct_ ? gct_->nodeCount() : 0);
         }
+        EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GCT", gct_ ? gct_->root() : nullptr); });
+        if (!gct_ || diagnostics_->hasErrors()) {
+            CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GCT", name_);
+            return false;
+        }
+        stage_ = CompileStage::GCT;
     }
 
-    if (stage_ < CompileStage::GIR && till >= CompileStage::GIR) {
-        if (!compileGraph_) {
-            camel::utils::phase::Scope phaseScope("gir", name_);
-            // Every module of the program is built by the program's one builder, into one
-            // root graph (design principles 2.11).
-            compileGraph_ = camel::compile::gir::Builder::of(context_).buildModule(
-                shared_from_this(),
-                *gct_,
-                diagnostics_);
-            if (diagnostics_->hasErrors()) {
-                CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GIR", name_);
-                return false;
-            }
+    if (till > CompileStage::GCT && stage_ < CompileStage::Declared) {
+        // The first of the three steps of loading (the graph model, 3.9.4): what the module
+        // declares (its functions, its top-level values, its types) becomes known to the
+        // program, and its exports readable, before any function body is built.
+        camel::utils::phase::Scope phaseScope("declare", name_);
+        camel::compile::gir::Builder::of(context_).declareModule(
+            shared_from_this(),
+            *gct_,
+            diagnostics_);
+        if (diagnostics_->hasErrors()) {
+            CAMEL_LOG_INFO_S("Module", "Module '{}' failed to declare", name_);
+            return false;
         }
-        if (till == CompileStage::GIR) {
-            stage_ = CompileStage::GIR;
-            CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
-            return true;
-        }
+        stage_ = CompileStage::Declared;
     }
 
-    stage_ = CompileStage::Done;
+    if (till > CompileStage::Declared && stage_ < CompileStage::Done) {
+        if (context_->mainModule().get() != this) {
+            // A module is built with the program it belongs to, when its entry module is.
+            return true;
+        }
+        // The other two steps for the whole program: build, then link.
+        camel::utils::phase::Scope phaseScope("gir", name_);
+        if (!camel::compile::gir::Builder::of(context_).buildProgram() ||
+            diagnostics_->hasErrors()) {
+            CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GIR", name_);
+            return false;
+        }
+    }
     CAMEL_LOG_INFO_S("Module", "Module '{}' built successfully.", name_);
     return true;
 }
+
+void UserDefinedModule::setProgramGraph(
+    const std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root) {
+    compileGraph_ = root;
+    stage_        = CompileStage::Done;
+    loaded_       = true;
+}
+
+void UserDefinedModule::declareTypes() { (void)compile(CompileStage::GCT); }
+
+void UserDefinedModule::declareEntities() { (void)compile(CompileStage::Declared); }

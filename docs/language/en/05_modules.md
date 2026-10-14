@@ -25,7 +25,7 @@ import math                          // bring in only the module's namespace: ac
 ```
 
 - `import module` does not inject the names in the module directly into the current module; access them through `module::name`, or additionally write `using namespace module` to inject all the names it exports.
-- A module cannot import itself: `import m` in the file `m.cml` is `SemanticDiag::ImportCycle`. Modules cannot import each other either (`a` imports `b` and `b` imports `a`, or a longer ring): that is `ImportCycle` too, located at the `import` that closes the ring, and the message lists the modules of the ring: `import cycle: a -> b -> a`. Move what the modules share into a third module. A module that is not found is `SemanticDiag::ModuleNotFound`, located at the `import`.
+- **Modules can import each other** (`a` imports `b` and `b` imports `a`, or a longer ring): their functions can call each other and their values and types can be used by each other, as long as the top-level values do not depend on each other in a ring ([5.7](#57-loading-modules)). A module that is not found is `SemanticDiag::ModuleNotFound`, located at the `import`; where a module in error is imported, that is `SemanticDiag::ImportedModuleHasErrors`.
 - **A name can be renamed when it is imported**: `import { find as str_find } from str` brings the `find` of the module in under the name `str_find`; renamed and plain names may stand in one import (`import { find as str_find, trim } from str`). After a renaming the original name is not visible in this module. When two modules have a function of the same name, rename one of them, or import one and use the qualified name for the other (`import array`, then `array::find`). Renaming a whole module (`import m as n`) is undecided and not supported.
 - Two imports by name that bring functions of the same name and the same parameter types are `SemanticDiag::ImportNameConflict`, located at the later `import` and pointing to the earlier one; neither is chosen silently. Functions of the same name and different parameter types currently form one set of overloads, chosen by the argument types (whether this stays is undecided).
 - **Search order**: `.cml` files in the same directory as the entry file, the directories given by `-I <dir>`, the directories listed in the environment variable `CAMEL_PACKAGES`, and the modules installed with Camel.
@@ -222,3 +222,24 @@ For the functions each module exports (signature, whether it is pure, behaviour 
 - Modules written in Camel can export values ([5.3](#53-exports)); the constants of C++ modules (such as `math`) are still functions without parameters: `pi()`, `e()`.
 - A function passed to a higher-order function of the `array` module is applied with `map`: there is no agreed order between the calls on the elements (a parallel scheduler may execute them at the same time), and the results are arranged by position; for side effects that need an order use the built-in `foreach` and `reduce`.
 - `camel inspect --ops <file>` lists all the operators of the built-in modules and of every module the program imports, together with their declared purity.
+
+## 5.7 Loading modules
+
+All modules of a program are built into one `__root__` graph (design principles 2.11), in three steps:
+
+1. **Declare**: starting from the entry, every imported module is found, and each only records what it declares (the signatures of its functions, its top-level values, its types) and fills its export table, without looking at any function body. So modules may import each other in any way. A module's types are recorded before its other declarations, so two modules that import each other can use each other's types (type definitions themselves cannot depend on each other in a ring).
+2. **Build**: the function bodies and top-level values of the modules are built in the order of the imports; a function or a value is built when it is first needed, by whichever module needs it. So **the top-level declarations do not depend on the order they are written in**:
+
+   ```cml
+   let area = pi * r * r      // pi and r come later
+   let pi = 3.14159
+   let r = 2.0
+   func twice() { return k * 2 }   // no declared return type; may be called before it is written
+   let k = 21
+   ```
+
+3. **Link**: every top-level value a function uses is passed along the calls up to `__root__`, the call of the entry module's `main` is made, and the summaries of effects are computed, with the warnings that depend on them.
+
+- A top-level value cannot depend on itself, directly or not (through other values, through the functions its initializer calls, through other modules): that is `SemanticDiag::ModuleValueCycle`, located at the reference that closes the ring, with the whole chain in the message: `The value 'a' depends on itself: a (m.cml:1:1) -> b (m.cml:2:1) -> a`. Functions calling each other are not a cycle.
+- A function named `main` in an imported module is an ordinary function; only the entry module's `main` is the entry of the program.
+- A top-level value a recursive function uses only after it calls itself reaches the recursive call as usual; but a **variable** used only after the recursive call is `SemanticDiag::CaptureAfterRecursiveCall`: that call was already ordered among the reads and writes of the variables known then. Write the first use of the variable before the recursive call, or pass it as a parameter.

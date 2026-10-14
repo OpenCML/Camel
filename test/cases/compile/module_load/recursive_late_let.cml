@@ -1,0 +1,13 @@
+// A recursive function that uses a top-level value only after it calls itself, and a
+// function that calls it before either is written: fine (the value reaches the recursive call
+// at the link step).
+func main(): int sync {
+    println(sum_to(4))
+    return 0
+}
+
+func sum_to(n: int): int {
+    return if n == 0 then 0 else sum_to(n - 1) + n * weight
+}
+
+let weight = 10

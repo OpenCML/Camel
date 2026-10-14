@@ -30,6 +30,7 @@
 #include <ostream>
 #include <span>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::runtime {
@@ -95,14 +96,19 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Most recent reason a ".cmo found but failed to load" case occurred, used by ModuleNotFound
      * diagnostics. */
     mutable std::string lastCmoLoadError_;
-    // The modules whose load is in progress, outermost first (see importModule).
-    std::vector<std::string> loadingModules_;
     /// See setPassFact.
     std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
     /// See setSemanticRecorder.
     camel::compile::SemanticRecorder *semanticRecorder_ = nullptr;
     /// See graphBuildSession.
     std::shared_ptr<void> graphBuildSession_;
+    /// The regular files of each directory a module was looked up in (getModulePathAndKind),
+    /// by their names without the extension, and the names that have a `.cmo`.
+    struct DirectoryListing {
+        std::unordered_map<std::string, std::string> byStem;
+        std::unordered_set<std::string> cmo;
+    };
+    std::unordered_map<std::string, DirectoryListing> directoryListings_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>

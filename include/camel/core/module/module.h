@@ -81,6 +81,15 @@ using context_ptr_t = camel::core::context::context_ptr_t;
 
 class Module : public std::enable_shared_from_this<Module> {
   public:
+    /// One `import` of a module: the module, and where the import stands (its origin, or its
+    /// tokens for an import without an origin).
+    struct ImportSite {
+        std::shared_ptr<Module> mod;
+        camel::source::origin_id_t origin;
+        size_t tokenStart;
+        size_t tokenEnd;
+    };
+
     /// One `import { name } from mod`: the module, and where the import stands.
     struct NamedImport {
         std::shared_ptr<Module> mod;
@@ -118,6 +127,8 @@ class Module : public std::enable_shared_from_this<Module> {
     mutable std::unordered_map<Reference, entity> importedEntityCache_;
     /// The imports by name, in the order they were written (see noteNamedImport).
     std::vector<std::pair<Reference, NamedImport>> namedImports_;
+    /// Every import of a module, in the order they were written (see noteImport).
+    std::vector<ImportSite> importSites_;
 
     std::vector<ImportedRefBinding> importedBindingsForRef(const Reference &ref) const;
 
@@ -130,6 +141,30 @@ class Module : public std::enable_shared_from_this<Module> {
 
     virtual bool load() = 0;
     virtual bool loaded() const { return loaded_; }
+    /// Makes the types the module exports readable (getExportedType). A module written in
+    /// Camel declares them while its construction tree is built, so that modules importing
+    /// each other can use each other's types (design principles 2.11); a module of another
+    /// kind is loaded.
+    virtual void declareTypes() {
+        if (!loaded()) {
+            load();
+        }
+    }
+    /// Makes the names the module wants imported along with it (defaultImportedRefs: the
+    /// operator groups of a module of operators) readable.
+    virtual void declareDefaultRefs() {
+        if (!loaded()) {
+            load();
+        }
+    }
+    /// Makes the entities the module exports readable (getExportedEntity, exportedEntityNS):
+    /// for a module written in Camel, once its declarations are known, before any function
+    /// body of the program is built.
+    virtual void declareEntities() {
+        if (!loaded()) {
+            load();
+        }
+    }
 
     void markImportedRefFromMod(const Reference &ref, const std::shared_ptr<Module> &mod);
     void markImportedRefFromMod(
@@ -148,6 +183,12 @@ class Module : public std::enable_shared_from_this<Module> {
     void noteNamedImport(
         const Reference &ref, const std::shared_ptr<Module> &mod,
         camel::source::origin_id_t origin, size_t tokenStart, size_t tokenEnd);
+    /// Records an import of `mod` (any form) at `origin`.
+    void noteImport(
+        const std::shared_ptr<Module> &mod, camel::source::origin_id_t origin, size_t tokenStart,
+        size_t tokenEnd);
+    /// Every import of a module this module has, in the order they were written.
+    const std::vector<ImportSite> &importSites() const { return importSites_; }
     /// The names imported by name from more than one module, each with its imports in the
     /// order they were written.
     std::vector<std::pair<Reference, std::vector<NamedImport>>> namesImportedMoreThanOnce() const;

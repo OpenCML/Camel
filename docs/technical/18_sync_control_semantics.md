@@ -235,7 +235,10 @@ func main(): int {
   - 捕获端口绑定在被捕获的值本身（同一个节点，模块顶层的值是公共 root 上的节点），调用处传入的是同一个值
     在调用者看来的样子，不按名字在调用处重找（`src/compile/gir/captures.cpp`）。不可变值的捕获可以在
     调用之后才出现（递归函数先调用自己、后用到值），由链接步补上；变量的捕获不行：调用处已经按当时知道的
-    变量排好了序，所以函数被直接调用之后再捕获变量仍是 `ClosureCaptureAfterSelfCall`（现有限制）。
+    变量排好了序，所以函数被直接调用之后再捕获变量是 `CaptureAfterRecursiveCall`。函数体在第一次被用到时
+    就建出来（三步加载的第二步，`src/compile/gir/program.cpp`），这只会出现在递归里：函数在调用自己之后才
+    第一次用到某个变量。写入摘要（`capturedWritesOf`）与"出口是否依赖效应"（`settleEffectfulGraphs`）都在
+    全程序的函数体建完之后、在链接步取不动点。
   - 通过函数值的调用（`CALL` 节点、交给算子的 lambda）不查摘要。
 
 > 这就是语言层“sync/wait 控制副作用可见性”的具体编译落点。

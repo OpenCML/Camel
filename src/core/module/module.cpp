@@ -132,9 +132,9 @@ Module::Module(const std::string &name, const std::string &path, context_ptr_t c
       importedRefMap_(), importedNamespaceBindings_(), importedEntityCache_() {}
 
 void Module::importDefaultRefsFromMod(const module_ptr_t &mod) {
-    if (!mod->loaded()) {
-        mod->load();
-    }
+    // Default names are what a module of operators brings along; a module written in Camel
+    // has none, and is not compiled here (it may be importing this module).
+    mod->declareDefaultRefs();
     for (const auto &ref : mod->defaultImportedRefs()) {
         markImportedRefFromMod(ref, mod);
     }
@@ -284,15 +284,19 @@ bool Module::importAllRefsFromImportedNamespace(const Reference &localPrefix) {
             importedAny = true;
         };
 
-        if (!binding.mod->loaded()) {
-            binding.mod->load();
-        }
+        binding.mod->declareEntities();
         binding.mod->exportedTypeNS()->forEach(
             [&](const Reference &remoteRef, Type *) { importRef(remoteRef); });
         binding.mod->exportedEntityNS()->forEach(
             [&](const Reference &remoteRef, const entity &) { importRef(remoteRef); });
     }
     return importedAny;
+}
+
+void Module::noteImport(
+    const module_ptr_t &mod, camel::source::origin_id_t origin, size_t tokenStart,
+    size_t tokenEnd) {
+    importSites_.push_back(ImportSite{mod, origin, tokenStart, tokenEnd});
 }
 
 void Module::noteNamedImport(
@@ -349,9 +353,7 @@ std::optional<Type *> Module::getImportedType(const Reference &ref) const {
     // Types are not overloaded; the first module providing this ref wins.
     for (auto &binding : bindings) {
         auto &mod = binding.mod;
-        if (!mod->loaded()) {
-            mod->load();
-        }
+        mod->declareTypes();
         auto type = mod->getExportedType(binding.remoteRef);
         if (type.has_value()) {
             return type;
@@ -373,9 +375,7 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
     std::vector<entity> collected;
     for (const auto &binding : bindings) {
         const auto &mod = binding.mod;
-        if (!mod->loaded()) {
-            mod->load();
-        }
+        mod->declareEntities();
         auto opt = mod->getExportedEntity(binding.remoteRef);
         if (opt) {
             collected.push_back(std::move(*opt));
@@ -388,13 +388,14 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref) const {
     return merged;
 }
 
+// The export tables of a module written in Camel fill while it is declared (types while its
+// construction tree is built, the rest when the program's graph builder declares it); what is
+// asked for before that is not there yet.
 std::optional<Type *> Module::getExportedType(const Reference &ref) const {
-    ASSERT(loaded_, "Module not built: " + name_);
     return exportedTypeNS_->get(ref);
 };
 
 std::optional<entity> Module::getExportedEntity(const Reference &ref) const {
-    ASSERT(loaded_, "Module not built: " + name_);
     return exportedEntityNS_->get(ref);
 };
 
@@ -424,14 +425,8 @@ std::vector<std::pair<std::string, std::shared_ptr<Module>>> Module::importedNam
 
 const std::vector<Reference> &Module::defaultImportedRefs() const { return defaultImportedRefs_; }
 
-type_ns_ptr_t Module::exportedTypeNS() const {
-    ASSERT(loaded_, "Module not built: " + name_);
-    return exportedTypeNS_;
-}
+type_ns_ptr_t Module::exportedTypeNS() const { return exportedTypeNS_; }
 
-entity_ns_ptr_t Module::exportedEntityNS() const {
-    ASSERT(loaded_, "Module not built: " + name_);
-    return exportedEntityNS_;
-}
+entity_ns_ptr_t Module::exportedEntityNS() const { return exportedEntityNS_; }
 
 } // namespace camel::core::module

@@ -30,6 +30,7 @@
 
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/compile/gir/value_entity.h"
 #include "camel/compile/semantic_recorder.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
@@ -68,14 +69,24 @@ class Builder {
     /// The builder of the program compiled on `context`, created on first use.
     static Builder &of(const camel::core::context::context_ptr_t &context);
 
-    /// Builds the module `module`, whose construction tree is `tree`, into the program: its
-    /// functions, and its top-level values on the root graph. Diagnostics go to `diags`. The
-    /// entry module (Context::mainModule) also gets the call of its `main` as the exit of the
-    /// root. Returns the root graph, or null when the module is in error. The tree must
-    /// outlive the program's graphs: generic functions are lowered again from its nodes.
-    compile_graph_ptr_t buildModule(
+    // Loading is three steps (the graph model, 3.9.4): declare every module, build, link.
+
+    /// Step one for the module `module`, whose construction tree is `tree`: makes the graphs
+    /// of its functions (without bodies), registers its generic functions, its top-level
+    /// values and its types, and fills its export table. Nothing of another module is looked
+    /// at, so modules may import each other. Diagnostics go to `diags`. The tree must outlive
+    /// the program's graphs: function bodies and generic instances are lowered from it.
+    void declareModule(
         const camel::core::module::module_ptr_t &module, GCT::Tree &tree,
         camel::core::error::diagnostics_ptr_t diags);
+
+    /// Steps two and three for the program whose entry is Context::mainModule (every module
+    /// it imports, directly or not, declared): builds the function bodies and the top-level
+    /// values of every module, in the order of the imports, each one when it is first needed
+    /// (so the top level of a module does not depend on the order it is written in); then
+    /// links (captures, the call of the entry module's `main`, the summaries of effects and
+    /// the warnings that need them). False when a module is in error.
+    bool buildProgram();
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
@@ -86,6 +97,22 @@ class Builder {
     // from these). A function body of the module is built with these in force, whichever
     // module asks for it.
     struct GenericTemplate;
+    struct BuiltFunction;
+    struct PendingIgnoredWrite;
+    struct ModuleUnit;
+    // A top-level declaration of a module that is built when first needed (step two): a value
+    // declaration (`let`/`var`, one or several names) or a function.
+    enum class BuildState { Declared, Building, Built, Failed };
+    struct TopLevelDeclaration {
+        GCT::node_ptr_t gct;
+        ModuleUnit *unit = nullptr;
+        BuildState state = BuildState::Declared;
+        // The names a value declaration binds; the function's name for a function.
+        std::vector<std::string> names;
+        bool isVar = false;
+        // The graph of a function (made when the module was declared).
+        compile_graph_ptr_t graph;
+    };
     struct ModuleUnit {
         camel::core::module::module_ptr_t module;
         GCT::Tree *tree = nullptr;
@@ -98,6 +125,19 @@ class Builder {
         std::unordered_map<Reference, Type *> typeDecls;
         // Whether the module is the entry of the program.
         bool entry = false;
+        // Its top-level declarations to build, in the order they are written, and the value
+        // declaration of each name of its top level.
+        std::vector<std::unique_ptr<TopLevelDeclaration>> declarations;
+        std::unordered_map<std::string, TopLevelDeclaration *> values;
+        // The values it exports (their entities point here), and its export list.
+        std::vector<std::unique_ptr<ExportedValue>> exportedValues;
+        GCT::node_ptr_t exportList = nullptr;
+        // Whether step two found it in error.
+        bool failed = false;
+        // What the link step reports per module, collected while its bodies are built.
+        std::vector<BuiltFunction> builtFunctions;
+        std::vector<compile_graph_ptr_t> builtBodies;
+        std::vector<PendingIgnoredWrite> pendingIgnoredWrites;
     };
     std::unordered_map<const camel::core::module::Module *, std::unique_ptr<ModuleUnit>> units_;
     // The module being built.
@@ -105,9 +145,49 @@ class Builder {
     // The module whose top level put each node on the root graph, by node id: the warnings
     // about the top level of a module (EffectNotExecuted) are about its own nodes only.
     std::vector<const ModuleUnit *> rootNodeOwners_;
+    // The modules in the order they were declared.
+    std::vector<ModuleUnit *> unitOrder_;
+    // The top-level functions of every module by their graphs.
+    std::unordered_map<DraftGraphBuilder *, TopLevelDeclaration *> topLevelFunctions_;
+    // The module of each graph made directly under the root graph (a top-level function, a
+    // generic instance of one, a lambda at the top level): the root graph lists as its own
+    // functions only the entry module's, so that what the program does not use of the
+    // modules it imports is not part of it.
+    std::unordered_map<DraftGraphBuilder *, const ModuleUnit *> rootSubGraphOwners_;
+    // What is being built on demand, outermost first: a top-level value or function. A value
+    // asked for while it is in here depends on itself (ModuleValueCycle).
+    std::vector<TopLevelDeclaration *> buildStack_;
+    // Where the name being resolved is written: a diagnostic about what resolving it found
+    // (a cycle, a late capture) is reported there.
+    camel::source::origin_id_t refOrigin_ = camel::source::kInvalidOriginId;
+    // Switches the builder to the top level of a module for as long as it lives, and back.
+    class UnitContext;
+    friend class UnitContext;
+    // Step two for one module: its top-level declarations in the order they are written.
+    void buildModuleBody(ModuleUnit &unit);
+    // Builds the top-level value declaration `declaration` unless it is built: in its own
+    // module's top level, wherever the builder is. A value already being built depends on
+    // itself: ModuleValueCycle.
+    void buildTopLevelValue(TopLevelDeclaration &declaration);
+    // Builds the body of the top-level function `graph` unless it is built or being built (a
+    // recursive call). An error in it is reported and leaves the caller's build going.
+    void ensureFunctionBuilt(const compile_graph_ptr_t &graph);
+    // When `name` names a top-level value of the current module not built yet: builds it and
+    // returns true (nodeAt then finds it).
+    bool buildTopLevelValueNamed(const std::string &name);
+    // The node of a value another module exports, built if it is not.
+    node_handle_t exportedValueNode(ExportedValue &value);
+    // Reports ModuleValueCycle: `declaration` is asked for while it is being built.
+    [[noreturn]] void reportValueCycle(const TopLevelDeclaration &declaration);
+    // The name a top-level declaration is shown by in a diagnostic of the current module.
+    std::string shownName(const TopLevelDeclaration &declaration) const;
+    // Fills the export table of the current module from its export list `expt`: at step one
+    // everything but the functions with decorators, which exist once their bodies are built
+    // (`decorated`).
+    void exportDeclarations(const GCT::node_ptr_t &expt, bool decorated);
     // Notes the nodes of the root graph added since `firstNode` as nodes of the current module.
     void claimRootNodes(size_t firstNode);
-    // Makes the root graph the first time a module is built.
+    // Makes the root graph the first time a module is declared.
     void ensureRootGraph();
     // The exit of the root graph: the call of the entry module's `main` (EntryModuleMissingMain
     // when it has none), which takes the parameters `main` takes.
@@ -207,6 +287,8 @@ class Builder {
     // with its captures). The value holds the captures the graph had then, so the graph
     // cannot take one more.
     std::unordered_set<DraftGraphBuilder *> valueUsedGraphs_;
+    // The captures refused so (CaptureAfterRecursiveCall), each reported once.
+    std::set<std::pair<DraftGraphBuilder *, node_handle_t>> lateCaptures_;
     // A direct call of a graph (a FUNC node): its captures are passed as With inputs after
     // the declared `with` arguments, in the order of the callee's capture ports, by the link
     // step (linkCaptureSites) once the module is built. `values` are the callee's captures as
@@ -320,23 +402,22 @@ class Builder {
         std::string subject;
         std::string verb;
     };
-    std::vector<PendingIgnoredWrite> pendingIgnoredWrites_;
-    // The functions and lambdas of the module, in source order, for the check that a function
-    // with side effects declares them (the `sync` function modifier).
+    // (ModuleUnit::pendingIgnoredWrites.) The functions and lambdas of the module, in source
+    // order, for the check that a function with side effects declares them (the `sync`
+    // function modifier): ModuleUnit::builtFunctions.
     struct BuiltFunction {
         DraftGraphBuilder *graph;
         camel::source::origin_id_t origin;
         std::string name;
     };
-    std::vector<BuiltFunction> builtFunctions_;
     // Dropped effects (design principles 2.1): outside a sync block an effectful expression
     // whose result nothing uses is not connected to the graph's exit and does not run. That
     // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
     // graphs that are branch arms (reported through their branch, not as calls).
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
     std::unordered_set<DraftGraphBuilder *> armGraphs_;
-    // The function bodies and arms of the module, in the order they were built.
-    std::vector<compile_graph_ptr_t> builtBodies_;
+    // The function bodies and arms of a module, in the order they were built, are in
+    // ModuleUnit::builtBodies.
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -479,7 +560,13 @@ class Builder {
                 });
             CAMEL_LOG_DEBUG_S("GIR Builder", "Accessing node '{}' from scope {}", name, ss.str());
         });
-        return nodeScope_->get(name);
+        auto found = nodeScope_->get(name);
+        // A value of the top level written further down, or in a module not yet built: built
+        // now (the top level does not depend on the order it is written in).
+        if (!found.has_value() && buildTopLevelValueNamed(name)) {
+            found = nodeScope_->get(name);
+        }
+        return found;
     }
     std::optional<graph_set_ptr_t> graphsAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
@@ -628,8 +715,10 @@ class Builder {
     // warns (EffectNotExecuted) about the effects that the exit does not depend on.
     // With `report` false it only records whether the exit depends on an effect.
     void reportDroppedEffects(const compile_graph_ptr_t &graph, bool report = true);
-    // Once every body is built: settles which graphs are effectful (a callee may be written
-    // after its caller) and then warns for each body.
+    // Once every body of the program is built: settles which graphs are effectful (a callee
+    // may be written after its caller, in another module).
+    void settleEffectfulGraphs();
+    // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
@@ -771,7 +860,6 @@ class Builder {
     void checkDeclaredReturn(
         const compile_graph_ptr_t &graph, camel::core::type::Type *resultType, uint64_t origin,
         const GCT::node_ptr_t &value = nullptr);
-    void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 
 } // namespace camel::compile::gir

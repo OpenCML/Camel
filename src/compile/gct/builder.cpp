@@ -21,6 +21,7 @@
 #include "builder.h"
 
 #include "camel/compile/semantic_recorder.h"
+#include "camel/core/module/userdef.h"
 #include "camel/core/data/composite/array.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/data/composite/tuple.h"
@@ -308,8 +309,25 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
     auto stmtNodes     = ast->atAs<AST::RepeatedLoad>(2);
 
-    // Process import declarations. One that fails is reported and the others are still
-    // processed.
+    // The names the module exports: a type among them is exported as soon as it is declared,
+    // for the modules that import this one back (see below).
+    exportedRefs_.clear();
+    if (!exportOptNode->empty()) {
+        for (const Reference &ref :
+             exportOptNode->front()->loadAs<AST::ExportLoad>()->getRefs()) {
+            exportedRefs_.insert(ref.toString());
+        }
+    }
+
+    // Loading in steps (design principles 2.11: modules may import each other; the graph
+    // model, 3.9.4). First every import is bound: the modules are found, nothing of them is
+    // compiled. Then the module declares its types, compiling an imported module only when one
+    // of its types is named. Then the imported modules are compiled as far as their
+    // declarations, and only then the rest of this module. A module that imports this one back
+    // finds it in the middle of this: with its types declared, and the rest of its
+    // declarations known before any function body of the program is built. One import that
+    // fails is reported and the others are still processed.
+    importedModules_.clear();
     for (const auto &import : *importNodes) {
         try {
             visitImport(import);
@@ -323,9 +341,43 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
 
     node_ptr_t root = tree_->makeExec();
 
-    for (auto &stmt : *stmtNodes) {
+    // The statements in two passes, types first; the results are put back in source order.
+    const auto isTypeDecl = [](const AST::node_ptr_t &stmt) {
+        return stmt->type() == AST::LoadType::Stmt &&
+               stmt->loadAs<AST::StmtLoad>()->stmtType() == AST::StmtType::Type;
+    };
+    std::vector<node_ptr_t> visited(stmtNodes->size(), nullptr);
+    std::vector<bool> failed(stmtNodes->size(), false);
+    for (size_t i = 0; i < stmtNodes->size(); ++i) {
+        const auto &stmt = stmtNodes->at(i);
+        if (!isTypeDecl(stmt)) {
+            continue;
+        }
         try {
-            node_ptr_t node = visitStmt(stmt);
+            visited[i] = visitStmt(stmt);
+        } catch (const BuildAbortException &) {
+            failed[i] = true;
+        }
+    }
+    compileImportedModules();
+    for (size_t i = 0; i < stmtNodes->size(); ++i) {
+        if (isTypeDecl(stmtNodes->at(i))) {
+            continue;
+        }
+        try {
+            visited[i] = visitStmt(stmtNodes->at(i));
+        } catch (const BuildAbortException &) {
+            failed[i] = true;
+        }
+    }
+
+    for (size_t i = 0; i < stmtNodes->size(); ++i) {
+        const auto &stmt = stmtNodes->at(i);
+        if (failed[i] || visited[i] == nullptr) {
+            continue;
+        }
+        try {
+            node_ptr_t node = visited[i];
             if (node->type() == GCT::NodeKind::DECL) {
                 decls.push_back(node);
             } else if (node->type() == GCT::NodeKind::FUNC) {
@@ -444,6 +496,12 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
+    // Where the import stands, for the errors of the imported module and for the importers
+    // the program's graph builder reports when it is in error.
+    const auto origin = ast->load()->origin();
+    module_->noteImport(mod, origin, load->tokenRange().start, load->tokenRange().end);
+    importedModules_.push_back({ast, mod});
+
     // Import all references if none are specified; otherwise still import the module's
     // default-import refs so operator groups and other ambient symbols can participate
     // in name/operator resolution after a normal import.
@@ -473,6 +531,47 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
 
     LEAVE("ImportDecl");
     return nullptr;
+}
+
+void Builder::compileImportedModules() {
+    for (const auto &[ast, mod] : importedModules_) {
+        auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
+        if (!ud || ud->compiling()) {
+            // Not written in Camel (loaded where it was found), or this import closes a cycle
+            // of imports: the module is being compiled further up and will be complete before
+            // any function body is built.
+            continue;
+        }
+        bool ok = false;
+        std::optional<Diagnostic> failure;
+        try {
+            ok = ud->compile(CompileStage::Declared);
+        } catch (Diagnostic &d) {
+            failure = std::move(d);
+        }
+        if (ok && !failure) {
+            continue;
+        }
+        if (!failure) {
+            // A module that was found and is in error is not a module that was not found:
+            // its own diagnostics say what is wrong with it.
+            failure = DiagnosticBuilder::of(SemanticDiag::ImportedModuleHasErrors)
+                          .commit(mod->name(), mod->path());
+        }
+        const auto &load = ast->loadAs<AST::ImportLoad>();
+        if (load->refs().empty()) {
+            wholeImportFailed_ = true;
+        }
+        for (const Reference &ref : load->refs()) {
+            poisonedTypes_.insert(ref.toString());
+        }
+        if (ast->load()->origin() != camel::source::kInvalidOriginId) {
+            failure->range = ast->load()->origin();
+        } else {
+            failure->range = load->tokenRange();
+        }
+        diags_->add(std::move(*failure));
+    }
 }
 
 /*
@@ -895,6 +994,11 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         typeScope_->erase(typeLoad->ref(), false);
     }
     typeScope_->insert(typeLoad->ref(), type);
+    if (exportedRefs_.contains(typeLoad->ref().toString())) {
+        // Exported at once: a module that imports this one back may need it before this one
+        // is through (see visitModule).
+        module_->exportType(typeLoad->ref(), type);
+    }
     node_ptr_t declNode = tree_->makeDecl(typeLoad->ref(), false);
     *declNode << tree_->makeType(type, typeLoad->implMark());
     LEAVE("TypeDecl");

@@ -1,0 +1,153 @@
+id = "compile.module_load"
+order = 335
+tier = "feat"
+tags = ["feat", "compile", "semantic", "modules", "import"]
+desc = "Loading in three steps: modules import each other, the top level does not depend on its order, values that depend on themselves are errors"
+
+# Design principles 2.11 and 2.12; docs/design/graph-model/README.cn.md 3.9.4 (declare, build,
+# link) and 3.9.5 (the two kinds of cycle).
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+# ---- The top level does not depend on the order it is written in ----
+
+[[tests]]
+name = "load.order_values"
+desc = "A value uses values written after it; a function uses values written after it; a function without a declared return type is called before it is written (it was UnresolvedReference and CallingIncompleteFunction)."
+kind = "behavior"
+case = "../../../cases/compile/module_load/order_values.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "12.56636 42 121\n"
+
+[[tests]]
+name = "load.order_values_prl"
+desc = "The same on the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/compile/module_load/order_values.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_stdout_exact = "12.56636 42 121\n"
+
+[[tests]]
+name = "load.recursive_late_let"
+desc = "A recursive function uses a top-level value after it calls itself, and is called before either is written (it was ClosureCaptureAfterSelfCall): the value reaches the recursive call at the link step."
+kind = "behavior"
+case = "../../../cases/compile/module_load/recursive_late_let.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "100\n"
+
+[[tests]]
+name = "load.recursive_late_let_fvm"
+desc = "The same on the bytecode VM."
+kind = "behavior"
+case = "../../../cases/compile/module_load/recursive_late_let.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "100\n"
+
+[[tests]]
+name = "load.recursive_late_var"
+desc = "A recursive function uses a captured variable only after it calls itself: the call was ordered among the uses of the variables known then, so this stays an error, now located at the use and reported once."
+kind = "negative"
+case = "../../../cases/compile/module_load/recursive_late_var.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CaptureAfterRecursiveCall"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 10
+expect_output_contains = ["The function 'walk' uses 'count' only after it is called in its own recursion"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout + input.normalized.stderr
+assert(out.split('CaptureAfterRecursiveCall').length - 1 === 1, 'reported once')
+}
+"""
+
+# ---- Values that depend on themselves ----
+
+[[tests]]
+name = "load.value_cycle"
+desc = "Three values in a ring: ModuleValueCycle at the reference that closes it, with the chain."
+kind = "negative"
+case = "../../../cases/compile/module_load/value_cycle.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ModuleValueCycle"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 9
+expect_output_contains = ["The value 'a' depends on itself: a (value_cycle.cml:2:1) -> b (value_cycle.cml:3:1) -> c (value_cycle.cml:4:1) -> a"]
+
+[[tests]]
+name = "load.value_cycle_fn"
+desc = "A value computed by a function that uses the value: the cycle goes through the function."
+kind = "negative"
+case = "../../../cases/compile/module_load/value_cycle_fn.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ModuleValueCycle"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 12
+expect_output_contains = ["The value 'total' depends on itself: total (value_cycle_fn.cml:2:1) -> compute (value_cycle_fn.cml:4:1) -> total"]
+
+[[tests]]
+name = "load.value_self"
+desc = "A value computed from itself."
+kind = "negative"
+case = "../../../cases/compile/module_load/value_self.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ModuleValueCycle"
+expect_diagnostic_line = 2
+expect_diagnostic_column = 9
+
+[[tests]]
+name = "load.value_cycle_modules"
+desc = "Values of two modules that import each other depend on each other: ModuleValueCycle across the modules, names qualified by their module."
+kind = "negative"
+case = "../../../cases/compile/module_load/value_cycle_modules.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["cycle_x.cml:5:16: [Error]: The value 'cycle_y::y' depends on itself: cycle_y::y (cycle_y.cml:5:8) -> x (cycle_x.cml:5:8) -> cycle_y::y", "name=SemanticDiag::ModuleValueCycle", "name=SemanticDiag::ImportedModuleHasErrors"]
+
+# ---- Modules that import each other ----
+
+[[tests]]
+name = "load.mutual"
+desc = "Two modules import each other: functions call each other across them, values of each are used by the other (no cycle), a type of one is used by the other."
+kind = "behavior"
+case = "../../../cases/compile/module_load/mutual.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true true\n22 11\n(10, 11)\n"
+
+[[tests]]
+name = "load.mutual_jit"
+desc = "The same with inlining and the JIT."
+kind = "behavior"
+case = "../../../cases/compile/module_load/mutual.cml"
+args = ["${case}", "std::inline", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "true true\n22 11\n(10, 11)\n"
+
+[[tests]]
+name = "load.mutual_check"
+desc = "The same through `camel check`: no diagnostic."
+kind = "behavior"
+case = "../../../cases/compile/module_load/mutual.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+
+[[tests]]
+name = "load.imported_main"
+desc = "The `main` of an imported module is an ordinary function."
+kind = "behavior"
+case = "../../../cases/compile/module_load/imported_main.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "43\n"
