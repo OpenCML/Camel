@@ -45,6 +45,14 @@ find_package(Taskflow REQUIRED)
 
 add_definitions(-DNOMINMAX)
 
+# Every floating-point expression is rounded as written: no contraction of a * b + c into one
+# fused multiply-add. Clang contracts by default wherever the target has an FMA instruction,
+# which is always on arm64 and only with -mfma (or -march levels that imply it) on x86-64, so
+# the same source printed different numbers on macOS (docs/design-principles.cn.md 2.11: the
+# output is the same bytes on every platform). Applies to libcamel, the modules and the tools.
+# The tensor GEMM and unary kernels opt back in (modules/tensor/CMakeLists.txt).
+add_compile_options(-ffp-contract=off)
+
 # Shared library: Camel core (libcamel)
 add_library(libcamel SHARED ${LIBCAMEL_SRC})
 
