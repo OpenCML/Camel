@@ -41,19 +41,23 @@
  *    is decided by their structure, never by which object each is, and sharing equal types
  *    changes no program's meaning;
  *  - struct types (StructType);
- *  - function signatures without parameter names (FunctionType::interned), which is what an
- *    operator's type rule gives every call it resolves.
+ *  - function types (FunctionType::create, FunctionTypeFactory::build), parameter names
+ *    included: the type an operator's type rule gives a call, a function type a program
+ *    writes, the signature of a branch arm, and every signature a rewrite re-infers.
  * Variable cells, `T?`, `T!`, maps, sets and tensor types were already shared by rules of
  * their own; cells and tagged forms take a TypeId from the table.
  *
  * What is not (the fallback of the design's section 10.1):
- *  - A graph's own function type: the front end completes it in place (the result type is
- *    set after the body is built, capture names are appended) and it carries parameter names.
+ *  - The open signature of a function the front end is building (OpenFunctionType, see
+ *    camel/core/type/composite/func.h): its result type is decided by its body after values
+ *    of the function exist, and it is the function's identity while it is built. One per
+ *    function the program defines; never in the table, so never shared.
  *  - Union types (mutable sets) and type variables.
  * A type that contains one of these is still interned by the address of that component.
  *
  * An interned object is immutable from the moment the table returns it. Code must never
- * modify a type it did not just allocate itself.
+ * modify a type it did not just allocate itself; the only mutator a type class has is the
+ * result type of an open signature, which the table never holds.
  *
  * TypeId. Every interned type, and every primitive type singleton, has a dense non-zero id;
  * `Type::typeId()` is 0 for a type that is not in the table. For types in the table, equal
@@ -90,7 +94,7 @@ class TypeTable {
         Tuple,    // TupleType::create (layouts included); not cells or tagged forms
         Array,    // ArrayType::create
         Struct,   // StructType
-        Function, // FunctionType::interned: signatures without parameter names
+        Function, // FunctionType::create, FunctionTypeFactory::build
     };
 
     static TypeTable &instance();

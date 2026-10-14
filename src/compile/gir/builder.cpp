@@ -80,14 +80,14 @@ void setGraphReturnFromResult(
     if (isVoidGraphExitType(resultType)) {
         graph->draft().setReturnNode(runtime::kInvalidNodeRef, runtime::GCReturnKind::None);
         if (!graph->funcType()->hasExitType()) {
-            graph->funcType()->setExitType(Type::Void());
+            graph->setExitType(Type::Void());
         }
         return;
     }
 
     graph->draft().setReturnNode(valueNode, runtime::GCReturnKind::Self);
     if (!graph->funcType()->hasExitType()) {
-        graph->funcType()->setExitType(resultType);
+        graph->setExitType(resultType);
     }
 }
 
@@ -1705,7 +1705,7 @@ void Builder::settleGenericOperatorArguments(
                             results.push_back(usual);
                         }
                         for (size_t r = 0; !wanted && r < results.size(); ++r) {
-                            FunctionType *probe = instantiateFunctionType(signature, bindings);
+                            OpenFunctionType *probe = instantiateFunctionType(signature, bindings);
                             probe->setExitType(results[r]);
                             type   = probe;
                             wanted = accepted();
@@ -5263,7 +5263,7 @@ void Builder::coerceArmExit(
         linkNodes(LinkType::Ctrl, output, gate);
         coerced = gate;
     }
-    arm->funcType()->setExitType(target);
+    arm->setExitType(target);
     setGraphReturnFromResult(arm, nodeIdOf(coerced), nodeIdOf(coerced), target);
     currGraph_ = outer;
 }

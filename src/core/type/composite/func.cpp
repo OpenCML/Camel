@@ -13,220 +13,238 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/type/composite/func.h"
 #include "camel/core/mm.h"
-#include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
-#include <cstring>
+#include <limits>
+#include <new>
+#include <type_traits>
 
-namespace mm = camel::core::mm;
 using namespace std;
 using namespace camel::core::type;
+using camel::core::internSymbol;
+using camel::core::symbolText;
+
+static_assert(
+    sizeof(FunctionType) % alignof(Type *) == 0,
+    "The parameter arrays follow the fixed part of a FunctionType and must start aligned.");
+static_assert(
+    sizeof(OpenFunctionType) == sizeof(FunctionType),
+    "An open signature has the layout of every other signature.");
+
+// ---- FunctionTypeFactory ----
 
 namespace {
 
-FunctionTypeLayout computeLayout(size_t withCount, size_t normCount) {
-    size_t withTypesSize     = withCount * sizeof(Type *);
-    size_t withTypeCodesSize = withCount * sizeof(TypeCode);
-    size_t withIsVarSize     = withCount * sizeof(uint8_t);
-    size_t normTypesSize     = normCount * sizeof(Type *);
-    size_t normTypeCodesSize = normCount * sizeof(TypeCode);
-    size_t normIsVarSize     = normCount * sizeof(uint8_t);
-
-    size_t aWTypes  = mm::alignUp(withTypesSize, alignof(TypeCode));
-    size_t aWCodes  = mm::alignUp(withTypeCodesSize, alignof(uint8_t));
-    size_t aWVar    = mm::alignUp(withIsVarSize, alignof(Type *));
-    size_t normBase = aWTypes + aWCodes + aWVar;
-    size_t aNTypes  = mm::alignUp(normTypesSize, alignof(TypeCode));
-    size_t aNCodes  = mm::alignUp(normTypeCodesSize, alignof(uint8_t));
-    size_t aNVar    = mm::alignUp(normIsVarSize, alignof(uint8_t));
-
-    size_t dataSize  = normBase + aNTypes + aNCodes + aNVar;
-    size_t totalSize = sizeof(FunctionType) + dataSize;
-
-    return FunctionTypeLayout{
-        .totalSize                = totalSize,
-        .alignedWithTypesSize     = aWTypes,
-        .alignedWithTypeCodesSize = aWCodes,
-        .alignedWithIsVarSize     = aWVar,
-        .normBase                 = normBase,
-        .alignedNormTypesSize     = aNTypes,
-        .alignedNormTypeCodesSize = aNCodes,
-        .alignedNormIsVarSize     = aNVar,
-    };
+/// The parts a factory collected, its names interned as symbols.
+template <typename Parts>
+Parts partsOf(
+    ImplMark implMark, ModifierSet modifiers, const std::vector<param_t> &withTypes,
+    const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
+    const std::vector<std::string> &argNames) {
+    Parts parts;
+    parts.implMark  = implMark;
+    parts.modifiers = modifiers;
+    parts.params.reserve(withTypes.size() + normTypes.size());
+    parts.params.insert(parts.params.end(), withTypes.begin(), withTypes.end());
+    parts.params.insert(parts.params.end(), normTypes.begin(), normTypes.end());
+    parts.withCount = withTypes.size();
+    parts.exitType  = exitType;
+    parts.hasNames  = hasNames;
+    if (hasNames) {
+        ASSERT(argNames.size() == parts.params.size(), "One name per parameter.");
+        parts.names.reserve(argNames.size());
+        for (const auto &name : argNames) {
+            parts.names.push_back(internSymbol(name));
+        }
+    }
+    return parts;
 }
 
 } // namespace
 
-// --- FunctionMetaInfo ---
+// The factory reaches FunctionType's protected Parts through friendship; the helper above is
+// instantiated with it here.
+FunctionType *FunctionTypeFactory::build() {
+    return FunctionType::intern(partsOf<FunctionType::Parts>(
+        implMark_,
+        modifiers_,
+        withTypes_,
+        normTypes_,
+        exitType_,
+        hasNames_,
+        argNames_));
+}
 
-FunctionMetaInfo *
-FunctionMetaInfo::create(std::vector<std::string> argNames, std::vector<std::string> closureRefs) {
+OpenFunctionType *FunctionTypeFactory::buildOpen() {
+    return FunctionType::allocate<OpenFunctionType>(partsOf<FunctionType::Parts>(
+        implMark_,
+        modifiers_,
+        withTypes_,
+        normTypes_,
+        exitType_,
+        hasNames_,
+        argNames_));
+}
+
+// ---- Construction ----
+
+size_t FunctionType::trailingBytes(size_t params, bool hasNames) {
+    return params *
+           (sizeof(Type *) + sizeof(TypeCode) + (hasNames ? sizeof(SymId) : 0) + sizeof(uint8_t));
+}
+
+FunctionType::FunctionType(const Parts &parts, bool open)
+    : CompositeType(TypeCode::Function), exitType_(parts.exitType), implMark_(parts.implMark),
+      modifiers_(parts.modifiers), withCount_(static_cast<uint16_t>(parts.withCount)),
+      normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
+      hasNames_(parts.hasNames), open_(open) {
+    for (size_t i = 0; i < parts.params.size(); ++i) {
+        const auto &[type, isVar] = parts.params[i];
+        types()[i]                = type;
+        codes()[i]                = type->code();
+        varMarks()[i]             = isVar ? 1 : 0;
+        if (hasNames_) {
+            names()[i] = parts.names[i];
+        }
+    }
+}
+
+template <typename T> T *FunctionType::allocate(const Parts &parts) {
+    ASSERT(
+        parts.withCount <= std::numeric_limits<uint16_t>::max() &&
+            parts.params.size() - parts.withCount <= std::numeric_limits<uint16_t>::max(),
+        "Too many parameters for one function type.");
+    const size_t bytes = sizeof(FunctionType) + trailingBytes(parts.params.size(), parts.hasNames);
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "FunctionMetaInfo",
-        "Allocating FunctionMetaInfo: size: {} bytes",
-        sizeof(FunctionMetaInfo)));
-    void *mem = allocTypeStorage<FunctionMetaInfo>(TypeStorageKind::FunctionMeta);
-    return new (mem) FunctionMetaInfo(std::move(argNames), std::move(closureRefs));
+        "FunctionType",
+        "Allocating {}FunctionType: params={}, totalSize: {} bytes",
+        std::is_same_v<T, OpenFunctionType> ? "open " : "",
+        parts.params.size(),
+        bytes));
+    void *mem = allocTypeStorage<FunctionType>(TypeStorageKind::Function, bytes);
+    return new (mem) T(parts);
 }
 
-FunctionMetaInfo *FunctionMetaInfo::create(
-    std::span<const std::string_view> argNames, std::span<const std::string_view> closureRefs) {
-    std::vector<std::string> names(argNames.begin(), argNames.end());
-    std::vector<std::string> refs(closureRefs.begin(), closureRefs.end());
-    return create(std::move(names), std::move(refs));
+// FunctionType itself is constructed through this specialization only, by intern().
+template <> FunctionType *FunctionType::allocate<FunctionType>(const Parts &parts) {
+    const size_t bytes = sizeof(FunctionType) + trailingBytes(parts.params.size(), parts.hasNames);
+    void *mem          = allocTypeStorage<FunctionType>(TypeStorageKind::Function, bytes);
+    return new (mem) FunctionType(parts, false);
 }
 
-FunctionMetaInfo::FunctionMetaInfo(
-    std::vector<std::string> argNames, std::vector<std::string> closureRefs)
-    : argNames_(std::move(argNames)), closureRefs_(std::move(closureRefs)) {}
-
-std::string_view FunctionMetaInfo::argNameAt(size_t idx) const {
-    ASSERT(idx < argNames_.size(), "Index out of range");
-    return argNames_[idx];
-}
-
-std::string_view FunctionMetaInfo::closureRefAt(size_t idx) const {
-    ASSERT(idx < closureRefs_.size(), "Index out of range");
-    return closureRefs_[idx];
-}
-
-std::vector<std::string_view> FunctionMetaInfo::argNamesSpan() const {
-    return std::vector<std::string_view>(argNames_.begin(), argNames_.end());
-}
-
-std::vector<std::string_view> FunctionMetaInfo::closureRefsSpan() const {
-    return std::vector<std::string_view>(closureRefs_.begin(), closureRefs_.end());
-}
-
-// --- FunctionTypeFactory ---
-
-FunctionType *FunctionTypeFactory::build() { return FunctionType::fromFactory(*this); }
-
-// --- FunctionType ---
-
-// Copy once from the precomputed layout and pointers; do not recompute layout.
-FunctionType::FunctionType(
-    const FunctionTypeLayout &layout, size_t withCount, size_t normCount,
-    const Type *const *withTypes, const TypeCode *withTypeCodes, const bool *withIsVar,
-    const Type *const *normTypes, const TypeCode *normTypeCodes, const bool *normIsVar,
-    Type *exitType, ImplMark implMark, ModifierSet modifiers, const FunctionMetaInfo *metaInfo)
-    : CompositeType(TypeCode::Function), implMark_(implMark), modifiers_(modifiers),
-      exitType_(exitType), metaInfo_(const_cast<FunctionMetaInfo *>(metaInfo)) {
-    auto p         = layout.ptrs(data_);
-    withTypes_     = std::span(p.withTypes, withCount);
-    withTypeCodes_ = std::span(p.withTypeCodes, withCount);
-    withIsVar_     = std::span(p.withIsVar, withCount);
-    normTypes_     = std::span(p.normTypes, normCount);
-    normTypeCodes_ = std::span(p.normTypeCodes, normCount);
-    normIsVar_     = std::span(p.normIsVar, normCount);
-
-    for (size_t i = 0; i < withCount; ++i) {
-        p.withTypes[i]     = const_cast<Type *>(withTypes[i]);
-        p.withTypeCodes[i] = withTypeCodes[i];
-        p.withIsVar[i]     = withIsVar[i] ? 1 : 0;
+FunctionType *FunctionType::intern(const Parts &parts) {
+    // The key is everything a signature consists of (see intern.h; types by address): the
+    // counts, the marks, the result type, each parameter with its `var` mark, and the names.
+    std::vector<uintptr_t> key;
+    key.reserve(6 + parts.params.size() * (parts.hasNames ? 3 : 2));
+    key.push_back(parts.withCount);
+    key.push_back(parts.params.size());
+    key.push_back(static_cast<uintptr_t>(parts.implMark));
+    key.push_back(static_cast<uintptr_t>(parts.modifiers.mask));
+    key.push_back(reinterpret_cast<uintptr_t>(parts.exitType));
+    key.push_back(parts.hasNames ? 1 : 0);
+    for (const auto &[type, isVar] : parts.params) {
+        key.push_back(reinterpret_cast<uintptr_t>(type));
+        key.push_back(isVar ? 1 : 0);
     }
-    for (size_t i = 0; i < normCount; ++i) {
-        p.normTypes[i]     = const_cast<Type *>(normTypes[i]);
-        p.normTypeCodes[i] = normTypeCodes[i];
-        p.normIsVar[i]     = normIsVar[i] ? 1 : 0;
+    if (parts.hasNames) {
+        key.insert(key.end(), parts.names.begin(), parts.names.end());
     }
+    Type *type = TypeTable::instance().intern(TypeTable::Shape::Function, key, [&]() -> Type * {
+        return allocate<FunctionType>(parts);
+    });
+    return static_cast<FunctionType *>(type);
 }
 
-// Write directly from the factory into data_; one pass, no temporary vector.
-FunctionType::FunctionType(
-    FunctionTypeFactory &factory, const FunctionTypeLayout &layout, Type *exitType,
-    ImplMark implMark, ModifierSet modifiers, const FunctionMetaInfo *metaInfo)
-    : CompositeType(TypeCode::Function), implMark_(implMark), modifiers_(modifiers),
-      exitType_(exitType), metaInfo_(const_cast<FunctionMetaInfo *>(metaInfo)) {
-    const size_t withCount = factory.withTypes_.size();
-    const size_t normCount = factory.normTypes_.size();
-    auto p                 = layout.ptrs(data_);
-
-    withTypes_     = std::span(p.withTypes, withCount);
-    withTypeCodes_ = std::span(p.withTypeCodes, withCount);
-    withIsVar_     = std::span(p.withIsVar, withCount);
-    normTypes_     = std::span(p.normTypes, normCount);
-    normTypeCodes_ = std::span(p.normTypeCodes, normCount);
-    normIsVar_     = std::span(p.normIsVar, normCount);
-
-    for (size_t i = 0; i < withCount; ++i) {
-        const auto &[type, isVar] = factory.withTypes_[i];
-        p.withTypes[i]            = type;
-        p.withTypeCodes[i]        = type->code();
-        p.withIsVar[i]            = isVar ? 1 : 0;
+FunctionType::Parts FunctionType::parts() const {
+    Parts parts;
+    parts.implMark  = implMark_;
+    parts.modifiers = modifiers_;
+    parts.withCount = withCount_;
+    parts.exitType  = exitType_;
+    parts.hasNames  = hasNames_;
+    parts.params.reserve(paramCount());
+    for (size_t i = 0; i < paramCount(); ++i) {
+        parts.params.emplace_back(types()[i], varMarks()[i] != 0);
+        if (hasNames_) {
+            parts.names.push_back(names()[i]);
+        }
     }
-    for (size_t i = 0; i < normCount; ++i) {
-        const auto &[type, isVar] = factory.normTypes_[i];
-        p.normTypes[i]            = type;
-        p.normTypeCodes[i]        = type->code();
-        p.normIsVar[i]            = isVar ? 1 : 0;
-    }
+    return parts;
 }
 
-// Write from param_vec into data_ in one pass, without temporary vectors.
-FunctionType::FunctionType(
-    const FunctionTypeLayout &layout, const param_vec_t &withTypes, const param_vec_t &normTypes,
-    Type *exitType, ImplMark implMark, ModifierSet modifiers)
-    : CompositeType(TypeCode::Function), implMark_(implMark), modifiers_(modifiers),
-      exitType_(exitType), metaInfo_(nullptr) {
-    const size_t withCount = withTypes.size();
-    const size_t normCount = normTypes.size();
-    auto p                 = layout.ptrs(data_);
-
-    withTypes_     = std::span(p.withTypes, withCount);
-    withTypeCodes_ = std::span(p.withTypeCodes, withCount);
-    withIsVar_     = std::span(p.withIsVar, withCount);
-    normTypes_     = std::span(p.normTypes, normCount);
-    normTypeCodes_ = std::span(p.normTypeCodes, normCount);
-    normIsVar_     = std::span(p.normIsVar, normCount);
-
-    for (size_t i = 0; i < withCount; ++i) {
-        const auto &[type, isVar] = withTypes[i];
-        p.withTypes[i]            = type;
-        p.withTypeCodes[i]        = type->code();
-        p.withIsVar[i]            = isVar ? 1 : 0;
-    }
-    for (size_t i = 0; i < normCount; ++i) {
-        const auto &[type, isVar] = normTypes[i];
-        p.normTypes[i]            = type;
-        p.normTypeCodes[i]        = type->code();
-        p.normIsVar[i]            = isVar ? 1 : 0;
-    }
+FunctionType *FunctionType::create() {
+    // What an empty factory builds: no parameters, names recorded (there are none to print).
+    FunctionTypeFactory factory;
+    return factory.build();
 }
+
+FunctionType *FunctionType::create(
+    const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
+    const ModifierSet &modifiers) {
+    return create(param_vec_t(withTypes), param_vec_t(normTypes), returnType, modifiers);
+}
+
+FunctionType *FunctionType::create(
+    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
+    const ModifierSet &modifiers) {
+    Parts parts;
+    parts.modifiers = modifiers;
+    parts.params.reserve(withTypes.size() + normTypes.size());
+    parts.params.insert(parts.params.end(), withTypes.begin(), withTypes.end());
+    parts.params.insert(parts.params.end(), normTypes.begin(), normTypes.end());
+    parts.withCount = withTypes.size();
+    parts.exitType  = returnType;
+    return intern(parts);
+}
+
+FunctionType *FunctionType::withExitType(Type *exitType) const {
+    Parts changed    = parts();
+    changed.exitType = exitType;
+    return intern(changed);
+}
+
+OpenFunctionType *FunctionType::asOpen() const {
+    return open_ ? static_cast<OpenFunctionType *>(const_cast<FunctionType *>(this)) : nullptr;
+}
+
+OpenFunctionType *OpenFunctionType::copyOf(const FunctionType *type) {
+    return FunctionType::allocate<OpenFunctionType>(type->parts());
+}
+
+// ---- Queries ----
 
 Type *FunctionType::exitType() const {
-    // If there is no return type, default to void.
-    // The value still counts as unset so the compiler can keep inferring types.
+    // Without a result type yet (an open signature), void; hasExitType() tells the two apart.
     return exitType_ ? exitType_ : Type::Void();
 }
 
 bool FunctionType::checkModifiers() const { return true; }
 
 std::string_view FunctionType::argNameAt(size_t idx) const {
-    ASSERT(metaInfo_ != nullptr, "No meta info available");
-    return metaInfo_->argNameAt(idx);
-}
-
-std::string_view FunctionType::closureRefAt(size_t index) const {
-    ASSERT(metaInfo_ != nullptr, "No meta info available");
-    return metaInfo_->closureRefAt(index);
+    ASSERT(hasNames_, "The function type records no parameter names.");
+    ASSERT(idx < paramCount(), "Index out of range");
+    return symbolText(names()[idx]);
 }
 
 std::vector<std::string_view> FunctionType::argNames() const {
-    return metaInfo_ ? metaInfo_->argNamesSpan() : std::vector<std::string_view>();
-}
-
-std::vector<std::string_view> FunctionType::closureRefs() const {
-    return metaInfo_ ? metaInfo_->closureRefsSpan() : std::vector<std::string_view>();
+    std::vector<std::string_view> result;
+    if (hasNames_) {
+        result.reserve(paramCount());
+        for (size_t i = 0; i < paramCount(); ++i) {
+            result.push_back(symbolText(names()[i]));
+        }
+    }
+    return result;
 }
 
 Type *FunctionType::resolve(const type_vec_t &typeList) const {
@@ -244,30 +262,28 @@ string FunctionType::toString() const {
     if (!modifiers_.empty()) {
         result += string(modifiers_) + " ";
     }
-    if (!withTypes_.empty()) {
+    if (withCount_ > 0) {
         result += "<";
-        for (size_t i = 0; i < withTypes_.size(); i++) {
+        for (size_t i = 0; i < withCount_; i++) {
             if (i > 0)
                 result += ", ";
             if (withIsVarAt(i))
                 result += "var ";
-            if (metaInfo_)
+            if (hasNames_)
                 result += string(argNameAt(i)) + ": ";
-            result += withTypes_[i]->toString();
+            result += withTypeAt(i)->toString();
         }
         result += "> ";
     }
     result += "(";
-    for (size_t i = 0; i < normTypes_.size(); i++) {
+    for (size_t i = 0; i < normCount_; i++) {
         if (i > 0)
             result += ", ";
         if (normIsVarAt(i))
             result += "var ";
-        if (metaInfo_) {
-            size_t idx = i + withTypes_.size();
-            result += string(argNameAt(idx)) + ": ";
-        }
-        result += normTypes_[i]->toString();
+        if (hasNames_)
+            result += string(argNameAt(withCount_ + i)) + ": ";
+        result += normTypeAt(i)->toString();
     }
     result += ") => ";
     result += exitType_ ? exitType_->toString() : "<null>";
@@ -276,20 +292,20 @@ string FunctionType::toString() const {
 
 string FunctionType::mangle() const {
     string result = "F";
-    if (!withTypes_.empty()) {
-        result += "W" + to_string(withTypes_.size());
-        for (size_t i = 0; i < withTypes_.size(); i++) {
+    if (withCount_ > 0) {
+        result += "W" + to_string(withCount_);
+        for (size_t i = 0; i < withCount_; i++) {
             if (withIsVarAt(i))
                 result += "V";
-            result += withTypes_[i]->mangle();
+            result += withTypeAt(i)->mangle();
         }
     }
-    if (!normTypes_.empty()) {
-        result += "N" + to_string(normTypes_.size());
-        for (size_t i = 0; i < normTypes_.size(); i++) {
+    if (normCount_ > 0) {
+        result += "N" + to_string(normCount_);
+        for (size_t i = 0; i < normCount_; i++) {
             if (normIsVarAt(i))
                 result += "V";
-            result += normTypes_[i]->mangle();
+            result += normTypeAt(i)->mangle();
         }
     }
     result += "R";
@@ -297,182 +313,17 @@ string FunctionType::mangle() const {
     return result;
 }
 
-FunctionType *FunctionType::create() {
-    // Empty FunctionType: build via the factory.
-    FunctionTypeFactory factory;
-    factory.setHasCompileInfo(true);
-    return factory.build();
-}
-
-FunctionType *FunctionType::create(
-    const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
-    const ModifierSet &modifiers) {
-    param_vec_t withVec(withTypes);
-    param_vec_t normVec(normTypes);
-    return create(withVec, normVec, returnType, modifiers);
-}
-
-FunctionType *FunctionType::create(
-    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
-    const ModifierSet &modifiers) {
-    FunctionTypeLayout layout = computeLayout(withTypes.size(), normTypes.size());
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "FunctionType",
-        "Allocating FunctionType: withCount={}, normCount={}, totalSize: {} bytes",
-        withTypes.size(),
-        normTypes.size(),
-        layout.totalSize));
-    void *mem = allocTypeStorage<FunctionType>(TypeStorageKind::Function, layout.totalSize);
-    return new (mem)
-        FunctionType(layout, withTypes, normTypes, returnType, ImplMark::Graph, modifiers);
-}
-
-FunctionType *FunctionType::create(
-    const param_vec_t &&withTypes, const param_vec_t &&normTypes, Type *returnType,
-    const ModifierSet &modifiers) {
-    return create(withTypes, normTypes, returnType, modifiers);
-}
-
-FunctionType *FunctionType::interned(
-    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
-    const ModifierSet &modifiers) {
-    // The key is everything create() stores: the counts (which also separate the two
-    // parameter lists), the modifiers, the result type, then each parameter with its `var`
-    // mark. Types are compared by address (see intern.h).
-    std::vector<uintptr_t> key;
-    key.reserve(4 + 2 * (withTypes.size() + normTypes.size()));
-    key.push_back(withTypes.size());
-    key.push_back(normTypes.size());
-    key.push_back(static_cast<uintptr_t>(modifiers.mask));
-    key.push_back(reinterpret_cast<uintptr_t>(returnType));
-    for (const auto *params : {&withTypes, &normTypes}) {
-        for (const auto &[type, isVar] : *params) {
-            key.push_back(reinterpret_cast<uintptr_t>(type));
-            key.push_back(isVar ? 1 : 0);
+Type *FunctionType::clone(bool deep /* = false */) const {
+    Parts copy = parts();
+    if (deep) {
+        for (auto &[type, isVar] : copy.params) {
+            type = type->clone(true);
+        }
+        if (copy.exitType) {
+            copy.exitType = copy.exitType->clone(true);
         }
     }
-    Type *type = TypeTable::instance().intern(TypeTable::Shape::Function, key, [&]() -> Type * {
-        return create(withTypes, normTypes, returnType, modifiers);
-    });
-    return static_cast<FunctionType *>(type);
-}
-
-FunctionType *FunctionType::fromFactory(FunctionTypeFactory &factory) {
-    const size_t withCount    = factory.withTypes_.size();
-    const size_t normCount    = factory.normTypes_.size();
-    FunctionTypeLayout layout = computeLayout(withCount, normCount);
-
-    const FunctionMetaInfo *metaInfo = nullptr;
-    if (factory.hasCompileInfo_) {
-        metaInfo =
-            FunctionMetaInfo::create(std::move(factory.argNames_), std::move(factory.closureRefs_));
-    }
-
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "FunctionType",
-        "Allocating FunctionType(fromFactory): withCount={}, normCount={}, "
-        "totalSize: {} bytes",
-        withCount,
-        normCount,
-        layout.totalSize));
-    void *mem = allocTypeStorage<FunctionType>(TypeStorageKind::Function, layout.totalSize);
-    return new (mem) FunctionType(
-        factory,
-        layout,
-        factory.exitType_,
-        factory.implMark_,
-        factory.modifiers_,
-        metaInfo);
-}
-
-FunctionType *FunctionType::fromData(
-    size_t withCount, size_t normCount, const Type *const *withTypes, const TypeCode *withTypeCodes,
-    const bool *withIsVar, const Type *const *normTypes, const TypeCode *normTypeCodes,
-    const bool *normIsVar, Type *exitType, ImplMark implMark, ModifierSet modifiers,
-    const FunctionMetaInfo *metaInfo) {
-    FunctionTypeLayout layout = computeLayout(withCount, normCount);
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "FunctionType",
-        "Allocating FunctionType(fromData): withCount={}, normCount={}, "
-        "totalSize: {} bytes",
-        withCount,
-        normCount,
-        layout.totalSize));
-    void *mem = allocTypeStorage<FunctionType>(TypeStorageKind::Function, layout.totalSize);
-    return new (mem) FunctionType(
-        layout,
-        withCount,
-        normCount,
-        withTypes,
-        withTypeCodes,
-        withIsVar,
-        normTypes,
-        normTypeCodes,
-        normIsVar,
-        exitType,
-        implMark,
-        modifiers,
-        metaInfo);
-}
-
-void FunctionMetaInfo::addClosureRef(const std::string &ref) { closureRefs_.push_back(ref); }
-
-void FunctionType::addClosureRef(const std::string &ref) {
-    ASSERT(!isInterned(), "An interned function type is immutable.");
-    if (metaInfo_)
-        metaInfo_->addClosureRef(ref);
-}
-
-Type *FunctionType::clone(bool deep /* = false */) const {
-    // Prepare the data.
-    std::vector<Type *> withTypePtrs;
-    std::vector<TypeCode> withTypeCodes;
-    std::vector<uint8_t> withIsVar;
-    std::vector<Type *> normTypePtrs;
-    std::vector<TypeCode> normTypeCodes;
-    std::vector<uint8_t> normIsVar;
-
-    withTypePtrs.reserve(withTypes_.size());
-    withTypeCodes.reserve(withTypes_.size());
-    withIsVar.reserve(withTypes_.size());
-    for (size_t i = 0; i < withTypes_.size(); ++i) {
-        withTypePtrs.push_back(deep ? withTypes_[i]->clone(true) : withTypes_[i]);
-        withTypeCodes.push_back(withTypeCodes_[i]);
-        withIsVar.push_back(withIsVar_[i]);
-    }
-
-    normTypePtrs.reserve(normTypes_.size());
-    normTypeCodes.reserve(normTypes_.size());
-    normIsVar.reserve(normTypes_.size());
-    for (size_t i = 0; i < normTypes_.size(); ++i) {
-        normTypePtrs.push_back(deep ? normTypes_[i]->clone(true) : normTypes_[i]);
-        normTypeCodes.push_back(normTypeCodes_[i]);
-        normIsVar.push_back(normIsVar_[i]);
-    }
-
-    Type *newExitType = deep && exitType_ ? exitType_->clone(true) : exitType_;
-
-    const FunctionMetaInfo *newMetaInfo = nullptr;
-    if (metaInfo_) {
-        auto an = argNames(), cr = closureRefs();
-        newMetaInfo = FunctionMetaInfo::create(
-            std::span<const std::string_view>(an),
-            std::span<const std::string_view>(cr));
-    }
-
-    return fromData(
-        withTypes_.size(),
-        normTypes_.size(),
-        withTypePtrs.data(),
-        withTypeCodes.data(),
-        reinterpret_cast<const bool *>(withIsVar.data()),
-        normTypePtrs.data(),
-        normTypeCodes.data(),
-        reinterpret_cast<const bool *>(normIsVar.data()),
-        newExitType,
-        implMark_,
-        modifiers_,
-        newMetaInfo);
+    return intern(copy);
 }
 
 bool FunctionType::equals(Type *other) const {
@@ -483,18 +334,11 @@ bool FunctionType::equals(Type *other) const {
 
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
-    if (withTypes_.size() != otherFunc.withTypes_.size() ||
-        normTypes_.size() != otherFunc.normTypes_.size())
+    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_)
         return false;
 
-    for (size_t i = 0; i < withTypes_.size(); i++) {
-        if (withIsVar_[i] != otherFunc.withIsVar_[i] ||
-            !withTypes_[i]->equals(otherFunc.withTypes_[i]))
-            return false;
-    }
-    for (size_t i = 0; i < normTypes_.size(); i++) {
-        if (normIsVar_[i] != otherFunc.normIsVar_[i] ||
-            !normTypes_[i]->equals(otherFunc.normTypes_[i]))
+    for (size_t i = 0; i < paramCount(); i++) {
+        if (varMarks()[i] != otherFunc.varMarks()[i] || !types()[i]->equals(otherFunc.types()[i]))
             return false;
     }
     if (exitType_ && otherFunc.exitType_) {
@@ -522,19 +366,14 @@ bool FunctionType::assignableFrom(Type *other) const {
 
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
-    if (withTypes_.size() != otherFunc.withTypes_.size() ||
-        normTypes_.size() != otherFunc.normTypes_.size())
+    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_)
         return false;
 
-    for (size_t i = 0; i < withTypes_.size(); i++) {
-        if (withIsVar_[i] != otherFunc.withIsVar_[i] ||
-            !otherFunc.withTypes_[i]->assignableFrom(withTypes_[i]))
-            return false;
-    }
-
-    for (size_t i = 0; i < normTypes_.size(); i++) {
-        if (normIsVar_[i] != otherFunc.normIsVar_[i] ||
-            !otherFunc.normTypes_[i]->assignableFrom(normTypes_[i]))
+    // Parameters are contravariant: this type's parameter must be acceptable where the other
+    // one's is expected.
+    for (size_t i = 0; i < paramCount(); i++) {
+        if (varMarks()[i] != otherFunc.varMarks()[i] ||
+            !otherFunc.types()[i]->assignableFrom(types()[i]))
             return false;
     }
 

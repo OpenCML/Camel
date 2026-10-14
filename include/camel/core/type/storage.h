@@ -43,16 +43,15 @@ namespace camel::core::type {
 
 /// What a block of type storage holds. One counter each in the `CAMEL_TYPE_STATS` report.
 enum class TypeStorageKind : unsigned {
-    Primitive,    // Type objects of the built-in scalar and auxiliary types
-    Array,        // ArrayType
-    Tuple,        // TupleType, including variable cells, `T?` / `T!` and frame layouts
-    Struct,       // StructType
-    Function,     // FunctionType
-    FunctionMeta, // FunctionMetaInfo (parameter and capture names of a function type)
-    Union,        // UnionType
-    Collection,   // MapType, SetType
-    TypeVar,      // TypeVarType, TypeFunctionType (compile time only)
-    Params,       // parameter arrays of module-defined (Other) types
+    Primitive,  // Type objects of the built-in scalar and auxiliary types
+    Array,      // ArrayType
+    Tuple,      // TupleType, including variable cells, `T?` / `T!` and frame layouts
+    Struct,     // StructType
+    Function,   // FunctionType (parameter names inline)
+    Union,      // UnionType
+    Collection, // MapType, SetType
+    TypeVar,    // TypeVarType, TypeFunctionType (compile time only)
+    Params,     // parameter arrays of module-defined (Other) types
     Count,
 };
 

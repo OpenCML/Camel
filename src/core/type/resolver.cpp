@@ -79,5 +79,5 @@ std::optional<FunctionType *> DynamicFuncTypeResolver::resolve(
     }
     // The same call shape resolves to the same signature object: a program resolves the same
     // few operator signatures at every call, and the permanent space never frees.
-    return FunctionType::interned(withParams, normParams, *optResType, modifiers);
+    return FunctionType::create(withParams, normParams, *optResType, modifiers);
 }

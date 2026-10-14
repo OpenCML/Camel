@@ -466,7 +466,7 @@ was never finalized, so a file a Python object held open was not flushed.
 
 - **operator_t**（`core/operator.h`）：算子索引类型，与 GIR 的 **OperNode** 对应。
 - 运行时根据操作数类型选择具体实现（如整型加法、浮点加法），OPER 字节码或 NodeVM 的 **evalMarkedOperator** 会调用到这些实现。
-- **FunctionType**：函数类型（with 参数、普通参数、返回类型），与 Graph 的 **funcType_** 一致，用于调用约定与类型检查。
+- **FunctionType**：函数类型（with 参数、普通参数、形参名、返回类型），与 Graph 的 **funcType_** 一致，用于调用约定与类型检查。驻留在类型表里、不可变；只有前端正在建的函数的签名是 `OpenFunctionType`（不驻留，返回类型由函数体定下后填入）。图捕获了哪些名字记在图上（`GCGraph::captureNames`），不在函数类型里。
 
 ## 6. 数据与类型（Data / Type）
 

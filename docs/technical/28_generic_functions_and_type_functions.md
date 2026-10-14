@@ -36,7 +36,7 @@ and the operations over them:
 |---|---|
 | `containsTypeVar(type)` | a variable occurs somewhere in `type` |
 | `substituteTypeVars(type, bindings)` | replace bound variables; returns the same object when nothing changed |
-| `instantiateFunctionType(type, bindings)` | the same for a function type, always a new object |
+| `instantiateFunctionType(type, bindings)` | the same for a function type, always a new open signature (`OpenFunctionType`): the type of an instance about to be built, whose body may still decide the result type |
 | `bindTypeVars(pattern, actual, bindings)` | bind the `typeas` occurrences of `pattern` from the type at the same position of `actual` |
 | `collectBindableTypeVars(pattern, names)` | the variables `bindTypeVars` can reach |
 | `TypeFunctionType::apply(arguments)` | the body with the parameters replaced |

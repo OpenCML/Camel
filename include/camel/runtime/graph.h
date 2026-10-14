@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -328,6 +328,11 @@ class GCGraph : public camel::core::rtdata::Object {
     const std::string &name() const;
     /// Source origin (camel::source::origin_id_t) of node `ref`, 0 when unknown.
     uint64_t nodeOrigin(gc_node_ref_t ref) const;
+    /// The names of the values the function captures from where it was written, in the order
+    /// it captured them (symbols of camel/core/symbol.h). Compile and debug metadata: what a
+    /// capture is bound to at run time is the closure tuple and the with-inputs of a call.
+    /// Not part of the function type (camel/core/type/composite/func.h).
+    std::span<const camel::core::SymId> captureNames() const;
     camel::core::type::FunctionType *funcType() const;
     const camel::core::type::TupleType *runtimeDataType() const;
     const camel::core::type::TupleType *staticDataType() const;

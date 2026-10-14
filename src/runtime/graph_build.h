@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 11, 2026
- * Updated: Apr. 12, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -42,6 +42,8 @@ struct GCGraphDebugRecord {
     std::string name;
     // Source origin of each node that has one, by runtime node ref.
     std::unordered_map<gc_node_ref_t, uint64_t> nodeOrigins;
+    // The names the graph captures, in the order it captured them (GCGraph::captureNames).
+    std::vector<camel::core::SymId> captureNames;
 };
 
 struct GCGraphPayloadShape {
@@ -80,9 +82,10 @@ struct GCGraphPayloadArena {
 GCGraphDebugRecord *
 createGraphDebugRecord(std::string stableId, std::string mangledName, std::string name);
 
-/// Records the source origins of `draft`'s nodes in `record`, keyed by the runtime node refs
-/// the draft encodes to.
-void recordDraftNodeOrigins(GCGraphDebugRecord *record, const GraphDraft &draft);
+/// Records the cold data of `draft` in `record`: the source origins of its nodes, keyed by the
+/// runtime node refs the draft encodes to, and the names it captures. Every encoding of a draft
+/// calls it, so that nothing of the draft's debug data is lost on a commit.
+void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft);
 
 struct GCGraphBuildAccess {
     static size_t requiredBytes(

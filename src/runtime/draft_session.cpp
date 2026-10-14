@@ -509,7 +509,7 @@ GCGraph *encodeDraftGraph(
         [&] {
             auto *record =
                 createGraphDebugRecord(identity.stableId, identity.mangledName, identity.name);
-            recordDraftNodeOrigins(record, draft);
+            recordDraftDebugData(record, draft);
             return record;
         }(),
         draft.funcType(),

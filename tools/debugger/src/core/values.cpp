@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -341,8 +341,10 @@ std::vector<Member> members(const ValueView &original, size_t maxCount, size_t *
             break;
         }
         std::vector<std::string_view> names;
-        if (graph->funcType() != nullptr) {
-            names = graph->funcType()->closureRefs();
+        if (graph != nullptr) {
+            for (camel::core::SymId name : graph->captureNames()) {
+                names.push_back(camel::core::symbolText(name));
+            }
         }
         count = std::min(values->size(), types->size());
         for (size_t i = 0; i < count && i < maxCount; ++i) {

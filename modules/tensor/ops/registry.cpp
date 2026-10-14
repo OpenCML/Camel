@@ -134,7 +134,7 @@ class OpDefResolver final : public FuncTypeResolver {
         for (Type *t : norm) {
             normParams.emplace_back(t, false);
         }
-        return FunctionType::interned(param_vec_t{}, normParams, *result, modifiers);
+        return FunctionType::create(param_vec_t{}, normParams, *result, modifiers);
     }
 
     std::optional<std::string> explainRejection(

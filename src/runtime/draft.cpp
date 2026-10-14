@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -724,6 +724,7 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
         graph->nodeCount());
     auto draft              = std::make_unique<GraphDraft>();
     draft->funcType_        = graph->funcType();
+    draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
     draft->runtimeDataType_ = const_cast<camel::core::type::TupleType *>(graph->runtimeDataType());
     draft->closureType_     = const_cast<camel::core::type::TupleType *>(graph->closureType());
     draft->returnKind_      = graph->returnKind();
@@ -1336,6 +1337,10 @@ void GraphDraft::addSubGraph(GCGraph *graph) {
     }
 }
 
+void GraphDraft::addCaptureName(std::string_view name) {
+    captureNames_.push_back(camel::core::internSymbol(name));
+}
+
 void GraphDraft::addStaticGraphRef(GCGraph *graph) {
     if (graph && std::find(staticGraphRefs_.begin(), staticGraphRefs_.end(), graph) ==
                      staticGraphRefs_.end()) {
@@ -1346,7 +1351,7 @@ void GraphDraft::addStaticGraphRef(GCGraph *graph) {
 GCGraph *GraphDraft::encode(
     const std::string &stableId, const std::string &mangledName, const std::string &name) const {
     auto *debugRecord = createGraphDebugRecord(stableId, mangledName, name);
-    recordDraftNodeOrigins(debugRecord, *this);
+    recordDraftDebugData(debugRecord, *this);
     camel::core::type::TupleType *staticDataType = nullptr;
     if (!staticSlotTypes_.empty()) {
         staticDataType = camel::core::type::TupleType::layout(staticSlotTypes_);

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -2539,7 +2539,7 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
             nameRef.ident(),
             TypeVarType::create("$element" + std::to_string(idIndex_++), true),
             false);
-        FunctionType *type  = tt::as_ptr<FunctionType>(factory.build());
+        FunctionType *type  = factory.buildOpen(); // a function being defined: see openSignature_
         node_ptr_t typeNode = place(tree_->makeType(type, type->implMark()), body, "gct.func.type");
         const ValueUseScope valueUseScope(*this);
         valueUse_           = {};
@@ -2716,6 +2716,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     } typeScopeGuard{*this, typeScope_, std::exchange(declaredTypeVars_, {})};
     pushScope();
     declSignature_ = isDecl;
+    openSignature_ = true;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
     // A parameter of a reserved name would stand in front of the operator of that name.
@@ -3100,6 +3101,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     // (`typeas T`), not in its return type. In a function type written inside such a
     // parameter both positions bind: `f: (x: T) => typeas U`.
     const bool signature = std::exchange(declSignature_, false);
+    const bool open      = std::exchange(openSignature_, false);
     struct FlagGuard {
         bool &allowed, &inReturn;
         bool outerAllowed, outerInReturn;
@@ -3229,7 +3231,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
 
     LEAVE("FuncType");
-    return factory.build();
+    return open ? static_cast<Type *>(factory.buildOpen()) : factory.build();
 }
 
 /*

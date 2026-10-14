@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -91,7 +91,7 @@ string portLabel(
     // `with` ports, one more for each capture; those are named by the captured names.
     // (Counting them as declared parameters gave a capture the name of the first parameter,
     // and that parameter no name.)
-    const auto captured    = graph->funcType()->closureRefs();
+    const auto captured    = graph->captureNames();
     const size_t withPorts = graph->withPorts().size();
     const size_t withCount =
         graph->closureNodes().empty() && captured.size() <= withPorts ? withPorts - captured.size()
@@ -102,7 +102,7 @@ string portLabel(
     for (size_t i = 0; i < withPorts; ++i) {
         if (graph->withPorts()[i] == nodeRef) {
             if (i >= withCount) {
-                return std::string(captured[i - withCount]);
+                return std::string(camel::core::symbolText(captured[i - withCount]));
             }
             argIndex = i;
             found    = true;

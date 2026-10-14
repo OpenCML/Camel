@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -454,9 +454,9 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                 portNames[norm[i]] = std::string(names[with.size() + i]);
             }
         }
-        const auto captured = type->closureRefs();
+        const auto captured = g->captureNames();
         for (size_t i = 0; i < closure.size() && i < captured.size(); ++i) {
-            portNames[closure[i]] = std::string(captured[i]);
+            portNames[closure[i]] = std::string(camel::core::symbolText(captured[i]));
         }
     }
     // A graph the compiler made itself (the arm of a branch) takes the values it uses from the

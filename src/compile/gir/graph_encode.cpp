@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -393,6 +393,7 @@ class EncodeSession {
         prepared.draft  = std::make_unique<GraphDraft>();
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setFuncType(graph->funcType());
+        prepared.draft->setCaptureNames(graph->draft().captureNames());
         prepared.draft->setRuntimeDataType(
             ensureRuntimeTupleType(graph->draft().runtimeDataType()));
         prepared.draft->setClosureType(graph->closureType());
@@ -837,7 +838,7 @@ class EncodeSession {
         }
         auto *debugRecord =
             createGraphDebugRecord(source->stableId(), source->name(), source->name());
-        recordDraftNodeOrigins(debugRecord, *prepared.draft);
+        recordDraftDebugData(debugRecord, *prepared.draft);
 
         const auto &deps = source->dependencyGraphs();
         const auto &subs = source->subGraphs();

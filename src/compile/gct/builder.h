@@ -121,6 +121,11 @@ class Builder {
     // `Name<...>` (typeFunctionBase_).
     bool funcDeclPending_  = false;
     bool declSignature_    = false;
+    // The function type visited next is the signature of a function being defined (a
+    // FuncData): it is built open (camel/core/type/composite/func.h), so that the graph
+    // builder can set the result type the body decides when none is written. Every other
+    // function type is interned.
+    bool openSignature_    = false;
     bool typeasAllowed_    = false;
     bool inDeclReturnType_ = false;
     bool typeFunctionBase_ = false;

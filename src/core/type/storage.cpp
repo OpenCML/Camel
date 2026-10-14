@@ -45,7 +45,6 @@ constexpr std::array<const char *, kKindCount> kKindNames = {
     "tuple",
     "struct",
     "function",
-    "function_meta",
     "union",
     "collection",
     "typevar",

@@ -108,7 +108,7 @@ node_handle_t Builder::captureInto(
     } else {
         graph->draft().appendClosureNode(nodeIdOf(port));
     }
-    graph->funcType()->addClosureRef(shown);
+    graph->addCaptureName(shown);
     capturedValues_[graph.get()].push_back({origin, port, shown});
     captureOriginOf_[port] = origin;
     if (isVar) {

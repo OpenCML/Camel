@@ -123,7 +123,6 @@ static const std::vector<std::string> &extraScopePrefixes() {
         "StructType",
         "ArrayType",
         "FunctionType",
-        "FunctionMetaInfo",
         "BumpPtr",
         "GIR Builder",
         "GlobalsBuiltinModule",

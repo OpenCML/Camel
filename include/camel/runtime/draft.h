@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -49,6 +49,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::runtime {
@@ -200,6 +201,8 @@ class GraphDraft {
     GraphDraft &operator=(const GraphDraft &) = delete;
 
     camel::core::type::FunctionType *funcType() const { return funcType_; }
+    /// The names the function captures, in capture order (GCGraph::captureNames).
+    std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
     camel::core::type::TupleType *runtimeDataType() const;
     camel::core::type::TupleType *closureType() const { return closureType_; }
     size_t frameSize() const {
@@ -268,6 +271,11 @@ class GraphDraft {
     std::span<std::byte> mutablePayloadOf(DraftNode *node);
 
     void setFuncType(camel::core::type::FunctionType *funcType) { funcType_ = funcType; }
+    void setCaptureNames(std::span<const camel::core::SymId> names) {
+        captureNames_.assign(names.begin(), names.end());
+    }
+    /// Records that the function captures `name` (one entry per capture port, in order).
+    void addCaptureName(std::string_view name);
     void setRuntimeDataType(camel::core::type::TupleType *runtimeDataType) {
         runtimeDataType_ = runtimeDataType;
         pendingRuntimeSlots_.clear();
@@ -384,6 +392,7 @@ class GraphDraft {
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
 
     camel::core::type::FunctionType *funcType_     = nullptr;
+    std::vector<camel::core::SymId> captureNames_;
     // The frame layout. Slots allocated since it was last built are pending: building the tuple
     // type once per allocation would cost memory quadratic in the slot count.
     mutable camel::core::type::TupleType *runtimeDataType_ = nullptr;
