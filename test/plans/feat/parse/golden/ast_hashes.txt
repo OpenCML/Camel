@@ -1293,7 +1293,7 @@ a1b22a536d75ec01 ok test/cases/para/core/println_whole_lines.cml
 30be95b610ae6854 ok test/cases/para/core/scalar_recursion_inline.cml
 b285af21c87e8e7d ok test/cases/para/core/sync_order_with_tasks.cml
 dac29117678ca942 ok test/cases/para/core/unordered_foreach_smoke.cml
-3d97770d6c311201 ok test/cases/para/core/unordered_foreach_timing.cml
+43156d9c57077930 ok test/cases/para/core/unordered_foreach_timing.cml
 756ab8039fcbc22f ok test/cases/para/core/unordered_reduce_sum.cml
 a58a7cd293a77647 no test/cases/parse/numbers/member_index_exponent.cml
 7d7964a39be8391b ok test/cases/parse/numbers/tokens.cml

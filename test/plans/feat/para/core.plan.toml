@@ -73,7 +73,7 @@ timeout_ms = 4000
 name = "unordered_foreach_timing.prl"
 # Wall-clock time is the assertion: not for a mode that collects at every safepoint.
 sweep = false
-desc = "Uses wall-clock time as a correctness proxy that unordered_foreach is not serialized under PRL."
+desc = "Uses wall-clock time as a correctness proxy that unordered_foreach is not serialized under PRL: eight 200 ms sleeps must finish under 1.4 s, one sleep less than the 1.6 s a serialized run cannot go below (the earlier bound, 0.5 s for 120 ms sleeps, assumed about four workers and failed on a 3-core macOS runner)."
 kind = "behavior"
 case = "../../../cases/para/core/unordered_foreach_timing.cml"
 args = ["${case}", "${run_prl}"]
