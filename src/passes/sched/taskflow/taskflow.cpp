@@ -54,6 +54,8 @@ using namespace camel::core::context;
 using namespace camel::core::error;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
+using camel::core::OperatorTable;
+namespace oper = camel::core::oper;
 
 namespace {
 
@@ -475,10 +477,11 @@ bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
                 heavy = true;
             } else if (node->kind == GCNodeKind::Oper) {
                 const auto *body = current->nodeBodyAs<GCOperBody>(it.ref());
-                // Built-in operators have an empty protocol (":op/add_l"); ":mark/..." are
-                // the higher-order ones.
-                heavy = body == nullptr || !body->uri().starts_with(":") ||
-                        body->uri().starts_with(":mark/");
+                // Built-in operators have an empty protocol (":op/add_l"); the marked ones
+                // (":mark/...") are the higher-order ones.
+                const auto &table = OperatorTable::instance();
+                heavy =
+                    body == nullptr || !table.isBuiltin(body->oper) || table.isMarked(body->oper);
             } else if (node->kind == GCNodeKind::Func) {
                 GCGraph *callee = current->directCalleeGraphOf(it.ref());
                 if (callee == nullptr) {
@@ -797,9 +800,9 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                 break;
             case GCNodeKind::Oper: {
                 const auto *body = graph->nodeBodyAs<GCOperBody>(ref);
-                item.kind =
-                    body->uri().starts_with(":mark/") ? ItemKind::Mark : ItemKind::Leaf;
-                item.leaveAfter = !body->uri().starts_with(":");
+                const auto &table = OperatorTable::instance();
+                item.kind         = table.isMarked(body->oper) ? ItemKind::Mark : ItemKind::Leaf;
+                item.leaveAfter   = !table.isBuiltin(body->oper);
                 break;
             }
             default:
@@ -1445,7 +1448,7 @@ void TaskflowExecSchedPass::runLinearBody(
         case GCNodeKind::Sync:
             break;
         case GCNodeKind::Oper:
-            if (graph->nodeBodyAs<GCOperBody>(nodeRef)->uri().starts_with(":mark/")) {
+            if (OperatorTable::instance().isMarked(graph->nodeBodyAs<GCOperBody>(nodeRef)->oper)) {
                 region.leave();
                 (void)executeLinearMarkedOperator(graph, nodeRef, frame);
                 break;
@@ -1617,27 +1620,35 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
 
 slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
-    if (camel::execute::isFaultIsolationUri(graph->nodeBodyAs<GCOperBody>(nodeRef)->uri())) {
-        return executeIsolateNode(graph, nodeRef, frame);
-    }
     // On the calling thread: an operator decides itself whether its elements are worth
     // tasks (runElements). A task graph per operator, as before, cost more than a `reduce`
     // over a handful of elements.
-    const std::string_view uri = graph->nodeBodyAs<GCOperBody>(nodeRef)->uri();
-    if (uri == ":mark/map_arr") {
+    switch (graph->nodeBodyAs<GCOperBody>(nodeRef)->oper) {
+    case oper::Isolate:
+        return executeIsolateNode(graph, nodeRef, frame);
+    case oper::MapArr:
         mark_map_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/apply_arr") {
+        break;
+    case oper::ApplyArr:
         mark_apply_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/filter_arr") {
+        break;
+    case oper::FilterArr:
         mark_filter_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/reduce_arr") {
+        break;
+    case oper::ReduceArr:
         mark_reduce_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/unordered_reduce_arr") {
+        break;
+    case oper::UnorderedReduceArr:
         mark_unordered_reduce_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/foreach_arr") {
+        break;
+    case oper::ForeachArr:
         mark_foreach_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/unordered_foreach_arr") {
+        break;
+    case oper::UnorderedForeachArr:
         mark_unordered_foreach_arr(graph, nodeRef, frame);
+        break;
+    default:
+        break;
     }
     const auto *node = requireNode(graph, nodeRef);
     return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
@@ -1777,7 +1788,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
 
     case GCNodeKind::Oper: {
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
-        if (body->uri().starts_with(":mark/")) {
+        if (OperatorTable::instance().isMarked(body->oper)) {
             return executeLinearMarkedOperator(graph, nodeRef, frame);
         }
         const slot_t result = executePreparedOperator(graph, nodeRef, frame, plan);
@@ -2093,27 +2104,35 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Oper: {
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
-        const std::string uri(body->uri());
-        if (uri == ":mark/map_arr") {
+        switch (body->oper) {
+        case oper::MapArr:
             mark_map_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/apply_arr") {
+            break;
+        case oper::ApplyArr:
             mark_apply_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/filter_arr") {
+            break;
+        case oper::FilterArr:
             mark_filter_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/reduce_arr") {
+            break;
+        case oper::ReduceArr:
             mark_reduce_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/unordered_reduce_arr") {
+            break;
+        case oper::UnorderedReduceArr:
             mark_unordered_reduce_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/foreach_arr") {
+            break;
+        case oper::ForeachArr:
             mark_foreach_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/unordered_foreach_arr") {
+            break;
+        case oper::UnorderedForeachArr:
             mark_unordered_foreach_arr(graph, nodeRef, frame);
-        } else if (camel::execute::isFaultIsolationUri(uri)) {
+            break;
+        case oper::Isolate:
             return executeIsolateNode(graph, nodeRef, frame);
-        } else {
+        default: {
             const slot_t result = executePreparedOperator(graph, nodeRef, frame);
             frame->set(node->dataIndex, result);
             return result;
+        }
         }
         return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
     }

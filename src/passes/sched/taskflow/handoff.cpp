@@ -152,8 +152,9 @@ std::string_view TaskflowExecSchedPass::serialObstacle(const GraphPlan &plan) co
             }
             // The higher-order operators and `attempt` declare that they call function values
             // (OperatorTraits::callsGraphs); `:mark/` is how the schedulers recognise them.
-            const auto traits = camel::core::OperatorTable::instance().find(body->oper);
-            if (body->uri().starts_with(":mark/") || (traits && traits->callsGraphs)) {
+            const auto &table = camel::core::OperatorTable::instance();
+            const auto traits = table.find(body->oper);
+            if (table.isMarked(body->oper) || (traits && traits->callsGraphs)) {
                 return "it has a higher-order operator";
             }
             if (!context_->execMgr().findWithoutImport(std::string(body->uri()))) {

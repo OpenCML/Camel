@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -759,12 +759,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                         opFunc   = *found;
                         body->op = opFunc;
                     } else {
-                        if (uri.starts_with(":mark/")) {
-                            evalMarkedOperator(
-                                uri.substr(6),
-                                currRuntimeGraph,
-                                nodeRef,
-                                *currFrame);
+                        if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
+                            evalMarkedOperator(body->oper, currRuntimeGraph, nodeRef, *currFrame);
                             break;
                         }
                         throwRuntimeFault(RuntimeDiag::UnrecognizedOperatorURI, uri);
@@ -871,22 +867,36 @@ camel::runtime::GCGraph *NodeVMSchedPass::apply(camel::runtime::GCGraph *graph, 
 }
 
 void NodeVMSchedPass::evalMarkedOperator(
-    const std::string &uri, camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef,
+    camel::core::OperId oper, camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef,
     Frame &currFrame) {
-    if (uri == "map_arr") {
+    namespace ops = camel::core::oper;
+    switch (oper) {
+    case ops::MapArr:
         evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
-    } else if (uri == "apply_arr") {
+        break;
+    case ops::ApplyArr:
         evalMarkedOperator_apply_arr(graph, nodeRef, currFrame);
-    } else if (uri == "filter_arr") {
+        break;
+    case ops::FilterArr:
         evalMarkedOperator_filter_arr(graph, nodeRef, currFrame);
-    } else if (uri == "reduce_arr" || uri == "unordered_reduce_arr") {
+        break;
+    case ops::ReduceArr:
+    case ops::UnorderedReduceArr:
         evalMarkedOperator_reduce_arr(graph, nodeRef, currFrame);
-    } else if (uri == "foreach_arr" || uri == "unordered_foreach_arr") {
+        break;
+    case ops::ForeachArr:
+    case ops::UnorderedForeachArr:
         evalMarkedOperator_foreach_arr(graph, nodeRef, currFrame);
-    } else if (uri == camel::execute::kFaultIsolationMark) {
+        break;
+    case ops::Isolate:
         evalMarkedOperator_isolate(graph, nodeRef, currFrame);
-    } else {
-        ASSERT(false, std::format("Mark operator {} not implemented in NodeVM.", uri));
+        break;
+    default:
+        ASSERT(
+            false,
+            std::format(
+                "Mark operator {} not implemented in NodeVM.",
+                camel::core::OperatorTable::instance().uri(oper)));
     }
 }
 

@@ -308,6 +308,15 @@ struct GCOperBody {
   `callsGraphs`), the type resolver and the type folder are stored once per
   operator in the table, not per node; passes ask the table by `OperId`
 - an `OperId` is process-local and never renumbered while the process lives
+- passes and schedulers recognise an operator by its `OperId`, never by comparing
+  the URI text: the operators the core knows have compile-time ids
+  (`camel::core::oper::VarGet`, `oper::MapArr`, `oper::Isolate`, ...; the table
+  interns their URIs first, in a fixed order), a module's pass interns the URIs
+  of its own operators once and compares ids, and the families "built-in"
+  (`:` prefix), "marked" (`:mark/`) and "assignment" (`:op/assn...`) are flags
+  of the entry (`isBuiltin`, `isMarked`, `isAssignment`). The URI is still how
+  a scheduler finds the implementation (the executor manager) and what messages
+  print
 
 (Until 2026-10-13 the URI characters were stored inline after the body, once per
 node.)

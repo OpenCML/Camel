@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,6 +34,15 @@
  * dropped. Modules and the builtin operator set declare those properties here when they are
  * loaded; passes only query. An operator nobody declared is treated conservatively: it has
  * side effects and may fault (design principles 2.9).
+ *
+ * Passes and back ends recognise an operator by its OperId, never by comparing URI text
+ * (design section 3.8, R10). The operators the core itself knows have compile-time ids
+ * (namespace `oper` below): the table interns their URIs first, in a fixed order. An operator
+ * of a module that a pass of the same module recognises is interned once by that pass and
+ * compared by id. Families are flags of the entry, derived from the URI when it is interned:
+ * built-in (`:` prefix: no module protocol), marked (`:mark/`: the schedulers run it
+ * themselves, it calls the function values it receives) and assignment (`:op/assn...`: `=`
+ * and the compound assignments, which store into a variable cell).
  *
  * The implementation (the C++ function pointer) is deliberately not in the table: it is
  * resolved per Context by the executor manager.
@@ -79,6 +88,38 @@ using OperId = uint32_t;
 /// "No operator": the value of a zero-initialized OPER payload. Its URI is the empty string and
 /// it is never declared, so every query treats it conservatively.
 inline constexpr OperId kNoOper = 0;
+
+/// The operators the core recognises by identity, with their ids fixed at compile time. The
+/// table interns their URIs (kWellKnownOperatorUris, same order) before anything else, so
+/// `body->oper == oper::VarGet` is the test that `body->uri() == ":var/get"` used to be.
+namespace oper {
+inline constexpr OperId VarNew              = 1;  // ":var/new"  `var v = e`
+inline constexpr OperId VarGet              = 2;  // ":var/get"  reading a variable
+inline constexpr OperId MapArr              = 3;  // ":mark/map_arr"
+inline constexpr OperId ApplyArr            = 4;  // ":mark/apply_arr"
+inline constexpr OperId FilterArr           = 5;  // ":mark/filter_arr"
+inline constexpr OperId ReduceArr           = 6;  // ":mark/reduce_arr"
+inline constexpr OperId UnorderedReduceArr  = 7;  // ":mark/unordered_reduce_arr"
+inline constexpr OperId ForeachArr          = 8;  // ":mark/foreach_arr"
+inline constexpr OperId UnorderedForeachArr = 9;  // ":mark/unordered_foreach_arr"
+inline constexpr OperId Isolate             = 10; // ":mark/isolate"  `attempt`
+inline constexpr OperId kWellKnownCount     = 11; // kNoOper included
+} // namespace oper
+
+/// The URIs of the ids in namespace `oper`, indexed by id (index 0, kNoOper, is empty).
+inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] = {
+    "",
+    ":var/new",
+    ":var/get",
+    ":mark/map_arr",
+    ":mark/apply_arr",
+    ":mark/filter_arr",
+    ":mark/reduce_arr",
+    ":mark/unordered_reduce_arr",
+    ":mark/foreach_arr",
+    ":mark/unordered_foreach_arr",
+    ":mark/isolate",
+};
 
 struct OperatorTraits {
     /// No side effects and no hidden state: the result depends only on the arguments, so a call
@@ -129,6 +170,20 @@ class OperatorTable {
 
     /// Number of entries, kNoOper included.
     uint32_t size() const { return entries_.size(); }
+
+    /// The operator's URI has no module protocol (`:op/add_i`, `:var/get`): it is one of the
+    /// interpreter's own. Lock-free.
+    bool isBuiltin(OperId id) const { return (entries_[id].family & kFamilyBuiltin) != 0; }
+
+    /// A `:mark/` operator: the schedulers run it themselves rather than through a function
+    /// pointer, because it calls the function values it receives (the higher-order array
+    /// operators and `attempt`). Lock-free.
+    bool isMarked(OperId id) const { return (entries_[id].family & kFamilyMarked) != 0; }
+
+    /// An assignment (`:op/assn`, `:op/assn_l`, `:op/assn_add_i`, ...): `=` or a compound
+    /// assignment, storing its second operand (or the result of the operation) into the
+    /// variable cell that is its first. Lock-free.
+    bool isAssignment(OperId id) const { return (entries_[id].family & kFamilyAssignment) != 0; }
 
     // ---- Declarations (module load time) --------------------------------------------------
 
@@ -194,8 +249,16 @@ class OperatorTable {
         kCallsGraphs = 1 << 5,
     };
 
+    // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isMarked).
+    enum : uint8_t {
+        kFamilyBuiltin    = 1 << 0,
+        kFamilyMarked     = 1 << 1,
+        kFamilyAssignment = 1 << 2,
+    };
+
     struct Entry {
-        SymId uri = kEmptySym;
+        SymId uri      = kEmptySym;
+        uint8_t family = 0;
         std::atomic<uint8_t> traits{0};
         // Guarded by mutex_. A folder is heap-allocated once and replaced only at load time, so
         // readers may keep the pointer after releasing the lock.

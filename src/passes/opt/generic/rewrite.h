@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -36,8 +36,12 @@ namespace camel::passes::generic {
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphDraft;
 
-/// URI of an OPER node, or an empty view for other nodes.
+/// URI of an OPER node, or an empty view for other nodes. For messages: passes recognise an
+/// operator by operIdOf.
 std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id);
+
+/// The operator an OPER node calls (camel/core/operator_table.h), or kNoOper for other nodes.
+camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id);
 
 /// True for an OPER node whose operator is registered as pure.
 bool isPureOper(const GraphDraft &draft, gc_node_ref_t id);

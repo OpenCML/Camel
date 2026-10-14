@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 10, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -890,7 +890,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
         // as data. Waiting on it would also wrap the cell in a GATE when the call is spliced,
         // and a consumer that follows a variable by its cell (the ONNX exporter) would no
         // longer see it as local.
-        if (camel::passes::generic::operUriOf(draft, source) == ":var/new") {
+        if (camel::passes::generic::operIdOf(draft, source) == camel::core::oper::VarNew) {
             continue;
         }
         const auto existing = draft.ctrlInputsOf(funcNodeId);

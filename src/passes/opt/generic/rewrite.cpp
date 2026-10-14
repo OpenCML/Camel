@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,6 +44,14 @@ std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id) {
         return {};
     }
     return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->uri();
+}
+
+camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto *h = draft.header(id);
+    if (!h || h->kind != GCNodeKind::Oper) {
+        return camel::core::kNoOper;
+    }
+    return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper;
 }
 
 bool isPureOper(const GraphDraft &draft, gc_node_ref_t id) {

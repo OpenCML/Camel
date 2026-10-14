@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -22,6 +22,8 @@
  */
 
 #include "camel/core/operator_table.h"
+
+#include "camel/utils/assert.h"
 
 #include <mutex>
 
@@ -36,6 +38,12 @@ OperatorTable::OperatorTable() {
     // Index 0 is kNoOper: the empty URI, never declared.
     const OperId id = entries_.append([](Entry &entry) { entry.uri = kEmptySym; });
     ids_.emplace(kEmptySym, id);
+    // The operators with compile-time ids come next, in the order of their ids.
+    for (OperId known = 1; known < oper::kWellKnownCount; ++known) {
+        const OperId interned = internLocked(kWellKnownOperatorUris[known]);
+        ASSERT(interned == known, "The well-known operators must be interned first, in order.");
+        (void)interned;
+    }
 }
 
 uint8_t OperatorTable::encode(OperatorTraits traits) {
@@ -60,7 +68,20 @@ OperId OperatorTable::internLocked(std::string_view uri) {
     if (auto it = ids_.find(symbol); it != ids_.end()) {
         return it->second;
     }
-    const OperId id = entries_.append([&](Entry &entry) { entry.uri = symbol; });
+    uint8_t family = 0;
+    if (uri.starts_with(':')) {
+        family |= kFamilyBuiltin;
+    }
+    if (uri.starts_with(":mark/")) {
+        family |= kFamilyMarked;
+    }
+    if (uri.starts_with(":op/assn")) {
+        family |= kFamilyAssignment;
+    }
+    const OperId id = entries_.append([&](Entry &entry) {
+        entry.uri    = symbol;
+        entry.family = family;
+    });
     ids_.emplace(symbol, id);
     return id;
 }

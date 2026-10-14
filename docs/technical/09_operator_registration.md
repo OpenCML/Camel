@@ -151,6 +151,14 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 | `mayFault` | 可能出故障（除零、越界、转换放不进目标类型）。**缺省为真**；确定不会出故障的才声明为假。目前没有任何遍依据它改变行为（图数据模型设计稿 Q1 待定）。 |
 | `callsGraphs` | 执行中会调用实参里的函数值（`map`、`reduce` 等高阶算子与 `attempt`），它做什么取决于传进来的函数。 |
 
+遍与调度器按编号认算子，不比较 URI 文本：
+
+- 核心认得的算子有编译期常量形式的编号（`camel::core::oper::VarNew`、`VarGet`、`MapArr` 等 `:mark/` 算子、`Isolate`），算子表构造时按固定顺序先驻留它们的 URI；
+- 模块自己的遍要认本模块的算子时，把 URI 驻留一次（函数内的静态量）再比较编号，例如 `autodiff:grad`、`tensor:matmul`、`onnx:export_model`；
+- 三个族是表项上的标志，在 URI 第一次驻留时由前缀定下：`isBuiltin`（`:` 开头，没有模块协议）、`isMarked`（`:mark/`，调度器自己执行、会调用收到的函数值）、`isAssignment`（`:op/assn` 开头的赋值与复合赋值）。
+
+URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显示的名字。
+
 **没有登记的算子按保守方式处理，即视为有副作用。** 新增一个纯算子时若不登记，结果仍然正确，但通用图遍不会对它做折叠、合并或删除。
 
 登记发生在模块加载时：
