@@ -1508,6 +1508,12 @@ export func simplify(p: Program): Program! {
 | 1 | **已完成（一项留待第 3 步）** | 删除 `src/compile/gir/validate.cpp` 与头文件、`DraftGraphBuilder::looped_`、没人用的 `gir::NodeType`、`addBindNode`；`GCNodeKind` 写明数值，`Bind`、`Dref` 标为保留；三个调度器、`std::cpp`、DOT 转储、调试器索引里为这两种节点留的分支删掉 | **`debug_json.cpp` 没有删**：本稿 1.11 与附录 B 的 D5 说它没有调用点，这是错的——调试器的 `/gir` 查询经 `tools/debugger/src/compile.cpp` 链接它（删掉后 `camel-db` 链接失败）。**四个锚点收成 `exit`/`result` 没有做**：`entry`/`output`/`return`/`returnKind` 在 23 个文件里有 165 处使用（内联、自动微分、四个后端），它改的正是第 3 步要重排的图头，放到第 3 步一起做 |
 | 2 | **部分完成** | **符号表**（`include/camel/core/symbol.h`）：`ACCS` 的字段名改存 `SymId`。**算子表**（`include/camel/core/operator_table.h`）：`OperId`；`OPER` 节点负载定长、不再内嵌 URI；原来三张按 URI 查的注册表（性质、类型规则、类型折叠）并入表项；新增 `mayFault`（缺省为真）与 `callsGraphs` 两个声明。**类型表**（`include/camel/core/type/intern.h`）：`TypeId`；帧布局与静态区布局、结构体类型、算子类型规则给出的签名做了驻留。`CAMEL_TYPE_STATS=1` 按种类印出类型对象的个数与字节数 | 见下 |
 
+**实施状态（2026-10-14，分支 `lane/modules`）。** 第 6–8 步与第 12 步在这条线上做。
+
+| 步 | 状态 | 做了什么 | 与设计不同或没做的 |
+|---|---|---|---|
+| 6 | **已完成** | 全程序一个建图器（`camel::compile::gir::Builder::of(context)`，`src/compile/gir/program.cpp`），每个模块一组顶层作用域，所有模块建在同一张 `__root__` 上；捕获端口绑定到它代表的节点（"来源"，模块顶层的值即 root 上的节点），调用处与函数值处按来源在调用者里取值，不再按名字重找（`src/compile/gir/captures.cpp`）；直接调用的捕获在链接步按被调图的端口次序接线，取到不动点；泛型实例全程序每组类型一张、挂在声明它的图下 | 实体表没有单独做成一张表：值的实体就是 root 上的节点（`topLevelValues_` 记着它属于哪个模块、叫什么）；捕获的绑定只用到"来源节点"，3.7 的 `Local`/`Entity` 两种绑定在实现里是同一种。被导入模块的函数图不登记为 root 的子图，可达性与以前一样只沿调用与函数值 |
+
 第 2 步的验收数字（永久空间，扣除空程序的基线后）：
 
 | | 迁移前 | 现在 | 设计的目标 |

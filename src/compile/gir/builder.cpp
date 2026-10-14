@@ -18,6 +18,7 @@
  */
 
 #include "builder.h"
+#include "builder_support.h"
 
 #include "camel/core/numeric_convert.h"
 #include "camel/compile/gir/static_function.h"
@@ -165,82 +166,6 @@ StaticFunction *createStaticFunction(
         targetGraph,
         currentClosureTupleType(targetGraph),
         staticFunctionAllocator(ownerGraph));
-}
-
-runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
-    switch (type) {
-    case LinkType::Norm:
-        return runtime::DraftEdgeKind::Norm;
-    case LinkType::With:
-        return runtime::DraftEdgeKind::With;
-    case LinkType::Ctrl:
-        return runtime::DraftEdgeKind::Ctrl;
-    }
-    ASSERT(false, "Unknown link type.");
-    return runtime::DraftEdgeKind::Norm;
-}
-
-runtime::GCNodeKind nodeKindOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
-    return node->header.kind;
-}
-
-Type *nodeTypeOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
-    return node->header.dataType;
-}
-
-const runtime::DraftNodeHeader *nodeHeaderOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
-    return &node->header;
-}
-
-runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
-    return node->header.owner;
-}
-
-DraftGraphBuilder *nodeGraphOf(node_handle_t node) {
-    auto *builder = DraftGraphBuilder::fromDraft(nodeDraftOf(node));
-    ASSERT(builder != nullptr, "Draft node is not owned by a compile graph builder.");
-    return builder;
-}
-
-draft_node_ref_t nodeIdOf(node_handle_t node) {
-    ASSERT(node != nullptr, "Draft node is null.");
-    return node->header.selfId;
-}
-
-std::span<const draft_node_ref_t> normInputsOf(node_handle_t node) {
-    return nodeDraftOf(node)->normInputsOf(node);
-}
-
-std::span<const draft_node_ref_t> withInputsOf(node_handle_t node) {
-    return nodeDraftOf(node)->withInputsOf(node);
-}
-
-std::span<const draft_node_ref_t> ctrlInputsOf(node_handle_t node) {
-    return nodeDraftOf(node)->ctrlInputsOf(node);
-}
-
-std::span<const draft_node_ref_t> normUsersOf(node_handle_t node) {
-    return nodeDraftOf(node)->normUsersOf(node);
-}
-
-std::span<const draft_node_ref_t> withUsersOf(node_handle_t node) {
-    return nodeDraftOf(node)->withUsersOf(node);
-}
-
-std::span<const draft_node_ref_t> ctrlUsersOf(node_handle_t node) {
-    return nodeDraftOf(node)->ctrlUsersOf(node);
-}
-
-std::string_view nodeDebugEntityIdOf(node_handle_t node) {
-    return node ? nodeGraphOf(node)->nodeDebugEntityId(node) : std::string_view{};
-}
-
-bool nodeIsKind(node_handle_t node, runtime::GCNodeKind kind) {
-    return node != nullptr && nodeKindOf(node) == kind;
 }
 
 /// Compile-time value of a node that is static data (possibly behind a COPY), else nullopt.
@@ -438,32 +363,6 @@ void setNodeMacro(node_handle_t node, bool enabled) {
     nodeDraftOf(node)->setNodeRuntimeFlags(nodeIdOf(node), flags);
 }
 
-bool isMacroGraph(const compile_graph_ptr_t &graph) {
-    return graph && graph->funcType() && graph->funcType()->modifiers().macro();
-}
-
-std::vector<std::string> closureRefNames(const compile_graph_ptr_t &graph) {
-    std::vector<std::string> refs;
-    if (!graph) {
-        return refs;
-    }
-    refs.reserve(graph->draft().closureNodes().size());
-    for (draft_node_ref_t portId : graph->draft().closureNodes()) {
-        refs.push_back(graph->nodePortName(graph->draft().node(portId)));
-    }
-    return refs;
-}
-
-bool sameGraph(node_handle_t lhs, const compile_graph_ptr_t &graph) {
-    return lhs != nullptr && nodeGraphOf(lhs) == graph.get();
-}
-
-void linkNodes(LinkType type, node_handle_t from, node_handle_t to) {
-    ASSERT(from != nullptr && to != nullptr, "Cannot link null draft nodes.");
-    ASSERT(nodeGraphOf(from) == nodeGraphOf(to), "Compile-time link must stay within one graph.");
-    nodeGraphOf(from)->link(toDraftEdgeKind(type), from, to);
-}
-
 std::string makeCompileGraphStableId(const std::string &name) {
     static std::atomic<uint64_t> seq = 1;
     return std::format("{}_{}", name.empty() ? "g" : name, seq++);
@@ -523,25 +422,6 @@ const char *operatorSymbolOf(std::string_view group) {
     return it == symbols.end() ? nullptr : it->second;
 }
 } // namespace
-
-inline void tryRemoveCtrlLink(node_handle_t from, node_handle_t to) {
-    // if from has already linked to to by a ctrl link, remove it first
-    // sometimes we may need to change a ctrl link (linked before) to a data link
-    // because data link has higher priority than ctrl link
-    // and we don't want to have duplicate links
-    if (!from || !to || nodeGraphOf(from) != nodeGraphOf(to)) {
-        return;
-    }
-    (void)nodeGraphOf(from)->unlink(runtime::DraftEdgeKind::Ctrl, from, to);
-}
-
-inline bool linkCheek(node_handle_t from, node_handle_t to) {
-    // prevent linking a node to itself
-    if (!from || !to || from == to) {
-        return false;
-    }
-    return true;
-}
 
 inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
     if (!lhs || !rhs || nodeGraphOf(lhs) != nodeGraphOf(rhs)) {
@@ -706,164 +586,95 @@ inline void bindGraphScopedFuncNodeDebug(
     }
 }
 
-compile_graph_ptr_t Builder::build(GCT::Tree &tree, diagnostics_ptr_t diags) {
-    tree_                      = &tree;
-    const GCT::node_ptr_t &gct = tree.root();
-    waited_                    = false;
-    synced_ = false;
-    varied_ = false;
-    diags_  = diags;
-    usedGraphs_.clear();
-    variables_.clear();
-    pendingUses_.clear();
-    captures_.clear();
-    bodyStates_.clear();
-    capturePortNames_.clear();
-    pendingIgnoredWrites_.clear();
-    builtFunctions_.clear();
-    effectfulGraphs_.clear();
-    armGraphs_.clear();
-    builtBodies_.clear();
-    typeDecls_.clear();
-    redeclaredFuncTypes_.clear();
-    syntheticRefIndex_ = 0;
-    typeBindings_.clear();
-    genericDrefs_.clear();
-    instantiationDepth_   = 0;
-    genericCalleeAllowed_ = false;
-    recorder_             = context_ ? context_->semanticRecorder() : nullptr;
-    declOrigins_.clear();
-    importedUseOrigins_.clear();
-    discardedValues_.clear();
-    inferredExitGraphs_.clear();
-
-    nodeScope_      = node_scope_t::create();
-    graphScope_     = graph_scope_t::create();
-    decoratedScope_ = decorated_scope_t::create();
-    templateScope_  = template_scope_t::create();
-    rootGraph_      = createCompileGraph(FunctionType::create(), nullptr, "__root__");
+void Builder::ensureRootGraph() {
+    if (rootGraph_) {
+        return;
+    }
+    rootGraph_ = createCompileGraph(FunctionType::create(), nullptr, "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
     }
-    currGraph_ = rootGraph_;
+}
 
-    try {
-        reportImportNameConflicts();
-        visit(gct);
-        reportIgnoredCapturedWrites();
-        reportUndeclaredCapturedWrites();
-        reportUnusedFallibleValues();
-        reportDroppedEffectsOfBodies();
-
-        compile_graph_ptr_t entryGraph = nullptr;
-        if (auto decoratedMain = decoratedGraphAt("main")) {
-            entryGraph = *decoratedMain;
-        } else if (auto gv = graphsAt("main"); gv.has_value() && !gv.value()->empty()) {
-            entryGraph = gv.value()->front();
-        }
-        const bool entryModule =
-            context_ && module_ && context_->mainModule() && context_->mainModule() == module_;
-        if (entryGraph) {
-            // The entry graph stands for the entry function where a diagnostic is about the
-            // program as a whole (a translation pass that finds nothing to translate): it
-            // shares the origin of `main`, also after passes have inlined `main` into it.
-            if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
-                const auto mainOrigin =
-                    sourceContext->debugMap().graphOrigin(entryGraph->stableId());
-                if (mainOrigin != camel::source::kInvalidOriginId) {
-                    sourceContext->debugMap().registerGraphOrigin(
-                        rootGraph_->stableId(),
-                        mainOrigin);
-                    // Also under a fixed key: the entry graph is rewritten (and renamed) by
-                    // passes, the question "where is main" outlives that.
-                    sourceContext->debugMap().registerGraphOrigin(
-                        camel::execute::kEntryFunctionOriginKey,
-                        mainOrigin);
-                }
-            }
-            // `main` is a function like any other: its parameters are the inputs of the
-            // program. The entry graph takes the same parameters (`with` ones first) and
-            // passes them on, so it never calls `main` with fewer arguments than it takes.
-            // Who supplies them is not decided here: a run binds values given from outside
-            // (see camel/execute/entry_args.h), a translation takes them as the inputs of
-            // what it produces.
-            FunctionType *entryType = entryGraph->funcType();
-            std::vector<node_handle_t> entryWithArgs, entryNormArgs;
-            if (entryType->withTypesCount() + entryType->normTypesCount() > 0) {
-                FunctionTypeFactory rootTypeFactory;
-                const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
-                    return argIndex < entryType->argNamesCount()
-                               ? std::string(entryType->argNameAt(argIndex))
-                               : std::format("{}{}", prefix, i);
-                };
-                for (size_t i = 0; i < entryType->withTypesCount(); ++i) {
-                    const std::string name = nameAt(i, "__w", i);
-                    const bool isVar       = entryType->withIsVarAt(i);
-                    Type *type             = entryType->withTypeAt(i);
-                    rootTypeFactory.addWithArg(name, type, isVar);
-                    entryWithArgs.push_back(
-                        rootGraph_
-                            ->addPortNode(isVar ? TupleType::cell(type) : type, name, true, isVar));
-                }
-                for (size_t i = 0; i < entryType->normTypesCount(); ++i) {
-                    const std::string name = nameAt(entryType->withTypesCount() + i, "__n", i);
-                    const bool isVar       = entryType->normIsVarAt(i);
-                    Type *type             = entryType->normTypeAt(i);
-                    rootTypeFactory.addNormArg(name, type, isVar);
-                    entryNormArgs.push_back(
-                        rootGraph_
-                            ->addPortNode(isVar ? TupleType::cell(type) : type, name, false, isVar));
-                }
-                rootGraph_->setFuncType(rootTypeFactory.build());
-            }
-            auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
-            auto entryCall      = rootGraph_->addCallNode(entryGraph->funcType()->exitType());
-            linkNodes(LinkType::With, entryFuncValue, entryCall);
-            for (node_handle_t arg : entryWithArgs) {
-                linkNodes(LinkType::With, arg, entryCall);
-            }
-            for (node_handle_t arg : entryNormArgs) {
-                linkNodes(LinkType::Norm, arg, entryCall);
-            }
-            setGraphReturnFromResult(
-                rootGraph_,
-                nodeIdOf(entryCall),
-                nodeIdOf(entryCall),
-                entryGraph->funcType()->exitType());
-            // Module-level statements run only as far as the call of `main` depends on them.
-            reportDroppedEffects(rootGraph_);
-        } else if (entryModule) {
-            diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
-            throw BuildAbortException();
-        } else {
-            auto *placeholder =
-                rootGraph_->addStaticDataNode(std::make_shared<LongData>(static_cast<int64_t>(0)));
-            setGraphReturnFromResult(
-                rootGraph_,
-                nodeIdOf(placeholder),
-                nodeIdOf(placeholder),
-                Type::Int64());
-        }
-    } catch (Diagnostic &d) {
-        diags_->add(std::move(d));
-        rootGraph_ = nullptr;
-    } catch (const BuildAbortException &) {
-        rootGraph_ = nullptr;
-    } catch (const camel::core::mm::MemoryExhausted &e) {
-        // A memory space is at its limit: reported like any other limit the program runs into,
-        // at the function that was being compiled (buildFuncBody says which).
-        camel::core::error::setPipelineStage("compile");
-        auto diag = diags_->of(RuntimeDiag::MemoryExhausted);
-        if (e.origin() != camel::source::kInvalidOriginId) {
-            diag.atOrigin(e.origin());
-        }
-        diag.commit(std::string(), std::string(e.what()));
-        camel::core::error::setPipelineStage("");
-        rootGraph_ = nullptr;
+void Builder::buildEntryCall() {
+    compile_graph_ptr_t entryGraph = nullptr;
+    if (auto decoratedMain = decoratedGraphAt("main")) {
+        entryGraph = *decoratedMain;
+    } else if (auto gv = graphsAt("main"); gv.has_value() && !gv.value()->empty()) {
+        entryGraph = gv.value()->front();
     }
-
-    return rootGraph_;
+    if (entryGraph) {
+        // The entry graph stands for the entry function where a diagnostic is about the
+        // program as a whole (a translation pass that finds nothing to translate): it
+        // shares the origin of `main`, also after passes have inlined `main` into it.
+        if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+            const auto mainOrigin =
+                sourceContext->debugMap().graphOrigin(entryGraph->stableId());
+            if (mainOrigin != camel::source::kInvalidOriginId) {
+                sourceContext->debugMap().registerGraphOrigin(
+                    rootGraph_->stableId(),
+                    mainOrigin);
+                // Also under a fixed key: the entry graph is rewritten (and renamed) by
+                // passes, the question "where is main" outlives that.
+                sourceContext->debugMap().registerGraphOrigin(
+                    camel::execute::kEntryFunctionOriginKey,
+                    mainOrigin);
+            }
+        }
+        // `main` is a function like any other: its parameters are the inputs of the
+        // program. The entry graph takes the same parameters (`with` ones first) and
+        // passes them on, so it never calls `main` with fewer arguments than it takes.
+        // Who supplies them is not decided here: a run binds values given from outside
+        // (see camel/execute/entry_args.h), a translation takes them as the inputs of
+        // what it produces.
+        FunctionType *entryType = entryGraph->funcType();
+        std::vector<node_handle_t> entryWithArgs, entryNormArgs;
+        if (entryType->withTypesCount() + entryType->normTypesCount() > 0) {
+            FunctionTypeFactory rootTypeFactory;
+            const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
+                return argIndex < entryType->argNamesCount()
+                           ? std::string(entryType->argNameAt(argIndex))
+                           : std::format("{}{}", prefix, i);
+            };
+            for (size_t i = 0; i < entryType->withTypesCount(); ++i) {
+                const std::string name = nameAt(i, "__w", i);
+                const bool isVar       = entryType->withIsVarAt(i);
+                Type *type             = entryType->withTypeAt(i);
+                rootTypeFactory.addWithArg(name, type, isVar);
+                entryWithArgs.push_back(
+                    rootGraph_
+                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, true, isVar));
+            }
+            for (size_t i = 0; i < entryType->normTypesCount(); ++i) {
+                const std::string name = nameAt(entryType->withTypesCount() + i, "__n", i);
+                const bool isVar       = entryType->normIsVarAt(i);
+                Type *type             = entryType->normTypeAt(i);
+                rootTypeFactory.addNormArg(name, type, isVar);
+                entryNormArgs.push_back(
+                    rootGraph_
+                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, false, isVar));
+            }
+            rootGraph_->setFuncType(rootTypeFactory.build());
+        }
+        auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
+        auto entryCall      = rootGraph_->addCallNode(entryGraph->funcType()->exitType());
+        linkNodes(LinkType::With, entryFuncValue, entryCall);
+        for (node_handle_t arg : entryWithArgs) {
+            linkNodes(LinkType::With, arg, entryCall);
+        }
+        for (node_handle_t arg : entryNormArgs) {
+            linkNodes(LinkType::Norm, arg, entryCall);
+        }
+        setGraphReturnFromResult(
+            rootGraph_,
+            nodeIdOf(entryCall),
+            nodeIdOf(entryCall),
+            entryGraph->funcType()->exitType());
+    } else {
+        diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
+        throw BuildAbortException();
+    }
 }
 
 compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
@@ -990,61 +801,6 @@ bool Builder::insertDecoratedGraph(const std::string &name, const compile_graph_
     return true;
 }
 
-node_handle_t Builder::resolveCrossGraphRef(node_handle_t node, const std::string &name) {
-    compile_graph_ptr_t curr = currGraph_;
-    node_scope_ptr_t scope   = nodeScope_;
-
-    if (!foreignInstanceOf_.empty() && node) {
-        // The instance of an imported generic function hangs under the importing module's
-        // root graph, so a value of the declaring module's top level is not in a graph that
-        // encloses it and cannot be captured (DESIGN-QUESTION(generic-export)).
-        bool enclosed = false;
-        for (compile_graph_ptr_t g = currGraph_; g; g = g->outerGraph()) {
-            if (g.get() == nodeGraphOf(node)) {
-                enclosed = true;
-                break;
-            }
-        }
-        if (!enclosed) {
-            auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-            auto origin        = (sourceContext && currGraph_)
-                                     ? sourceContext->debugMap().graphOrigin(currGraph_->stableId())
-                                     : camel::source::kInvalidOriginId;
-            diags_->of(SemanticDiag::ImportedFunctionUsesModuleValue)
-                .atOrigin(origin)
-                .commit(foreignInstanceOf_, name);
-            throw BuildAbortException();
-        }
-    }
-
-    while (curr && node && curr.get() != nodeGraphOf(node)) {
-        if (usedGraphs_.find(curr.get()) != usedGraphs_.end()) {
-            diags_->of(SemanticDiag::ClosureCaptureAfterSelfCall).commit(name, curr->name());
-            throw BuildAbortException();
-        }
-
-        // A captured variable is captured by reference: the port holds the same cell.
-        auto *portNode = curr->addPortNode(nodeTypeOf(node), name, false, isVariable(node));
-        curr->draft().removeNormPort(nodeIdOf(portNode));
-        curr->draft().appendClosureNode(nodeIdOf(portNode));
-        const auto closureRefs = curr->funcType()->closureRefs();
-        if (std::find(closureRefs.begin(), closureRefs.end(), name) == closureRefs.end()) {
-            curr->funcType()->addClosureRef(name);
-        }
-        scope->insert(name, portNode);
-        if (isVariable(node)) {
-            variables_.insert(portNode);
-            capturePortNames_.emplace(portNode, name);
-            captures_[curr.get()].variables.push_back(name);
-        }
-
-        curr  = curr->outerGraph();
-        scope = scope->outer();
-    }
-
-    return *nodeScope_->get(name);
-}
-
 node_handle_t Builder::resolveNodeByRef(const std::string &name) {
     auto optSrcNode = nodeAt(name);
     if (!optSrcNode.has_value()) {
@@ -1074,12 +830,8 @@ node_handle_t Builder::resolveNodeByRef(const std::string &name) {
     }
     node_handle_t node = optSrcNode.value();
 
-    if (!sameGraph(node, currGraph_)) {
-        node = resolveCrossGraphRef(node, name);
-        ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
-    }
-
-    return node;
+    // A value of an enclosing graph (a module's top level included) is captured.
+    return captureInto(currGraph_, node, name);
 }
 
 bool Builder::isPoisonedName(const std::string &name) const {
@@ -1212,7 +964,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     GCT::node_ptr_t typeNode = gct->at(0);
     Type *type               = typeNode->dataType();
     if (!gct->isFunc()) {
-        typeDecls_[Reference(gct->name())] = type;
+        unit_->typeDecls[Reference(gct->name())] = type;
         LEAVE("DECL");
         return nullptr;
     }
@@ -1369,7 +1121,6 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
         tmpl->module         = module_;
-        tmpl->homeRoot       = rootGraph_.get();
         tmpl->nodeScope      = nodeScope_;
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
@@ -1386,7 +1137,6 @@ node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
     tmpl->outerBindings  = typeBindings_;
     tmpl->ownerGraph     = currGraph_;
     tmpl->module         = module_;
-    tmpl->homeRoot       = rootGraph_.get();
     tmpl->nodeScope      = nodeScope_;
     tmpl->graphScope     = graphScope_;
     tmpl->decoratedScope = decoratedScope_;
@@ -2046,16 +1796,14 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         }
         return true;
     };
-    // One instance per set of types. An instance whose body is still being built is found
-    // here too: that is a recursive call.
-    // DESIGN-QUESTION(generic-export): a generic function imported from another module is
-    // instantiated here, in the module that calls it: the template travels with the module
-    // that declares it, each importing module holds its own instances (under its own root
-    // graph), and the body resolves its names where it was declared. The alternative is one
-    // instance per set of types for the whole program, owned by the declaring module.
-    const bool foreign = tmpl->homeRoot != rootGraph_.get();
+    // One instance per set of types in the whole program, whichever module calls it: the
+    // instance is a graph under the graph the function was declared in (the root graph for a
+    // function of a module's top level), and its body resolves its names, and captures the
+    // values of the top level, of the module that declares it. An instance whose body is
+    // still being built is found here too: that is a recursive call.
+    const bool foreign = tmpl->module != module_;
     for (const GenericInstance &instance : tmpl->instances) {
-        if (instance.owner == rootGraph_.get() && sameBindings(instance.bindings)) {
+        if (sameBindings(instance.bindings)) {
             if (instance.failed) {
                 throw BuildAbortException();
             }
@@ -2114,22 +1862,19 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         bool waited, synced, varied, declaresVariable, calleeAllowed;
         node_handle_t lastSynced;
         camel::core::module::module_ptr_t module;
-        std::string foreignInstanceOf;
         GenericTemplate &opened;
         BuildState(Builder &b, GenericTemplate &t)
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
               bindings(b.typeBindings_), waited(b.waited_), synced(b.synced_), varied(b.varied_),
               declaresVariable(b.declaresVariable_), calleeAllowed(b.genericCalleeAllowed_),
-              lastSynced(b.lastSyncedNode_), module(b.module_),
-              foreignInstanceOf(b.foreignInstanceOf_), opened(t) {
+              lastSynced(b.lastSyncedNode_), module(b.module_), opened(t) {
             ++self.instantiationDepth_;
             ++opened.openInstances;
         }
         ~BuildState() {
             --opened.openInstances;
             self.module_               = module;
-            self.foreignInstanceOf_    = std::move(foreignInstanceOf);
             self.currGraph_            = graph;
             self.nodeScope_            = nodeScope;
             self.graphScope_           = graphScope;
@@ -2152,14 +1897,8 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     compile_graph_ptr_t graph;
     try {
         BuildState saved(*this, *tmpl);
-        // An imported template: the instance belongs to this module (its graph hangs under
-        // this module's root graph), the names of its body to the declaring module.
-        currGraph_ = foreign && tmpl->ownerGraph.get() == tmpl->homeRoot ? rootGraph_
-                                                                         : tmpl->ownerGraph;
-        if (foreign) {
-            module_            = tmpl->module;
-            foreignInstanceOf_ = tmpl->name;
-        }
+        currGraph_ = tmpl->ownerGraph;
+        module_    = tmpl->module;
         nodeScope_      = tmpl->nodeScope;
         graphScope_     = tmpl->graphScope;
         decoratedScope_ = tmpl->decoratedScope;
@@ -2176,14 +1915,13 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings);
         graph = tmpl->name.empty() ? createCompileGraph(funcType, currGraph_)
                                    : createCompileGraph(funcType, currGraph_, instanceName);
-        tmpl->instances.push_back({bindings, graph, false, rootGraph_.get()});
-        // Scopes are kept by name under the scope they were entered from, here a scope of
-        // the declaring module: the instances of two importing modules need two scopes.
-        // Likewise two functions written in place, which have no name to tell them apart.
+        tmpl->instances.push_back({bindings, graph, false});
+        // Scopes are kept by name under the scope they were entered from, here the scope the
+        // function was declared in: two functions written in place, which have no name to
+        // tell them apart, need two scopes.
         enterGraphScope(
             graph,
-            foreign ? std::format("{}@{:p}", instanceName, static_cast<void *>(rootGraph_.get()))
-            : tmpl->name.empty()
+            tmpl->name.empty()
                 ? std::format("{}@{:p}", instanceName, static_cast<void *>(tmpl.get()))
                 : instanceName);
         buildFuncBody(tmpl->func, graph, funcType, instanceName);
@@ -2416,6 +2154,11 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(ident);
         throw BuildAbortException();
     }
+    if (currGraph_ == rootGraph_ && !ident.empty() &&
+        !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
+        // A value of the top level of the module: what the functions that use it capture.
+        topLevelValues_[bound] = {module_.get(), ident};
+    }
     if (recorder_ && !nodeIsKind(bound, runtime::GCNodeKind::Dref)) {
         recordDeclaration(ident, bound, gct);
     }
@@ -2487,8 +2230,7 @@ void Builder::recordWrite(
     setModifier(variable, exit);
     // A write of a captured variable is what callers of this graph have to see.
     if (!throughCallee) {
-        if (auto captured = capturePortNames_.find(variable);
-            captured != capturePortNames_.end()) {
+        if (auto captured = captureOriginOf_.find(variable); captured != captureOriginOf_.end()) {
             captures_[nodeGraphOf(variable)].written.insert(captured->second);
         }
     }
@@ -2502,7 +2244,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     }
 }
 
-std::set<std::string> Builder::capturedWritesOf(DraftGraphBuilder *root) const {
+std::set<node_handle_t> Builder::capturedWritesOf(DraftGraphBuilder *root) const {
     const auto isOpen = [&](DraftGraphBuilder *graph) {
         auto state = bodyStates_.find(graph);
         return state != bodyStates_.end() && state->second == BodyState::Open;
@@ -2514,7 +2256,7 @@ std::set<std::string> Builder::capturedWritesOf(DraftGraphBuilder *root) const {
     // The graphs reachable through direct calls and arms. An open body is not looked into:
     // what it will write is not known yet, so all it captured stands for it.
     std::vector<DraftGraphBuilder *> reached{root};
-    std::unordered_map<DraftGraphBuilder *, std::set<std::string>> writes;
+    std::unordered_map<DraftGraphBuilder *, std::set<node_handle_t>> writes;
     for (size_t i = 0; i < reached.size(); ++i) {
         DraftGraphBuilder *graph = reached[i];
         const auto *summary      = summaryOf(graph);
@@ -2546,9 +2288,10 @@ std::set<std::string> Builder::capturedWritesOf(DraftGraphBuilder *root) const {
             }
             auto &own = writes[graph];
             for (DraftGraphBuilder *callee : summary->callees) {
-                for (const std::string &name : writes[callee]) {
-                    if (std::ranges::find(summary->variables, name) != summary->variables.end() &&
-                        own.insert(name).second) {
+                for (node_handle_t variable : writes[callee]) {
+                    if (std::ranges::find(summary->variables, variable) !=
+                            summary->variables.end() &&
+                        own.insert(variable).second) {
                         changed = true;
                     }
                 }
@@ -2567,30 +2310,28 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
     if (summary == captures_.end() || summary->second.variables.empty()) {
         return {};
     }
-    // Resolving a name may add a capture port to the current graph and its summary.
-    const std::vector<std::string> names = summary->second.variables;
-    const std::set<std::string> written  = capturedWritesOf(callee.get());
+    // Capturing into the current graph may add to its summary: copies.
+    const std::vector<node_handle_t> variables = summary->second.variables;
+    const std::set<node_handle_t> written      = capturedWritesOf(callee.get());
     std::vector<CapturedUse> uses;
-    for (const std::string &name : names) {
-        // The callee's capture is bound by name where it is called, as its with-inputs are.
-        node_handle_t variable = resolveNodeByRef(name);
-        if (isVariable(variable)) {
-            uses.push_back({variable, name, written.contains(name)});
-        }
+    for (node_handle_t origin : variables) {
+        // The callee's variable, as the current graph sees it (see captureInto).
+        node_handle_t variable = captureInto(currGraph_, origin, captureNameOf(origin, ""));
+        uses.push_back({variable, origin, written.contains(origin)});
     }
     return uses;
 }
 
 void Builder::reportIgnoredCapturedWrites() {
     for (const PendingIgnoredWrite &pending : pendingIgnoredWrites_) {
-        std::set<std::string> written;
+        std::set<node_handle_t> written;
         for (DraftGraphBuilder *graph : pending.graphs) {
             written.merge(capturedWritesOf(graph));
         }
         std::vector<std::string> names;
-        for (const std::string &name : pending.names) {
-            if (written.contains(name)) {
-                names.push_back("'" + name + "'");
+        for (node_handle_t variable : pending.variables) {
+            if (written.contains(variable)) {
+                names.push_back("'" + captureNameOf(variable, originNames_[variable]) + "'");
             }
         }
         if (names.empty()) {
@@ -2620,12 +2361,14 @@ void Builder::reportUndeclaredCapturedWrites() {
             continue;
         }
         std::vector<std::string> names;
-        for (const std::string &name : capturedWritesOf(function.graph)) {
-            names.push_back("'" + name + "'");
+        for (node_handle_t variable : capturedWritesOf(function.graph)) {
+            names.push_back("'" + captureNameOf(variable, originNames_[variable]) + "'");
         }
         if (names.empty()) {
             continue;
         }
+        // In the order of the names, not of the nodes.
+        std::ranges::sort(names);
         diags_->of(SemanticDiag::CapturedWriteInAsyncFunction)
             .atOrigin(function.origin)
             .commit(
@@ -2742,7 +2485,9 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         if (needed.contains(id)) {
             effectfulGraphs_.insert(graph.get());
-        } else {
+        } else if (graph != rootGraph_ || (id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
+            // On the root graph, the top level of the module being reported only: another
+            // module's top-level value that this program does not use is not a mistake.
             dropped.push_back(id);
         }
     }
@@ -2943,8 +2688,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             // capture could hold (it was captured as a port of type void, and the call of
             // it then failed with "Function of type 'void' cannot be called").
             rejectNameWithoutValue(node, name, gct);
-            node = resolveCrossGraphRef(node, name);
-            ASSERT(sameGraph(node, currGraph_), "Failed to resolve cross-graph reference.");
+            node = captureInto(currGraph_, node, name);
         }
         if (recorder_ && !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
             recorder_->valueReferenced(
@@ -3039,9 +2783,6 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isGraphSet(e)) {
             auto graphs = asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(e));
-            for (const auto &imported : *graphs) {
-                importedUseOrigins_[imported.get()] = gct->origin();
-            }
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{graphs})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref");
@@ -3066,7 +2807,6 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         } else if (camel::core::module::detail::EntityAccess::isDecoratedGraph(e)) {
             auto decorated = camel::core::module::detail::EntityAccess::decoratedGraph(e);
-            importedUseOrigins_[decorated.get()] = gct->origin();
             node_handle_t drefNode{graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{decorated})};
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.decorated");
@@ -3613,159 +3353,67 @@ void Builder::reportImportNameConflicts() {
     }
 }
 
-void Builder::rejectImportedFunctionWithCaptures(const compile_graph_ptr_t &graph) {
-    // A function of the top level of another module that captures: what it captures are values
-    // of the top level of its own module. A capture is bound by name where the function is
-    // used, so here the name would be looked up in this module: not found, or, worse, found as
-    // a value of this module that happens to have the name (the program then silently computed
-    // with the wrong value). Until the roots of modules are merged this is refused.
-    compile_graph_ptr_t home = graph;
-    while (home->outerGraph()) {
-        home = home->outerGraph();
-    }
-    if (!rootGraph_ || home == rootGraph_ || home == graph) {
-        return;
-    }
-    std::vector<std::string> names = closureRefNames(graph);
-    if (graph->funcType()) {
-        for (const auto &ref : graph->funcType()->closureRefs()) {
-            if (std::find(names.begin(), names.end(), ref) == names.end()) {
-                names.emplace_back(ref);
-            }
-        }
-    }
-    if (names.empty()) {
-        return;
-    }
-    std::string list;
-    for (const auto &captured : names) {
-        list += (list.empty() ? "" : "', '") + captured;
-    }
-    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    auto declOrigin    = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
-                                       : camel::source::kInvalidOriginId;
-    camel::source::origin_id_t useOrigin = camel::source::kInvalidOriginId;
-    if (auto it = importedUseOrigins_.find(graph.get()); it != importedUseOrigins_.end()) {
-        useOrigin = it->second;
-    } else if (sourceContext && currGraph_) {
-        useOrigin = sourceContext->debugMap().graphOrigin(currGraph_->stableId());
-    }
-    if (declOrigin == camel::source::kInvalidOriginId) {
-        std::swap(declOrigin, useOrigin);
-    }
-    const size_t diagsBefore = diags_->count();
-    diags_->of(SemanticDiag::ImportedFunctionUsesModuleValue)
-        .atOrigin(declOrigin)
-        .relatedOrigin(useOrigin, "used from another module here")
-        .commit(graph->name(), list);
-    // The declaration is in the other module's file.
-    diags_->locateByOriginFrom(diagsBefore);
-    throw BuildAbortException();
-}
-
 node_handle_t Builder::createFuncDataNode(
-    const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
+    const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization,
+    node_handle_t branch) {
     ASSERT(
         !(callableAsResult && allowParameterization),
         "Cannot enable both callableAsResult and allowParameterization options.");
     ASSERT(currGraph_ != nullptr, "Current owner graph is null when creating a function node.");
     ASSERT(graph != nullptr, "Target graph is null when creating a function node.");
 
-    rejectImportedFunctionWithCaptures(graph);
-
     // Centralize dependency bookkeeping here so every FUNC node and static Function value obeys
     // the same graph-reference invariant. Self-dependency is intentional: a recursive graph lists
     // itself as a dependency.
     currGraph_->addDependencyGraph(graph);
 
-    bool graphUsedBefore = usedGraphs_.find(graph.get()) != usedGraphs_.end();
-    bool resolved        = graph->draft().closureNodes().empty();
-    auto *staticFunc     = createStaticFunction(currGraph_, graph);
-
-    node_handle_t resultNode{};
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
     auto graphOrigin   = sourceContext ? sourceContext->debugMap().graphOrigin(graph->stableId())
                                        : camel::source::kInvalidOriginId;
-
     auto markMacroNode = [&](node_handle_t node) {
         if (node != nullptr && isMacroGraph(graph)) {
             setNodeMacro(node, true);
         }
     };
+    const bool hasClosure = !graph->draft().closureNodes().empty();
+    const bool valueMade  = valueUsedGraphs_.contains(graph.get());
 
-    if (allowParameterization && !callableAsResult && !graphUsedBefore) {
-        if (resolved) {
-            resultNode = currGraph_->addFuncNode(graph, 0);
-            markMacroNode(resultNode);
-            bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
-        } else {
-            std::vector<draft_node_ref_t> closureNodes(
+    if (allowParameterization && (graph->parameterized() || !hasClosure || !valueMade)) {
+        // A direct call: a FUNC node. At the first one the callee's capture ports become
+        // with-ports after its declared ones (it is "parameterized"); every direct call then
+        // passes its captures as With inputs after the declared `with` arguments, linked by
+        // the link step (addCaptureSite, linkCaptureSites).
+        if (!graph->parameterized()) {
+            const std::vector<draft_node_ref_t> closureNodes(
                 graph->draft().closureNodes().begin(),
                 graph->draft().closureNodes().end());
-            std::vector<std::string> closureRefs = closureRefNames(graph);
             for (draft_node_ref_t closureId : closureNodes) {
                 graph->draft().removeNormPort(closureId);
                 graph->draft().appendWithPort(closureId);
                 graph->draft().removeClosureNode(closureId);
-                ASSERT(
-                    std::find(
-                        graph->draft().normPorts().begin(),
-                        graph->draft().normPorts().end(),
-                        closureId) == graph->draft().normPorts().end(),
-                    "Parameterized closure port must be removed from norm ports.");
             }
             graph->setParameterized(true);
-            auto funcNode = currGraph_->addFuncNode(graph, 0);
-            markMacroNode(funcNode);
-            for (const auto &ref : closureRefs) {
-                const auto &refNode = resolveNodeByRef(ref);
-                linkNodes(LinkType::With, refNode, funcNode);
-            }
-            resultNode = funcNode;
-            bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
         }
-
-        usedGraphs_.insert(graph.get());
-        return resultNode;
+        node_handle_t funcNode = currGraph_->addFuncNode(graph, 0);
+        markMacroNode(funcNode);
+        addCaptureSite(funcNode, graph, branch);
+        bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, funcNode);
+        return funcNode;
     }
 
-    // allowParameterization = false
-    if (resolved) {
-        if (callableAsResult && graph->parameterized() && graph->funcType()->hasExitType() &&
-            graph->funcType()->closureRefsCount() > 0) {
-            // A direct call has turned the captures of `graph` into with-parameters, which
-            // each direct call passes. A function value has no place for them: called through
-            // the value, the function read parameters nobody had set. The value is therefore
-            // that of a function which captures the same names and passes them on.
-            return createFuncDataNode(forwardingGraphOf(graph), true, false);
-        }
-        if (callableAsResult) {
-            const auto slotIndex = currGraph_->addStaticSlot(
-                camel::core::rtdata::toSlot<StaticFunction *>(staticFunc),
-                graph->funcType());
-            resultNode = currGraph_->draft().node(currGraph_->draft().addDataNode(
-                graph->funcType(),
-                slotIndex,
-                static_cast<uint8_t>(runtime::kGCNodeFlagConstant)));
-            markMacroNode(resultNode);
-        } else {
-            auto funcNode = currGraph_->addFuncNode(graph, 0);
-            markMacroNode(funcNode);
-            if (graph->parameterized()) {
-                for (const auto &ref : graph->funcType()->closureRefs()) {
-                    const auto &refNode = resolveNodeByRef(std::string(ref));
-                    linkNodes(LinkType::With, refNode, funcNode);
-                }
-            }
-            resultNode = funcNode;
-        }
-        bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
-
-        usedGraphs_.insert(graph.get());
-        return resultNode;
+    if (callableAsResult && graph->parameterized() && graph->funcType()->hasExitType() &&
+        !capturedValues_[graph.get()].empty()) {
+        // A direct call has turned the captures of `graph` into with-parameters, which
+        // each direct call passes. A function value has no place for them: called through
+        // the value, the function read parameters nobody had set. The value is therefore
+        // that of a function which captures the same values and passes them on.
+        return createFuncDataNode(forwardingGraphOf(graph), true, false);
     }
 
-    // graph still carries unresolved closure captures while parameterization is disabled
+    // A function value. It holds the captures the graph has now (filled into it), so the
+    // graph can take no more (see captureInto).
+    valueUsedGraphs_.insert(graph.get());
+    auto *staticFunc     = createStaticFunction(currGraph_, graph);
     const auto slotIndex = currGraph_->addStaticSlot(
         camel::core::rtdata::toSlot<StaticFunction *>(staticFunc),
         graph->funcType());
@@ -3774,40 +3422,38 @@ node_handle_t Builder::createFuncDataNode(
         slotIndex,
         static_cast<uint8_t>(runtime::kGCNodeFlagConstant)));
     markMacroNode(dataNode);
-    node_vec_t refNodes;
-    for (draft_node_ref_t closureId : graph->draft().closureNodes()) {
-        const auto &refNode = resolveNodeByRef(graph->nodePortName(graph->draft().node(closureId)));
-        refNodes.push_back(refNode);
-    }
-
-    std::vector<size_t> closureSlots;
-    closureSlots.reserve(refNodes.size());
-    for (size_t i = 0; i < refNodes.size(); ++i) {
-        closureSlots.push_back(i);
-    }
-    auto fillPayload = runtime::makeFillPayload(runtime::GCFillKind::FunctionClosure, closureSlots);
-    auto fillNode    = currGraph_->addFillNode(graph->funcType(), fillPayload);
-    markMacroNode(fillNode);
-    linkNodes(LinkType::Norm, dataNode, fillNode);
-    for (const auto &refNode : refNodes) {
-        linkNodes(LinkType::With, refNode, fillNode);
-    }
-
-    if (callableAsResult) {
+    node_handle_t resultNode = dataNode;
+    if (hasClosure) {
+        // The closure: the captured values, as the current graph sees them, in the order of
+        // the closure ports.
+        node_vec_t refNodes;
+        const std::vector<CapturedValue> captured = capturedValues_[graph.get()];
+        for (const CapturedValue &value : captured) {
+            refNodes.push_back(captureInto(currGraph_, value.origin, value.name));
+        }
+        std::vector<size_t> closureSlots;
+        closureSlots.reserve(refNodes.size());
+        for (size_t i = 0; i < refNodes.size(); ++i) {
+            closureSlots.push_back(i);
+        }
+        auto fillPayload =
+            runtime::makeFillPayload(runtime::GCFillKind::FunctionClosure, closureSlots);
+        auto fillNode = currGraph_->addFillNode(graph->funcType(), fillPayload);
+        markMacroNode(fillNode);
+        linkNodes(LinkType::Norm, dataNode, fillNode);
+        for (const auto &refNode : refNodes) {
+            linkNodes(LinkType::With, refNode, fillNode);
+        }
         resultNode = fillNode;
-    } else {
+    }
+    if (!callableAsResult) {
+        // A direct call of a graph whose value was made before: called through a value.
         auto callNode = currGraph_->addCallNode(graph->funcType()->exitType());
         markMacroNode(callNode);
-        linkNodes(LinkType::With, fillNode, callNode);
+        linkNodes(LinkType::With, resultNode, callNode);
         resultNode = callNode;
     }
     bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, resultNode);
-
-    // Update usedGraphs_ last.
-    // Closure captures may be updated during construction, and capture updates
-    // check whether the target graph has already been used. Mark the graph as
-    // used only after all updates finish.
-    usedGraphs_.insert(graph.get());
     return resultNode;
 }
 
@@ -4187,14 +3833,11 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         }
         bodyStates_[graph.get()] = BodyState::Open;
         graph->addDependencyGraph(target);
-        // The call the target's direct callers make: the captured names first, bound where
-        // the call stands (here they become captures of this graph), then the arguments.
+        // The call the target's direct callers make: the arguments, then the target's
+        // captures, which become captures of this graph (passed by the link step).
         node_handle_t call = graph->addFuncNode(target, 0);
         if (isMacroGraph(target)) {
             setNodeMacro(call, true);
-        }
-        for (const auto &ref : targetType->closureRefs()) {
-            linkNodes(LinkType::With, resolveNodeByRef(std::string(ref)), call);
         }
         for (draft_node_ref_t port : graph->draft().withPorts()) {
             linkNodes(LinkType::With, graph->draft().node(port), call);
@@ -4202,6 +3845,7 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         for (draft_node_ref_t port : graph->draft().normPorts()) {
             linkNodes(LinkType::Norm, graph->draft().node(port), call);
         }
+        addCaptureSite(call, target);
         bindGraphScopedFuncNodeDebug(sourceContext, targetOrigin, target, call);
         // The summaries see the target as a function this graph calls: what the target
         // writes of the captured variables, this graph writes.
@@ -5219,11 +4863,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (targetGraph) {
         captured = capturedUsesOf(targetGraph);
     }
-    std::vector<std::string> capturedWrites;
+    std::vector<node_handle_t> capturedWrites;
     for (const CapturedUse &use : captured) {
         orderAfterLastWriter(use.variable, targetNode);
         if (use.written) {
-            capturedWrites.push_back(use.name);
+            capturedWrites.push_back(use.origin);
         }
     }
     if (!waited_ && !synced_) {
@@ -6151,21 +5795,12 @@ node_handle_t Builder::buildBranch(
         currGraph_->addDependencyGraph(subGraph);
         Type *exitType = subGraph->funcType()->exitType();
 
-        // Ensure all captured variables are ready before the BRCH node runs.
-        // This keeps the nodes on every branch path between BRCH and JOIN
-        // tightly grouped in topological order, with no unrelated external
-        // nodes inserted in between.
-        // That makes the graph scheduler easier to implement because it can
-        // jump directly without frequent checks.
-        for (draft_node_ref_t portId : subGraph->draft().closureNodes()) {
-            const auto &refNode =
-                resolveNodeByRef(subGraph->nodePortName(subGraph->draft().node(portId)));
-            if (linkCheek(refNode, brchNode)) {
-                linkNodes(LinkType::Ctrl, refNode, brchNode);
-            }
-        }
-
-        auto funcNode = createFuncDataNode(subGraph, false, true);
+        // The arm is called by a FUNC node like a function; every value it captures is made
+        // ready before the BRCH node runs (addCaptureSite). This keeps the nodes on every
+        // branch path between BRCH and JOIN tightly grouped in topological order, with no
+        // unrelated external nodes inserted in between, so that the graph scheduler can jump
+        // directly without frequent checks.
+        auto funcNode = createFuncDataNode(subGraph, false, true, brchNode);
         branchFuncs.push_back(funcNode);
         branchArms.push_back(runtime::GCBranchArm{
             .head = nodeIdOf(funcNode),
@@ -6360,11 +5995,11 @@ node_handle_t Builder::buildBranch(
 
     // Entering an arm is like calling it: the branch uses every variable an arm captured and
     // writes those an arm writes. It begins at BRCH and is complete at JOIN.
-    std::vector<std::string> capturedWrites;
+    std::vector<node_handle_t> capturedWrites;
     for (const CapturedUse &use : captured) {
         orderAfterLastWriter(use.variable, brchNode);
         if (use.written) {
-            capturedWrites.push_back(use.name);
+            capturedWrites.push_back(use.origin);
         }
     }
     if (!capturedWrites.empty() && !waited_ && !synced_) {
@@ -6727,8 +6362,8 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
     ENTER("EXPT");
     for (size_t i = 0; i < gct->exportCount(); ++i) {
         const Reference ref(gct->exportName(i));
-        auto optType = typeDecls_.find(ref);
-        if (optType != typeDecls_.end()) {
+        auto optType = unit_->typeDecls.find(ref);
+        if (optType != unit_->typeDecls.end()) {
             module_->exportType(ref, optType->second);
             continue;
         }

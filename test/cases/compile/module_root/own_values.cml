@@ -1,0 +1,10 @@
+// Exported functions use the `let` and the `var` of the top level of their own module
+// (design principles 2.11: one root graph, captures bound to the value, not to its name).
+import counter
+
+sync func main(): int sync {
+    println(counter::bump())
+    println(counter::bump())
+    println(counter::current())
+    return 0
+}

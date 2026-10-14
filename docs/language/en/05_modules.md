@@ -111,20 +111,35 @@ func main(): int sync {
 - `export` is written before a `func`, `type` or `let`/`var` declaration, or in the form `export { a, b }` listing names already declared.
 - Generic functions can be exported ([7.5](07_statements.md#75-generic-functions)). A name that has both an annotated function and other overloads currently cannot be exported (`SemanticDiag::ConstructNotSupported`).
 
-Two current restrictions (the values of the top level of a module cannot be used across modules yet):
+**An exported function can use the `let` and `var` values of the top level of its own module**, directly or through functions of its module that it calls (design principles 2.11):
 
-- **A function used from another module cannot use a value of the top level of its own module** (`let`/`var`), whether directly or through a function of its module that it calls. Once such a function is used in another module, that is `SemanticDiag::ImportedFunctionUsesModuleValue`, located at the declaration of the function and pointing to the place that uses it. Pass the value as a parameter or a `with` parameter, or write the constant as a function without parameters:
+```cml
+// counter.cml
+module counter
+var cnt = 0
+let step = 2
+export sync func bump(): int sync { wait cnt += step; return cnt }
+export func current(): int { return cnt }
+```
 
-  ```cml
-  module lib
-  let base = 10                                   // usable only among lib's own functions
-  export func bump(x: int): int { return x + base }       // an error once another module uses it
-  export func base2(): int { return 10 }                  // the constant as a function
-  export func bump2(x: int): int { return x + base2() }   // fine
-  ```
+```cml
+// main.cml
+import counter
+let step = 1000                 // unrelated to counter's step
 
-  The functions of the entry module that use the values of its own top level are not affected.
-- **An exported value cannot be used by the importing module yet.** `export let pi = 3.14159` can be written, and another module can `import { pi }`, but using `pi` (or `lib::pi`) is `SemanticDiag::ConstructNotSupported`, located at the use. Export a function without parameters instead.
+sync func main(): int sync {
+    println(counter::bump(), counter::bump(), counter::current())
+    return 0
+}
+```
+
+```text
+2 4 4
+```
+
+All modules of a program are built into one `__root__` graph: each value of the top level of a module is a node of that graph, and a function gets it through a capture port bound to that value ("module + name"), not by looking the name up again where the function is called. So a value of the same name in the importing module (`step` above), or a local of the same name at the call, does not take its place. Top-level values are evaluated as in the entry module: before `main` starts, by static dependence, and once even when several modules use them.
+
+**An exported value cannot be used by the importing module yet.** `export let pi = 3.14159` can be written, and another module can `import { pi }`, but using `pi` (or `lib::pi`) is `SemanticDiag::ConstructNotSupported`, located at the use. Export a function without parameters instead.
 
 ## 5.4 Namespaces
 

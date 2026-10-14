@@ -305,7 +305,7 @@ f0bc865a95342d5b ok exemplars/05_effect_order/program.cml
 49a64acf8762b930 ok exemplars/06_loop_carried_state/program.cml
 4cc558105f57667a ok exemplars/07_export_integrity/program.cml
 18da615b13dfd8aa ok exemplars/08_structured_control_flow/program.cml
-30fcf6db1a2489eb ok stdlib/array.cml
+cd2479e5aabb7c48 ok stdlib/array.cml
 4be6e381dc4ff4f4 ok stdlib/perf.cml
 55c2951c797ac17b ok stdlib/signatures/algo.cml
 3f20be7d0332af35 ok stdlib/signatures/crypto.cml
@@ -437,7 +437,7 @@ c3c5022aa9beb676 ok test/cases/compile/generics/effects.cml
 316529efdbb1755b ok test/cases/compile/generics/err_decorated.cml
 d32827851b36e177 ok test/cases/compile/generics/err_deep.cml
 1e52ccee3c501528 ok test/cases/compile/generics/err_export_body.cml
-779686b3d1951c6b ok test/cases/compile/generics/err_export_capture.cml
+14f4781c5824b167 ok test/cases/compile/generics/err_export_capture.cml
 9154dbf2be0da5b8 ok test/cases/compile/generics/err_export_value.cml
 3ec4e8695671837d ok test/cases/compile/generics/err_generic_arg.cml
 515482c616f9f044 ok test/cases/compile/generics/err_literal.cml
@@ -518,6 +518,17 @@ a8ebe63d4a7826a6 ok test/cases/compile/module_imports/d5_same_twice.cml
 7ebe19937261aef5 ok test/cases/compile/module_imports/ring_a.cml
 2820c63475d2664b ok test/cases/compile/module_imports/ring_b.cml
 274c18e984f0fa47 ok test/cases/compile/module_imports/ring_c.cml
+c2f22c5fdb0e6edc ok test/cases/compile/module_root/capture_shadow.cml
+76a791600ed07b70 ok test/cases/compile/module_root/counter.cml
+d58463a1176022c5 ok test/cases/compile/module_root/diamond.cml
+0abb3a0130f272df ok test/cases/compile/module_root/diamond_a.cml
+3186d3d8c405b224 ok test/cases/compile/module_root/diamond_b.cml
+ad0ae332e56e98c8 ok test/cases/compile/module_root/diamond_d.cml
+b749be62b5d7f307 ok test/cases/compile/module_root/lib_uses.cml
+61267f938e3e4ddc ok test/cases/compile/module_root/own_values.cml
+390905e220769020 ok test/cases/compile/module_root/own_values_shadow.cml
+1e811a3b285b42a2 ok test/cases/compile/module_root/values_lib.cml
+ca91c9c4ffcb2fad ok test/cases/compile/module_root/with_capture.cml
 51eee85b2f2b8ef3 ok test/cases/compile/namespace/module_import_builtins.cml
 233561c4cca155d3 ok test/cases/compile/namespace/module_import_no_direct_inject.cml
 d713cfa843192186 ok test/cases/compile/namespace/module_import_qualified.cml

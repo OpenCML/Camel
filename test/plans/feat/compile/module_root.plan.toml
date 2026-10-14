@@ -1,0 +1,126 @@
+id = "compile.module_root"
+order = 334
+tier = "feat"
+tags = ["feat", "compile", "semantic", "modules", "import"]
+desc = "All modules build into one root graph; a capture is bound to the value it captures, not to its name"
+
+# Design principles 2.11 ("模块"); docs/design/graph-model/README.cn.md 3.7 and 3.9. Every
+# program here runs on several back ends: the root graph and the capture ports are ordinary
+# graph structure, which no back end treats specially.
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+# ---- Exported functions use the top level of their own module ----
+
+[[tests]]
+name = "root.own_values"
+desc = "An exported function reads and writes a top-level `var` of its module and reads a `let` of it."
+kind = "behavior"
+case = "../../../cases/compile/module_root/own_values.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n4\n4\n"
+
+[[tests]]
+name = "root.own_values_fvm"
+desc = "The same on the bytecode VM."
+kind = "behavior"
+case = "../../../cases/compile/module_root/own_values.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "2\n4\n4\n"
+
+[[tests]]
+name = "root.own_values_prl"
+desc = "The same on the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/compile/module_root/own_values.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_stdout_exact = "2\n4\n4\n"
+
+[[tests]]
+name = "root.own_values_shadow"
+desc = "The importing module has a `let` and a `var` of the same names: the imported functions use their own module's."
+kind = "behavior"
+case = "../../../cases/compile/module_root/own_values_shadow.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n2\n1000 1000\n"
+
+[[tests]]
+name = "root.lib_uses"
+desc = "A function of another module reaches its module's values directly, through a private function, as a generic instance, as a function value and as an element function."
+kind = "behavior"
+case = "../../../cases/compile/module_root/lib_uses.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
+
+[[tests]]
+name = "root.lib_uses_inline"
+desc = "The same after inlining."
+kind = "behavior"
+case = "../../../cases/compile/module_root/lib_uses.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
+
+[[tests]]
+name = "root.lib_uses_simplify"
+desc = "The same after the macro evaluator and the simplifier."
+kind = "behavior"
+case = "../../../cases/compile/module_root/lib_uses.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
+
+[[tests]]
+name = "root.diamond"
+desc = "Two modules use a function of a third that uses its top-level value: computed once, before `main` starts."
+kind = "behavior"
+case = "../../../cases/compile/module_root/diamond.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "computing the common value\nmain starts\n41 42\n"
+
+[[tests]]
+name = "root.diamond_jit"
+desc = "The same with the JIT."
+kind = "behavior"
+case = "../../../cases/compile/module_root/diamond.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "computing the common value\nmain starts\n41 42\n"
+
+# ---- A capture is bound to its value, within one module ----
+
+[[tests]]
+name = "root.capture_shadow"
+desc = "A local of the caller named like a top-level value the callee uses does not take its place (it did: 6 instead of 11)."
+kind = "behavior"
+case = "../../../cases/compile/module_root/capture_shadow.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "11 5\n"
+
+[[tests]]
+name = "root.with_capture"
+desc = "A `with` argument and a captured value of a function called directly reach their own ports (they were swapped: 32 instead of 16)."
+kind = "behavior"
+case = "../../../cases/compile/module_root/with_capture.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "16\n"
+
+[[tests]]
+name = "root.with_capture_fvm"
+desc = "The same on the bytecode VM."
+kind = "behavior"
+case = "../../../cases/compile/module_root/with_capture.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "16\n"

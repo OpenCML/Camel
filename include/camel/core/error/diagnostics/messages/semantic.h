@@ -65,7 +65,8 @@ enum class SemanticDiag : uint32_t {
     ReturnNeedsConversion        = 0x000022,
     LiteralOutOfRange            = 0x000023,
     ImportCycle                  = 0x000025,
-    ImportedFunctionUsesModuleValue = 0x000026,
+    // 0x000026 was ImportedFunctionUsesModuleValue: a function of another module may use the
+    // top level of its own module since every module builds into one root graph.
     ImportNameConflict           = 0x000027,
     // An error: the construct it reports is not compiled, so a program that uses it must not
     // run. It used to be a warning (0x100000), and the declaration that used the feature was

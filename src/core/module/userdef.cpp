@@ -160,8 +160,12 @@ bool UserDefinedModule::compile(CompileStage till) {
     if (stage_ < CompileStage::GIR && till >= CompileStage::GIR) {
         if (!compileGraph_) {
             camel::utils::phase::Scope phaseScope("gir", name_);
-            auto girBuilder = camel::compile::gir::Builder(context_, shared_from_this());
-            compileGraph_   = girBuilder.build(*gct_, diagnostics_);
+            // Every module of the program is built by the program's one builder, into one
+            // root graph (design principles 2.11).
+            compileGraph_ = camel::compile::gir::Builder::of(context_).buildModule(
+                shared_from_this(),
+                *gct_,
+                diagnostics_);
             if (diagnostics_->hasErrors()) {
                 CAMEL_LOG_INFO_S("Module", "Module '{}' failed to build GIR", name_);
                 return false;

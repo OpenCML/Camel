@@ -923,7 +923,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "generic_exported_instances"
-desc = "Each importing module holds its own instance: the graph shows rev<int> twice, once under the module that re-exports a use of it."
+desc = "One instance per set of types in the whole program (design principles 2.11): rev<int> is one graph, though two modules call it."
 kind = "behavior"
 case = "../../../cases/compile/generics/export_use.cml"
 args = ["${case}", "std::rgir"]
@@ -933,7 +933,7 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const count = (s) => out.split(`label="${s}";`).length - 1
-assert(count('rev<int>') === 2, `rev<int> clusters: ${count('rev<int>')}`)
+assert(count('rev<int>') === 1, `rev<int> clusters: ${count('rev<int>')}`)
 assert(count('rev<string>') === 1, `rev<string> clusters: ${count('rev<string>')}`)
 assert(count('rev<bool>') === 1, `rev<bool> clusters: ${count('rev<bool>')}`)
 }
@@ -953,14 +953,12 @@ timeout_ms = 4000
 
 [[tests]]
 name = "generic_exported_capture"
-desc = "The body of an imported generic function cannot use a top-level value of its own module: the instance is not built inside that module."
-kind = "negative"
+desc = "The body of an imported generic function uses a top-level value of its own module: one instance per set of types in the whole program, under the one root graph (design principles 2.11)."
+kind = "behavior"
 case = "../../../cases/compile/generics/err_export_capture.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImportedFunctionUsesModuleValue"
-expect_diagnostic_line = 36
-expect_output_contains = ["export_lib.cml:36:1", "The function 'biased' is used from another module, but it uses 'bias' of the top level of its own module"]
+expect_exit = 0
+expect_stdout_exact = "100\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

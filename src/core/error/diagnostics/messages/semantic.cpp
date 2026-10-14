@@ -348,18 +348,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ImportedFunctionUsesModuleValue,
-            {
-                "ImportedFunctionUsesModuleValue",
-                "The function '{0}' is used from another module, but it uses '{1}' of the top "
-                "level of its own module, directly or through a function it calls.",
-                "A function used from another module cannot yet read a 'let' or a 'var' of the "
-                "top level of the module that declares it: the name would be looked up in the "
-                "importing module. Pass the value as a parameter or a 'with' parameter, or "
-                "write it as a function without parameters ('func base(): int {{ return 10 }}').",
-            },
-        },
-        {
             SemanticDiag::ImportNameConflict,
             {
                 "ImportNameConflict",

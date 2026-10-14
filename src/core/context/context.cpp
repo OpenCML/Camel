@@ -93,6 +93,7 @@ Context::~Context() {
     // whole object destruction cascade.
     mainModule_.reset();
     modules_.clear();
+    graphBuildSession_.reset();
     builtinModules_.clear();
     exeMgr_.reset();
     if (runtimeGraphMgr_) {

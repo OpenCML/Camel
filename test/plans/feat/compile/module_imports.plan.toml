@@ -2,11 +2,9 @@ id = "compile.module_imports"
 order = 333
 tier = "feat"
 tags = ["feat", "compile", "semantic", "negative", "modules", "import"]
-desc = "Imports that used to compute with the wrong value or crash the compiler are located compile-time errors"
+desc = "Imports that used to compute with the wrong value or crash the compiler: now correct programs, or located compile-time errors"
 
-# docs/design/module-root/README.cn.md, appendix B (D1 to D6). Exported values and the merged
-# root are not implemented; these tests hold the diagnostics that stand in their place. No
-# program here may crash.
+# docs/design/module-root/README.cn.md, appendix B (D1 to D6). No program here may crash.
 
 [defaults]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast", ":?:?"]
@@ -14,81 +12,67 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 # ---- D1: an imported function that uses a value of the top level of its own module ----
+# All modules build into one root graph and a capture is bound to the value it captures
+# (design principles 2.11): these used to be ImportedFunctionUsesModuleValue (and before that,
+# a silent use of the importer's value of the same name).
 
 [[tests]]
 name = "imports.d1_shadow"
-desc = "The importing module has a top-level value of the same name: the imported function used it silently (1001 instead of 11). Now an error at the function, with the use."
-kind = "negative"
+desc = "The importing module has a top-level value of the same name: the imported function uses its own module's (it used the importer's silently: 1001 instead of 11)."
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_shadow.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImportedFunctionUsesModuleValue"
-expect_diagnostic_line = 10
-expect_diagnostic_column = 1
-expect_output_contains = ["mi_values.cml:10:1", "The function 'bump' is used from another module, but it uses 'base' of the top level of its own module", "used from another module here at", "d1_shadow.cml:6:13", "Pass the value as a parameter"]
-expect_output_not_contains = ["1001", "Segmentation fault", "internal error", "Internal"]
+expect_exit = 0
+expect_stdout_exact = "11\n"
 
 [[tests]]
 name = "imports.d1_shadow_check"
-desc = "The same through `camel check`."
-kind = "negative"
+desc = "The same through `camel check`: no diagnostic."
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_shadow.cml"
 args = ["check", "-O", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImportedFunctionUsesModuleValue"
-expect_diagnostic_line = 10
-expect_output_contains = ["mi_values.cml:10:1", "d1_shadow.cml:6:13"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
 
 [[tests]]
 name = "imports.d1_unresolved"
-desc = "Without a value of that name in the importing module it was UnresolvedReference pointing at the importer's `main`."
-kind = "negative"
+desc = "Without a value of that name in the importing module (it was UnresolvedReference pointing at the importer's `main`)."
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_unresolved.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImportedFunctionUsesModuleValue"
-expect_diagnostic_line = 10
-expect_output_contains = ["mi_values.cml:10:1", "d1_unresolved.cml:4:13"]
-expect_output_not_contains = ["UnresolvedReference", "Segmentation fault", "internal error", "Internal"]
+expect_exit = 0
+expect_stdout_exact = "11\n"
 
 [[tests]]
 name = "imports.d1_indirect"
 desc = "The exported function calls a function of its module that is not exported, and that one uses the value."
-kind = "negative"
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_indirect.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImportedFunctionUsesModuleValue"
-expect_diagnostic_line = 14
-expect_output_contains = ["mi_values.cml:14:1", "The function 'indirect' is used from another module, but it uses 'base'", "d1_indirect.cml:6:13"]
-expect_output_not_contains = ["2001", "Segmentation fault", "internal error", "Internal"]
+expect_exit = 0
+expect_stdout_exact = "21\n"
 
 [[tests]]
 name = "imports.d1_var"
-desc = "A top-level `var` of the declaring module."
-kind = "negative"
+desc = "A top-level `var` of the declaring module, read by the exported function."
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_var.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImportedFunctionUsesModuleValue"
-expect_diagnostic_line = 18
-expect_output_contains = ["mi_values.cml:18:1", "The function 'count' is used from another module, but it uses 'cnt'", "d1_var.cml:4:13"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
 
 [[tests]]
 name = "imports.d1_qualified"
 desc = "The imported function reached through its module (`m::f`)."
-kind = "negative"
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_qualified.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImportedFunctionUsesModuleValue"
-expect_diagnostic_line = 10
-expect_output_contains = ["mi_values.cml:10:1", "d1_qualified.cml:6:13"]
-expect_output_not_contains = ["1001", "Segmentation fault", "internal error", "Internal"]
+expect_exit = 0
+expect_stdout_exact = "11\n"
 
 [[tests]]
 name = "imports.d1_ok"
-desc = "Not refused: imported functions that use no top-level value (one takes the value as a parameter, one calls a function without parameters), from a module that also has functions which do; and the entry module's own functions using its own top-level `let` and `var`."
+desc = "Imported functions that use no top-level value (one takes the value as a parameter, one calls a function without parameters), from a module that also has functions which do; and the entry module's own functions using its own top-level `let` and `var`."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d1_ok.cml"
 args = ["-E", "short", "${case}"]

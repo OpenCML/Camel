@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-130 diagnostics: 119 errors, 11 warnings.
+129 diagnostics: 118 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -77,7 +77,6 @@ prints one entry.
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
 | `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
 | `0x03000025` | [SemanticDiag::ImportCycle](#importcycle) | Error |
-| `0x03000026` | [SemanticDiag::ImportedFunctionUsesModuleValue](#importedfunctionusesmodulevalue) | Error |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
@@ -1569,37 +1568,6 @@ import { even } from cyc_a
 
 func main(): int sync {
     println(even(10))
-    return 0
-}
-```
-
-### ImportedFunctionUsesModuleValue
-
-`0x03000026` · Error · `SemanticDiag::ImportedFunctionUsesModuleValue`
-
-**Message**
-
-```text
-The function '{0}' is used from another module, but it uses '{1}' of the top level of its own module, directly or through a function it calls.
-```
-
-**Help**
-
-```text
-A function used from another module cannot yet read a 'let' or a 'var' of the top level of the module that declares it: the name would be looked up in the importing module. Pass the value as a parameter or a 'with' parameter, or write it as a function without parameters ('func base(): int { return 10 }').
-```
-
-**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
-
-```camel
-module err_export_capture
-
-import { biased } from export_lib
-
-func main(): int sync {
-    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
-    // cannot capture a top-level value of the module that declares it.
-    println(biased(1))
     return 0
 }
 ```

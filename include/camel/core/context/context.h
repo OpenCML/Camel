@@ -101,6 +101,8 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
     /// See setSemanticRecorder.
     camel::compile::SemanticRecorder *semanticRecorder_ = nullptr;
+    /// See graphBuildSession.
+    std::shared_ptr<void> graphBuildSession_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>
@@ -225,6 +227,14 @@ class Context : public std::enable_shared_from_this<Context> {
         semanticRecorder_ = recorder;
     }
     camel::compile::SemanticRecorder *semanticRecorder() const { return semanticRecorder_; }
+
+    /**
+     * The graph builder of the program compiled on this context: one for all of its modules,
+     * which build their functions and their top-level values into one `__root__` graph
+     * (design principles 2.11). Opaque here: it belongs to camel/compile/gir, which creates
+     * it on first use (camel::compile::gir::Builder::of).
+     */
+    std::shared_ptr<void> &graphBuildSession() { return graphBuildSession_; }
 
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

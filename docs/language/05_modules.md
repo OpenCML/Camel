@@ -111,20 +111,35 @@ func main(): int sync {
 - `export` 写在 `func`、`type`、`let`/`var` 声明之前，或写成 `export { a, b }` 列出已声明的名字。
 - 泛型函数可以导出（[7.5](07_statements.md#75-泛型函数)）。既有带标注的函数又有其他重载的名字目前不能导出（`SemanticDiag::ConstructNotSupported`）。
 
-目前的两条限制（模块顶层的值还不能跨模块使用）：
+**导出的函数可以使用它所在模块顶层的 `let` 与 `var`**，直接用到或经它调用的本模块函数用到都一样（设计原则 2.11）：
 
-- **被别的模块使用的函数不能用到它所在模块顶层的值**（`let`/`var`），直接用到或经它调用的本模块函数用到都一样。这样的函数一旦在别的模块里被使用，就是 `SemanticDiag::ImportedFunctionUsesModuleValue`，定位在这个函数的声明，并指出使用它的位置。把值作为参数或 `with` 参数传入，或者把常量写成没有参数的函数：
+```cml
+// counter.cml
+module counter
+var cnt = 0
+let step = 2
+export sync func bump(): int sync { wait cnt += step; return cnt }
+export func current(): int { return cnt }
+```
 
-  ```cml
-  module lib
-  let base = 10                                   // 只能在 lib 自己的函数之间使用
-  export func bump(x: int): int { return x + base }       // 别的模块一用就报错
-  export func base2(): int { return 10 }                  // 常量写成函数
-  export func bump2(x: int): int { return x + base2() }   // 可以
-  ```
+```cml
+// main.cml
+import counter
+let step = 1000                 // 与 counter 的 step 无关
 
-  入口模块自己的函数使用自己顶层的值不受影响。
-- **导出的值还不能被导入方使用。** `export let pi = 3.14159` 可以写，别的模块也可以 `import { pi }`，但使用 `pi`（或 `lib::pi`）是 `SemanticDiag::ConstructNotSupported`，定位在使用处。改为导出一个没有参数的函数。
+sync func main(): int sync {
+    println(counter::bump(), counter::bump(), counter::current())
+    return 0
+}
+```
+
+```text
+2 4 4
+```
+
+程序的所有模块建在同一张 `__root__` 图上：每个模块顶层的值是这张图上的一个节点，函数经捕获端口取得它，捕获绑定在这个值上（"模块 + 名字"），不在调用处按名字再找一遍。所以导入方自己有同名的值（上例的 `step`）、调用处有同名的局部量，都不会顶替它。顶层的值与入口模块的一样，在 `main` 开始之前按静态依赖求值，被几个模块用到也只求值一次。
+
+**导出的值还不能被导入方使用。** `export let pi = 3.14159` 可以写，别的模块也可以 `import { pi }`，但使用 `pi`（或 `lib::pi`）是 `SemanticDiag::ConstructNotSupported`，定位在使用处。改为导出一个没有参数的函数。
 
 ## 5.4 命名空间
 

@@ -150,32 +150,28 @@ the same types is not a new instance and is not limited.
 
 ## 5. Exported generic functions
 
-`DESIGN-QUESTION(generic-export)`: where the instances of an imported generic function live is
-not ruled on. Implemented: **the template is exported by the module that declares it, and each
-importing module builds the instances it calls**. The alternative is one instance per set of
-types for the whole program, owned by the declaring module (smaller graphs when several
-modules use the same types; the declaring module's graph then changes after it was compiled).
+All modules of a program are built by one graph builder into one root graph (design
+principles 2.11; `src/compile/gir/program.cpp`). An instance of a generic function is
+therefore **one graph per set of types for the whole program**, under the graph the function
+was declared in (the root graph for a function of a module's top level), whichever module
+calls it. (Before the root graphs were merged, each importing module built instances of its
+own and their bodies could not use a top-level value of the declaring module; that was
+`DESIGN-QUESTION(generic-export)`, which the merged root settles.)
 
 - `export` of a generic function exports its `GenericTemplate` as a module entity of its own
   kind (`Entity::generic_payload_t`, opaque outside the GIR builder; `EntityAccess`).
 - A `DREF` that resolves to such an entity is treated like the name of a local template: a
   marker node, instantiated by a call or by the position it stands in (section 6).
-- `instantiateGeneric` recognises a template of another builder by its `homeRoot` (the root
-  graph of the builder that registered it). For such a template it
-  - looks for, and records, the instance under the *importing* builder's root graph
-    (`GenericInstance::owner`), so two importing modules each have their own;
-  - creates the instance graph under the importing module's root graph;
-  - moves to the template's scopes as for a local template, and also to its module
-    (`module_`), so that names the body imports are looked up in the declaring module;
-  - enters a scope whose name carries the importing root, because scopes are kept by name
-    under the scope they are entered from, which here belongs to the declaring module.
-- The body may call private functions, other generic functions and imports of its module.
-  It may not use a top-level *value* of its module: that node lies in a graph that does not
-  enclose the instance, so it cannot be captured (`ImportedFunctionUsesModuleValue`, located
-  at the function; the same diagnostic an ordinary imported function gets). A constant a
-  library needs is written as a function.
-- An error in the body is reported in the declaring module's file
-  (`Diagnostics::locateByOriginFrom`), with the call that asked for the instance.
+- `instantiateGeneric` looks the instance up in the template's instance table; to build one
+  it moves to the template's scopes and to its module (`module_`), so that names the body
+  imports are looked up in the declaring module, and creates the instance graph under the
+  template's `ownerGraph`.
+- The body may call private functions, other generic functions and imports of its module,
+  and use the top-level values of its module: they are nodes of the root graph, which
+  encloses the instance, and are captured like any value of an enclosing graph.
+- An error in the body of an instance asked for by another module is reported in the
+  declaring module's file (`Diagnostics::locateByOriginFrom`), with the call that asked for
+  the instance.
 
 ## 6. A generic function where a function is expected
 
