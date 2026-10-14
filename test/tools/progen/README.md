@@ -80,6 +80,8 @@ with `--features all,modules`.
 | `partial` | functions with one or two context parameters (`with <k: T>`), called in place (`f<w>(x)`), bound (`let g = f<w>`), and handed to `map` / `filter` / user functions as `f<w>` |
 | `ifnoelse` | `if c then e` as a statement of a sync block with one expression as its arm: a `println`, a call with effects, or a pure value of any type that is dropped |
 | `modules` (not on by default) | two to four top-level `let`s of scalar types (each a pure expression over literals and the ones made before it), written in a shuffled order and used by functions and by `main`; and the program split into three modules: `<name>_vals` exports the values and the struct types, `<name>_funcs` exports a random set of functions that call only each other and imports what it uses from `<name>_vals`, the entry module imports both by name and keeps the rest. The reference is the same as for the program in one file: the values are evaluated once, before `main` |
+| `append` | `xs->append<v>` as an array expression (a new array; `xs` unchanged), and `acc = acc->append<v>` as a write of an array variable, also in `foreach` element functions, where it is the rebinding the compiler carries out in place (design principles 2.12) |
+| `opover` | operator overloads of the program on the struct `P` (`func operator +(a: P, b: P): P`, unary `-`, `*` of an int and a `P`, `<`, `[]`), used wherever a `P`, a `bool` or an `int` is generated, next to the built-in operators (design principles 2.12) |
 
 The spelling of a program varies without touching the random stream (a seed still names the
 same program): `+`, `-` and `*` are written with both spaces, with none, or with one (`a - b`,
@@ -221,6 +223,7 @@ the rewrite sequence it was found with and under `std::inline`, `std::opt`,
   `null` (it used to be `return null`, which the warning ExitInUnusedBranch now reports);
   since the ruling of 2026-10-12 the arm may be one expression of any type, which the feature
   `ifnoelse` writes (`generate.VERSION` 3, with `comprehension`, `nullable` and `partial`).
+  `generate.VERSION` 5 adds `append` and `opover` (design principles 2.12).
 - Integers near the 64-bit range (programs are discarded when a value leaves +-2^62), bit
   operators, `^`, `i32` / `f32`, `as` / `is`, slices with a step.
 

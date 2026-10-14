@@ -50,6 +50,8 @@ FEATURES = {
     "modules": "top-level values written in any order, and the program split into three modules "
                "(values and types; functions that call only each other; the rest), imported by "
                "name; not in the default set",
+    "append": "xs->append<v> (a new array, xs unchanged) and acc = acc->append<v> (rebinding a variable, also in foreach element functions)",
+    "opover": "operator overloads of the program (func operator +, unary -, *, <, []) on the struct P, next to the built-in operators",
 }
 # `modules` is left out of the default set: the feature set is part of every program's random
 # stream, and the recorded seeds must keep naming the same programs. `--features all,modules`.
@@ -57,7 +59,7 @@ DEFAULT_FEATURES = frozenset(FEATURES) - {"modules"}
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
-VERSION = 4
+VERSION = 5
 
 
 def parse_features(text: Optional[str]) -> frozenset:
@@ -122,6 +124,7 @@ class Gen:
         self.env = {}
         self.funcs: List[N] = []
         self.label = 0
+        self.operators = False     # the overloads of operator_overloads() are declared
         if "struct" in features:
             self.types["P"] = [("x", INT), ("y", INT)]
             second = [("n", INT)]
@@ -252,6 +255,8 @@ class Gen:
         applied = self.with_functions(ret=t)
         if applied:
             o.append((1.4, lambda: self.applied_call(self.r.choice(applied), d)))
+        if self.operators:
+            o += self.operator_options(t, d)
         if t == INT:
             o.append((4.0, lambda: self.int_arith(d)))
             if self.on("array") or self.on("string"):
@@ -576,6 +581,9 @@ class Gen:
         e = t[1]
         o = [(3.0, lambda: N("arr", [self.expr(e, d - 1) for _ in range(self.r.choice([1, 2, 3, 3, 4]))], t=t)),
              (1.5, lambda: N("concat", [self.expr(t, d - 1), self.expr(t, d - 1)], t=t))]
+        if self.on("append"):
+            # A new array; the array appended to is unchanged (design principles 2.12).
+            o.append((1.2, lambda: N("append", [self.expr(t, d - 1), self.expr(e, d - 1)], t=t)))
         named = self.values(t)
         if named:
             def slice_():
@@ -1000,7 +1008,13 @@ class Gen:
                 op, rhs = "=", (bin_("+", ref(v), self.expr(STR, d), STR) if self.chance(0.5) else self.expr(STR, d))
         elif t[0] == "arr":
             op = "="
-            rhs = N("concat", [ref(v), N("arr", [self.expr(t[1], d)], t=t)], t=t) if self.chance(0.7) else self.expr(t, d)
+            if self.on("append") and self.chance(0.5):
+                # `acc = acc->append<x>`: the rebinding the compiler may carry out in place.
+                rhs = N("append", [ref(v), self.expr(t[1], d)], t=t)
+            elif self.chance(0.7):
+                rhs = N("concat", [ref(v), N("arr", [self.expr(t[1], d)], t=t)], t=t)
+            else:
+                rhs = self.expr(t, d)
         elif t == BOOL:
             op, rhs = "=", (N("un", [ref(v)], t=BOOL, op="!") if self.chance(0.5) else self.expr(BOOL, d))
         else:
@@ -1222,6 +1236,49 @@ class Gen:
         return N("func", [body], name=name, params=params, ret=ret, syncfn=effectful and writes_captured(body))
 
     # -- the program ------------------------------------------------------------------------
+    # -- operator overloads of the program (design principles 2.12) ----------------------------
+    def operator_overloads(self):
+        """`func operator +(a: P, b: P): P` and the others on the struct P. Their bodies are fixed;
+        what varies is where the operators are used (operator_options)."""
+        P = REC("P")
+        a, b = N("ref", t=P, name="a"), N("ref", t=P, name="b")
+
+        def fld(r, f):
+            return N("fld", [r.clone()], t=INT, name=f)
+
+        def both(make):
+            return N("rec", [make("x"), make("y")], t=P, fields=["x", "y"])
+
+        def decl(symbol, key, params, ret, result):
+            self.funcs.append(N("func", [N("blk", [[], result], t=ret)], name="operator " + symbol,
+                                key=key, params=params, ret=ret))
+
+        decl("+", "operator +/2", [("a", P, False), ("b", P, False)], P,
+             both(lambda f: bin_("+", fld(a, f), fld(b, f), INT)))
+        decl("-", "operator -/1", [("a", P, False)], P,
+             both(lambda f: N("un", [fld(a, f)], t=INT, op="-")))
+        k = N("ref", t=INT, name="k")
+        decl("*", "operator */2", [("k", INT, False), ("a", P, False)], P,
+             both(lambda f: bin_("*", k.clone(), fld(a, f), INT)))
+        decl("<", "operator </2", [("a", P, False), ("b", P, False)], BOOL,
+             bin_("<", fld(a, "x"), fld(b, "x"), BOOL))
+        i = N("ref", t=INT, name="i")
+        decl("[]", "operator []/2", [("a", P, False), ("i", INT, False)], INT,
+             N("if", [bin_("==", i, lit(INT, 0), BOOL), fld(a, "x"), fld(a, "y")], t=INT))
+        self.operators = True
+
+    def operator_options(self, t, d):
+        P = REC("P")
+        if t == P:
+            return [(2.0, lambda: bin_("+", self.expr(P, d - 1), self.expr(P, d - 1), P)),
+                    (1.0, lambda: N("un", [self.expr(P, d - 1)], t=P, op="-")),
+                    (1.0, lambda: bin_("*", self.expr(INT, d - 1), self.expr(P, d - 1), P))]
+        if t == BOOL:
+            return [(0.8, lambda: bin_("<", self.expr(P, d - 1), self.expr(P, d - 1), BOOL))]
+        if t == INT:
+            return [(0.8, lambda: N("idx", [self.expr(P, d - 1), lit(INT, self.r.choice([0, 1]))], t=INT))]
+        return []
+
     def top_level_values(self) -> list:
         """Feature `modules`: a few top-level `let`s of scalar types, each a pure expression
         over literals and the ones before it, in scope for every function and for main. They
@@ -1246,6 +1303,9 @@ class Gen:
                  for f in self.funcs}
         chosen = set()
         for f in self.funcs:
+            # The operator overloads stay in the main module: they are used where P is.
+            if f.a.get("key"):
+                continue
             if self.chance(0.5):
                 todo = [f.a["name"]]
                 while todo:
@@ -1257,6 +1317,8 @@ class Gen:
 
     def program(self, module: str) -> N:
         globals_ = self.top_level_values() if self.on("modules") else []
+        if self.on("opover") and "P" in self.types:
+            self.operator_overloads()
         if self.on("func"):
             for _ in range(self.r.choice([1, 2, 3, 3, 4]) * self.size):
                 if self.on("rec") and self.chance(0.3):
