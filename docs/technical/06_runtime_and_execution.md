@@ -104,7 +104,7 @@ on Windows, on macOS or on an idle machine. The programs and the scripts are in
 
 | What | When | Cost now | Before (trunk of 2026-10-12) |
 |---|---|---|---|
-| A node of a graph | every executed node | the evaluator's dispatch on the node kind, operands read through the graph. About the cost of `std::nvm`; `std::fvm` runs the same graph as bytecode 4 to 6 times faster | the same, plus resolving every operator by its URI (two string copies, two hash lookups, the read lock of the operator table) |
+| A node of a graph | every executed node | the evaluator's dispatch on the node kind, operands read through the graph. About the cost of `std::nvm`; `std::fvm` runs the same graph as bytecode 4 to 6 times faster. A node of a serial graph: its bytecode, as on `std::fvm` (4.3.3; this table describes the scheduler's own evaluator) | the same, plus resolving every operator by its URI (two string copies, two hash lookups, the read lock of the operator table) |
 | A call | every `FUNC`, `CALL` and element call | a frame from the calling thread's own list, the callee's plan from the thread's own cache, one check whether a collector is waiting | the mutex of the callee's graph twice, a hash insert and erase for the set of active frames, the shared lock of the plan table, two sequentially consistent stores |
 | A built-in operator, a branch | every one | nothing (the collector's region stays held; a branch checks whether a collector is waiting) | two sequentially consistent stores each |
 | A step of `reduce` / `foreach` | every element | a call | a task, in a chain of one task per element, inside a task graph per operator |
@@ -320,6 +320,36 @@ state for one thread; a debugger runs a program on `std::fvm` anyway). `CAMEL_TF
 prints `[taskflow] bytecode: graphs=G bytecodes=B calls=C interpreters=I` (or `off`) next to the
 collector's line.
 
+**Measured.** Wall seconds of the whole process, median [min, max] of 5 rounds in which the
+configurations ran in turn (`benchmarks/parallel/run.sh` with
+`BUILDS="on=... off=...,CAMEL_TF_BYTECODE=0"`, one release build of 2026-10-14, Linux x86-64
+in a container, 18 logical CPUs, load average 15 to 25 from other builds). "off" is the
+scheduler as it was before (its evaluator for every graph); `std::prl` uses 18 workers unless
+the row says `-t`.
+
+| Case | `std::fvm` | `std::prl` off, `-t 1` | `std::prl` on, `-t 1` | `std::prl` off | `std::prl` on | `-t 4` off / on |
+|---|---|---|---|---|---|---|
+| `fib` | 0.29 [0.16, 0.44] | 1.41 [0.90, 1.49] | 0.18 [0.16, 0.23] | 1.27 [1.03, 1.58] | 0.21 [0.15, 0.25] | 1.47 / 0.20 |
+| `small_calls` | 0.30 [0.24, 0.35] | 1.11 [1.03, 1.66] | 0.30 [0.28, 0.46] | 1.16 [1.04, 1.56] | 0.29 [0.26, 0.53] | 1.13 / 0.32 |
+| `serial_math` | 0.19 [0.13, 0.22] | 0.65 [0.59, 0.85] | 0.20 [0.15, 0.25] | 0.63 [0.59, 1.01] | 0.20 [0.14, 0.30] | 0.72 / 0.17 |
+| `map_light` | 0.08 [0.07, 0.10] | 0.15 [0.11, 0.21] | 0.07 [0.06, 0.11] | 0.05 [0.04, 0.08] | 0.03 [0.03, 0.06] | 0.07 / 0.04 |
+| `map_medium` | 0.16 [0.14, 0.20] | 0.68 [0.66, 0.98] | 0.19 [0.15, 0.29] | 0.49 [0.49, 0.51] | 0.05 [0.04, 0.08] | 0.47 / 0.06 |
+| `map_heavy` | 0.30 [0.21, 0.35] | 1.57 [1.44, 1.61] | 0.28 [0.20, 0.28] | 0.28 [0.27, 0.30] | 0.07 [0.06, 0.08] | 0.52 / 0.11 |
+| `collatz_reduce` | 0.57 [0.42, 0.67] | 2.16 [1.49, 2.33] | 0.61 [0.50, 0.76] | 0.56 [0.40, 0.68] | 0.19 [0.18, 0.28] | 0.76 / 0.25 |
+| `driver_inner` | 1.71 [0.73, 2.45] | 4.30 [3.85, 7.94] | 0.92 [0.70, 1.66] | 2.57 [1.66, 3.10] | 0.73 [0.47, 0.76] | 2.94 / 0.55 |
+| `mc_pi` | 5.50 [5.19, 13.25] | 5.62 [4.84, 9.99] | 6.68 [5.15, 9.94] | 1.43 [1.28, 1.95] | 1.47 [1.44, 1.74] | 2.44 / 2.05 |
+| `asian_mc` | 3.30 [2.90, 4.99] | 3.19 [2.72, 3.79] | 2.85 [2.54, 4.19] | 0.74 [0.64, 1.08] | 0.83 [0.62, 0.98] | 1.31 / 1.16 |
+| `merge_sort` | 1.95 [1.33, 3.17] | 1.58 [1.17, 2.09] | 1.99 [1.32, 2.49] | 1.13 [0.87, 1.31] | 1.06 [0.81, 1.26] | 1.01 / 0.98 |
+| `tensor_train` (after `std::macro`) | 0.24 [0.19, 0.24] | 0.22 [0.20, 0.26] | 0.21 [0.18, 0.27] | 0.22 [0.21, 0.27] | 0.22 [0.17, 0.22] | 0.23 / 0.22 |
+
+Reading: serial programs (`fib`, `small_calls`, `serial_math`) now run at the speed of
+`std::fvm` on any number of workers, 3 to 6 times faster than before. Maps whose elements are
+Camel code keep scaling with the workers and are 1.4 to 10 times faster than before (the
+smallest gain for `map_light`, whose elements are a few operators); on 18 workers `map_medium`
+and `map_heavy` are 3 to 4 times faster than `std::fvm`. A serial driver around a parallel inner function (`driver_inner`) gains on both
+sides. Programs whose elements are module operators (`mc_pi`, `asian_mc`, `merge_sort`) and the
+tensor program are unchanged within the noise: their time is in the operators.
+
 **Not handed off, and why.**
 
 - Graphs with a higher-order operator, even an ordered one (`reduce`, `foreach`) whose element
@@ -344,7 +374,7 @@ Linux x86-64 with a release build; nothing here has been run on Windows or macOS
 | `std::nvm` | a nested activation of `NodeVMSchedPass::call` on the native stack, for a direct call (`FUNC`), a call through a function value (`CALL`) and every element call of a higher-order operator alike | rebinds graph and frame inside the same activation (`goto loop_start`) | `FramePool`, a bump allocator over one block |
 | `std::fvm` | a direct call pushes its return pc and frame on the interpreter's own stack (`pcStack_` / `frameStack_`, vectors that grow up to the limit) and jumps: no native stack. A call through a function value and an element call of a higher-order operator run in a nested `callBorrowed` on the native stack | the `TAIL` bytecode: releases the frame, takes the callee's, jumps | `FramePool` |
 | `std::jit` | the interpreter of `std::fvm` for every graph the JIT does not compile (any graph with an operator, or that calls another graph). A compiled self-recursion nests on the native stack through the trampolines, uncounted | compiled as a jump | `FramePool` |
-| `std::tf` | `executeCallNode` -> `evalGraph` on the native stack of the thread that runs the call; a scope with independent heavy items becomes a task graph, whose tasks may run on other threads | the `for (;;)` loop of `evalGraph` | `TaskflowFramePool`: per graph, grown in chunks |
+| `std::tf` | `executeCallNode` -> `evalGraph` on the native stack of the thread that runs the call; a scope with independent heavy items becomes a task graph, whose tasks may run on other threads. A call of a serial graph runs on the thread's bytecode interpreter instead, with the calls of `std::fvm` from there on (4.3.3) | the `for (;;)` loop of `evalGraph`; `TAIL` in the interpreter | `TaskflowFramePool`: per graph, grown in chunks; the interpreter's `FramePool` per thread |
 | macro evaluator (`std::macro`) | `executeFunction` -> `executeGraph` on the native stack; no tail calls, every call nests | none | its own `FramePool` |
 
 Measured cost of one open call of `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`:
@@ -367,7 +397,10 @@ higher-order operator; the entry graph's call of `main` is not counted (`kEntryC
   through a function value was unbounded and overflowed the native stack.
 - `std::tf` counts per thread (`ThreadState::callDepth`), and a task continues from the count of
   the thread that started it (`InheritedDepth`), so the count follows a recursion across
-  workers. It applies the limit only when one is given; by default the native stack bounds it.
+  workers. The limit is the same as on the other back ends (1000 by default). A serial graph
+  it hands to the bytecode interpreter (4.3.3) is counted by the interpreter on top of the
+  thread's count, so the limit is reached at the same call; such a recursion does not nest on
+  the native stack (design principles 2.12).
 - All of them raise the fault with `camel::execute::throwRecursionLimitReached`, in the caller
   and before the callee's frame is taken, so the diagnostic is the same text at the same call
   expression.
