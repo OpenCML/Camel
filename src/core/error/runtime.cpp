@@ -222,13 +222,21 @@ ExecutionSite makePcExecutionSite(
     return site;
 }
 
+namespace {
+thread_local uint32_t tlsFaultIsolationDepth = 0;
+// DescribedFaultScope objects open on the calling thread.
+thread_local uint32_t tlsDescribedFaultScopes = 0;
+uint32_t describedFaultScopes() { return tlsDescribedFaultScopes; }
+} // namespace
+
 Diagnostic reportRuntimeFault(
     camel::core::context::Context &ctx, const RuntimeFault &fault, const ExecutionSite &site) {
     auto reporter = ctx.runtimeErrorReporter();
     if (!reporter) {
         return DiagnosticBuilder::of(fault.diag()).commit(fault.what());
     }
-    if (faultIsolationDepth() != 0 && isIsolatableFault(fault.diag())) [[unlikely]] {
+    if (describedFaultScopes() != 0 ||
+        (faultIsolationDepth() != 0 && isIsolatableFault(fault.diag()))) [[unlikely]] {
         return reporter->describe(fault, site);
     }
     return reporter->report(fault, site);
@@ -236,9 +244,6 @@ Diagnostic reportRuntimeFault(
 
 // ---- Fault isolation ----
 
-namespace {
-thread_local uint32_t tlsFaultIsolationDepth = 0;
-} // namespace
 
 bool isIsolatableFault(RuntimeDiag diag) {
     switch (diag) {
@@ -291,5 +296,8 @@ InheritedFaultIsolation::InheritedFaultIsolation(uint32_t depth) : saved_(tlsFau
     tlsFaultIsolationDepth = depth;
 }
 InheritedFaultIsolation::~InheritedFaultIsolation() { tlsFaultIsolationDepth = saved_; }
+
+DescribedFaultScope::DescribedFaultScope() { ++tlsDescribedFaultScopes; }
+DescribedFaultScope::~DescribedFaultScope() { --tlsDescribedFaultScopes; }
 
 } // namespace camel::core::error
