@@ -1,0 +1,522 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Oct. 14, 2026
+ * Updated: Oct. 14, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * The text of values, printing, and `format` in the programs std::cpp writes.
+ *
+ * The text of a value is what `println`, `string(x)` and a `{}` of `format` write for it
+ * (camel/core/rtdata/base.h, printSlot): a float has one text, the shortest that reads back as
+ * the same number (camel::utils::floatText, the runtime's own function).
+ *
+ * `format` follows the runtime (src/builtin/operators/str.cpp, float_format.h), which hands the
+ * string to the fmt library: an integer is formatted as an integer, a float as a float (a
+ * placeholder without a specification writes the float's text), and every other value as its
+ * text. What fmt does with a specification ([[fill]align][sign][#][0][width][.precision][type])
+ * is reproduced here for the forms a Camel program can write; a format string fmt rejects is
+ * FormatFailed at the operation's site (values: the format string, what is wrong).
+ *
+ * Two things of the runtime that look accidental are kept (docs/design/cpp-standalone, Q3):
+ * `println` with a format string ends with two line breaks, and `print` with one ends with a
+ * line break.
+ */
+
+#pragma once
+
+#include "camel/standalone/core.h"
+#include "camel/standalone/str.h"
+#include "camel/utils/number_text.h"
+
+#include <cctype>
+#include <charconv>
+#include <cmath>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+namespace camel::standalone {
+
+// ---- The text of a value ----
+
+inline void appendText(std::string &out, int64_t v) { out += std::to_string(v); }
+inline void appendText(std::string &out, int32_t v) { out += std::to_string(v); }
+inline void appendText(std::string &out, double v) { out += camel::utils::floatText(v); }
+inline void appendText(std::string &out, float v) { out += camel::utils::floatText(v); }
+inline void appendText(std::string &out, bool v) { out += v ? "true" : "false"; }
+inline void appendText(std::string &out, const Str &v) { out += v.view(); }
+
+/// `string(x)` (:op/itos, :op/ltos, :op/ftos, :op/dtos, :op/atos): the text of `x`.
+template <typename T> Str toText(const T &value) {
+    std::string out;
+    appendText(out, value);
+    return Str(out);
+}
+
+// ---- println and print (:io/println, :io/print) ----
+
+namespace detail {
+
+template <typename... Args> std::string joined(const Args &...args) {
+    std::string out;
+    bool first = true;
+    (
+        [&] {
+            if (!first) {
+                out += ' ';
+            }
+            first = false;
+            appendText(out, args);
+        }(),
+        ...);
+    return out;
+}
+
+} // namespace detail
+
+/// `println(a, b, ...)`: the texts separated by blanks, then a line break. Gives `a`
+/// (design principles 2.10: an effect returns a value, here its first argument).
+template <typename First, typename... Rest> First println(const First &first, const Rest &...rest) {
+    write(detail::joined(first, rest...) + "\n");
+    return first;
+}
+inline void println() { write("\n"); }
+
+/// `print(a, b, ...)`: as println without the line break.
+template <typename First, typename... Rest> First print(const First &first, const Rest &...rest) {
+    write(detail::joined(first, rest...));
+    return first;
+}
+inline void print() {}
+
+// ---- format (:str/format) ----
+
+namespace detail {
+
+/// One argument of `format`, classified as the runtime hands it to fmt.
+struct FormatArg {
+    enum class Kind { Integer, Float32, Float64, Text } kind;
+    int64_t integer = 0;
+    double real     = 0;
+    std::string text;
+};
+
+inline FormatArg formatArg(int64_t v) { return {FormatArg::Kind::Integer, v, 0, {}}; }
+inline FormatArg formatArg(int32_t v) { return {FormatArg::Kind::Integer, v, 0, {}}; }
+inline FormatArg formatArg(double v) { return {FormatArg::Kind::Float64, 0, v, {}}; }
+inline FormatArg formatArg(float v) { return {FormatArg::Kind::Float32, 0, v, {}}; }
+template <typename T> FormatArg formatArg(const T &v) {
+    FormatArg arg{FormatArg::Kind::Text, 0, 0, {}};
+    appendText(arg.text, v);
+    return arg;
+}
+
+/// A format specification: [[fill]align][sign][#][0][width][.precision][type].
+struct Spec {
+    std::string fill = " ";
+    char align       = '\0'; // '<', '>', '^' or none
+    char sign        = '-';
+    bool alternate   = false;
+    bool zeroPad     = false;
+    int width        = 0;
+    int precision    = -1;
+    char type        = '\0';
+};
+
+/// A format string fmt would reject: the text of its message.
+struct FormatError {
+    std::string what;
+};
+
+inline std::size_t codePoints(std::string_view s) {
+    std::size_t n = 0;
+    for (unsigned char c : s) {
+        n += (c & 0xC0) != 0x80;
+    }
+    return n;
+}
+
+inline std::string padded(std::string body, const Spec &spec, char defaultAlign) {
+    const std::size_t width = codePoints(body);
+    if (spec.width <= 0 || width >= static_cast<std::size_t>(spec.width)) {
+        return body;
+    }
+    const std::size_t missing = static_cast<std::size_t>(spec.width) - width;
+    const char align          = spec.align != '\0' ? spec.align : defaultAlign;
+    std::size_t before        = 0;
+    if (align == '>') {
+        before = missing;
+    } else if (align == '^') {
+        before = missing / 2;
+    }
+    std::string out;
+    for (std::size_t i = 0; i < before; ++i) {
+        out += spec.fill;
+    }
+    out += body;
+    for (std::size_t i = before; i < missing; ++i) {
+        out += spec.fill;
+    }
+    return out;
+}
+
+/// `body` is a number's digits without a sign; `negative` its sign. Applies sign, `#` prefix
+/// and zero padding (which goes between the sign and the digits, and only without an
+/// explicit alignment), then the alignment.
+inline std::string numeric(std::string body, bool negative, std::string_view prefix,
+                           const Spec &spec) {
+    std::string head = negative ? "-" : (spec.sign == '+' ? "+" : (spec.sign == ' ' ? " " : ""));
+    head += prefix;
+    if (spec.zeroPad && spec.align == '\0' && spec.width > 0) {
+        const std::size_t have = head.size() + body.size();
+        if (have < static_cast<std::size_t>(spec.width)) {
+            body.insert(0, static_cast<std::size_t>(spec.width) - have, '0');
+        }
+        return head + body;
+    }
+    return padded(head + body, spec, '>');
+}
+
+inline std::string formatInteger(int64_t value, const Spec &spec) {
+    if (spec.precision >= 0) {
+        throw FormatError{"precision not allowed for this argument type"};
+    }
+    const bool negative = value < 0;
+    const uint64_t magnitude =
+        negative ? uint64_t{0} - static_cast<uint64_t>(value) : static_cast<uint64_t>(value);
+    int base                = 10;
+    std::string_view prefix = "";
+    switch (spec.type) {
+    case '\0':
+    case 'd':
+        break;
+    case 'x':
+        base   = 16;
+        prefix = spec.alternate ? "0x" : "";
+        break;
+    case 'X':
+        base   = 16;
+        prefix = spec.alternate ? "0X" : "";
+        break;
+    case 'b':
+        base   = 2;
+        prefix = spec.alternate ? "0b" : "";
+        break;
+    case 'B':
+        base   = 2;
+        prefix = spec.alternate ? "0B" : "";
+        break;
+    case 'o':
+        base   = 8;
+        prefix = spec.alternate && magnitude != 0 ? "0" : "";
+        break;
+    case 'c':
+        return padded(std::string(1, static_cast<char>(value)), spec, '<');
+    default:
+        throw FormatError{"invalid format specifier"};
+    }
+    char digits[72];
+    auto [end, ec] = std::to_chars(digits, digits + sizeof(digits), magnitude, base);
+    std::string body(digits, end);
+    if (spec.type == 'X' || spec.type == 'B') {
+        for (char &c : body) {
+            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        }
+    }
+    return numeric(std::move(body), negative, prefix, spec);
+}
+
+/// fmt's float without a type: the shortest digits that read back, laid out without an
+/// exponent when the decimal exponent is from -4 to 15, and without a forced ".0".
+template <typename T> std::string shortestFloat(T value) {
+    std::string text = camel::utils::floatText(value);
+    // floatText writes "2.0" where fmt writes "2"; everything else is the same layout.
+    if (text.size() > 2 && text.compare(text.size() - 2, 2, ".0") == 0 &&
+        text.find('e') == std::string::npos) {
+        text.resize(text.size() - 2);
+    }
+    return text;
+}
+
+template <typename T> std::string formatFloat(T value, const Spec &spec) {
+    const bool negative = std::signbit(value) && !std::isnan(value);
+    const T magnitude   = negative ? -value : value;
+    std::string body;
+    if (std::isnan(magnitude) || std::isinf(magnitude)) {
+        const bool upper = spec.type == 'F' || spec.type == 'E' || spec.type == 'G';
+        body = std::isnan(magnitude) ? (upper ? "NAN" : "nan") : (upper ? "INF" : "inf");
+        Spec plain    = spec;
+        plain.zeroPad = false; // fmt does not pad infinity and NaN with zeros
+        return numeric(std::move(body), negative, "", plain);
+    }
+    if (spec.type == '\0' && spec.precision < 0) {
+        body = shortestFloat(magnitude);
+        if (spec.alternate && body.find('.') == std::string::npos &&
+            body.find('e') == std::string::npos) {
+            body += '.';
+        }
+        return numeric(std::move(body), negative, "", spec);
+    }
+    char conversion    = spec.type;
+    double v           = static_cast<double>(magnitude);
+    std::string suffix = "";
+    switch (spec.type) {
+    case '\0':
+        conversion = 'g';
+        break;
+    case 'f':
+    case 'F':
+    case 'e':
+    case 'E':
+    case 'g':
+    case 'G':
+    case 'a':
+    case 'A':
+        break;
+    case '%':
+        conversion = 'f';
+        v *= 100.0;
+        suffix = "%";
+        break;
+    default:
+        throw FormatError{"invalid format specifier"};
+    }
+    std::string pattern = "%";
+    if (spec.alternate) {
+        pattern += '#';
+    }
+    if (spec.precision >= 0) {
+        pattern += "." + std::to_string(spec.precision);
+    }
+    pattern += conversion;
+    const int n = std::snprintf(nullptr, 0, pattern.c_str(), v);
+    body.resize(static_cast<std::size_t>(n) + 1);
+    std::snprintf(body.data(), body.size(), pattern.c_str(), v);
+    body.resize(static_cast<std::size_t>(n));
+    return numeric(body + suffix, negative, "", spec);
+}
+
+inline std::string formatText(const std::string &text, const Spec &spec) {
+    if (spec.type != '\0' && spec.type != 's') {
+        throw FormatError{"invalid format specifier"};
+    }
+    if (spec.sign != '-' || spec.alternate || spec.zeroPad) {
+        throw FormatError{"invalid format specifier"};
+    }
+    std::string body = text;
+    if (spec.precision >= 0) {
+        // The precision of a string is the number of characters (code points) kept.
+        std::size_t kept = 0, at = 0;
+        while (at < body.size() && kept < static_cast<std::size_t>(spec.precision)) {
+            ++at;
+            while (at < body.size() && (static_cast<unsigned char>(body[at]) & 0xC0) == 0x80) {
+                ++at;
+            }
+            ++kept;
+        }
+        body.resize(at);
+    }
+    return padded(std::move(body), spec, '<');
+}
+
+inline int parseNumber(std::string_view s, std::size_t &i) {
+    int value = 0;
+    while (i < s.size() && s[i] >= '0' && s[i] <= '9') {
+        value = value * 10 + (s[i] - '0');
+        ++i;
+    }
+    return value;
+}
+
+inline Spec parseSpec(std::string_view s) {
+    Spec spec;
+    std::size_t i = 0;
+    auto isAlign  = [](char c) { return c == '<' || c == '>' || c == '^'; };
+    // A fill is one code point followed by an alignment.
+    std::size_t fillEnd = 0;
+    if (!s.empty()) {
+        fillEnd = 1;
+        while (fillEnd < s.size() && (static_cast<unsigned char>(s[fillEnd]) & 0xC0) == 0x80) {
+            ++fillEnd;
+        }
+    }
+    if (fillEnd < s.size() && isAlign(s[fillEnd]) && s[0] != '{' && s[0] != '}') {
+        spec.fill  = std::string(s.substr(0, fillEnd));
+        spec.align = s[fillEnd];
+        i          = fillEnd + 1;
+    } else if (!s.empty() && isAlign(s[0])) {
+        spec.align = s[0];
+        i          = 1;
+    }
+    if (i < s.size() && (s[i] == '+' || s[i] == '-' || s[i] == ' ')) {
+        spec.sign = s[i++];
+    }
+    if (i < s.size() && s[i] == '#') {
+        spec.alternate = true;
+        ++i;
+    }
+    if (i < s.size() && s[i] == '0') {
+        spec.zeroPad = true;
+        ++i;
+    }
+    if (i < s.size() && s[i] >= '0' && s[i] <= '9') {
+        spec.width = parseNumber(s, i);
+    }
+    if (i < s.size() && s[i] == '.') {
+        ++i;
+        if (i >= s.size() || s[i] < '0' || s[i] > '9') {
+            throw FormatError{"missing precision specifier"};
+        }
+        spec.precision = parseNumber(s, i);
+    }
+    if (i < s.size() && s[i] == 'L') {
+        ++i;
+    }
+    if (i < s.size()) {
+        spec.type = s[i++];
+    }
+    if (i != s.size()) {
+        throw FormatError{"invalid format specifier"};
+    }
+    return spec;
+}
+
+inline std::string formatOne(const FormatArg &arg, std::string_view specText, bool hasSpec) {
+    const Spec spec = parseSpec(specText);
+    switch (arg.kind) {
+    case FormatArg::Kind::Integer:
+        return formatInteger(arg.integer, spec);
+    case FormatArg::Kind::Float32:
+        return hasSpec ? formatFloat(static_cast<float>(arg.real), spec)
+                       : camel::utils::floatText(static_cast<float>(arg.real));
+    case FormatArg::Kind::Float64:
+        return hasSpec ? formatFloat(arg.real, spec) : camel::utils::floatText(arg.real);
+    case FormatArg::Kind::Text:
+    default:
+        return formatText(arg.text, spec);
+    }
+}
+
+/// fmt::vformat over the classified arguments.
+inline std::string vformat(std::string_view pattern, const std::vector<FormatArg> &args) {
+    std::string out;
+    std::size_t next = 0;
+    enum class Indexing { None, Automatic, Manual } indexing = Indexing::None;
+    for (std::size_t i = 0; i < pattern.size(); ++i) {
+        const char c = pattern[i];
+        if (c == '}') {
+            if (i + 1 < pattern.size() && pattern[i + 1] == '}') {
+                out += '}';
+                ++i;
+                continue;
+            }
+            throw FormatError{"unmatched '}' in format string"};
+        }
+        if (c != '{') {
+            out += c;
+            continue;
+        }
+        if (i + 1 < pattern.size() && pattern[i + 1] == '{') {
+            out += '{';
+            ++i;
+            continue;
+        }
+        const std::size_t close = pattern.find('}', i + 1);
+        if (close == std::string_view::npos) {
+            throw FormatError{"invalid format string"};
+        }
+        std::string_view field = pattern.substr(i + 1, close - i - 1);
+        const std::size_t colon = field.find(':');
+        std::string_view id     = field.substr(0, colon);
+        std::string_view spec =
+            colon == std::string_view::npos ? std::string_view() : field.substr(colon + 1);
+        std::size_t index = 0;
+        if (id.empty()) {
+            if (indexing == Indexing::Manual) {
+                throw FormatError{"cannot switch from manual to automatic argument indexing"};
+            }
+            indexing = Indexing::Automatic;
+            index    = next++;
+        } else {
+            if (indexing == Indexing::Automatic) {
+                throw FormatError{"cannot switch from automatic to manual argument indexing"};
+            }
+            indexing        = Indexing::Manual;
+            std::size_t pos = 0;
+            if (id[0] < '0' || id[0] > '9') {
+                throw FormatError{"invalid format string"};
+            }
+            index = static_cast<std::size_t>(parseNumber(id, pos));
+            if (pos != id.size()) {
+                throw FormatError{"invalid format string"};
+            }
+        }
+        if (index >= args.size()) {
+            throw FormatError{"argument not found"};
+        }
+        out += formatOne(args[index], spec, colon != std::string_view::npos);
+        i = close;
+    }
+    return out;
+}
+
+template <typename... Args> std::string formatted(const Str &pattern, const Site &site,
+                                                  const Args &...args) {
+    try {
+        return vformat(pattern.view(), std::vector<FormatArg>{formatArg(args)...});
+    } catch (const FormatError &e) {
+        fault(site, {pattern.str(), e.what});
+    }
+}
+
+} // namespace detail
+
+/// `pattern->format<a, b, ...>` (:str/format).
+template <typename... Args> Str format(const Str &pattern, const Site &site, const Args &...args) {
+    return Str(detail::formatted(pattern, site, args...));
+}
+
+/// `println<pattern>(a, b, ...)`: the formatted text and two line breaks (see the file
+/// comment). Gives `a`.
+template <typename First, typename... Rest>
+First printlnFormatted(const Str &pattern, const Site &site, const First &first,
+                       const Rest &...rest) {
+    write(detail::formatted(pattern, site, first, rest...) + "\n\n");
+    return first;
+}
+inline void printlnFormatted(const Str &pattern, const Site &site) {
+    write(detail::formatted(pattern, site) + "\n\n");
+}
+
+/// `print<pattern>(a, b, ...)`: the formatted text and one line break. Gives `a`.
+template <typename First, typename... Rest>
+First printFormatted(const Str &pattern, const Site &site, const First &first,
+                     const Rest &...rest) {
+    write(detail::formatted(pattern, site, first, rest...) + "\n");
+    return first;
+}
+inline void printFormatted(const Str &pattern, const Site &site) {
+    write(detail::formatted(pattern, site) + "\n");
+}
+
+} // namespace camel::standalone

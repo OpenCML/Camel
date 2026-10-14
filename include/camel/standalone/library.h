@@ -1,0 +1,49 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Oct. 14, 2026
+ * Updated: Oct. 14, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * Operators of the standard modules that the programs std::cpp writes carry out themselves
+ * (each as the module's implementation named with it does), so that using them does not make
+ * a program depend on the runtime.
+ */
+
+#pragma once
+
+#include "camel/standalone/str.h"
+
+#include <chrono>
+#include <cstdlib>
+#include <string>
+
+namespace camel::standalone {
+
+/// `time.now()` (time:now, modules/time/operators.cpp): seconds since the epoch.
+inline double now() {
+    using namespace std::chrono;
+    return duration_cast<duration<double>>(system_clock::now().time_since_epoch()).count();
+}
+
+/// `sys.get_env(name)` (sys:get_env, modules/sys/operators.cpp): the variable's value, or the
+/// empty string when it is not set.
+inline Str getEnv(const Str &name) {
+    const char *value = std::getenv(name.str().c_str());
+    return value != nullptr ? Str(value) : Str();
+}
+
+} // namespace camel::standalone
