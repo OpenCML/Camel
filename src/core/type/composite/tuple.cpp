@@ -467,9 +467,9 @@ Type *camel::core::type::joinTypes(Type *a, Type *b) {
     }
     // A value and `null`: the value's type, nullable. (Asked first: `void` is assignable
     // from anything, which is not what joining with `null` means.)
-    // DESIGN-QUESTION(void-as-null): `null` has the type `void`, and so has every expression
-    // without a value (a call of a function that returns nothing). All of them join as
-    // `null` does. The alternative is to accept the literal only.
+    // Design principles 2.11: an arm without a value (`void`: the literal `null`, a call of
+    // a function that returns nothing, an empty block) and an arm of type `T` make the
+    // branch a `T?`; the arm without a value gives `null`.
     if (a->code() == TypeCode::Void || b->code() == TypeCode::Void) {
         Type *value = a->code() == TypeCode::Void ? b : a;
         return asNullable(value) != nullptr ? value : TupleType::nullable(value);

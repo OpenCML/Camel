@@ -161,8 +161,8 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     if (start < 0 || start > size || end < 0 || end > size) {
         throwRuntimeFault(RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
     }
-    // DESIGN-QUESTION(slice-reversed-range): both bounds inside the array and the end before
-    // the start is the empty range, as before; the alternative is a fault.
+    // Both bounds inside the array and the end before the start is the empty range, not a
+    // fault (design principles 2.11): `xs->slice<2, 1>` is `[]`.
     if (end < start)
         end = start;
 
