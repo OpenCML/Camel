@@ -28,12 +28,14 @@ cb86e9333aae5aaa ok benchmarks/lenet_big/model.cml
 60565ba18d836e98 ok benchmarks/mlp_big/model.cml
 f7dc2926afb11127 ok benchmarks/parallel/cases/asian_mc.cml
 822b720e68ac9ef3 ok benchmarks/parallel/cases/collatz_reduce.cml
+25327c84e13512df ok benchmarks/parallel/cases/driver_inner.cml
 d249f66638c5a342 ok benchmarks/parallel/cases/fib.cml
 14ee17000e08b5ae ok benchmarks/parallel/cases/map_heavy.cml
 9717e6df0477c8d3 ok benchmarks/parallel/cases/map_light.cml
 05c78d6427e94dd8 ok benchmarks/parallel/cases/map_medium.cml
 bd16a3eb11d1cc31 ok benchmarks/parallel/cases/mc_pi.cml
 23f630b3df84c585 ok benchmarks/parallel/cases/merge_sort.cml
+2308c7bda7867fab ok benchmarks/parallel/cases/serial_math.cml
 91bb0515d7b1dbb1 ok benchmarks/parallel/cases/small_calls.cml
 39994af5febb5538 ok benchmarks/parallel/cases/tensor_train.cml
 98c0b86961010046 ok benchmarks/resnet/model.cml
