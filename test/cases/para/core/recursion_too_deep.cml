@@ -1,9 +1,11 @@
 /**
- * The parallel scheduler has no fixed recursion limit (NodeVM stops at 256 frames): a non-tail
- * recursion goes as deep as the native stack of the thread allows. Past that it stops with
- * MaxRecursionDepthExceeded instead of a segmentation fault. depth(2000) fits and
- * depth(400000) does not. Unix normally reserves an 8 MB stack; the Windows CLI reserves
- * 32 MB, keeping more space free for fault unwinding.
+ * A non-tail recursion far deeper than a native stack holds, run with the limit raised to
+ * 1000000 (the plan passes --max-recursion-depth). On the bytecode interpreter (std::fvm, and
+ * std::prl, which hands these serial functions to it) direct calls do not nest on the native
+ * stack and depth(400000) completes. Where every call nests on the native stack (the parallel
+ * scheduler's own evaluator, CAMEL_TF_BYTECODE=0) it stops with MaxRecursionDepthExceeded
+ * when the stack of the thread is nearly full instead of a segmentation fault; depth(2000)
+ * fits there.
  */
 module recursion_too_deep
 
@@ -14,6 +16,6 @@ func depth(n: int): int {
 func main(): int sync {
     println(depth(2000))
     println(depth(400000))
-    println('not reached')
+    println('done')
     return 0
 }

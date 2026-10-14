@@ -395,15 +395,33 @@ timeout_ms = 30000
 
 [[tests]]
 name = "recursion_too_deep.prl"
-desc = "With the limit raised far above what the native stack holds, a non-tail recursion deeper than the stack allows stops under PRL with MaxRecursionDepthExceeded (the shared guard reserves space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(2000) printed before it, nothing after. (Without the option PRL counts like the other schedulers and stops at 1000: consistency.limits.)"
+desc = "With the limit raised to 1000000, depth(400000) is far deeper than a native stack holds. main and depth are serial, so std::prl runs them on the bytecode interpreter, which keeps direct calls off the native stack: the recursion completes, as on std::fvm (design principles 2.12). The two back ends agree. (Without the option every scheduler stops at 1000: consistency.limits, para.handoff.)"
+kind = "behavior"
+case = "../../../cases/para/core/recursion_too_deep.cml"
+args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${backend}"]
+backends = ["fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "2000\n400000\ndone\n"
+# 400000 calls: under a sweep that collects at every safepoint (poison) that is 400000
+# collections on std::fvm. What such a sweep checks, the other tests check.
+sweep = false
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "recursion_too_deep.prl_evaluator"
+desc = "The same program with the bytecode hand-off off (CAMEL_TF_BYTECODE=0), so that the scheduler's own evaluator runs the recursion and every call nests on the native stack: it stops with MaxRecursionDepthExceeded when the stack of the thread is nearly full (the shared guard reserves space for reporting and fault unwinding on each platform) instead of a segmentation fault; depth(2000) printed before it, nothing after."
 kind = "negative"
 case = "../../../cases/para/core/recursion_too_deep.cml"
 args = ["-t", "4", "--max-recursion-depth", "1000000", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_BYTECODE=0"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_code = "0x04000004"
 expect_stdout_contains = ["2000", "the native stack of the thread"]
-expect_output_not_contains = ["not reached"]
+expect_stdout_starts_with = "2000\n"
+expect_output_not_contains = ["400000\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000
 

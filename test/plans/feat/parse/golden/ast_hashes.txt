@@ -1289,12 +1289,15 @@ b18aff186c29a183 ok test/cases/para/core/merge_sort_small.cml
 341f9b9575d42415 ok test/cases/para/core/monte_carlo_pi_small.cml
 e8964d2bbb832c94 ok test/cases/para/core/ordered_operators_inline.cml
 a1b22a536d75ec01 ok test/cases/para/core/println_whole_lines.cml
-8e076ece34d120b9 ok test/cases/para/core/recursion_too_deep.cml
+989f59a1cd66bebf ok test/cases/para/core/recursion_too_deep.cml
 30be95b610ae6854 ok test/cases/para/core/scalar_recursion_inline.cml
 b285af21c87e8e7d ok test/cases/para/core/sync_order_with_tasks.cml
 dac29117678ca942 ok test/cases/para/core/unordered_foreach_smoke.cml
 43156d9c57077930 ok test/cases/para/core/unordered_foreach_timing.cml
 756ab8039fcbc22f ok test/cases/para/core/unordered_reduce_sum.cml
+ef06324be0bc2590 ok test/cases/para/handoff/depth_across.cml
+f63b8a6547cded97 ok test/cases/para/handoff/fault_deep.cml
+c1e8f807cd8def36 ok test/cases/para/handoff/shapes.cml
 a58a7cd293a77647 no test/cases/parse/numbers/member_index_exponent.cml
 7d7964a39be8391b ok test/cases/parse/numbers/tokens.cml
 c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml

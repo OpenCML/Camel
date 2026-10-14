@@ -192,15 +192,9 @@ independent calls of heavy graphs. For a program that is sequential by its depen
 
 **Remaining gaps, and questions that are not the scheduler's to decide.**
 
-- `DESIGN-QUESTION(prl-light-graph-evaluator)`: the remaining factor of 4 to 6 on scalar code is
-  the difference between walking the nodes of a graph and running its bytecode, not scheduling.
-  It can only go away by running light graphs (the ones the granularity rule never makes tasks
-  of) on the bytecode interpreter inside a worker. Candidates: (a) `std::prl` compiles light
-  graphs with FastVM's compiler and runs them on a per-worker interpreter: this needs the
-  interpreter to be re-entrant per thread, to take frames the collector's handshake can see, and
-  to count calls and report faults the way the scheduler does; (b) a pass before `std::prl` that
-  marks or outlines light regions, with the same requirements at run time; (c) leave it and say
-  that scalar-heavy programs belong on `std::fvm`. (a) and (b) change how back ends are composed.
+- The remaining factor of 4 to 6 on scalar code was the difference between walking the nodes
+  of a graph and running its bytecode (`prl-light-graph-evaluator`). Decided by the owner
+  (design principles 2.11) and done as candidate (a): 4.3.3.
 - `DESIGN-QUESTION(prl-coarsening-pass)`: for scopes, the granularity is still the static rule
   of 4.3.1: two unordered calls of heavy graphs become a task graph every time, whatever their
   size at run time (a recursive split keeps making task graphs down to its leaves), and two
@@ -246,6 +240,96 @@ platform's default stack) until that is done. The class does nothing a collector
 about: a worker registers with the stop-the-world gate on its first safepoint
 (`TaskflowGcGate::self`), whichever way its thread was started, and reads its stack bounds from
 the thread itself.
+
+#### 4.3.3 Serial graphs run as bytecode (字节码移交)
+
+Design principles 2.11: the parallel scheduler hands subgraphs that have nothing to parallelise
+to the bytecode interpreter. Walking a graph node by node costs 4 to 6 times what its bytecode
+costs (4.3.2), and where nothing can run concurrently that is all the scheduler adds. The code
+is `src/passes/sched/taskflow/handoff.{h,cpp}` (the scheduler's side) and
+`src/passes/sched/fastvm/hosted.{h,cpp}` (the interpreter's side).
+
+**Which graphs.** A graph is *serial* when the scheduler would run all of it, and everything it
+calls, on the calling thread in the linear order. Precisely: G is serial when every graph H
+that G reaches through direct calls (`FUNC`, G included) satisfies all of
+
+1. H has no higher-order operator (`:mark/...`: `map`, `apply`, `filter`, `reduce`, `foreach`,
+   their unordered forms, and `attempt`). The unordered ones are where elements run
+   concurrently, and all of them call a function value.
+2. H has no call of a function value (`CALL`): the callee is not known before the run and may
+   not be serial.
+3. No scope of H runs as a task graph: H has no two unordered items that the granularity rule
+   (4.3.1) would fork.
+4. Every operator of H is found without importing a module, and H has a frame layout (what the
+   bytecode compiler needs). An operator of a module the program did not import, such as the
+   global `exit` without `import ... from os`, keeps its graph on the scheduler.
+
+The set is closed under direct calls by definition, so the bytecode never calls back into the
+scheduler: a serial graph reaches serial graphs only, through `FUNC` and `TAIL` bytecodes the
+interpreter runs itself. Whether a graph is serial does not depend on how long it runs: a
+serial `fib(35)` runs on one thread whether it takes a microsecond or seconds, as it did before
+(4.3.1 already never made tasks of it). What changes is only how its nodes are executed.
+
+Examples: `fib`, a tail-recursive loop, a helper that calls `math::sqrt`, a function that builds
+an array step by step are serial. `main` with a `map` in it, a driver that calls such a
+function, and the element function of a `map` that itself contains a `map` are not; the element
+function of a `map` that only computes is serial, and each worker runs it as bytecode.
+
+**When.** Before the run starts, on the thread that starts it (`prepareBytecodeHandoff`): every
+graph reachable from the entry graph is classified (its plan is built for condition 3), and the
+serial ones are compiled once, with the strategy of `std::fvm`, into one image
+(`FastVMHostImage`). The image and the debug map's pc origins are written then and only read
+while the workers run, so no thread takes a lock for them. A graph created during the run (a
+gradient built at run time) is not in the image and is evaluated by the scheduler.
+`CAMEL_TF_DIAG=1` prints the decision for every graph and the reason when a graph stays.
+
+**Where.** The scheduler reaches a graph at a call (`callGraph`: `FUNC`, `CALL`, an element call
+of a higher-order operator, the call made by `attempt`, the entry graph) and at a tail call (the
+loop of `evalGraph`). Both look at `GraphPlan::bytecodeEntry` and, for a serial graph, enter the
+interpreter of the calling thread instead of `evalGraph`. A program with nothing to
+parallelise therefore runs as bytecode from its entry graph on, like `std::fvm`.
+
+**One interpreter per thread.** Each thread that makes a hosted call gets its own
+`FastVMSchedPass`, constructed over the shared image (it never compiles and never runs
+`apply`; the JIT stays off). Its frame pool, its call stack and its counters belong to that
+thread. The hand-off object owns all of them and destroys them before the image; a thread finds
+its own through a thread-local slot that names the run.
+
+**The boundary** (`TaskflowBytecodeHandoff::call`):
+
+| | |
+|---|---|
+| Arguments | written into a frame of the interpreter's own pool, inside the thread's region (the collector's handshake, 4.3.2); the value comes back inside the region and the caller stores it before a collection can run |
+| Collector | the interpreter runs inside the region like any leaf work. Its safepoints (every `FUNC`, `TAIL`) call a hook the scheduler installs for the call (`FastVmSafepointScope`): when a collector wants in, leave the region, poll, enter again, which is what the scheduler does at a graph boundary. The interpreter's frames are roots through its frame pool and are traced only while their thread is stopped there |
+| Recursion limit | the interpreter counts its calls on top of the calls open on the thread (`ThreadState::callDepth`, which includes the hosted one), so the limit of 1000 is reached at the same call as on the scheduler, also inside a `map` element (`test/plans/feat/para/handoff.plan.toml`, `depth_across`) |
+| Faults | a fault leaves the interpreter as a located diagnostic that nothing has recorded (`DescribedFaultScope`), like one from `raiseFault`: the scheduler chooses among concurrent faults (design principles 2.10) and records the one that ends the run. An `attempt` boundary open on the thread is seen by the interpreter (thread-local state). Anything else an operator throws (`exit`) puts the interpreter back as it was before it passes on |
+| Call-backs | none (see "Which graphs") |
+
+**What changes that can be seen.** Nothing in the output, the exit code or the diagnostics of a
+program. Two things a program cannot observe but a test can: the number of collections and
+where they run (the interpreter polls at calls, the evaluator at calls and branches), and how
+deep a non-tail recursion can go when `--max-recursion-depth` is raised far above the default:
+a serial recursion no longer nests on the native stack, so it completes on `std::prl` as it does
+on `std::fvm` instead of stopping when the thread's stack is nearly full (design principles
+2.12; `para.core.recursion_too_deep.prl`).
+
+**Switch.** `CAMEL_TF_BYTECODE=0` turns the hand-off off: every graph is evaluated by the
+scheduler as before. For A/B measurements and as an escape hatch. The hand-off is also off under
+`CAMEL_TF_LINEAR=1` and while an execution observer or the inspection mode is active (both keep
+state for one thread; a debugger runs a program on `std::fvm` anyway). `CAMEL_TF_GC_STATS=1`
+prints `[taskflow] bytecode: graphs=G bytecodes=B calls=C interpreters=I` (or `off`) next to the
+collector's line.
+
+**Not handed off, and why.**
+
+- Graphs with a higher-order operator, even an ordered one (`reduce`, `foreach`) whose element
+  function is serial, and `attempt`: the function they call is a value, and running it in the
+  interpreter would run a parallel callee serially. The element function itself is handed off
+  at each element call, so only the operator's own loop stays on the scheduler.
+- Graphs that call a function value, for the same reason.
+- A serial driver around a parallel inner function stays on the scheduler as a whole (the
+  decision is per graph); its serial helpers run as bytecode at every call.
+- Graphs created during the run.
 
 ### 4.4 How each back end runs a call, a fault and the end of a program
 

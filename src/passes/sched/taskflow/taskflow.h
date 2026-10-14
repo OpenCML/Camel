@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -277,19 +277,16 @@ class TaskflowGcRegion {
     bool held_ = false;
 };
 
+class TaskflowBytecodeHandoff;
+
 class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
   public:
     /// `max_concurrent_tasks` = 0: the thread limit of the context (`-t`), else the number of
     /// hardware threads.
-    TaskflowExecSchedPass(const ctx::context_ptr_t &ctx, size_t max_concurrent_tasks = 0)
-        : RuntimeGraphSchedulePass(ctx), executor_(workerCount(ctx, max_concurrent_tasks)) {
-        if (ctx) {
-            // The same count as on the other schedulers, with the same default (design
-            // principles 2.10).
-            maxRecursionDepth_ = camel::execute::recursionLimit(*ctx).frames;
-        }
-    }
-    ~TaskflowExecSchedPass() override = default;
+    // Constructor and destructor are out of line (handoff.cpp): the pass owns a
+    // TaskflowBytecodeHandoff, which is an incomplete type here.
+    TaskflowExecSchedPass(const ctx::context_ptr_t &ctx, size_t max_concurrent_tasks = 0);
+    ~TaskflowExecSchedPass() override;
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
     void buildAndDump(camel::runtime::GCGraph *graph, std::ostream &os);
@@ -399,6 +396,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         uint32_t end       = 0;
         bool prepared      = false;
     };
+    static constexpr size_t kNoBytecode = std::numeric_limits<size_t>::max();
     struct GraphPlan {
         camel::runtime::GCGraph *graph = nullptr;
         // False: the graph does not fit the scope model (or task graphs are switched off); it
@@ -425,6 +423,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         // element is then bounded by the size of the graphs), 0 when not, -1 until asked
         // (boundedLight).
         std::atomic<int8_t> boundedLightState{-1};
+        // Where the bytecode of the graph starts when the graph is *serial* and is handed to
+        // the bytecode interpreter ("Bytecode hand-off" below); kNoBytecode when the scheduler
+        // evaluates it. Written once before the run starts, never after.
+        size_t bytecodeEntry = kNoBytecode;
         bool isTailCall(camel::runtime::gc_node_ref_t ref) const {
             return std::binary_search(tailCalls.begin(), tailCalls.end(), ref);
         }
@@ -500,6 +502,60 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     // helpers (reported with CAMEL_TF_GC_STATS).
     std::atomic<uint64_t> taskGraphsRun_{0};
 
+    // ---- Bytecode hand-off (handoff.h, handoff.cpp) ---------------------------------------
+    //
+    // Design principles 2.11: the parallel scheduler hands subgraphs that have nothing to
+    // parallelise to the bytecode interpreter. Walking a graph node by node costs 4 to 6 times
+    // what its bytecode costs, and where no two things can run at once that is all the
+    // scheduler adds.
+    //
+    // A graph is *serial* when the scheduler would run all of it, and everything it calls, on
+    // the calling thread in the linear order. Precisely, G is serial when every graph H that G
+    // reaches through direct calls (G included) satisfies all of:
+    //
+    //   1. H has no higher-order operator (`:mark/...`: map, apply, filter, reduce, foreach,
+    //      their unordered forms, and the fault-isolation node). The unordered ones are where
+    //      the scheduler runs elements concurrently; all of them call a function value.
+    //   2. H has no call of a function value (CALL): the callee is not known before the run and
+    //      may be a graph that is not serial.
+    //   3. No scope of H's plan runs as a task graph (PlanScope::sequential holds for all):
+    //      H has no two unordered items the granularity rule would fork.
+    //   4. Every operator of H is found without importing a module, and H has a frame layout:
+    //      what the bytecode compiler needs. (An operator of a module that is imported only
+    //      when first used, like `exit`, keeps its graph on the scheduler.)
+    //
+    // The property is closed under direct calls by definition, so bytecode never has to call
+    // back into the scheduler: a serial graph reaches serial graphs only, through FUNC and TAIL
+    // bytecodes that the interpreter runs itself. It is decided for every graph reachable from
+    // the entry graph before the run starts (prepareBytecodeHandoff), and the serial graphs are
+    // compiled then, once, into one image that is read-only while the workers run. A graph
+    // created during the run (a gradient built at run time) is not in the image and stays on
+    // the scheduler.
+    //
+    // The scheduler reaches a graph in two places: a call (callGraph: FUNC, CALL, an element
+    // call of a higher-order operator, the call of the fault-isolation node, the entry graph)
+    // and a tail call (the loop of evalGraph). Both look at GraphPlan::bytecodeEntry and enter
+    // the interpreter of the calling thread instead of evalGraph. What the two sides agree on
+    // at that boundary is written at TaskflowBytecodeHandoff::call.
+    //
+    // CAMEL_TF_BYTECODE=0 switches the hand-off off (every graph is evaluated by the
+    // scheduler, as before); it is also off under CAMEL_TF_LINEAR and while an execution
+    // observer or the inspection mode is active. CAMEL_TF_DIAG=1 prints the decision per graph.
+    std::unique_ptr<TaskflowBytecodeHandoff> handoff_;
+    /// Classifies the graphs reachable from `root`, compiles the serial ones and records their
+    /// entry in their plans. On the thread that starts the run, before any graph is evaluated.
+    void prepareBytecodeHandoff(camel::runtime::GCGraph *root);
+    /// Why `plan`'s graph cannot be serial by its own body (conditions 1 to 4 for H = the
+    /// graph); empty when its body allows it.
+    std::string_view serialObstacle(const GraphPlan &plan) const;
+    /// Calls `target` on the calling thread and returns its value, inside `region`: on the
+    /// bytecode interpreter when the graph is serial, else on a frame of the pool with
+    /// evalGraph. `fill(frame)` writes the arguments into the callee's frame (inside the
+    /// region). The caller has counted the call (OpenCall). `plan`: of `target`, when known.
+    template <typename Fill>
+    slot_t callGraph(
+        camel::runtime::GCGraph *target, GraphPlan *plan, TaskflowGcRegion &region, Fill &&fill);
+
     GraphPlan *planFor(camel::runtime::GCGraph *graph);
     std::unique_ptr<GraphPlan> buildGraphPlan(camel::runtime::GCGraph *graph);
     void buildStructuredPlan(GraphPlan &plan);
@@ -568,6 +624,11 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         ctx::Frame *sourceFrame);
     ctx::Frame *acquirePreparedClosureCallFrame(
         camel::runtime::GCGraph *targetGraph, ::Tuple *closure, std::span<const slot_t> args);
+    /// Writes the arguments `args` and the captured values of `closure` into `dest`, a frame of
+    /// `targetGraph` from any pool.
+    static void fillClosureCallFrame(
+        ctx::Frame *dest, camel::runtime::GCGraph *targetGraph, ::Tuple *closure,
+        std::span<const slot_t> args);
 
     slot_t executePreparedOperator(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame,
