@@ -90,41 +90,34 @@ expect_exit = 0
 expect_output_not_contains = ["Error", "Warn"]
 
 # ---- D2: using an exported value ----
+# Exported values are nodes of the program's one root graph (design principles 2.11).
 
 [[tests]]
 name = "imports.d2_value"
-desc = "`export let` used by the importing module crashed the compiler. ConstructNotSupported at the use."
-kind = "negative"
+desc = "`export let` used by the importing module (it crashed the compiler, then was ConstructNotSupported)."
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d2_value.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 13
-expect_output_contains = ["'pi' is not supported: a value exported by another module cannot be used yet"]
+expect_exit = 0
+expect_stdout_exact = "3.14159\n"
 
 [[tests]]
 name = "imports.d2_value_check"
-desc = "The same through `camel check` (it crashed too)."
-kind = "negative"
+desc = "The same through `camel check`: no diagnostic."
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d2_value.cml"
 args = ["check", "-O", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 13
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
 
 [[tests]]
 name = "imports.d2_qualified"
 desc = "The same value reached as `m::pi`."
-kind = "negative"
+kind = "behavior"
 case = "../../../cases/compile/module_imports/d2_qualified.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 13
-expect_output_contains = ["'mi_values::pi' is not supported"]
+expect_exit = 0
+expect_stdout_exact = "3.14159\n"
 
 [[tests]]
 name = "imports.d2_unused"

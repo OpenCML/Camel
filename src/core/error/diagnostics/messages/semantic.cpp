@@ -351,10 +351,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::ImportNameConflict,
             {
                 "ImportNameConflict",
-                "The name '{0}' is imported from the modules '{1}' and '{2}' with the same "
-                "signature {3}.",
-                "Two imports that bring the same name with the same parameter types conflict; "
-                "neither is chosen silently. Give one of them another name where it is imported "
+                "The name '{0}' is imported from the modules '{1}' and '{2}' with {3}.",
+                "Two imports that bring the same name with the same parameter types conflict, "
+                "and so do two that bring a value of the same name; neither is chosen silently. Give one of them another name where it is imported "
                 "('import {{ name as other_name }} from m'), or import the name from one of the "
                 "modules only and reach the other through its module ('import m', then "
                 "'m::name').",
@@ -625,6 +624,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The empty array literal takes its element type from where it stands: a "
                 "declared type, a parameter, the other arm of a branch, an 'as'. Here there "
                 "is none. Write the type: 'let {0}: int[] = []'.",
+            },
+        },
+        {
+            SemanticDiag::ExportedVariable,
+            {
+                "ExportedVariable",
+                "The variable '{0}' cannot be exported.",
+                "A 'var' of the top level of a module is read and written only by the module's own "
+                "functions (design principles 2.11): export the functions that read and write it "
+                "('export sync func bump(): int sync {{ wait cnt += 1; return cnt }}'). A 'let' "
+                "can be exported.",
             },
         },
         {

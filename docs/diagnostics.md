@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-129 diagnostics: 118 errors, 11 warnings.
+130 diagnostics: 119 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -104,6 +104,7 @@ prints one entry.
 | `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error |
 | `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error |
 | `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error |
+| `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -1411,13 +1412,21 @@ func main(): int sync {
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/module_imports/d2_value.cml`, run as `camel -E short test/cases/compile/module_imports/d2_value.cml`)
+**Example** (`test/cases/compile/not_supported/pattern_identifier.cml`, run as `camel test/cases/compile/not_supported/pattern_identifier.cml`)
 
 ```camel
-import { pi } from mi_values
+module pattern_identifier
+
+func f(n: int): int {
+    return match n {
+        case other => 1
+        case _ => 0
+    }
+}
 
 func main(): int sync {
-    println(pi)
+    println('never printed')
+    println(f(1))
     return 0
 }
 ```
@@ -1579,13 +1588,13 @@ func main(): int sync {
 **Message**
 
 ```text
-The name '{0}' is imported from the modules '{1}' and '{2}' with the same signature {3}.
+The name '{0}' is imported from the modules '{1}' and '{2}' with {3}.
 ```
 
 **Help**
 
 ```text
-Two imports that bring the same name with the same parameter types conflict; neither is chosen silently. Give one of them another name where it is imported ('import { name as other_name } from m'), or import the name from one of the modules only and reach the other through its module ('import m', then 'm::name').
+Two imports that bring the same name with the same parameter types conflict, and so do two that bring a value of the same name; neither is chosen silently. Give one of them another name where it is imported ('import { name as other_name } from m'), or import the name from one of the modules only and reach the other through its module ('import m', then 'm::name').
 ```
 
 **Example** (`test/cases/compile/module_imports/d5_conflict.cml`, run as `camel -E short test/cases/compile/module_imports/d5_conflict.cml`)
@@ -2394,6 +2403,33 @@ The {1} side of '{0}' has type '{2}', not 'bool'.
 func main(): int sync {
     let n = 3
     println(n && true)
+    return 0
+}
+```
+
+### ExportedVariable
+
+`0x030000D0` · Error · `SemanticDiag::ExportedVariable`
+
+**Message**
+
+```text
+The variable '{0}' cannot be exported.
+```
+
+**Help**
+
+```text
+A 'var' of the top level of a module is read and written only by the module's own functions (design principles 2.11): export the functions that read and write it ('export sync func bump(): int sync { wait cnt += 1; return cnt }'). A 'let' can be exported.
+```
+
+**Example** (`test/cases/compile/module_root/export_var.cml`, run as `camel -E short test/cases/compile/module_root/export_var.cml`)
+
+```camel
+// A `var` cannot be exported (design principles 2.11).
+import export_var_lib
+
+func main(): int sync {
     return 0
 }
 ```

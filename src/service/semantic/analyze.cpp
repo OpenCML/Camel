@@ -800,6 +800,13 @@ class ModelBuilder {
             if (graph && graph->funcType()) {
                 ext.signatures.push_back(sourceSpelling(graph->funcType()->toString()));
             }
+        } else if (EntityAccess::isNode(entity)) {
+            // An exported value (design principles 2.11): a node of the program's root graph.
+            ext.kind   = ExternalName::Kind::Value;
+            auto *node = static_cast<camel::runtime::DraftNode *>(EntityAccess::node(entity));
+            if (node != nullptr && node->header.dataType != nullptr) {
+                ext.signatures.push_back(sourceSpelling(node->header.dataType->toString()));
+            }
         }
         // One function may be bound to a name along several import paths.
         std::vector<std::string> unique;

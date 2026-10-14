@@ -139,7 +139,34 @@ sync func main(): int sync {
 
 程序的所有模块建在同一张 `__root__` 图上：每个模块顶层的值是这张图上的一个节点，函数经捕获端口取得它，捕获绑定在这个值上（"模块 + 名字"），不在调用处按名字再找一遍。所以导入方自己有同名的值（上例的 `step`）、调用处有同名的局部量，都不会顶替它。顶层的值与入口模块的一样，在 `main` 开始之前按静态依赖求值，被几个模块用到也只求值一次。
 
-**导出的值还不能被导入方使用。** `export let pi = 3.14159` 可以写，别的模块也可以 `import { pi }`，但使用 `pi`（或 `lib::pi`）是 `SemanticDiag::ConstructNotSupported`，定位在使用处。改为导出一个没有参数的函数。
+**模块可以导出值**（`let`）：
+
+```cml
+// geometry.cml
+module geometry
+export let pi = 3.14159
+export let tau = pi * 2.0
+```
+
+```cml
+import { pi } from geometry
+import geometry
+
+let area = pi * 2.0 * 2.0
+func main(): int sync {
+    println(area, geometry::tau)
+    return 0
+}
+```
+
+```text
+12.56636 6.28318
+```
+
+导出的值就是公共 `__root__` 上的那个节点：导入方在顶层直接用它，在函数里经捕获端口取得它，不复制、不重新求值。没有被任何东西用到的导出值不求值（它的初始化表达式里有效应也不执行，被导入的模块里这也不给警告）。
+
+- **不能导出 `var`**：`export var count = 0` 是 `SemanticDiag::ExportedVariable`，定位在这个变量。导出读写它的函数（上面的 `counter`）。
+- 两条按名字的导入带来同名的值（或一个是值、一个是函数）是 `SemanticDiag::ImportNameConflict`；值不组成重载。
 
 ## 5.4 命名空间
 
@@ -192,6 +219,6 @@ func main(): int sync {
 
 - 可能没有结果的函数返回 `T?`（`find`、`index_of` 找不到，`min`、`max`、`median` 遇到空数组），用 `??` 处理；只有声明为可能失败的操作返回 `T!`（如按码点解码一个不是合法 UTF-8 的字符串）；越界与不在定义域内的实参是故障。
 - 用 Camel 写的库（如 `array`）导出的是泛型函数，在调用它的模块里按元素类型实例化（见 [7.5](07_statements.md#75-泛型函数)）。
-- 模块不能导出值，常量写成无参函数：`pi()`、`e()`。
+- 用 Camel 写的模块可以导出值（[5.3](#53-导出)）；C++ 模块（如 `math`）的常量仍是无参函数：`pi()`、`e()`。
 - 传给 `array` 模块高阶函数的函数用 `map` 施加：各元素上的调用之间没有顺序约定（并行调度器可以同时执行），结果按位置排列；需要顺序的副作用用内建的 `foreach`、`reduce`。
 - `camel inspect --ops <文件>` 列出内建模块与该程序导入的每个模块的全部算子及其声明的纯度。

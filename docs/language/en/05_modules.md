@@ -139,7 +139,34 @@ sync func main(): int sync {
 
 All modules of a program are built into one `__root__` graph: each value of the top level of a module is a node of that graph, and a function gets it through a capture port bound to that value ("module + name"), not by looking the name up again where the function is called. So a value of the same name in the importing module (`step` above), or a local of the same name at the call, does not take its place. Top-level values are evaluated as in the entry module: before `main` starts, by static dependence, and once even when several modules use them.
 
-**An exported value cannot be used by the importing module yet.** `export let pi = 3.14159` can be written, and another module can `import { pi }`, but using `pi` (or `lib::pi`) is `SemanticDiag::ConstructNotSupported`, located at the use. Export a function without parameters instead.
+**A module can export values** (`let`):
+
+```cml
+// geometry.cml
+module geometry
+export let pi = 3.14159
+export let tau = pi * 2.0
+```
+
+```cml
+import { pi } from geometry
+import geometry
+
+let area = pi * 2.0 * 2.0
+func main(): int sync {
+    println(area, geometry::tau)
+    return 0
+}
+```
+
+```text
+12.56636 6.28318
+```
+
+An exported value is that very node of the common `__root__` graph: the importing module uses it directly at its top level and through a capture port in its functions; it is neither copied nor evaluated again. An exported value that nothing uses is not evaluated (an effect in its initializer does not run, and in an imported module this gives no warning).
+
+- **A `var` cannot be exported**: `export var count = 0` is `SemanticDiag::ExportedVariable`, located at the variable. Export the functions that read and write it (`counter` above).
+- Two imports by name that bring values of one name (or a value and a function) are `SemanticDiag::ImportNameConflict`; values are not overloaded.
 
 ## 5.4 Namespaces
 
@@ -192,6 +219,6 @@ For the functions each module exports (signature, whether it is pure, behaviour 
 
 - A function that may have no result returns `T?` (`find` and `index_of` when nothing is found, `min`, `max` and `median` of an empty array), handled with `??`; only operations declared as fallible return `T!` (such as decoding by code point a string that is not valid UTF-8); out-of-range arguments and arguments outside the domain are faults.
 - A library written in Camel (such as `array`) exports generic functions, which are instantiated by element type in the module that calls them (see [7.5](07_statements.md#75-generic-functions)).
-- A module cannot export values; constants are written as functions without parameters: `pi()`, `e()`.
+- Modules written in Camel can export values ([5.3](#53-exports)); the constants of C++ modules (such as `math`) are still functions without parameters: `pi()`, `e()`.
 - A function passed to a higher-order function of the `array` module is applied with `map`: there is no agreed order between the calls on the elements (a parallel scheduler may execute them at the same time), and the results are arranged by position; for side effects that need an order use the built-in `foreach` and `reduce`.
 - `camel inspect --ops <file>` lists all the operators of the built-in modules and of every module the program imports, together with their declared purity.

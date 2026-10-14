@@ -2758,17 +2758,24 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         }
         const auto &e = opt.value();
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
-            // The node is on the root graph of the module that exports it, which is not a
-            // graph of this program (the roots of modules are not merged yet). Using it as a
-            // node of the current graph crashed the compiler.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .atOrigin(gct->origin())
-                .commit(
+            // A value exported by another module: a node of the root graph (design principles
+            // 2.11), used like a value of this module's top level: on the root graph itself,
+            // through a capture port in a function.
+            node_handle_t node = asCompileNode(camel::core::module::detail::EntityAccess::node(e));
+            if (nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+                // A name bound to a set of overloads or to an operator has no value of its own.
+                rejectNameWithoutValue(node, name, gct);
+            }
+            node = captureInto(currGraph_, node, name);
+            if (recorder_) {
+                recorder_->valueReferenced(
+                    gct->origin(),
                     name,
-                    "a value exported by another module cannot be used yet; only functions, "
-                    "operators and types can be imported. Export a function without parameters "
-                    "that returns the value");
-            throw BuildAbortException();
+                    camel::source::kInvalidOriginId,
+                    valueTypeOf(nodeTypeOf(node)));
+            }
+            LEAVE("DREF");
+            return node;
         } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(e)) {
             // A generic function of another module: like a local one it is a marker until a
             // call or the position it stands in chooses the instance, which is built in this
@@ -3307,43 +3314,57 @@ void Builder::reportImportNameConflicts() {
             for (size_t earlier = 0; earlier < later && !reported; ++earlier) {
                 const auto first  = imports[earlier].mod->getExportedEntity(ref);
                 const auto second = imports[later].mod->getExportedEntity(ref);
-                if (!first || !second ||
-                    !camel::core::module::detail::EntityAccess::isGraphSet(*first) ||
-                    !camel::core::module::detail::EntityAccess::isGraphSet(*second)) {
+                if (!first || !second) {
                     continue;
                 }
-                const auto firstSet =
-                    asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(*first));
-                const auto secondSet =
-                    asCompileGraphSet(camel::core::module::detail::EntityAccess::graphSet(*second));
-                for (const auto &f : *firstSet) {
-                    for (const auto &g : *secondSet) {
-                        if (reported || f == g || !sameSignature(f->funcType(), g->funcType())) {
-                            continue;
-                        }
-                        auto diag = diags_->of(SemanticDiag::ImportNameConflict);
-                        const auto &here  = imports[later];
-                        const auto &there = imports[earlier];
-                        if (here.origin != camel::source::kInvalidOriginId) {
-                            diag.atOrigin(here.origin);
-                        } else {
-                            diag.at(TokenRange{here.tokenStart, here.tokenEnd});
-                        }
-                        if (there.origin != camel::source::kInvalidOriginId) {
-                            diag.relatedOrigin(there.origin, "also imported here");
-                        } else {
-                            diag.related(
-                                TokenRange{there.tokenStart, there.tokenEnd},
-                                "also imported here");
-                        }
-                        diag.commit(
-                                ref.toString(),
-                                imports[earlier].mod->name(),
-                                imports[later].mod->name(),
-                                signatureOf(f->funcType()));
-                        reported = true;
-                        found    = true;
+                using camel::core::module::detail::EntityAccess;
+                // What the two imports bring that cannot stand side by side: two functions of
+                // the same parameter types, or a value and anything else of that name (a value
+                // is not overloaded).
+                std::optional<std::string> clash;
+                if (EntityAccess::isNode(*first) || EntityAccess::isNode(*second)) {
+                    const bool same = EntityAccess::isNode(*first) &&
+                                      EntityAccess::isNode(*second) &&
+                                      EntityAccess::node(*first) == EntityAccess::node(*second);
+                    if (!same) {
+                        clash = EntityAccess::isNode(*first) && EntityAccess::isNode(*second)
+                                    ? std::string("a value in both")
+                                    : std::string("a value in one of them");
                     }
+                } else if (EntityAccess::isGraphSet(*first) && EntityAccess::isGraphSet(*second)) {
+                    const auto firstSet  = asCompileGraphSet(EntityAccess::graphSet(*first));
+                    const auto secondSet = asCompileGraphSet(EntityAccess::graphSet(*second));
+                    for (const auto &f : *firstSet) {
+                        for (const auto &g : *secondSet) {
+                            if (!clash && f != g && sameSignature(f->funcType(), g->funcType())) {
+                                clash = "the same signature " + signatureOf(f->funcType());
+                            }
+                        }
+                    }
+                }
+                if (clash) {
+                    auto diag = diags_->of(SemanticDiag::ImportNameConflict);
+                    const auto &here  = imports[later];
+                    const auto &there = imports[earlier];
+                    if (here.origin != camel::source::kInvalidOriginId) {
+                        diag.atOrigin(here.origin);
+                    } else {
+                        diag.at(TokenRange{here.tokenStart, here.tokenEnd});
+                    }
+                    if (there.origin != camel::source::kInvalidOriginId) {
+                        diag.relatedOrigin(there.origin, "also imported here");
+                    } else {
+                        diag.related(
+                            TokenRange{there.tokenStart, there.tokenEnd},
+                            "also imported here");
+                    }
+                    diag.commit(
+                            ref.toString(),
+                            imports[earlier].mod->name(),
+                            imports[later].mod->name(),
+                            *clash);
+                    reported = true;
+                    found    = true;
                 }
             }
         }
@@ -6389,12 +6410,21 @@ void_ptr_t Builder::visitExptNode(const GCT::node_ptr_t &gct) {
         }
         auto optNode = nodeAt(ref);
         if (optNode.has_value()) {
-            auto *exportedNode = new node_handle_t(optNode.value());
+            node_handle_t node = optNode.value();
+            if (isVariable(node)) {
+                // Design principles 2.11: a `var` of the top level is written by the module's
+                // own functions only, which are exported instead.
+                diags_->of(SemanticDiag::ExportedVariable)
+                    .atOrigin(node->header.origin != 0 ? node->header.origin : gct->origin())
+                    .commit(ref.toString());
+                throw BuildAbortException();
+            }
+            // A value of the top level is a node of the root graph, which every module of the
+            // program builds into: the importing module captures that very node.
             module_->exportEntity(
                 ref,
                 camel::core::module::detail::EntityAccess::makeNode(
-                    static_cast<camel::core::module::detail::EntityAccess::node_handle_t>(
-                        exportedNode)));
+                    static_cast<camel::core::module::detail::EntityAccess::node_handle_t>(node)));
             continue;
         }
         auto optGraph = graphsAt(ref);

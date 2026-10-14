@@ -1,0 +1,17 @@
+// Exported values: imported by name, reached through the module, used on the top level of the
+// importing module and inside its functions (design principles 2.11).
+import { pi } from geometry
+import geometry
+
+let area = pi * 2.0 * 2.0
+
+func scaled(k: float): float {
+    return geometry::tau * k
+}
+
+func main(): int sync {
+    println('main starts')
+    println(pi, area, scaled(1.0))
+    println(geometry::circumference(1.0), geometry::unit.0)
+    return 0
+}

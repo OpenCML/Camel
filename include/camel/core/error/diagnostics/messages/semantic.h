@@ -105,6 +105,8 @@ enum class SemanticDiag : uint32_t {
     ComprehensionSourceRefused   = 0x0000B4,
     // Rulings of 2026-10-13 (design principles 2.11): 0xC0 and up.
     LogicalOperandNotBool        = 0x0000C0,
+    // Modules and namespaces (design principles 2.11, 2.12): 0xD0 and up.
+    ExportedVariable             = 0x0000D0,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

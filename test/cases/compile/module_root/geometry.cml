@@ -1,0 +1,18 @@
+/**
+ * Helper module: exported values (design principles 2.11), one of them computed from another
+ * and from a function of the module, with an effect that shows when it is evaluated.
+ */
+module geometry
+
+export let pi = 3.14159
+export let tau = pi * 2.0
+export let unit = make_unit()
+
+sync func make_unit(): (float, float) sync {
+    println('geometry: making the unit vector')
+    return (1.0, 0.0)
+}
+
+export func circumference(r: float): float {
+    return tau * r
+}
