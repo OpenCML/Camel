@@ -5,7 +5,7 @@ tags = ["feat", "trans", "cpp"]
 
 [[tests]]
 name = "exec_mod_scalar"
-desc = "A program of scalars is translated into a standalone C++ file: it includes camel/standalone/runtime.h and nothing of the compiler or the runtime, and `%` goes through rt::mod, which faults on zero at a located site."
+desc = "A program of scalars is translated into a standalone C++ file: it includes camel/standalone/runtime.h and nothing of the compiler or the runtime, and `%` goes through rt::mod, which faults on zero at a located site (the program itself is built and run by agree_with_fvm)."
 kind = "behavior"
 case = "../../../cases/trans/cpp/exec_mod_scalar.cml"
 args = ["${case}", "std::cpp"]
@@ -14,6 +14,20 @@ expect_stdout_contains = ["#include \"camel/standalone/runtime.h\"", "A standalo
 expect_output_not_contains = ["bridge.h", "camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "agree_with_fvm"
+desc = "The programs of test/tools/cppexec/expect.txt are translated with std::cpp, built with the system's C++ compiler and run; each prints what std::fvm prints and exits with its code: scalars and their text, strings, branches as statements, the order of effects, faults with their located report, the recursion limit, tail calls as loops (also between two functions), exit codes, and operators of runtime modules through the bridge."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/cppexec/run.py"
+args = ["${case}", "--expect", "test/tools/cppexec/expect.txt"]
+skip_unless = ["${python}", "test/tools/cppexec/run.py", "--have-compiler"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 600000
 
 [[tests]]
 name = "main_io"

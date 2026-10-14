@@ -1719,6 +1719,12 @@ b4c8a24177615791 ok test/cases/tools/lsp/fixtures/main.cml
 63abfcb9afe7cf04 ok test/cases/trans/cpp/mod_scalar.cml
 2ac9ffbf1479b5ef ok test/cases/trans/cpp/refuse_tensor.cml
 cf57643df47bb00e ok test/cases/trans/cpp/unary_scalar.cml
+7c8e91fcce1d27ca ok test/cases/trans/cpp/exec/branches.cml
+3a02833f9072052e ok test/cases/trans/cpp/exec/faults.cml
+fa55cb6ca13acda7 ok test/cases/trans/cpp/exec/recursion_limit.cml
+b51151106e56a3ff ok test/cases/trans/cpp/exec/scalars.cml
+b6e07599df719cc2 ok test/cases/trans/cpp/exec/strings.cml
+5d15a2912c2a2402 ok test/cases/trans/cpp/exec/tail_calls.cml
 9a77ce915c807446 ok test/cases/trans/effect_trace/macro_effect.cml
 af9b7b7b3dbd7a22 ok test/cases/trans/macro/basic.cml
 53dae2a4ab0b7dc5 ok test/cases/trans/macro/branch_chain.cml

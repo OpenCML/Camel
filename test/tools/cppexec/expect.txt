@@ -1,0 +1,40 @@
+# Programs whose translation by std::cpp must build, run and agree with std::fvm (standard
+# output and exit code). Read by test/tools/cppexec/run.py --expect, which the plan
+# test/plans/feat/trans/cpp.plan.toml runs. Keep it small: every entry is one C++ compilation.
+
+# Written for std::cpp: one construct each (docs/design/cpp-standalone/README.cn.md 12.2).
+test/cases/trans/cpp/exec
+test/cases/trans/cpp/exec_mod_scalar.cml
+
+# Values and their text.
+test/cases/consistency/values/int_wrap.cml
+test/cases/consistency/values/int_min_div.cml
+test/cases/consistency/values/float_special.cml
+test/cases/consistency/values/strings.cml
+test/cases/linear/operators/string_ordering.cml
+test/cases/compile/literals/real_literals.cml
+test/cases/opt/progen/judgement/string_of_float_format.cml
+
+# Order of effects, branches, match.
+test/cases/consistency/values/sync_order.cml
+test/cases/linear/runtime/effects_outside_sync.cml
+test/cases/linear/match/multi_pattern.cml
+test/cases/opt/inline/arm_call_then_effect.cml
+
+# Faults, limits, exit codes, the result of main.
+test/cases/consistency/faults/i32_out_of_range.cml
+test/cases/consistency/faults/int_text_trailing.cml
+test/cases/consistency/faults/exit_code.cml
+test/cases/consistency/cleanup/unflushed_print_fault.cml
+test/cases/consistency/entry/undeclared_int.cml
+test/cases/consistency/entry/declared_string.cml
+test/cases/linear/runtime/recursion_depth_limit.cml
+test/cases/compile/diag_render/runtime_format.cml
+
+# Tail calls.
+test/cases/consistency/values/tail_deep.cml
+test/cases/linear/nvm/mutual_tail.cml
+
+# Operators of runtime modules (the program links libcamel).
+test/cases/compile/diag_render/runtime_regex.cml
+test/cases/modules/stdlib/fault_substr_start.cml
