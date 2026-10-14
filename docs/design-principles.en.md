@@ -149,7 +149,7 @@ Inside a sync block it does not matter whether `wait` is written.
 - **Camel distinguishes two kinds of parameters at the language level.** One kind is the attributes a function is configured with (`with` parameters, that is, context parameters); the other is the inputs the function processes, that is, what flows through the function (ordinary parameters). In a sense this makes up for the limitation that Camel does not support object orientation: the configuration and state that other languages hold in the members of an object are, in Camel, the context parameters of a function.
 - **The return value of a pure `main`**: it is output through the existing command-line option `-o` / `--output <file>`, standard output by default. No dedicated option is added.
 - **Granularity of parallel scheduling**: do not go down to the atomic level. Creating a task for every very small function call is pointless and only adds burden.
-- **A value whose static type is `any` printing as `<any>` is normal**: Camel has no ability to determine a type at run time, and to prevent serious errors this is the safest course.
+- (Superseded by 2.12: `any` is being tightened.) **A value whose static type is `any` printing as `<any>` is normal**: Camel has no ability to determine a type at run time, and to prevent serious errors this is the safest course.
 - **`with` parameters are suited to expressing the parameters and weights of a model**: ordinary parameters are the data inputs, `with` parameters are the weights. Besides `f<w>(x)`, a call can also be written `x->f<w>`, which is convenient for chaining and for connecting the inputs and outputs of the layers of a model.
 - **When a pass of some module (such as `onnx::export`) is written on the command line, the compiler loads that module automatically**; a pure program does not have to `import` a module it does not use in order to be exported.
 - **An export pass does not have to check much**: translate what can be translated, and report an error when something cannot. No academic fastidiousness.
@@ -360,11 +360,15 @@ At present all complicated type computation is implemented directly by operators
 - **Name precedence has one rule**: local > this module (the enclosing namespaces and the module top level) > imported by name > brought in by `using namespace` > built in. The first layer that has the name is taken; functions of the same name in one layer form an overload set, and an identical signature is an error; layers are not merged. Operator overloads are the exception and are merged across layers.
 - **`import a from m` brings the name `a` in from `m`**, the same as `import { a } from m`, as the language documentation says; a module alias is written `import m as x`.
 - **`use` is not implemented** and the reserved word is retired; `import { … } from m::N` is allowed.
+- **A namespace block may hold values**: `namespace Config { export let limit = 10 }`, used as `Config::limit`; it differs from a top-level `let` only by the path in its name.
+- **A module may qualify its own things with its own name**: in `module shapes`, `shapes::area` is the same as `area`.
+- **Diagnostics, the debugger and graph names always show the full name** `module::path::name`, leaving out the module where that is unambiguous.
 - **The module cache lives in a `__cmo__/` directory beside the source file**; it is off by default at first; a module served from the cache does not replay compile-time warnings. An importer's cache is invalid when any of these change: the signature of an exported function (including the inferred return type), the module-level values it uses transitively, its effects, the body of a generic function.
 
 #### Types and conversion
 
 - **Converting a value to its own type is legal and does nothing**: `xs as int[]` (with `xs: int[]`) passes, as `p as A` through an alias does.
+- **The signature text of the standard library uses type variables, not `any`** (as `print<T>(x: T)`). Camel functions with a variable number of arguments of differing types are not made for now.
 - **`any` is to be tightened step by step.** An opening is made only temporarily, for a specific need that the type system cannot yet express; wherever a clear recommended form exists (generics, overloads, concrete types), `any` is rejected and the diagnostic gives the recommended form. `json.decode` becomes a self-describing `Json` type, with `decode_as<T>`. Compile-time errors from now on: `any` as the condition of `if`, `any` as the subject of `match`, the unchecked `as any as T`.
 - **A function with a `var` context parameter can be partially applied**: `add<t>` is a function value that writes a captured variable; its type carries `sync`, and each call counts as one write of `t`.
 
@@ -376,16 +380,23 @@ At present all complicated type computation is implemented directly by operators
 - **`let r = ...` binding a `T!` whose `r` is never used is warned about too** (as the statement form in 2.11).
 - **Hovers and documentation take `///` comments only**; an ordinary `//` is not documentation.
 
+#### Operators
+
+- **Users can overload operators in Camel source**, written `func operator &(a: Mask, b: Mask): Mask` (notation provisional). The overloadable operators are those that today become `__x__` functions; `&&`, `||` and constructs such as `??`, `!!`, `->` cannot be overloaded. Names of the form `__x__` stay reserved and are not written by users.
+
 #### The graph
 
 - **The published node kinds**: `DATA PORT OPER FUNC CALL FILL ACCS CAST COPY BRCH JOIN LOOP GATE SYNC`. `BIND` and `DREF` are removed; higher-order operators such as `map`, and `attempt`, remain operator nodes, with "calls subgraphs" declared in the operator table; besides purity an operator declares whether it may fault, and an operator that declares nothing is treated as possibly faulting.
 - **Both forms of branch arms are legal graphs**: the front end produces "one subgraph per arm"; after inlining, the nodes of an arm merged into the enclosing graph as a stretch between the branch and the join are legal too.
+- **Whether an operator may fault need not be declared operator by operator**: module authors declare it where useful; an operator that declares nothing is treated as possibly faulting.
+- **How side-effect tracking is kept under passes**: effects are a summary on the graph (whether the exit of the graph depends on effects, which captured variables it writes), recomputed from the nodes and checked at every commit; a pass cannot commit a graph whose summary disagrees with its content. Whether a pass is right to delete or move an effect is still that pass's responsibility (section 4).
 - **`LOOP`**: the condition subgraph and the body subgraph share one capture table; `for … while` is a third form of the same node; with several state values the body returns a tuple, and the value of `LOOP` is that tuple.
 - **The direction for passes written in Camel**: graphs and nodes are immutable values, a pass is `(Program) => Program!`; a rewrite is "a set of changes → `apply` → a new graph or an error value", with no modification in place; a pattern rule is a pair of functions with the same parameters, the graph of the left one being the pattern and that of the right one the replacement. Details later.
 
 #### Back ends and run time
 
 - **The goal of `std::cpp` is programs that can be deployed without the runtime.** Where a faithful translation is impossible, the generated code may use Camel's runtime modules, kept as clean as possible. Generated programs report faults with source positions, keep the recursion limit, and do not grow the stack on tail calls.
+- **What has identity is to be listed**: `var` cells, objects modified in place through `var` parameters, objects wrapping a foreign library (Python objects and the like); every other value has no observable identity, and a back end may copy or share it freely. No type word is added to object headers. The module interface generated by `std::cpp` uses standard C++ types and does not expose the runtime's internal types.
 - **A back end may collect less garbage, or none**: when and whether collection happens is not observable (2.11).
 - **Generational collection is on by default once it is usable.**
 - **When the parallel scheduler hands serial subgraphs to the bytecode interpreter, the recursion limit is counted by the same rule**: with a raised `--max-recursion-depth`, a deep non-tail recursion completes on `std::prl` as it does on `std::fvm`.
@@ -448,7 +459,6 @@ When you meet one of the following, ask the language author:
 - The notation of the loop header (the one in 2.10 is provisional).
 - Whether the type parameters of a generic function may be given explicitly at the call.
 - The behaviour when the same mutable object is written through references in several places outside a sync block, none of them with `wait`.
-- How side-effect tracking is preserved under the various passes (see 2.7).
 - **After a fault in a parallel `map`, whether elements of smaller index that have not started still run** (`parallel-fault-lower-elements`):
   `range(0, 64)->map<bad>` where every element faults and a worker happens to run element 40 first. Implemented: only the elements with an index above 40 are not started, 0 to 39 still run, so the one reported is always element 0, as on the linear back ends and the same on every run.
   Alternative: start no element at all after a fault; "the smallest index" is then taken among the elements that happened to have started, and may differ from run to run.
