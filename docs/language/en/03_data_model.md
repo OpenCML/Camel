@@ -26,7 +26,18 @@ Every expression has a definite type at compile time; the graph contains only co
 | No value | `void` | Return type of a function that returns no value; its only value prints as `null` |
 | Module types | e.g. `Tensor`, `Tensor<f32, const [2, 3]>` | Introduced by modules; the arguments in angle brackets are interpreted by the type itself |
 
-The type name `any` exists for use in the signatures of built-in operators (for example, `println` accepts any value); user code cannot declare a value as `any`, and a value whose static type is `any` prints as `<any>`.
+There is no type `any`: after compilation every value has a definite type (design principles 2.11, 2.12). Writing `any` in any type position is the compile-time error `SemanticDiag::AnyNotAllowed`, whose message gives the form recommended for that position:
+
+| What one meant to write | Write instead |
+|---|---|
+| a parameter that takes several types, `x: any` | a type parameter: `func f(x: typeas T): T` (one instance per set of argument types, see [7.5](07_statements.md#75-generic-functions)) |
+| a `with` parameter that takes several types | `with <tag: typeas T>` |
+| a return type `any` | the type actually returned, or nothing, to have it inferred from the body |
+| `e as any` | nothing: the value keeps its own type |
+| values of different types side by side (`any[]`, `(int, any)`) | a tuple or a struct: `(int, string)`, `{ id: int, name: string }` |
+| JSON of a known shape | `json::decode_as(text, shape)`, whose result is a `T!` |
+
+The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 
 Use `type` to give a type a name, see [7.7](07_statements.md#77-type-declarations):
 

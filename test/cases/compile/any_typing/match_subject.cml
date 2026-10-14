@@ -1,11 +1,12 @@
 module match_subject
 
+import { decode } from json
+
 // An `any` value as the subject of a `match` is refused: it used to be compared bit for bit
 // with the cases, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing,
 // defect D5).
-func wrap_s(x: string): any { return x }
 func main(): int sync {
-    let v = wrap_s('a' + 'b')
+    let v = decode('"ab"')
     let r = match v {
         case 1 => 'one'
         case 'ab' => 'ab'

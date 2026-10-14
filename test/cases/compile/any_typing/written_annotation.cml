@@ -1,0 +1,9 @@
+module written_annotation
+
+// An annotation of type `any` on a `let`.
+func main(): int sync {
+    let n = 40 + 2
+    let a: any = n
+    println(a)
+    return 0
+}

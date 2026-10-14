@@ -114,6 +114,7 @@ enum class SemanticDiag : uint32_t {
     // slot, so nothing may read it as a type of its own. 0xE0 and up.
     AnyUncheckedCast             = 0x0000E0,
     AnyBranchSubject             = 0x0000E1,
+    AnyNotAllowed                = 0x0000E2,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

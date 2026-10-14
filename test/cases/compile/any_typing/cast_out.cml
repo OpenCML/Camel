@@ -1,10 +1,12 @@
 module cast_out
 
-// `as T` out of `any` is refused: the slot does not record what entered it. Reading 12345 back
-// as a string followed it as an address (segmentation fault; docs/design/any-typing, t03).
+import { decode } from json
+
+// `as T` out of `any` is refused: the slot does not record what entered it. Reading the
+// decoded 12345 back as a string followed it as an address (segmentation fault;
+// docs/design/any-typing, t03 and t06d).
 func main(): int sync {
-    let n = 12345
-    let a = n as any
+    let a = decode('12345')
     let s = a as string
     println(s)
     return 0

@@ -1,0 +1,10 @@
+module written_return
+
+// A return type of `any`: write the type returned, or leave it out to have it inferred.
+func wrap(x: int): any {
+    return x
+}
+func main(): int sync {
+    println(wrap(2))
+    return 0
+}

@@ -437,7 +437,7 @@
       "patterns": [
         {
           "name": "support.type.primitive.camel",
-          "match": "\\b(?:int|i32|i64|float|f32|f64|bool|string|any|void)\\b"
+          "match": "\\b(?:int|i32|i64|float|f32|f64|bool|string|void)\\b"
         },
         {
           "name": "support.type.collection.camel",

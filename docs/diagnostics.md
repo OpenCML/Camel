@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-132 diagnostics: 121 errors, 11 warnings.
+133 diagnostics: 122 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -107,6 +107,7 @@ prints one entry.
 | `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error |
 | `0x030000E0` | [SemanticDiag::AnyUncheckedCast](#anyuncheckedcast) | Error |
 | `0x030000E1` | [SemanticDiag::AnyBranchSubject](#anybranchsubject) | Error |
+| `0x030000E2` | [SemanticDiag::AnyNotAllowed](#anynotallowed) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -2470,7 +2471,7 @@ A value of static type 'any' cannot be converted to '{0}' with 'as': nothing rec
 **Help**
 
 ```text
-Give the value its type where it is made instead of reading it back: a type parameter ('func f(x: typeas T): T') in place of an 'any' parameter, the type itself in place of an 'any' return type. For JSON whose shape is known use 'decode_as(text, shape)' of the json module, which checks the shape and gives a 'T!'.
+The one operator that gives a value of type 'any' is 'decode' of the json module. Decode JSON whose shape is known with 'decode_as(text, shape)', which checks the shape and gives a 'T!'.
 ```
 
 **Example** (`test/cases/compile/any_typing/cast_out.cml`, run as `camel test/cases/compile/any_typing/cast_out.cml`)
@@ -2478,11 +2479,13 @@ Give the value its type where it is made instead of reading it back: a type para
 ```camel
 module cast_out
 
-// `as T` out of `any` is refused: the slot does not record what entered it. Reading 12345 back
-// as a string followed it as an address (segmentation fault; docs/design/any-typing, t03).
+import { decode } from json
+
+// `as T` out of `any` is refused: the slot does not record what entered it. Reading the
+// decoded 12345 back as a string followed it as an address (segmentation fault;
+// docs/design/any-typing, t03 and t06d).
 func main(): int sync {
-    let n = 12345
-    let a = n as any
+    let a = decode('12345')
     let s = a as string
     println(s)
     return 0
@@ -2502,7 +2505,7 @@ A value of static type 'any' cannot be the {0}: nothing records what the value i
 **Help**
 
 ```text
-Give the value its type where it is made (a type parameter, 'func f(x: typeas T): T', or the type itself in place of 'any'), then branch on it.
+The one operator that gives a value of type 'any' is 'decode' of the json module. Decode the JSON with 'decode_as(text, shape)', which gives a typed value, and branch on that.
 ```
 
 **Example** (`test/cases/compile/any_typing/if_condition.cml`, run as `camel test/cases/compile/any_typing/if_condition.cml`)
@@ -2510,12 +2513,45 @@ Give the value its type where it is made (a type parameter, 'func f(x: typeas T)
 ```camel
 module if_condition
 
+import { decode } from json
+
 // An `any` value as the condition of an `if` is refused: its slot used to be read as a bool
 // (docs/design/any-typing, defect D5).
 func main(): int sync {
-    let t = 1 < 2
-    let a = t as any
+    let a = decode('true')
     println(if a then 1 else 2)
+    return 0
+}
+```
+
+### AnyNotAllowed
+
+`0x030000E2` · Error · `SemanticDiag::AnyNotAllowed`
+
+**Message**
+
+```text
+'any' is not a type a program can write: {0}.
+```
+
+**Help**
+
+```text
+Every value has a definite type after compilation (design principles 2.11, 2.12). A type parameter ('typeas T') takes values of several types, a tuple or a struct holds values of different types side by side, and 'decode_as' of the json module reads JSON of a known shape.
+```
+
+**Example** (`test/cases/compile/any_typing/written_parameter.cml`, run as `camel test/cases/compile/any_typing/written_parameter.cml`)
+
+```camel
+module written_parameter
+
+// `any` is not a type a program can write (design principles 2.12). A parameter that takes
+// values of several types declares a type parameter: `func keep(x: typeas T, n: int): T`.
+func keep(x: any, n: int): any {
+    return x
+}
+func main(): int sync {
+    println(keep('abc', 3))
     return 0
 }
 ```

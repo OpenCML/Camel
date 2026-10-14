@@ -169,7 +169,7 @@ bool isKeywordToken(uint16_t type) {
 
 const std::vector<std::string> &builtinTypeNames() {
     static const std::vector<std::string> names = {
-        "int", "float", "bool", "string", "any", "void", "i32", "i64", "f32", "f64", "Map", "Set"};
+        "int", "float", "bool", "string", "void", "i32", "i64", "f32", "f64", "Map", "Set"};
     return names;
 }
 

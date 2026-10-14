@@ -193,8 +193,9 @@ false
 
 - entering the nullable or fallible form: `5 as int?`, `null as int?`, `v as int!` (not needed where the target type is known, see [3.4](03_data_model.md));
 - constructing maps and sets: `[...] as Map<K, V>`, `[...] as Set<T>`;
-- checked conversion of module types: `t as Tensor<f32, const [3]>`, where the shape is checked at the conversion;
-- giving a type to a result of undetermined type, as returned by `json::decode` and the like: `decode(s) as int[]`.
+- checked conversion of module types: `t as Tensor<f32, const [3]>`, where the shape is checked at the conversion.
+
+`as` never changes the type of a value unchecked: reading the result of `json::decode` as another type (`decode(s) as int[]`) is the compile-time error `SemanticDiag::AnyUncheckedCast`. JSON of a known shape is decoded with `json::decode_as(s, [0])`, which checks the shape while decoding and gives a `T!`.
 
 Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `e is T` is reserved, not implemented (there is no type information at run time; `SemanticDiag::ConstructNotSupported`). The postfix non-null assertion `x!` is likewise reserved and not implemented; use `x ?? default`.
 

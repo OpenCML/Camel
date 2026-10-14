@@ -41,12 +41,12 @@ timeout_ms = 4000
 
 [[tests]]
 name = "accepted"
-desc = "Unchanged: returning the declared type, into any, with no declared type, and a value from a function declared void."
+desc = "Unchanged: returning the declared type, with no declared type, and a value from a function declared void. (A return type of `any` is refused now: typing_any.plan.toml.)"
 kind = "behavior"
 case = "../../../cases/compile/return_type/accepted.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["<any>", "3"]
+expect_stdout_starts_with = "2\n3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

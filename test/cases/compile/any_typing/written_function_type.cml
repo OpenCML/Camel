@@ -1,0 +1,10 @@
+module written_function_type
+
+// `any` as the return type of a function type, here in the type of a parameter: the
+// innermost position decides the advice (a return type).
+func apply(f: (x: int) => any, x: int): int {
+    return x
+}
+func main(): int sync {
+    return 0
+}

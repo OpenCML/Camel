@@ -110,6 +110,32 @@ class Builder {
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
 
+    // `any` is not a type a program can write (design principles 2.11, 2.12): the name is
+    // not in the type scope, and visitRefType reports it with the form recommended for the
+    // position it was written in. The visitors of those positions set this around the
+    // type they visit (TypePositionGuard in builder.cpp). A type nested in another one is
+    // reported for the innermost of those positions: `any` in `g: (x: int) => any` is the
+    // return type of a function type, in `xs: any[]` the type of a parameter.
+    enum class TypePosition {
+        Other,
+        Parameter,
+        WithParameter,
+        ReturnType,
+        CastTarget,
+        Annotation,
+        TypeDeclaration,
+    };
+    TypePosition typePosition_ = TypePosition::Other;
+    /// Sets typePosition_ while the type of one position is visited.
+    struct TypePositionGuard {
+        TypePositionGuard(Builder &builder, TypePosition position);
+        ~TypePositionGuard();
+        Builder &builder;
+        TypePosition saved;
+    };
+    /// Reports `any` written as a type (AnyNotAllowed) and aborts the declaration.
+    [[noreturn]] void reportAnyType(const AST::node_ptr_t &ast);
+
     // Where the value of what is being lowered goes, as far as the warning
     // ExitInUnusedBranch needs it. A `return` / `throw` in a branch arm ends the arm and
     // gives the value of the `if` / `match` (an arm is a graph of its own); when nothing

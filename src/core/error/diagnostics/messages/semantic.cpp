@@ -658,11 +658,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "AnyUncheckedCast",
                 "A value of static type 'any' cannot be converted to '{0}' with 'as': nothing "
                 "records what the value was, so the conversion could not be checked.",
-                "Give the value its type where it is made instead of reading it back: a type "
-                "parameter ('func f(x: typeas T): T') in place of an 'any' parameter, the type "
-                "itself in place of an 'any' return type. For JSON whose shape is known use "
-                "'decode_as(text, shape)' of the json module, which checks the shape and gives "
-                "a 'T!'.",
+                "The one operator that gives a value of type 'any' is 'decode' of the json "
+                "module. Decode JSON whose shape is known with 'decode_as(text, shape)', which "
+                "checks the shape and gives a 'T!'.",
             },
         },
         {
@@ -671,8 +669,20 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "AnyBranchSubject",
                 "A value of static type 'any' cannot be the {0}: nothing records what the "
                 "value is, so it could not be {1}.",
-                "Give the value its type where it is made (a type parameter, 'func f(x: "
-                "typeas T): T', or the type itself in place of 'any'), then branch on it.",
+                "The one operator that gives a value of type 'any' is 'decode' of the json "
+                "module. Decode the JSON with 'decode_as(text, shape)', which gives a typed "
+                "value, and branch on that.",
+            },
+        },
+        {
+            SemanticDiag::AnyNotAllowed,
+            {
+                "AnyNotAllowed",
+                "'any' is not a type a program can write: {0}.",
+                "Every value has a definite type after compilation (design principles 2.11, "
+                "2.12). A type parameter ('typeas T') takes values of several types, a tuple or "
+                "a struct holds values of different types side by side, and 'decode_as' of "
+                "the json module reads JSON of a known shape.",
             },
         },
         {

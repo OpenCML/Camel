@@ -263,6 +263,47 @@ bool isCollectionPrototype(Type *type) {
 
 } // namespace
 
+Builder::TypePositionGuard::TypePositionGuard(Builder &builder, TypePosition position)
+    : builder(builder), saved(std::exchange(builder.typePosition_, position)) {}
+
+Builder::TypePositionGuard::~TypePositionGuard() { builder.typePosition_ = saved; }
+
+void Builder::reportAnyType(const AST::node_ptr_t &ast) {
+    // Design principles 2.11, 2.12: every value has a definite type after compilation, and
+    // `any` is refused wherever a recommended form exists. Each position has one.
+    const char *instead = "";
+    switch (typePosition_) {
+    case TypePosition::Parameter:
+        instead = "a parameter that takes values of several types declares a type parameter "
+                  "where its type is written, 'func f(x: typeas T): T'";
+        break;
+    case TypePosition::WithParameter:
+        instead = "a 'with' parameter that takes values of several types declares a type "
+                  "parameter, 'with <tag: typeas T>'";
+        break;
+    case TypePosition::ReturnType:
+        instead = "write the type the function returns, or leave the return type out to have "
+                  "it inferred from the body";
+        break;
+    case TypePosition::CastTarget:
+        instead = "'as any' converts nothing; leave it out and the value keeps its own type";
+        break;
+    case TypePosition::Annotation:
+        instead = "write the type of the value, or leave the annotation out";
+        break;
+    case TypePosition::TypeDeclaration:
+        instead = "a type that stands for several types is a type function, "
+                  "'type Box<T> = (T, int)'";
+        break;
+    case TypePosition::Other:
+        instead = "write the type of the value; values of different types side by side go in "
+                  "a tuple or a struct";
+        break;
+    }
+    diags_->of(SemanticDiag::AnyNotAllowed).at(ast->load()->tokenRange()).commit(instead);
+    throw BuildAbortException();
+}
+
 void Builder::initInnerTypes() {
     typeScope_->clear();
     typeScope_->insert(Reference("i32"), Type::Int32());
@@ -273,7 +314,7 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("float"), Type::Float64());
     typeScope_->insert(Reference("bool"), Type::Bool());
     typeScope_->insert(Reference("string"), Type::String());
-    typeScope_->insert(Reference("any"), Type::Any());
+    // No `any`: see reportAnyType.
     typeScope_->insert(Reference("void"), Type::Void());
     // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 2.9).
     typeScope_->insert(Reference("Map"), MapType::prototype());
@@ -705,9 +746,11 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
                 // The declared type first: an array literal takes the form of its elements
                 // from it (visitDataInto).
-                Type *declaredType = i < typeNodes->size()
-                                         ? visitType(typeNodes->atAs<AST::TypeLoad>(i))
-                                         : nullptr;
+                Type *declaredType = nullptr;
+                if (i < typeNodes->size()) {
+                    TypePositionGuard position(*this, TypePosition::Annotation);
+                    declaredType = visitType(typeNodes->atAs<AST::TypeLoad>(i));
+                }
                 bool enteredLiteral = false;
                 node_ptr_t dataNode = declaredType != nullptr
                                           ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
@@ -788,7 +831,11 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
 
                 if (typeNodes->size() > 0) {
                     const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
-                    Type *type              = visitType(typeASTNode);
+                    Type *type              = nullptr;
+                    {
+                        TypePositionGuard position(*this, TypePosition::Annotation);
+                        type = visitType(typeASTNode);
+                    }
                     // Try a static type conversion first.
                     // A declared function type says which function a name stands for
                     // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
@@ -955,6 +1002,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             }
         }
     } poisonOnFailure{*this, typeLoad->ref().toString()};
+    TypePositionGuard position(*this, TypePosition::TypeDeclaration);
     if (typeLoad->params().empty()) {
         type = visitType(typeNode);
     } else {
@@ -1836,7 +1884,11 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::As: {
         const auto &rhsASTNode = ast->atAs<AST::TypeLoad>(1);
-        const auto &dstType    = visitType(rhsASTNode);
+        Type *dstType          = nullptr;
+        {
+            TypePositionGuard position(*this, TypePosition::CastTarget);
+            dstType = visitType(rhsASTNode);
+        }
         // `[1, null] as (int?)[]`: the literal takes the form of its elements from the type.
         bool enteredLiteral  = false;
         const auto &dataNode = visitDataInto(lhsASTNode, dstType, enteredLiteral);
@@ -2969,8 +3021,12 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
-        Type *type         = visitType(paramPair->atAs<AST::TypeLoad>(0));
-        data_ptr_t data    = nullptr;
+        Type *type         = nullptr;
+        {
+            TypePositionGuard position(*this, TypePosition::WithParameter);
+            type = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        }
+        data_ptr_t data = nullptr;
 
         // Process optional default values for parameters
         const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
@@ -3014,8 +3070,12 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
-        Type *type         = visitType(paramPair->atAs<AST::TypeLoad>(0));
-        data_ptr_t data    = nullptr;
+        Type *type         = nullptr;
+        {
+            TypePositionGuard position(*this, TypePosition::Parameter);
+            type = visitType(paramPair->atAs<AST::TypeLoad>(0));
+        }
+        data_ptr_t data = nullptr;
 
         // Process optional default values for parameters
         const auto &dataNode = paramPair->optAtAs<AST::DataLoad>(1);
@@ -3049,6 +3109,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             typeasAllowed_    = false;
             inDeclReturnType_ = true;
         }
+        TypePositionGuard position(*this, TypePosition::ReturnType);
         factory.setExitType(visitType(exitTypeNode));
     }
 
@@ -3267,6 +3328,9 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     if (!importedType.has_value()) {
         if (wholeImportFailed_ || poisonedTypes_.contains(ref.toString())) {
             throw BuildAbortException();
+        }
+        if (ref.plain() && ref.ident() == "any") {
+            reportAnyType(ast);
         }
         // If the type cannot be resolved, log a diagnostic and throw an exception
         diags_->of(SemanticDiag::UnresolvedTypeReference)
