@@ -1,180 +1,81 @@
-# 从 std::cpp 生成代码的编译、链接与执行
+# 从 std::cpp 生成代码的编译与运行
 
-## 流程概述
+`std::cpp` 把一个 Camel 程序转译成一个 C++20 源文件。生成的程序**不依赖 Camel 运行时**：它只包含随 Camel 安装的一组头文件（`$CAMEL_HOME/include/camel/standalone/`，只用 C++ 标准库），用任何 C++20 编译器一条命令就能编成可执行文件，运行时不需要 `libcamel`、不加载 `.cmo`。设计见 [docs/design/cpp-standalone/README.cn.md](design/cpp-standalone/README.cn.md)。
 
-1. **生成 C++**：用 `camel` 将 `.cml` 转成 C++ 源码
-2. **编译链接**：使用 Clang/CMake 编译生成代码，并链接 `libcamel`
-3. **执行**：运行生成的可执行文件（需要能找到 `libcamel.dll`）
+程序用到某个还没有独立译法的模块算子时（例如 `fs`、`re` 的算子），生成的文件另外包含 `camel/standalone/bridge.h`，要链接 `libcamel`；这种情形文件开头的注释会写明是哪些算子、怎样编译。
 
 ---
 
-## 0. 一键流程（camel-cpp 推荐）
+## 1. 一步完成：camel-cpp
 
-若只需从 `.cml` 直接得到可执行文件，无需手动生成、编译、拷贝 DLL：
-
-```powershell
-# 构建 camel-cpp（与 libcamel 一起）
-cmake --build build --target camel-cpp --config Release
-
-# 一键：转译 + 编译，产物输出到 tmp/
-build\tools\camel-cpp\Release\camel-cpp.exe test\cases\linear\nvm\fib.cml
-
-# 产物：tmp/fib.cpp、tmp/fib.exe、tmp/libcamel.dll
-.\tmp\fib.exe
+```bash
+camel-cpp test/cases/linear/nvm/fib.cml            # 写出 fib.cpp，编出 fib（Windows 上 fib.exe）
+camel-cpp prog.cml -o build/prog                   # 指定可执行文件
+camel-cpp prog.cml -o prog std::inline             # std::cpp 之前先跑别的遍
 ```
 
-camel-cpp 会自动：解析并编译 `.cml` → 应用 `std::cpp` pass → 写入 `tmp/<stem>.cpp` → 调用 clang++ 编译 → 将 exe 与 libcamel.dll 拷贝到 `tmp/`。详见 [CLI 文档](cli.cn.md#相关工具)。
+`camel-cpp` 调用同目录下的 `camel <文件> [遍…] std::cpp` 得到 C++，写到可执行文件旁边的 `<名字>.cpp`，再用 `$CXX`（没有时用 `c++`，Windows 上用 `clang++`）编译。头文件取自安装目录（`$CAMEL_HOME`，没有设时取 `camel-cpp` 所在的安装）。需要运行时的程序会自动加上链接参数。
 
 ---
 
-## 1. 生成 C++ 源码
+## 2. 分两步
 
-```powershell
-# 示例：生成 fib.cml 的 C++
-camel -L "D:/Projects/camel-1/build/modules/time/Release" test/cases/linear/nvm/fib.cml std::cpp > gen.cpp
+```bash
+camel prog.cml std::cpp > prog.cpp
+c++ -std=c++20 -O2 -I"$CAMEL_HOME/include" prog.cpp -o prog
+./prog
 ```
 
-- 用 `-L` 指定 `.cmo` 模块所在路径
-- 输出重定向到文件（如 `gen.cpp`）
-- **编码**：生成文件需为 UTF-8，否则 Clang 可能报错。PowerShell 默认重定向为 UTF-16，可用以下方式获得 UTF-8：
-  ```powershell
-  [System.IO.File]::WriteAllText("gen.cpp", (camel ... std::cpp | Out-String), [System.Text.UTF8Encoding]::new($false))
-  ```
-  或用 cmd：`cmd /c "camel ... std::cpp > gen.cpp"`
+要链接运行时的程序（文件开头的注释会说明）：
 
----
-
-## 2. 编译与链接
-
-生成代码依赖 Camel 头文件和 `libcamel` 运行时，需要一起参与编译和链接。
-
-### 方式 A：在主工程中作为可选目标（推荐）
-
-```powershell
-# 配置时指定生成文件路径
-cmake -S . -B build -DCPP_GEN_SOURCE=D:/Projects/camel-1/gen.cpp
-
-# 编译 cpp_gen 目标
-cmake --build build --target cpp_gen --config Release
+```bash
+c++ -std=c++20 -O2 -I"$CAMEL_HOME/include" prog.cpp -o prog \
+    -L"$CAMEL_HOME/libs" -lcamel -Wl,-rpath,"$CAMEL_HOME/libs"
 ```
 
-生成的可执行文件：`build/cpp_gen/Release/cpp_gen.exe`（或对应配置目录）
+它运行时通过 `CAMEL_HOME` 找到模块（`.cmo`），与 `camel` 相同。
 
-### 方式 B：用脚本单独编译（示例）
+**PowerShell 的重定向**默认写 UTF-16，C++ 编译器读不了；改用：
 
 ```powershell
-# 假设 gen.cpp 在项目根目录
-$CAMEL_ROOT = "D:\Projects\camel-1"
-$BUILD = "$CAMEL_ROOT\build"
-$GEN_CPP = "$CAMEL_ROOT\gen.cpp"
-
-clang++ -std=c++23 -O2 `
-  -I"$CAMEL_ROOT/include" `
-  -I"$CAMEL_ROOT/src" `
-  -I"$CAMEL_ROOT" `
-  -DPLATFORM_WINDOWS `
-  "$GEN_CPP" `
-  -o "$BUILD/cpp_gen.exe" `
-  -L"$BUILD/Release" -lcamel `
-  -lfmt -lnlohmann_json -lTaskflow
+[System.IO.File]::WriteAllText("prog.cpp", (camel prog.cml std::cpp | Out-String), [System.Text.UTF8Encoding]::new($false))
 ```
 
-依赖路径（fmt、nlohmann_json、Taskflow）需根据你的 Conan 安装目录调整。
+或者直接用 `camel-cpp`。
 
----
+### 放进自己的 CMake 工程
 
-## 3. 运行
+生成的是一个文件、一个包含目录：
 
-生成的可执行文件依赖 `libcamel.dll`，需保证能正确找到 DLL。
-
-### Windows
-
-```powershell
-# 将 libcamel.dll 所在目录加入 PATH 后运行
-$env:PATH = "D:\Projects\camel-1\build\Release;$env:PATH"
-.\build\cpp_gen\Release\cpp_gen.exe
-```
-
-或用完整路径：
-
-```powershell
-# 在 build/Release 目录下执行
-cd D:\Projects\camel-1\build\Release
-..\cpp_gen\Release\cpp_gen.exe
-```
-
-### Linux / macOS
-
-若配置了 RPATH，可直接运行；否则需设置 `LD_LIBRARY_PATH`（Linux）或 `DYLD_LIBRARY_PATH`（macOS）。
-
----
-
-## 4. 一键流程示例
-
-**推荐：使用 camel-cpp**（见上文「0. 一键流程」）
-
-```powershell
-build\tools\camel-cpp\Release\camel-cpp.exe test\cases\linear\nvm\fib.cml
-.\tmp\fib.exe
-```
-
-**手动流程**（需分步生成与编译时）：
-
-```powershell
-cd D:\Projects\camel-1
-
-# 1. 生成 C++
-build\Release\camel.exe -L "build/modules/time/Release" test\cases\linear\nvm\fib.cml std::cpp > gen.cpp
-
-# 2. 配置并编译（需在 CMakeLists 中添加 cpp_gen 目标）
-cmake -S . -B build -DCPP_GEN_SOURCE=$PWD/gen.cpp
-cmake --build build --target cpp_gen --config Release
-
-# 3. 运行
-$env:PATH = "build\Release;$env:PATH"
-build\cpp_gen\Release\cpp_gen.exe
+```cmake
+add_executable(prog prog.cpp)
+target_compile_features(prog PRIVATE cxx_std_20)
+target_include_directories(prog PRIVATE $ENV{CAMEL_HOME}/include)
 ```
 
 ---
 
-## 5. 生命周期与模块加载
+## 3. 生成的程序做什么
 
-生成的 `main` 会自动调用：
-
-- **`initialize()`**：基础初始化（context + 库搜索路径，通过 `CAMEL_HOME` 定位 SDK）
-- **`importModules({...})`**：导入依赖的 `.cmo` 模块（如 `time`）
-- **`finalize()`**：清理全局单例，释放 .cmo 句柄等
-
-算子访问通过 `bridge()` 获取全局 bridge，未初始化时由 libcamel 抛出明确错误。
-
-模块搜索路径与 camel-cli 一致，支持环境变量：
-- `CAMEL_HOME`：安装根（用于推导 `bin/`、`libs/`、`stdlib/`）
-- `CAMEL_PACKAGES`：附加模块根路径（Windows 下用 `;` 分隔）
-- `CAMEL_STD_LIB`：覆盖 stdlib 路径
-- `CAMEL_MODULE_PATH`：额外 `.cmo` 路径（如 `build/modules/time/Release`）
+- **输出**：与 `camel prog.cml std::fvm` 相同的字节（Windows 上也不写 `\r\n`）。
+- **故障**（除零、越界、转换越界等）：与解释器相同的诊断文字，带源码位置与源码摘录，写在标准输出上，退出码 1。`CAMEL_ERROR_FORMAT=short` 时是一行的形式。
+- **递归上限**：与调度器的规则相同，默认是转译时的上限（`--max-recursion-depth`，否则 1000）；运行时 `CAMEL_MAX_RECURSION_DEPTH` 可以改它。尾调用（包括互相尾调用的一组函数）写成循环，不使栈增长、不计数。
+- **退出码**：`main` 声明了整数返回类型时是它的返回值；`exit(n)` 是 n。
 
 ---
 
-## 6. 常见问题
+## 4. 转译不了的程序
 
-- **找不到 libcamel.dll**：
-  - 生成 exe 通过 `setupLibrarySearchPathForApp` 搜索，优先：exe 所在目录、`CAMEL_HOME`、`CAMEL_HOME/libs`、`CAMEL_HOME/bin`。
-  - `CAMEL_HOME` 指向 SDK 根目录（如 `out/latest`），其下应有 `bin/`、`libs/` 等子目录。
-  - 若 exe 部署到其他位置，设置环境变量 `CAMEL_HOME` 指向 SDK 根目录即可。
-  - 或将 `libcamel.dll` 与 exe 放在同一目录。
-- **`python.cmo` 已找到但 failed to load DLL**：
-  - 这是 Python 运行时依赖缺失，不是模块搜索失败。
-  - `collect-out` 从 `modules/python/sdks/python3xx/` 收集 `python3xx.dll`、`python3.dll`、`vcruntime140*.dll` 到 `out/latest/libs/`；若 sdks 中缺少解释器 DLL，再回退到当前 venv/conda/ PATH 上的 Python。
-  - 也可激活目标 venv（`VIRTUAL_ENV`/`CONDA_PREFIX`），运行时会把其常见 DLL 目录加入搜索路径。
-- **Python SDK 准备（用于编译 python.cmo/bridge）**：
-  - 手动同步 SDK 到 `modules/python/sdks/`（gitignored）：
-    - `node scripts/sync-python-sdks.js <python-archive-root>`
-  - 构建优先从 `modules/python/sdks/` 查找；若不存在则回退当前激活 venv。
-  - 若两者都缺失，仅跳过 `python.cmo` 编译，不影响其它模块。
-- **PyPI 打包（与日常 `npm run build` 的差异、多 SDK 多 wheel、`CAMEL_PYPI_SINGLE_SDK_MM`）**：见 [pypi-packaging.md](pypi-packaging.md)。
-- **链接错误**：检查 Conan 依赖和 CMake 配置是否与主工程一致
-- **模块未找到**：`-L` 指向的目录需包含对应 `.cmo` 文件（如 `time.cmo`）
-- **UTF-16 BOM 错误**：PowerShell 重定向默认 UTF-16，Clang 会报错，请用文档中的 UTF-8 写入方式
-- **undeclared identifier**：若子函数在调用者之后定义，需在生成器中增加前向声明或调整函数发射顺序
+`std::cpp` 遇到还不能转译的构造时给出 `TranslationRefused`，位置是那个构造，说明是什么类型或算子。能转译的范围随 [设计稿](design/cpp-standalone/README.cn.md) 第 12 节的各阶段扩大；当前的数字见那里的 12.1。
 
+其他模式：`std::cpp::module` 写出模块里的具名函数（没有 `main`），`std::cpp::inspect` 在此之上给每个函数加一段列出节点的注释。
 
+---
+
+## 5. 测试
+
+```bash
+python3 test/tools/cppexec/run.py prog.cml                 # 转译、编译、运行，与 std::fvm 比较
+python3 test/tools/cppexec/run.py test/cases benchmarks    # 整个目录：结果分类、拒绝理由、编译时间
+python3 test/tools/cppexec/run.py --expect test/tools/cppexec/expect.txt   # 测试计划用的清单
+```

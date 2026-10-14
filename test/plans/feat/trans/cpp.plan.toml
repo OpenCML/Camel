@@ -5,11 +5,13 @@ tags = ["feat", "trans", "cpp"]
 
 [[tests]]
 name = "exec_mod_scalar"
-desc = "Checks the C++ translation path lowers scalar modulo logic and executes the generated program."
+desc = "A program of scalars is translated into a standalone C++ file: it includes camel/standalone/runtime.h and nothing of the compiler or the runtime, and `%` goes through rt::mod, which faults on zero at a located site."
 kind = "behavior"
 case = "../../../cases/trans/cpp/exec_mod_scalar.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
+expect_stdout_contains = ["#include \"camel/standalone/runtime.h\"", "A standalone program", "rt::mod(", "int main() { return camel::standalone::run(1000, exec_mod_scalar::entry); }"]
+expect_output_not_contains = ["bridge.h", "camel/core/", "libcamel"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

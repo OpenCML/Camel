@@ -224,12 +224,12 @@ expect_output_contains = ["std::cpp translates only literal top-level values yet
 
 [[tests]]
 name = "imports.d4_cpp_literal"
-desc = "Unchanged: a literal top-level value is passed to the entry function."
+desc = "Unchanged: a literal top-level value is passed to the entry function (as the argument for main's capture)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_literal.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["generated::f_main(10LL)"]
+expect_stdout_contains = ["return static_cast<int>(main_(0, 10));"]
 
 # ---- D6: port names of a function that captures, in std::rgir ----
 

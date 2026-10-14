@@ -13,215 +13,129 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: May. 01, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include "camel/core/context/context.h"
-#include "camel/core/error/diagnostics.h"
-#include "camel/core/mm.h"
-#include "camel/core/module/userdef.h"
-#include "camel/core/type.h"
-#include "camel/execute/pass/base.h"
-#include "camel/init.h"
-#include "camel/parse/ast/builder.h"
-#include "camel/parse/parse.h"
-#include "camel/utils/install_layout.h"
-#include "camel/utils/log.h"
-#include "camel/utils/memperf.h"
-#include "camel/utils/windows_parser_guard.h"
-#include "passes/trans/dot/graphviz.h"
-#include "passes/trans/tns/topo_node_seq.h"
+/*
+ * camel-cpp: a Camel program to an executable, in one step.
+ *
+ *   camel-cpp <file.cml> [-o <executable>] [passes before std::cpp ...]
+ *
+ * It runs `camel <file.cml> [passes] std::cpp` (the `camel` next to this tool) to get the C++
+ * of the program, writes it next to the executable as <name>.cpp, and builds it with the C++
+ * compiler ($CXX, else c++ / clang++) and the headers of the installation
+ * ($CAMEL_HOME/include). A standalone program needs nothing else; a program that uses operators
+ * of runtime modules (the C++ includes camel/standalone/bridge.h) is linked with libcamel
+ * (docs/cpp_export_build.md, docs/design/cpp-standalone/README.cn.md section 10).
+ */
 
-#include <chrono>
+#include "camel/utils/install_layout.h"
+
 #include <cstdlib>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
-namespace mm = camel::core::mm;
-using namespace camel::core::context;
-using namespace camel::core::module;
-using namespace camel::core::error;
-using namespace camel::parse;
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 
 namespace fs = std::filesystem;
 
-static fs::path findProjectRoot() {
-    for (auto p = fs::current_path(); !p.empty() && p != p.root_path(); p = p.parent_path()) {
-        auto libPath = p / "build" / "Release" / "libcamel.lib";
-        if (fs::exists(libPath))
-            return p;
-        libPath = p / "build" / "libcamel.lib";
-        if (fs::exists(libPath))
-            return p;
-    }
-    return fs::current_path();
-}
+namespace {
 
-static int runCompile(const fs::path &projRoot, const fs::path &cppPath, const std::string &stem) {
-    auto libDir  = projRoot / "build" / "Release";
-    auto libPath = libDir / "libcamel.lib";
-    if (!fs::exists(libPath)) {
-        libDir  = projRoot / "build";
-        libPath = libDir / "libcamel.lib";
-    }
-    if (!fs::exists(libPath)) {
-        std::cerr << "[camel-cpp] libcamel.lib not found. Run: cmake --build build --config Release"
-                  << std::endl;
-        return 1;
-    }
+std::string quoted(const fs::path &p) { return "\"" + p.string() + "\""; }
 
-    auto tmpDir  = projRoot / "tmp";
-    auto outExe  = tmpDir / (stem + ".exe");
-    auto include = projRoot / "include";
-    auto src     = projRoot / "src";
-    auto third   = projRoot / "third_party";
-
-    std::ostringstream cmd;
+int runCommand(const std::string &command) {
+    std::cerr << "[camel-cpp] " << command << std::endl;
 #ifdef _WIN32
-    cmd << "clang++ -std=c++23 -O2 -m64 "
-        << "-DPLATFORM_WINDOWS "
-        << "-I \"" << include.string() << "\" "
-        << "-I \"" << src.string() << "\" "
-        << "-I \"" << third.string() << "\" "
-        << "-I \"" << projRoot.string() << "\" "
-        << "\"" << cppPath.string() << "\" "
-        << "-o \"" << outExe.string() << "\" "
-        << "\"" << libPath.string() << "\"";
+    // cmd.exe drops the outer quotes of a command that starts with a quote.
+    return std::system(("\"" + command + "\"").c_str());
 #else
-    cmd << "clang++ -std=c++23 -O2 "
-        << "-I " << include.string() << " "
-        << "-I " << src.string() << " "
-        << "-I " << third.string() << " "
-        << "-I " << projRoot.string() << " " << cppPath.string() << " "
-        << "-o " << outExe.string() << " " << libPath.string();
+    const int status = std::system(command.c_str());
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 #endif
-
-    std::cerr << "[camel-cpp] Building: " << cppPath.filename().string() << " -> " << outExe
-              << std::endl;
-    int ret = std::system(cmd.str().c_str());
-    if (ret != 0)
-        return ret;
-
-    std::cerr << "[camel-cpp] Done: " << outExe << std::endl;
-    return 0;
 }
+
+std::string compiler() {
+    if (const char *cxx = std::getenv("CXX"); cxx != nullptr && *cxx != '\0') {
+        return cxx;
+    }
+#ifdef _WIN32
+    return "clang++";
+#else
+    return "c++";
+#endif
+}
+
+} // namespace
 
 int main(int argc, char *argv[]) {
-    camel::ScopedRuntime camelRuntime;
-
     if (argc < 2) {
-        std::cerr << "Usage: camel-cpp <file.cml>\n";
-        return 1;
+        std::cerr << "Usage: camel-cpp <file.cml> [-o <executable>] [passes before std::cpp ...]\n";
+        return 2;
     }
-    std::string targetFile = argv[1];
-
-    std::unique_ptr<std::ifstream> input = std::make_unique<std::ifstream>(targetFile);
-    if (!input->is_open()) {
-        std::cerr << "Error: Cannot open file " << targetFile << std::endl;
-        return 1;
-    }
-
-    auto diagnostics = std::make_shared<Diagnostics>("main", targetFile);
-    diagnostics->setConfig(
-        DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
-
-    fs::path entryPath(targetFile);
-    std::string entryDir = fs::absolute(entryPath).parent_path().string();
-
-    auto projRoot    = findProjectRoot();
-    auto searchPaths = camel::utils::buildModuleSearchPaths(entryDir);
-    searchPaths.push_back(fs::absolute(projRoot / "stdlib").string());
-    {
-        auto installRoot = camel::utils::resolveInstallRoot();
-        std::size_t n    = 0;
-        for (const auto &p : searchPaths) {
-            if (!p.empty())
-                ++n;
+    const fs::path source = argv[1];
+    fs::path executable   = source.stem();
+#ifdef _WIN32
+    executable += ".exe";
+#endif
+    std::vector<std::string> passes;
+    for (int i = 2; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "-o" && i + 1 < argc) {
+            executable = argv[++i];
+        } else {
+            passes.push_back(arg);
         }
-        LogInfoPathList(
-            "camel-cpp",
-            [&] {
-                return std::format(
-                    "run | module paths | {} entries | CAMEL_HOME={} | entry_dir={}",
-                    n,
-                    installRoot.string(),
-                    entryDir);
-            },
-            searchPaths);
     }
 
-    auto ctx = Context::create(
-        EntryConfig{
-            .entryDir    = entryDir,
-            .entryFile   = targetFile,
-            .searchPaths = std::move(searchPaths),
-        },
-        DiagsConfig{.total_limit = -1, .per_severity_limits = {{Severity::Error, 0}}});
+    const fs::path home  = camel::utils::resolveInstallRoot();
+    fs::path tool        = camel::utils::detail::executableDirectoryRaw() / "camel";
+#ifdef _WIN32
+    tool += ".exe";
+#endif
+    if (!fs::exists(tool)) {
+        tool = home / "bin" / tool.filename();
+    }
+    fs::path cpp = executable;
+    cpp.replace_extension(".cpp");
 
-    auto parser     = std::make_shared<CamelParser>(diagnostics);
-    auto mainModule = std::make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
-    ctx->setMainModule(mainModule);
-
-    (void)mm::autoSpace();
-    (void)mm::metaSpace();
-    (void)mm::permSpace();
-
-    try {
-        std::cerr << "[camel-cpp] Parsing..." << std::endl;
-        parser->parse(*input);
-        std::cerr << "[camel-cpp] Compiling..." << std::endl;
-        mainModule->compile(CompileStage::Done);
-        if (!mainModule->loaded()) {
-            ctx->dumpAllModuleDiagnostics(std::cerr, false);
-            return 1;
-        }
-
-        std::cerr << "[camel-cpp] Applying std::cpp..." << std::endl;
-        std::stringstream cppOutput;
-        auto *graph = ctx->runtimeRootGraph();
-        graph       = applyPasses(graph, {"std::cpp"}, ctx, cppOutput);
-        if (ctx->rtmDiags()->hasErrors()) {
-            ctx->runtimeDiagSink()->dump(std::cerr, false);
-            return 1;
-        }
-
-        std::string out = cppOutput.str();
-        if (out.find("#include") == std::string::npos) {
-            std::cerr << "[camel-cpp] std::cpp produced invalid output" << std::endl;
-            return 1;
-        }
-
-        auto tmpDir = projRoot / "tmp";
-        fs::create_directories(tmpDir);
-
-        std::string stem = entryPath.stem().string();
-        auto cppPath     = tmpDir / (stem + ".cpp");
-        std::cerr << "[camel-cpp] Writing " << cppPath << "..." << std::endl;
-        std::ofstream ofs(cppPath);
-        if (!ofs) {
-            std::cerr << "[camel-cpp] Cannot write " << cppPath << std::endl;
-            return 1;
-        }
-        ofs << out;
-        ofs.close();
-
-        return runCompile(projRoot, cppPath, stem);
-
-    } catch (Diagnostic &d) {
-        RangeConverter conv(parser->tokenPositions());
-        d.fetchRange(conv);
-        std::cerr << "Uncaught diagnostic: " << d.toText() << std::endl;
-        return 1;
-    } catch (std::exception &e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
-    } catch (...) {
-        std::cerr << "Unknown error" << std::endl;
+    std::string translate = quoted(tool) + " " + quoted(source);
+    for (const std::string &p : passes) {
+        translate += " " + p;
+    }
+    translate += " std::cpp > " + quoted(cpp);
+    if (runCommand(translate) != 0) {
+        std::cerr << "[camel-cpp] std::cpp did not translate " << source << std::endl;
         return 1;
     }
+
+    std::ifstream in(cpp);
+    std::stringstream text;
+    text << in.rdbuf();
+    const bool bridged = text.str().find("camel/standalone/bridge.h") != std::string::npos;
+
+    std::string build = compiler() + " -std=c++20 -O2 -I" + quoted(home / "include") + " " +
+                        quoted(cpp) + " -o " + quoted(executable);
+    if (bridged) {
+        // The program uses operators of runtime modules: it links the runtime, and finds it
+        // (and the modules) through the installation when it runs.
+        const fs::path lib = home / "libs";
+        build += " -L" + quoted(lib) + " -lcamel";
+#ifndef _WIN32
+        build += " -Wl,-rpath," + quoted(lib);
+#endif
+    }
+    if (runCommand(build) != 0) {
+        std::cerr << "[camel-cpp] the C++ compiler failed on " << cpp << std::endl;
+        return 1;
+    }
+    std::cerr << "[camel-cpp] " << executable.string()
+              << (bridged ? " (links the Camel runtime)" : " (standalone)") << std::endl;
+    return 0;
 }
