@@ -47,8 +47,13 @@ FEATURES = {
     "ifnoelse": "if statements without else whose arm is one expression of any type",
     "logic": "&& and || with effects on the right side (branches: the right side runs only when needed), & and | (both sides run)",
     "narrowing": "x == null / x != null as bool expressions, and the arm of if x != null (also joined by &&) where x is a T",
+    "modules": "top-level values written in any order, and the program split into three modules "
+               "(values and types; functions that call only each other; the rest), imported by "
+               "name; not in the default set",
 }
-DEFAULT_FEATURES = frozenset(FEATURES)
+# `modules` is left out of the default set: the feature set is part of every program's random
+# stream, and the recorded seeds must keep naming the same programs. `--features all,modules`.
+DEFAULT_FEATURES = frozenset(FEATURES) - {"modules"}
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
@@ -1217,7 +1222,41 @@ class Gen:
         return N("func", [body], name=name, params=params, ret=ret, syncfn=effectful and writes_captured(body))
 
     # -- the program ------------------------------------------------------------------------
+    def top_level_values(self) -> list:
+        """Feature `modules`: a few top-level `let`s of scalar types, each a pure expression
+        over literals and the ones before it, in scope for every function and for main. They
+        are written in a shuffled order (`global_order`): the top level does not depend on the
+        order it is written in."""
+        made = []
+        for _ in range(self.r.choice([2, 3, 3, 4]) * self.size):
+            t = self.scalar()
+            e = self.expr(t, 2)
+            s = Sym(self.fresh("k"), t, "let")
+            self.scope.append(s)
+            made.append(N("let", [e], name=s.name))
+        self.global_order = list(range(len(made)))
+        self.r.shuffle(self.global_order)
+        return made
+
+    def split(self) -> set:
+        """Feature `modules`: the functions that go to the second module, a random set closed
+        under the functions they name (the second module imports only the first one)."""
+        names = {f.a["name"] for f in self.funcs}
+        named = {f.a["name"]: {x.a["name"] for x in walk(f) if x.a.get("name") in names}
+                 for f in self.funcs}
+        chosen = set()
+        for f in self.funcs:
+            if self.chance(0.5):
+                todo = [f.a["name"]]
+                while todo:
+                    n = todo.pop()
+                    if n not in chosen:
+                        chosen.add(n)
+                        todo.extend(named.get(n, ()))
+        return chosen
+
     def program(self, module: str) -> N:
+        globals_ = self.top_level_values() if self.on("modules") else []
         if self.on("func"):
             for _ in range(self.r.choice([1, 2, 3, 3, 4]) * self.size):
                 if self.on("rec") and self.chance(0.3):
@@ -1242,7 +1281,8 @@ class Gen:
             if self.on("partial"):
                 for _ in range(self.r.choice([1, 2, 2])):
                     self.with_function()
-        declared = [s for s in self.scope if s.kind in ("fn", "wfn")]
+        top = {g.a["name"] for g in globals_}
+        declared = [s for s in self.scope if s.kind in ("fn", "wfn") or s.name in top]
         self.scope = list(declared)
         stmts = []
         if self.on("env"):
@@ -1262,7 +1302,10 @@ class Gen:
                 stmts.append(N("expr", [N("println", [N("fmt", [ref(s)], t=STR, s=f"L{self.label} {{}}")])]))
         body = N("blk", [stmts, lit(INT, 0)], t=INT, sync=True)
         main = N("func", [body], name="main", params=[], ret=INT)
-        return N("prog", [self.funcs + [main]], module=module, types=dict(self.types), env=dict(self.env))
+        if not self.on("modules"):
+            return N("prog", [self.funcs + [main]], module=module, types=dict(self.types), env=dict(self.env))
+        return N("prog", [self.funcs + [main], globals_], module=module, types=dict(self.types),
+                 env=dict(self.env), split=self.split(), global_order=self.global_order)
 
 
 def macro_safe(body: N) -> bool:

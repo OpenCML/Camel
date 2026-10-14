@@ -168,11 +168,15 @@ def first_difference(expected: List[str], got: List[str]) -> str:
 
 
 def run_program(source: str, env_values: dict, expected: List[str], cells: Dict[str, List[str]],
-                workdir: Optional[Path] = None, name: str = "prog", timeout: float = 30.0) -> Dict[str, dict]:
-    """Runs the cells one after the other. Returns cell id -> info."""
+                workdir: Optional[Path] = None, name: str = "prog", timeout: float = 30.0,
+                modules: Optional[Dict[str, str]] = None) -> Dict[str, dict]:
+    """Runs the cells one after the other. Returns cell id -> info. `modules`: the other
+    modules of the program (file stem -> source), written beside it (feature `modules`)."""
     def go(d: Path):
         path = d / f"{name}.cml"
         path.write_text(source, encoding="utf-8", newline="\n")
+        for stem, text in (modules or {}).items():
+            (d / f"{stem}.cml").write_text(text, encoding="utf-8", newline="\n")
         out, crashes = {}, 0
         for cid, passes in cells.items():
             if crashes >= MAX_CRASHES:

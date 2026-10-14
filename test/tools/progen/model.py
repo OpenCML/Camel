@@ -318,15 +318,85 @@ def func_src(n: N, ind: int) -> list:
     return lines
 
 
+def prog_globals(prog: N) -> list:
+    """The top-level `let`s of the program (feature `modules`), in the order they were made:
+    each uses only the ones before it."""
+    return list(prog.c[1]) if len(prog.c) > 1 else []
+
+
+def type_decls_src(prog: N, export: bool) -> list:
+    out = []
+    for name, fields in prog.a.get("types", {}).items():
+        out += [("export " if export else "") + f"type {name} = {{ " +
+                ", ".join(f"{f}: {type_src(t)}" for f, t in fields) + " }", ""]
+    return out
+
+
+def globals_src(prog: N, export: bool) -> list:
+    # Written in the order recorded by the generator, not the order they were made: the top
+    # level of a module does not depend on the order it is written in (design principles 2.12).
+    made = prog_globals(prog)
+    order = prog.a.get("global_order") or list(range(len(made)))
+    out = []
+    for i in order:
+        if i < len(made):
+            g = made[i]
+            out += [("export " if export else "") + f"let {g.a['name']} = {ex(g.c[0], 0, True)}", ""]
+    return out
+
+
+def module_names(prog: N):
+    """With the feature `modules`: the module that holds the top-level values and the types,
+    and the one that holds part of the functions."""
+    return f"{prog.a['module']}_vals", f"{prog.a['module']}_funcs"
+
+
 def emit(prog: N) -> str:
+    """The source of the entry module."""
+    split = prog.a.get("split")
     out = [f"module {prog.a['module']}", ""]
     if prog.a.get("env"):
         out += ["import { get_env } from sys", ""]
-    for name, fields in prog.a.get("types", {}).items():
-        out += [f"type {name} = {{ " + ", ".join(f"{f}: {type_src(t)}" for f, t in fields) + " }", ""]
+    if split is None:
+        out += type_decls_src(prog, False)
+        out += globals_src(prog, False)
+        for f in prog.c[0]:
+            out += func_src(f, 0) + [""]
+        return "\n".join(out)
+    vals, funcs = module_names(prog)
+    names = list(prog.a.get("types", {})) + [g.a["name"] for g in prog_globals(prog)]
+    moved = [f for f in prog.c[0] if f.a["name"] in split]
+    if names:
+        out += ["import { " + ", ".join(names) + " } from " + vals]
+    if moved:
+        out += ["import { " + ", ".join(f.a["name"] for f in moved) + " } from " + funcs]
+    out += [""]
     for f in prog.c[0]:
-        out += func_src(f, 0) + [""]
+        if f.a["name"] not in split:
+            out += func_src(f, 0) + [""]
     return "\n".join(out)
+
+
+def emit_modules(prog: N) -> dict:
+    """The other modules of a program split by the feature `modules` (file stem -> source):
+    one with the top-level values and the types, exported; one with the functions that call
+    only each other, exported, which imports the first one. Empty for a program of one module."""
+    split = prog.a.get("split")
+    if split is None:
+        return {}
+    vals, funcs = module_names(prog)
+    out_vals = [f"module {vals}", ""] + type_decls_src(prog, True) + globals_src(prog, True)
+    names = list(prog.a.get("types", {})) + [g.a["name"] for g in prog_globals(prog)]
+    out_funcs = [f"module {funcs}", ""]
+    if names:
+        out_funcs += ["import { " + ", ".join(names) + " } from " + vals, ""]
+    for f in prog.c[0]:
+        if f.a["name"] in split:
+            lines = func_src(f, 0)
+            head = 1 if lines[0].startswith("with ") else 0   # `with <...>` comes before `export`
+            lines[head] = "export " + lines[head]
+            out_funcs += lines + [""]
+    return {vals: "\n".join(out_vals), funcs: "\n".join(out_funcs)}
 
 
 # ----------------------------------------------------------------------------------------------
@@ -448,6 +518,10 @@ class Evaluator:
         g = Env()
         for f in prog_funcs(self.prog):
             g.d[f.a["name"]] = Closure(f.a["params"], f.c[0], g, f.a["name"], f.a.get("with"))
+        # The top-level values are pure and each uses only the ones made before it: evaluated
+        # in that order, before main (design principles 2.11), whatever order they are written in.
+        for v in prog_globals(self.prog):
+            g.d[v.a["name"]] = self.ev(v.c[0], g)
         main = g.get("main")
         self.call(main, [])
         return self.out
