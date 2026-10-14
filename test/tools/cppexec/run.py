@@ -58,15 +58,17 @@ def find_compiler():
     return None, False
 
 
-def build_command(compiler, msvc, source, target, bridged, camel_home):
-    """A program that uses operators of runtime modules (bridged) links libcamel."""
+def build_command(compiler, msvc, source, target, bridged, camel_home, pch=None):
+    """A program that uses operators of runtime modules (bridged) links libcamel. `pch` is a
+    precompiled camel/standalone/runtime.h (clang only): most of a compilation is spent in
+    the standard library's headers it includes."""
     include = os.path.join(ROOT, "include")
     lib = os.path.join(camel_home, "libs")
     if msvc:
         cmd = [compiler, "/nologo", "/std:c++20", "/O2", "/EHsc", "/I", include, source,
                "/Fe" + target]
         return cmd + ([os.path.join(lib, "libcamel.lib")] if bridged else [])
-    cmd = [compiler, "-std=c++20", "-O2", "-w", "-I", include, source, "-o", target]
+    cmd = [compiler, "-std=c++20", "-O2", "-w", "-I", include] +         (["-include-pch", pch] if pch else []) + [source, "-o", target]
     return cmd + (["-L" + lib, "-lcamel", "-Wl,-rpath," + lib] if bridged else [])
 
 
@@ -124,7 +126,8 @@ def check(program, workdir, args):
     rec["standalone"] = "camel/standalone/bridge.h" not in out
     compiler, msvc = find_compiler()
     code, cout, cerr, seconds = run(
-        build_command(compiler, msvc, source, target, not rec["standalone"], env["CAMEL_HOME"]),
+        build_command(compiler, msvc, source, target, not rec["standalone"], env["CAMEL_HOME"],
+                      args.pch),
         600, env, cwd=workdir)
     rec["compile_seconds"] = round(seconds, 2)
     if code != 0:
@@ -184,6 +187,8 @@ def main():
     ap.add_argument("--json", help="write the records to this file")
     ap.add_argument("--keep", help="keep the C++ files and executables in this directory")
     ap.add_argument("--have-compiler", action="store_true")
+    ap.add_argument("--no-pch", action="store_true",
+                    help="do not precompile camel/standalone/runtime.h (clang)")
     args = ap.parse_args()
     args.passes = args.passes.split()
 
@@ -202,6 +207,13 @@ def main():
 
     workdir = args.keep or tempfile.mkdtemp(prefix="cppexec-")
     os.makedirs(workdir, exist_ok=True)
+    args.pch = None
+    if not args.no_pch and "clang" in os.path.basename(compiler).lower():
+        pch = os.path.join(workdir, "runtime.pch")
+        header = os.path.join(ROOT, "include", "camel", "standalone", "runtime.h")
+        code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-I", os.path.join(ROOT, "include"),
+                             "-x", "c++-header", header, "-o", pch], 600)
+        args.pch = pch if code == 0 else None
     try:
         with concurrent.futures.ThreadPoolExecutor(args.jobs) as pool:
             records = list(pool.map(lambda p: check(p, workdir, args), programs))
