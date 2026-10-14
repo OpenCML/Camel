@@ -65,7 +65,7 @@ PHASES = [
     ("lexer+cst", r"camel::parse::syntax::|CamelParser::buildCST"),
     ("parse (other)", r"camel::parse::"),
     ("gct builder", r"camel::compile::gct::"),
-    ("gir encode", r"encodeToRuntimeGraph|graph_encode|gir::encode|materializeRuntimeRoot|GraphEncoder"),
+    ("gir encode", r"encodeToRuntimeGraph|EncodeSession|collectLiveDraftNodes|staticGraphRefsOf|planDraftPayload|materializeRuntimeRoot"),
     ("gir builder", r"camel::compile::gir::"),
     ("module load", r"Context::importModule|Context::tryLoadModule|loadCmoModule|getModulePathAndKind"),
     ("pass", r"applyPassesDetailed|Pass::apply"),
