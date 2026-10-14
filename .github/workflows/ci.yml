@@ -190,7 +190,8 @@ jobs:
       # scripts/cmake-opts.js reads the build options from .camel-opts.json.
       - name: Switch the JIT off (no-JIT build)
         if: matrix.cfg.nojit
-        run: echo '{ "ENABLE_FASTVM_JIT": "OFF" }' > .camel-opts.json
+        run: |
+          echo '{ "ENABLE_FASTVM_JIT": "OFF" }' > .camel-opts.json
 
       - name: Build (Release)
         run: npm run build
