@@ -218,7 +218,7 @@ def camel_env(home: Path, extra: dict) -> dict:
 def run_camel(home: Path, source: str, passes: List[str], env: dict, cpu: Optional[int], report: Path,
               preload: Optional[Path] = None, timeout: float = 600.0) -> Tuple[float, int, dict]:
     """One run. Returns (wall seconds of the child, exit code, phase report)."""
-    command = [str(tool_path(home, "camel")), "--time-phases", str(report), source] + passes
+    command = [str(tool_path(home, "camel")), f"--time-phases={report}", source] + passes
     if cpu is not None and shutil.which("taskset"):
         command = ["taskset", "-c", str(cpu)] + command
     if preload is not None:
@@ -574,6 +574,22 @@ def cmd_check(_args) -> int:
         text = render(data)
         if "## Compile only" not in text or "## Modules" not in text:
             problems.append("the Markdown report misses a section")
+        # The option as a user writes it: bare (the report goes to stderr) and with a file,
+        # in front of a program that then runs as without it.
+        camel = str(tool_path(default_home(), "camel"))
+        plain = inputs[0]["path"]
+        for form, report_file in (("--time-phases", None), ("--time-phases=", work / "by_flag.json")):
+            argument = form + (str(report_file) if report_file else "")
+            done = subprocess.run([camel, argument, plain], env=camel_env(default_home(), {}),
+                                  capture_output=True, text=True, cwd=tmp)
+            text = report_file.read_text(encoding="utf-8") if report_file and report_file.exists() else done.stderr
+            try:
+                phases = json.loads(text[text.index("{"):])["phases"]
+            except (ValueError, KeyError):
+                phases = []
+            if done.returncode != 0 or done.stdout.strip() != "25" or not any(p["name"] == "gct" for p in phases):
+                problems.append(f"`camel {argument} <program>`: exit {done.returncode}, "
+                                f"output {done.stdout.strip()!r}, {len(phases)} phases")
         # The environment variable asks for the report where the option cannot be given.
         by_env = work / "by_env.json"
         subprocess.run([str(tool_path(default_home(), "camel")), inputs[0]["path"], "std::null"],

@@ -8,7 +8,7 @@
 
 | 设施 | 位置 | 作用 |
 |---|---|---|
-| 阶段计时 | `camel --time-phases <file>` 或 `CAMEL_TIME_PHASES=<file>`；`include/camel/utils/phase_timer.h` | 每个阶段的墙钟，可选的堆分配数，JSON 输出 |
+| 阶段计时 | `camel --time-phases[=<file>]` 或 `CAMEL_TIME_PHASES=<file>`（不带文件时写到标准错误；文件用 `=` 连在选项上，免得把后面的程序当成输出文件）；`include/camel/utils/phase_timer.h` | 每个阶段的墙钟，可选的堆分配数，JSON 输出 |
 | 计数分配器 | `test/tools/allocshim/allocshim.c`（`LD_PRELOAD`） | 分配次数、字节、峰值在用堆；按调用点采样；CPU 时间采样（无 `perf` 时用） |
 | 基准脚本 | `benchmarks/compile/bench.py` | 固定输入集、钉核、版本交替、中位数与最小值，输出 `results.json` 与 Markdown 表 |
 | 多模块工程生成器 | `benchmarks/compile/gen_modules.py` | N 个模块，形状为 flat / chain / fan |

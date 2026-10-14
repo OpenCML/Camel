@@ -4,7 +4,7 @@ tier = "feat"
 tags = ["feat", "tools", "bench"]
 desc = """
 The measuring tools of the compile pipeline keep working: the phase report of the compiler
-(`camel --time-phases <file>`, CAMEL_TIME_PHASES; camel/utils/phase_timer.h), the counting
+(`camel --time-phases[=<file>]`, CAMEL_TIME_PHASES; camel/utils/phase_timer.h), the counting
 allocator shim (test/tools/allocshim), the generator of multi-module projects and the benchmark
 script built on them (benchmarks/compile/). Nothing here asserts a time or a number of
 allocations: the test is that every part runs and that the report has the shape the scripts
@@ -13,7 +13,7 @@ and docs/technical/38_compile_pipeline_cost.md rely on.
 
 [[tests]]
 name = "compile_bench.smoke"
-desc = "One round of the benchmark on a ten-line program and on a generated project of three modules that import each other, for the pipelines compile-only, the rewrite passes and std::fvm: the report names the phases start-up, parse, GCT, GIR, encode, each pass and teardown; the user modules, the GCT nodes and the graph nodes are counted; under the allocator shim (where a C compiler exists) every run has allocation counts; the environment variable produces the report too; the Markdown tables are rendered."
+desc = "One round of the benchmark on a ten-line program and on a generated project of three modules that import each other, for the pipelines compile-only, the rewrite passes and std::fvm: the report names the phases start-up, parse, GCT, GIR, encode, each pass and teardown; the user modules, the GCT nodes and the graph nodes are counted; under the allocator shim (where a C compiler exists) every run has allocation counts; the option, bare and with `=<file>`, in front of a ten-line program gives exit 0, the program's output and a report with the GCT phase; the environment variable produces the report too; the Markdown tables are rendered."
 kind = "behavior"
 tool = "python"
 case = "../../../../benchmarks/compile/bench.py"

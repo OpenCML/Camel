@@ -21,8 +21,9 @@
  * Phase timing of one compiler run: where the wall-clock time and the heap allocations of
  * `camel x.cml <passes>` go, phase by phase (start-up, parse, GCT, GIR, each pass, teardown).
  *
- * Off by default. It is switched on by `camel --time-phases <file>` or by the environment
- * variable CAMEL_TIME_PHASES=<file> (`-` is standard error), and the report is one JSON
+ * Off by default. It is switched on by `camel --time-phases` (standard error),
+ * `camel --time-phases=<file>` or by the environment variable CAMEL_TIME_PHASES=<file>
+ * (`-` is standard error), and the report is one JSON
  * object (see docs/technical/38_compile_pipeline_cost.md for the schema and for how
  * benchmarks/compile/ uses it).
  *

@@ -53,6 +53,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::context;
@@ -628,14 +629,23 @@ int runCommand(int argc, char *argv[]) {
 
 int main(int argc, char *argv[]) {
     phase::enableFromEnvironment();
-    // The option is looked for here, ahead of the argument parser (which checks it and puts
-    // it in the help), so that the report covers the start of the run as well.
-    for (int i = 1; i + 1 < argc; ++i) {
-        if (std::string_view(argv[i]) == "--time-phases") {
-            phase::enable(argv[i + 1]);
+    // `--time-phases` (report to standard error) and `--time-phases=<file>` are taken out of
+    // argv here, before the argument parser runs, so that the report covers the start of the
+    // run as well. The file is joined to the option: a separate value would take the program
+    // that follows for the file, and the report would be written over the program.
+    std::vector<char *> args;
+    for (int i = 0; i < argc; ++i) {
+        const std::string_view arg = argv[i];
+        if (i > 0 && arg == "--time-phases") {
+            phase::enable("-");
+        } else if (i > 0 && arg.starts_with("--time-phases=")) {
+            phase::enable(std::string(arg.substr(std::string_view("--time-phases=").size())));
+        } else {
+            args.push_back(argv[i]);
         }
     }
-    const int code = runCommand(argc, argv);
+    args.push_back(nullptr);
+    const int code = runCommand(static_cast<int>(args.size()) - 1, args.data());
     phase::closeOpen();
     phase::report();
     return code;

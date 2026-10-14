@@ -79,8 +79,6 @@ extern unsigned int timeitIterations;             // parsed iteration count from
 extern bool timeitEnabled;
 /// --dump-after-each-pass <dir>: directory for per-pass graph snapshots ("" = disabled).
 extern std::string dumpAfterEachPassDir;
-/// --time-phases <file>: where the phase report is written ("" = disabled; "-" = stderr).
-extern std::string timePhasesPath;
 /// --arg name=value (repeatable): values for the parameters of `main`.
 extern std::vector<std::string> entryArgs;
 
