@@ -640,13 +640,18 @@ compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileS
 LinkedBytecodeResult compileAndLinkFrom(
     context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt,
     const KnownEntryPc &known, size_t baseOffset) {
-    bytecode_vec_t linked;
-    std::vector<BytecodeIndex> graphs;
-    std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
-
     std::vector<camel::runtime::GCGraph *> uniqueGraphs =
         camel::runtime::collectReachableGraphs(entry);
     reverse(uniqueGraphs.begin(), uniqueGraphs.end());
+    return compileAndLinkGraphs(std::move(ctx), uniqueGraphs, opt, known, baseOffset);
+}
+
+LinkedBytecodeResult compileAndLinkGraphs(
+    context_ptr_t ctx, std::span<camel::runtime::GCGraph *const> uniqueGraphs,
+    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset) {
+    bytecode_vec_t linked;
+    std::vector<BytecodeIndex> graphs;
+    std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
 
     for (auto *runtimeGraph : uniqueGraphs) {
         ASSERT(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");

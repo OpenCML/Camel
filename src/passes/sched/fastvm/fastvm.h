@@ -30,6 +30,7 @@
 #include <array>
 #include <cstdlib>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include "jit/jit_config.h"
@@ -45,6 +46,26 @@ namespace jit = camel::jit;
 namespace ctx = camel::core::context;
 
 /**
+ * What a call-boundary safepoint of the interpreter does on the calling thread when a host
+ * scheduler runs the interpreter on several threads (hosted.cpp). The allocator collects on
+ * whichever thread reaches a safepoint; with other threads running, a collection may only
+ * start once they have all stopped at a safepoint of their own, and that agreement belongs to
+ * the host. So the host installs a hook for the duration of a hosted call, and the interpreter
+ * calls it in place of the allocator's safepoint. The hook returns when the thread may go on
+ * (it may have collected itself, or waited for another thread to). nullptr: the thread is the
+ * only one running the program (std::fvm, std::jit).
+ */
+struct FastVmSafepointHook {
+    void (*poll)(void *host, std::string_view reason) = nullptr;
+    void *host                                         = nullptr;
+};
+
+/// The hook of the calling thread (thread-local; hosted.cpp).
+FastVmSafepointHook &fastVmSafepointHook() noexcept;
+/// Out of line: the hook, or the allocator's own safepoint without one.
+void fastVmSafepointSlowPath();
+
+/**
  * GC safepoint for FVM call transitions (CALL / FUNC / TAIL). FVM does not poll
  * per bytecode; at a call boundary every live value sits in a FramePool frame
  * (a registered root), so a pending collection can run here. Every call checks
@@ -54,7 +75,7 @@ namespace ctx = camel::core::context;
  */
 inline void fastVmCallBoundarySafepoint() {
     if (camel::core::mm::autoSpaceSafepointSlowPathEnabled()) [[unlikely]] {
-        camel::core::mm::autoSpace().safepoint("fastvm call boundary");
+        fastVmSafepointSlowPath();
     }
 }
 
@@ -112,7 +133,12 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     // Frame pool used by the interpreter and JIT trampolines.
     ctx::FramePool framePool_;
 
-    bytecode_vec_t bytecodes_;
+    // The bytecode this interpreter runs. It is the pass's own (ownBytecodes_, compiled by
+    // apply) unless the pass was constructed over the image of a host (hosted.cpp): then it is
+    // the host's vector, shared with the interpreters of the host's other threads and never
+    // written by any of them.
+    bytecode_vec_t ownBytecodes_;
+    bytecode_vec_t &bytecodes_;
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap_;
     std::vector<slot_t> tailArgValuesScratch_;
 
@@ -220,10 +246,15 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
 
   public:
-    FastVMSchedPass(const ctx::context_ptr_t &ctx, const FastVMConfig &config = {})
+    /// `hostImage`: the bytecode of a host scheduler to interpret in place of the pass's own
+    /// (see "Hosted interpreters" below); nullptr for a pass that runs programs itself.
+    FastVMSchedPass(
+        const ctx::context_ptr_t &ctx, const FastVMConfig &config = {},
+        bytecode_vec_t *hostImage = nullptr)
         : RuntimeGraphSchedulePass(ctx),
           maxRecursionDepth_(camel::execute::recursionLimit(*ctx).frames),
-          framePool_(camel::execute::framePoolBytes(maxRecursionDepth_))
+          framePool_(camel::execute::framePoolBytes(maxRecursionDepth_)),
+          bytecodes_(hostImage ? *hostImage : ownBytecodes_)
 #if ENABLE_FASTVM_JIT
           ,
           jitConfig_([&config]() {
@@ -266,6 +297,30 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     CallResult callBorrowedInspected(size_t pc, ctx::Frame *rootFrame);
 #endif
     slot_t call(size_t pc, ctx::Frame *rootFrame);
+
+    // ---- Hosted interpreters (hosted.cpp) --------------------------------------------------
+    //
+    // A scheduler that evaluates graphs itself (the parallel scheduler) can run some of them
+    // as bytecode: it compiles them once into an image (FastVMHostImage), constructs one pass
+    // per thread over that image, and enters it with the two calls below. Such a pass never
+    // runs apply(); it interprets only (the JIT stays off) and never compiles.
+    //
+    // One pass belongs to one thread: its frame pool, call stack and counters are not shared.
+    // The image is shared and read-only while hosted calls run.
+
+    /// A frame of `graph` from this interpreter's pool, for the host to fill with the
+    /// arguments of a hosted call. It must be passed to callHosted next (the pool is a stack).
+    ctx::Frame *acquireHostedFrame(camel::runtime::GCGraph *graph) {
+        return framePool_.acquire(graph);
+    }
+    /// Runs the graph compiled at `pc` on `frame` (from acquireHostedFrame) and returns its
+    /// value; the frame is released whether the call returns or throws. `hostOpenCalls`: the
+    /// calls open on this thread in the host, the hosted one included; the interpreter counts
+    /// its own calls on top of them, so the recursion limit is reached at the same call as in
+    /// the host. A fault leaves as a located Diagnostic, as from call(); whether it is recorded
+    /// is the host's choice (camel::core::error::DescribedFaultScope).
+    slot_t callHosted(size_t pc, ctx::Frame *frame, size_t hostOpenCalls);
+
     /// Entry pc of `graph`, compiling it (and what it reaches) first when it was created after
     /// startup, e.g. a gradient built at run time.
     size_t graphEntryPc(camel::runtime::GCGraph *graph);

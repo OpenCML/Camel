@@ -25,6 +25,7 @@
 #include "optimize.h"
 #include <functional>
 #include <optional>
+#include <span>
 
 namespace ctx = camel::core::context;
 
@@ -68,5 +69,14 @@ using KnownEntryPc = std::function<std::optional<size_t>(camel::runtime::GCGraph
 LinkedBytecodeResult compileAndLinkFrom(
     ctx::context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt,
     const KnownEntryPc &known, size_t baseOffset);
+
+/**
+ * The same for exactly the graphs listed (in that order), whatever else they reach: for a host
+ * that runs only some of the graphs of a program as bytecode (the parallel scheduler). Every
+ * graph a listed graph calls directly must be listed too or have a pc in `known`.
+ */
+LinkedBytecodeResult compileAndLinkGraphs(
+    ctx::context_ptr_t ctx, std::span<camel::runtime::GCGraph *const> graphs,
+    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset);
 
 std::string opCodeToString(const Bytecode &bc, const ctx::context_ptr_t &context);
