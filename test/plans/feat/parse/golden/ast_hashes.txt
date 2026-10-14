@@ -731,6 +731,7 @@ c7e96bf1a03ff827 ok test/cases/consistency/if_without_else/as_value_let.cml
 03244465ff3b22e0 ok test/cases/consistency/imported_value/by_name.cml
 471a793eb4f04c10 ok test/cases/consistency/imported_value/lib.cml
 0b1907b81a182b9f ok test/cases/consistency/limits/depth_direct.cml
+e249f992f470a27e ok test/cases/consistency/limits/depth_isolated.cml
 8d3a48a31570143b ok test/cases/consistency/limits/depth_map.cml
 f7f7aac9d4b95e96 ok test/cases/consistency/limits/depth_value.cml
 d2c992afbc6bd1ab ok test/cases/consistency/limits/macro_depth.cml
@@ -844,6 +845,9 @@ e95c2579bc1c33bc ok test/cases/linear/jit/branch_join.cml
 1417cfc72db0d515 ok test/cases/linear/jit/comparison_matrix.cml
 5a34859ea3e9403b ok test/cases/linear/jit/fib_recursive.cml
 312073b31b88bda2 ok test/cases/linear/jit/float_arith.cml
+e1a0882356fc9534 ok test/cases/linear/jit/framed_faults.cml
+9a11edd01f704f8d ok test/cases/linear/jit/framed_loops.cml
+a14494295a5e5eda ok test/cases/linear/jit/framed_operators.cml
 c586c0b2d1b3a359 ok test/cases/linear/jit/lambda_points.cml
 ada3c81b30471767 ok test/cases/linear/jit/list_transform.cml
 5d36744611a3b970 ok test/cases/linear/jit/list_transform_chain.cml
@@ -1347,6 +1351,7 @@ a5db29965a226f05 ok test/plans/feat/format/golden/namespace.cml
 69ecdfed21290bb7 ok test/plans/feat/format/golden/tuple_singleton.cml
 d0ff0c1893586f15 ok test/plans/feat/format/golden/type_params.cml
 1bad1d461a55356c ok test/plans/feat/parse/golden/numbers_format.cml
+64ae4705339287e4 ok test/tools/jitcov/workloads.cml
 4c6b6e3195b9ef66 ok probes/probe_d000.cml
 5131da37189b4814 ok probes/probe_d001.cml
 3e2020201dfe29da ok probes/probe_d002.cml
