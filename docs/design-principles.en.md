@@ -384,6 +384,10 @@ At present all complicated type computation is implemented directly by operators
 
 - **Users can overload operators in Camel source**, written `func operator &(a: Mask, b: Mask): Mask` (notation provisional). The overloadable operators are those that today become `__x__` functions; `&&`, `||` and constructs such as `??`, `!!`, `->` cannot be overloaded. Names of the form `__x__` stay reserved and are not written by users.
 
+#### Modifying collections
+
+- **`append` returns a new array and does not modify the original**: after `let ys = xs->append<5>`, `xs` is unchanged; to "append to a variable" write `acc = acc->append<5>`, as `x = x + 1`. Changing in place is only an optimization of the implementation (when the old value is no longer used it can be extended where it is), not part of the semantics, and no explicit in-place operator is added. The other standard-library operators likewise. Migration: an unused result of a pure operation (such as `xs->append<5>` written as a statement) is a compile-time error that suggests rebinding.
+
 #### The graph
 
 - **The published node kinds**: `DATA PORT OPER FUNC CALL FILL ACCS CAST COPY BRCH JOIN LOOP GATE SYNC`. `BIND` and `DREF` are removed; higher-order operators such as `map`, and `attempt`, remain operator nodes, with "calls subgraphs" declared in the operator table; besides purity an operator declares whether it may fault, and an operator that declares nothing is treated as possibly faulting.
