@@ -28,14 +28,27 @@ The eight lines of `ZEN` outline this position: the first two say the graph is f
 | `sync` block | Control edges between adjacent expressions | Executes in written order inside the block |
 | `wait` expression | Control edges between that expression and the related operations before and after it | Locally ordered |
 | Function | Subgraph | Its behaviour is decided by the function itself; a call only places the subgraph node in a larger graph and does not change its structure |
+| `var x = v`, reading, assigning | Three kinds of operator node: make a cell, read it, write it; the name `x` is bound to the cell | What is mutable is the cell, not the value |
+| Lambda, function as a value | A function constant; with captures, one more node that puts the captured values in | A function value is "graph + captured values" |
+| `f<w>` as a value (partial application) | A function value that captured `w`; its graph hands the remaining arguments and `w` to `f` | The same structure as a lambda |
 | `macro` function | A subgraph that can be evaluated early, its result materialized as a constant of the graph | Builds a static graph dynamically |
+| `if`, `match` | A branch, one subgraph per arm | Only the chosen arm is evaluated |
 | `a ?? b`, `a !! b`, `x ?-> f` | A branch: the condition is a one-bit tag on the value (null / error), and the two arms are the original value and the substitute | The same structure as `if` |
+| `a && b`, `a \|\| b` | A branch: `a && b` is `if a then b else false`, `a \|\| b` is `if a then true else b` | The right side is an arm, evaluated only when needed; cannot be overloaded |
+| `a & b`, `a \| b` | An ordinary operator node | Both sides are evaluated; can be overloaded |
+| `if x != null then A else B` | The same graph as a `match` on `x`: the non-null arm is entered with the opened value | Narrowing is not a separate mechanism |
+| A value entering `T?`, `T!` | One entering node per level | Entering happens only where it is needed |
 | `throw e` | Returning an error value | The same structure as `return` |
 | Fault isolation (`attempt`) | One tagged call of a subgraph | The boundary of the fault is the boundary of the subgraph; the structure does not vary with the content of the subgraph |
+| `map`, `filter`, `reduce`, `foreach` | One operator node; the element function is passed in as a function value | Higher-order operators are not a new kind of node |
 | Generic function | A subgraph template; each call with a set of concrete types instantiates a subgraph whose types are all concrete | Only concrete types are on the graph |
 | Type function | Evaluated while the graph is built; leaves no node on the graph | A value of kind "type" does not exist at run time |
 | `loop` expression | One `LOOP` node with a condition subgraph, a body subgraph and state edges | The state is decided by the loop header, not by what the body contains |
 | A `let` at the top level of a module | A node of the common root graph | Evaluated when depended on; importing executes no code |
+| A function using a top-level value of a module | A capture port of the function graph, bound to "module + name"; the value is passed down along the calls | No node reference across graphs |
+| `import { f } from m`, `import { v } from m` | No node is built: calling `f` is an ordinary call; `v` is an ordinary edge on the root and a capture port inside a function | Importing executes no code |
+| Importing a generic function | No node is built; one instance per set of types, shared by the whole program, belonging to the module that declares it | Only concrete types are on the graph |
+| `namespace`, `using namespace`, `m::f` | No trace on the graph; they only decide which "module + qualified name" a name resolves to | A namespace is part of the name |
 | Pass | A program that turns one graph into another (or consumes a graph) | An open pipeline |
 
 ---
@@ -337,6 +350,46 @@ At present all complicated type computation is implemented directly by operators
 - **The output of a program and the text written by `fs` are the same bytes on every platform**; on Windows no `\r\n` is written.
 - **The debugger**: the arms of a branch are folded into the frame of the enclosing function by default, and the real subgraph structure can be shown on request; line stepping follows the order of execution, and when a line did not execute because nothing uses its result, an explanation is given.
 
+### 2.12 Supplementary rulings (2026-10-14)
+
+#### Modules and namespaces
+
+- **Top-level `let` and `var` of a module do not depend on the order of writing, only on dependence.** `let area = pi * r * r` may come before `let pi`; a cycle among top-level values is a compile-time error. A local `let` in a function body is still declared before use.
+- **Inside a namespace block, the names of the same block and of enclosing blocks can be used without a prefix.**
+- **`using namespace`**: may be used on a namespace of the module itself; takes effect only in the block where it is written (in a function body, only in that function); when two `using`s bring in names with the same name and signature that cannot be told apart, it is an error at the use.
+- **Name precedence has one rule**: local > this module (the enclosing namespaces and the module top level) > imported by name > brought in by `using namespace` > built in. The first layer that has the name is taken; functions of the same name in one layer form an overload set, and an identical signature is an error; layers are not merged. Operator overloads are the exception and are merged across layers.
+- **`import a from m` brings the name `a` in from `m`**, the same as `import { a } from m`, as the language documentation says; a module alias is written `import m as x`.
+- **`use` is not implemented** and the reserved word is retired; `import { … } from m::N` is allowed.
+- **The module cache lives in a `__cmo__/` directory beside the source file**; it is off by default at first; a module served from the cache does not replay compile-time warnings. An importer's cache is invalid when any of these change: the signature of an exported function (including the inferred return type), the module-level values it uses transitively, its effects, the body of a generic function.
+
+#### Types and conversion
+
+- **Converting a value to its own type is legal and does nothing**: `xs as int[]` (with `xs: int[]`) passes, as `p as A` through an alias does.
+- **`any` is to be tightened step by step.** An opening is made only temporarily, for a specific need that the type system cannot yet express; wherever a clear recommended form exists (generics, overloads, concrete types), `any` is rejected and the diagnostic gives the recommended form. `json.decode` becomes a self-describing `Json` type, with `decode_as<T>`. Compile-time errors from now on: `any` as the condition of `if`, `any` as the subject of `match`, the unchecked `as any as T`.
+- **A function with a `var` context parameter can be partially applied**: `add<t>` is a function value that writes a captured variable; its type carries `sync`, and each call counts as one write of `t`.
+
+#### Syntax and narrowing
+
+- **`!` and `~` behave like the unary minus**: they bind less tightly than `^` and more tightly than `->`; `!x->f` negates first and then passes the value on.
+- **The scope of narrowing**: both `x != null` and `null != x` narrow; in the then arm of `if x != null && ready then ...`, `x` is narrowed (any operand of `&&` that is a direct null test of `x` counts); the else arm of `||` is not narrowed for now. Writing `let x = ...` again inside a narrowed arm is a redeclaration.
+- **A nullable function value may be compared with `null`**; "function values cannot be compared" means two function values.
+- **`let r = ...` binding a `T!` whose `r` is never used is warned about too** (as the statement form in 2.11).
+- **Hovers and documentation take `///` comments only**; an ordinary `//` is not documentation.
+
+#### The graph
+
+- **The published node kinds**: `DATA PORT OPER FUNC CALL FILL ACCS CAST COPY BRCH JOIN LOOP GATE SYNC`. `BIND` and `DREF` are removed; higher-order operators such as `map`, and `attempt`, remain operator nodes, with "calls subgraphs" declared in the operator table; besides purity an operator declares whether it may fault, and an operator that declares nothing is treated as possibly faulting.
+- **Both forms of branch arms are legal graphs**: the front end produces "one subgraph per arm"; after inlining, the nodes of an arm merged into the enclosing graph as a stretch between the branch and the join are legal too.
+- **`LOOP`**: the condition subgraph and the body subgraph share one capture table; `for … while` is a third form of the same node; with several state values the body returns a tuple, and the value of `LOOP` is that tuple.
+- **The direction for passes written in Camel**: graphs and nodes are immutable values, a pass is `(Program) => Program!`; a rewrite is "a set of changes → `apply` → a new graph or an error value", with no modification in place; a pattern rule is a pair of functions with the same parameters, the graph of the left one being the pattern and that of the right one the replacement. Details later.
+
+#### Back ends and run time
+
+- **The goal of `std::cpp` is programs that can be deployed without the runtime.** Where a faithful translation is impossible, the generated code may use Camel's runtime modules, kept as clean as possible. Generated programs report faults with source positions, keep the recursion limit, and do not grow the stack on tail calls.
+- **A back end may collect less garbage, or none**: when and whether collection happens is not observable (2.11).
+- **Generational collection is on by default once it is usable.**
+- **When the parallel scheduler hands serial subgraphs to the bytecode interpreter, the recursion limit is counted by the same rule**: with a raised `--max-recursion-depth`, a deep non-tail recursion completes on `std::prl` as it does on `std::fvm`.
+
 ---
 
 ## 3. `macro`
@@ -394,7 +447,6 @@ When you meet one of the following, ask the language author:
 - How failure or non-termination of the evaluation of a type function is handled.
 - The notation of the loop header (the one in 2.10 is provisional).
 - Whether the type parameters of a generic function may be given explicitly at the call.
-- Whether generational collection is on by default.
 - The behaviour when the same mutable object is written through references in several places outside a sync block, none of them with `wait`.
 - How side-effect tracking is preserved under the various passes (see 2.7).
 - **After a fault in a parallel `map`, whether elements of smaller index that have not started still run** (`parallel-fault-lower-elements`):
@@ -403,6 +455,3 @@ When you meet one of the following, ask the language author:
 - **Whether arguments of built-in operators enter `T?` / `T!`** (`entering-operator-args`): `xs->append<5>` (with `xs: (int?)[]`), `len([])`.
   Implemented: they do not; the first needs `5 as int?`, and the `[]` of the second has no element type and is not reported. The parameter types of a built-in operator are computed from the arguments by its C++ type rule, so there is no target type before the call.
   Alternative: let a type rule name the types it accepts, so that built-in operators behave as user functions do.
-- **Whether a function with a `var` context parameter can be partially applied** (`partial-application-var`): `with <var total: int> sync func add(x: int)`, `let g = add<t>`.
-  Implemented: refused (`ConstructNotSupported`). Once configured, `g` is a function value that writes a captured variable; whether that agrees with "a modification is declared explicitly at every level" has not been ruled on.
-  Alternatives: allow it, each call of `g` counting as a write of `t`; or keep refusing.
