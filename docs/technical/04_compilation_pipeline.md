@@ -43,14 +43,14 @@
 
 ### 2.3 AST → GCT
 
-- **GCT Builder**（`compile/builder/gct_builder.cpp`）将 AST 转为 **图构造树（GCT）**。
-- GCT 节点类型（LoadType）：DECL, FUNC, DATA, TYPE, NREF, DREF, VARI, WAIT, LINK, WITH, ACCS, BRCH, CASE, CAST, ANNO, EXIT, EXEC, EXPT 等。
+- **GCT Builder**（`src/compile/gct/builder.cpp`）将 AST 转为 **图构造树（GCT）**。树由 `gct::Tree`（`include/camel/compile/gct/tree.h`）持有：节点是 arena 里 32 字节的记录，名字在树内驻留，模块存活多久树就存活多久，详见 [03](03_trees_and_structures.md) 4.7 与 [38](38_compile_pipeline_cost.md)。
+- GCT 节点种类（`NodeKind`）：DECL, FUNC, DATA, TYPE, NREF, DREF, VARI, WAIT, LINK, WITH, ACCS, BRCH, CASE, CAST, ANNO, EXIT, EXEC, EXPT 等。
 - GCT 仍是树形结构，但已按「图构造」的语义组织（声明、链接、分支、退出等）。
 
 ### 2.4 GCT → GIR
 
-- **GIR Builder**（`compile/builder/gir_builder.cpp`）遍历 GCT，生成 **GraphIR** 命名空间下的 **Graph** 与 **Node**。
-- 每个 GCT `LoadType` 对应一个 `visitXxxNode`：递归访问子节点、创建 GIR 节点、用 `Node::link(LinkType, from, to)` 建立边。
+- **GIR Builder**（`src/compile/gir/builder.cpp`）遍历 GCT，生成 **GraphIR** 命名空间下的 **Graph** 与 **Node**。
+- 每个 GCT `NodeKind` 对应一个 `visitXxxNode`：递归访问子节点、创建 GIR 节点、用 `Node::link(LinkType, from, to)` 建立边。
 - 典型模式：单子节点（如 ACCS、CAST、VARI、WAIT）访问 `gct->at(0)` 得到值节点，创建目标 GIR 节点后以 `Norm` 边连接 `valueNode → targetNode`。
 - 每个函数体对应一个 **Graph**，内含 **Node**（DATA, PORT, OPER, CALL, FUNC, BRCH, JOIN, EXIT, CAST 等）及 Norm/With/Ctrl 边。
 - 子函数对应子图，通过 `Graph::addSubGraph` 等与根图关联。
