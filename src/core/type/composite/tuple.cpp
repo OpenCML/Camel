@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -102,26 +102,30 @@ TupleType *TupleType::allocate(const std::vector<Type *> &types) {
     return new (mem) TupleType(layout, types);
 }
 
-TupleType *TupleType::create() { return allocate({}); }
+TupleType *TupleType::create() { return create(std::vector<Type *>{}); }
 
-TupleType *TupleType::create(const std::vector<Type *> &types) { return allocate(types); }
+TupleType *TupleType::create(const std::vector<Type *> &types) {
+    return create(std::span<Type *const>(types.data(), types.size()));
+}
 
-TupleType *TupleType::layout(std::span<Type *const> slotTypes) {
-    // One object per sequence of slot type objects (see intern.h). This is what keeps frame
-    // and static-area layouts from piling up in the permanent space: every commit of a rewrite
-    // re-encodes graphs it did not change and asks for the same layouts again, and the many
-    // small graphs of a program (branch arms above all) share a handful of layouts.
+TupleType *TupleType::create(std::vector<Type *> &&types) { return create(types); }
+
+TupleType *TupleType::create(std::span<Type *const> types) {
+    // One object per sequence of element type objects (see intern.h). Frame and static-area
+    // layouts are asked for again at every commit of a rewrite, for graphs it did not change
+    // too, and the many small graphs of a program (branch arms above all) share a handful of
+    // them; a tuple type a program writes is shared by every place that writes it.
     static_assert(sizeof(Type *) == sizeof(uintptr_t));
     const std::span<const uintptr_t> key(
-        reinterpret_cast<const uintptr_t *>(slotTypes.data()),
-        slotTypes.size());
-    Type *type = TypeTable::instance().intern(TypeTable::Shape::Layout, key, [&]() -> Type * {
-        return allocate(std::vector<Type *>(slotTypes.begin(), slotTypes.end()));
+        reinterpret_cast<const uintptr_t *>(types.data()),
+        types.size());
+    Type *type = TypeTable::instance().intern(TypeTable::Shape::Tuple, key, [&]() -> Type * {
+        return allocate(std::vector<Type *>(types.begin(), types.end()));
     });
     return static_cast<TupleType *>(type);
 }
 
-TupleType *TupleType::create(std::vector<Type *> &&types) { return create(types); }
+TupleType *TupleType::layout(std::span<Type *const> slotTypes) { return create(slotTypes); }
 
 TupleType *TupleType::cell(Type *valueType) {
     ASSERT(valueType != nullptr, "A variable cell needs a value type.");
@@ -208,7 +212,7 @@ size_t camel::core::type::errorFieldIndex(std::string_view name) {
     return *index;
 }
 
-TupleType *TupleType::fromFactory(TupleTypeFactory &factory) { return allocate(factory.types_); }
+TupleType *TupleType::fromFactory(TupleTypeFactory &factory) { return create(factory.types_); }
 
 TupleType *TupleType::slice(size_t start, size_t end) const {
     ASSERT(start <= end && end <= size_, "TupleType slice indices out of range");
@@ -332,12 +336,11 @@ bool TupleType::equals(Type *other) const {
 }
 
 CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
-    if (this == sourceType)
+    // Converting a value to its own type is legal and does nothing (design principles 2.12):
+    // decided by structure, so `t as (int, int)` passes for `t: (int, int)`.
+    if (equals(sourceType))
         return CastSafety::Safe;
     if (isTagged() && sourceType != nullptr) {
-        if (equals(sourceType)) {
-            return CastSafety::Safe;
-        }
         // `null` is the literal of every nullable type.
         if (isNullable() && sourceType->code() == TypeCode::Void) {
             return CastSafety::Safe;
@@ -358,11 +361,14 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
 }
 
 slot_t TupleType::castSlotFrom(slot_t value, Type *sourceType) const {
-    if (!isTagged() || sourceType == nullptr) {
+    if (sourceType == nullptr) {
         return Type::castSlotFrom(value, sourceType);
     }
     if (equals(sourceType)) {
-        return value;
+        return value; // a conversion to the value's own type does nothing
+    }
+    if (!isTagged()) {
+        return Type::castSlotFrom(value, sourceType);
     }
     if (isNullable() && sourceType->code() == TypeCode::Void) {
         return NullSlot;

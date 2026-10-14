@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,22 +90,19 @@ class TupleType : public CompositeType {
     TupleType(const TupleType &)            = delete;
     TupleType &operator=(const TupleType &) = delete;
 
-    // A tuple type with these element types. Always a new object: a tuple type that a program
-    // can name is not interned yet, because `v as T` between two tuple types is accepted only
-    // when they are the same object (castSafetyFrom), and sharing equal types would change
-    // which programs that rule accepts (docs/design/graph-model, step 2 status).
+    /// The tuple type with these element types. Interned (camel/core/type/intern.h): the same
+    /// element type objects in the same order always give the same immutable object. Never a
+    /// variable cell or a tagged form, which have constructors of their own.
     static TupleType *create();
     static TupleType *create(const std::vector<Type *> &types);
     static TupleType *create(std::vector<Type *> &&types);
+    static TupleType *create(std::span<Type *const> types);
 
     // Build from a factory.
     static TupleType *fromFactory(TupleTypeFactory &factory);
 
-    /// The layout of a frame or of a static area: the slot types in order. Interned
-    /// (camel/core/type/intern.h): the same slot type objects always give the same immutable
-    /// TupleType object, so graphs with equal layouts, and every re-encoding of one graph,
-    /// share it. A layout is never the static type of a value a program can cast, which is why
-    /// it can be shared where create() cannot.
+    /// The layout of a frame or of a static area: the slot types in order. The tuple type of
+    /// those slot types (create()); the name says what the caller uses it for.
     static TupleType *layout(std::span<Type *const> slotTypes);
 
     /// The type of a variable cell: the one-slot mutable object that a `var` variable denotes

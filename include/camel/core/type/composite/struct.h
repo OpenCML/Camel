@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -145,6 +145,7 @@ class StructType : public CompositeType {
     virtual Type *clone(bool deep = false) const override;
     virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
+    virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
     /// Widens every element type, so `var` bindings never hold refined aggregates (mutation
     /// through `var` parameters would otherwise break covariant assignability).

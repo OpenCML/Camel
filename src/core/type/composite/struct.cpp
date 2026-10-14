@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -302,10 +302,19 @@ bool StructType::equals(Type *type) const {
     return true;
 }
 
+// Converting a value to its own type is legal and does nothing (design principles 2.12).
 CastSafety StructType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr)
         return CastSafety::Forbidden;
-    return CastSafety::Forbidden;
+    return equals(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
+}
+
+// Every conversion castSafetyFrom admits (to the same type) keeps the value.
+slot_t StructType::castSlotFrom(slot_t value, Type *sourceType) const {
+    ASSERT(
+        castSafetyFrom(sourceType) == CastSafety::Safe,
+        "castSlotFrom only allowed when castSafetyFrom returns Safe");
+    return value;
 }
 
 // Fields are immutable, so a struct accepts any struct with the same field names whose field

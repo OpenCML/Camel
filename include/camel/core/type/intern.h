@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -34,20 +34,19 @@
  * keys denote the same type however the components are compared. It is complete (equal types
  * are one object) exactly when all components are interned.
  *
- * What is interned today:
- *  - frame and static-area layouts (TupleType::layout);
+ * What is interned:
+ *  - tuple types (TupleType::create), frame and static-area layouts among them, and array
+ *    types (ArrayType::create). Converting a value to its own type is legal and does nothing
+ *    (design principles 2.12, question Q11 of the design), so `v as T` between two of them
+ *    is decided by their structure, never by which object each is, and sharing equal types
+ *    changes no program's meaning;
  *  - struct types (StructType);
  *  - function signatures without parameter names (FunctionType::interned), which is what an
  *    operator's type rule gives every call it resolves.
  * Variable cells, `T?`, `T!`, maps, sets and tensor types were already shared by rules of
  * their own; cells and tagged forms take a TypeId from the table.
  *
- * What is not, and why (the fallback of the design's section 10.1):
- *  - Tuple and array types a program can name. `v as T` between two of them is accepted only
- *    when both are the same object (TupleType/ArrayType::castSafetyFrom), so `xs as int[]` is
- *    a DynamicCastForbidden error today while a cast through one alias is not. Sharing equal
- *    types would change which programs are accepted; that is a language question, not a
- *    storage one, and it is recorded as such in the design's step 2 status.
+ * What is not (the fallback of the design's section 10.1):
  *  - A graph's own function type: the front end completes it in place (the result type is
  *    set after the body is built, capture names are appended) and it carries parameter names.
  *  - Union types (mutable sets) and type variables.
@@ -88,7 +87,8 @@ class TypeTable {
     /// Which constructor a key belongs to. Part of the key: different constructors can have
     /// the same components.
     enum class Shape : uint32_t {
-        Layout,   // TupleType::layout: frame and static-area layouts
+        Tuple,    // TupleType::create (layouts included); not cells or tagged forms
+        Array,    // ArrayType::create
         Struct,   // StructType
         Function, // FunctionType::interned: signatures without parameter names
     };
