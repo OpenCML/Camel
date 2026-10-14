@@ -623,7 +623,9 @@ assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
 const out = input.normalized.stdout
 const fwd = match(/bn_train_sanity fwd=([0-9.eE+-]+) rm=([0-9.eE+-]+) rv=([0-9.eE+-]+)/, out)
 assert(Number(fwd[1]) < 1e-4, `forward differs from the manual decomposition: ${fwd[1]}`)
-assert(Number(fwd[2]) < 1e-9, `running mean differs: ${fwd[2]}`)
+// The kernel and the decomposition round differently (one expression against three tensor
+// operations): float32 rounding, as for the variance. A wrong formula is off by far more.
+assert(Number(fwd[2]) < 1e-6, `running mean differs: ${fwd[2]}`)
 assert(Number(fwd[3]) < 1e-6, `running variance differs (UNBIASED correction?): ${fwd[3]}`)
 const grads = match(/bn_train_sanity dx=([0-9.eE+-]+) dg=([0-9.eE+-]+) db=([0-9.eE+-]+) rm_grad=([0-9.eE+-]+) rv_grad=([0-9.eE+-]+)/, out)
 assert(Number(grads[1]) === 0 && Number(grads[2]) === 0 && Number(grads[3]) === 0, `autodiff must emit the gradient operator verbatim: ${grads[0]}`)
