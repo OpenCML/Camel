@@ -725,7 +725,9 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     auto draft              = std::make_unique<GraphDraft>();
     draft->funcType_        = graph->funcType();
     draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
-    draft->runtimeDataType_ = const_cast<camel::core::type::TupleType *>(graph->runtimeDataType());
+    if (const auto *layout = graph->runtimeDataType()) {
+        draft->setRuntimeSlotTypes(layout->types());
+    }
     draft->closureType_     = const_cast<camel::core::type::TupleType *>(graph->closureType());
     draft->returnKind_      = graph->returnKind();
     draft->staticSlots_.assign(graph->staticSlots().begin(), graph->staticSlots().end());
@@ -1268,30 +1270,16 @@ size_t GraphDraft::dissolveUnorderedGates() {
 
 gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
     ASSERT(type != nullptr, "Draft runtime slot allocation requires a non-null type.");
-    size_t built = runtimeDataType_ != nullptr ? runtimeDataType_->size() : 0;
-    if (built == 0 && pendingRuntimeSlots_.empty()) {
-        pendingRuntimeSlots_.push_back(camel::core::type::Type::Void()); // slot 0 is reserved
+    if (runtimeSlotTypes_.empty()) {
+        runtimeSlotTypes_.push_back(camel::core::type::Type::Void()); // slot 0 is reserved
     }
-    const size_t slotIndex = built + pendingRuntimeSlots_.size();
+    hasFrameLayout_        = true;
+    const size_t slotIndex = runtimeSlotTypes_.size();
     ASSERT(
         slotIndex < static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
         "Draft runtime slot count exceeds 16-bit data-index capacity.");
-    pendingRuntimeSlots_.push_back(type);
+    runtimeSlotTypes_.push_back(type);
     return static_cast<gc_slot_idx_t>(slotIndex);
-}
-
-camel::core::type::TupleType *GraphDraft::runtimeDataType() const {
-    if (!pendingRuntimeSlots_.empty()) {
-        std::vector<camel::core::type::Type *> slotTypes;
-        if (runtimeDataType_ != nullptr) {
-            const auto current = runtimeDataType_->types();
-            slotTypes.assign(current.begin(), current.end());
-        }
-        slotTypes.insert(slotTypes.end(), pendingRuntimeSlots_.begin(), pendingRuntimeSlots_.end());
-        pendingRuntimeSlots_.clear();
-        runtimeDataType_ = camel::core::type::TupleType::layout(slotTypes);
-    }
-    return runtimeDataType_;
 }
 
 size_t GraphDraft::appendStaticSlot(slot_t value, camel::core::type::Type *type) {
@@ -1367,7 +1355,7 @@ GCGraph *GraphDraft::encode(
     return GCGraphBuildAccess::create(
         debugRecord,
         funcType_,
-        runtimeDataType(),
+        frameSlotTypes(),
         staticDataType,
         closureType_,
         nullptr,

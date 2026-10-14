@@ -103,9 +103,9 @@ Type *effectiveDraftNodeType(const GraphDraft &draft, const DraftNodeHeader &hea
         return header.dataType;
     }
     if (header.dataIndex > 0) {
-        if (auto *runtimeType = draft.runtimeDataType();
-            runtimeType != nullptr && static_cast<size_t>(header.dataIndex) < runtimeType->size()) {
-            return runtimeType->typeAt(static_cast<size_t>(header.dataIndex));
+        if (const auto slots = draft.runtimeSlotTypes();
+            static_cast<size_t>(header.dataIndex) < slots.size()) {
+            return slots[static_cast<size_t>(header.dataIndex)];
         }
     } else if (header.dataIndex < 0) {
         const size_t staticIndex = static_cast<size_t>(-header.dataIndex);
@@ -129,13 +129,14 @@ struct GraphArenaLayout {
     size_t withPortBytes       = 0;
     size_t closureBytes        = 0;
     size_t branchArmBytes      = 0;
+    size_t frameLayoutBytes    = 0;
     size_t totalBytes          = 0;
 };
 
 GraphArenaLayout planGraphArenaLayout(
     std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
     std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payload,
-    std::span<const slot_t> staticSlots) {
+    std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots) {
     GraphArenaLayout layout{
         .graphBytes      = camel::core::mm::alignUp(sizeof(GCGraph), alignof(GCGraph)),
         .dependencyBytes = camel::core::mm::alignUp(
@@ -171,10 +172,18 @@ GraphArenaLayout planGraphArenaLayout(
             bytesForArray<GCBranchArm>(payload.branchArmCount),
             alignof(GCBranchArm)),
     };
-    layout.totalBytes = layout.graphBytes + layout.dependencyBytes + layout.subGraphBytes +
-                        layout.staticGraphRefBytes + layout.tupleBytes + layout.nodeBlockBytes +
-                        layout.edgeBytes + layout.normPortBytes + layout.withPortBytes +
-                        layout.closureBytes + layout.branchArmBytes;
+    const size_t beforeFrameLayout =
+        layout.graphBytes + layout.dependencyBytes + layout.subGraphBytes +
+        layout.staticGraphRefBytes + layout.tupleBytes + layout.nodeBlockBytes + layout.edgeBytes +
+        layout.normPortBytes + layout.withPortBytes + layout.closureBytes + layout.branchArmBytes;
+    // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
+    // padding up to the layout's alignment is part of its share.
+    if (frameSlots) {
+        layout.frameLayoutBytes =
+            camel::core::mm::alignUp(beforeFrameLayout, alignof(TupleType)) - beforeFrameLayout +
+            TupleType::frameLayoutBytes(*frameSlots);
+    }
+    layout.totalBytes = beforeFrameLayout + layout.frameLayoutBytes;
     return layout;
 }
 
@@ -999,14 +1008,19 @@ void syncPayloadArenaView(GCGraphNativePayload &payload, const GCGraphPayloadAre
 
 GCGraph *GCGraphBuildAccess::create(
     GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
-    camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
+    const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
     camel::core::type::TupleType *closureType, GCGraph *outerGraph,
     std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
     std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
     const std::function<void(GCGraphPayloadArena &)> &emitPayload,
     std::span<const slot_t> staticSlots) {
-    const size_t bytes =
-        requiredBytes(dependencies, subGraphs, staticGraphRefs, payloadShape, staticSlots);
+    const size_t bytes = requiredBytes(
+        dependencies,
+        subGraphs,
+        staticGraphRefs,
+        payloadShape,
+        staticSlots,
+        frameSlots);
     // Throws mm::MemoryExhausted when the graph space is at its limit.
     void *mem = mm::graphSpace().alloc(bytes, alignof(GCGraph));
     return constructInPlace(
@@ -1014,7 +1028,7 @@ GCGraph *GCGraphBuildAccess::create(
         bytes,
         debugRecord,
         funcType,
-        runtimeDataType,
+        frameSlots,
         staticDataType,
         closureType,
         outerGraph,
@@ -1029,14 +1043,20 @@ GCGraph *GCGraphBuildAccess::create(
 size_t GCGraphBuildAccess::requiredBytes(
     std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
     std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payload,
-    std::span<const slot_t> staticSlots) {
-    return planGraphArenaLayout(dependencies, subGraphs, staticGraphRefs, payload, staticSlots)
+    std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots) {
+    return planGraphArenaLayout(
+               dependencies,
+               subGraphs,
+               staticGraphRefs,
+               payload,
+               staticSlots,
+               frameSlots)
         .totalBytes;
 }
 
 GCGraph *GCGraphBuildAccess::constructInPlace(
     void *memory, size_t bytes, GCGraphDebugRecord *debugRecord,
-    camel::core::type::FunctionType *funcType, camel::core::type::TupleType *runtimeDataType,
+    camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
     camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
     GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
     std::span<GCGraph *const> subGraphs, std::span<GCGraph *const> staticGraphRefs,
@@ -1072,6 +1092,14 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     ::Tuple *staticArea               = buildStaticAreaInArena(arena, staticDataType, staticSlots);
     GCGraphNativePayload ownedPayload = allocPayloadInArena(arena, payloadShape);
     GCGraphPayloadArena payloadArena  = makePayloadArenaView(ownedPayload);
+    // The frame layout is part of the graph (see TupleType::constructFrameLayout); the padding
+    // planned for it lets it start aligned wherever the arrays before it ended.
+    TupleType *runtimeDataType = nullptr;
+    if (frameSlots) {
+        const size_t layoutBytes = TupleType::frameLayoutBytes(*frameSlots);
+        void *layoutMem          = arena.alloc(layoutBytes, alignof(TupleType));
+        runtimeDataType          = TupleType::constructFrameLayout(layoutMem, *frameSlots);
+    }
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
         "constructInPlace allocated arenas: name='{}' staticArea={} nodeBlocks={} edges={} "

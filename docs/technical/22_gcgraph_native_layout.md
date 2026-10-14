@@ -436,6 +436,14 @@ The agreed direction is:
 - graph static-slot storage also lives in the graph heap
 - objects referenced by those static slots may still point at normal runtime
   `GCObject` instances allocated in `autoSpace`
+- the frame layout (`GCGraph::runtimeDataType()`, the tuple type of the frame
+  slots that frames trace by) is built at the end of the graph's own block
+  (`TupleType::constructFrameLayout`, since 2026-10-14; graph model step 3,
+  the slot type table of section 4.1). It is not in the type table and is
+  released with the graph, so a rewrite that changes a graph no longer leaves
+  a layout behind in the permanent space. Only the graph's frames refer to it;
+  a draft keeps the slot types as a plain vector
+  (`GraphDraft::runtimeSlotTypes`) and the encoder builds the layout
 
 This split keeps graph identity and payload addresses stable while still
 allowing graph-owned slots to reference ordinary runtime objects.

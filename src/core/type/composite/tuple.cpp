@@ -127,6 +127,33 @@ TupleType *TupleType::create(std::span<Type *const> types) {
 
 TupleType *TupleType::layout(std::span<Type *const> slotTypes) { return create(slotTypes); }
 
+namespace {
+
+size_t runtimeReferenceCount(std::span<Type *const> types) {
+    size_t refCount = 0;
+    for (Type *t : types) {
+        if (isRuntimeReferenceSlot(t)) {
+            ++refCount;
+        }
+    }
+    return refCount;
+}
+
+} // namespace
+
+size_t TupleType::frameLayoutBytes(std::span<Type *const> slotTypes) {
+    return mm::alignUp(
+        computeLayout(slotTypes.size(), runtimeReferenceCount(slotTypes)).totalSize,
+        alignof(TupleType));
+}
+
+TupleType *TupleType::constructFrameLayout(void *memory, std::span<Type *const> slotTypes) {
+    ASSERT(memory != nullptr, "A frame layout needs memory to be built in.");
+    const TupleTypeLayout layout =
+        computeLayout(slotTypes.size(), runtimeReferenceCount(slotTypes));
+    return new (memory) TupleType(layout, std::vector<Type *>(slotTypes.begin(), slotTypes.end()));
+}
+
 TupleType *TupleType::cell(Type *valueType) {
     ASSERT(valueType != nullptr, "A variable cell needs a value type.");
     static std::mutex mutex;

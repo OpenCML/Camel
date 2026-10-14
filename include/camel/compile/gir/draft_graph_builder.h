@@ -69,7 +69,6 @@ class DraftGraphBuilder {
     const std::string &name() const { return name_; }
     const std::string &stableId() const { return stableId_; }
     camel::core::type::FunctionType *funcType() const { return draft_->funcType(); }
-    camel::core::type::TupleType *runtimeDataType() const { return draft_->runtimeDataType(); }
     camel::core::type::TupleType *closureType() const { return draft_->closureType(); }
     bool hasFrameLayout() const { return draft_->hasFrameLayout(); }
     size_t frameSize() const { return draft_->frameSize(); }

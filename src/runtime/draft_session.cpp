@@ -513,7 +513,7 @@ GCGraph *encodeDraftGraph(
             return record;
         }(),
         draft.funcType(),
-        draft.runtimeDataType(),
+        draft.frameSlotTypes(),
         staticDataType,
         draft.closureType(),
         nullptr,
@@ -545,7 +545,8 @@ size_t draftGraphBytes(
         subGraphPlaceholders,
         staticRefPlaceholders,
         describeDraftNativePayload(draft),
-        staticSlots);
+        staticSlots,
+        draft.frameSlotTypes());
 }
 
 /// The source position a failure to encode the graph `identity` is reported at, which only

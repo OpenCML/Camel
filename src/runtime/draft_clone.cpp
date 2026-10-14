@@ -161,9 +161,9 @@ camel::core::type::Type *resolveDraftNodeDataType(const GraphDraft &draft, gc_no
         return node->dataType;
     }
     if (node->dataIndex > 0) {
-        if (auto *runtimeType = draft.runtimeDataType();
-            runtimeType != nullptr && static_cast<size_t>(node->dataIndex) < runtimeType->size()) {
-            return runtimeType->typeAt(static_cast<size_t>(node->dataIndex));
+        if (const auto slots = draft.runtimeSlotTypes();
+            static_cast<size_t>(node->dataIndex) < slots.size()) {
+            return slots[static_cast<size_t>(node->dataIndex)];
         }
     } else if (node->dataIndex < 0) {
         const size_t staticIndex = static_cast<size_t>(-node->dataIndex);
