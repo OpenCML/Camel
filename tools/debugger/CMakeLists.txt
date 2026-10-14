@@ -46,3 +46,8 @@ target_link_options(camel-debugger PRIVATE $<$<AND:$<CONFIG:RelWithDebInfo>,$<NO
 target_libcamel_tool_options(camel-debugger)
 target_link_libcamel(camel-debugger)
 target_link_libraries(camel-debugger PRIVATE httplib::httplib nlohmann_json::nlohmann_json)
+# On macOS cpp-httplib resolves host names through CFHost (CFNetwork), which the Conan
+# package does not link for us.
+if(APPLE)
+    target_link_libraries(camel-debugger PRIVATE "-framework CoreFoundation" "-framework CFNetwork")
+endif()
