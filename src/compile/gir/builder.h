@@ -608,6 +608,14 @@ class Builder {
     node_handle_t nullComparison(
         const std::string &group, const GCT::node_ptr_t &gct,
         const std::vector<Argument> &operands, const camel::core::type::type_vec_t &types);
+    /// Warns about every `T!` that is evaluated in a body and that nothing takes
+    /// (UnusedFallibleValue): a statement of a sync block, the arm of an `if` without
+    /// `else`, and what a `main` without a declared return type ends with.
+    void reportUnusedFallibleValues();
+    /// Values dropped on purpose by `let _ = e`.
+    std::unordered_set<node_handle_t> discardedValues_;
+    /// Function graphs whose return type is not declared but taken from their body.
+    std::unordered_set<DraftGraphBuilder *> inferredExitGraphs_;
 
     /// Binds `node` to a fresh name no program can write, so that arms can capture it.
     std::string bindTemporary(node_handle_t node);

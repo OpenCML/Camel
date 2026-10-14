@@ -1,0 +1,69 @@
+id = "consistency.unused_fallible"
+order = 364
+tier = "feat"
+tags = ["feat", "consistency", "compile", "fallible", "warnings"]
+desc = "A `T!` that is evaluated in a sync block and that nothing uses is a compile-time warning; `let _ = ...` drops it on purpose; a `main` without a declared return type ending in an error value is the same case (design principles 2.11, 2.12)."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unused_fallible.statements"
+desc = "A statement, a `let` whose name is never used and the arm of an `if` without `else` are warned about; two `let _` are not; the program runs alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/unused_fallible/unused.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "12\n-1\n"
+verify_script = """
+const lines = input.stderr.split('\n').filter((l) => l.includes("[Warn]: This value has type 'int!'"))
+assert(lines.length === 3, 'three warnings: ' + input.stderr)
+for (const line of [':12:', ':13:', ':17:']) {
+  assert(lines.some((l) => l.includes(line)), 'a warning at ' + line + ': ' + input.stderr)
+}
+"""
+
+[[tests]]
+name = "unused_fallible.main_undeclared"
+desc = "A `main` without a declared return type that ends in an error value: warned at compile time, nothing at run time, exit code 0."
+kind = "behavior"
+case = "../../../cases/consistency/unused_fallible/main_undeclared.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n"
+expect_stderr_contains = ["name=SemanticDiag::UnusedFallibleValue", "'main' declares no return type"]
+
+[[tests]]
+name = "unused_fallible.main_declared"
+desc = "The same body under a declared `int!`: no warning; the error reaches the exit of `main`."
+kind = "behavior"
+case = "../../../cases/consistency/unused_fallible/main_declared.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_stdout_starts_with = "start\n"
+expect_stderr_contains = ["RuntimeDiag::UnhandledError"]
+expect_output_not_contains = ["UnusedFallibleValue"]
+
+[[tests]]
+name = "unused_fallible.used"
+desc = "`!!`, `?->`, `match`, an argument and a return use the value: no warning."
+kind = "behavior"
+case = "../../../cases/consistency/unused_fallible/used.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "1\n4\nok 3 failed\n4\n"
+expect_output_not_contains = ["UnusedFallibleValue"]
+
+[[tests]]
+name = "unused_fallible.outside_sync"
+desc = "Outside a sync block an unused value is not evaluated: no warning."
+kind = "behavior"
+case = "../../../cases/consistency/unused_fallible/outside_sync.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "1\n"
+expect_output_not_contains = ["UnusedFallibleValue"]

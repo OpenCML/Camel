@@ -113,6 +113,8 @@ enum class SemanticDiag : uint32_t {
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
     ExitInUnusedBranch           = 0x100090,
     IntegerLiteralTruncated      = 0x1000A0,
+    // Rulings of 2026-10-13 (design principles 2.11): 0xC0 and up.
+    UnusedFallibleValue          = 0x1000C0,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

@@ -685,6 +685,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::UnusedFallibleValue,
+            {
+                "UnusedFallibleValue",
+                "This value has type '{0}' and nothing uses it: an error it holds is lost{1}.",
+                "A function that returns a 'T!' reports its failure through that value. Take "
+                "the value apart with '!!', '?->' or 'match', return it from a function that "
+                "declares a 'T!', or drop it on purpose with 'let _ = ...'.",
+            },
+        },
+        {
             SemanticDiag::IntegerLiteralTruncated,
             {
                 "IntegerLiteralTruncated",

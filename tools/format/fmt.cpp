@@ -1299,7 +1299,9 @@ any Formatter::visitFuncType(cst::FuncType context) {
 identDef : IDENTIFIER ;
 */
 any Formatter::visitIdentDef(cst::IdentDef context) {
-    return context->tok(TK::Identifier)->text();
+    // The text of the node, not of an Identifier token: the `_` of `let _ = e` is a token of
+    // its own kind.
+    return context->text();
 }
 
 /*

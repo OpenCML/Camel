@@ -739,11 +739,27 @@ void ParserImpl::parseFuncDecl() {
 }
 
 /// dataDecl : ('let' | 'var') carrier (':' typeList)? '=' dataList
+///          | 'let' '_' (':' typeList)? '=' dataList
 /// carrier  : identList | parentIdents | bracedIdents | bracketIdents
 void ParserImpl::parseDataDecl() {
-    const size_t m = mark();
+    const size_t m   = mark();
+    const bool isLet = cur_ == TK::KwLet;
     bump();
     switch (cur_) {
+    case TK::Underscore: {
+        // `let _ = e`: the value of `e` is dropped on purpose (design principles 2.11). `_`
+        // is not a name; it is taken in this one place, alone, and stands where the single
+        // name of a declaration does, so the tree has the shape of `let x = e`.
+        if (!isLet) {
+            unexpected({e(TK::Identifier)});
+            return close(m, NK::DataDecl);
+        }
+        const size_t list = mark();
+        const size_t name = mark();
+        bump();
+        close(name, NK::IdentDef);
+        close(list, NK::IdentList);
+    } break;
     case TK::LParen:
         parseBracketedIdents(TK::RParen, NK::ParentIdents);
         break;

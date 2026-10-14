@@ -466,8 +466,9 @@ void writeEntryResultTo(
             // Only a `main` that declares its return type has a result (design principles
             // 2.10). The value an undeclared one happens to end with (that of its last
             // statement, `println('a')` giving 'a') is neither printed nor written.
-            // DESIGN-QUESTION(main-undeclared-error): an error value such a body ends with
-            // is not reported either.
+            // An error value such a body ends with is not reported at run time either:
+            // nothing takes it, which the compiler warns about (UnusedFallibleValue,
+            // design principles 2.11).
             const bool declared = ctx->entryResultDeclared();
             Type *resultType =
                 declared && graph && graph->funcType() && graph->funcType()->hasExitType()

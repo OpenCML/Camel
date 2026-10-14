@@ -1,0 +1,5 @@
+// The same body under a declared `int!`: the value is the result of the program.
+func main(): int! sync {
+    println('start')
+    parse_int('zz')
+}

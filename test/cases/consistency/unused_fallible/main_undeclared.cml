@@ -1,0 +1,5 @@
+// A `main` without a declared return type that ends in an error value: nothing takes it.
+func main() sync {
+    println('start')
+    parse_int('zz')
+}

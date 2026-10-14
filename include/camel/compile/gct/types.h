@@ -84,5 +84,8 @@ enum class CaseType : uint8_t { Value, True, Else, Bind, Error };
 /// The reserved name under which the arm of `x ?-> f` finds the value taken out of `x`. It
 /// is not an identifier, so no program can write it.
 inline constexpr const char *kPassedValueName = "$passed";
+/// The name of `let _ = e`: the value of `e` is dropped on purpose and no name is bound
+/// (design principles 2.11). An NREF with this name declares nothing.
+inline constexpr const char *kDiscardName = "_";
 
 } // namespace camel::compile::gct

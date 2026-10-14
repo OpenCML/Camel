@@ -114,6 +114,7 @@ funcAnno           : '@' identRef angledValues?
 funcDecl           : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
                      'func' identRef parentParams (':' typeExpr)? stmtBlock
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
+                     | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : implMark? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))

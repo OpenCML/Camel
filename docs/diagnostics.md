@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-129 diagnostics: 119 errors, 10 warnings.
+130 diagnostics: 119 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -111,6 +111,7 @@ prints one entry.
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
 | `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
+| `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -2624,6 +2625,32 @@ A number written without a decimal point is an 'int', with an exponent too. For 
 func main(): int sync {
     println(1e-2, 15e-1, 1500e-2)
     return 0
+}
+```
+
+### UnusedFallibleValue
+
+`0x031000C0` · Warn · `SemanticDiag::UnusedFallibleValue`
+
+**Message**
+
+```text
+This value has type '{0}' and nothing uses it: an error it holds is lost{1}.
+```
+
+**Help**
+
+```text
+A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '?->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
+```
+
+**Example** (`test/cases/consistency/unused_fallible/main_undeclared.cml`, run as `camel -E short test/cases/consistency/unused_fallible/main_undeclared.cml`)
+
+```camel
+// A `main` without a declared return type that ends in an error value: nothing takes it.
+func main() sync {
+    println('start')
+    parse_int('zz')
 }
 ```
 

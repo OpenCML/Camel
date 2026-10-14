@@ -734,6 +734,8 @@ compile_graph_ptr_t Builder::build(GCT::Tree &tree, diagnostics_ptr_t diags) {
     recorder_             = context_ ? context_->semanticRecorder() : nullptr;
     declOrigins_.clear();
     importedUseOrigins_.clear();
+    discardedValues_.clear();
+    inferredExitGraphs_.clear();
 
     nodeScope_      = node_scope_t::create();
     graphScope_     = graph_scope_t::create();
@@ -751,6 +753,7 @@ compile_graph_ptr_t Builder::build(GCT::Tree &tree, diagnostics_ptr_t diags) {
         visit(gct);
         reportIgnoredCapturedWrites();
         reportUndeclaredCapturedWrites();
+        reportUnusedFallibleValues();
         reportDroppedEffectsOfBodies();
 
         compile_graph_ptr_t entryGraph = nullptr;
@@ -1296,6 +1299,9 @@ void Builder::buildFuncBody(
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;
+        if (!funcType->hasExitType()) {
+            inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
+        }
         setBodyResult(graph, visitBodyNode(gct->at(1)));
         bodyStates_[graph.get()] = BodyState::Built;
         builtFunctions_.push_back({graph.get(), gct->origin(), name});
@@ -2389,6 +2395,15 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         }
         throw BuildAbortException();
     }
+    if (ident == GCT::kDiscardName) {
+        // `let _ = e` (design principles 2.11): the value is evaluated where the statement
+        // stands and dropped on purpose. No name is bound, so the statement can be repeated.
+        if (node != nullptr) {
+            discardedValues_.insert(node);
+        }
+        LEAVE("NREF");
+        return node;
+    }
     // `var x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value.
     node_handle_t bound = isVar ? newVariable(node) : node;
@@ -2785,6 +2800,112 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             origin = sourceContext->debugMap().graphOrigin(graph->stableId());
         }
         diags_->of(SemanticDiag::EffectNotExecuted).atOrigin(origin).commit(subject);
+    }
+}
+
+void Builder::reportUnusedFallibleValues() {
+    // Design principles 2.11: a `T!` that is evaluated and that nothing takes is a warning,
+    // because the error it may hold is lost without a trace. On the graph "evaluated and
+    // not taken" is a node without a data user that something is ordered after: a statement
+    // of a sync block. (Outside a sync block a value nothing takes is not evaluated at all:
+    // design principles 2.1, which has its own warning, EffectNotExecuted.)
+    auto sourceContext = context_ ? context_->sourceContext() : nullptr;
+    const auto warn    = [&](const compile_graph_ptr_t &graph, node_handle_t node, Type *type,
+                          const char *remark) {
+        camel::source::origin_id_t origin = node->header.origin;
+        if (origin == camel::source::kInvalidOriginId && sourceContext) {
+            origin = sourceContext->debugMap().graphOrigin(graph->stableId());
+        }
+        diags_->of(SemanticDiag::UnusedFallibleValue)
+            .atOrigin(origin)
+            .commit(type->toString(), remark);
+    };
+    // The `T!` a node gives, if it gives one. A call was typed when it was built, which for
+    // a callee whose return type is taken from its body may be before that body was
+    // complete (a recursive callee): the callee is asked.
+    const auto fallibleTypeOf = [](const compile_graph_ptr_t &graph, node_handle_t node) {
+        Type *type = nodeTypeOf(node);
+        if (nodeIsKind(node, runtime::GCNodeKind::Func)) {
+            if (const auto callee = graph->funcTarget(node)) {
+                type = callee->funcType()->exitType();
+            }
+        }
+        return asFallible(valueTypeOf(type));
+    };
+    // The entry function, when it declares no return type: what its body ends with is not
+    // the result of the program (design principles 2.10), so nothing takes that either.
+    DraftGraphBuilder *undeclaredMain = nullptr;
+    if (context_ && module_ && context_->mainModule() == module_) {
+        if (auto mains = graphsAt("main"); mains.has_value() && !mains.value()->empty() &&
+                                           inferredExitGraphs_.contains(mains.value()->front().get())) {
+            undeclaredMain = mains.value()->front().get();
+        }
+    }
+
+    for (const compile_graph_ptr_t &graph : builtBodies_) {
+        auto &draft = graph->draft();
+        if (draft.exitNode() == runtime::kInvalidNodeRef) {
+            continue; // the body did not build (an error was reported)
+        }
+        const auto isExit = [&](draft_node_ref_t id) {
+            return id == draft.exitNode() || id == draft.outputNode() || id == draft.returnNode();
+        };
+        if (graph.get() == undeclaredMain && draft.returnNode() != runtime::kInvalidNodeRef) {
+            node_handle_t value = draft.node(draft.returnNode());
+            if (TupleType *type = fallibleTypeOf(graph, value);
+                type != nullptr && !discardedValues_.contains(value)) {
+                warn(
+                    graph,
+                    value,
+                    type,
+                    " ('main' declares no return type, so what its body ends with is not the "
+                    "result of the program)");
+            }
+        }
+        for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+            if (!draft.alive(id)) {
+                continue;
+            }
+            node_handle_t node = draft.node(id);
+            switch (nodeKindOf(node)) {
+            case runtime::GCNodeKind::Oper:
+            case runtime::GCNodeKind::Func:
+            case runtime::GCNodeKind::Call:
+            case runtime::GCNodeKind::Join:
+                break;
+            default:
+                continue; // not the result of an evaluation
+            }
+            const bool ordered = !draft.ctrlUsersOf(id).empty();
+            if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
+                isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id))) {
+                // An `if` without `else`: the join takes nothing, so what an arm gives is
+                // dropped where the arm ends.
+                for (draft_node_ref_t armId : draft.withInputsOf(id)) {
+                    node_handle_t arm   = draft.node(armId);
+                    const auto armGraph = nodeIsKind(arm, runtime::GCNodeKind::Func)
+                                              ? graph->funcTarget(arm)
+                                              : nullptr;
+                    if (armGraph == nullptr ||
+                        armGraph->draft().returnNode() == runtime::kInvalidNodeRef) {
+                        continue;
+                    }
+                    node_handle_t value = armGraph->draft().node(armGraph->draft().returnNode());
+                    if (TupleType *type = fallibleTypeOf(armGraph, value);
+                        type != nullptr && !discardedValues_.contains(value)) {
+                        warn(armGraph, value, type, "");
+                    }
+                }
+                continue;
+            }
+            if (!ordered || isExit(id) || !draft.normUsersOf(id).empty() ||
+                !draft.withUsersOf(id).empty() || discardedValues_.contains(node)) {
+                continue;
+            }
+            if (TupleType *type = fallibleTypeOf(graph, node)) {
+                warn(graph, node, type, "");
+            }
+        }
     }
 }
 
