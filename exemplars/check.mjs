@@ -91,8 +91,19 @@ function runOne(dir, run, update, log) {
             fs.writeFileSync(file, stdout)
         } else if (!fs.existsSync(file)) {
             failures.push(`missing ${run.stdout} (run with --update)`)
-        } else if (normalize(fs.readFileSync(file, 'utf8')) !== stdout) {
-            failures.push(`stdout differs from ${run.stdout}`)
+        } else {
+            const expected = normalize(fs.readFileSync(file, 'utf8'))
+            if (expected !== stdout) {
+                // The first line that differs, so that a run on another platform shows what it printed.
+                const want = expected.split('\n'), got = stdout.split('\n')
+                let line = 0
+                while (line < want.length && want[line] === got[line]) line++
+                failures.push(
+                    `stdout differs from ${run.stdout} at line ${line + 1}:\n` +
+                        `       expected: ${JSON.stringify(want[line] ?? '<end>')}\n` +
+                        `       got:      ${JSON.stringify(got[line] ?? '<end>')}`
+                )
+            }
         }
     }
     for (const needle of run.output_contains || []) {
