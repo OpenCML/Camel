@@ -3,7 +3,7 @@
 This records implementation evidence against the language's numerical contract.
 Neither the CPU implementation nor the CUDA implementation is normative by
 itself. The language author's ruling is recorded in design principles 2.13 on
-`fsh-dev` (verified at `d23d262d`). Basic arithmetic follows correctly rounded,
+`fsh-dev` (latest ruling verified at `d7d192de`). Basic arithmetic follows correctly rounded,
 ordered operations without contraction; transcendental functions require a
 declared ULP error bound. Five independent explicit permissions govern relaxation.
 
@@ -50,8 +50,8 @@ this difference.
 
 ## Other evidence boundaries
 
-- Before the correction below, Tiles matrix multiplication explicitly emitted
-  `fmaf`; disabling implicit FMA contraction does not disable an explicit fused
+- Tiles matrix multiplication explicitly emits `fmaf` under Q7B;
+  disabling implicit FMA contraction does not disable an explicit fused
   operation. The CPU blocked
   GEMM has panel accumulators and optional backend selection. Cross-backend
   bitwise equivalence is not established by the current tests.
@@ -65,14 +65,18 @@ this difference.
   distinguish signed zeros or NaN payloads. Calling this gate bitwise validation
   would be incorrect.
 
-## Strict matrix multiplication correction
+## Matrix multiplication ruling and correction
 
 The regression `test/cases/modules/tiles/matmul_rounding.cml` computes a two-term
 dot product: `-1 + (1 + 2^-23) * (1 - 2^-23)`. Separate f32 rounding produces
-positive zero; the old fused second accumulation produced `-2^-46`, observed as
-`-1.4210854715202004e-14` on RTX 3090 before the change. Tiles now emits explicit
-`__fmul_rn` followed by `__fadd_rn`, preserving each rounding boundary. No numeric
-permission is inferred from selecting the GPU backend.
+positive zero; fused accumulation produces `-2^-46`, observed as
+`-1.4210854715202004e-14`. The earlier separate-rounding implementation in
+`f2749f17` is superseded by the author's Q7B ruling: matmul itself specifies an
+increasing-k FMA chain from +0. Tiles therefore emits `fmaf` with one accumulator
+across all K tiles, skipping padded K entries. A 34-term regression crosses two
+tile boundaries and distinguishes the continuous chain (1) from independent
+panel accumulators (2). This does not grant contraction to ordinary multiply/add
+nodes; their NVRTC policy remains `--fmad=false`.
 
 ## Remaining contract work
 

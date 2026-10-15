@@ -33,7 +33,7 @@ Replacing graph URI dispatch did not remove this private representation.
 | `sum_axis`, `mean_axis` | Parallel coordinates outside one axis; ordered reduction coordinate on that axis; keep-dimension encoded in output shape | f64 accumulator, final f32 conversion; mean division before conversion; empty-axis behavior needs an explicit declaration |
 | `max_axis` | Same axis domain; empty reduction axis rejected | Start from first element; replace only when current < candidate; first NaN retained, later NaNs ignored, first equal value/zero retained |
 | `sum_to` | Reduce leading and broadcast-expanded dimensions to target shape; preserve remaining coordinates | Row-major f32 accumulation from +0; differs from sum_axis accumulation type |
-| `matmul` | Rank-2 A(i,k), B(k,j), C(i,j); i/j parallel and k ordered; masked physical tile edges | f32 product then f32 addition, each rounded separately; +0 initial accumulator; zero K performs no products |
+| `matmul` | Rank-2 A(i,k), B(k,j), C(i,j); i/j parallel and k ordered; masked physical tile edges | Continuous f32 FMA chain in increasing k order; +0 initial accumulator; zero K performs no products |
 
 These are 30 lowered tags. Shape, dtype, inputs, generic integer attributes,
 offset and strides currently carry their parameters. Ordinary tags have no

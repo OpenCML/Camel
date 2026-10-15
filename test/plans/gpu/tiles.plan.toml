@@ -10,7 +10,7 @@ case = "../../cases/modules/tiles/matmul_rounding.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
 verify_script = """
-({ input, assert }) => { assert(input.stdout.trim() === "0.0", "matmul contracted a multiply/add pair") }
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === "-1.4210854715202004e-14,1.0", "matmul must follow a continuous increasing-k FMA chain") }
 """
 timeout_ms = 60000
 
@@ -21,7 +21,7 @@ case = "../../cases/modules/tiles/matmul_rounding.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 0
 verify_script = """
-({ input, assert }) => { assert(input.stdout.trim() === "0.0", "matmul contracted a multiply/add pair") }
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === "-1.4210854715202004e-14,1.0", "matmul must follow a continuous increasing-k FMA chain") }
 """
 timeout_ms = 60000
 
@@ -32,7 +32,7 @@ case = "../../cases/modules/tiles/matmul_rounding.cml"
 args = ["${case}", "std::jit"]
 expect_exit = 0
 verify_script = """
-({ input, assert }) => { assert(input.stdout.trim() === "0.0", "matmul contracted a multiply/add pair") }
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === "-1.4210854715202004e-14,1.0", "matmul must follow a continuous increasing-k FMA chain") }
 """
 timeout_ms = 60000
 
