@@ -614,7 +614,11 @@ std::vector<std::byte> execute(const Program &p) {
     Backend &b = backend();
     std::lock_guard lock(b.mutex);
     Current current(b.api, b.context);
-    if (std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
+    if (std::none_of(
+            p.nodes.begin(),
+            p.nodes.end(),
+            [](const auto &n) { return n.op == "scalar_div"; }) &&
+        std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
             return !elements(p.nodes[id].shape) ||
                    (p.nodes[id].op == "input" && !p.nodes[id].resident);
         })) {

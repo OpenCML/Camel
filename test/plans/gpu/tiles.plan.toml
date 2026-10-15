@@ -825,3 +825,30 @@ args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["division by zero at Tiles node"]
 timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero_control.nvm"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero_control.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero_control.fvm"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero_control.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero_control.jit"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero_control.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000

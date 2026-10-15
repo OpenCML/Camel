@@ -400,3 +400,10 @@ results, check resident scalar inputs, and compare fused/unfused outputs exactly
 The test arithmetic chain uses one kernel and one eight-byte result allocation;
 the reference uses five kernels. Positive/negative zero division faults are tested
 through host and resident return paths. Native plan validation covers 33 mutations.
+
+Review found and reproduced a shortcut defect: empty/identity host results skipped
+scalar division retained through a sync control dependency. The host shortcut now
+requires the absence of scalar division anywhere in the compiled computation.
+An explicit empty-output case must fault on all three VMs. This preserves the
+selected Tiles execution contract; it does not impose new restrictions on other
+Camel optimization passes.
