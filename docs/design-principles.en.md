@@ -258,7 +258,7 @@ At present all complicated type computation is implemented directly by operators
 #### Loops
 
 - **A `LOOP` node is introduced.** Most modern computation-graph standards have such a node, and connecting to them needs it. It is to be done gracefully: first the syntax, the node and a lowering "from `LOOP` to a tail-recursive subgraph", with every subsystem lowering at its entry; then the subsystems are changed to native handling one by one. The loop body is a subgraph of its own and is not merged into the enclosing graph.
-- **A loop is an expression with state.** The state is written in the loop header, the value of the body is the state of the next round, and the value of the whole loop is the final state. No statement form is added for "a `var` outside the loop as the state"; iterating for effects only uses `foreach` and the other existing means. The notation is provisionally:
+- **A loop is an expression with state.** The state is written in the loop header, the value of the body is the state of the next round, and the value of the whole loop is the final state. No statement form is added for "a `var` outside the loop as the state"; iterating for effects only uses `foreach` and the other existing means. The notation is provisionally (superseded by 2.13):
 
   ```camel
   let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
@@ -413,6 +413,15 @@ At present all complicated type computation is implemented directly by operators
 - **Modules**: a module may import itself, to no effect; a cycle of types across modules gets a cycle diagnostic that lists the cycle; reopening a namespace block does not carry the `using`s of the earlier block; an ambiguous name lists the qualified candidates; the language server shows namespace members by their full names; C++ modules can export values (`math::pi`).
 - **Collections**: returning a new value versus changing in place is no longer told apart by two names (`sort` and `sorted`): only `sort` remains, and it returns a new array; `xs = xs->sort` sorts in place when the old value is no longer used, the same optimization of the implementation as `acc = acc->append<v>`. Tensors keep an explicit in-place operator (2.10); arrays have none.
 - **Operator overloading**: a user overload more specific than a built-in one wins; overloading `==` gives `!=`; an operator declared in a namespace block belongs to the module.
+- **The loop header takes the `do` form** (superseding the provisional notation of 2.10): the state is declared once, several state values are separated by commas and the value of the loop is their tuple; `do` is followed by an expression, with `{` read as after `then` (`{ x: 1 }` is a struct, `{ 5 }` a block).
+
+  ```camel
+  let total    = loop acc = 0 for x in xs do acc + x * x
+  let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
+  let p        = loop p = { x: 0 } for d in ds do { x: p.x + d }
+  let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else hit
+  ```
+
 - **`std::cpp`**: the fault reports of generated programs are byte-identical to the interpreter's; recursion is counted exactly (as on every back end); the extra blank line of `println<fmt>` and the extra line feed of `print<fmt>` are defects of the interpreter and are fixed there; `std::cpp::bench` is removed; `map`/`filter` run sequentially in generated programs for now; `main` takes its parameters as `--arg name=value`, as the command line does.
 
 ---
@@ -470,7 +479,6 @@ When you meet one of the following, ask the language author:
 - How numeric parameters in types (such as the dimensions of a tensor) are bound to names, and how arithmetic is done on them.
 - The meaning of `typeof` applied to a constant value, and its use in generics.
 - How failure or non-termination of the evaluation of a type function is handled.
-- The notation of the loop header (the one in 2.10 is provisional).
 - Whether the type parameters of a generic function may be given explicitly at the call.
 - The behaviour when the same mutable object is written through references in several places outside a sync block, none of them with `wait`.
 - **After a fault in a parallel `map`, whether elements of smaller index that have not started still run** (`parallel-fault-lower-elements`):
