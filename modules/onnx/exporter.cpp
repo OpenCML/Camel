@@ -2527,6 +2527,14 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
         if (!isLast) {
             continue;
         }
+        if (operUriOf(g, last) == ":op/assn_append") {
+            // `acc = acc->append<v>` (design principles 2.12): an array grown in a variable,
+            // which a model has no form for.
+            unsupported(
+                act,
+                "an array variable is appended to (`acc = acc->append<v>`); an ONNX model holds "
+                "no growing arrays: compute the values as a tensor instead");
+        }
         const Value operand        = eval(act, g->normInputsOf(last)[1]);
         const AssignmentKind kind  = assignmentKindOf(operUriOf(g, last));
         if (kind.binary.empty()) {
