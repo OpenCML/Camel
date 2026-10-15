@@ -158,6 +158,19 @@ class Module : public std::enable_shared_from_this<Module> {
     const std::string &declaredName() const { return declaredName_; }
     void setDeclaredName(std::string name) { declaredName_ = std::move(name); }
 
+    /// The module a name imported into this one comes from, and the name it has there: the
+    /// first binding of `ref` in `layer` (the one getImportedType reads for a type). nullopt
+    /// when the name is not imported.
+    std::optional<std::pair<std::shared_ptr<Module>, Reference>>
+    importedSource(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
+
+    /// The full name `module::path::name` of the name `ref` of this module, as diagnostics show
+    /// it where names of several modules are listed (design principles 2.12, 2.13). The module
+    /// is named by the name it declares, or else the name it was loaded under; the entry
+    /// module without a `module` declaration has no name to show, and its names are shown
+    /// without one, as the graph names show them.
+    std::string qualifiedName(const Reference &ref) const;
+
     virtual bool load() = 0;
     virtual bool loaded() const { return loaded_; }
     /// Makes the types the module exports readable (getExportedType). A module written in

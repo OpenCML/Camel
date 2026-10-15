@@ -128,6 +128,7 @@ enum class SemanticDiag : uint32_t {
     // Rulings of 2026-10-15 (design principles 2.13) and the defects found with them: 0x110
     // and up.
     DeclaredTypeMismatch         = 0x000110,
+    ModuleTypeCycle              = 0x000111,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

@@ -1,0 +1,7 @@
+// Design principles 2.13: types that form a cycle across modules are reported with the cycle
+// (ModuleTypeCycle), not as names that are not resolved.
+import { A } from cycle_a
+
+func main(): int sync {
+    return 0
+}

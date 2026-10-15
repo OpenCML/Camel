@@ -801,6 +801,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ModuleTypeCycle,
+            {
+                "ModuleTypeCycle",
+                "The type '{0}' is part of a cycle of types across modules: {1}.",
+                "Each of these types needs the next one to be declared first, and the last needs "
+                "the first: none of them can be. Remove one of the references that close the "
+                "cycle.",
+            },
+        },
+        {
             SemanticDiag::NullTestNeverNull,
             {
                 "NullTestNeverNull",

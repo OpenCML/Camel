@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-142 diagnostics: 128 errors, 14 warnings.
+143 diagnostics: 129 errors, 14 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -115,6 +115,7 @@ prints one entry.
 | `0x030000F3` | [SemanticDiag::OperatorOverloadConflict](#operatoroverloadconflict) | Error |
 | `0x030000F4` | [SemanticDiag::AmbiguousOperatorCall](#ambiguousoperatorcall) | Error |
 | `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
+| `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -2781,6 +2782,34 @@ func main(): int sync {
     let n = 3
     let x: float = n
     println(x)
+    return 0
+}
+```
+
+### ModuleTypeCycle
+
+`0x03000111` · Error · `SemanticDiag::ModuleTypeCycle`
+
+**Message**
+
+```text
+The type '{0}' is part of a cycle of types across modules: {1}.
+```
+
+**Help**
+
+```text
+Each of these types needs the next one to be declared first, and the last needs the first: none of them can be. Remove one of the references that close the cycle.
+```
+
+**Example** (`test/cases/compile/modules_213/type_cycle.cml`, run as `camel -E short test/cases/compile/modules_213/type_cycle.cml`)
+
+```camel
+// Design principles 2.13: types that form a cycle across modules are reported with the cycle
+// (ModuleTypeCycle), not as names that are not resolved.
+import { A } from cycle_a
+
+func main(): int sync {
     return 0
 }
 ```

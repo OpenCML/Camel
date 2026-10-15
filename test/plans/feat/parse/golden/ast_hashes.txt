@@ -572,6 +572,13 @@ f8ffdde1017e42e5 ok test/cases/compile/module_root/values.cml
 1e811a3b285b42a2 ok test/cases/compile/module_root/values_lib.cml
 d9355176adda7b36 ok test/cases/compile/module_root/values_unused.cml
 ca91c9c4ffcb2fad ok test/cases/compile/module_root/with_capture.cml
+9e457ed99804cd9b ok test/cases/compile/modules_213/cycle_a.cml
+6d2334936359c26d ok test/cases/compile/modules_213/cycle_b.cml
+3c6ed19cb0fe11c5 ok test/cases/compile/modules_213/self_entry.cml
+26662a88d95af55b ok test/cases/compile/modules_213/self_entry_error.cml
+a9c0041a7ae06870 ok test/cases/compile/modules_213/self_imported.cml
+a3f13eaa683c0519 ok test/cases/compile/modules_213/self_lib.cml
+35f55aa2563f2aef ok test/cases/compile/modules_213/type_cycle.cml
 51eee85b2f2b8ef3 ok test/cases/compile/namespace/module_import_builtins.cml
 233561c4cca155d3 ok test/cases/compile/namespace/module_import_no_direct_inject.cml
 d713cfa843192186 ok test/cases/compile/namespace/module_import_qualified.cml
@@ -588,6 +595,8 @@ ce28c63cf40e4aaf ok test/cases/compile/namespace/type_namespace_builtins.cml
 c97801e7c90a9df6 ok test/cases/compile/namespace_rules/lib.cml
 450742410712a199 ok test/cases/compile/namespace_rules/lib2.cml
 9b44cc9a75d7e98f ok test/cases/compile/namespace_rules/lib_values.cml
+13757ab20cc801af ok test/cases/compile/namespace_rules/libt1.cml
+240abda0287ef885 ok test/cases/compile/namespace_rules/libt2.cml
 efeb083339d4ed20 ok test/cases/compile/namespace_rules/p01_qualified.cml
 669d434122a3bb87 ok test/cases/compile/namespace_rules/p02_using_module.cml
 c10f1cb2288977de ok test/cases/compile/namespace_rules/p03_using_nested.cml
@@ -620,6 +629,9 @@ aa6e3c1cddb68984 ok test/cases/compile/namespace_rules/p29_using_block.cml
 7aea3a670082170a ok test/cases/compile/namespace_rules/p30_using_own_nested.cml
 767f37235eef8cb5 ok test/cases/compile/namespace_rules/p31_import_one.cml
 6b8ad3fcb8b37a5e ok test/cases/compile/namespace_rules/p32_layers.cml
+43a07054734e599a ok test/cases/compile/namespace_rules/p33_reopen_using.cml
+08e77648cbe27041 ok test/cases/compile/namespace_rules/p34_ambiguous_qualified.cml
+25e1cd83d3e6642d ok test/cases/compile/namespace_rules/p35_ambiguous_type.cml
 348184e258f29976 no test/cases/compile/not_supported/formatted_string.cml
 6ff823b21e5dd2c8 no test/cases/compile/not_supported/is_operator.cml
 b899c596353e7dae ok test/cases/compile/not_supported/list_comprehension.cml

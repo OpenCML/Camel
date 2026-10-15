@@ -89,6 +89,14 @@ class Builder {
     // them), then imported by name, then through a `using namespace`, then built in. Reports
     // and throws when there is none, or when two `using` give different types (AmbiguousName).
     Type *lookupType(const Reference &ref, const AST::node_ptr_t &ast);
+    /// `ref`, written at `ast`, names the type `remote` of the module `source`, which is
+    /// not declared yet. When that declaration is in progress further up, the types form a
+    /// cycle across modules: reported with the cycle (ModuleTypeCycle; design principles 2.13).
+    /// When it is on a cycle reported already, the failure follows from that report and is not
+    /// reported again. Either way BuildAbortException; otherwise nothing happens.
+    void rejectTypeCycle(
+        const std::shared_ptr<camel::core::module::Module> &source, const Reference &remote,
+        const Reference &ref, const AST::node_ptr_t &ast);
     // Whether `ref` names a namespace a `using namespace` can open: one of the module (also
     // relative to the namespace being lowered) or one bound by an import.
     bool usableNamespace(const Reference &ref) const;

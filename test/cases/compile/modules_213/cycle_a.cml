@@ -1,0 +1,5 @@
+module cycle_a
+
+import { B } from cycle_b
+
+export type A = { b: B, n: int }

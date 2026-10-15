@@ -1,0 +1,5 @@
+module libt2
+
+namespace Shapes {
+    export type P = { x: float }
+}

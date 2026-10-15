@@ -396,6 +396,22 @@ std::optional<Type *> Module::getImportedType(const Reference &ref, ImportLayer 
     return std::nullopt;
 }
 
+std::string Module::qualifiedName(const Reference &ref) const {
+    if (declaredName_.empty() && context_ && context_->mainModule().get() == this) {
+        return ref.toString();
+    }
+    return (declaredName_.empty() ? name_ : declaredName_) + "::" + ref.toString();
+}
+
+std::optional<std::pair<std::shared_ptr<Module>, Reference>>
+Module::importedSource(const Reference &ref, ImportLayer layer) const {
+    const auto bindings = importedBindingsForRef(ref, layer);
+    if (bindings.empty()) {
+        return std::nullopt;
+    }
+    return std::make_pair(bindings.front().mod, bindings.front().remoteRef);
+}
+
 std::optional<entity> Module::getImportedEntity(const Reference &ref, ImportLayer layer) const {
     auto bindings = importedBindingsForRef(ref, layer);
     if (bindings.empty()) {

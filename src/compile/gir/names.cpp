@@ -140,7 +140,7 @@ Builder::throughUsing(const std::string &written, const GCT::node_ptr_t &at) {
                 const std::string candidate = joined(namespacePath_, depth, prefixed);
                 if (declaredAtTopLevel(*unit, candidate)) {
                     match.ownName = candidate;
-                    match.shown   = candidate;
+                    match.shown   = module_->qualifiedName(Reference(candidate));
                     break;
                 }
             }
@@ -151,6 +151,12 @@ Builder::throughUsing(const std::string &written, const GCT::node_ptr_t &at) {
                 match.entity = module_->getImportedEntity(prefixed, ImportLayer::Named);
                 if (!match.entity) {
                     continue;
+                }
+                // Shown by its full name in the module it comes from, whatever the import
+                // and the `using` called the module and the namespace (an alias, a name
+                // imported by itself).
+                if (const auto source = module_->importedSource(prefixed, ImportLayer::Named)) {
+                    match.shown = source->first->qualifiedName(source->second);
                 }
             }
             const bool known = std::ranges::any_of(matches, [&](const UsingMatch &have) {

@@ -641,6 +641,14 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
+    // A module importing itself: allowed, and it has no effect (design principles 2.13). Its
+    // names are its own already (with or without its own name in front, 2.12); the import
+    // binds nothing, and records no import a cycle could be made of.
+    if (mod == module_) {
+        LEAVE("ImportDecl");
+        return nullptr;
+    }
+
     // Where the import stands, for the errors of the imported module and for the importers
     // the program's graph builder reports when it is in error.
     const auto origin = ast->load()->origin();
@@ -1093,6 +1101,18 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             }
         }
     } poisonOnFailure{*this, typeLoad->ref().toString()};
+    // In progress until it is declared, for a module whose types this one needs and which
+    // needs this one back (rejectTypeCycle).
+    struct InProgress {
+        camel::core::context::Context &context;
+        InProgress(
+            camel::core::context::Context &ctx, const camel::core::module::Module *mod,
+            const std::string &name)
+            : context(ctx) {
+            context.enterTypeDeclaration(mod, name);
+        }
+        ~InProgress() { context.leaveTypeDeclaration(); }
+    } inProgress{*context_, module_.get(), typeLoad->ref().toString()};
     TypePositionGuard position(*this, TypePosition::TypeDeclaration);
     if (typeLoad->params().empty()) {
         type = visitType(typeNode);
@@ -3444,6 +3464,39 @@ bool Builder::usableNamespace(const Reference &ref) const {
     return module_->hasImportedPrefix(ref);
 }
 
+void Builder::rejectTypeCycle(
+    const std::shared_ptr<camel::core::module::Module> &source, const Reference &remote,
+    const Reference &ref, const AST::node_ptr_t &ast) {
+    const auto key = std::make_pair(
+        static_cast<const camel::core::module::Module *>(source.get()),
+        remote.toString());
+    if (context_->onReportedTypeCycle(key.first, key.second)) {
+        throw BuildAbortException(); // reported where the cycle closed
+    }
+    const auto &inProgress = context_->typeDeclarationsInProgress();
+    const auto start       = std::ranges::find(inProgress, key);
+    if (start == inProgress.end()) {
+        return; // not on a cycle: the name is reported as not resolved
+    }
+    // From the declaration that is needed again to the one that needs it, then that one again:
+    // `a::A -> b::B -> a::A`.
+    const auto shown = [](const std::pair<const camel::core::module::Module *, std::string> &d) {
+        const std::string &module =
+            d.first->declaredName().empty() ? d.first->name() : d.first->declaredName();
+        return module + "::" + d.second;
+    };
+    std::string chain;
+    for (auto it = start; it != inProgress.end(); ++it) {
+        chain += shown(*it) + " -> ";
+        context_->markTypeCycle(it->first, it->second);
+    }
+    chain += shown(key);
+    diags_->of(SemanticDiag::ModuleTypeCycle)
+        .at(ast->load()->tokenRange())
+        .commit(ref.toString(), chain);
+    throw BuildAbortException();
+}
+
 Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     const std::string written = ref.toString();
     // The module's own name may qualify its names (design principles 2.12).
@@ -3477,6 +3530,10 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     if (const auto imported = module_->getImportedType(ref, ImportLayer::Named)) {
         return imported.value();
     }
+    if (const auto source = module_->importedSource(ref, ImportLayer::Named)) {
+        // Imported, and not declared (yet): perhaps the types form a cycle across modules.
+        rejectTypeCycle(source->first, source->second, ref, ast);
+    }
     // Layer 4: through a `using namespace` in force; two that give different types are an
     // error where the name is used.
     std::vector<std::pair<std::string, Type *>> viaUsing;
@@ -3484,23 +3541,30 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
         for (const Reference &using_ : frame) {
             const std::string prefixed = using_.toString() + "::" + written;
             Type *type                 = nullptr;
+            // The full name of the candidate, for AmbiguousName (design principles 2.13).
+            std::string shown = prefixed;
             for (size_t depth = namespacePath_.size() + 1; depth-- > 0 && type == nullptr;) {
                 std::string candidate;
                 for (size_t i = 0; i < depth; ++i) {
                     candidate += namespacePath_[i] + "::";
                 }
                 if (auto own = typeScope_->get(Reference(candidate + prefixed))) {
-                    type = own.value();
+                    type  = own.value();
+                    shown = module_->qualifiedName(Reference(candidate + prefixed));
                 }
             }
             if (type == nullptr) {
                 if (auto imported = module_->getImportedType(Reference(prefixed), ImportLayer::Named)) {
                     type = imported.value();
+                    if (const auto source =
+                            module_->importedSource(Reference(prefixed), ImportLayer::Named)) {
+                        shown = source->first->qualifiedName(source->second);
+                    }
                 }
             }
             if (type != nullptr &&
                 std::ranges::none_of(viaUsing, [&](const auto &have) { return have.second == type; })) {
-                viaUsing.emplace_back(prefixed, type);
+                viaUsing.emplace_back(shown, type);
             }
         }
     }
