@@ -628,6 +628,11 @@ int runCommand(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
+    // Before the first call into libcamel: on Windows the executable loads libcamel.dll lazily
+    // (/DELAYLOAD), and initialize() is what adds the directories it is found in. A call made
+    // earlier ends the process with "module not found" (0xC06D007E) before any output.
+    // initialize() is idempotent; runCommand's ScopedRuntime calls it again.
+    camel::initialize();
     phase::enableFromEnvironment();
     // `--time-phases` (report to standard error) and `--time-phases=<file>` are taken out of
     // argv here, before the argument parser runs, so that the report covers the start of the
