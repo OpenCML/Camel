@@ -52,13 +52,16 @@ namespace debugger {
 
 namespace {
 
+// The registry is never destroyed: terminateAll runs from an atexit handler, which main
+// registers before the first process exists, so it runs after the destructors of statics
+// made later (a function-local static here would be gone by then).
 std::mutex &registryMutex() {
-    static std::mutex m;
-    return m;
+    static auto *m = new std::mutex;
+    return *m;
 }
 std::vector<std::weak_ptr<ChildProcess>> &registry() {
-    static std::vector<std::weak_ptr<ChildProcess>> r;
-    return r;
+    static auto *r = new std::vector<std::weak_ptr<ChildProcess>>;
+    return *r;
 }
 
 /// State shared by both implementations: the exit notification.
