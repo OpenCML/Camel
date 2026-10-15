@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <mutex>
 #include <tuple>
 #include <unordered_set>
 
@@ -31,6 +32,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -91,6 +93,7 @@ Context::~Context() {
     // closure metadata during teardown. Release module-owned runtime data before
     // dropping the graph closure so those metadata pointers stay valid for the
     // whole object destruction cascade.
+    facts_.reset();
     mainModule_.reset();
     modules_.clear();
     graphBuildSession_.reset();
@@ -100,6 +103,16 @@ Context::~Context() {
         camel::core::mm::autoSpace().setObjectRootSet(nullptr);
     }
     runtimeGraphMgr_.reset();
+}
+
+camel::runtime::fact::FactStore &Context::facts() {
+    // Created once, on the thread that first asks: back ends may ask from worker threads.
+    static std::mutex creation;
+    std::lock_guard lock(creation);
+    if (!facts_) {
+        facts_ = std::make_unique<camel::runtime::fact::FactStore>();
+    }
+    return *facts_;
 }
 
 std::string EntryConfig::toString() const {

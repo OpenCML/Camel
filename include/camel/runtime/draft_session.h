@@ -42,6 +42,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::runtime {
@@ -146,10 +147,16 @@ class RuntimeGraphDraftSession {
 
     GraphDraft &ensureDraft(GCGraph *graph);
     std::vector<GCGraph *> collectCommitClosure() const;
+    /// The graphs of `closure` whose copy gets a new revision (GCGraph::serial): edited, or
+    /// referring at any depth to an edited one.
+    std::unordered_set<GCGraph *> changedGraphs(const std::vector<GCGraph *> &closure) const;
 
     camel::core::context::context_ptr_t context_;
     GCGraph *runtimeRoot_ = nullptr;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
+    /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself: a
+    /// pass that asks to edit a graph is taken to have changed it.
+    std::unordered_set<GCGraph *> edited_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;
     std::unordered_map<std::string, size_t> typeSpecializationCounts_;

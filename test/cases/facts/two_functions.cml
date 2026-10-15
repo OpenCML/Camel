@@ -1,0 +1,9 @@
+// The program test::facts works on: `main` calls `f`, and `f` calls nothing of the program.
+module two_functions
+
+func f(x: int): int { return x * 2 + 1 }
+
+func main(): int sync {
+    println(f(20))
+    return 0
+}

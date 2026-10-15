@@ -32,6 +32,7 @@
 #include "camel/init.h"
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/parse.h"
+#include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
@@ -341,7 +342,7 @@ int runCommand(int argc, char *argv[]) {
                 }
             }
             if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
-                !Inspect::dumpInstances) {
+                !Inspect::dumpInstances && !Inspect::dumpFacts) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -352,7 +353,8 @@ int runCommand(int argc, char *argv[]) {
             if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
                 mainModule->compile(CompileStage::GCT);
             }
-            if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps || Inspect::dumpInstances) {
+            if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps || Inspect::dumpInstances ||
+                Inspect::dumpFacts) {
                 mainModule->compile(CompileStage::Done);
             }
         } else {
@@ -377,6 +379,13 @@ int runCommand(int argc, char *argv[]) {
             if (Inspect::dumpInstances) {
                 if (auto *root = ctx->runtimeRootGraph()) {
                     camel::runtime::dumpOperatorInstances(root, os);
+                }
+            }
+            if (Inspect::dumpFacts) {
+                if (auto *root = ctx->runtimeRootGraph()) {
+                    camel::runtime::fact::FactStore &facts = ctx->facts();
+                    camel::runtime::fact::computeFacts(facts, root);
+                    camel::runtime::fact::dumpFacts(facts, root, os);
                 }
             }
             if (Inspect::dumpOps) {

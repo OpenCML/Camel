@@ -133,6 +133,16 @@ struct GCGraphBuildAccess {
     static void setOriginal(GCGraph *copy, GCGraph *source) {
         copy->originalGraph_ = source->originalGraph_ ? source->originalGraph_ : source;
     }
+
+    /// Makes `copy`, a commit's encoding of `source`, the same graph to the fact store
+    /// (GCGraph::lineage) and, when the commit did not change it, the same revision
+    /// (GCGraph::serial). Set before anything can see `copy`.
+    static void inheritIdentity(GCGraph *copy, const GCGraph *source, bool changed) {
+        copy->lineage_ = source->lineage_;
+        if (!changed) {
+            copy->serial_ = source->serial_;
+        }
+    }
 };
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft);
 void emitDraftNativePayload(

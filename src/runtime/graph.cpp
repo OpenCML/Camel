@@ -1231,7 +1231,13 @@ GCGraph::GCGraph(
     : debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
-      staticArea_(staticArea) {}
+      staticArea_(staticArea) {
+    // A new graph: a lineage and a revision of its own (graph facts, facts.h). A commit that
+    // encoded it as the copy of another graph replaces them (GCGraphBuildAccess::inheritIdentity).
+    static std::atomic<uint64_t> serials{0};
+    serial_  = serials.fetch_add(1, std::memory_order_relaxed) + 1;
+    lineage_ = serial_;
+}
 
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
     return describeDraftPayload(draft, planDraftPayload(draft));
@@ -1663,6 +1669,8 @@ camel::core::rtdata::Object *GCGraph::clone(
         nativePayload_,
         staticArea_);
     graph->originalGraph_ = originalGraph_;
+    graph->lineage_       = lineage_; // the same content: the same graph and revision
+    graph->serial_        = serial_;
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
         graph->extraSlots_[i] = extraSlots_[i];
     }

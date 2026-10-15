@@ -1,0 +1,63 @@
+id = "modules.graph_facts"
+order = 372
+tier = "feat"
+tags = ["feat", "modules", "facts", "semantics"]
+desc = "Graph facts (camel/runtime/facts.h, docs/design/op-semantics section 10, docs/technical/40_graph_facts.md): the registry of kinds and its rules, the store and its stamps checked on every read, the core's kinds as `camel inspect --facts` prints them, how rewrites make facts stale and nothing stale is reused, and the persistence hooks."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "registry_and_store"
+desc = "test::facts: each registration rule rejects one kind (owner prefix, core. and tiles. reserved to their owners, print, class (i) needs compute, class (iii) is never persisted, encode with decode, Cone needs its hash, the same key as another kind); tiles may register tiles.*. Typed access, scopes, a GraphContent fact read from the graph and not storable, a Target fact needs and checks its hash, a cross-graph fact, the validator. A commit that asks to edit main counts as changing it (stale); one that changes main makes the facts on main and on the root (which refers to it) stale, keeps those on f, and revalidates a Cone fact whose node did not change; a new declaration makes the facts that read declarations stale and keeps the others; invalidation."
+kind = "behavior"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::facts"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const [check, why] of [
+  ['key_without_owner', "the key must be '<owner>.<name>'"],
+  ['key_of_the_core', "the key must be '<owner>.<name>'"],
+  ['tiles_prefix_by_another_owner', "the key must be '<owner>.<name>'"],
+  ['no_print', 'a kind must say how its values are printed'],
+  ['content_without_compute', "a fact of class (i) is the graph's content"],
+  ['target_persisted', 'a fact of class (iii) is never persisted by the core'],
+  ['encode_without_decode', 'encode and decode come together'],
+  ['cone_without_hash', 'Dependency::Cone needs the hash'],
+  ['register_again_other_version', 'registered before as another kind'],
+  ['get_as_another_type', 'its values are'],
+  ['node_fact_on_a_graph', 'a Node fact has one anchor, a node'],
+  ['node_out_of_range', 'node 60000 is not a node of'],
+  ['store_graph_content', 'it is written with the graph'],
+  ['target_without_hash', 'is stored with the hash of its target'],
+]) {
+  assert(out.includes(`FACTS ${check} rejected: `) && out.split(`FACTS ${check} rejected: `)[1].split('\n')[0].includes(why), `${check}: ${why}`)
+}
+for (const l of [
+  'FACTS tiles_kind_by_tiles accepted', 'FACTS register_again same id', 'FACTS get 11',
+  "FACTS content is the graph's", 'FACTS target_same valid', 'FACTS target_other stale',
+  'FACTS cross_graph valid', 'FACTS cross_graph_other_anchors absent',
+  'FACTS verify_wrong differs', 'FACTS verify_right equal',
+  'FACTS unchanged_serial_main new', 'FACTS unchanged_main stale',
+  'FACTS lineage_main kept', 'FACTS serial_main new', 'FACTS serial_f kept', 'FACTS serial_root new',
+  'FACTS after_commit_main absent', 'FACTS after_commit_root stale', 'FACTS after_commit_f valid',
+  'FACTS after_commit_cross_graph stale', 'FACTS after_commit_cone revalidated',
+  'FACTS after_declaration_reads_declarations stale', 'FACTS after_declaration_reads_none valid',
+  'FACTS invalidated absent', 'FACTS invalidated_graph absent', '41',
+]) line(l)
+}
+"""
+
+[[tests]]
+name = "test_passes_need_the_environment"
+desc = "test::facts is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
+kind = "negative"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::facts"]
+expect_exit = 1
+expect_output_not_contains = ["FACTS"]

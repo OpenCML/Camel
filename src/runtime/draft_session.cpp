@@ -673,9 +673,45 @@ GraphDraft &RuntimeGraphDraftSession::ensureDraft(GCGraph *graph) {
     return *it->second->draft;
 }
 
-GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) { return ensureDraft(graph); }
+GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
+    edited_.insert(graph);
+    return ensureDraft(graph);
+}
 
-GraphDraft &RuntimeGraphDraftSession::rootDraft() { return ensureDraft(runtimeRoot_); }
+GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
+
+std::unordered_set<GCGraph *>
+RuntimeGraphDraftSession::changedGraphs(const std::vector<GCGraph *> &closure) const {
+    // A graph changed when it was edited, or when a graph it refers to changed (the serial is
+    // transitive, see GCGraph::serial): walk the references backwards from the edited ones.
+    std::unordered_map<GCGraph *, std::vector<GCGraph *>> referrers;
+    for (GCGraph *graph : closure) {
+        visitDraftGraphs(context_, *drafts_.at(graph)->draft, [&](GCGraph *ref) {
+            if (ref) {
+                referrers[ref].push_back(graph);
+            }
+        });
+    }
+    std::unordered_set<GCGraph *> changed;
+    std::vector<GCGraph *> work;
+    for (GCGraph *graph : closure) {
+        if (edited_.contains(graph) && changed.insert(graph).second) {
+            work.push_back(graph);
+        }
+    }
+    while (!work.empty()) {
+        GCGraph *graph = work.back();
+        work.pop_back();
+        if (auto it = referrers.find(graph); it != referrers.end()) {
+            for (GCGraph *referrer : it->second) {
+                if (changed.insert(referrer).second) {
+                    work.push_back(referrer);
+                }
+            }
+        }
+    }
+    return changed;
+}
 
 GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializationKey &key) const {
     if (auto it = specializationCache_.find(key); it != specializationCache_.end()) {
@@ -765,7 +801,9 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
     for (GCGraph *graph : closure) {
         // Rewrites may leave gates that wait on nothing; they are plain forwarding.
-        (void)ensureDraft(graph).dissolveUnorderedGates();
+        if (ensureDraft(graph).dissolveUnorderedGates() > 0) {
+            edited_.insert(graph);
+        }
     }
 
     GCGraph *oldRuntimeRoot = runtimeRoot_;
@@ -794,6 +832,12 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
     for (GCGraph *graph : closure) {
         validateRuntimeGraphCalls(rewritten.at(graph));
     }
+    // The copy is the same graph to the fact store; a new revision only where it changed: a
+    // graph edited, or one referring to such a graph.
+    const std::unordered_set<GCGraph *> changed = changedGraphs(closure);
+    for (GCGraph *graph : closure) {
+        GCGraphBuildAccess::inheritIdentity(rewritten.at(graph), graph, changed.contains(graph));
+    }
 
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
@@ -818,6 +862,7 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
         context_->trackDetachedRuntimeGraphs(graphs);
     }
     drafts_.clear();
+    edited_.clear();
     return runtimeRoot_;
 }
 

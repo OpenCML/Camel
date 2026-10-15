@@ -426,6 +426,15 @@ class GCGraph : public camel::core::rtdata::Object {
     /// they see the program as it was written (op-semantics 11.4). Traced: the copy keeps it
     /// alive.
     GCGraph *originalGraph() const { return originalGraph_; }
+    /// The graph's identity across rewrites, standing in for the design's GraphId until
+    /// graph-model step 5 (graph facts, camel/runtime/facts.h): a commit gives the copy it
+    /// encodes of a graph that graph's lineage; any other new graph gets a new one.
+    uint64_t lineage() const { return lineage_; }
+    /// The graph's revision, standing in for the design's Revision until graph-model step 5
+    /// (facts.h): a process-wide serial number. A commit keeps it for a graph it did not change
+    /// and gives a new one to a graph it changed: one a pass edited, or one that refers (at any
+    /// depth) to a graph that changed. Equal serials mean equal content.
+    uint64_t serial() const { return serial_; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
     uintptr_t extraSlot(size_t index) const;
@@ -594,6 +603,8 @@ class GCGraph : public camel::core::rtdata::Object {
     camel::core::type::TupleType *closureType_     = nullptr;
     GCGraph *outerGraph_                           = nullptr;
     GCGraph *originalGraph_                        = nullptr; // see originalGraph()
+    uint64_t lineage_                              = 0;       // see lineage()
+    uint64_t serial_                               = 0;       // see serial()
     GCGraph **refs_                                = nullptr;
     uint8_t *refRoles_                             = nullptr;
     gc_cnt_t refCount_                             = 0;
