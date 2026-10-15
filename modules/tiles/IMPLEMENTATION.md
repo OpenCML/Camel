@@ -369,3 +369,8 @@ general scalar arithmetic lowering or asynchronous execution.
 Manual moving-GC checks cover resident loss/gradient reuse, precise f64 values
 16777217.0 and 1.0000000000000002, host/device scalar identity, explicit upload,
 and empty sum results. Native validation now exercises 30 rejected mutations.
+
+Committed 4f2a3db7 rebuilds and passes 71/71 relevant checks on local RTX 4060 Ti
+and remote RTX 3090 device 7. The three scalar-residency VM cases run with moving
+GC stress and macro expansion of value-and-gradient. Remote results are retained
+in `docs/performance/tiles/2026-10-15-rtx3090-resident-scalar-tests.txt`.
