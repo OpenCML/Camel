@@ -536,3 +536,15 @@ passed the 85-case Tiles/GPU/tensor suite on local RTX 4060 Ti and RTX 3090 devi
 This validates the compiler-policy change, not the still-pending full numerical
 contract audit or cross-device ULP guarantees.
 
+# Normative matrix FMA chain (2026-10-16)
+
+Commit `e1bf35da` applies design principles 2.13 / op-semantics Q7B from
+`fsh-dev` at `d7d192de`: matrix multiplication starts at +0 and performs f32 FMA
+in increasing k order. This supersedes the earlier separate-rounding correction.
+The two-term rounding probe returns exactly -2^-46; a 34-term probe spanning
+three tiles returns 1, distinguishing a continuous accumulator from separate
+panel sums. Both probes run on nvm/fvm/jit. The committed implementation passed
+85/85 relevant tests on local RTX 4060 Ti and remote RTX 3090 device 7; remote
+evidence is `docs/performance/tiles/2026-10-16-rtx3090-fma-contract-tests.txt`.
+This is not yet a proof of full CPU/GPU numerical equivalence.
+
