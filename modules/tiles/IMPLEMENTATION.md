@@ -214,3 +214,8 @@ identity outputs and mixed empty/nonempty results. Native validation now rejects
 20 malformed plans, including an output whose lifetime would overlap reused
 storage. These tests exercise the new resource contract rather than executing
 the graph once per output.
+
+Revision 6df012b6 was rebuilt through the standard command on Windows and Linux.
+Both local RTX 4060 Ti and remote RTX 3090 device 7 pass 47/47 host/GPU/tensor
+checks, including the three GC-stress aggregate cases. The remote log is
+`docs/performance/tiles/2026-10-15-rtx3090-outputs-tests.txt`.
