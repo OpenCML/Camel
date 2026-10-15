@@ -479,3 +479,24 @@ positive zero afterward. The local RTX 4060 Ti and remote RTX 3090 device 7 pass
 This fixes one concrete contraction violation, not the entire numerical contract.
 See `notes/numerical-contract-audit.md` for the reproduced CPU/GPU subnormal exp
 difference and remaining error-bound and comparison-mode work.
+
+## Execution ownership and cross-thread resource cleanup
+
+Execution retains an immutable native Program snapshot, including borrowed input
+owners, until stream cleanup completes. Compiled programs move into the snapshot
+without copying their input payloads. CUDA execution resources independently own
+their backend and activate/restore its context during allocation and destruction.
+Destruction drains the stream before releasing device buffers, pinned staging and
+the stream itself, including when destruction occurs on another host thread.
+
+Commit 9831d00c rebuilds and passes 85/85 relevant cases on local RTX 4060 Ti and
+remote RTX 3090 device 7. The native lifetime test now additionally queues an
+upload, transfers resource ownership to another thread, and checks successful
+draining, all three resource releases, restored context and eventual backend
+destruction. Remote evidence is in
+`docs/performance/tiles/2026-10-15-rtx3090-resources-tests.txt`.
+
+The remote checkout was updated to the merged core before this verification;
+its old core headers were incompatible with the updated graph accessor API.
+Public execution remains synchronous. Completion events, pending-output
+dependencies and deferred fault propagation are not implemented by this change.
