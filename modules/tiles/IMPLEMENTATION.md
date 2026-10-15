@@ -414,3 +414,19 @@ results are retained in
 `docs/performance/tiles/2026-10-15-rtx3090-scalar-arithmetic-tests.txt`. The scalar
 benchmark is a fusion correctness control; no end-to-end performance claim is
 inferred from kernel count alone.
+
+## CUDA runtime ownership boundary
+
+Driver/NVRTC loading, context selection and the compiled-module cache now live in
+`cuda_backend.cpp` behind `include/tiles/internal/cuda_backend.h`. Public program
+and device headers remain CUDA-independent. Execution allocations, transfers,
+fault reporting and timing stay in `cuda.cpp`. The extraction preserves symbol
+version resolution, Windows NVRTC builtins preloading, device selection and
+cache policy, without a parallel implementation or compatibility adapter.
+
+Before asynchronous submissions can release the backend mutex, compiled modules
+must have submission-owned leases; the existing raw module cache is safe only
+under synchronous execution's lock. Completion events must also retain pointer
+tables, pinned staging, inputs, outputs and fault state until GPU completion.
+This split establishes the internal ownership boundary for that work; it does
+not advertise asynchronous execution yet.

@@ -1,7 +1,7 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME tiles
-  SOURCES src/module.cpp src/compiler.cpp src/codegen.cpp src/cuda.cpp src/schedule.cpp src/device.cpp
+  SOURCES src/module.cpp src/compiler.cpp src/codegen.cpp src/cuda.cpp src/cuda_backend.cpp src/schedule.cpp src/device.cpp
   EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include
   EXTRA_LIBS tensor_cmo nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS}
 )
