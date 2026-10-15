@@ -818,7 +818,7 @@ c1c4cd916184e41d ok test/cases/consistency/if_without_else/as_value_argument.cml
 c7e96bf1a03ff827 ok test/cases/consistency/if_without_else/as_value_let.cml
 07c8371311cb5bf0 ok test/cases/consistency/if_without_else/as_value_return.cml
 297a12f087b91940 ok test/cases/consistency/if_without_else/return_null_in_arm.cml
-009a837eb371cb98 ok test/cases/consistency/if_without_else/statement.cml
+ad84dceef9834577 ok test/cases/consistency/if_without_else/statement.cml
 385a1c37660a67ed ok test/cases/consistency/imported_value/by_module.cml
 03244465ff3b22e0 ok test/cases/consistency/imported_value/by_name.cml
 471a793eb4f04c10 ok test/cases/consistency/imported_value/lib.cml
@@ -1411,7 +1411,7 @@ f7ed12d05a9e9c2f ok test/cases/para/core/concurrent_alloc.cml
 124aad4df4fbd4d8 ok test/cases/para/core/concurrent_recursion.cml
 1df1831c7c81f0cf ok test/cases/para/core/file_chunk_hash.cml
 1305f89a125c1353 ok test/cases/para/core/filter_keeps_all.cml
-12b1e9bcf48f0cdd ok test/cases/para/core/map_chunks.cml
+b5681dd0c4839381 ok test/cases/para/core/map_chunks.cml
 fbe8b81927ee5879 ok test/cases/para/core/map_ordered_effects.cml
 49c745cbe848fae2 ok test/cases/para/core/map_result_order.cml
 021c23890549d680 ok test/cases/para/core/merge_sort.cml

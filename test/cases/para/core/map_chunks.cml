@@ -39,7 +39,7 @@ func main(): int sync {
     let one = range(5, 6)->map<(x: int): int => x + 1>
     println('edge', len(none), one)
 
-    unordered_foreach<(x: int) => x + 1>(range(0, 5000))
+    unordered_foreach<(x: int) => x>(range(0, 5000))
     println('done')
     return 0
 }
