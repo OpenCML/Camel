@@ -943,6 +943,19 @@ class Builder {
     /// The reads of variables (`:var/get`) made in a sync block, and the nodes the sync chain
     /// orders (reads, calls, operators and branches made in a sync block, in the order they
     /// were made): what markNonRetainingReads needs to know about a read and its users.
+    /// The last statement of the body of each graph and the node it made: the value of the
+    /// body. Where that value is dropped (a body declared `: void`, the element function of
+    /// `foreach`, the arm of an `if` without `else`), rejectDiscardedValue checks it as a
+    /// statement whose value nothing takes.
+    std::unordered_map<const DraftGraphBuilder *, std::pair<GCT::node_ptr_t, node_handle_t>>
+        bodyValueStatement_;
+    /// The last statement of the block visitExecNode finished most recently, and its node.
+    std::pair<GCT::node_ptr_t, node_handle_t> lastBlockStatement_{};
+    /// UnusedPureResult at the last statement of the body of `graph` when it is a call of a
+    /// pure operator: the body's value is dropped where `graph` is used (see above).
+    void rejectDiscardedValue(const DraftGraphBuilder *graph);
+    /// The graph of each function written in place (a lambda), by its construction node.
+    std::unordered_map<const GCT::Node *, const DraftGraphBuilder *> lambdaGraphs_;
     std::vector<node_handle_t> syncedReads_;
     std::unordered_set<node_handle_t> chainedNodes_;
     /// Once every body is built: turns into `:var/peek` each read whose value cannot be kept by

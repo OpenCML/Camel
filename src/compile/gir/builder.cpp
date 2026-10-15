@@ -996,6 +996,9 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(name, funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, name);
     buildFuncBody(gct, graph, funcType, name);
+    if (name.empty()) {
+        lambdaGraphs_[gct] = graph.get();
+    }
     leaveScope();
 
     std::vector<GCT::node_ptr_t> annoNodes;
@@ -1047,6 +1050,11 @@ void Builder::buildFuncBody(
             inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
         }
         setBodyResult(graph, visitBodyNode(gct->at(1)));
+        // A body declared `: void` drops the value of its last statement.
+        if (!inferredExitGraphs_.contains(graph.get()) &&
+            isVoidGraphExitType(funcType->exitType())) {
+            rejectDiscardedValue(graph.get());
+        }
         bodyStates_[graph.get()] = BodyState::Built;
         unit_->builtFunctions.push_back({graph.get(), gct->origin(), name});
         unit_->builtBodies.push_back(graph);
@@ -4396,9 +4404,16 @@ void Builder::markNonRetainingReads() {
     syncedReads_.clear();
 }
 
+void Builder::rejectDiscardedValue(const DraftGraphBuilder *graph) {
+    if (auto it = bodyValueStatement_.find(graph); it != bodyValueStatement_.end()) {
+        rejectUnusedPureResult(it->second.first, it->second.second);
+    }
+}
+
 void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t node) {
-    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
-        return;
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper) ||
+        discardedValues_.contains(node)) {
+        return; // not an operator, or dropped on purpose (`let _`), or reported already
     }
     const auto op = nodeGraphOf(node)->operTarget(node);
     if (op == nullptr || !camel::core::OperatorTable::instance().isPure(op->uri())) {
@@ -5477,6 +5492,21 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             targetOperator = *res;
             rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
+            // `foreach` drops what its element function gives: the value of the body of a
+            // function written in place here is a value nothing takes (design principles
+            // 2.12). A function named here may be used elsewhere, where its value counts.
+            if (const auto uri = targetOperator->uri();
+                uri == ":mark/foreach_arr" || uri == ":mark/unordered_foreach_arr") {
+                for (const Argument &input : withInputs) {
+                    if (input.expr == nullptr) {
+                        continue;
+                    }
+                    if (auto element = lambdaGraphs_.find(input.expr);
+                        element != lambdaGraphs_.end()) {
+                        rejectDiscardedValue(element->second);
+                    }
+                }
+            }
             // An operator calls a function argument with values. A function with a `var`
             // parameter needs a variable there, which an operator does not have. A macro
             // operator (grad, value_and_grad, ...) does not call its argument: it rewrites the
@@ -6588,6 +6618,16 @@ node_handle_t Builder::buildBranch(
     // join then takes nothing from any of them.
     bool absentElse = valueless;
     bool ifArmSeen  = false;
+    // Whether the branch is an `if` without `else`, known before its arms are added: its arms
+    // give values nothing takes (rejectDiscardedValue in addArm).
+    bool dropsArmValues = valueless;
+    if (arms == nullptr && gct->size() >= 3) {
+        const auto &first = gct->at(1);
+        const auto &last  = gct->at(gct->size() - 1);
+        dropsArmValues    = first->caseType() == GCT::CaseType::True &&
+                         last->caseType() == GCT::CaseType::Else && last->size() == 1 &&
+                         last->at(0)->size() == 0;
+    }
 
     linkNodes(LinkType::Norm, condNode, brchNode);
     std::vector<runtime::GCBranchArm> branchArms;
@@ -6599,6 +6639,10 @@ node_handle_t Builder::buildBranch(
 
     // Makes `subGraph` the next arm of the branch.
     const auto addArm = [&](const graph_ptr_t &subGraph) {
+        if (dropsArmValues) {
+            // The arm of an `if` without `else` gives a value nothing takes.
+            rejectDiscardedValue(subGraph.get());
+        }
         armGraphs.push_back(subGraph.get());
         armList.push_back(subGraph);
         for (const CapturedUse &use : capturedUsesOf(subGraph)) {
@@ -6930,6 +6974,9 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     node_handle_t result{};
     try {
         result = visitExecNode(gct);
+        if (lastBlockStatement_.first != nullptr) {
+            bodyValueStatement_[currGraph_.get()] = lastBlockStatement_;
+        }
     } catch (...) {
         synced_         = outerSynced;
         lastSyncedNode_ = outerLast;
@@ -7153,14 +7200,19 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     };
     bool failed = false;
     const GCT::Node *outerStatement = unusedStatement_;
+    // A block that is itself a statement whose value nothing takes drops the value of its last
+    // statement too.
+    const bool valueDropped = gct == unusedStatement_;
+    std::pair<GCT::node_ptr_t, node_handle_t> lastStatement{};
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
         try {
             const auto &child = gct->at(i);
-            // Every statement but the last is one whose value nothing takes. The scopes the
-            // lowering introduced (operands of a literal, the names of a declaration) have
-            // no statements.
-            const bool unused = !operands && i + 1 < gct->size();
+            // Every statement but the last is one whose value nothing takes, and the last one
+            // too when the block's value is dropped. The scopes the lowering introduced
+            // (operands of a literal, the names of a declaration) have no statements; a sync
+            // block inside a sync block continues the chain but has statements of its own.
+            const bool unused = !gct->operands() && (i + 1 < gct->size() || valueDropped);
             unusedStatement_  = unused ? child : nullptr;
             any result        = visit(child);
             unusedStatement_  = nullptr;
@@ -7169,6 +7221,9 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             }
             if (result.has_value() && result.type() == typeid(node_handle_t)) {
                 res = any_cast<node_handle_t>(result);
+                if (!gct->operands() && i + 1 == gct->size()) {
+                    lastStatement = {child, res};
+                }
             } else if (
                 result.type() == typeid(graph_ptr_t) && child->type() == GCT::NodeKind::FUNC &&
                 child->name().empty()) {
@@ -7182,7 +7237,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             continue;
         }
     }
-    unusedStatement_ = outerStatement;
+    unusedStatement_    = outerStatement;
+    lastBlockStatement_ = lastStatement;
     if (failed) {
         throw BuildAbortException();
     }

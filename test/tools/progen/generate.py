@@ -1134,7 +1134,9 @@ class Gen:
 
     def if_without_else(self, d):
         """`if c then e` as a statement: the arm is one expression of any type, whose value is
-        dropped; an effect written there happens when the condition holds."""
+        dropped; an effect written there happens when the condition holds. A pure value there
+        is a literal or a name: a call of a pure operator whose result is dropped is an error
+        (UnusedPureResult, design principles 2.12)."""
         cond = self.expr(BOOL, 2)
 
         def make():
@@ -1147,7 +1149,7 @@ class Gen:
                 if call.k == "let":
                     self.scope.pop()
                 return call.c[0]
-            return self.expr(self.rand_type(0.2), 1)
+            return self.leaf(self.rand_type(0.2))
         arm = self.narrowed(self.narrowable(cond, True), make)
         return N("ifs", [cond, arm, None])
 
