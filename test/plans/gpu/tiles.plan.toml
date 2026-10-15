@@ -1,0 +1,130 @@
+id = "gpu.tiles"
+order = 900
+tier = "gpu"
+tags = ["gpu", "modules", "tiles"]
+
+[[tests]]
+name = "boundaries.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/boundaries.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'capture, call, reduction, or empty dimension mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "boundaries.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/boundaries.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'capture, call, reduction, or empty dimension mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "boundaries.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/boundaries.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'capture, call, reduction, or empty dimension mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "vector_add"
+kind = "behavior"
+case = "../../cases/modules/tiles/vector_add.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["165.0"]
+timeout_ms = 60000
+
+[[tests]]
+name = "softmax"
+kind = "behavior"
+case = "../../cases/modules/tiles/softmax.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["0.09003","0.2447","0.6652"]
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["22.","28.","49.","64."]
+timeout_ms = 60000
+
+[[tests]]
+name = "consistency.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/consistency.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(Number.isFinite), 'expected five finite error measurements')
+assert(values[0] < 0.005, 'odd-size tiled matmul differs from CPU')
+assert(values[1] < 0.0001, 'softmax differs from CPU')
+assert(values.slice(2).every(x => x === 0), 'broadcast, cache refresh, or reshape mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "consistency.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/consistency.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(Number.isFinite), 'expected five finite error measurements')
+assert(values[0] < 0.005, 'odd-size tiled matmul differs from CPU')
+assert(values[1] < 0.0001, 'softmax differs from CPU')
+assert(values.slice(2).every(x => x === 0), 'broadcast, cache refresh, or reshape mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "consistency.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/consistency.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(Number.isFinite), 'expected five finite error measurements')
+assert(values[0] < 0.005, 'odd-size tiled matmul differs from CPU')
+assert(values[1] < 0.0001, 'softmax differs from CPU')
+assert(values.slice(2).every(x => x === 0), 'broadcast, cache refresh, or reshape mismatch')
+}
+"""
+timeout_ms = 60000

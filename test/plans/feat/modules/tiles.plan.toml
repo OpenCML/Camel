@@ -1,0 +1,28 @@
+id = "modules.tiles"
+order = 367
+tier = "feat"
+tags = ["feat", "modules", "tiles"]
+
+[[tests]]
+name = "source"
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+kind = "behavior"
+case = "../../../cases/modules/tiles/source.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["extern \"C\" __global__", "i<3ULL", "v[2][i]=a+b"]
+timeout_ms = 10000
+
+[[tests]]
+name = "reject_effect"
+kind = "negative"
+case = "../../../cases/modules/tiles/reject_effect.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["unsupported or effectful operator ':io/println'"]
+verify_script = """
+({ input, assert }) => {
+assert(!input.stdout.includes('BODY MUST NOT EXECUTE'), 'compilation executed an effect')
+}
+"""
+timeout_ms = 10000
