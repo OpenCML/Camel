@@ -4291,6 +4291,111 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
     return visitLinkNode(rebinding);
 }
 
+void Builder::markNonRetainingReads() {
+    // A read `r` of a variable becomes `:var/peek`, which leaves the variable's sole-reference
+    // mark set (Tuple::holdsUnsharedArray), when the array it reads can be referred to by
+    // nothing but the variable once the users of `r` have run, and they all run before the
+    // variable can be written again. Then the next `acc = acc->append<v>` may still change the
+    // array in place: nobody can see the difference. The conditions, every one required:
+    //
+    //  1. `r` was made in a sync block, so the sync chain orders it (syncedReads_).
+    //  2. `r` is not the value of its graph (returned, the exit): that value leaves.
+    //  3. Every user of `r` is an operator node in the sync chain, declared pure (no state, so
+    //     the result is all it leaves behind), whose result type holds no reference to an
+    //     array: a number, a bool, a string or nothing (`len`, `contains`, `==`, `<`, `[]`
+    //     of an array of numbers, `format`). A call, a branch, a closure, a literal holding
+    //     the value, a `let` used later by such a node: any of them keeps `r` a `:var/get`.
+    //  4. No node made between `r` and its last user may write the variable: no operator
+    //     that is neither pure nor state-only (assignments, `:op/assn_append`, effects), no
+    //     call and no branch (their bodies may write it through a capture). The chain runs
+    //     the nodes in the order they were made, so the users of `r` run before any later
+    //     writer.
+    //  5. The graph has no writer outside the chain (made in a nested block that is not a
+    //     sync block), which could run between `r` and its users.
+    //
+    // Anything not covered keeps the read a `:var/get`, which clears the mark: at worst the
+    // next append copies, as it would without this. The decision is made here, once the
+    // graph is complete; the passes treat both reads alike (oper::isVariableRead).
+    auto &table = camel::core::OperatorTable::instance();
+    const auto referenceFree = [](Type *type) {
+        return type != nullptr &&
+               (type->code() == TypeCode::String || !isGCTraced(type->code()));
+    };
+    const auto mayWrite = [&](node_handle_t node) {
+        switch (nodeKindOf(node)) {
+        case runtime::GCNodeKind::Oper: {
+            const auto op = nodeGraphOf(node)->operTarget(node);
+            const auto traits = table.find(op->uri());
+            return !traits.has_value() || (!traits->pure && !traits->stateOnly);
+        }
+        case runtime::GCNodeKind::Call:
+        case runtime::GCNodeKind::Func:
+        case runtime::GCNodeKind::Brch:
+            return true;
+        default:
+            return false;
+        }
+    };
+    // Condition 5, per graph.
+    std::unordered_map<runtime::GraphDraft *, bool> unchainedWriter;
+    const auto hasUnchainedWriter = [&](runtime::GraphDraft *draft) {
+        if (auto it = unchainedWriter.find(draft); it != unchainedWriter.end()) {
+            return it->second;
+        }
+        bool found = false;
+        for (draft_node_ref_t id = 0; !found && id < draft->nodeSlotCount(); ++id) {
+            if (draft->alive(id)) {
+                node_handle_t node = draft->node(id);
+                found = mayWrite(node) && !chainedNodes_.contains(node);
+            }
+        }
+        return unchainedWriter[draft] = found;
+    };
+    const auto peekGroup =
+        context_->importModule("")->getExportedEntity(Reference("__var_peek__"));
+    ASSERT(peekGroup.has_value() && peekGroup->isOperGroup(), "The built-in __var_peek__ is missing.");
+    const std::vector<StaticArg> statics(1);
+
+    for (node_handle_t read : syncedReads_) {
+        runtime::GraphDraft *draft = nodeDraftOf(read);
+        const draft_node_ref_t id  = nodeIdOf(read);
+        if (!draft->alive(id) || id == draft->exitNode() || id == draft->outputNode() ||
+            id == draft->returnNode()) {
+            continue; // condition 2
+        }
+        draft_node_ref_t lastUser = id;
+        bool keeps                = false;
+        size_t users              = 0;
+        for (auto inputs : {normUsersOf(read), withUsersOf(read)}) {
+            for (draft_node_ref_t userId : inputs) {
+                node_handle_t user = draft->node(userId);
+                ++users;
+                lastUser = std::max(lastUser, userId);
+                if (!nodeIsKind(user, runtime::GCNodeKind::Oper) || !chainedNodes_.contains(user) ||
+                    !table.isPure(nodeGraphOf(user)->operTarget(user)->uri()) ||
+                    !referenceFree(nodeTypeOf(user))) {
+                    keeps = true; // condition 3
+                }
+            }
+        }
+        if (keeps || users == 0) {
+            continue;
+        }
+        for (draft_node_ref_t between = id + 1; !keeps && between < lastUser; ++between) {
+            keeps = draft->alive(between) && mayWrite(draft->node(between)); // condition 4
+        }
+        if (keeps || hasUnchainedWriter(draft)) {
+            continue;
+        }
+        node_handle_t cell = draft->node(normInputsOf(read).front());
+        const auto peek =
+            peekGroup->operGroup()->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
+        ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
+        nodeGraphOf(read)->retargetOperNode(read, *peek);
+    }
+    syncedReads_.clear();
+}
+
 void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t node) {
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
         return;
@@ -4774,6 +4879,8 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
         }
         lastSyncedNode_ = value;
+        syncedReads_.push_back(value);
+        chainedNodes_.insert(value);
     }
     return value;
 }
@@ -5610,6 +5717,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Ctrl, lastSyncedNode_, targetNode);
         }
         lastSyncedNode_ = targetNode;
+        chainedNodes_.insert(targetNode);
     }
     LEAVE("LINK");
     return targetNode;
@@ -6750,6 +6858,10 @@ node_handle_t Builder::buildBranch(
             linkNodes(LinkType::Ctrl, lastSyncedNode_, brchNode);
         }
         lastSyncedNode_ = joinNode;
+        chainedNodes_.insert(brchNode);
+        chainedNodes_.insert(joinNode);
+        // The arms run between the BRCH and the JOIN, so in the chain too.
+        chainedNodes_.insert(branchFuncs.begin(), branchFuncs.end());
     }
 
     return joinNode;

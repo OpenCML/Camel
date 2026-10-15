@@ -123,6 +123,9 @@ class DraftGraphBuilder {
     addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body = {});
     runtime::DraftNode *addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
     runtime::DraftNode *addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);
+    /// Makes the OPER node `node` call `op` instead, an overload with the same parameters and
+    /// result type (the node's inputs, outputs and slot are kept).
+    void retargetOperNode(runtime::DraftNode *node, const oper_idx_ptr_t &op);
     runtime::DraftNode *addSyncNode();
     runtime::DraftNode *addGateNode(camel::core::type::Type *type);
     runtime::DraftNode *addDrefNode(DrefTarget target);

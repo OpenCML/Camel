@@ -793,7 +793,7 @@ size_t cseDraft(GraphDraft &draft) {
                 const auto *h = draft.header(in);
                 if (isWrittenInPlace(draft, in) ||
                     (h && h->kind == GCNodeKind::Oper &&
-                     operIdOf(draft, in) == camel::core::oper::VarGet)) {
+                     camel::core::oper::isVariableRead(operIdOf(draft, in)))) {
                     return true;
                 }
             }

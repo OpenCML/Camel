@@ -272,6 +272,26 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
 
+        // A read of a variable that leaves its sole-reference mark set; the compiler writes it
+        // in place of a `:var/get` whose value cannot be kept (Builder::markNonRetainingReads).
+        OperatorGroup::create(
+            "__var_peek__",
+            {
+                {
+                    ":var/peek",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(variable: var T) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (valueTypeOf(norm[0]) == norm[0]) {
+                                return nullopt; // not a variable
+                            }
+                            return valueTypeOf(norm[0]);
+                        }),
+                },
+            }),
+
         // ======= Assignment operators =======
         // `=` takes any type. A compound assignment takes exactly the types listed for it: a
         // combination without an implementation is rejected when the program is compiled.

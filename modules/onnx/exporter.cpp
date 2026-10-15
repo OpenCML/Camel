@@ -416,7 +416,7 @@ core::OperId operIdOf(const GCGraph *g, gc_node_ref_t ref) {
 
 /// Reading a variable (`:var/get`) or storing into one (`=`, `+=`, ...).
 bool readsOrAssignsVariable(core::OperId id) {
-    return id == core::oper::VarGet || core::OperatorTable::instance().isAssignment(id);
+    return core::oper::isVariableRead(id) || core::OperatorTable::instance().isAssignment(id);
 }
 
 /// A variable declared in `g` itself (`var v = e` is the operator `:var/new`): its content
@@ -2495,7 +2495,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
                 continue;
             }
             const core::OperId id = operIdOf(g, user);
-            if (id == core::oper::VarGet) {
+            if (core::oper::isVariableRead(id)) {
                 continue;
             }
             if (!core::OperatorTable::instance().isAssignment(id) ||
@@ -2544,7 +2544,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
 Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     GCGraph *g       = act.graph;
     const auto *body = g->nodeBodyAs<camel::runtime::GCOperBody>(ref);
-    if (body->oper == core::oper::VarGet) {
+    if (core::oper::isVariableRead(body->oper)) {
         return evalVariableRead(act, ref);
     }
     const std::string uri(body->uri());

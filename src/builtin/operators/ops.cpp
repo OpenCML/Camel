@@ -69,6 +69,15 @@ slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return cell->get<slot_t>(0);
 }
 
+// A read of a variable whose value goes only to operations that cannot keep it (the length,
+// an element of scalars, a comparison, ...) and that all run before the variable is written
+// again (Builder::markNonRetainingReads). The array cannot be referred to by anything but the
+// variable after such a read, so the read leaves the variable's mark (holdsUnsharedArray) as
+// it is; otherwise it is :var/get.
+slot_t __builtin__var_peek__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return variableOf(norm)->get<slot_t>(0);
+}
+
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
     slot_t rhs  = norm.slot(1);
     Tuple *cell = variableOf(norm);

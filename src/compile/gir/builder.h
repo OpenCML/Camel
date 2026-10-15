@@ -940,6 +940,17 @@ class Builder {
     /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
     /// nothing, so the statement does nothing. `node` is what the statement built.
     void rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t node);
+    /// The reads of variables (`:var/get`) made in a sync block, and the nodes the sync chain
+    /// orders (reads, calls, operators and branches made in a sync block, in the order they
+    /// were made): what markNonRetainingReads needs to know about a read and its users.
+    std::vector<node_handle_t> syncedReads_;
+    std::unordered_set<node_handle_t> chainedNodes_;
+    /// Once every body is built: turns into `:var/peek` each read whose value cannot be kept by
+    /// anything but the variable, so that the read leaves the variable's sole-reference mark
+    /// set and the next `acc = acc->append<v>` still appends in place
+    /// (`out = out->append<i>; total += len(out)` in a loop stays linear). See the definition
+    /// for the conditions; a read that does not meet every one of them stays `:var/get`.
+    void markNonRetainingReads();
     /// Function graphs whose return type is not declared but taken from their body.
     std::unordered_set<DraftGraphBuilder *> inferredExitGraphs_;
 
