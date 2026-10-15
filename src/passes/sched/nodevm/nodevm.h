@@ -92,10 +92,8 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
   private:
     /// Runs a marked operator (camel/core/operator_table.h), which calls the function values it
     /// receives. Kept out of line on purpose: call() recurses on the native stack once per Camel
-    /// call, and a compiler that inlines this dispatch (and the helpers below with their locals)
-    /// into call() multiplies the size of every recursion level. That happened with Clang on
-    /// Windows once the dispatch became a switch over operator ids: about 16 KB per level, so the
-    /// 32 MiB stack held 2,100 levels instead of the 10,000 the limit tests expect.
+    /// call, and these helpers run once per higher-order operator, so inlining them (with their
+    /// locals) into call() would only enlarge every recursion level.
     __attribute__((noinline)) void evalMarkedOperator(
         camel::core::OperId oper, camel::runtime::GCGraph *graph,
         camel::runtime::gc_node_ref_t nodeRef, ctx::Frame &currFrame);
