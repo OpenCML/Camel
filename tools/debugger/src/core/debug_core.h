@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #pragma once
@@ -28,6 +28,13 @@
  * to stop (breakpoints, steps, pause), stops by blocking the program's thread in the hook, and
  * answers questions about the stopped program on that thread. It knows no transport: the HTTP
  * API of the worker and, through it, the debug adapter are shells over command() and events().
+ *
+ * Two layers of frames (35_debugger.md, 5.4). The core tracks one shadow frame per activation
+ * of a graph, as the schedulers run them. What it shows is, by default, one frame per
+ * activation of a *function*: the frames of the subgraphs a function is made of (the arms of
+ * its branches) are folded into it, and the line steps and line breakpoints treat them as one.
+ * The setting `frames` ("functions", the default, or "subgraphs") switches the presentation
+ * to the shadow frames themselves; node steps and the graph view always see the real graphs.
  *
  * Threads: the program's thread calls the run life cycle and the observer hooks; any other
  * thread calls command() and events(). Commands that read the program (stack, variables,
@@ -50,6 +57,7 @@
 #include <future>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -108,6 +116,13 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     enum class StepKind { None, Node, Line, Out };
     enum class Pending { None, Enter, Tail };
 
+    /// Where a frame is in the text: the line it is on (2.1) and the source function of it.
+    struct LinePosition {
+        int file     = -1;
+        int line     = 0;
+        int function = -1;
+    };
+
     struct ShadowFrame {
         uint64_t id                         = 0;
         camel::runtime::GCGraph *graph      = nullptr;
@@ -123,18 +138,41 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         std::vector<bool> done;                   // by node index: has run in this activation
         uint32_t tailReplaced               = 0;
         camel::execute::InstructionEffect lastEffect = camel::execute::InstructionEffect::None;
+
+        // ---- the function activation the frame is part of (5.4) ----
+        /// Shared by the frame of a function and the frames of the subgraphs it calls that
+        /// are part of it (GraphInfo::folds); every other frame starts an activation.
+        uint64_t activation = 0;
+        /// The number of activations from the bottom of the stack up to this one.
+        size_t presentedDepth = 0;
+        /// The graph of the activation's function and what is known of it.
+        GraphInfo *function = nullptr;
+        /// Activations of functions that tail calls replaced in this one's place.
+        uint32_t functionsReplaced = 0;
+        /// The line the activation is on: the line of its last located node, whichever of
+        /// its frames ran it. Handed on to the frame below when a frame of it ends.
+        LinePosition activationLine;
+        /// The activation has not run a located node yet (function breakpoints, 3.3).
+        bool awaitingEntry = false;
     };
 
     struct Step {
         StepKind kind = StepKind::None;
         bool into     = false;
-        size_t depth  = 0;
-        uint64_t frame = 0;
+        /// Steps by activation of a function (`frames` is "functions"), or by shadow frame.
+        bool folded   = true;
+        size_t depth  = 0;  // of the frame or of the activation, as `folded` says
+        uint64_t frame = 0; // the frame or the activation the step started in
+        uint64_t startActivation = 0; // the activation it started in, in both cases
         int file      = -1;
         int line      = 0;
         int function  = -1;
         bool foreign  = false; // started in code inlined from another function
         std::string graph;     // node steps of the HTTP API: only nodes of this graph
+        /// Where the caller of the start frame was: a line step that returns there may
+        /// have gone past lines of the caller as well (4.2).
+        uint64_t caller = 0;
+        LinePosition callerLine;
     };
 
     struct LineBreakpoint {
@@ -144,6 +182,17 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         bool verified = false;
         std::string message;
         std::vector<origin_t> origins;
+        LineResolution resolution; // why it is not hit, said again at the end (4.2)
+    };
+
+    /// A breakpoint on the entry of a function, by the name the user wrote (3.3).
+    struct FunctionBreakpoint {
+        int id = 0;
+        std::string name;     // as written
+        std::string fullName; // as resolved
+        bool verified = false;
+        std::string message;
+        std::vector<std::string> graphs; // stable ids
     };
 
     /// What is about to run, for both back ends.
@@ -180,13 +229,31 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     void refreshConfig();
     void stop(const std::string &reason, json details);
     json describeStop(const std::string &reason, json details);
-    json frameJson(const ShadowFrame &frame, bool top);
     json stackJson();
     ShadowFrame *frameById(uint64_t id);
-    std::vector<Variable> localsOf(ShadowFrame &frame);
-    std::vector<Variable> capturedOf(ShadowFrame &frame);
-    std::vector<Variable> inlinedOf(ShadowFrame &frame);
-    std::vector<Variable> nodesOf(ShadowFrame &frame);
+
+    // presentation of frames (frames.cpp)
+    using Chain = std::vector<ShadowFrame *>; // the frames shown as one, innermost first
+    /// Places the frame of a call, just pushed above `caller` (null for the first frame):
+    /// part of the caller's activation when it is a subgraph of the caller's graph that folds
+    /// (an arm of one of its branches), the start of an activation otherwise.
+    void placeCallee(ShadowFrame &f, const ShadowFrame *caller);
+    /// Places the frame of a tail call that replaced `old`; `below` is the frame under it.
+    void placeReplacement(ShadowFrame &f, const ShadowFrame &old, const ShadowFrame *below);
+    /// Before the top frame ends: the line of its activation goes on in the frame below.
+    void handOnLine(size_t endingFrom);
+    bool foldsFrames() const { return foldFrames_.load(std::memory_order_relaxed); }
+    /// The frames shown as the frame of `top` (only `top` when frames are not folded).
+    Chain chainOf(ShadowFrame &top);
+    json frameJson(const Chain &chain, bool top);
+    /// The lines a line step went past that did not execute because nothing uses their
+    /// result, and why (4.2). `f` is the frame stopped in.
+    json skippedLines(const ShadowFrame &f, const Arrival &arrival);
+
+    std::vector<Variable> localsOf(const Chain &chain);
+    std::vector<Variable> capturedOf(const Chain &chain);
+    std::vector<Variable> inlinedOf(const Chain &chain);
+    std::vector<Variable> nodesOf(const Chain &chain);
     std::optional<Variable> nodeVariable(ShadowFrame &frame, const NodeInfo &node, std::string name);
     json variablesJson(std::vector<Variable> variables, uint64_t frame);
     json variableJson(const Variable &variable, uint64_t frame);
@@ -199,8 +266,13 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     // any thread
     json runWhileStopped(std::function<json()> fn);
     json setLineBreakpoints(const json &args);
+    json setFunctionBreakpoints(const json &args);
     json breakpointJson(const LineBreakpoint &bp) const;
+    json breakpointJson(const FunctionBreakpoint &bp) const;
     void verify(LineBreakpoint &bp);
+    void verify(FunctionBreakpoint &bp);
+    /// At the end of a run: what is known about the breakpoints that were never hit.
+    void reportUnhitBreakpoints();
     void reverifyAll();
     void pushEvent(json event);
     json resume(Step step, bool stepping);
@@ -213,6 +285,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     std::deque<json> events_;
     uint64_t nextEventSeq_ = 1;
     std::vector<LineBreakpoint> lineBreakpoints_;
+    std::vector<FunctionBreakpoint> functionBreakpoints_;
     std::vector<origin_t> nodeBreakpoints_;
     bool stopOnUncaught_ = true;
     bool stopOnIsolated_ = false;
@@ -227,6 +300,9 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     std::function<void(const json *)> stopListener_;
 
     std::atomic<uint64_t> configVersion_{1};
+    /// `frames`: true for "functions" (the default, design principles 2.11), false for
+    /// "subgraphs". Read by the program's thread when it presents a frame or starts a step.
+    std::atomic<bool> foldFrames_{true};
     std::atomic<bool> pauseRequested_{false};
     std::atomic<int> abort_{0}; // 0 none, 1 terminate, 2 restart
 
@@ -244,6 +320,11 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     Step step_;
     uint64_t seenConfig_ = 0;
     std::unordered_map<origin_t, std::vector<int>> lineBreakpointByOrigin_;
+    std::unordered_map<std::string, std::vector<int>> functionBreakpointByGraph_; // stable id
+    std::unordered_set<int> hitBreakpoints_; // ids of the breakpoints this run stopped at
+    uint64_t nextActivation_ = 1;
+    /// The dropped lines a step has already explained, by activation: said once (4.2).
+    std::unordered_map<uint64_t, std::set<std::pair<int, int>>> explainedLines_;
     std::unordered_set<origin_t> nodeBreakpointSet_;
     bool filterUncaught_ = true;
     bool filterIsolated_ = false;
