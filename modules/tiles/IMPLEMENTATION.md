@@ -28,6 +28,15 @@ Both complete JSON reports are retained as `*-canonical-extrema-benchmark.jsonl`
 The wider developer suite exposed a pre-existing formatter token-boundary bug;
 its isolated fix and verification are tracked separately.
 
+The complete developer run finished with 4,908 passes, 10 skips and two failures
+out of 4,920 cases. Both failures were repaired: repeated type postfix tokens in
+the formatter (16d29a1a), and explicit standard includes in Tiles (344c192d).
+After rebuilding, the entire parse and portability subset passed 48/48, followed
+by native plan/cache, CUDA lease/resource/precision and NVM/FVM/JIT extrema tests.
+Linux formatter corpus and 3,000 mutations also passed. The original full-run
+log is retained rather than relabeled as an all-green run; the targeted rerun
+records the repairs. No remaining failure from that run is unresolved.
+
 The source-template cache is committed independently as 944f9d24. Its native
 checks cover runtime value independence, literal sensitivity, borrowed/owned
 storage changes, owner release, bounded eviction and concurrent generation.
