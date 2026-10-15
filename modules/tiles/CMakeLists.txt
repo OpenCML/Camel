@@ -1,13 +1,13 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME tiles
-  SOURCES src/module.cpp src/compiler.cpp src/codegen.cpp src/codegen_cache.cpp src/index_expr.cpp src/access.cpp src/cuda.cpp src/cuda_backend.cpp src/cuda_resources.cpp src/schedule.cpp src/device.cpp
+  SOURCES src/module.cpp src/compiler.cpp src/codegen.cpp src/codegen_cache.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/cuda.cpp src/cuda_backend.cpp src/cuda_resources.cpp src/schedule.cpp src/device.cpp
   EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include
   EXTRA_LIBS tensor_cmo nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS}
 )
 
 # Native contract tests build with the standard build, without needing a CUDA device.
-add_executable(tiles-plan-check ../../test/cases/modules/tiles/plan_check.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/index_expr.cpp src/access.cpp)
+add_executable(tiles-plan-check ../../test/cases/modules/tiles/plan_check.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp)
 target_compile_features(tiles-plan-check PRIVATE cxx_std_23)
 target_include_directories(tiles-plan-check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/third_party)
 target_link_libraries(tiles-plan-check PRIVATE libcamel fmt::fmt)
