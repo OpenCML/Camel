@@ -454,6 +454,14 @@ Camel 在副作用的管理与追踪方面还有缺陷，需要进一步研究�
   - **`unordered_reduce`** 只授予"这次归约的合并顺序可以改变"，不含其他许可。
   - **许可写在哪段代码上就只对那段代码生效**：被调用的函数不自动继承；内联、展开定义图时许可随节点保留，并随缓存保存。授予的写法倾向于函数或代码块上的标注（如 `@numeric(reassociate, contract)`），细节见 `docs/design/op-semantics`。
 
+- **数值契约的细则**（详见 `docs/design/op-semantics`）：
+  - **矩阵乘的规范算法是按 k 从小到大连续做乘加融合**（FMA 本身是 IEEE 规定的一次正确舍入运算，因此同样逐位可复现）；这是矩阵乘自身的规范算法，不是对"不收缩为乘加融合"的放宽。
+  - **`max`、`min` 采用 IEEE 754-2019 的 `maximum`、`minimum`**：NaN 传播，-0 小于 +0。它们满足结合律与交换律，求最大、最小值的归约不需要许可即可重排。**`relu` 定义为 `maximum(x, +0)`**。
+  - **许可的名字**：`reassociate`、`contract`、`approx_math`、`change_precision`、`finite_math`（后者是 `no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` 的合写）。提高累加精度也属于 `change_precision`。
+  - **作用范围**：写在函数或代码块上；词法上嵌在其中的分支臂、循环体、lambda 算作同一段代码。不设模块级的默认许可，也不提供命令行或流水线开关；后端的入口（如 `tiles.run`）不接受许可。
+  - **超越函数**逐个声明误差上界，标准库的目标是 `exp`、`log` 不超过 2 ulp；NaN、无穷、零等特殊值必须精确。
+  - **定义图是规范**：融合或手写的实现必须与算子的定义图一致。维度可能为 1 的广播在形状确定之前不给出索引映射。
+
 - **`std::cpp`**：生成程序的故障报告与解释器逐字相同；递归计数精确（与各后端一致）；`println<fmt>` 多出的空行、`print<fmt>` 多出的换行是解释器的缺陷，修掉解释器；去掉 `std::cpp::bench`；生成程序里的 `map`/`filter` 先串行；`main` 的参数用 `--arg name=value` 给出，与命令行一致。
 
 ---
