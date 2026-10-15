@@ -7,6 +7,28 @@ the [architecture proposal](../../docs/design/indexed-computation/README.md).
 Unresolved language semantics require an author decision. Backend policy and
 module operator contracts must be explicit; they do not redefine Camel syntax.
 
+## Core integration and canonical extrema (2026-10-16)
+
+Integrated remote fsh-dev through d05050f7 into the Tiles working branch: stable
+operator semantic records, source-position columns, approved route documents,
+and CPU numeric contract corrections. CUDA extrema now use canonical NaN
+0x7fc00000 and IEEE signed-zero ordering throughout elementwise, fused and
+serial/parallel reduction paths. Singleton reductions also canonicalize NaNs.
+The remaining payload decision was explicitly delegated by the user; the chosen
+f64 representation is 0x7ff8000000000000 (Tiles extrema currently use f32).
+
+Manual raw-word tests passed on the local RTX 4060 Ti with NVM/FVM/JIT, including
+quiet/signaling payloads, operand reversal, fused relu, singleton reductions and
+widths 127/128/257/513 across the parallel threshold. The pre-addition integration
+suite passed 98/98, including the new core operator semantics plan. Final local
+and remote evidence follows after the complete merged-tree checks.
+
+The source-template cache is committed independently as 944f9d24. Its native
+checks cover runtime value independence, literal sensitivity, borrowed/owned
+storage changes, owner release, bounded eviction and concurrent generation.
+It remains a process-local physical-plan cache, not the future versioned graph
+semantic fingerprint cache.
+
 ## Delivery sequence
 
 1. **Executable baseline.** Bundled module, direct graph inspection, CUDA/NVRTC

@@ -916,3 +916,13 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed", "tiles precision: subnormals, rounding and explicit FMA bits passed"]
 timeout_ms = 60000
+
+[[tests]]
+name = "extrema_canonical_bits"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/extrema_bits.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: canonical extrema", "std::fvm: canonical extrema", "std::jit: canonical extrema"]
+timeout_ms = 60000

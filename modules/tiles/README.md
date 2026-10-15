@@ -123,8 +123,8 @@ uses the normal typed write barriers; no GC pointers survive in the CUDA cache.
 Plan validation checks topology, shapes, stage boundaries, launch dimensions,
 storage capacities and nonoverlapping lifetimes. Matmul uses masked 16x16 shared-memory tiles and explicit
 f32 FMA. Last-axis maximum uses a block-parallel implementation for widths of at
-least 128, with original-index tie breaking. It preserves the first element's
-NaN and signed-zero ties according to the serial tensor operation. Other axis
+least 128. Extrema propagate any NaN to canonical f32 `0x7fc00000` and order
+negative zero below positive zero, matching the CPU numeric contract. Other axis
 reductions are serial per output, with f64 accumulation for sum/mean.
 There is no fast-math mode; GPU transcendental results need not be bitwise equal
 to CPU results. Floating-point agreement is tested with tolerances.

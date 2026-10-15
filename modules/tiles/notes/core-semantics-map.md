@@ -26,12 +26,12 @@ Replacing graph URI dispatch did not remove this private representation.
 | `cast_f32` | Scalar identity mapping | Explicit f64-to-f32 conversion boundary |
 | `scalar_add`, `scalar_sub`, `scalar_mul`, `scalar_div`, `scalar_neg` | Scalar domain, one or two inputs | Ordered f64 arithmetic; scalar division faults on either signed zero |
 | `neg`, `abs`, `exp`, `log`, `sqrt`, `rsqrt`, `relu` | Output domain mapped to one input with broadcasting | Preserve f32 node boundaries; exp/log need ULP bounds; rsqrt currently means division by sqrt, not an approximate reciprocal-square-root instruction |
-| `add`, `subtract`, `multiply`, `divide`, `maximum`, `minimum` | Right-aligned broadcast maps for two inputs | f32 boundaries; tensor divide follows tensor behavior, not the scalar fault rule; extrema use ordered comparisons, not an unspecified mathematical max/min |
+| `add`, `subtract`, `multiply`, `divide`, `maximum`, `minimum` | Right-aligned broadcast maps for two inputs | f32 boundaries; tensor divide follows tensor behavior, not the scalar fault rule; extrema use IEEE maximum/minimum, canonical f32 NaN, and -0 < +0 |
 | `reshape` | Equal element counts; flatten/unflatten with quotient and remainder | No arithmetic conversion |
 | `reindex` | Output coordinate -> input linear offset + sum(coordinate * stride); zero strides support broadcast | No arithmetic conversion; valid-domain/overflow verification; currently nonnegative offsets/strides |
 | `sum_all`, `mean_all` | Full input domain -> scalar; row-major iteration | f32 inputs accumulated in f64 from +0 in order; f64 result; mean divides by count; empty full mean rejected |
 | `sum_axis`, `mean_axis` | Parallel coordinates outside one axis; ordered reduction coordinate on that axis; keep-dimension encoded in output shape | f64 accumulator, final f32 conversion; mean division before conversion; empty-axis behavior needs an explicit declaration |
-| `max_axis` | Same axis domain; empty reduction axis rejected | Start from first element; replace only when current < candidate; first NaN retained, later NaNs ignored, first equal value/zero retained |
+| `max_axis` | Same axis domain; empty reduction axis rejected | Fold IEEE maximum from negative infinity; any NaN yields canonical 0x7fc00000, -0 is below +0; reordering is bitwise invariant |
 | `sum_to` | Reduce leading and broadcast-expanded dimensions to target shape; preserve remaining coordinates | Row-major f32 accumulation from +0; differs from sum_axis accumulation type |
 | `matmul` | Rank-2 A(i,k), B(k,j), C(i,j); i/j parallel and k ordered; masked physical tile edges | Continuous f32 FMA chain in increasing k order; +0 initial accumulator; zero K performs no products |
 
