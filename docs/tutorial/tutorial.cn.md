@@ -803,7 +803,7 @@ func main(): int sync {
     let xs = [3, -1, 4, -1, 5]
     println(sum(xs), reverse(xs), xs->map<(x: int): int => abs(x)>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
-    println('{:.4f}'->format<pi()>)
+    println('{:.4f}'->format<pi>)
     return 0
 }
 ```

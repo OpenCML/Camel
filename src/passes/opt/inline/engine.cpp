@@ -272,8 +272,8 @@ GCGraph *functionConstantGraph(const GCGraph *graph, gc_node_ref_t ref) {
         ref  = graph->normInputsOf(ref).front();
         node = graph->node(ref);
     }
-    if (node->kind != GCNodeKind::Data || node->dataIndex >= 0 || !node->dataType ||
-        node->dataType->code() != TypeCode::Function) {
+    if (node->kind != GCNodeKind::Data || node->dataIndex >= 0 || !node->dataType() ||
+        node->dataType()->code() != TypeCode::Function) {
         return nullptr;
     }
     auto *function = camel::core::rtdata::fromSlot<::Function *>(
@@ -299,7 +299,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
             for (auto inputs : {graph->normInputsOf(it.ref()), graph->withInputsOf(it.ref())}) {
                 for (gc_node_ref_t input : inputs) {
                     const auto *operand = graph->node(input);
-                    if (!operand->dataType || operand->dataType->code() != TypeCode::Function) {
+                    if (!operand->dataType() || operand->dataType()->code() != TypeCode::Function) {
                         continue;
                     }
                     if (operand->kind == GCNodeKind::Oper && operand->isMacro()) {
@@ -575,18 +575,17 @@ GCGraph *applyRuntimeOptimizeRewrite(
                     if (!node || node->kind != GCNodeKind::Func) {
                         continue;
                     }
-                    const auto *body = runtimeGraph->nodeBodyAs<GCFuncBody>(it.ref());
-                    if (!body || !body->calleeGraph) {
+                    GCGraph *callee = runtimeGraph->directCalleeGraphOf(it.ref());
+                    if (!callee) {
                         continue;
                     }
-                    if (!closureSet.contains(body->calleeGraph)) {
-                        throw std::runtime_error(
-                            std::format(
-                                "Runtime rewrite discovered FUNC node {} in graph '{}' with callee "
-                                "graph {:p} outside the reachable closure.",
-                                it.ref(),
-                                runtimeGraph->name(),
-                                static_cast<void *>(body->calleeGraph)));
+                    if (!closureSet.contains(callee)) {
+                        throw std::runtime_error(std::format(
+                            "Runtime rewrite discovered FUNC node {} in graph '{}' with callee "
+                            "graph {:p} outside the reachable closure.",
+                            it.ref(),
+                            runtimeGraph->name(),
+                            static_cast<void *>(callee)));
                     }
                 }
             }

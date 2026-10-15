@@ -249,6 +249,11 @@ class Walker {
         decl.fullRange  = full.empty() ? decl.nameRange : full;
         decl.scope      = scope_;
         decl.container  = container_;
+        // Declared directly in a namespace block: named with the namespaces around it.
+        if (index_.scopes[scope_].kind == ScopeKind::Namespace && container_ >= 0 &&
+            index_.decls[container_].kind == DeclKind::Namespace) {
+            decl.qualified = index_.decls[container_].shownName() + "::" + decl.name;
+        }
         index_.scopes[scope_].decls.push_back(decl.id);
         index_.decls.push_back(std::move(decl));
         return index_.decls.back();
@@ -545,8 +550,24 @@ class Walker {
     void namespaceDecl(cst::NamespaceDecl ctx) {
         const Range whole = rangeOf(ctx);
         int32_t self      = -1;
-        if (const syn::TokenRef name = lastNameOf(ctx.get<cst::IdentRef>())) {
-            self = static_cast<int32_t>(declare(DeclKind::Namespace, name, whole, whole).id);
+        const syn::Node path = ctx.get<cst::IdentRef>();
+        if (const syn::TokenRef name = lastNameOf(path)) {
+            Decl &decl = declare(DeclKind::Namespace, name, whole, whole);
+            self       = static_cast<int32_t>(decl.id);
+            // `namespace A::B { ... }`: the whole path, after the namespaces around the block.
+            const size_t parts = path.tokCount(TK::Identifier);
+            if (parts > 1) {
+                std::string written;
+                for (size_t i = 0; i < parts; ++i) {
+                    written += (i == 0 ? "" : "::") + std::string(path.tok(TK::Identifier, i).text());
+                }
+                const size_t outer = decl.qualified.empty()
+                                         ? std::string::npos
+                                         : decl.qualified.size() - decl.name.size();
+                decl.qualified =
+                    (outer == std::string::npos ? std::string() : decl.qualified.substr(0, outer)) +
+                    written;
+            }
         }
         const int32_t savedContainer = container_;
         if (self >= 0) {

@@ -114,7 +114,7 @@ void validateRuntimeBranchArms(const GCGraph *graph) {
     if (!graph || !graph->hasNodePayload()) {
         return;
     }
-    const size_t slots = graph->nodeBlockCount();
+    const size_t slots = graph->nodeCount();
     std::vector<gc_node_ref_t> branches;
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         if (*it && (*it)->kind == GCNodeKind::Brch) {

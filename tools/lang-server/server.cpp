@@ -798,6 +798,12 @@ json Server::completion(const json &params) {
             {"label", c.label},
             {"kind", completionItemKind(c.kind)},
             {"sortText", std::to_string(c.rank) + c.label}};
+        if (!c.insert.empty()) {
+            // Shown by one name, written by another (a namespace member): matched by what
+            // is typed, which is the written one.
+            item["insertText"] = c.insert;
+            item["filterText"] = c.insert;
+        }
         if (!c.detail.empty()) {
             item["detail"] = c.detail;
         }

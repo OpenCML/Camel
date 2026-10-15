@@ -1,0 +1,32 @@
+/**
+ * An overload of the program that is more specific than the built-in operator is preferred
+ * (design principles 2.13): `==` on a struct is the built-in comparison by content, which
+ * takes any struct; an overload for exactly `V` takes `V` only, so it is the one called. An
+ * overload of `==` gives `!=`: `a != b` is `!(a == b)` with that overload.
+ */
+module struct_equality
+
+type V = { x: float, y: float }
+
+// Two points are the same when they are closer than a tolerance (not by content).
+func operator ==(a: V, b: V): bool {
+    let dx = a.x - b.x
+    let dy = a.y - b.y
+    return dx * dx + dy * dy < 0.01
+}
+
+type W = { x: float }
+
+func main(): int sync {
+    let p: V = { x: 1.0, y: 2.0 }
+    let q: V = { x: 1.05, y: 2.0 }
+    let r: V = { x: 3.0, y: 2.0 }
+    println(p == q, p != q, p == r, p != r)
+    // Another struct type: still the built-in comparison by content.
+    let a: W = { x: 1.0 }
+    let b: W = { x: 1.05 }
+    println(a == b, a != b)
+    // Scalars: the built-in operators, which are as specific as an overload could be.
+    println(1.0 == 1.05, 1.0 != 1.05)
+    return 0
+}

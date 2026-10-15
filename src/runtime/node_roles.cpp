@@ -59,7 +59,7 @@ NodeRoleRegistry::NodeRoleRegistry() {
              if (node->kind != GCNodeKind::Join) {
                  return std::nullopt;
              }
-             return node->dataType ? "arms: " + node->dataType->toString() : "arms";
+             return node->dataType() ? "arms: " + node->dataType()->toString() : "arms";
          }});
 }
 

@@ -38,44 +38,10 @@ namespace {
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
-            "sorted",
-            {
-                {
-                    "algo:sorted",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
             "sort",
             {
                 {
                     "algo:sort",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
-            "insert_sorted",
-            {
-                {
-                    "algo:insert_sorted",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
@@ -106,44 +72,10 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
             }),
 
         OperatorGroup::create(
-            "quick_sorted",
-            {
-                {
-                    "algo:quick_sorted",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
             "quick_sort",
             {
                 {
                     "algo:quick_sort",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (array: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            return tt::as_ptr<ArrayType>(norm[0]);
-                        }),
-                },
-            }),
-
-        OperatorGroup::create(
-            "merge_sorted",
-            {
-                {
-                    "algo:merge_sorted",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "<> (array: T[]) => T[]",
@@ -218,22 +150,28 @@ bool AlgoModule::load() {
     camel::core::OperatorTable::instance().declare(
         "algo",
         {
-            // Return a new array.
-            {"sorted", true},
-            {"insert_sorted", true},
-            {"quick_sorted", true},
-            {"merge_sorted", true},
-            {"merge_sorted_arrays", true},
-            {"flatten", true},
-            {"unique", true},
-            {"argsort", true},
-            // The same, under the names that used to sort the array they were given in
-            // place: no operator changes its argument (design principles 2.12).
+            // Return a new array: no operator changes its argument (design principles
+            // 2.12). Only one name per operation is kept (2.13: `sort`, not `sorted`).
             {"sort", true},
             {"insert_sort", true},
             {"quick_sort", true},
             {"merge_sort", true},
+            {"merge_sorted_arrays", true},
+            {"flatten", true},
+            {"unique", true},
+            {"argsort", true},
         });
+    // The in-place forms of the sorting operators (design principles 2.13): `xs = xs->sort`
+    // sorts the variable's own array when nothing else refers to it (Builder::
+    // inPlaceRebindingOf). Each changes the array it is given, so it is not pure; what it
+    // changes is the program's own variable, so it has no effect outside the program.
+    // An array of numbers is sorted without a fault, so the array is never left half done.
+    auto &table = camel::core::OperatorTable::instance();
+    for (const char *name : {"sort", "insert_sort", "quick_sort", "merge_sort"}) {
+        const std::string uri = std::string("algo:") + name;
+        table.set(uri + "_in_place", {.stateOnly = true, .mayFault = true});
+        table.setInPlaceForm(uri, uri + "_in_place");
+    }
     loaded_ = true;
     return true;
 }

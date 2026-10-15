@@ -129,6 +129,40 @@ slot_t __builtin__assn_append__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(res);
 }
 
+// `xs = xs->sort` written as a statement, for an operator that declares an in-place form
+// (OperatorTable::setInPlaceForm; Builder::inPlaceRebindingOf). The compiler writes
+//
+//     :op/assn_owned(xs, <the in-place form>(..., :var/take(xs)))
+//
+// The meaning is that of the rebinding (design principles 2.12, 2.13): the operator returns a
+// new array and the variable is bound to it. :var/take hands the in-place form an array no one
+// else refers to: the variable's own array when the variable is its only holder (the mark
+// __builtin__assn_append__ describes), otherwise a copy of it. The form changes that array and
+// returns it, and :op/assn_owned stores it and sets the mark, as nothing else refers to it.
+// Between the two nothing reads the variable: the three are one statement of a sync block.
+//
+// Collectors: the copy is a new object, and the in-place forms reorder the slots of an array
+// of numbers, which hold no references. The flag is a field of the cell (it moves with it).
+slot_t __builtin__var_take__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *cell    = variableOf(norm);
+    auto *cellType = static_cast<TupleType *>(norm.type(0));
+    auto *arrType  = static_cast<ArrayType *>(cellType->typeAt(0));
+    Array *arr     = cell->get<Array *>(0);
+    if (cell->holdsUnsharedArray()) {
+        return toSlot(arr);
+    }
+    return toSlot(static_cast<Array *>(arr->clone(mm::autoSpace(), arrType)));
+}
+
+slot_t __builtin__assn_owned__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const slot_t value = norm.slot(1);
+    Tuple *cell        = variableOf(norm);
+    cell->set<slot_t>(0, value, static_cast<TupleType *>(norm.type(0)));
+    // Made by :var/take and an in-place form for this variable: no one else refers to it.
+    cell->setHoldsUnsharedArray(true);
+    return value;
+}
+
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     Int32 lhs = cell->get<Int32>(0);

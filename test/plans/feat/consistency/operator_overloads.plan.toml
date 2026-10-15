@@ -212,15 +212,15 @@ expect_output_contains = ["no var parameters"]
 
 [[tests]]
 name = "operator_overloads.ambiguous_generic"
-desc = "A generic and a plain overload both accept the operands: the call is ambiguous and both are listed."
+desc = "Two generic overloads both accept the operands and neither has the operands' types exactly: the call is ambiguous and both are listed (design principles 2.13 prefers only an exact overload)."
 kind = "negative"
 case = "../../../cases/consistency/operator_overloads/ambiguous_generic.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousOperatorCall"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 12
 expect_diagnostic_column = 19
-expect_output_contains = ["(a: string[], b: string) => string[] (this module)", "(a: typeas T[], b: T) => T[] (this module)"]
+expect_output_contains = ["(a: typeas T[], b: T[]) => T[] (this module)", "(a: typeas T[], b: typeas U[]) => T[] (this module)"]
 
 [[tests]]
 name = "operator_overloads.ambiguous_modules"
@@ -245,3 +245,71 @@ expect_diagnostic_name = "SemanticDiag::OperatorOverloadConflict"
 expect_diagnostic_line = 5
 expect_diagnostic_column = 1
 expect_output_contains = ["by module 'plus_a'"]
+
+[[tests]]
+name = "operator_overloads.struct_equality"
+desc = "An overload of `==` for exactly a struct type is more specific than the built-in comparison by content and is called (design principles 2.13); it gives `!=` as its negation; another struct type and the scalars keep the built-in operators. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/operator_overloads/specific/struct_equality.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "true false false true\nfalse true\nfalse true\n"
+expect_output_not_contains = ["[Warn]", "[Error]"]
+
+[[tests]]
+name = "operator_overloads.struct_equality.passes"
+desc = "The same program through std::inline and std::opt."
+kind = "behavior"
+case = "../../../cases/consistency/operator_overloads/specific/struct_equality.cml"
+args = ["${case}", "std::inline", "std::opt", "std::fvm"]
+expect_exit = 0
+expect_stdout = "true false false true\nfalse true\nfalse true\n"
+
+[[tests]]
+name = "operator_overloads.generic_and_exact"
+desc = "A generic overload and one for exactly the operand types both accept the operands: the exact one is called; operands it does not take go to the generic one (design principles 2.13)."
+kind = "behavior"
+case = "../../../cases/consistency/operator_overloads/specific/generic_and_exact.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "[y] [1, 2]\n"
+
+[[tests]]
+name = "operator_overloads.neq_refused"
+desc = "`!=` follows `==` and is not overloaded by itself (design principles 2.13): OperatorNotOverloadable with the reason."
+kind = "negative"
+case = "../../../cases/consistency/operator_overloads/specific/neq_refused.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::OperatorNotOverloadable"
+expect_output_contains = ["'!=' cannot be overloaded: it follows an overload of '=='", ".cml:3:1:"]
+
+[[tests]]
+name = "operator_overloads.eq_not_bool"
+desc = "`a != b` through an overload of `==` that does not return a bool: OperatorOverloadInvalid where `!=` is used (`==` itself is fine)."
+kind = "negative"
+case = "../../../cases/consistency/operator_overloads/specific/eq_not_bool.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
+expect_output_contains = ["returns 'int', not 'bool'", ".cml:7:"]
+
+[[tests]]
+name = "operator_overloads.namespace_block"
+desc = "An operator declared in a namespace block belongs to the module (design principles 2.13): its signature names the block's types without a prefix, and importing the module brings it."
+kind = "behavior"
+case = "../../../cases/consistency/operator_overloads/specific/ns/use_geo.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "11 22\n"
+
+[[tests]]
+name = "operator_overloads.namespace_block_local"
+desc = "The operator of a namespace block used in its own module, outside the block."
+kind = "behavior"
+case = "../../../cases/consistency/operator_overloads/specific/ns/in_module.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "2\n"

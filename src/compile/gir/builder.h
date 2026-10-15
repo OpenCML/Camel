@@ -232,6 +232,9 @@ class Builder {
     node_handle_t exportedValueNode(ExportedValue &value);
     // Reports ModuleValueCycle: `declaration` is asked for while it is being built.
     [[noreturn]] void reportValueCycle(const TopLevelDeclaration &declaration);
+    // The namespaces a top-level declaration is built in: those of its name, or for an
+    // operator overload those of the block it is written in (GCT::Tree::namespaceOf).
+    std::vector<std::string> namespacesOf(const TopLevelDeclaration &declaration) const;
     // The name a top-level declaration is shown by in a diagnostic of the current module.
     std::string shownName(const TopLevelDeclaration &declaration) const;
     // Fills the export table of the current module from its export list `expt`: at step one
@@ -850,10 +853,26 @@ class Builder {
     /// `null`. nullptr (nothing built) for any other branch, which visitBrchNode builds.
     node_handle_t visitConditionBrchNode(const GCT::node_ptr_t &gct);
     /// `x == null` / `x != null` (either order) where `x` is a `T?`: the test of its tag, a
-    /// `bool`. nullptr when the call `gct` of the operator group `group` is not that.
+    /// `bool`. Where `x` has a type that is never null, the constant result of the test, with
+    /// a warning (NullTestNeverNull; design principles 2.13). nullptr when the call `gct` of
+    /// the operator group `group` is not that.
     node_handle_t nullComparison(
         const std::string &group, const GCT::node_ptr_t &gct,
         const std::vector<Argument> &operands, const camel::core::type::type_vec_t &types);
+    /// The values a narrowing `if` binds its names to in the arm that excludes null: the name
+    /// `x` in the then arm of `if x != null then ...` stands for one of these (design
+    /// principles 2.11, 2.12). A lookup that finds one of these nodes found a narrowed name;
+    /// a declaration that shadows the name finds another node.
+    std::unordered_set<node_handle_t> narrowedValues_;
+    /// Whether `expr` is a name narrowed to a `T` by an `if` around it (see narrowedValues_).
+    bool isNarrowedName(const GCT::node_ptr_t &expr);
+    /// `subject`, the value of the narrowed name `expr`, put back into `T?` so that a
+    /// construct written for a `T?` (`??`, a `match` with `case null`) applies to it, with a
+    /// warning that the name is known not to be null (KnownNotNull; design principles 2.13).
+    /// `construct` names the construct in the warning.
+    node_handle_t reopenNarrowedName(
+        const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
+        const char *construct);
     /// Warns about every `T!` that is evaluated in a body and that nothing takes
     /// (UnusedFallibleValue): a statement of a sync block, the arm of an `if` without
     /// `else`, and what a `main` without a declared return type ends with.
@@ -883,6 +902,9 @@ class Builder {
     /// The DREF of an operator (`__add__`) whose set has overloads of the program, with that
     /// set. A DREF of an operator without any is an ordinary DREF to the operator group.
     std::unordered_map<node_handle_t, OperatorOverloads> operatorOverloads_;
+    /// The `!=` operators whose overloads (in operatorOverloads_) are those of `==`: an
+    /// overload of `==` gives `!=`, the negation of its result (design principles 2.13).
+    std::unordered_set<node_handle_t> negatedEqualities_;
     /// The generic overloads of an operator declared in this module, each with the scope it
     /// was declared in (visible from that scope and the scopes inside it).
     std::unordered_map<std::string, std::vector<std::pair<template_scope_ptr_t, template_ptr_t>>>
@@ -936,6 +958,22 @@ class Builder {
     /// grows the array in place while only the variable refers to it. Returns nullptr when
     /// `gct` is not that form; the call is then built as written.
     node_handle_t rebindingAppendOf(const GCT::node_ptr_t &gct);
+    /// `xs = xs->op<w...>` (or `xs = op<w...>(xs)`) as the statement `gct` of a sync block,
+    /// `xs` a variable holding an array and `op` an operator of a module that declares an
+    /// in-place form for the overload the call resolves to (OperatorTable::setInPlaceForm;
+    /// design principles 2.13: `xs = xs->sort`). The same rebinding, written
+    /// `:op/assn_owned(xs, <in-place form><w...>(:var/take(xs)))`, which works on the
+    /// variable's own array when nothing else refers to it and on a copy otherwise
+    /// (__builtin__var_take__). Returns nullptr when `gct` is not that form; the statement
+    /// is then built as written.
+    node_handle_t inPlaceRebindingOf(const GCT::node_ptr_t &gct);
+    /// The calls inPlaceRebindingOf wrote: visitLinkNode calls the in-place form of the
+    /// operator they resolve to.
+    std::unordered_set<const GCT::Node *> inPlaceCalls_;
+    /// The operator group the name `name` stands for here when it is an operator a module
+    /// brings (the built-in module or an imported one) that nothing of the program shadows (the
+    /// lookup order of visitDRefNode); nullptr otherwise.
+    oper_group_ptr_t importedOperatorGroupNamed(const std::string &name);
     /// UnusedPureResult at the statement `stmt` when it is a call of an operator declared
     /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
     /// nothing, so the statement does nothing. `node` is what the statement built.

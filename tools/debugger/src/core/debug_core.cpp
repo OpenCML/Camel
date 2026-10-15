@@ -950,12 +950,12 @@ DebugCore::nodeVariable(ShadowFrame &f, const NodeInfo &n, std::string name) {
         return std::nullopt;
     }
     const GCNode *node = f.graph->node(n.ref);
-    if (node == nullptr || node->dataType == nullptr) {
+    if (node == nullptr || node->dataType() == nullptr) {
         return std::nullopt;
     }
     Variable v;
     v.name      = std::move(name);
-    v.view.type = node->dataType;
+    v.view.type        = node->dataType();
     const size_t index = static_cast<size_t>(&n - f.info->nodes.data());
     // Constants and ports have their values from the start; everything else once it ran.
     const bool available = n.slot < 0 || n.kind == GCNodeKind::Port || n.kind == GCNodeKind::Data ||

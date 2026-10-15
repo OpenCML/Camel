@@ -73,6 +73,11 @@ class SiteTable {
     /// to which the generated program adds the runtime's diagnostic when the operator faults.
     std::string placeFor(const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t node);
 
+    /// The name of the Site of a fault of `kind` at `origin`, a place of the program that is
+    /// not a node: the entry function, for the reports of its command-line arguments.
+    std::string siteAt(
+        uint64_t origin, camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
+
     /// A Site of a diagnostic that is not located in the program (the report of an error
     /// value nobody handled: what the value says is its location is put in when it happens).
     std::string unlocated(camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
@@ -92,6 +97,11 @@ class SiteTable {
         std::string message;  // for an error value: the message
         std::string location; // for an error value: `file.cml:line:col`
     };
+
+    /// A new Site of a fault of `kind` at `origin` (none when it is kInvalidOriginId), whose
+    /// name is `at_<line>_<column>`. Shared by siteFor and siteAt.
+    std::string makeSite(
+        uint64_t origin, camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
 
     /// `file.cml:line:col` of `d`'s range, the file without its directory (as an error value
     /// names it, src/execute/fault_isolation.cpp).

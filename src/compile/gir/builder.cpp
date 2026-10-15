@@ -2908,6 +2908,23 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         const auto &e = opt.value();
+        if (e.isValue()) {
+            // A constant a C++ module exports (`math::pi`; design principles 2.13): the
+            // constant itself, here, as the same value written as a literal would be. It has
+            // no node on the root graph and needs no capture.
+            const GCT::node_ptr_t literal = tree_->makeData(e.value());
+            literal->setOrigin(gct->origin());
+            node_handle_t node = visitDataNode(literal);
+            if (recorder_) {
+                recorder_->valueReferenced(
+                    gct->origin(),
+                    name,
+                    camel::source::kInvalidOriginId,
+                    valueTypeOf(nodeTypeOf(node)));
+            }
+            LEAVE("DREF");
+            return node;
+        }
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
             // A value exported by another module: a node of the root graph (design principles
             // 2.11), used like a value of this module's top level: on the root graph itself,
@@ -3101,6 +3118,19 @@ bool Builder::hasProgramOperatorOverloads(const std::string &group) {
 
 node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct) {
     OperatorOverloads set = operatorOverloadsOf(group);
+    // `!=` is not overloaded itself: an overload of `==` gives it (design principles 2.13).
+    // Where one applies, `a != b` is the negation of the call of that overload; where none
+    // does, the built-in `!=` (the group of the DREF, which set.ops is not) is used as before.
+    bool negated = false;
+    if (group == "__neq__") {
+        if (OperatorOverloads equality = operatorOverloadsOf("__eq__");
+            !equality.graphs.empty() || !equality.templates.empty()) {
+            set.graphs    = std::move(equality.graphs);
+            set.templates = std::move(equality.templates);
+            set.moduleOf  = std::move(equality.moduleOf);
+            negated       = true;
+        }
+    }
     ASSERT(set.ops != nullptr, "An operator has no group.");
     node_handle_t drefNode{currGraph_->addDrefNode(
         std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{set.ops})};
@@ -3117,6 +3147,9 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
     }
     if (!set.graphs.empty() || !set.templates.empty()) {
         operatorOverloads_[drefNode] = std::move(set);
+        if (negated) {
+            negatedEqualities_.insert(drefNode);
+        }
     }
     return drefNode;
 }
@@ -3160,6 +3193,31 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     }
     const bool builtinAccepts =
         set.ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+    // Design principles 2.13: an overload of the program is preferred where it is more
+    // specific than the others that take the arguments. "More specific" is exact: its
+    // parameter types are the argument types themselves (as written, without a value entering
+    // `T?` / `T!`), while the others take them only as members of a family of types: a
+    // built-in or C++ module operator whose type rule accepts several types (the comparison of
+    // arrays, tuples and structs by content, an arithmetic over tensors), or a generic
+    // overload. A built-in overload declared for exactly these types is as specific, and
+    // the two stay a conflict (rejectOperatorConflict) or an ambiguity.
+    const auto exactFor = [&](FunctionType *type) {
+        if (type == nullptr || type->withTypesCount() != 0 ||
+            type->normTypesCount() != normTypes.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < normTypes.size(); ++i) {
+            if (!type->normTypeAt(i)->equals(valueTypeOf(normTypes[i]))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const bool builtinExact = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+        const auto *fixed = dynamic_cast<const StaticFuncTypeResolver *>(entry.second.get());
+        return fixed != nullptr && exactFor(fixed->funcType()) &&
+               fixed->resolve(withTypes, normTypes, Modifier::None).has_value();
+    });
     const auto where = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
         return it == set.moduleOf.end() ? std::string(" (this module)")
@@ -3182,9 +3240,25 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
                 }
             }
         }
-        const size_t fits = graphs.size() + templates.size() + (builtinAccepts && !entering);
+        bool useBuiltin = builtinAccepts && !entering;
+        size_t fits     = graphs.size() + templates.size() + (useBuiltin ? 1 : 0);
         if (fits == 0) {
             continue;
+        }
+        if (fits > 1 && !entering && !builtinExact) {
+            // One exact overload of the program among several that fit: it wins (above).
+            std::vector<compile_graph_ptr_t> exact;
+            for (const auto &graph : graphs) {
+                if (exactFor(graph->funcType())) {
+                    exact.push_back(graph);
+                }
+            }
+            if (exact.size() == 1) {
+                graphs     = std::move(exact);
+                templates  = {};
+                useBuiltin = false;
+                fits       = 1;
+            }
         }
         if (fits > 1) {
             // One line, as every diagnostic message is: the overloads separated by `;`.
@@ -3225,7 +3299,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
                     strutil::join(overloads, "; ", [](const std::string &o) { return o; }));
             throw BuildAbortException();
         }
-        if (builtinAccepts && !entering) {
+        if (useBuiltin) {
             return nullptr;
         }
         if (!templates.empty()) {
@@ -3270,8 +3344,24 @@ void Builder::rejectOperatorConflict(
     const std::string symbol = operatorSymbolOf(group);
     const std::string types  = strutil::join(params, ", ", [](Type *t) { return t->toString(); });
     const OperatorOverloads set = operatorOverloadsOf(group);
-    const std::vector<StaticArg> statics(params.size());
-    if (set.ops->resolve({}, params, statics, Modifier::None).has_value()) {
+    // A built-in (or C++ module) overload declared for exactly these parameter types is as
+    // specific as this one: the two cannot both be meant. One that takes them as members of a
+    // family of types (by content, a type rule over several types) is less specific, and this
+    // one is preferred where both apply (design principles 2.13; chooseOperatorOverload).
+    const bool sameAsBuiltin = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+        const auto *fixed = dynamic_cast<const StaticFuncTypeResolver *>(entry.second.get());
+        if (fixed == nullptr || fixed->funcType()->withTypesCount() != 0 ||
+            fixed->funcType()->normTypesCount() != params.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < params.size(); ++i) {
+            if (!fixed->funcType()->normTypeAt(i)->equals(params[i])) {
+                return false;
+            }
+        }
+        return true;
+    });
+    if (sameAsBuiltin) {
         diags_->of(SemanticDiag::OperatorOverloadConflict)
             .atOrigin(gct->origin())
             .commit(symbol, types, " by the built-in operator or by an operator of a C++ module");
@@ -3441,6 +3531,25 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
+    if (gct->annotation() && asTagged(targetType) == nullptr &&
+        gct->at(0)->type() != GCT::NodeKind::DATA) {
+        // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
+        // `e` must already have it. A value of that very type passes as it is (converting a
+        // value to its own type does nothing, design principles 2.12); one of a type the
+        // declared type accepts is cast to it, so that the name has the declared type; any
+        // other is refused, as numbers are not converted implicitly (design principles 2.7).
+        Type *have = valueTypeOf(sourceType);
+        if (targetType->equals(have)) {
+            LEAVE("CAST");
+            return valueNode;
+        }
+        if (!targetType->assignableFrom(have)) {
+            diags_->of(SemanticDiag::DeclaredTypeMismatch)
+                .atOrigin(gct->origin())
+                .commit(have->toString(), targetType->toString());
+            throw BuildAbortException();
+        }
+    }
     if (asTagged(targetType) != nullptr &&
         targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
         // Several levels at once (`let x: int?! = 5`): one CAST per level.
@@ -3824,12 +3933,19 @@ void Builder::reportImportNameConflicts() {
                 // the same parameter types, or a value and anything else of that name (a value
                 // is not overloaded).
                 std::optional<std::string> clash;
-                if (EntityAccess::isNode(*first) || EntityAccess::isNode(*second)) {
-                    const bool same = EntityAccess::isNode(*first) &&
-                                      EntityAccess::isNode(*second) &&
-                                      EntityAccess::node(*first) == EntityAccess::node(*second);
+                // A value: exported by a module written in Camel (a node of the root graph) or
+                // a constant of a C++ module (design principles 2.13).
+                const auto isValue = [](const camel::core::module::entity &e) {
+                    return EntityAccess::isNode(e) || e.isValue();
+                };
+                if (isValue(*first) || isValue(*second)) {
+                    const bool same =
+                        (EntityAccess::isNode(*first) && EntityAccess::isNode(*second) &&
+                         EntityAccess::node(*first) == EntityAccess::node(*second)) ||
+                        (first->isValue() && second->isValue() &&
+                         first->value() == second->value());
                     if (!same) {
-                        clash = EntityAccess::isNode(*first) && EntityAccess::isNode(*second)
+                        clash = isValue(*first) && isValue(*second)
                                     ? std::string("a value in both")
                                     : std::string("a value in one of them");
                     }
@@ -4240,16 +4356,9 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
     }
     // `append` is the built-in one: no declaration of the program, and no other module,
     // gives the name another meaning here (the lookup order of visitDRefNode).
-    if (nodeAt("append").has_value() || templateScope_->get("append").has_value() ||
-        decoratedGraphAt("append").has_value()) {
-        return nullptr;
-    }
-    if (auto graphs = graphsAt("append"); graphs.has_value() && !graphs.value()->empty()) {
-        return nullptr;
-    }
-    const auto appendEntity = module_->getImportedEntity("append");
-    if (!appendEntity.has_value() || !appendEntity->isOperGroup() ||
-        std::ranges::none_of(appendEntity->operGroup()->resolvers(), [](const auto &overload) {
+    const oper_group_ptr_t appendGroup = importedOperatorGroupNamed("append");
+    if (appendGroup == nullptr ||
+        std::ranges::none_of(appendGroup->resolvers(), [](const auto &overload) {
             return overload.first == ":struct/append_arr";
         })) {
         return nullptr;
@@ -4275,7 +4384,7 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
     };
     if (recorder_) {
         std::vector<std::string> signatures;
-        for (const auto &[uri, resolver] : appendEntity->operGroup()->resolvers()) {
+        for (const auto &[uri, resolver] : appendGroup->resolvers()) {
             signatures.push_back(resolver->signature());
         }
         recorder_->operatorReferenced(binding->at(0)->origin(), "append", std::move(signatures));
@@ -4308,6 +4417,121 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
         *appended << with << tree_->clone(call->at(1));
         *rebinding << tree_->clone(gct->at(0)) << tree_->clone(target) << appended;
     }
+    return visitLinkNode(rebinding);
+}
+
+oper_group_ptr_t Builder::importedOperatorGroupNamed(const std::string &name) {
+    if (nodeAt(name).has_value() || templateScope_->get(name).has_value() ||
+        decoratedGraphAt(name).has_value()) {
+        return nullptr;
+    }
+    if (auto graphs = graphsAt(name); graphs.has_value() && !graphs.value()->empty()) {
+        return nullptr;
+    }
+    const auto entity = module_->getImportedEntity(name);
+    return entity.has_value() && entity->isOperGroup() ? entity->operGroup() : nullptr;
+}
+
+node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
+    // The lowered form of `xs = xs->op<w...>` (and of `xs = op<w...>(xs)`, `xs = xs->op`):
+    //   LINK(DREF __assn__, DREF xs, LINK(WITH(DREF op, w...) | DREF op, DREF xs))
+    // In a sync block only: the rewritten statement is three operations on the variable,
+    // which must run together and in this order.
+    const auto isDref = [](const GCT::node_ptr_t &node, std::string_view name = {}) {
+        return node != nullptr && node->type() == GCT::NodeKind::DREF &&
+               (name.empty() || node->name() == name);
+    };
+    if (!synced_ || gct->size() != 3 || !isDref(gct->at(0), "__assn__") || !isDref(gct->at(1))) {
+        return nullptr;
+    }
+    const GCT::node_ptr_t target = gct->at(1);
+    const GCT::node_ptr_t call   = gct->at(2);
+    if (call->type() != GCT::NodeKind::LINK || call->size() != 2 ||
+        !isDref(call->at(1), target->name())) {
+        return nullptr;
+    }
+    const GCT::node_ptr_t callee = call->at(0);
+    const bool withArgs          = callee->type() == GCT::NodeKind::WITH;
+    const GCT::node_ptr_t opName = withArgs ? callee->at(0) : callee;
+    if (!isDref(opName)) {
+        return nullptr;
+    }
+    // `xs` is a variable (of this function or a captured one) holding an array.
+    const std::string name = target->name();
+    if (!nodeAt(name).has_value()) {
+        return nullptr;
+    }
+    const node_handle_t variable = resolveNodeByRef(name);
+    Type *arrayType              = valueTypeOf(nodeTypeOf(variable));
+    if (!isVariable(variable) || arrayType == nullptr || arrayType->code() != TypeCode::Array) {
+        return nullptr;
+    }
+    // `op` is an operator of a module (nothing of the program is named so), and one of its
+    // overloads declares an in-place form: anything else is an ordinary call.
+    const oper_group_ptr_t group = importedOperatorGroupNamed(opName->name());
+    auto &table                  = camel::core::OperatorTable::instance();
+    if (group == nullptr || std::ranges::none_of(group->resolvers(), [&](const auto &overload) {
+            return table.inPlaceForm(overload.first).has_value();
+        })) {
+        return nullptr;
+    }
+    // The with-arguments are plain values, built first as in the call as written and named
+    // so that the call below refers to them; a name of a function, a binding or a lambda is
+    // settled by the call it is passed to, and such a call is built as written.
+    for (size_t i = 1; withArgs && i < callee->size(); ++i) {
+        const GCT::node_ptr_t arg = callee->at(i);
+        if ((isDref(arg) && !nodeAt(arg->name()).has_value()) ||
+            arg->type() == GCT::NodeKind::WITH || arg->type() == GCT::NodeKind::FUNC) {
+            return nullptr;
+        }
+    }
+    std::vector<std::string> temporaries;
+    type_vec_t withTypes;
+    for (size_t i = 1; withArgs && i < callee->size(); ++i) {
+        node_handle_t value = valueOf(visitOperand(callee->at(i), callee));
+        if (nodeIsKind(value, runtime::GCNodeKind::Dref) || boundWithArgs_.contains(value)) {
+            rejectNameWithoutValue(value, "the argument", callee->at(i));
+        }
+        withTypes.push_back(valueTypeOf(nodeTypeOf(value)));
+        temporaries.push_back(bindTemporary(value));
+    }
+    const auto make = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {
+        node->setOrigin(at->origin());
+        return node;
+    };
+    // The callee as written, with the with-arguments replaced by their names.
+    GCT::node_ptr_t calleeCopy = tree_->clone(opName);
+    if (withArgs) {
+        GCT::node_ptr_t with = make(tree_->makeWith(temporaries.size()), callee);
+        *with << calleeCopy;
+        for (size_t i = 0; i < temporaries.size(); ++i) {
+            *with << make(tree_->makeDRef(temporaries[i]), callee->at(i + 1));
+        }
+        calleeCopy = with;
+    }
+    // The overload the call resolves to, as visitLinkNode will resolve it: rewritten only when
+    // it has an in-place form and gives an array of the variable's own type.
+    const std::vector<StaticArg> statics(1);
+    const auto resolved = group->resolve(withTypes, {arrayType}, statics, Modifier::None);
+    const bool inPlace  = resolved.has_value() &&
+                         table.inPlaceForm((*resolved)->uri()).has_value() &&
+                         (*resolved)->funcType()->exitType() != nullptr &&
+                         (*resolved)->funcType()->exitType()->equals(arrayType);
+    GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
+    GCT::node_ptr_t applied   = make(tree_->makeLink(1), call);
+    if (!inPlace) {
+        // As written (with the arguments already built): `op` reports what does not fit.
+        *applied << calleeCopy << tree_->clone(call->at(1));
+        *rebinding << tree_->clone(gct->at(0)) << tree_->clone(target) << applied;
+        return visitLinkNode(rebinding);
+    }
+    GCT::node_ptr_t take = make(tree_->makeLink(1), call->at(1));
+    *take << make(tree_->makeDRef(std::string(kBuiltinPrefix) + "__var_take__"), call->at(1))
+          << tree_->clone(target);
+    *applied << calleeCopy << take;
+    inPlaceCalls_.insert(applied);
+    *rebinding << make(tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn_owned__"), gct->at(0))
+               << tree_->clone(target) << applied;
     return visitLinkNode(rebinding);
 }
 
@@ -4969,6 +5193,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             LEAVE("LINK");
             return rebound;
         }
+        if (node_handle_t rebound = inPlaceRebindingOf(gct)) {
+            LEAVE("LINK");
+            return rebound;
+        }
     }
     genericCalleeAllowed_ =
         gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::WITH;
@@ -5236,7 +5464,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     };
 
     // An operator with overloads of the program: one of them, or the built-in group below.
+    // `a != b` by an overload of `==` is the negation of that call (`negateResult`).
     compile_graph_ptr_t operatorOverload = nullptr;
+    bool negateResult                    = false;
     if (auto overloads = operatorOverloads_.find(targetNode);
         overloads != operatorOverloads_.end()) {
         operatorOverload = chooseOperatorOverload(
@@ -5249,7 +5479,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             accepts);
     }
     if (operatorOverload != nullptr) {
-        targetGraph = operatorOverload;
+        negateResult = negatedEqualities_.contains(targetNode);
+        targetGraph  = operatorOverload;
         currGraph_->addDependencyGraph(targetGraph);
         targetNode     = createFuncDataNode(targetGraph, false, true);
         targetFuncType = targetGraph->funcType();
@@ -5503,6 +5734,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
+            if (inPlaceCalls_.contains(gct)) {
+                // Written by inPlaceRebindingOf, which checked that this overload has an
+                // in-place form: the call works on the array :var/take hands it.
+                const auto form =
+                    camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
+                ASSERT(form.has_value(), "An in-place rebinding lost its in-place form.");
+                targetOperator = std::make_shared<OperatorIndex>(
+                    targetOperator->name(),
+                    targetOperator->funcType(),
+                    *form);
+            }
             rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
             // `foreach` drops what its element function gives: the value of the body of a
             // function written in place here is a value nothing takes (design principles
@@ -5659,8 +5901,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // a `var` argument as the variable itself. Any other operator with a `var` parameter mutates
     // an object in place and takes the object; the call still counts as a write of the variable
     // the object was read from. Every other parameter takes the value.
-    const bool takesVariables =
-        targetOperator == nullptr || targetOperator->name().starts_with("__assn");
+    // A function, an assignment and a variable operator (`:var/take`, inPlaceRebindingOf) are
+    // given the variable itself at a `var` position; any other operator its value.
+    const bool takesVariables = targetOperator == nullptr ||
+                                targetOperator->name().starts_with("__assn") ||
+                                targetOperator->name().starts_with("__var_");
     // The node to link and, at a `var` position, the variable the callee writes (if any).
     const auto passArgument = [&](const Argument &arg, bool isVar) {
         if (!isVar) {
@@ -5760,6 +6005,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         lastSyncedNode_ = targetNode;
         chainedNodes_.insert(targetNode);
+    }
+    if (negateResult) {
+        // `a != b` through an overload of `==`: `!(a == b)`, which needs a bool from it.
+        if (Type *equal = valueTypeOf(nodeTypeOf(targetNode));
+            equal == nullptr || equal->code() != TypeCode::Bool) {
+            diags_->of(SemanticDiag::OperatorOverloadInvalid)
+                .atOrigin(gct->origin())
+                .commit(
+                    "==",
+                    std::format(
+                        "'!=' is the negation of '==', and the overload of '==' for these "
+                        "operands returns '{}', not 'bool'",
+                        equal != nullptr ? equal->toString() : std::string("void")));
+            throw BuildAbortException();
+        }
+        node_handle_t negation = applyTagOperator("__not__", bindTemporary(targetNode), gct);
+        LEAVE("LINK");
+        return negation;
     }
     LEAVE("LINK");
     return targetNode;
@@ -6060,6 +6323,12 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     const char *symbol = onNull ? "??" : kind == Kind::ErrorThen ? "!!" : "?->";
 
     node_handle_t subject = valueNodeOf(visit(gct->at(0)));
+    if (onNull && asTagged(valueTypeOf(nodeTypeOf(subject))) == nullptr &&
+        isNarrowedName(gct->at(0))) {
+        // `x ?? d` where an `if` around it already narrowed `x` to a `T` (design principles
+        // 2.13): allowed, with a warning.
+        subject = reopenNarrowedName(gct->at(0), subject, gct, "??");
+    }
     Type *subjectType     = valueTypeOf(nodeTypeOf(subject));
     TupleType *tagged     = asTagged(subjectType);
     if (tagged == nullptr || tagged->isNullable() != onNull) {
@@ -6327,15 +6596,60 @@ node_handle_t Builder::nullComparison(
     if (nullFirst == isNullLiteral(operands[1].expr)) {
         return nullptr; // no `null` written, or two
     }
-    // Only a `T?` has the tag asked about. Two `T?` values are not compared, and neither is
-    // any other value with `null`: those stay the errors they were.
+    // Only a `T?` has the tag asked about. Two `T?` values are not compared (no `null` is
+    // written then).
     const size_t subject = nullFirst ? 1 : 0;
-    if (asNullable(types[subject]) == nullptr) {
-        return nullptr;
+    Type *subjectType    = valueTypeOf(types[subject]);
+    if (asNullable(subjectType) == nullptr) {
+        // A value whose type is never null (`5`, an `int`, a name already narrowed to a `T`):
+        // the test is allowed and its result is fixed, which is worth a warning (design
+        // principles 2.13). The value itself is not needed, so nothing evaluates it. `null`
+        // itself (type `void`) is left to the comparison of two `null`s, which is refused.
+        if (subjectType == nullptr || subjectType->code() == TypeCode::Void) {
+            return nullptr;
+        }
+        const bool fixed      = group == "__neq__";
+        const auto &written   = operands[subject].expr;
+        const std::string who = written->type() == GCT::NodeKind::DREF
+                                    ? std::format("'{}'", written->name())
+                                    : std::string("This value");
+        diags_->of(SemanticDiag::NullTestNeverNull)
+            .atOrigin(gct->origin())
+            .commit(who, subjectType->toString(), fixed ? "true" : "false");
+        const GCT::node_ptr_t literal =
+            tree_->makeData(tt::as_shared<Data>(std::make_shared<BoolData>(fixed)));
+        literal->setOrigin(gct->origin());
+        return visitDataNode(literal);
     }
     node_handle_t isNull =
         applyTagOperator("__is_null__", bindTemporary(valueOf(operands[subject].node)), gct);
     return group == "__eq__" ? isNull : applyTagOperator("__not__", bindTemporary(isNull), gct);
+}
+
+bool Builder::isNarrowedName(const GCT::node_ptr_t &expr) {
+    if (expr->type() != GCT::NodeKind::DREF) {
+        return false;
+    }
+    // The scope maps the name to the value the narrowing `if` bound in its arm, also from an
+    // arm or a function nested in that arm (which reaches it through a capture).
+    const auto bound = nodeScope_->get(expr->name());
+    return bound.has_value() && narrowedValues_.contains(*bound);
+}
+
+node_handle_t Builder::reopenNarrowedName(
+    const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
+    const char *construct) {
+    // Design principles 2.13: the construct is still allowed on the name; it is applied to the
+    // value put back into `T?`, so that it is checked and built exactly as on the name before
+    // narrowing (the right side of `??` still has to fit, the cases of the `match` still have
+    // to be its fixed patterns), and only its null arm can never be taken.
+    Type *type = valueTypeOf(nodeTypeOf(subject));
+    diags_->of(SemanticDiag::KnownNotNull)
+        .atOrigin(at->origin())
+        .commit(expr->name(), type->toString(), construct);
+    node_handle_t reopened = coerceTo(subject, TupleType::nullable(type), at);
+    ASSERT(reopened != nullptr, "A value always enters the nullable form of its own type.");
+    return reopened;
 }
 
 node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
@@ -6473,10 +6787,11 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
                     // written where no DREF shows it (the elements of an array literal are
                     // names kept in the constant), and an unused node costs nothing at run
                     // time, as nothing depends on it.
-                    [[maybe_unused]] const bool bound = insertNode(
-                        opened.name,
-                        applyTagOperator("__null_value__", opened.temporary, opened.subject));
+                    node_handle_t value =
+                        applyTagOperator("__null_value__", opened.temporary, opened.subject);
+                    [[maybe_unused]] const bool bound = insertNode(opened.name, value);
                     ASSERT(bound, "A narrowed name is the first name of its arm.");
+                    narrowedValues_.insert(value);
                 }
                 return visitBodyNode(arm.exec);
             });
@@ -6536,6 +6851,18 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         "Unexpected result type from Enter the child of BRCH node.");
     node_handle_t condNode = any_cast<node_handle_t>(res);
     node_handle_t node{};
+    if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr &&
+        isNarrowedName(gct->at(0))) {
+        // `match x { case null => ...  case v => ... }` where an `if` around it already
+        // narrowed `x` to a `T` (design principles 2.13): allowed, with a warning. A match
+        // without `case null` is an ordinary match on the `T`.
+        const bool nullCase = std::any_of(gct->begin() + 1, gct->end(), [](const auto &c) {
+            return c->caseType() == GCT::CaseType::Value && isNullLiteral(c->at(0));
+        });
+        if (nullCase) {
+            condNode = reopenNarrowedName(gct->at(0), condNode, gct, "match");
+        }
+    }
     if (TupleType *tagged = asTagged(valueTypeOf(nodeTypeOf(condNode)))) {
         node = visitTaggedMatch(gct, condNode, tagged);
     } else {

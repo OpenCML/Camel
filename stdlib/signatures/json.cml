@@ -24,13 +24,15 @@ inner func encode(value: T, indent: int): string {
 }
 
 /// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
-/// known only when the program runs. Look into it with get, as_int, as_array and the other
-/// operators below, each of which gives a value of a definite type; read a part whose shape is
-/// known with decode_as. Prints as its JSON text.
+/// known only when the program runs; an error value when the text is not JSON (design
+/// principles 2.13). Look into a Json with get, as_int, as_array and the other operators below,
+/// each of which gives a value of a definite type and takes a `Json?` as well, so that calls
+/// chain; read a part whose shape is known with decode_as. Prints as its JSON text. In the
+/// examples below, `j` is a Json decoded so.
 /// @pure
-/// @fails fault `JsonDecodeFailed` when the text is not JSON
-/// @example decode('{"port": 80}')->get<'port'>->as_int ?? 0    // 80
-inner func decode(text: string): Json {
+/// @fails error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning)
+/// @example decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1    // 80
+inner func decode(text: string): Json! {
     return 'json:decode'
 }
 
@@ -47,14 +49,14 @@ inner func decode_as(text: string | Json): T! {
 
 /// The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 /// @pure
-/// @example kind(decode('[1]'))    // 'array'
+/// @example kind(j)    // 'array', for j of '[1]'
 inner func kind(j: Json): string {
     return 'json:kind'
 }
 
 /// Whether a Json is the JSON null.
 /// @pure
-/// @example is_null(decode('null'))    // true
+/// @example is_null(j)    // true, for j of 'null'
 inner func is_null(j: Json): bool {
     return 'json:is_null'
 }
@@ -62,7 +64,7 @@ inner func is_null(j: Json): bool {
 /// The member key of an object; null when j is not an object, has no such member, or is null
 /// itself (so that calls chain: j->get<'a'>->get<'b'>).
 /// @pure
-/// @example decode('{"a": 1}')->get<'a'>    // 1, a Json?
+/// @example j->get<'a'>    // 1, a Json?, for j of '{"a": 1}'
 with <key: string>
 inner func get(j: Json | Json?): Json? {
     return 'json:get'
@@ -71,7 +73,7 @@ inner func get(j: Json | Json?): Json? {
 /// The element index of an array; null when j is not an array, the index is out of range, or j
 /// is null itself.
 /// @pure
-/// @example decode('[5, 6]')->get<1>->as_int ?? 0    // 6
+/// @example j->get<1>->as_int ?? 0    // 6, for j of '[5, 6]'
 with <index: int>
 inner func get(j: Json | Json?): Json? {
     return 'json:get'
@@ -79,42 +81,42 @@ inner func get(j: Json | Json?): Json? {
 
 /// The bool a Json holds; null for any other kind.
 /// @pure
-/// @example decode('true')->as_bool ?? false    // true
+/// @example j->as_bool ?? false    // true, for j of 'true'
 inner func as_bool(j: Json | Json?): bool? {
     return 'json:as_bool'
 }
 
 /// The integer a Json holds; null for any other kind (a number with a fraction is not an int).
 /// @pure
-/// @example decode('42')->as_int ?? 0    // 42
+/// @example j->as_int ?? 0    // 42, for j of '42'
 inner func as_int(j: Json | Json?): int? {
     return 'json:as_int'
 }
 
 /// The number a Json holds, an integer included; null for any other kind.
 /// @pure
-/// @example decode('2')->as_float ?? 0.0    // 2.0
+/// @example j->as_float ?? 0.0    // 2.0, for j of '2'
 inner func as_float(j: Json | Json?): float? {
     return 'json:as_float'
 }
 
 /// The string a Json holds; null for any other kind.
 /// @pure
-/// @example decode('"hi"')->as_string ?? ''    // 'hi'
+/// @example j->as_string ?? ''    // 'hi', for j of '"hi"'
 inner func as_string(j: Json | Json?): string? {
     return 'json:as_string'
 }
 
 /// The elements of a JSON array; null for any other kind.
 /// @pure
-/// @example len(decode('[1, "a"]')->as_array ?? [])    // 2
+/// @example len(j->as_array ?? [])    // 2, for j of '[1, "a"]'
 inner func as_array(j: Json | Json?): Json[]? {
     return 'json:as_array'
 }
 
 /// The members of a JSON object, by name; null for any other kind.
 /// @pure
-/// @example keys(decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>))    // ['a', 'b']
+/// @example keys(j->as_object ?? ([] as Map<string, Json>))    // ['a', 'b'], for j of '{"b": 1, "a": 2}'
 inner func as_object(j: Json | Json?): Map<string, Json>? {
     return 'json:as_object'
 }

@@ -318,3 +318,55 @@ expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 9
 expect_output_contains = ["'out = out->append<7>'"]
+
+[[tests]]
+name = "new_values.sort_rebinding"
+desc = "`xs = xs->sort` binds the variable to a sorted array and leaves every other holder of the old one as it was (design principles 2.13): a local, `sort(xs)`, merge_sort, a var parameter, a captured variable, floats. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+expect_output_not_contains = ["[Warn]"]
+
+[[tests]]
+name = "new_values.sort_rebinding.graph"
+desc = "The rebinding is written with the in-place form of the operator between `:var/take` and `:op/assn_owned`, for each of the four rebindings."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = [":var/take", "algo:sort_in_place", "algo:merge_sort_in_place", "algo:insert_sort_in_place", ":op/assn_owned"]
+
+[[tests]]
+name = "new_values.sort_rebinding.passes"
+desc = "The same program through std::inline, std::opt, std::jit: the passes keep the in-place forms (state-only operators) in order."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+args = ["${case}", "std::inline", "std::opt", "std::jit"]
+expect_exit = 0
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+
+[[tests]]
+name = "new_values.sort_rebinding.gc_mark_sweep"
+desc = "The rebindings on std::fvm with the mark-sweep collector, a collection of both kinds every third allocation and the heap verified around each."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
+timeout_ms = 60000
+
+[[tests]]
+name = "new_values.sort_rebinding.gc_generational"
+desc = "The rebindings on std::fvm with the generational collector, a collection of both kinds every third allocation and the heap verified around each."
+kind = "behavior"
+case = "../../../cases/consistency/new_values/sort_rebinding.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
+timeout_ms = 60000

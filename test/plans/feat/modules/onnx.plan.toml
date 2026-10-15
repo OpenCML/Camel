@@ -1438,7 +1438,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_tree_recursion"
-desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic at the second recursive call; it used to fail with an unlocated allocation error from simplification."
+desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic at the second recursive call; it used to fail with an unlocated allocation error from simplification. The refusal comes when the doubling graph outgrows one runtime graph; since a node is a 16-byte record and an edge one entry (graph model step 3) a graph holds several times more nodes, so the unrolling runs further before it stops (measured in one container, release build: 9 s before, 39 s after; hence the timeout)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_tree_recursion.cml"
 args = ["${case}"]
@@ -1453,7 +1453,7 @@ assert(/[(]at [^ ]*export_tree_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missin
 assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
 }
 """
-timeout_ms = 30000
+timeout_ms = 120000
 
 [[tests]]
 name = "export_slice_loop"
@@ -2164,7 +2164,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 72
 expect_diagnostic_column = 5
-expect_output_contains = ["the exported function does not fit one graph once every call in it is inlined and every recursion of constant depth is unrolled (ONNX has no calls): graph 'f13' needs ", " node blocks (the 8-byte units nodes are stored in", "and one runtime graph holds at most 65535 (they are addressed with 16 bits)"]
+expect_output_contains = ["the exported function does not fit one graph once every call in it is inlined and every recursion of constant depth is unrolled (ONNX has no calls): graph 'f13' needs ", " edges (every input of every node is one)", "and one runtime graph holds at most 65535 (they are addressed with 16 bits)"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "internal error", "integral width"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000
@@ -2185,7 +2185,7 @@ const diags = JSON.parse(input.normalized.stdout)
 assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
-const m = /graph 'f13' needs (\d+) node blocks .* holds at most (\d+) /.exec(d.message)
+const m = /graph 'f13' needs (\d+) edges .* holds at most (\d+) /.exec(d.message)
 assert(m && Number(m[2]) === 65535 && Number(m[1]) > 65535, `graph, size and limit are missing: ${d.message}`)
 assert(d.range.start.line === 71 && d.range.start.character === 4, `unexpected range ${JSON.stringify(d.range)}`)
 assert(!fs.existsSync(path.join(input.repo_root, 'tmp/test/onnx/refusal_graph_too_large.onnx')), 'a refused export must not write a model')

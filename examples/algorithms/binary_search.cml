@@ -4,7 +4,7 @@
 // Run: camel examples/algorithms/binary_search.cml
 module binary_search
 
-import { sorted } from algo
+import { sort } from algo
 import { index_of } from array
 
 // Searches xs[lo, hi) for `target` and returns its index.
@@ -25,7 +25,7 @@ func describe(xs: int[], target: int): string {
 }
 
 func main(): int sync {
-    let xs = sorted([41, 7, 19, 3, 88, 54, 23, 60])
+    let xs = sort([41, 7, 19, 3, 88, 54, 23, 60])
     println(xs)
     println([54, 3, 88, 20]->map<(t: int): string => describe(xs, t)>->join<'\n'>)
     println('index_of gives:', xs->index_of<54> ?? -1, xs->index_of<20> ?? -1)

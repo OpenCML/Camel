@@ -69,7 +69,7 @@ std::vector<std::byte> clonePayloadBytes(
         const auto sourceArms = sourceGraph->branchArmsOf(sourceRef);
         std::vector<std::byte> bytes(sizeof(DraftBrchPayload) + sourceArms.size_bytes());
         auto *payload                 = reinterpret_cast<DraftBrchPayload *>(bytes.data());
-        const auto *sourceBrchPayload = sourceNode->bodyAs<GCBrchBody>();
+        const auto *sourceBrchPayload = sourceGraph->nodeBodyAs<GCBrchBody>(sourceRef);
         payload->join                 = remapNodeRef(sourceBrchPayload->join, mapping);
         payload->armCount             = sourceBrchPayload->armCount;
         payload->defaultArm           = remapNodeRef(sourceBrchPayload->defaultArm, mapping);
@@ -83,13 +83,15 @@ std::vector<std::byte> clonePayloadBytes(
         return bytes;
     }
 
-    std::vector<std::byte> bytes(sourceNode->bodyBytes());
-    if (!bytes.empty()) {
-        std::memcpy(
-            bytes.data(),
-            reinterpret_cast<const std::byte *>(sourceNode) + sizeof(GCNode),
-            bytes.size());
+    if (sourceNode->kind == GCNodeKind::Func) {
+        // A frozen FUNC names its callee by reference-table index; a draft holds the callee.
+        const GCFuncBody callee{.calleeGraph = sourceGraph->directCalleeGraphOf(sourceRef)};
+        std::vector<std::byte> bytes(sizeof(GCFuncBody));
+        std::memcpy(bytes.data(), &callee, sizeof(callee));
+        return bytes;
     }
+    const auto body = sourceGraph->nodePayloadBytes(sourceRef);
+    std::vector<std::byte> bytes(body.begin(), body.end());
     if (sourceNode->kind == GCNodeKind::Join && bytes.size() >= sizeof(GCJoinBody)) {
         auto *joinBody = reinterpret_cast<GCJoinBody *>(bytes.data());
         joinBody->brch = remapNodeRef(joinBody->brch, mapping);
@@ -100,8 +102,8 @@ std::vector<std::byte> clonePayloadBytes(
 camel::core::type::Type *resolveRuntimeNodeDataType(const GCGraph *graph, const GCNode *node) {
     ASSERT(graph != nullptr, "Runtime draft clone type resolution requires a non-null graph.");
     ASSERT(node != nullptr, "Runtime draft clone type resolution requires a non-null node.");
-    if (node->dataType != nullptr) {
-        return node->dataType;
+    if (node->dataType() != nullptr) {
+        return node->dataType();
     }
     if (node->dataIndex > 0) {
         const auto *runtimeTuple = graph->runtimeDataType();
@@ -200,7 +202,7 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
     CAMEL_LOG_INFO_S("DraftClone", "Clone copied cross-graph registries.");
 
     DraftGraphCloneResult result;
-    result.sourceToCloned.assign(sourceGraph->nodeBlockCount(), kInvalidNodeRef);
+    result.sourceToCloned.assign(sourceGraph->nodeCount(), kInvalidNodeRef);
     const gc_node_ref_t baseId = static_cast<gc_node_ref_t>(owner.nodeSlotCount());
     std::unordered_map<gc_slot_idx_t, gc_slot_idx_t> slotMap;
     std::unordered_map<gc_slot_idx_t, gc_slot_idx_t> staticSlotMap;

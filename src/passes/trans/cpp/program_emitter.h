@@ -42,7 +42,6 @@ enum class CppEmitMode {
     Plain,   // a program: the functions main reaches, and an `int main()`
     Module,  // the named functions of the module, without an entry
     Inspect, // as Module, each function preceded by a comment listing its nodes
-    Bench,   // as Plain (kept for the pass name std::cpp::bench; design note, Q5)
 };
 
 class ProgramEmitter {

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-140 diagnostics: 128 errors, 12 warnings.
+143 diagnostics: 129 errors, 14 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -114,6 +114,8 @@ prints one entry.
 | `0x030000F2` | [SemanticDiag::OperatorOverloadInvalid](#operatoroverloadinvalid) | Error |
 | `0x030000F3` | [SemanticDiag::OperatorOverloadConflict](#operatoroverloadconflict) | Error |
 | `0x030000F4` | [SemanticDiag::AmbiguousOperatorCall](#ambiguousoperatorcall) | Error |
+| `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
+| `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -121,6 +123,8 @@ prints one entry.
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
 | `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
+| `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn |
+| `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -147,7 +151,6 @@ prints one entry.
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error |
 | `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error |
 | `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error |
-| `0x04000037` | [RuntimeDiag::JsonDecodeFailed](#jsondecodefailed) | Error |
 | `0x04000038` | [RuntimeDiag::JsonEncodeUnsupported](#jsonencodeunsupported) | Error |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error |
@@ -2557,14 +2560,17 @@ There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 
 ```camel
 module if_condition
 
-import { decode } from json
+import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
 // bool (docs/design/any-typing, defect D5). It is a `Json` now, and a condition is a bool.
-func main(): int sync {
-    let a = decode('true')
+func check(a: Json): int sync {
     println(if a then 1 else 2)
     return 0
+}
+
+func main(): int sync {
+    return decode('true') ?-> check !! 1
 }
 ```
 
@@ -2581,7 +2587,7 @@ This case of a 'match' on a value of type '{0}' is a value of type '{1}'.
 **Help**
 
 ```text
-A case is compared with the value matched, so it must have the same type. Write the case as a value of that type, or convert the value matched first.
+A case is compared with the value matched, so the type of that value must accept it (design principles 2.13). Write the case as a value of that type, or convert the value matched first.
 ```
 
 **Example** (`test/cases/compile/any_typing/match_subject.cml`, run as `camel test/cases/compile/any_typing/match_subject.cml`)
@@ -2589,13 +2595,12 @@ A case is compared with the value matched, so it must have the same type. Write 
 ```camel
 module match_subject
 
-import { decode } from json
+import { Json, decode } from json
 
 // A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
 // bit, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing, defect D5). It
 // is a `Json` now, and a case has the type of the value matched.
-func main(): int sync {
-    let v = decode('"ab"')
+func check(v: Json): int sync {
     let r = match v {
         case 1 => 'one'
         case 'ab' => 'ab'
@@ -2603,6 +2608,10 @@ func main(): int sync {
     }
     println(r)
     return 0
+}
+
+func main(): int sync {
+    return decode('"ab"') ?-> check !! 1
 }
 ```
 
@@ -2648,7 +2657,7 @@ func main(): int sync {
 **Help**
 
 ```text
-The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '!=', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'. '&&', '||', '??', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.
+The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '??', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.
 ```
 
 **Example** (`test/cases/consistency/operator_overloads/not_overloadable_logical.cml`, run as `camel test/cases/consistency/operator_overloads/not_overloadable_logical.cml`)
@@ -2740,11 +2749,67 @@ More than one overload of the operator takes these arguments; make the parameter
 ```camel
 module ambiguous_generic
 
-func operator +(a: (typeas T)[], b: T): T[] { return a->append<b> }
-func operator +(a: string[], b: string): string[] { return [b] }
+func operator +(a: (typeas T)[], b: T[]): T[] { return a->extend<b> }
+func operator +(a: (typeas T)[], b: (typeas U)[]): T[] { return a }
 
 func main(): int sync {
-    println(['x'] + 'y')
+    println(['x'] + ['y'])
+    return 0
+}
+```
+
+### DeclaredTypeMismatch
+
+`0x03000110` · Error · `SemanticDiag::DeclaredTypeMismatch`
+
+**Message**
+
+```text
+This value has type '{0}', which is not the declared type '{1}'.
+```
+
+**Help**
+
+```text
+A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself). Convert the value explicitly, e.g. 'float(n)' or 'v as T', or change the declared type.
+```
+
+**Example** (`test/cases/consistency/declared_type/mismatch.cml`, run as `camel -E short test/cases/consistency/declared_type/mismatch.cml`)
+
+```camel
+// Nothing is converted on the way into a declared type: an `int` is not a `float`.
+func main(): int sync {
+    let n = 3
+    let x: float = n
+    println(x)
+    return 0
+}
+```
+
+### ModuleTypeCycle
+
+`0x03000111` · Error · `SemanticDiag::ModuleTypeCycle`
+
+**Message**
+
+```text
+The type '{0}' is part of a cycle of types across modules: {1}.
+```
+
+**Help**
+
+```text
+Each of these types needs the next one to be declared first, and the last needs the first: none of them can be. Remove one of the references that close the cycle.
+```
+
+**Example** (`test/cases/compile/modules_213/type_cycle.cml`, run as `camel -E short test/cases/compile/modules_213/type_cycle.cml`)
+
+```camel
+// Design principles 2.13: types that form a cycle across modules are reported with the cycle
+// (ModuleTypeCycle), not as names that are not resolved.
+import { A } from cycle_a
+
+func main(): int sync {
     return 0
 }
 ```
@@ -2970,6 +3035,74 @@ A function that returns a 'T!' reports its failure through that value. Take the 
 func main() sync {
     println('start')
     parse_int('zz')
+}
+```
+
+### NullTestNeverNull
+
+`0x03100110` · Warn · `SemanticDiag::NullTestNeverNull`
+
+**Message**
+
+```text
+{0} has type '{1}', which is never null: this test is always {2}.
+```
+
+**Help**
+
+```text
+Only a value of type 'T?' can be null. In the arm of 'if x != null' the name 'x' is already a 'T'. Remove the test, or test a value that may be null.
+```
+
+**Example** (`test/cases/consistency/narrowing/compare_plain_with_null.cml`, run as `camel -E short test/cases/consistency/narrowing/compare_plain_with_null.cml ${backend}`)
+
+```camel
+// A value that cannot be null may be compared with `null`: the result is fixed, and the
+// compiler warns (design principles 2.13).
+func main(): int sync {
+    let a = 1
+    println(a == null)          // line 5: warned, always false
+    println(null != a)          // line 6: warned, always true
+    println(a + 1 == null)      // line 7: warned, a value that is not a name
+    return 0
+}
+```
+
+### KnownNotNull
+
+`0x03100111` · Warn · `SemanticDiag::KnownNotNull`
+
+**Message**
+
+```text
+'{0}' is known not to be null here (it has type '{1}'): the null case of '{2}' is never taken.
+```
+
+**Help**
+
+```text
+An 'if' around this narrowed the name: in the arm where it is not null it is a 'T'. Use the name directly.
+```
+
+**Example** (`test/cases/consistency/narrowing/after_narrowing.cml`, run as `camel -E short test/cases/consistency/narrowing/after_narrowing.cml ${backend}`)
+
+```camel
+func describe(x: int?, ready: bool): string {
+    return if x != null && ready then {
+        let a = x ?? 0                                  // line 7: warned, `??`
+        let b = match x { case null => -1  case v => v * 2 }   // line 8: warned, `match`
+        let c = x != null                               // line 9: warned, always true
+        let d = if x == null then 'null' else 'set'     // line 10: warned, always false
+        let e = if ready then x ?? 1 else 0             // line 11: warned, in a nested arm
+        return '{} {} {} {} {}'->format<a, b, c, d, e>
+    } else 'none'
+}
+
+func main(): int sync {
+    println(describe(4, true))
+    println(describe(null, true))
+    println(describe(4, false))
+    return 0
 }
 ```
 
@@ -3479,7 +3612,7 @@ Pass '{0}' cannot build graph '{1}': it needs {2} {3}, and one graph holds at mo
 **Help**
 
 ```text
-A graph addresses its nodes, its node blocks and its edge table with 16 bits. The function is not too large as written: the pass inlined or unrolled more code into this one graph than fits (a recursion unrolled over many steps, a function inlined at many call sites). Keep part of the computation out of the graph (a smaller constant depth, fewer unrolled steps), or run the pipeline without this pass.
+A graph addresses its nodes and its edges with 16 bits. The function is not too large as written: the pass inlined or unrolled more code into this one graph than fits (a recursion unrolled over many steps, a function inlined at many call sites). Keep part of the computation out of the graph (a smaller constant depth, fewer unrolled steps), or run the pipeline without this pass.
 ```
 
 **Example** (`test/cases/opt/generic/broken_graph.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/opt/generic/broken_graph.cml test::overgrow_graph std::fvm`)
@@ -3696,24 +3829,6 @@ Check that the path exists and that the program may access it; a relative path i
 
 ```text
 Check the path and the permissions of the directories on it.
-```
-
-*No example: no test small enough to show raises it.*
-
-### JsonDecodeFailed
-
-`0x04000037` · Error · `RuntimeDiag::JsonDecodeFailed`
-
-**Message**
-
-```text
-json.decode: the text is not valid JSON ({0}). The text begins: '{1}'.
-```
-
-**Help**
-
-```text
-The line and column in the message are positions in the decoded text, not in the program.
 ```
 
 *No example: no test small enough to show raises it.*

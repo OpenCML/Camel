@@ -222,6 +222,25 @@ class OperatorTable {
     bool hasExternalEffect(OperId id) const;
     bool hasExternalEffect(std::string_view uri) const;
 
+    // ---- In-place forms (design principles 2.12, 2.13) --------------------------------------
+    //
+    // An operator returns a new value and never changes its arguments (`sort` returns a new
+    // array). Where a variable is bound to the result of the operator applied to the
+    // variable's own array, `xs = xs->sort`, and nothing but the variable refers to that
+    // array, changing the array in place gives the same result without a copy: an
+    // implementation-level optimisation that does not enter the semantics. An operator that
+    // can work so declares an in-place form: an operator with the same parameters and the same
+    // result type that may change its first ordinary argument (an array) and returns it, which
+    // the compiler calls only on an array no one else holds (Builder::inPlaceRebindingOf).
+    // The form must change nothing before it can no longer fail: a fault leaves the array as
+    // it was. It is not a name a program can write.
+
+    /// Declares that `inPlaceUri` is the in-place form of the operator `uri` (module load time).
+    void setInPlaceForm(std::string_view uri, std::string_view inPlaceUri);
+
+    /// The in-place form of the operator `uri`, or nullopt when it has none.
+    std::optional<std::string> inPlaceForm(std::string_view uri) const;
+
     // ---- Type rules -----------------------------------------------------------------------
 
     /// Registers (or replaces) the type resolver of an operator overload. An OPER node records
@@ -272,6 +291,8 @@ class OperatorTable {
         // readers may keep the pointer after releasing the lock.
         type::resolver_ptr_t resolver;
         std::unique_ptr<TypeFolder> folder;
+        /// The in-place form (setInPlaceForm); kEmptySym when there is none.
+        SymId inPlace = kEmptySym;
     };
 
     static uint8_t encode(OperatorTraits traits);

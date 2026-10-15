@@ -1,0 +1,17 @@
+// Design principles 2.13: reopening a namespace block does not carry the `using` of an
+// earlier block of it. The first block may use `inc` unqualified; the second may not.
+import lib
+
+namespace N {
+    using namespace lib::Tools
+    export func a(): int { return inc(1) }
+}
+
+namespace N {
+    export func b(): int { return inc(2) }
+}
+
+func main(): int sync {
+    println(N::a() + N::b())
+    return 0
+}

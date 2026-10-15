@@ -5,7 +5,7 @@
  */
 module append_new
 
-import { sort, sorted } from algo
+import { sort } from algo
 
 func main(): int sync {
     let xs = [1, 2, 3]
@@ -15,7 +15,7 @@ func main(): int sync {
     println(xs->extend<[7, 8]>, xs)
     println([1, 2, 3]->apply<(x: int): int => x * 10>, xs)
     let unsorted = [3, 1, 2]
-    println(sort(unsorted), sorted(unsorted), unsorted)
+    println(sort(unsorted), unsorted->sort, unsorted)
 
     var acc: int[] = []
     acc = acc->append<1>

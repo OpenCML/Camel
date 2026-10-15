@@ -46,8 +46,3 @@ class CppInspectDumpPass : public CppDumpPass {
         : CppDumpPass(ctx, camel::passes::cpp::CppEmitMode::Inspect) {}
 };
 
-class CppBenchDumpPass : public CppDumpPass {
-  public:
-    CppBenchDumpPass(const camel::core::context::context_ptr_t &ctx)
-        : CppDumpPass(ctx, camel::passes::cpp::CppEmitMode::Bench) {}
-};

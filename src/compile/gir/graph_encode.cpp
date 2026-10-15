@@ -956,11 +956,11 @@ class EncodeSession {
         }
         CAMEL_LOG_INFO_S(
             "GIREncode",
-            "Construct runtime graph '{}' in place: bytes={}, nodes={}, blocks={}, edges={}.",
+            "Construct runtime graph '{}' in place: bytes={}, nodes={}, payloadWords={}, edges={}.",
             source->name(),
             prepared.bytes,
             prepared.payloadShape.nodeCount,
-            prepared.payloadShape.nodeBlockCount,
+            prepared.payloadShape.payloadWordCount,
             prepared.payloadShape.edgeCount);
         prepared.runtime = GCGraphBuildAccess::constructInPlace(
             prepared.memory,
@@ -978,11 +978,11 @@ class EncodeSession {
             [&](camel::runtime::GCGraphPayloadArena &arena) {
                 CAMEL_LOG_INFO_S(
                     "GIREncode",
-                    "Emit runtime payload for graph '{}': nodeCount={}, blockCount={}, "
+                    "Emit runtime payload for graph '{}': nodeCount={}, payloadWords={}, "
                     "edgeCount={}.",
                     source->name(),
                     arena.nodeCount,
-                    arena.nodeBlockCount,
+                    arena.payloadWordCount,
                     arena.edgeCount);
                 emitDraftNativePayload(*prepared.draft, arena);
                 CAMEL_LOG_INFO_S(

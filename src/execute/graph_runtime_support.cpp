@@ -148,7 +148,7 @@ std::vector<gc_node_ref_t> buildReachableExecutionTopoIndices(camel::runtime::GC
     const gc_node_ref_t startRef = graph->exitNodeRef() != camel::runtime::kInvalidNodeRef
                                        ? graph->exitNodeRef()
                                        : graph->returnNodeRef();
-    std::vector<uint8_t> live(graph->nodeBlockCount(), 0);
+    std::vector<uint8_t> live(graph->nodeCount(), 0);
     {
         std::vector<gc_node_ref_t> work{startRef};
         while (!work.empty()) {
@@ -583,7 +583,7 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
     // Nodes outside the execution order are dead (nothing the exit depends on uses them). They
     // are no part of an arm, and what they read need not be either: followed, a dead user of
     // this arm that also reads another arm would pull that arm's code into this one's region.
-    std::vector<uint8_t> ordered(graph->nodeBlockCount(), 0);
+    std::vector<uint8_t> ordered(graph->nodeCount(), 0);
     for (gc_node_ref_t nodeRef : topoOrder) {
         if (nodeRef < ordered.size()) {
             ordered[nodeRef] = 1;

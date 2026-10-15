@@ -137,7 +137,9 @@ the two kinds differently beyond their order.
   option for the entry export (the target is the default, `onnxruntime-cpu`).
 - `CAMEL_ONNX_OUT` is the only way to name the file, until passes take arguments.
 - The result of `main` is neither printed nor written under `--timeit`.
-- `std::cpp` does not translate a `main` with parameters: it refuses with `TranslationRefused` at
-  `main` (the generated C++ program calls the entry function without arguments).
+- `std::cpp` translates a `main` with parameters of type int, i32, float, f32, bool or string: the
+  generated program reads them from its command line as `--arg name=value`, with the same reports
+  as `camel` (design principles 2.13; `include/camel/standalone/entry.h`). A parameter of another
+  type (a tensor, a struct) is refused with `TranslationRefused` at `main`.
 - An optimizer state (`nn` Adam state) is not accepted as a parameter type on the command line
   or as a declared model input.

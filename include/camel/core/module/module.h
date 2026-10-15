@@ -30,6 +30,7 @@
 
 #include "camel/common/ns.h"
 #include "camel/core/context/context.h"
+#include "camel/core/data/base.h"
 #include "camel/core/operator.h"
 
 namespace camel::compile::gir {
@@ -47,8 +48,18 @@ class Entity {
   public:
     Entity() = default;
     Entity(oper_group_ptr_t ops) : storage_(std::move(ops)) {}
+    /// A constant value a module exports under a name (`math::pi`): written without
+    /// parentheses, and a constant of the graph where it is used (design principles 2.13).
+    /// Its type is the type of the data.
+    explicit Entity(camel::core::data::data_ptr_t value) : storage_(std::move(value)) {}
     bool isOperGroup() const { return std::holds_alternative<oper_group_ptr_t>(storage_); }
     const oper_group_ptr_t &operGroup() const { return std::get<oper_group_ptr_t>(storage_); }
+    bool isValue() const {
+        return std::holds_alternative<camel::core::data::data_ptr_t>(storage_);
+    }
+    const camel::core::data::data_ptr_t &value() const {
+        return std::get<camel::core::data::data_ptr_t>(storage_);
+    }
 
   private:
     friend class detail::EntityAccess;
@@ -64,7 +75,8 @@ class Entity {
         std::shared_ptr<void> tmpl;
     };
     using storage_t = std::variant<
-        node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t, generic_payload_t>;
+        node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t, generic_payload_t,
+        camel::core::data::data_ptr_t>;
 
     explicit Entity(node_payload_t node) : storage_(node) {}
     explicit Entity(graph_set_ptr_t graphs) : storage_(std::move(graphs)) {}
@@ -158,6 +170,19 @@ class Module : public std::enable_shared_from_this<Module> {
     const std::string &declaredName() const { return declaredName_; }
     void setDeclaredName(std::string name) { declaredName_ = std::move(name); }
 
+    /// The module a name imported into this one comes from, and the name it has there: the
+    /// first binding of `ref` in `layer` (the one getImportedType reads for a type). nullopt
+    /// when the name is not imported.
+    std::optional<std::pair<std::shared_ptr<Module>, Reference>>
+    importedSource(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
+
+    /// The full name `module::path::name` of the name `ref` of this module, as diagnostics show
+    /// it where names of several modules are listed (design principles 2.12, 2.13). The module
+    /// is named by the name it declares, or else the name it was loaded under; the entry
+    /// module without a `module` declaration has no name to show, and its names are shown
+    /// without one, as the graph names show them.
+    std::string qualifiedName(const Reference &ref) const;
+
     virtual bool load() = 0;
     virtual bool loaded() const { return loaded_; }
     /// Makes the types the module exports readable (getExportedType). A module written in
@@ -216,6 +241,13 @@ class Module : public std::enable_shared_from_this<Module> {
     bool exportDefaultImportRef(const Reference &ref);
     bool exportType(const Reference &ref, Type *type);
     bool exportEntity(const Reference &ref, const entity &ent);
+    /// Exports the constant `value` under `ref` (a C++ module's `math::pi`; design principles
+    /// 2.13). A use of the name is that constant in the graph where it is used: no node of the
+    /// root graph, no capture, nothing evaluated when the module is imported. Only data that
+    /// can be a constant of a graph is accepted (scalars, strings, and composites of them).
+    bool exportValue(const Reference &ref, camel::core::data::data_ptr_t value) {
+        return exportEntity(ref, entity(std::move(value)));
+    }
 
     /// Return true if this module imports the given module.
     bool imports(const std::shared_ptr<Module> &mod) const;

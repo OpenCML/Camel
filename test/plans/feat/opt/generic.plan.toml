@@ -1281,7 +1281,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "graph_too_large.diagnostic"
-desc = "A pass that builds a graph too large for the runtime representation (here the test-only pass test::overgrow_graph, which adds COPY nodes to `main` until its node blocks exceed 65535) is stopped with RuntimeDiag::GraphTooLarge at the definition of the function, naming the pass, the graph, the quantity, the size it needs and the limit, and nothing executes. It used to be the unlocated PassInternalError '... exceeds the target integral width'."
+desc = "A pass that builds a graph too large for the runtime representation (here the test-only pass test::overgrow_graph, which adds COPY nodes to `main` until its edges exceed 65535) is stopped with RuntimeDiag::GraphTooLarge at the definition of the function, naming the pass, the graph, the quantity, the size it needs and the limit, and nothing executes. It used to be the unlocated PassInternalError '... exceeds the target integral width'."
 kind = "negative"
 case = "../../../cases/opt/generic/broken_graph.cml"
 args = ["${case}", "test::overgrow_graph", "std::fvm"]
@@ -1291,7 +1291,7 @@ expect_diagnostic_name = "RuntimeDiag::GraphTooLarge"
 expect_diagnostic_code = "0x04000013"
 expect_diagnostic_line = 10
 expect_diagnostic_column = 1
-expect_output_contains = ["Pass 'test::overgrow_graph' cannot build graph 'main': it needs ", " node blocks (the 8-byte units nodes are stored in", "and one graph holds at most 65535."]
+expect_output_contains = ["Pass 'test::overgrow_graph' cannot build graph 'main': it needs ", " edges (every input of every node is one)", "and one graph holds at most 65535."]
 expect_output_not_contains = ["main start", "internal error", "integral width", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1312,7 +1312,7 @@ assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::GraphTooLarge' && d.code === '0x04000013', `unexpected diagnostic ${d.data.name} ${d.code}`)
 assert(d.data.stage === 'pass:test::overgrow_graph', `stage ${d.data.stage}`)
-const m = /cannot build graph 'main': it needs (\d+) node blocks .* holds at most (\d+)[.]/.exec(d.message)
+const m = /cannot build graph 'main': it needs (\d+) edges .* holds at most (\d+)[.]/.exec(d.message)
 assert(m && Number(m[2]) === 65535 && Number(m[1]) > 65535, `graph, size and limit are missing: ${d.message}`)
 assert(d.range.start.line === 9 && d.range.start.character === 0, `unexpected range ${JSON.stringify(d.range)}`)
 }

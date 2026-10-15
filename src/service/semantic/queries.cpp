@@ -33,6 +33,7 @@
 #include "camel/parse/syntax/token.h"
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <set>
 #include <sstream>
@@ -612,16 +613,34 @@ std::string SemanticModel::declType(uint32_t file, uint32_t decl) const {
     return {};
 }
 
+namespace {
+/// `header`, the text of the declaration `d`, with the name it declares written in full
+/// (`func Tools::inc(x: int): int`): a member of a namespace is shown by its full name (design
+/// principles 2.13). The name is the first occurrence of it after the keyword.
+std::string withShownName(const Decl &d, const char *keyword) {
+    if (d.qualified.empty()) {
+        return d.header;
+    }
+    const size_t key = d.header.find(keyword);
+    const size_t at =
+        d.header.find(d.name, key == std::string::npos ? 0 : key + std::strlen(keyword));
+    if (at == std::string::npos) {
+        return d.header;
+    }
+    return d.header.substr(0, at) + d.qualified + d.header.substr(at + d.name.size());
+}
+} // namespace
+
 std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
     const Decl &d          = files_[file].syntax.decls[decl];
     const DeclFacts &facts = files_[file].declFacts[decl];
     const std::string type = declType(file, decl);
     const auto typed       = [&](const std::string &prefix) {
-        return type.empty() ? prefix + d.name : prefix + d.name + ": " + type;
+        return type.empty() ? prefix + d.shownName() : prefix + d.shownName() + ": " + type;
     };
     switch (d.kind) {
     case DeclKind::Function:
-        return d.header;
+        return withShownName(d, "func ");
     case DeclKind::Parameter:
     case DeclKind::WithParameter: {
         // As written (`x: typeas T`), which says more than one instance's type.
@@ -635,7 +654,7 @@ std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
     case DeclKind::Binding:
         return typed("");
     case DeclKind::Type:
-        return d.header;
+        return withShownName(d, "type ");
     case DeclKind::TypeParameter:
         return "type parameter " + d.name;
     case DeclKind::TypeVariable:
@@ -650,7 +669,7 @@ std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
     case DeclKind::Module:
         return "import " + d.importedFrom;
     case DeclKind::Namespace:
-        return "namespace " + d.name;
+        return "namespace " + d.shownName();
     case DeclKind::Alias:
         return "use " + d.name;
     }
@@ -884,7 +903,7 @@ std::vector<OutlineItem> SemanticModel::outline() const {
                 continue;
             }
             OutlineItem item;
-            item.name      = decl.name;
+            item.name      = decl.shownName();
             item.kind      = decl.kind;
             item.range     = decl.fullRange;
             item.selection = decl.nameRange;
@@ -1073,8 +1092,10 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
             file.syntax.decls[current].bodyScope >= 0) {
             for (uint32_t id : file.syntax.scopes[file.syntax.decls[current].bodyScope].decls) {
                 const Decl &decl = file.syntax.decls[id];
+                // Shown by its full name; what is written after `N::` is the rest of it.
                 Completion item;
-                item.label  = decl.name;
+                item.label  = decl.shownName();
+                item.insert = decl.name;
                 item.kind   = completionKind(decl.kind);
                 item.detail = decl.kind == DeclKind::Function ? decl.header : declType(0, id);
                 item.doc    = decl.doc;
@@ -1092,9 +1113,12 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
         if (decl.nameRange.touches(offset)) {
             continue;
         }
+        // A member of a namespace is shown by its full name and written by its own name,
+        // which is in scope here (design principles 2.12, 2.13).
         Completion item;
-        item.label = decl.name;
-        item.kind  = completionKind(decl.kind);
+        item.label  = decl.shownName();
+        item.insert = decl.qualified.empty() ? std::string() : decl.name;
+        item.kind   = completionKind(decl.kind);
         if (decl.kind == DeclKind::Import) {
             const DeclFacts &facts = file.declFacts[id];
             item.kind = facts.importedType && !facts.importedFunction ? Completion::Kind::Type

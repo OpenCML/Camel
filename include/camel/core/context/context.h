@@ -28,9 +28,12 @@
 #include <functional>
 #include <memory>
 #include <ostream>
+#include <set>
 #include <span>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace camel::runtime {
@@ -84,6 +87,11 @@ class Context : public std::enable_shared_from_this<Context> {
 
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
+    /// The type declarations being built right now, outermost first, across every module (see
+    /// enterTypeDeclaration).
+    std::vector<std::pair<const module::Module *, std::string>> typeDeclarations_;
+    /// The type declarations found on a cycle (see markTypeCycle).
+    std::set<std::pair<const module::Module *, std::string>> typeCycleMembers_;
     std::unordered_map<std::string, module_ptr_t> builtinModules_;
 
     std::unique_ptr<ExecutorManager> exeMgr_;
@@ -169,6 +177,31 @@ class Context : public std::enable_shared_from_this<Context> {
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
+
+    // ---- Type declarations in progress (design principles 2.13) ----------------------------
+    // Modules may import each other's types (2.11). A type declaration of one module that
+    // needs a type of another module compiles that module's types in the middle of its own
+    // declaration; when that module needs, in turn, the type being declared, the types form a
+    // cycle across the modules. Each module has its own construction-tree builder, so the
+    // declarations in progress are kept here, where all of them see them.
+    /// Records that the type `name` of `mod` is being declared (until the matching leave).
+    void enterTypeDeclaration(const module::Module *mod, const std::string &name) {
+        typeDeclarations_.emplace_back(mod, name);
+    }
+    void leaveTypeDeclaration() { typeDeclarations_.pop_back(); }
+    /// The declarations in progress, outermost first.
+    const std::vector<std::pair<const module::Module *, std::string>> &
+    typeDeclarationsInProgress() const {
+        return typeDeclarations_;
+    }
+    /// Remembers the members of a cycle that was reported, so that the failures that follow
+    /// from it (in the other modules of the cycle) are not reported again.
+    void markTypeCycle(const module::Module *mod, const std::string &name) {
+        typeCycleMembers_.emplace(mod, name);
+    }
+    bool onReportedTypeCycle(const module::Module *mod, const std::string &name) const {
+        return typeCycleMembers_.contains({mod, name});
+    }
 
     /// Returns main module plus all UserDefinedModules from modules_ (excluding builtin)
     std::vector<module_ptr_t> allUserModules() const;

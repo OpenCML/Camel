@@ -21,6 +21,7 @@
 
 #include "camel/core/module/module.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/execute/entry_args.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/warnings.h"
@@ -50,8 +51,8 @@ bool isAnonymous(const std::string &name) {
 /// The graph of a function constant (`Function(graph=main, ...)`) in a DATA node of `graph`.
 GCGraph *functionConstant(const GCGraph *graph, gc_node_ref_t ref) {
     const auto *node = graph->node(ref);
-    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType == nullptr ||
-        node->dataType->code() != TypeCode::Function) {
+    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType() == nullptr ||
+        node->dataType()->code() != TypeCode::Function) {
         return nullptr;
     }
     auto *function = camel::core::rtdata::fromSlot<::Function *>(
@@ -277,18 +278,102 @@ ProgramEmitter::tailCallGroups(const std::vector<GCGraph *> &functions) {
 }
 
 std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
-    std::string call = std::format("{}(0", parts_.functionNames.at(entry.main));
-    if (parts_.root != nullptr) {
-        // The root computes values of the top level and calls main with them.
-        call = std::format("{}(0", parts_.functionNames.at(root));
+    // The parameters of `main` still open (no --arg bound them when the program was
+    // translated) are the ports of the root graph: the program reads them from its command
+    // line (design principles 2.13; camel/standalone/entry.h), in the order `camel` names them
+    // (unboundEntryParameters: the `with` ones, then the others).
+    const std::vector<std::string> names = camel::execute::unboundEntryParameters(root);
+    const size_t withCount               = root->withPorts().size();
+    const auto *rootType                 = root->funcType();
+    std::unordered_map<gc_node_ref_t, std::string> parameterValue;
+    std::string parameters;
+    for (size_t i = 0; i < names.size(); ++i) {
+        const bool isWith        = i < withCount;
+        const size_t k           = isWith ? i : i - withCount;
+        const gc_node_ref_t port = isWith ? root->withPorts()[k] : root->normPorts()[k];
+        const bool declared =
+            rootType != nullptr &&
+            (isWith ? k < rootType->withTypesCount() : k < rootType->normTypesCount());
+        const Type *type = declared ? (isWith ? rootType->withTypeAt(k) : rootType->normTypeAt(k))
+                                    : root->node(port)->dataType();
+        if (declared && (isWith ? rootType->withIsVarAt(k) : rootType->normIsVarAt(k))) {
+            throw Refusal{
+                root,
+                port,
+                std::format(
+                    "the parameter '{}' of 'main' is a 'var' parameter, which the command line "
+                    "cannot give",
+                    names[i]),
+                false};
+        }
+        const char *kind = nullptr;
+        std::string value;
+        switch (type != nullptr ? type->code() : TypeCode::Void) {
+        case TypeCode::Int64:
+            kind  = "Int";
+            value = std::format("args.integer({})", i);
+            break;
+        case TypeCode::Int32:
+            kind  = "Int";
+            value = std::format("static_cast<int32_t>(args.integer({}))", i);
+            break;
+        case TypeCode::Float64:
+            kind  = "Float";
+            value = std::format("args.number({})", i);
+            break;
+        case TypeCode::Float32:
+            kind  = "Float";
+            value = std::format("static_cast<float>(args.number({}))", i);
+            break;
+        case TypeCode::Bool:
+            kind  = "Bool";
+            value = std::format("args.boolean({})", i);
+            break;
+        case TypeCode::String:
+            kind  = "Text";
+            value = std::format("args.text({})", i);
+            break;
+        default:
+            throw Refusal{
+                root,
+                port,
+                std::format(
+                    "the parameter '{}' of 'main' has type '{}', and std::cpp reads from the "
+                    "command line only the parameters of type int, i32, float, f32, bool and "
+                    "string (a tensor or a struct is read from files by camel only)",
+                    names[i],
+                    type != nullptr ? type->toString() : std::string("void")),
+                false};
+        }
+        parameters += std::format(
+            "{}{{{}, rt::EntryKind::{}}}",
+            parameters.empty() ? "" : ", ",
+            cppStringLiteral(names[i]),
+            kind);
+        parameterValue[port] = std::move(value);
     }
-    for (gc_node_ref_t arg : parts_.root != nullptr ? std::vector<gc_node_ref_t>{} : entry.args) {
+    // The reports of a wrong or missing argument, at the entry function, as camel gives them.
+    const uint64_t at  = camel::execute::entryFunctionOrigin(*context_);
+    const std::string invalid = parts_.sites.siteAt(
+        at,
+        camel::core::error::RuntimeDiag::EntryArgumentInvalid,
+        {SiteTable::valueMark(0), SiteTable::valueMark(1)});
+    const std::string missing = parts_.sites.siteAt(
+        at,
+        camel::core::error::RuntimeDiag::EntryArgumentMissing,
+        {SiteTable::valueMark(0), SiteTable::valueMark(1)});
+
+    // What an argument of the call is: a parameter of `main`, or a literal value.
+    const auto argumentText = [&](gc_node_ref_t arg) {
+        if (auto it = parameterValue.find(arg); it != parameterValue.end()) {
+            return it->second;
+        }
         const auto *node = root->node(arg);
         std::optional<std::string> value;
         if (node->kind == GCNodeKind::Data) {
             value = parts_.values.constant(
                 root->staticArea()->get<slot_t>(-node->dataIndex),
-                node->dataType);
+                node->dataType());
         }
         if (!value) {
             throw Refusal{
@@ -299,7 +384,34 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
                 "the value inside a function instead)",
                 false};
         }
-        call += ", " + *value;
+        return *value;
+    };
+    std::string call;
+    if (parts_.root != nullptr) {
+        // The root computes values of the top level and calls main with them; it takes the
+        // parameters of `main` as its own, in the order of a direct call (the normal ones,
+        // then the `with` ones).
+        call = std::format("{}(0", parts_.functionNames.at(root));
+        for (gc_node_ref_t port : root->normPorts()) {
+            call += ", " + parameterValue.at(port);
+        }
+        for (gc_node_ref_t port : root->withPorts()) {
+            call += ", " + parameterValue.at(port);
+        }
+    } else {
+        // The arguments of main in the order of a direct call: the normal ones, the `with`
+        // ones, then what it captures.
+        call = std::format("{}(0", parts_.functionNames.at(entry.main));
+        const auto withInputs = root->withInputsOf(entry.call);
+        for (gc_node_ref_t arg : root->normInputsOf(entry.call)) {
+            call += ", " + argumentText(arg);
+        }
+        for (size_t i = 1; i < withInputs.size(); ++i) {
+            call += ", " + argumentText(withInputs[i]);
+        }
+        for (gc_node_ref_t arg : entry.args) {
+            call += ", " + argumentText(arg);
+        }
     }
     call += ")";
 
@@ -333,8 +445,16 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
     } else {
         body += std::format("    rt::println({});\n    return 0;\n", value);
     }
-    return "/// Runs `main` and gives the exit code of the program.\nint entry() {\n" + body +
-           "}\n";
+    return std::format(
+        "/// Runs `main` with the arguments of the command line and gives the exit code of the\n"
+        "/// program.\n"
+        "int entry(int argc, char **argv) {{\n"
+        "    const rt::EntryArguments args(argc, argv, {{{}}}, {}, {});\n"
+        "{}}}\n",
+        parameters,
+        invalid,
+        missing,
+        body);
 }
 
 std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
@@ -345,13 +465,13 @@ std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
             "//   [{}] {} : {}\n",
             ref,
             kindName(node->kind),
-            node->dataType ? node->dataType->toString() : "-");
+            node->dataType() ? node->dataType()->toString() : "-");
     }
     return out;
 }
 
 std::string ProgramEmitter::emit(GCGraph *root) {
-    const bool program = mode_ == CppEmitMode::Plain || mode_ == CppEmitMode::Bench;
+    const bool program = mode_ == CppEmitMode::Plain;
     for (const char *reserved : {"entry", "rt", "std", "main", "depth", "lit", "program"}) {
         globals_.reserve(reserved);
     }
@@ -509,8 +629,11 @@ std::string ProgramEmitter::emit(GCGraph *root) {
     }
     out += std::format("\n}} // namespace {}\n", ns);
     if (program) {
+        // The command line goes to the entry, which reads the parameters of `main` from it.
         out += std::format(
-            "\nint main() {{ return camel::standalone::run({}, {}::entry); }}\n",
+            "\nint main(int argc, char **argv) {{\n"
+            "    return camel::standalone::run({}, [&] {{ return {}::entry(argc, argv); }});\n"
+            "}}\n",
             limit,
             ns);
     }

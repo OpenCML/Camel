@@ -149,7 +149,7 @@ bool TensorModule::load() {
            camel::runtime::gc_node_ref_t ref) -> std::optional<std::string> {
             namespace rt = camel::runtime;
             const rt::GCNode *node = graph.node(ref);
-            if (node->kind != rt::GCNodeKind::Oper || !node->dataType) {
+            if (node->kind != rt::GCNodeKind::Oper || !node->dataType()) {
                 return std::nullopt;
             }
             const auto isTensor = [](const camel::core::type::Type *t) {
@@ -159,21 +159,21 @@ bool TensorModule::load() {
                 return t && camel::tensor::isSupportedTensorScalar(t->code());
             };
             const auto inputs = graph.normInputsOf(ref);
-            if (isNumber(node->dataType)) {
+            if (isNumber(node->dataType())) {
                 for (rt::gc_node_ref_t in : inputs) {
-                    if (isTensor(graph.node(in)->dataType)) {
-                        return "tensor -> host " + node->dataType->toString();
+                    if (isTensor(graph.node(in)->dataType())) {
+                        return "tensor -> host " + node->dataType()->toString();
                     }
                 }
                 return std::nullopt;
             }
-            if (!isTensor(node->dataType)) {
+            if (!isTensor(node->dataType())) {
                 return std::nullopt;
             }
             for (rt::gc_node_ref_t in : inputs) {
                 const rt::GCNode *input = graph.node(in);
-                if (input->kind != rt::GCNodeKind::Data && isNumber(input->dataType)) {
-                    return "host " + input->dataType->toString() + " -> tensor";
+                if (input->kind != rt::GCNodeKind::Data && isNumber(input->dataType())) {
+                    return "host " + input->dataType()->toString() + " -> tensor";
                 }
             }
             return std::nullopt;

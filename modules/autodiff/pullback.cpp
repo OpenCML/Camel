@@ -446,7 +446,7 @@ std::vector<Type *> portTypesOf(const GCGraph *graph) {
     std::vector<Type *> types;
     for (auto ports : {graph->withPorts(), graph->normPorts()}) {
         for (gc_node_ref_t port : ports) {
-            types.push_back(graph->node(port)->dataType);
+            types.push_back(graph->node(port)->dataType());
         }
     }
     return types;
@@ -1084,7 +1084,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
                 } else if (held != nullptr && i < held->size()) {
                     captures[i] = draft_.materializeStaticValue(
                         held->get<slot_t>(i),
-                        graph->node(graph->closureNodes()[i])->dataType);
+                        graph->node(graph->closureNodes()[i])->dataType());
                 } else {
                     return std::nullopt; // a capture with no value: left to the refusal
                 }
@@ -1130,7 +1130,7 @@ void ForwardRewrite::rewriteClosureCall(
     FunctionType *type = graph->funcType();
     std::vector<Type *> portTypes = portTypesOf(graph);
     for (gc_node_ref_t capture : graph->closureNodes()) {
-        portTypes.push_back(graph->node(capture)->dataType);
+        portTypes.push_back(graph->node(capture)->dataType());
     }
     const bool carriesFlow =
         tangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);

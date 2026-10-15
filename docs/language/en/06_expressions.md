@@ -185,7 +185,7 @@ false
   - The element type must itself be comparable: numbers, `bool`, `string`, `Map`, `Set`, `T?`, `T!`, and arrays, tuples and structs of those. A value with a function in it (`[f] == [f]`) cannot be compared, which is a located compile-time error; tensors are not covered.
   - Float elements follow the rules of floats: an array that holds a `nan` does not equal itself, and `[0.0] == [-0.0]`.
   - A `T?` or `T!` by itself (not inside an array, tuple or struct) still has no `==`; open it first with `??`, `!!` or `match`.
-- **`x == null` and `x != null`** are defined for an `x` of type `T?`, in either order, and give a `bool`: the test of the tag of `x`, not a comparison of two values (the same node `??` branches on). It is an ordinary expression: `let has = x != null`. A nullable function value is compared with `null` the same way. Any other value compared with `null` (an `int`, a `T!`) and two `T?` values compared with each other stay `SemanticDiag::NoMatchingFunction`; two function values cannot be compared.
+- **`x == null` and `x != null`** are defined for an `x` of type `T?`, in either order, and give a `bool`: the test of the tag of `x`, not a comparison of two values (the same node `??` branches on). It is an ordinary expression: `let has = x != null`. A nullable function value is compared with `null` the same way. A value that is never null (an `int`, a `T!`, a name already narrowed to a `T`) may be compared with `null` too: the result is fixed (`==` is always `false`, `!=` always `true`), the compiler warns (`SemanticDiag::NullTestNeverNull`), and the value itself is not evaluated. Two `T?` values compared with each other stay `SemanticDiag::NoMatchingFunction`; two function values cannot be compared.
 - `<`, `>`, `<=`, `>=`: numbers and `string` (by byte). Comparisons cannot be chained: `1 < 2 < 3` is a type error.
 - `===` and `!==` are not supported for now: the lexer knows the two tokens, and writing one is a located compile-time error, `SemanticDiag::ConstructNotSupported`. Compare values with `==` and `!=`.
 
@@ -235,6 +235,7 @@ func sign(x: int): string {
   - only a name bound by `let` or a parameter is narrowed, not a `var` (it may be rewritten between the test and the use; bind its value with `let` first);
   - only the direct forms count, in either order (`x != null`, `null != x`): a test that is the whole condition, or one of the operands `&&` joins, narrows the `then` arm (`if x != null && ready then ...`). The `else` arm is narrowed only by a whole condition `x == null`, never by a conjunction. A test under `||` or `!` (`x != null || ready`, `!(x == null)`) or kept in a `let` narrows nothing; nest the `if`s, or use `match` or `??`;
   - only inside the arm: after the `if`, `x` is a `T?` again. Declaring the name again inside the arm (`let x = ...`) is a redeclaration.
+  - after narrowing, the arm may still apply to `x` the constructs written for a `T?`, `??` and a `match` with `case null`: they work on the value put back into `T?`, checked as they were before narrowing, only their null arm is never taken; the compiler warns (`SemanticDiag::KnownNotNull`). Testing `x == null` or `x != null` again in the arm is the comparison of a value that is never null (above): a warning, and a fixed result.
 
   Since `a && b` is `if a then b else false`, the right side of `x != null && ...` is such an arm, and so is the right side of `x == null || ...`. When a name is tested and then used as a `T` where narrowing does not apply, the error carries a note that says why.
 
@@ -289,7 +290,7 @@ match name {
 ```
 
 - What is matched must be a **name** (a variable or a parameter), not an arbitrary expression; bind it with `let` first.
-- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches.
+- A pattern is a literal (integer, floating-point number, string, `true`/`false`) or the wildcard `_`. One `case` can list several patterns with `|`, and is entered when any of them matches. **Each pattern must be a value the type of the matched value accepts** (design principles 2.13): it is compared with that value by the comparison of its type, so `case 1` on a `string` is `SemanticDiag::MatchCaseTypeMismatch`.
 - The first matching case in the order written is taken. All arms must have the same type. A `return` in an arm, as in an arm of `if`, gives the value of the `match`.
 
 ```cml

@@ -1,0 +1,25 @@
+/**
+ * The arm of an `if` without `else` gives a value nothing takes: a `T!` there is warned
+ * about, whatever form the `if` has (design principles 2.13), and only when the arm is the
+ * one the `if` runs in a sync block.
+ */
+func parse(s: string): int! {
+    return parse_int(s)
+}
+
+func check(x: string?, n: int): int sync {
+    if x != null then parse(x)                  // line 11: a narrowing `if`
+    if n > 1 then { parse('1') }                // line 12: a block arm
+    if n > 1 then {
+        let k = n + 1
+        parse('2')                              // line 15: the end of a longer block
+    }
+    if n > 1 then parse('3') !! 0               // used: no warning
+    if n > 1 then { let _ = parse('4') }        // dropped on purpose: no warning
+    return n
+}
+
+func main(): int sync {
+    println(check('5', 2))
+    return 0
+}

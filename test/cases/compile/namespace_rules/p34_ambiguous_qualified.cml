@@ -1,0 +1,10 @@
+// Design principles 2.13: an ambiguous name lists its candidates by their full names, whatever
+// the imports and the `using` called the modules (here aliases).
+import lib as L
+import lib2 as M
+using namespace L::Tools
+using namespace M::Tools
+func main(): int sync {
+    println(inc(1))
+    return 0
+}

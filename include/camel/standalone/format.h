@@ -31,9 +31,9 @@
  * is reproduced here for the forms a Camel program can write; a format string fmt rejects is
  * FormatFailed at the operation's site (values: the format string, what is wrong).
  *
- * Two things of the runtime that look accidental are kept (docs/design/cpp-standalone, Q3):
- * `println` with a format string ends with two line breaks, and `print` with one ends with a
- * line break.
+ * `println` with a format string ends with one line break and `print` with one with none, as
+ * without a format. (Both used to write one more, copied from the interpreter, whose defect it
+ * was: design principles 2.13.)
  */
 
 #pragma once
@@ -547,27 +547,26 @@ template <typename... Args> Str format(const Str &pattern, const Site &site, con
     return Str(detail::formatted(pattern, site, args...));
 }
 
-/// `println<pattern>(a, b, ...)`: the formatted text and two line breaks (see the file
-/// comment). Gives `a`.
+/// `println<pattern>(a, b, ...)`: the formatted text and a line break. Gives `a`.
 template <typename First, typename... Rest>
 First printlnFormatted(const Str &pattern, const Site &site, const First &first,
                        const Rest &...rest) {
-    write(detail::formatted(pattern, site, first, rest...) + "\n\n");
-    return first;
-}
-inline void printlnFormatted(const Str &pattern, const Site &site) {
-    write(detail::formatted(pattern, site) + "\n\n");
-}
-
-/// `print<pattern>(a, b, ...)`: the formatted text and one line break. Gives `a`.
-template <typename First, typename... Rest>
-First printFormatted(const Str &pattern, const Site &site, const First &first,
-                     const Rest &...rest) {
     write(detail::formatted(pattern, site, first, rest...) + "\n");
     return first;
 }
-inline void printFormatted(const Str &pattern, const Site &site) {
+inline void printlnFormatted(const Str &pattern, const Site &site) {
     write(detail::formatted(pattern, site) + "\n");
+}
+
+/// `print<pattern>(a, b, ...)`: the formatted text, without a line break. Gives `a`.
+template <typename First, typename... Rest>
+First printFormatted(const Str &pattern, const Site &site, const First &first,
+                     const Rest &...rest) {
+    write(detail::formatted(pattern, site, first, rest...));
+    return first;
+}
+inline void printFormatted(const Str &pattern, const Site &site) {
+    write(detail::formatted(pattern, site));
 }
 
 } // namespace camel::standalone

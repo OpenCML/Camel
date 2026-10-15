@@ -61,3 +61,15 @@ test/cases/modules/std/random/basic.cml
 test/cases/consistency/new_values/rebinding_loop.cml
 test/cases/consistency/new_values/peek_loop.cml
 test/cases/consistency/new_values/peek.cml
+
+# Output of print / println with a format (design principles 2.13).
+# (test/cases/trans/cpp/exec/print_formats.cml, in the directory above)
+
+# The parameters of `main` from the command line, as camel reads them (design principles 2.13):
+# all given; none (the report of the missing ones); a value that is not of the declared type; an
+# unknown name; a name given twice.
+test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=0.5 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml
+test/cases/compile/entry_args/scalars.cml --arg n=x --arg rate=0.5 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg m=1
+test/cases/compile/entry_args/scalars.cml --arg n=3 --arg n=4
