@@ -149,9 +149,11 @@ static void applyLaunchOptions(const nlohmann::json &j) {
             camel::core::error::DiagFormat::Rich,
             camel::core::error::ColorMode::Never);
     }
-    core::DebugCore::instance().command(
-        "configure",
-        nlohmann::json{{"stopOnEntry", j.value("stopOnEntry", false)}});
+    nlohmann::json configure{{"stopOnEntry", j.value("stopOnEntry", false)}};
+    if (auto frames = j.find("frames"); frames != j.end()) {
+        configure["frames"] = *frames; // "functions" or "subgraphs" (35_debugger.md, 5.4)
+    }
+    core::DebugCore::instance().command("configure", configure);
 }
 
 /// What the Web UI polls as the pause of a task (GET /api/step-paused, the lastAlloc of
