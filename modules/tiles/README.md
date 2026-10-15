@@ -21,6 +21,12 @@ func main(): int sync {
 
 ## API
 
+- `run_device<fn>(inputs)` executes the same graph and returns `Device<Tensor<...>>`
+  leaves in the result's original tuple/struct structure. Outputs retain their
+  allocations instead of downloading; feed them directly into subsequent graph
+  calls and use `download` only when host values are needed. Returned inputs and
+  repeated leaves share native ownership. Completion is synchronous. This API
+  currently requires tensor-only result leaves; scalar device results are pending.
 - `run<fn>(inputs)` specializes a function graph for actual input shapes, compiles
   CUDA with NVRTC, executes on the GPU, and returns host `Tensor<f32>` or `float` leaves
   in the function's original tuple/struct structure. Nested nonempty tuples and
@@ -178,7 +184,7 @@ separates logical indexing from thread placement and is a foundation for later
 map composition and view elimination, not the complete indexed-domain design.
 
 First-class index domains, masks, layouts, schedule/resource graphs, loop and
-branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning, persistent device
-outputs, asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
+branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning,
+scalar device values, asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.

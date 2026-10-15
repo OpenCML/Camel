@@ -330,3 +330,22 @@ return host values; ownership transfer for resident outputs is the next step.
 Committed 5814f1f9 rebuilds and passes 65/65 checks on both local RTX 4060 Ti
 and remote RTX 3090 device 7. The post-commit remote log is retained in
 `docs/performance/tiles/2026-10-15-rtx3090-borrowed-input-tests.txt`.
+
+## Resident tensor results
+
+`run_device` preserves tensor result structure while replacing leaves with device
+values. A completed launch transfers each distinct output allocation from scoped
+execution resources to a shared native owner. Returned borrowed inputs retain
+their original owner. Duplicate outputs share ownership; intermediate allocations
+and pointer tables remain scoped. No output copy or download is needed, and the
+existing input path accepts these values in subsequent invocations. Transfers
+publish only completed values, so this stage does not yet introduce asynchronous
+dependency semantics. Scalar device leaves remain pending and are rejected by
+the public resolver rather than downloaded implicitly.
+
+The manual GC-stress case chains forty graph calls, retains old inputs/results,
+checks nested and repeated outputs, host/device identity graphs and empty output
+domains. CUDA runtime code has now exceeded 800 lines; decomposition was evaluated.
+The driver, cache, scoped resources and ownership transfer currently share private
+types. Extracting an internal runtime interface alongside asynchronous resource
+planning is preferable to leaking those types through the public program API.

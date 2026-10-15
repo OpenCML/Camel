@@ -22,6 +22,7 @@ struct DeviceTensor {
 };
 std::shared_ptr<DeviceTensor> uploadTensor(const Shape &shape, const std::vector<float> &data);
 std::vector<float> downloadTensor(const DeviceTensor &tensor);
+std::vector<std::shared_ptr<DeviceTensor>> executeResident(const Program &program);
 
 class DeviceType final : public core::type::OtherType {
   public:

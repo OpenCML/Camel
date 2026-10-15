@@ -642,3 +642,48 @@ assert(p.allocated_bytes === 28 && p.allocations === 2 && p.kernels === 1, 'borr
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "resident_outputs.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_outputs.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident result ownership, chaining, alias or empty-domain mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_outputs.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_outputs.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident result ownership, chaining, alias or empty-domain mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_outputs.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_outputs.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident result ownership, chaining, alias or empty-domain mismatch')
+}
+"""
+timeout_ms = 60000

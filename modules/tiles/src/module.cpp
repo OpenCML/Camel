@@ -27,6 +27,8 @@
 #include "tiles/device.h"
 #include "tiles/program.h"
 #include <cstring>
+#include <mutex>
+#include <unordered_map>
 
 namespace camel::tiles {
 namespace {
@@ -120,6 +122,76 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
     });
 }
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
+slot_t wrapDevice(std::shared_ptr<DeviceTensor> resident) {
+    auto *owner = new std::shared_ptr<DeviceTensor>(std::move(resident));
+    td::ForeignResourceDescriptor descriptor;
+    descriptor.kind    = "tiles.Device";
+    descriptor.deleter = [](void *p) { delete static_cast<std::shared_ptr<DeviceTensor> *>(p); };
+    return td::toSlot(
+        td::ForeignResourceObject::create(core::mm::autoSpace(), std::move(descriptor), owner));
+}
+Type *buildResidentType(Type *type) {
+    if (tensor::asTensorType(type))
+        return DeviceType::get(type);
+    if (type->code() == TypeCode::Tuple) {
+        auto *tuple = static_cast<TupleType *>(type);
+        type_vec_t fields;
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            auto *field = buildResidentType(tuple->typeAt(i));
+            if (!field)
+                return nullptr;
+            fields.push_back(field);
+        }
+        return TupleType::create(fields);
+    }
+    if (type->code() == TypeCode::Struct) {
+        auto *object = static_cast<StructType *>(type);
+        StructTypeFactory fields;
+        for (size_t i = 0; i < object->size(); ++i) {
+            auto *field = buildResidentType(object->typeAt(i));
+            if (!field)
+                return nullptr;
+            fields.add(std::string(object->fieldName(i)), field);
+        }
+        return fields.build();
+    }
+    return nullptr;
+}
+Type *residentType(Type *type) {
+    static std::mutex mutex;
+    static std::unordered_map<Type *, Type *> types;
+    std::lock_guard lock(mutex);
+    if (auto it = types.find(type); it != types.end())
+        return it->second;
+    auto *result = buildResidentType(type);
+    types.emplace(type, result);
+    return result;
+}
+slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &) {
+    return checked([&] {
+        auto values = executeResident(prepare(with, norm));
+        core::mm::NoCollectionScope noCollection;
+        auto *resultType = residentType(static_cast<FunctionType *>(with.type(0))->exitType());
+        size_t leaf      = 0;
+        auto rebuild     = [&](auto &&self, Type *type) -> slot_t {
+            if (asDeviceType(type))
+                return wrapDevice(values.at(leaf++));
+            if (type->code() == TypeCode::Tuple) {
+                auto *types = static_cast<TupleType *>(type);
+                auto *out   = ::Tuple::create(types->size(), core::mm::autoSpace());
+                for (size_t i = 0; i < types->size(); ++i)
+                    out->set(i, self(self, types->typeAt(i)), types);
+                return td::toSlot(out);
+            }
+            auto *types = static_cast<StructType *>(type);
+            auto *out   = ::Struct::create(types->size(), core::mm::autoSpace());
+            for (size_t i = 0; i < types->size(); ++i)
+                out->set(i, self(self, types->typeAt(i)), types);
+            return td::toSlot(out);
+        };
+        return rebuild(rebuild, resultType);
+    });
+}
 slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
     return checked([&] {
         Shape shape;
@@ -135,14 +207,7 @@ slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
                 data.assign(tensor->dataAs<float>(), tensor->dataAs<float>() + count);
         }
         auto resident = uploadTensor(shape, data);
-        auto *owner   = new std::shared_ptr<DeviceTensor>(std::move(resident));
-        td::ForeignResourceDescriptor descriptor;
-        descriptor.kind    = "tiles.Device";
-        descriptor.deleter = [](void *p) {
-            delete static_cast<std::shared_ptr<DeviceTensor> *>(p);
-        };
-        return td::toSlot(
-            td::ForeignResourceObject::create(core::mm::autoSpace(), std::move(descriptor), owner));
+        return wrapDevice(std::move(resident));
     });
 }
 slot_t downloadKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -268,7 +333,7 @@ class TilesModule final : public BuiltinModule {
                                             : std::nullopt;
                           })}}));
         }
-        for (const std::string name : {"run", "source", "inspect", "benchmark"}) {
+        for (const std::string name : {"run", "run_device", "source", "inspect", "benchmark"}) {
             exportEntity(
                 name,
                 OperatorGroup::create(
@@ -277,11 +342,21 @@ class TilesModule final : public BuiltinModule {
                       DynamicFuncTypeResolver::create(
                           {{1, {false}}, {1, {false}}},
                           "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => " +
-                              std::string(name != "run" ? "string" : "NumericAggregate"),
-                          [source = name != "run"](
+                              std::string(
+                                  name == "run_device" ? "DeviceAggregate"
+                                  : name != "run"      ? "string"
+                                                       : "NumericAggregate"),
+                          [source   = name != "run" && name != "run_device",
+                           resident = name == "run_device"](
                               const type_vec_t &with,
                               const type_vec_t &norm,
-                              const ModifierSet &) { return resolve(with, norm, source); })}}));
+                              const ModifierSet &) -> std::optional<Type *> {
+                              auto result = resolve(with, norm, source);
+                              if (!result || !resident)
+                                  return result;
+                              auto *type = residentType(*result);
+                              return type ? std::optional<Type *>(type) : std::nullopt;
+                          })}}));
         }
         exportEntity(
             "available",
@@ -302,6 +377,7 @@ class TilesModule final : public BuiltinModule {
                 ctx,
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
+                    {"run_device", &runDeviceKernel},
                     {"upload", &uploadKernel},
                     {"download", &downloadKernel},
                     {"source", &sourceKernel},
@@ -314,6 +390,7 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().declare(
             "tiles",
             {{"run", false},
+             {"run_device", false},
              {"upload", false},
              {"download", false},
              {"source", false},

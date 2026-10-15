@@ -22,6 +22,7 @@
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 #ifdef CAMEL_TILES_CUDA
@@ -483,6 +484,39 @@ class DeviceRun {
         }
         return result;
     }
+    std::vector<std::shared_ptr<DeviceTensor>> retainOutputs(std::shared_ptr<Backend> backend) {
+        synchronize();
+        std::vector<std::shared_ptr<DeviceTensor>> result;
+        std::unordered_map<size_t, std::shared_ptr<DeviceTensor>> retained;
+        for (auto id : program.outputs) {
+            if (auto it = retained.find(id); it != retained.end()) {
+                result.push_back(it->second);
+                continue;
+            }
+            const auto &node = program.nodes[id];
+            if (node.dtype != DType::F32)
+                throw std::runtime_error("resident outputs currently require f32 tensors");
+            auto value = node.resident ? std::make_shared<DeviceTensor>(*node.resident)
+                                       : std::make_shared<DeviceTensor>();
+            if (!node.resident) {
+                auto owner     = std::make_shared<OwnedAllocation>();
+                owner->backend = backend;
+                auto allocation =
+                    std::find(resources.buffers.begin(), resources.buffers.end(), pointers[id]);
+                if (allocation == resources.buffers.end())
+                    throw std::runtime_error("resident output allocation is not owned");
+                value->shape   = node.shape;
+                value->address = pointers[id];
+                value->owner   = owner;
+                // Transfer only after every potentially throwing field assignment.
+                owner->pointer = *allocation;
+                *allocation    = 0;
+            }
+            retained.emplace(id, value);
+            result.push_back(std::move(value));
+        }
+        return result;
+    }
 };
 struct Event {
     Api &api;
@@ -576,6 +610,20 @@ std::vector<std::byte> execute(const Program &p) {
     run.upload();
     run.launch();
     return run.download();
+}
+
+std::vector<std::shared_ptr<DeviceTensor>> executeResident(const Program &p) {
+    validatePlan(p);
+    for (auto id : p.outputs)
+        if (p.nodes[id].dtype != DType::F32)
+            throw std::runtime_error("resident outputs currently require f32 tensors");
+    auto b = sharedBackend();
+    std::lock_guard lock(b->mutex);
+    Current current(b->api, b->context);
+    DeviceRun run(p, b->api, b->module(p.source));
+    run.upload();
+    run.launch();
+    return run.retainOutputs(b);
 }
 
 std::string benchmark(const Program &program) {
@@ -758,6 +806,10 @@ std::string deviceInfo() {
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
+std::vector<std::shared_ptr<DeviceTensor>> executeResident(const Program &) {
+    (void)deviceInfo();
+    return {};
+}
 std::shared_ptr<DeviceTensor> uploadTensor(const Shape &, const std::vector<float> &) {
     (void)deviceInfo();
     return {};
