@@ -139,6 +139,10 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 `.cmo` 模块的类继承 `camel::core::module::BuiltinModule`，以模块名作为名字。
 
+### 3.5 模块导出的值
+
+C++ 模块也可以导出值（设计原则 2.13）：在构造函数里 `exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi))`（`Module::exportValue`，公开接口 `include/camel/core/module/module.h`）。程序写 `math::pi`（或 `import { pi } from math` 后写 `pi`），不带括号；用到的地方就是这个常量，与写一个字面量相同：图上是使用处所在的图里的一个 `DATA` 节点，没有 root 上的节点，也不需要捕获。能导出的是能作为图中常量的数据（标量、字符串以及它们组成的复合数据），类型就是数据的类型。同一个名字只能导出一样东西：一个值与一个算子组不能同名。
+
 ## 4. 语义性质（纯度）注册
 
 算子表 `OperatorTable`（`include/camel/core/operator_table.h`）为每个算子 URI 保存一项，项的编号是 `OperId`，`OPER` 节点的负载里存的就是这个编号（URI 文本驻留在符号表里，全进程只存一份）。表项上的 `OperatorTraits`：
@@ -246,6 +250,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
   `@pure` 或 `@effect <原因>`、`@fails <失败时的行为>`、`@example <代码>    // <结果>`，函数体里
   `return '<URI>'`（`*` 通配一组只在类型上不同的重载）。这些文件不参与编译。
 - 用 Camel 写的库（`stdlib/<模块>.cml`）本身就是签名文件：读它的 `export func` 与 `///` 注释。
+- C++ 模块导出的值写作 `export let 名字: 类型 = 值`，带 `///` 说明与 `@example`，不写 `@pure` 与 URI（它不是算子，`--verify-ops` 不核对它）。
 - `node scripts/stdlib-reference.mjs --write` 由它们生成 `docs/stdlib-reference.md`；`--verify-doc` 检查
   文档是最新的；`--verify-ops` 用 `camel inspect --ops` 的结果核对签名文件：每个已注册的算子都有声明、
   每条声明都对应一个已注册的算子、参数个数一致、`@pure`/`@effect` 与登记的纯度一致。三者都在默认测试

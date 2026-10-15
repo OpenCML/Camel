@@ -267,7 +267,7 @@ c62c84428fcf24bf ok docs/tutorial/examples/09_errors.cml
 1dff99e33b9825c6 ok docs/tutorial/examples/10_nullable.cml
 ed025682de3cc038 ok docs/tutorial/examples/11_collections.cml
 8f7695e74762f861 ok docs/tutorial/examples/12_modules.cml
-8b8dfeb6a0e084f7 ok docs/tutorial/examples/12_stdlib.cml
+0102ec862d6edfa5 ok docs/tutorial/examples/12_stdlib.cml
 184dba2562adc4d4 ok docs/tutorial/examples/13_graph.cml
 6b3a7ca2d09feb6f ok docs/tutorial/examples/14_passes.cml
 957562fb1b1262ab ok docs/tutorial/examples/15_model.cml
@@ -289,7 +289,7 @@ ee8f0a6ffe2ed9a8 ok examples/data/validate_input.cml
 6cafbc617eaddad9 ok examples/functions/generic_helpers.cml
 32548e60068d0358 ok examples/ml/export_onnx.cml
 92c77ccc929a8cf1 ok examples/ml/train_linear.cml
-359189fc54a75939 ok examples/numeric/monte_carlo_pi.cml
+c1d16903890b5edc ok examples/numeric/monte_carlo_pi.cml
 01c62d482b7860e7 ok examples/numeric/ode_euler.cml
 b2ab4910dbb7b410 ok examples/numeric/random_walk.cml
 eaa19fbeaad142bf ok examples/parallel/parallel_map.cml
@@ -314,7 +314,7 @@ cd2479e5aabb7c48 ok stdlib/array.cml
 7b5ff78ccfa0d052 ok stdlib/signatures/fs.cml
 8db3ce3042e9b317 no stdlib/signatures/globals.cml
 debcb685683e6262 ok stdlib/signatures/json.cml
-1e1105a248f53ad6 ok stdlib/signatures/math.cml
+550b03294b54a2b5 ok stdlib/signatures/math.cml
 f8d330763bbcd3e8 ok stdlib/signatures/os.cml
 cc33c44661bbf49e ok stdlib/signatures/para.cml
 6a8195e842fe8298 ok stdlib/signatures/random.cml
@@ -579,6 +579,7 @@ ca91c9c4ffcb2fad ok test/cases/compile/module_root/with_capture.cml
 a9c0041a7ae06870 ok test/cases/compile/modules_213/self_imported.cml
 a3f13eaa683c0519 ok test/cases/compile/modules_213/self_lib.cml
 35f55aa2563f2aef ok test/cases/compile/modules_213/type_cycle.cml
+07f00bd5b6855550 ok test/cases/compile/modules_213/values_cpp.cml
 51eee85b2f2b8ef3 ok test/cases/compile/namespace/module_import_builtins.cml
 233561c4cca155d3 ok test/cases/compile/namespace/module_import_no_direct_inject.cml
 d713cfa843192186 ok test/cases/compile/namespace/module_import_qualified.cml
@@ -1239,7 +1240,7 @@ d8f60aa811873668 ok test/cases/modules/std/time/basic.cml
 5ee709eebe723e0f ok test/cases/modules/stdlib/fault_char_at.cml
 05ba4a79487a78c2 ok test/cases/modules/stdlib/fault_char_substr.cml
 53818e9878cd3cef ok test/cases/modules/stdlib/fault_clamp_bounds.cml
-1c69d88ab38d65d9 ok test/cases/modules/stdlib/fault_clamp_nan.cml
+8aa310af01dbb69c ok test/cases/modules/stdlib/fault_clamp_nan.cml
 f60be76fa3b57bbc ok test/cases/modules/stdlib/fault_from_bytes.cml
 9a32b29e918ac3dd ok test/cases/modules/stdlib/fault_gcd_overflow.cml
 54f5a83e59294c68 ok test/cases/modules/stdlib/fault_index.cml
@@ -1259,11 +1260,11 @@ c84a9af71f232e14 ok test/cases/modules/stdlib/fault_substr_negative.cml
 f26add8771e2e7a5 ok test/cases/modules/stdlib/fault_substr_start.cml
 f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
-d362c6d6072d1ab7 ok test/cases/modules/stdlib/math_functions.cml
-27c7a91150ff6614 ok test/cases/modules/stdlib/math_numbers.cml
+9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
+040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
 5755740f1467dc40 ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
-c9e1997b961f731f ok test/cases/modules/stdlib/stats_quantiles.cml
+bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 96cdb89ff2dd825a ok test/cases/modules/stdlib/str_bytes.cml
 186bba5943bfd778 ok test/cases/modules/stdlib/str_chars.cml
 56a6a4564ded517d ok test/cases/modules/tensor/broadcast_ops.cml

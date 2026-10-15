@@ -20,6 +20,7 @@
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
+#include "camel/core/data/primary.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
@@ -27,11 +28,14 @@
 #include "numeric.h"
 #include "operators.h"
 
+#include <limits>
+#include <numbers>
 #include <optional>
 
 using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
+using camel::core::data::DoubleData;
 
 namespace {
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
@@ -131,6 +135,17 @@ MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
         exportEntity(group->name(), group);
     for (const auto &group : getMathNumericGroups())
         exportEntity(group->name(), group);
+    // The constants are values (design principles 2.13): `math::pi`, written without
+    // parentheses, is the constant itself where it is used. (They were functions of no
+    // arguments, `pi()`, while a module could export nothing but functions and types.)
+    exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi));
+    exportValue(Reference("e"), std::make_shared<DoubleData>(std::numbers::e));
+    exportValue(
+        Reference("inf"),
+        std::make_shared<DoubleData>(std::numeric_limits<double>::infinity()));
+    exportValue(
+        Reference("nan"),
+        std::make_shared<DoubleData>(std::numeric_limits<double>::quiet_NaN()));
 }
 
 module_ptr_t MathModule::create(context_ptr_t ctx) { return std::make_shared<MathModule>(ctx); }

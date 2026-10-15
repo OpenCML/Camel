@@ -1161,53 +1161,55 @@ f(xs[i], ys[i]) for every i.
 Numeric types are not converted implicitly. A function over floats takes `f32` or `float`
 and returns the type it was given; a function of several numbers takes numbers of one type.
 Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
-A constant is a function of no arguments: `pi()`.
+A constant is a value, written without parentheses: `pi`.
 
 ### Constants
+
+Values the module exports (design principles 2.13), written without parentheses.
 
 #### `pi`
 
 ```camel
-pi: () => float
+pi: float
 ```
 
 The ratio of a circle's circumference to its diameter.
 
-- Pure.
-- Example: `pi()` gives `3.14159...`
+- A value: written without parentheses, a constant where it is used.
+- Example: `pi` gives `3.14159...`
 
 #### `e`
 
 ```camel
-e: () => float
+e: float
 ```
 
 The base of the natural logarithm.
 
-- Pure.
-- Example: `log(e())` gives `1`
+- A value: written without parentheses, a constant where it is used.
+- Example: `log(e)` gives `1`
 
 #### `inf`
 
 ```camel
-inf: () => float
+inf: float
 ```
 
-Positive infinity; negative infinity is -inf().
+Positive infinity; negative infinity is -inf.
 
-- Pure.
-- Example: `is_inf(-inf())` gives `true`
+- A value: written without parentheses, a constant where it is used.
+- Example: `is_inf(-inf)` gives `true`
 
 #### `nan`
 
 ```camel
-nan: () => float
+nan: float
 ```
 
 A NaN. It equals nothing, itself included: test with is_nan.
 
-- Pure.
-- Example: `is_nan(nan())` gives `true`
+- A value: written without parentheses, a constant where it is used.
+- Example: `is_nan(nan)` gives `true`
 
 ### Elementary functions
 
@@ -1534,7 +1536,7 @@ is_nan: (x: f32 | float) => bool
 Whether x is a NaN.
 
 - Pure.
-- Example: `is_nan(inf() - inf())` gives `true`
+- Example: `is_nan(inf - inf)` gives `true`
 
 #### `is_inf`
 

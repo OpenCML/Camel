@@ -2,7 +2,7 @@ id = "compile.modules_213"
 order = 337
 tier = "feat"
 tags = ["feat", "compile", "modules"]
-desc = "Modules by the rulings of 2026-10-15 (design principles 2.13): a module importing itself, types forming a cycle across modules."
+desc = "Modules by the rulings of 2026-10-15 (design principles 2.13): a module importing itself, types forming a cycle across modules, values exported by a C++ module."
 
 [defaults]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal"]
@@ -51,3 +51,23 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["name=SemanticDiag::ModuleTypeCycle", "The type 'A' is part of a cycle of types across modules: cycle_a::A -> cycle_b::B -> cycle_a::A."]
 expect_output_not_contains = ["UnresolvedTypeReference"]
+
+[[tests]]
+name = "modules_213.values_cpp"
+desc = "A C++ module exports values: `math::pi`, `e`, `inf`, `nan` are written without parentheses, through the module name, imported by name, in a function and in a typed `let`."
+kind = "behavior"
+case = "../../../cases/compile/modules_213/values_cpp.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "3.141592653589793 true 1.0\n12.566370614359172 true true true\n6.283185307179586\n"
+
+[[tests]]
+name = "modules_213.values_cpp.folded"
+desc = "A use of a C++ module's value is a constant of the graph where it is used: std::opt folds `2.0 * pi` like a literal."
+kind = "behavior"
+case = "../../../cases/compile/modules_213/values_cpp.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+expect_stdout = "3.141592653589793 true 1.0\n12.566370614359172 true true true\n6.283185307179586\n"

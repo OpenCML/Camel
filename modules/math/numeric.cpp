@@ -184,19 +184,8 @@ slot_t __math_is_inf__(ArgsView &, ArgsView &norm, Context &) {
     }
 }
 
-// ---- constants ----
-//
-// DESIGN-QUESTION(constants): a module cannot export a value (only functions, operators and
-// types), so a constant is a pure function of no arguments, `pi()`. std::opt folds the call.
-
-slot_t __math_pi__(ArgsView &, ArgsView &, Context &) { return toSlot(std::numbers::pi); }
-slot_t __math_e__(ArgsView &, ArgsView &, Context &) { return toSlot(std::numbers::e); }
-slot_t __math_inf__(ArgsView &, ArgsView &, Context &) {
-    return toSlot(std::numeric_limits<Float64>::infinity());
-}
-slot_t __math_nan__(ArgsView &, ArgsView &, Context &) {
-    return toSlot(std::numeric_limits<Float64>::quiet_NaN());
-}
+// The constants (`pi`, `e`, `inf`, `nan`) are values the module exports, not operators: see
+// MathModule::MathModule (design principles 2.13).
 
 // ---- gcd, lcm ----
 //
@@ -351,10 +340,6 @@ oper_group_ptr_t sameType(const std::string &name, size_t arity, bool floats) {
     return OperatorGroup::create(name, std::move(overloads));
 }
 
-oper_group_ptr_t constant(const std::string &name) {
-    return OperatorGroup::create(name, {{"math:" + name, sig({}, Type::Float64())}});
-}
-
 oper_group_ptr_t shift(const std::string &name) {
     return OperatorGroup::create(
         name,
@@ -386,8 +371,6 @@ const std::vector<oper_group_ptr_t> &getMathNumericGroups() {
         sameType("min", 2, true), sameType("max", 2, true), sameType("clamp", 3, true),
         sameType("sign", 1, true),
         floatTest("is_nan"),    floatTest("is_inf"),
-        constant("pi"),         constant("e"),         constant("inf"),
-        constant("nan"),
         sameType("gcd", 2, false),     sameType("lcm", 2, false),
         sameType("bit_and", 2, false), sameType("bit_or", 2, false),
         sameType("bit_xor", 2, false), sameType("bit_not", 1, false),
@@ -434,10 +417,6 @@ std::unordered_map<std::string, operator_t> getMathNumericOpsMap() {
     numbers("sign", __math_sign__);
     both("is_nan", __math_is_nan__);
     both("is_inf", __math_is_inf__);
-    ops["pi"]  = __math_pi__;
-    ops["e"]   = __math_e__;
-    ops["inf"] = __math_inf__;
-    ops["nan"] = __math_nan__;
     integers("gcd", __math_gcd__);
     integers("lcm", __math_lcm__);
     integers("bit_and", __math_bit_and__);

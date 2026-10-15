@@ -4,7 +4,7 @@
  * Numeric types are not converted implicitly. A function over floats takes `f32` or `float`
  * and returns the type it was given; a function of several numbers takes numbers of one type.
  * Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
- * A constant is a function of no arguments: `pi()`.
+ * A constant is a value, written without parentheses: `pi`.
  *
  * For reference only: these declarations are not compiled. They are checked against the
  * operators the module registers, and docs/stdlib-reference.md is generated from them
@@ -12,34 +12,23 @@
  */
 
 // ---- constants ----
+// Values the module exports (design principles 2.13), written without parentheses.
 
 /// The ratio of a circle's circumference to its diameter.
-/// @pure
-/// @example pi()    // 3.14159...
-inner func pi(): float {
-    return 'math:pi'
-}
+/// @example pi    // 3.14159...
+export let pi: float = 3.141592653589793
 
 /// The base of the natural logarithm.
-/// @pure
-/// @example log(e())    // 1
-inner func e(): float {
-    return 'math:e'
-}
+/// @example log(e)    // 1
+export let e: float = 2.718281828459045
 
-/// Positive infinity; negative infinity is -inf().
-/// @pure
-/// @example is_inf(-inf())    // true
-inner func inf(): float {
-    return 'math:inf'
-}
+/// Positive infinity; negative infinity is -inf.
+/// @example is_inf(-inf)    // true
+export let inf: float = 1.0e308 * 10.0
 
 /// A NaN. It equals nothing, itself included: test with is_nan.
-/// @pure
-/// @example is_nan(nan())    // true
-inner func nan(): float {
-    return 'math:nan'
-}
+/// @example is_nan(nan)    // true
+export let nan: float = inf - inf
 
 // ---- elementary functions ----
 
@@ -247,7 +236,7 @@ inner func sign(x: i32 | int | f32 | float): i32 | int | f32 | float {
 
 /// Whether x is a NaN.
 /// @pure
-/// @example is_nan(inf() - inf())    // true
+/// @example is_nan(inf - inf)    // true
 inner func is_nan(x: f32 | float): bool {
     return 'math:is_nan_*'
 }

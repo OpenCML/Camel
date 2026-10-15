@@ -53,7 +53,7 @@ func main(): int sync {
 |---|---|
 | `str` | 字符串：按字节的切分、修剪、大小写、替换、查找、截取；按码点的计数、读取、编解码 |
 | `array` | 数组：`reverse`、`take`、`drop`、`unique`、`find`、`sum`、`min`、`max`、`sort_by`、`flat_map` 等（用 Camel 写的泛型函数） |
-| `math` | 常量 `pi()`、`e()`；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
+| `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
 | `random` | `seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle` |
 | `time` | `now`、`strftime`、`strptime` |
 | `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk` |
@@ -245,7 +245,7 @@ func f(): int {
 
 - 可能没有结果的函数返回 `T?`（`find`、`index_of` 找不到，`min`、`max`、`median` 遇到空数组），用 `??` 处理；只有声明为可能失败的操作返回 `T!`（如按码点解码一个不是合法 UTF-8 的字符串）；越界与不在定义域内的实参是故障。
 - 用 Camel 写的库（如 `array`）导出的是泛型函数，在调用它的模块里按元素类型实例化（见 [7.5](07_statements.md#75-泛型函数)）。
-- 用 Camel 写的模块可以导出值（[5.3](#53-导出)）；C++ 模块（如 `math`）的常量仍是无参函数：`pi()`、`e()`。
+- 用 Camel 写的模块可以导出值（[5.3](#53-导出)）；C++ 模块也可以导出值（设计原则 2.13）：`math` 的常量 `math::pi`、`math::e`、`math::inf`、`math::nan` 不带括号，用到的地方就是那个常量，没有 root 上的节点，也不需要捕获。
 - 传给 `array` 模块高阶函数的函数用 `map` 施加：各元素上的调用之间没有顺序约定（并行调度器可以同时执行），结果按位置排列；需要顺序的副作用用内建的 `foreach`、`reduce`。
 - `camel inspect --ops <文件>` 列出内建模块与该程序导入的每个模块的全部算子及其声明的纯度。
 

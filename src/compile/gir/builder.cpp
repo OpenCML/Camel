@@ -2906,6 +2906,23 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         const auto &e = opt.value();
+        if (e.isValue()) {
+            // A constant a C++ module exports (`math::pi`; design principles 2.13): the
+            // constant itself, here, as the same value written as a literal would be. It has
+            // no node on the root graph and needs no capture.
+            const GCT::node_ptr_t literal = tree_->makeData(e.value());
+            literal->setOrigin(gct->origin());
+            node_handle_t node = visitDataNode(literal);
+            if (recorder_) {
+                recorder_->valueReferenced(
+                    gct->origin(),
+                    name,
+                    camel::source::kInvalidOriginId,
+                    valueTypeOf(nodeTypeOf(node)));
+            }
+            LEAVE("DREF");
+            return node;
+        }
         if (camel::core::module::detail::EntityAccess::isNode(e)) {
             // A value exported by another module: a node of the root graph (design principles
             // 2.11), used like a value of this module's top level: on the root graph itself,
@@ -3841,12 +3858,19 @@ void Builder::reportImportNameConflicts() {
                 // the same parameter types, or a value and anything else of that name (a value
                 // is not overloaded).
                 std::optional<std::string> clash;
-                if (EntityAccess::isNode(*first) || EntityAccess::isNode(*second)) {
-                    const bool same = EntityAccess::isNode(*first) &&
-                                      EntityAccess::isNode(*second) &&
-                                      EntityAccess::node(*first) == EntityAccess::node(*second);
+                // A value: exported by a module written in Camel (a node of the root graph) or
+                // a constant of a C++ module (design principles 2.13).
+                const auto isValue = [](const camel::core::module::entity &e) {
+                    return EntityAccess::isNode(e) || e.isValue();
+                };
+                if (isValue(*first) || isValue(*second)) {
+                    const bool same =
+                        (EntityAccess::isNode(*first) && EntityAccess::isNode(*second) &&
+                         EntityAccess::node(*first) == EntityAccess::node(*second)) ||
+                        (first->isValue() && second->isValue() &&
+                         first->value() == second->value());
                     if (!same) {
-                        clash = EntityAccess::isNode(*first) && EntityAccess::isNode(*second)
+                        clash = isValue(*first) && isValue(*second)
                                     ? std::string("a value in both")
                                     : std::string("a value in one of them");
                     }

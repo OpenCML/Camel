@@ -17,6 +17,13 @@
 //       return 'protocol:operator'                 (the URI; `*` stands for any text, for a
 //   }                                               group of overloads that differ by type)
 //
+// A value a module exports (`math::pi`; design principles 2.13) is declared with its type and
+// a doc comment, and needs neither @pure nor a URI (it is not an operator):
+//
+//   /// What it is.
+//   /// @example <code>    // <result>
+//   export let name: T = <its value>
+//
 // A library module written in Camel (stdlib/<module>.cml) is its own signature file: its
 // `export func` declarations and their `///` comments are read the same way.
 //
@@ -147,6 +154,33 @@ function parseDeclarations(module) {
             withText = bracketed(trimmed, trimmed.indexOf('<')).inner
             continue
         }
+        const valueMatch = module.kind === 'cpp' && trimmed.match(/^export let (\w+)\s*:\s*([^=]+?)\s*=/)
+        if (valueMatch) {
+            const entry = {
+                module: module.name,
+                name: valueMatch[1],
+                section,
+                line: i + 1,
+                value: true,
+                with: [],
+                norm: [],
+                result: valueMatch[2],
+                doc: [],
+                purity: 'value',
+                effect: '',
+                fails: [],
+                examples: [],
+                uri: null,
+            }
+            for (const text of doc) {
+                if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
+                else if (!text.startsWith('@')) entry.doc.push(text)
+            }
+            entries.push(entry)
+            doc = []
+            withText = ''
+            continue
+        }
         if (trimmed.startsWith(keyword + ' ')) {
             const rest = trimmed.slice(keyword.length + 1)
             const name = rest.slice(0, rest.indexOf('('))
@@ -216,6 +250,7 @@ function parseHeader(module) {
 // ---- the document -------------------------------------------------------------------------
 
 function signatureText(entry) {
+    if (entry.value) return `${entry.name}: ${entry.result}`
     const withPart = entry.with.length ? `<${entry.with.join(', ')}> ` : ''
     return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || 'void'}`
 }
@@ -304,7 +339,9 @@ function renderDoc() {
             out.push('')
             out.push(entry.doc.join('\n'))
             out.push('')
-            if (module.kind === 'camel') {
+            if (entry.value) {
+                out.push('- A value: written without parentheses, a constant where it is used.')
+            } else if (module.kind === 'camel') {
                 out.push('- Written in Camel: a subgraph, pure when the functions passed to it are.')
             } else if (entry.purity === 'pure') {
                 out.push('- Pure.')
@@ -365,7 +402,8 @@ function verifyOps() {
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
         }
-        const entries = parseDeclarations(module)
+        // Values are not operators: inspect --ops does not list them.
+        const entries = parseDeclarations(module).filter((e) => !e.value)
         for (const op of ops) {
             const sameName = entries.filter((e) => e.name === op.name)
             if (sameName.length === 0) {

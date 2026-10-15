@@ -33,7 +33,7 @@ const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'ran
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
-const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'math:pi', 'statistics:median', 'algo:sorted', 'algo:argsort',
+const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median', 'algo:sort', 'algo:argsort',
   're:test', 'json:encode', 'json:decode', 'crypto:sha256', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 2.12).
   ':struct/append_arr', ':struct/extend_arr', 'algo:sort', 'algo:quick_sort', 'algo:insert_sort', 'algo:merge_sort']

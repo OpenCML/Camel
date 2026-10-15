@@ -53,7 +53,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 |---|---|
 | `str` | Strings: by byte, splitting, trimming, case conversion, replacing, searching, taking substrings; by code point, counting, reading, encoding and decoding |
 | `array` | Arrays: `reverse`, `take`, `drop`, `unique`, `find`, `sum`, `min`, `max`, `sort_by`, `flat_map` and others (generic functions written in Camel) |
-| `math` | The constants `pi()`, `e()`; elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
+| `math` | The constants `pi`, `e`, `inf`, `nan` (values); elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
 | `random` | `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle` |
 | `time` | `now`, `strftime`, `strptime` |
 | `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `read_text`, `try_read_text`, `write_text`, `file_size`, `read_chunk` |
@@ -245,7 +245,7 @@ For the functions each module exports (signature, whether it is pure, behaviour 
 
 - A function that may have no result returns `T?` (`find` and `index_of` when nothing is found, `min`, `max` and `median` of an empty array), handled with `??`; only operations declared as fallible return `T!` (such as decoding by code point a string that is not valid UTF-8); out-of-range arguments and arguments outside the domain are faults.
 - A library written in Camel (such as `array`) exports generic functions, which are instantiated by element type in the module that calls them (see [7.5](07_statements.md#75-generic-functions)).
-- Modules written in Camel can export values ([5.3](#53-exports)); the constants of C++ modules (such as `math`) are still functions without parameters: `pi()`, `e()`.
+- Modules written in Camel can export values ([5.3](#53-exports)); so can C++ modules (design principles 2.13): the constants of `math`, `math::pi`, `math::e`, `math::inf`, `math::nan`, are written without parentheses, and each use is that constant itself, with no node on the root graph and no capture.
 - A function passed to a higher-order function of the `array` module is applied with `map`: there is no agreed order between the calls on the elements (a parallel scheduler may execute them at the same time), and the results are arranged by position; for side effects that need an order use the built-in `foreach` and `reduce`.
 - `camel inspect --ops <file>` lists all the operators of the built-in modules and of every module the program imports, together with their declared purity.
 
