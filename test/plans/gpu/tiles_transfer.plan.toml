@@ -1,0 +1,19 @@
+id = "gpu.tiles_transfer"
+order = 901
+tier = "gpu"
+tags = ["gpu", "modules", "tiles"]
+
+[[tests]]
+name = "large_upload_completion"
+kind = "behavior"
+case = "../../cases/modules/tiles/upload_large.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 3 && values.every(v => v === 0), 'large upload was read before completion')
+}
+"""
+timeout_ms = 60000

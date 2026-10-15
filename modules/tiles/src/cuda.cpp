@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <deque>
 #include <filesystem>
 #include <memory>
@@ -148,7 +149,10 @@ struct Api {
     DRIVER(cuModuleGetFunction);
     DRIVER(cuMemAlloc);
     DRIVER(cuMemFree);
+    DRIVER(cuMemHostAlloc);
+    DRIVER(cuMemFreeHost);
     DRIVER(cuMemcpyHtoD);
+    DRIVER(cuMemcpyHtoDAsync);
     DRIVER(cuMemcpyDtoH);
     DRIVER(cuStreamCreate);
     DRIVER(cuStreamSynchronize);
@@ -314,6 +318,7 @@ struct Resources {
     Api &api;
     CUstream stream = nullptr;
     std::vector<CUdeviceptr> buffers;
+    std::vector<void *> hostBuffers;
     explicit Resources(Api &a) : api(a) {
         api.check(api.cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING), "create stream");
     }
@@ -323,6 +328,8 @@ struct Resources {
         for (auto ptr : buffers)
             if (ptr)
                 api.cuMemFree(ptr);
+        for (auto ptr : hostBuffers)
+            api.cuMemFreeHost(ptr);
         if (stream)
             api.cuStreamDestroy(stream);
     }
@@ -337,6 +344,17 @@ struct Resources {
         }
         return ptr;
     }
+    void *allocateHost(size_t size) {
+        void *ptr = nullptr;
+        api.check(api.cuMemHostAlloc(&ptr, size, 0), "allocate pinned host memory");
+        try {
+            hostBuffers.push_back(ptr);
+        } catch (...) {
+            api.cuMemFreeHost(ptr);
+            throw;
+        }
+        return ptr;
+    }
 };
 
 // Both normal execution and benchmarking use this exact upload/launch/download path.
@@ -347,6 +365,7 @@ class DeviceRun {
     Resources resources;
     std::vector<CUdeviceptr> pointers;
     std::vector<CUfunction> kernels;
+    std::vector<void *> hostInputs;
     CUdeviceptr table;
 
   public:
@@ -358,10 +377,21 @@ class DeviceRun {
         for (size_t id = 0; id < p.nodes.size(); ++id)
             if (p.storage.slots[id] != SIZE_MAX)
                 pointers[id] = allocations[p.storage.slots[id]];
-        table = resources.allocate(pointers.size() * sizeof(CUdeviceptr));
+        table                   = resources.allocate(pointers.size() * sizeof(CUdeviceptr));
+        const size_t tableBytes = pointers.size() * sizeof(CUdeviceptr);
+        void *hostTable         = resources.allocateHost(tableBytes);
+        std::memcpy(hostTable, pointers.data(), tableBytes);
         api.check(
-            api.cuMemcpyHtoD(table, pointers.data(), pointers.size() * sizeof(CUdeviceptr)),
+            api.cuMemcpyHtoDAsync(table, hostTable, tableBytes, resources.stream),
             "upload argument table");
+        hostInputs.assign(p.nodes.size(), nullptr);
+        for (size_t id = 0; id < p.nodes.size(); ++id) {
+            const auto &data = p.nodes[id].data;
+            if (data.empty())
+                continue;
+            hostInputs[id] = resources.allocateHost(data.size() * sizeof(float));
+            std::memcpy(hostInputs[id], data.data(), data.size() * sizeof(float));
+        }
         for (const auto &launch : p.launches) {
             CUfunction kernel;
             api.check(
@@ -376,9 +406,17 @@ class DeviceRun {
             const auto &n = program.nodes[id];
             if (!n.data.empty())
                 api.check(
-                    api.cuMemcpyHtoD(pointers[id], n.data.data(), n.data.size() * sizeof(float)),
+                    api.cuMemcpyHtoDAsync(
+                        pointers[id],
+                        hostInputs[id],
+                        n.data.size() * sizeof(float),
+                        resources.stream),
                     "upload input");
         }
+        // Pageable synchronous copies can return after staging, before DMA completes.
+        // All transfers use our stream and stable pinned buffers; completion here makes
+        // the public synchronous upload contract and benchmark phase timing explicit.
+        synchronize();
     }
     void launch() {
         void *args[] = {&table};
