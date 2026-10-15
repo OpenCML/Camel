@@ -59,6 +59,11 @@ struct GCGraphPayloadShape {
 };
 
 struct GCGraphPayloadArena {
+    // The graph's reference table, already built, and the index of each entry: the encoder
+    // writes a FUNC node's callee as its index (GCFuncRef).
+    std::span<GCGraph *const> refs;
+    const std::unordered_map<const GCGraph *, uint32_t> *refIndex = nullptr;
+
     GCNode *nodes              = nullptr; // nodeCount + 1 records
     gc_node_ref_t *inputs      = nullptr;
     gc_payload_word_t *payload = nullptr;
@@ -141,8 +146,11 @@ void validateRuntimeBranchArms(const GCGraph *graph);
 /// and closure slots, at any depth) is an auxiliary type of the compiler. Part of
 /// validateRuntimeGraphPayload; throws std::runtime_error naming the graph and the type.
 void validateRuntimeGraphTypes(const GCGraph *graph);
-/// The check that needs the callees encoded: every direct call passes as many arguments as its
-/// callee has ports. Run on each graph once the whole set of a commit is encoded.
+/// The checks that need the callees encoded: every direct call passes as many arguments as its
+/// callee has ports, and every graph a function constant of the static area points to is in
+/// the reference table (graphs refer to graphs only through it; the FUNC payload is an index
+/// into it by construction, checked by validateRuntimeGraphPayload). Run on each graph once the
+/// whole set of a commit is encoded.
 void validateRuntimeGraphCalls(const GCGraph *graph);
 
 } // namespace camel::runtime

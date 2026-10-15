@@ -83,6 +83,13 @@ std::vector<std::byte> clonePayloadBytes(
         return bytes;
     }
 
+    if (sourceNode->kind == GCNodeKind::Func) {
+        // A frozen FUNC names its callee by reference-table index; a draft holds the callee.
+        const GCFuncBody callee{.calleeGraph = sourceGraph->directCalleeGraphOf(sourceRef)};
+        std::vector<std::byte> bytes(sizeof(GCFuncBody));
+        std::memcpy(bytes.data(), &callee, sizeof(callee));
+        return bytes;
+    }
     const auto body = sourceGraph->nodePayloadBytes(sourceRef);
     std::vector<std::byte> bytes(body.begin(), body.end());
     if (sourceNode->kind == GCNodeKind::Join && bytes.size() >= sizeof(GCJoinBody)) {

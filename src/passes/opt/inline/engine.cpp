@@ -575,18 +575,17 @@ GCGraph *applyRuntimeOptimizeRewrite(
                     if (!node || node->kind != GCNodeKind::Func) {
                         continue;
                     }
-                    const auto *body = runtimeGraph->nodeBodyAs<GCFuncBody>(it.ref());
-                    if (!body || !body->calleeGraph) {
+                    GCGraph *callee = runtimeGraph->directCalleeGraphOf(it.ref());
+                    if (!callee) {
                         continue;
                     }
-                    if (!closureSet.contains(body->calleeGraph)) {
-                        throw std::runtime_error(
-                            std::format(
-                                "Runtime rewrite discovered FUNC node {} in graph '{}' with callee "
-                                "graph {:p} outside the reachable closure.",
-                                it.ref(),
-                                runtimeGraph->name(),
-                                static_cast<void *>(body->calleeGraph)));
+                    if (!closureSet.contains(callee)) {
+                        throw std::runtime_error(std::format(
+                            "Runtime rewrite discovered FUNC node {} in graph '{}' with callee "
+                            "graph {:p} outside the reachable closure.",
+                            it.ref(),
+                            runtimeGraph->name(),
+                            static_cast<void *>(callee)));
                     }
                 }
             }

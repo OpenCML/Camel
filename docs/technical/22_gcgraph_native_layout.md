@@ -226,10 +226,15 @@ node.)
 
 ### 11.3 `FUNC`
 
-`FUNC` stores the direct runtime callee graph:
+In a frozen graph `FUNC` stores the index of its callee in the graph's
+reference table (section 11.8); `GCGraph::directCalleeGraphOf(ref)` resolves it.
 
 ```cpp
-struct GCFuncBody {
+struct GCFuncRef {         // frozen graph
+    uint32_t ref = 0;      // index into refs()
+    uint32_t reserved = 0;
+};
+struct GCFuncBody {        // draft: the callee itself; the encoder turns it into a GCFuncRef
     GCGraph *calleeGraph = nullptr;
 };
 ```
@@ -272,6 +277,21 @@ Control-structure metadata is stored explicitly in the node bodies.
 
 This makes runtime branch/join semantics explicit and avoids repeatedly
 reconstructing them from generic graph edges alone.
+
+### 11.8 The Reference Table
+
+A frozen graph refers to other graphs only through its reference table
+(`GCGraph::refs()`, design section 3.7; since 2026-10-15). Each graph appears
+once and carries the roles it has (`GCGraphRefRole`): called by a `FUNC` node
+(`kGraphRefCallee`), written inside this graph (`kGraphRefNested`), the graph of
+a function constant of the static area (`kGraphRefStatic`).
+`dependencies()`, `subGraphs()` and `staticGraphRefs()` are views of the table by
+role; `traceGraphs` walks the table. The encoder writes a `FUNC` callee as its
+index and refuses a callee that is not in the table; validation checks that
+every `FUNC` index names a callee entry and that every graph a function constant
+points to is in the table. The entries are graph pointers of this frozen
+graph: the program-wide `GraphId` that stays the same across a rewrite comes
+with snapshots and partial commits (graph model step 5).
 
 ## 12. Branch Arm Arena
 

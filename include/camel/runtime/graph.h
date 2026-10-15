@@ -35,6 +35,10 @@
  *    offset the record names.
  * 4. Users (the reverse direction) are not stored: GCGraph::uses() builds the index the first
  *    time anything asks for it and keeps it for the graph's lifetime.
+ * 6. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
+ *    FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
+ *    constants of the static area point to, the graphs written inside this one and the graphs
+ *    it calls directly are entries of it, each marked with the roles it has (GCGraphRefRole).
  * 5. Hot-path data stays plain; cold debug metadata lives elsewhere (GCGraphDebugRecord).
  */
 
@@ -176,6 +180,23 @@ static_assert(std::is_trivially_copyable_v<GCNode>);
 using gc_payload_word_t                   = uint64_t;
 inline constexpr size_t kPayloadWordBytes = sizeof(gc_payload_word_t);
 
+/// The roles of an entry of a graph's reference table (bit flags; one graph can have several).
+enum GCGraphRefRole : uint8_t {
+    kGraphRefCallee = 1 << 0, // called directly by a FUNC node (a dependency)
+    kGraphRefNested = 1 << 1, // written inside this graph (a lambda, a branch arm)
+    kGraphRefStatic = 1 << 2, // the graph of a function constant of the static area
+};
+
+/// Payload of a FUNC node in a frozen graph: the index of the callee in the graph's reference
+/// table. (A draft's FUNC payload is a GCFuncBody, holding the callee itself; the encoder
+/// turns one into the other.)
+struct GCFuncRef {
+    uint32_t ref      = 0;
+    uint32_t reserved = 0;
+};
+static_assert(std::is_trivially_copyable_v<GCFuncRef>);
+
+/// Payload of a FUNC node in a draft (see GCFuncRef for frozen graphs).
 struct GCFuncBody {
     class GCGraph *calleeGraph = nullptr;
 };
@@ -348,9 +369,17 @@ class GCGraph : public camel::core::rtdata::Object {
     void setExtraSlot(size_t index, uintptr_t value);
     void clearExtraSlots();
 
-    std::span<GCGraph *const> dependencies() const;
-    std::span<GCGraph *const> subGraphs() const;
-    std::span<GCGraph *const> staticGraphRefs() const;
+    /// The reference table: every graph this one refers to, once each (see the file comment).
+    std::span<GCGraph *const> refs() const { return {refs_, refCount_}; }
+    /// The roles of entry `index` of the reference table (GCGraphRefRole bits).
+    uint8_t refRoles(size_t index) const { return refRoles_[index]; }
+    /// The entries of the reference table with role `role`, in table order.
+    std::vector<GCGraph *> refsWithRole(uint8_t role) const;
+    /// The graphs called directly, written inside this one, referred to by a function
+    /// constant: views of the reference table by role.
+    std::vector<GCGraph *> dependencies() const { return refsWithRole(kGraphRefCallee); }
+    std::vector<GCGraph *> subGraphs() const { return refsWithRole(kGraphRefNested); }
+    std::vector<GCGraph *> staticGraphRefs() const { return refsWithRole(kGraphRefStatic); }
     std::span<const slot_t> staticSlots() const;
 
     bool hasNodePayload() const;
@@ -453,18 +482,9 @@ class GCGraph : public camel::core::rtdata::Object {
     /// Every node, in NodeId order.
     NodeRange nodes() const { return NodeRange(this); }
 
+    /// Calls `visitor` for every graph of the reference table.
     template <typename Visitor> void traceGraphs(Visitor &&visitor) const {
-        for (GCGraph *graph : dependencies()) {
-            if (graph) {
-                visitor(graph);
-            }
-        }
-        for (GCGraph *graph : subGraphs()) {
-            if (graph) {
-                visitor(graph);
-            }
-        }
-        for (GCGraph *graph : staticGraphRefs()) {
+        for (GCGraph *graph : refs()) {
             if (graph) {
                 visitor(graph);
             }
@@ -492,9 +512,8 @@ class GCGraph : public camel::core::rtdata::Object {
     GCGraph(
         GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
         camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
-        camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **dependencies,
-        GCGraph **subGraphs, GCGraph **staticGraphRefs, gc_cnt_t dependencyCount,
-        gc_cnt_t subGraphCount, gc_cnt_t staticGraphRefCount, const GCGraphNativePayload &payload,
+        camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
+        uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload,
         ::Tuple *staticArea);
 
     GCGraphDebugRecord *debug_                     = nullptr;
@@ -503,12 +522,9 @@ class GCGraph : public camel::core::rtdata::Object {
     camel::core::type::TupleType *staticDataType_  = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
     GCGraph *outerGraph_                           = nullptr;
-    GCGraph **dependencies_                        = nullptr;
-    GCGraph **subGraphs_                           = nullptr;
-    GCGraph **staticGraphRefs_                     = nullptr;
-    gc_cnt_t dependencyCount_                      = 0;
-    gc_cnt_t subGraphCount_                        = 0;
-    gc_cnt_t staticGraphRefCount_                  = 0;
+    GCGraph **refs_                                = nullptr;
+    uint8_t *refRoles_                             = nullptr;
+    gc_cnt_t refCount_                             = 0;
     std::span<const gc_node_ref_t> inputRun(gc_off_t begin, gc_off_t end) const {
         return {nativePayload_.inputs + begin, static_cast<size_t>(end - begin)};
     }

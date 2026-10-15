@@ -133,9 +133,8 @@ camel::core::type::TypeId typeIdOf(Type *type) {
 
 struct GraphArenaLayout {
     size_t graphBytes          = 0;
-    size_t dependencyBytes     = 0;
-    size_t subGraphBytes       = 0;
-    size_t staticGraphRefBytes = 0;
+    size_t refBytes            = 0; // the reference table
+    size_t refRoleBytes        = 0; // its roles, padded to the next array's alignment
     size_t tupleBytes          = 0;
     size_t nodeBytes           = 0;
     size_t payloadBytes        = 0;
@@ -153,15 +152,13 @@ GraphArenaLayout planGraphArenaLayout(
     std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payload,
     std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots) {
     GraphArenaLayout layout{
-        .graphBytes      = camel::core::mm::alignUp(sizeof(GCGraph), alignof(GCGraph)),
-        .dependencyBytes = camel::core::mm::alignUp(
-            bytesForArray<GCGraph *>(dependencies.size()),
-            alignof(GCGraph *)),
-        .subGraphBytes = camel::core::mm::alignUp(
-            bytesForArray<GCGraph *>(subGraphs.size()),
-            alignof(GCGraph *)),
-        .staticGraphRefBytes = camel::core::mm::alignUp(
-            bytesForArray<GCGraph *>(staticGraphRefs.size()),
+        .graphBytes = camel::core::mm::alignUp(sizeof(GCGraph), alignof(GCGraph)),
+        // Room for every graph the three lists name; a graph named twice takes one entry and
+        // leaves its room unused.
+        .refBytes = bytesForArray<GCGraph *>(
+            dependencies.size() + subGraphs.size() + staticGraphRefs.size()),
+        .refRoleBytes = camel::core::mm::alignUp(
+            dependencies.size() + subGraphs.size() + staticGraphRefs.size(),
             alignof(GCGraph *)),
         .tupleBytes = staticSlots.empty()
                           ? 0
@@ -188,10 +185,9 @@ GraphArenaLayout planGraphArenaLayout(
             alignof(GCBranchArm)),
     };
     const size_t beforeFrameLayout =
-        layout.graphBytes + layout.dependencyBytes + layout.subGraphBytes +
-        layout.staticGraphRefBytes + layout.tupleBytes + layout.nodeBytes + layout.payloadBytes +
-        layout.inputBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes +
-        layout.branchArmBytes;
+        layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
+        layout.nodeBytes + layout.payloadBytes + layout.inputBytes + layout.normPortBytes +
+        layout.withPortBytes + layout.closureBytes + layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
@@ -367,8 +363,10 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             validateRef(input, "ctrl-input");
         }
         if (node->kind == GCNodeKind::Func) {
-            const auto *body = graph->nodeBodyAs<GCFuncBody>(ref);
-            if (!body || !body->calleeGraph) {
+            // A graph names another graph only through its reference table (I12/I13).
+            const auto *body = graph->nodeBodyAs<GCFuncRef>(ref);
+            if (!body || body->ref >= graph->refs().size() || !graph->refs()[body->ref] ||
+                (graph->refRoles(body->ref) & kGraphRefCallee) == 0) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has FUNC node {} without callee graph.",
@@ -513,7 +511,7 @@ size_t draftPayloadWords(const DraftNodeHeader &header) {
     size_t bodyBytes = 0;
     switch (header.kind) {
     case GCNodeKind::Func:
-        bodyBytes = sizeof(GCFuncBody);
+        bodyBytes = sizeof(GCFuncRef);
         break;
     case GCNodeKind::Call:
         bodyBytes = sizeof(GCCallBody);
@@ -725,7 +723,19 @@ void emitDraftPayload(
                     "FUNC node runtimeRef={} callee after resolve={}.",
                     planned.ref,
                     static_cast<const void *>(body.calleeGraph));
-                writeBody(payload.payload, header, body);
+                // The frozen node names the callee by its index in the reference table; a
+                // callee that is not in it is a graph the encoder was not told this one calls.
+                const auto *refIndex = payload.refIndex;
+                const auto found =
+                    refIndex ? refIndex->find(body.calleeGraph)
+                             : std::unordered_map<const GCGraph *, uint32_t>::const_iterator{};
+                if (refIndex == nullptr || found == refIndex->end()) {
+                    throw std::runtime_error(std::format(
+                        "FUNC node {} calls a graph that is not among the graphs this graph "
+                        "calls (its reference table).",
+                        planned.ref));
+                }
+                writeBody(payload.payload, header, GCFuncRef{.ref = found->second});
             }
             break;
         case GCNodeKind::Call:
@@ -1022,12 +1032,37 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     void *graphMem = arena.alloc(sizeof(GCGraph), alignof(GCGraph));
     ASSERT(graphMem == memory, "Graph arena must place GCGraph at the start of its owned block.");
 
-    GCGraph **dependencyStorage       = arenaCopyArray<GCGraph *>(arena, dependencies);
-    GCGraph **subGraphStorage         = arenaCopyArray<GCGraph *>(arena, subGraphs);
-    GCGraph **staticRefStorage        = arenaCopyArray<GCGraph *>(arena, staticGraphRefs);
+    // The reference table: the three lists merged, each graph once, with the roles it has in
+    // them (callees first, in their order, then nested graphs, then constants' graphs).
+    const size_t refCapacity = dependencies.size() + subGraphs.size() + staticGraphRefs.size();
+    auto *refStorage         = static_cast<GCGraph **>(
+        arena.alloc(bytesForArray<GCGraph *>(refCapacity), alignof(GCGraph *)));
+    auto *refRoleStorage = static_cast<uint8_t *>(
+        arena.alloc(camel::core::mm::alignUp(refCapacity, alignof(GCGraph *)), alignof(GCGraph *)));
+    std::unordered_map<const GCGraph *, uint32_t> refIndex;
+    size_t refCount    = 0;
+    const auto addRefs = [&](std::span<GCGraph *const> graphs, uint8_t role) {
+        for (GCGraph *ref : graphs) {
+            if (ref == nullptr) {
+                continue;
+            }
+            const auto [it, added] = refIndex.emplace(ref, static_cast<uint32_t>(refCount));
+            if (added) {
+                refStorage[refCount]     = ref;
+                refRoleStorage[refCount] = 0;
+                ++refCount;
+            }
+            refRoleStorage[it->second] |= role;
+        }
+    };
+    addRefs(dependencies, kGraphRefCallee);
+    addRefs(subGraphs, kGraphRefNested);
+    addRefs(staticGraphRefs, kGraphRefStatic);
     ::Tuple *staticArea               = buildStaticAreaInArena(arena, staticDataType, staticSlots);
     GCGraphNativePayload ownedPayload = allocPayloadInArena(arena, payloadShape);
     GCGraphPayloadArena payloadArena  = makePayloadArenaView(ownedPayload);
+    payloadArena.refs                 = std::span<GCGraph *const>(refStorage, refCount);
+    payloadArena.refIndex             = &refIndex;
     // The frame layout is part of the graph (see TupleType::constructFrameLayout); the padding
     // planned for it lets it start aligned wherever the arrays before it ended.
     TupleType *runtimeDataType = nullptr;
@@ -1063,12 +1098,9 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
         staticDataType,
         closureType,
         outerGraph,
-        dependencyStorage,
-        subGraphStorage,
-        staticRefStorage,
-        narrowIntegral<gc_cnt_t>(dependencies.size(), "called graphs"),
-        narrowIntegral<gc_cnt_t>(subGraphs.size(), "nested graphs"),
-        narrowIntegral<gc_cnt_t>(staticGraphRefs.size(), "graphs referenced by constants"),
+        refStorage,
+        refRoleStorage,
+        narrowIntegral<gc_cnt_t>(refCount, "graphs referred to"),
         ownedPayload,
         staticArea);
 
@@ -1108,15 +1140,12 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
 GCGraph::GCGraph(
     GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
     camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
-    camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **dependencies,
-    GCGraph **subGraphs, GCGraph **staticGraphRefs, gc_cnt_t dependencyCount,
-    gc_cnt_t subGraphCount, gc_cnt_t staticGraphRefCount, const GCGraphNativePayload &payload,
-    ::Tuple *staticArea)
+    camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
+    uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload, ::Tuple *staticArea)
     : debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
-      dependencies_(dependencies), subGraphs_(subGraphs), staticGraphRefs_(staticGraphRefs),
-      dependencyCount_(dependencyCount), subGraphCount_(subGraphCount),
-      staticGraphRefCount_(staticGraphRefCount), nativePayload_(payload), staticArea_(staticArea) {}
+      refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
+      staticArea_(staticArea) {}
 
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
     return describeDraftPayload(draft, planDraftPayload(draft));
@@ -1166,6 +1195,26 @@ void validateRuntimeGraphCalls(const GCGraph *graph) {
                     callee->name(),
                     callee->normPorts().size(),
                     callee->withPorts().size()));
+        }
+    }
+    // A graph refers to other graphs only through its reference table (design 3.7, I12): the
+    // graphs the function constants of its static area point to are entries of it too.
+    if (const TupleType *types = graph->staticDataType()) {
+        const auto slots = graph->staticSlots();
+        std::vector<GCGraph *> referenced;
+        std::unordered_set<const Object *> visited;
+        for (size_t i = 1; i < slots.size() && i < types->size(); ++i) {
+            collectStaticGraphRefsRecursive(referenced, slots[i], types->typeAt(i), visited);
+        }
+        const auto refs = graph->refs();
+        for (GCGraph *ref : referenced) {
+            if (std::find(refs.begin(), refs.end(), ref) == refs.end()) {
+                throw std::runtime_error(std::format(
+                    "Runtime graph '{}' has a function constant of graph '{}', which is not in "
+                    "its reference table.",
+                    graph->name(),
+                    ref ? ref->name() : std::string("<null>")));
+            }
         }
     }
 }
@@ -1239,14 +1288,14 @@ void GCGraph::clearExtraSlots() {
     }
 }
 
-std::span<GCGraph *const> GCGraph::dependencies() const {
-    return {dependencies_, dependencyCount_};
-}
-
-std::span<GCGraph *const> GCGraph::subGraphs() const { return {subGraphs_, subGraphCount_}; }
-
-std::span<GCGraph *const> GCGraph::staticGraphRefs() const {
-    return {staticGraphRefs_, staticGraphRefCount_};
+std::vector<GCGraph *> GCGraph::refsWithRole(uint8_t role) const {
+    std::vector<GCGraph *> graphs;
+    for (gc_cnt_t i = 0; i < refCount_; ++i) {
+        if ((refRoles_[i] & role) != 0) {
+            graphs.push_back(refs_[i]);
+        }
+    }
+    return graphs;
 }
 
 std::span<const slot_t> GCGraph::staticSlots() const {
@@ -1299,7 +1348,7 @@ std::span<const std::byte> GCGraph::nodePayloadBytes(gc_node_ref_t ref) const {
     size_t bytes     = 0;
     switch (n->kind) {
     case GCNodeKind::Func:
-        bytes = sizeof(GCFuncBody);
+        bytes = sizeof(GCFuncRef);
         break;
     case GCNodeKind::Call:
         bytes = sizeof(GCCallBody);
@@ -1332,7 +1381,8 @@ GCGraph *GCGraph::directCalleeGraphOf(gc_node_ref_t ref) const {
     if (!n || n->kind != GCNodeKind::Func || !n->hasPayload()) {
         return nullptr;
     }
-    return nodeBodyAs<GCFuncBody>(ref)->calleeGraph;
+    const uint32_t index = nodeBodyAs<GCFuncRef>(ref)->ref;
+    return index < refCount_ ? refs_[index] : nullptr;
 }
 
 gc_node_ref_t GCGraph::matchedJoinOutputOf(gc_node_ref_t ref) const {
@@ -1493,12 +1543,9 @@ camel::core::rtdata::Object *GCGraph::clone(
         staticDataType_,
         closureType_,
         outerGraph_,
-        dependencies_,
-        subGraphs_,
-        staticGraphRefs_,
-        dependencyCount_,
-        subGraphCount_,
-        staticGraphRefCount_,
+        refs_,
+        refRoles_,
+        refCount_,
         nativePayload_,
         staticArea_);
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
@@ -1539,14 +1586,8 @@ void GCGraph::updateRefs(
                 .slotIndex = camel::core::rtdata::RefTraceInfo::npos,
             }));
     };
-    for (gc_cnt_t i = 0; i < dependencyCount_; ++i) {
-        traceEdge(dependencies_[i]);
-    }
-    for (gc_cnt_t i = 0; i < subGraphCount_; ++i) {
-        traceEdge(subGraphs_[i]);
-    }
-    for (gc_cnt_t i = 0; i < staticGraphRefCount_; ++i) {
-        traceEdge(staticGraphRefs_[i]);
+    for (gc_cnt_t i = 0; i < refCount_; ++i) {
+        traceEdge(refs_[i]);
     }
 }
 
