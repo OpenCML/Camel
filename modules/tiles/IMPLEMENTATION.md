@@ -607,3 +607,27 @@ build and selected CUDA device. Reports preserve 21 raw event samples per varian
 compiler options and correctness gates. The performance reference is unfused
 CUDA with the same ordered arithmetic, not Triton, cuBLAS or a CPU baseline.
 
+# Ordered reduction epilogues (2026-10-16)
+
+Commit `a82d3de9` joins a single ordered axis sum/mean with a same-shape
+pointwise epilogue. The reducer's f64 accumulator is explicitly rounded to f32
+before the epilogue, even when the intermediate has no allocation. The planner
+keeps shape changes and multiple reducers outside a combined stage; validator
+mutations check these boundaries. New byte-level cases cover affine epilogues,
+two independent reductions and `sum([2^24,1]) - 2^24 == +0`, which would expose
+a missing f32 boundary.
+
+Local relevant tests passed 86/86; the committed build then passed native plan
+checks and all reduction byte probes on nvm/fvm/jit. The isolated RTX 3090
+device 7 checkout rebuilt the commit and passed 86/86. Evidence:
+
+- `docs/performance/tiles/2026-10-16-rtx3090-epilogue-tests.txt`.
+- `docs/performance/tiles/2026-10-16-rtx4060ti-reduction-epilogue.jsonl`.
+- `docs/performance/tiles/2026-10-16-rtx3090-reduction-epilogue.jsonl`.
+
+The last two benchmark records add affine epilogues to 512x1025 and 4096x65
+reductions; kernel counts drop from six to two and one. These measurements
+compare the complete optimized schedule against unfused CUDA, not the isolated
+incremental contribution of epilogue fusion or any external compiler. Shared
+row intermediates and full normalization fusion remain unfinished.
+
