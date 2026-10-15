@@ -42,8 +42,13 @@ struct Launch {
     std::vector<size_t> members;
     size_t elements;
     std::string name;
+    std::string implementation;
     unsigned blockX = 256, blockY = 1;
     unsigned gridX = 1, gridY = 1;
+};
+struct ScheduleOptions {
+    bool fuseElementwise = true;
+    bool parallelMax     = true;
 };
 struct StoragePlan {
     std::vector<size_t> slots; // Node -> physical allocation; SIZE_MAX means register-only.
@@ -59,10 +64,10 @@ struct Program {
 
 size_t elements(const Shape &shape);
 Program compile(Function *function, const std::vector<Argument> &arguments);
-void generate(Program &program, bool fuse = true);
+void generate(Program &program, ScheduleOptions options = {});
 bool elementwise(const std::string &op);
 void validate(const Program &program);
-void schedule(Program &program, bool fuse = true);
+void schedule(Program &program, ScheduleOptions options = {});
 void validatePlan(const Program &program);
 std::string inspect(const Program &program);
 std::vector<float> execute(const Program &program);

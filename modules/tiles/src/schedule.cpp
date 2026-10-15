@@ -122,7 +122,7 @@ void validate(const Program &p) {
     }
 }
 
-void schedule(Program &p, bool fuse) {
+void schedule(Program &p, ScheduleOptions options) {
     validate(p);
     const size_t count = p.nodes.size();
     std::vector<size_t> users(count), consumer(count, SIZE_MAX), owner(count), groupSize(count, 1);
@@ -136,8 +136,9 @@ void schedule(Program &p, bool fuse) {
     // single-use elementwise nodes fuse; broadcasting stays on the boundary loads.
     for (size_t id = count; id-- > 0;) {
         size_t target = consumer[id];
-        if (!fuse || id == p.output || users[id] != 1 || !elementwise(p.nodes[id].op) ||
-            !elementwise(p.nodes[target].op) || p.nodes[id].shape != p.nodes[target].shape)
+        if (!options.fuseElementwise || id == p.output || users[id] != 1 ||
+            !elementwise(p.nodes[id].op) || !elementwise(p.nodes[target].op) ||
+            p.nodes[id].shape != p.nodes[target].shape)
             continue;
         size_t root = owner[target];
         if (groupSize[root] == 64)
@@ -156,6 +157,13 @@ void schedule(Program &p, bool fuse) {
         for (size_t member = 0; member <= id; ++member)
             if (owner[member] == id)
                 launch.members.push_back(member);
+        launch.implementation = "standard";
+        const auto &n         = p.nodes[id];
+        if (options.parallelMax && n.op == "max_axis") {
+            const auto &shape = p.nodes[n.inputs[0]].shape;
+            if (size_t(n.attributes[0]) + 1 == shape.size() && shape.back() >= 128)
+                launch.implementation = "parallel_max";
+        }
         p.launches.push_back(std::move(launch));
     }
     const auto life = lifetimes(p);
@@ -201,6 +209,20 @@ void validatePlan(const Program &p) {
                 launch.members.back() == launch.node,
             "invalid stage root");
         require(launch.elements == elements(p.nodes[launch.node].shape), "launch extent");
+        require(
+            launch.implementation == "standard" || launch.implementation == "parallel_max",
+            "unknown implementation");
+        if (launch.implementation == "parallel_max") {
+            const auto &root = p.nodes[launch.node];
+            require(
+                root.op == "max_axis" && launch.members.size() == 1,
+                "parallel maximum operation");
+            const auto &shape = p.nodes[root.inputs[0]].shape;
+            require(
+                size_t(root.attributes[0]) + 1 == shape.size() && shape.back() >= 128 &&
+                    launch.blockX == 256 && launch.blockY == 1,
+                "parallel maximum domain or block");
+        }
         require(
             launch.blockX > 0 && launch.blockY > 0 && launch.blockX <= 1024 &&
                 launch.blockY <= 1024 / launch.blockX && launch.gridX > 0 &&
@@ -266,7 +288,8 @@ std::string inspect(const Program &p) {
         if (i)
             out << ',';
         const auto &s = p.launches[i];
-        out << "{\"output\":" << s.node << ",\"members\":[";
+        out << "{\"output\":" << s.node << ",\"implementation\":\"" << s.implementation
+            << "\",\"members\":[";
         for (size_t j = 0; j < s.members.size(); ++j) {
             if (j)
                 out << ',';

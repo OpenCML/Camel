@@ -104,3 +104,23 @@ Remote environment inspection found CUDA 12.3 and Node 20, but the default CMake
 3.22 and Clang 14 are older than the current project's build requirements.
 Remote compilation remains outstanding; a saved Conan Clang 23 profile points
 to a Conda toolchain that should be located before installing another toolchain.
+
+## Stable parallel maximum and transfer ordering
+
+The first parallel reduction selects last-axis maxima for widths >= 128 using
+256-thread blocks. Selection carries original indices, preserving the first
+equal maximum, first-position NaN behavior and signed zeros. The maximum's
+numerical contract is unchanged; sums/means retain ordered f64 accumulation.
+Schedules expose the implementation name and validate its domain/block contract.
+The reference benchmark explicitly disables this optimization as well as fusion.
+
+New tests cover widths 127, 128, 257 and 513 with NaNs/infinities/signed-zero ties,
+and 65,537 rows that exercise multiple grid-stride iterations. The large case
+revealed the pageable-upload/nonblocking-stream race fixed in `a87af97d`; see
+[the transfer contract](notes/transfers.md). Current local suite: 38/38 passing.
+
+Remote baseline `75776da8` built successfully in an isolated archive directory
+using the existing Conda Clang 23 toolchain, CMake 4.4.3, Conan 2.33 and CUDA 12.3.
+The Conda sysroot needed a private include path for the system Python multiarch
+configuration header. All 35 baseline host/GPU/tensor checks passed on device 3
+(RTX 3090). Revalidation of the newer transfer/reduction work is in progress.

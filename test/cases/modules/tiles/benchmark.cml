@@ -9,6 +9,7 @@ func normalize(x: Tensor<f32>): Tensor<f32> {
     return e / sum(e, 1, true)
 }
 func product(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> { return x @ y }
+func maximum(x: Tensor<f32>): Tensor<f32> { return max(x, -1) }
 func main(): int sync {
     seed(61)
     let x = random([1024, 1024], -1.0, 1.0)
@@ -19,5 +20,7 @@ func main(): int sync {
     let a = random([127, 259], -1.0, 1.0)
     let w = random([259, 131], -1.0, 1.0)
     println(benchmark<product>((a, w)))
+    let wide = random([128, 4097], -1.0, 1.0)
+    println(benchmark<maximum>(wide))
     return 0
 }

@@ -4,6 +4,30 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "max_special_values"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/max_special.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["max width=127:", "max width=128:", "max width=257:", "max width=513:"]
+timeout_ms = 60000
+
+[[tests]]
+name = "max_grid_stride"
+kind = "behavior"
+case = "../../cases/modules/tiles/max_grid.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === '0.0', 'grid-stride maximum differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
 name = "benchmark_protocol"
 kind = "behavior"
 case = "../../cases/modules/tiles/benchmark.cml"
@@ -13,7 +37,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const records = input.normalized.stdout.trim().split(String.fromCharCode(10)).map(JSON.parse)
-assert(records.length === 3, 'expected three benchmark workloads')
+assert(records.length === 4, 'expected four benchmark workloads')
 for (const r of records) {
   assert(r.schema === 1 && r.repetitions === 21 && r.warmups === 5, 'unexpected measurement protocol')
   assert(r.device && r.driver_version > 0 && r.nvrtc_version, 'missing hardware/compiler provenance')
@@ -28,6 +52,8 @@ for (const r of records) {
 }
 assert(records[0].optimized.plan.kernels === 1 && records[0].unfused.plan.kernels === 5, 'missing unfused control')
 assert(records[2].identical_device_code === true, 'matmul must be the same-code noise control')
+assert(records[3].optimized.plan.stages[0].implementation === 'parallel_max', 'missing parallel reduction')
+assert(records[3].unfused.plan.stages[0].implementation === 'standard', 'missing serial reduction control')
 }
 """
 timeout_ms = 60000

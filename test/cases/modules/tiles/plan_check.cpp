@@ -48,7 +48,9 @@ int main() {
         rejects(p, [](auto &x) { x.storage.slots[2] = SIZE_MAX; }, "register value escapes stage");
         rejects(p, [](auto &x) { x.output = 1; }, "output has no materialized result");
         rejects(p, [](auto &x) { x.launches[0].blockX = 0; }, "launch dimensions");
-        std::cout << "tiles plan validation: 10 rejected mutations\n";
+        rejects(p, [](auto &x) { x.launches[0].implementation = "parallel_max"; }, "parallel maximum operation");
+        rejects(p, [](auto &x) { x.launches[0].implementation = "unknown"; }, "unknown implementation");
+        std::cout << "tiles plan validation: 12 rejected mutations\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }

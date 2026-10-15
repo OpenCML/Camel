@@ -63,7 +63,10 @@ slots are reused only after their last reader on the ordered stream has finished
 a kernel cannot overwrite storage it reads. Inputs start live at upload time.
 Plan validation checks topology, shapes, stage boundaries, launch dimensions,
 storage capacities and nonoverlapping lifetimes. Matmul uses masked 16x16 shared-memory tiles and explicit
-f32 FMA. Axis reductions are serial per output, with f64 accumulation for sum/mean.
+f32 FMA. Last-axis maximum uses a block-parallel implementation for widths of at
+least 128, with original-index tie breaking. It preserves the first element's
+NaN and signed-zero ties according to the serial tensor operation. Other axis
+reductions are serial per output, with f64 accumulation for sum/mean.
 There is no fast-math mode; GPU transcendental results need not be bitwise equal
 to CPU results. Floating-point agreement is tested with tolerances.
 
@@ -101,7 +104,8 @@ snapshot creation are outside the reported phase timings. No timing threshold
 is enforced by correctness tests.
 
 The unfused baseline uses the same compiler, arithmetic contract and storage
-planner with fusion disabled. It is not a Triton or vendor-library comparison.
+planner with fusion and parallel maximum disabled. The report records this
+reference policy. It is not a Triton or vendor-library comparison.
 An `identical_device_code` result is a noise control, not an optimization result.
 
 Run host-only compiler checks with

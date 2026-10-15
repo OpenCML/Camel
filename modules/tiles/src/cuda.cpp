@@ -508,7 +508,7 @@ std::string benchmark(const Program &program) {
         program.nodes[program.output].op == "input")
         throw std::runtime_error("benchmark requires a nonempty computed output");
     Program reference = program;
-    generate(reference, false);
+    generate(reference, {.fuseElementwise = false, .parallelMax = false});
     auto start              = Clock::now();
     Backend &b              = backend();
     double initializationMs = elapsed(start);
@@ -530,6 +530,7 @@ std::string benchmark(const Program &program) {
         {"repetitions", 21},
         {"timing", "CUDA event span including launch gaps; inputs restored before every sample"},
         {"includes_graph_specialization", false},
+        {"reference_policy", {{"fuse_elementwise", false}, {"parallel_max", false}}},
         {"identical_device_code", program.source == reference.source},
         {"output_shape", program.nodes[program.output].shape}};
     report["input_shapes"] = json::array();

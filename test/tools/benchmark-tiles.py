@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -15,6 +16,7 @@ root = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
 parser.add_argument('--runs', type=int, default=3)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--source-revision', help='Full commit ID for an exported source archive without .git')
 options = parser.parse_args()
 if not 1 <= options.runs <= 30:
     parser.error('--runs must be between 1 and 30')
@@ -23,7 +25,9 @@ case = root / 'test/cases/modules/tiles/benchmark.cml'
 env = os.environ.copy()
 env['CAMEL_HOME'] = str(root / 'out/latest')
 env['PATH'] = str(binary.parent) + os.pathsep + env.get('PATH', '')
-revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+revision = options.source_revision or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+if not re.fullmatch(r'[0-9a-f]{40}', revision):
+    parser.error('--source-revision must be a full commit ID')
 fingerprint = hashlib.sha256()
 files = sorted(p for p in (root / 'modules/tiles').rglob('*')
                if p.is_file() and (p.suffix in {'.cpp', '.h'} or p.name == 'CMakeLists.txt'))
@@ -35,10 +39,11 @@ for run in range(options.runs):
     result = subprocess.run([str(binary), str(case)], cwd=root, env=env,
                             capture_output=True, text=True, check=True, timeout=120)
     reports = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
-    if len(reports) != 3:
-        raise RuntimeError(f'expected three workloads, got {result.stdout!r}; {result.stderr}')
-    for workload, report in zip(['elementwise', 'softmax', 'matmul'], reports):
+    if len(reports) != 4:
+        raise RuntimeError(f'expected four workloads, got {result.stdout!r}; {result.stderr}')
+    for workload, report in zip(['elementwise', 'softmax', 'matmul', 'maximum'], reports):
         report.update(workload=workload, run=run, git_revision=revision,
+                      revision_source='archive_argument' if options.source_revision else 'git',
                       tiles_source_sha256=fingerprint.hexdigest())
         if report['correctness_after']['mismatches'] != 0:
             raise RuntimeError('benchmark correctness failure')
