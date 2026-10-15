@@ -48,3 +48,11 @@ test/cases/consistency/attempt/refuse_translate.cml
 test/cases/linear/nvm/var_params.cml
 test/cases/compile/module_imports/d4_cpp_computed.cml
 test/cases/consistency/faults/top_level_fault.cml
+
+# && and || as branches, null tests and narrowing (design principles 2.11, 2.12).
+test/cases/consistency/logical/short_circuit.cml
+test/cases/consistency/logical/pure.cml
+test/cases/consistency/narrowing/narrow.cml
+
+# Seeded random numbers, drawn as the random module draws them.
+test/cases/modules/std/random/basic.cml

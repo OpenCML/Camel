@@ -371,6 +371,14 @@ Rules buildRules() {
     // ---- Modules with a standalone translation ----
     r["time:now"]    = runtimeFunction("now", false);
     r["sys:get_env"] = runtimeFunction("getEnv", false);
+    // random draws as modules/random does, through camel/utils/random.h (standalone/random.h).
+    r["rand:seed"]    = runtimeFunction("randomSeed", false);
+    r["rand:rand"]    = runtimeFunction("randomUnit", false);
+    r["rand:randn"]   = runtimeFunction("randomNormal", false);
+    r["rand:randint"] = runtimeFunction("randomBetween", false);
+    r["rand:choice"]  = faultingFunction("randomChoice", RuntimeDiag::InvalidArgument, 2);
+    r["rand:sample"]  = faultingFunction("randomSample", RuntimeDiag::InvalidArgument, 2);
+    r["rand:shuffle"] = runtimeFunction("randomShuffle", false);
     r["math:sqrt"]   = cmath("sqrt", true);
     for (const char *t : {"i", "l"}) {
         r[std::format("math:abs_{}", t)] = cmath("abs");

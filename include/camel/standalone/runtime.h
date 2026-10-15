@@ -32,4 +32,5 @@
 #include "camel/standalone/library.h"
 #include "camel/standalone/num.h"
 #include "camel/standalone/opt.h"
+#include "camel/standalone/random.h"
 #include "camel/standalone/str.h"
