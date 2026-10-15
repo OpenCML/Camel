@@ -301,3 +301,82 @@ assert(values.length === 2 && values.every(x => x === 0), 'broadcast gradient mu
 }
 """
 timeout_ms = 10000
+
+# --- the numeric contract (design principles 2.13) -------------------------------------------
+
+[[tests]]
+name = "numeric_contract"
+desc = "max and min are IEEE 754-2019 maximum/minimum on every operator (elementwise, axis reductions): a NaN on either side or anywhere in the reduced axis gives the canonical NaN (it printed only when it came first: max([1, NaN, 3]) was 3, max([NaN, 1, 3]) NaN), -0 is below +0 on either side (max([-0, 0]) was -0); relu(x) = maximum(x, +0) (relu(NaN) was 0); matmul is one fused multiply-add per step in one chain over the whole of k (2^24 then 511 ones gave 16777472: the ones were summed per 256-wide block first); softmax is exp(x - max) / sum(exp(x - max)) bit for bit (it multiplied by a rounded reciprocal). Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/modules/tensor/numeric_contract.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = """
+tensor([    nan,       0.,       1.,       0.], dtype=float32)
+tensor([    nan,     nan,       0.,       0.], dtype=float32)
+tensor([    nan,     nan,       0.,       0.], dtype=float32)
+tensor([    nan,     nan,      -0.,      -0.], dtype=float32)
+tensor([    nan,     nan,      -0.,      -0.], dtype=float32)
+tensor(    nan, dtype=float32)
+tensor(    nan, dtype=float32)
+tensor(    nan, dtype=float32)
+tensor(    nan, dtype=float32)
+tensor(      0., dtype=float32)
+tensor(      0., dtype=float32)
+tensor(     -0., dtype=float32)
+tensor(     -0., dtype=float32)
+matmul fma_step=0.0004883408546447754
+matmul chain=16777216.0
+softmax equal=0.0
+softmax nan_count=3
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gemm_canonical"
+desc = "The GEMM is matmul's canonical algorithm, one fused multiply-add chain per element in ascending k (K = 600, beyond one cache block, with edge tiles). Reference output of the default GEMM unit."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_canonical.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "gemm product_sum=425.47250219917623\ngemm affine_sum=424.9194541722536 relu_sum=3375.5932369083166\ngemm linear_diff=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gemm_canonical.fused"
+desc = "tensor::fuse turns `a @ b + bias` and `relu(a @ b + bias)` into matmul_add(_relu), whose GEMM adds the bias after each element's chain: the bits of the unfused expression (they differed for K beyond one cache block)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_canonical.cml"
+args = ["${case}", "tensor::fuse"]
+expect_exit = 0
+expect_stdout_exact = "gemm product_sum=425.47250219917623\ngemm affine_sum=424.9194541722536 relu_sum=3375.5932369083166\ngemm linear_diff=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gemm_canonical.generic_unit"
+desc = "The portable GEMM unit (CAMEL_TENSOR_ISA=generic hides AVX2/AVX-512) gives the same bits as the vector units: it writes each fused multiply-add explicitly (on an x86-64 processor without FMA it used to round twice)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/gemm_canonical.cml"
+args = ["${case}", "tensor::fuse"]
+envs = ["CAMEL_TENSOR_ISA=generic"]
+expect_exit = 0
+expect_stdout_exact = "gemm product_sum=425.47250219917623\ngemm affine_sum=424.9194541722536 relu_sum=3375.5932369083166\ngemm linear_diff=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "numeric_contract.generic_unit"
+desc = "The numeric-contract program in the portable kernel units: the same output as the default units."
+kind = "behavior"
+case = "../../../cases/modules/tensor/numeric_contract.cml"
+args = ["${case}"]
+envs = ["CAMEL_TENSOR_ISA=generic"]
+expect_exit = 0
+expect_stdout_contains = ["matmul fma_step=0.0004883408546447754\nmatmul chain=16777216.0\nsoftmax equal=0.0\nsoftmax nan_count=3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

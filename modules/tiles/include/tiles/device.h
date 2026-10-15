@@ -12,6 +12,7 @@
 #pragma once
 #include "camel/core/type/other.h"
 #include "tiles/program.h"
+#include <cstddef>
 #include <memory>
 #include <span>
 

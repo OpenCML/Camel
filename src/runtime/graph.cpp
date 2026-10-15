@@ -137,6 +137,7 @@ struct GraphArenaLayout {
     size_t refRoleBytes        = 0; // its roles, padded to the next array's alignment
     size_t tupleBytes          = 0;
     size_t nodeBytes           = 0;
+    size_t originBytes         = 0;
     size_t payloadBytes        = 0;
     size_t inputBytes          = 0;
     size_t normPortBytes       = 0;
@@ -167,6 +168,10 @@ GraphArenaLayout planGraphArenaLayout(
                                 alignof(::Tuple)),
         // nodeCount records and the sentinel; a multiple of 16 bytes.
         .nodeBytes    = sizeof(GCNode) * (static_cast<size_t>(payload.nodeCount) + 1),
+        // The origin column, padded to the payload words that follow it.
+        .originBytes = camel::core::mm::alignUp(
+            sizeof(uint32_t) * static_cast<size_t>(payload.nodeCount),
+            alignof(gc_payload_word_t)),
         .payloadBytes = bytesForArray<gc_payload_word_t>(payload.payloadWordCount),
         .inputBytes   = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.edgeCount),
@@ -186,7 +191,7 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.nodeBytes + layout.payloadBytes + layout.inputBytes + layout.normPortBytes +
+        layout.nodeBytes + layout.originBytes + layout.payloadBytes + layout.inputBytes + layout.normPortBytes +
         layout.withPortBytes + layout.closureBytes + layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
@@ -703,6 +708,11 @@ void emitDraftPayload(
         record.withBegin     = appendInputs(draft.withInputsOf(planned.draftId));
         record.ctrlBegin     = appendInputs(draft.ctrlInputsOf(planned.draftId));
         record.payload       = planned.payload;
+        // Origin ids index the origin table of the source manager, a vector of records: they
+        // fit 32 bits long before memory runs out (design 3.8: a 32-bit OriginId per node).
+        const uint64_t origin = draft.nodeOrigin(planned.draftId);
+        ASSERT(origin <= std::numeric_limits<uint32_t>::max(), "Origin id beyond 32 bits.");
+        payload.origins[planned.ref] = static_cast<uint32_t>(origin);
         const GCNode &header = record;
 
         const auto payloadBytes = draft.payloadOf(planned.draftId);
@@ -875,15 +885,6 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
         return;
     }
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
-    const DraftPayloadPlan plan = planDraftPayload(draft);
-    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!draft.alive(id) || plan.runtimeRefsByDraftId[id] == kInvalidNodeRef) {
-            continue;
-        }
-        if (const uint64_t origin = draft.nodeOrigin(id)) {
-            record->nodeOrigins[plan.runtimeRefsByDraftId[id]] = origin;
-        }
-    }
 }
 
 GCGraphNativePayload
@@ -891,6 +892,11 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
     GCGraphNativePayload payload{};
     payload.nodes            = static_cast<GCNode *>(arena.alloc(
         sizeof(GCNode) * (static_cast<size_t>(shape.nodeCount) + 1),
+        alignof(gc_payload_word_t)));
+    payload.origins = static_cast<uint32_t *>(arena.alloc(
+        camel::core::mm::alignUp(
+            sizeof(uint32_t) * static_cast<size_t>(shape.nodeCount),
+            alignof(gc_payload_word_t)),
         alignof(gc_payload_word_t)));
     payload.payload          = arenaAllocArray<gc_payload_word_t>(arena, shape.payloadWordCount);
     payload.inputs           = arenaAllocArray<gc_node_ref_t>(arena, shape.edgeCount);
@@ -911,6 +917,7 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
 GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload) {
     return GCGraphPayloadArena{
         .nodes            = payload.nodes,
+        .origins          = payload.origins,
         .inputs           = payload.inputs,
         .payload          = payload.payload,
         .normPorts        = payload.normPorts,
@@ -1240,11 +1247,7 @@ std::span<const camel::core::SymId> GCGraph::captureNames() const {
 }
 
 uint64_t GCGraph::nodeOrigin(gc_node_ref_t ref) const {
-    if (!debug_) {
-        return 0;
-    }
-    auto it = debug_->nodeOrigins.find(ref);
-    return it == debug_->nodeOrigins.end() ? 0 : it->second;
+    return containsNodeRef(ref) && nativePayload_.origins ? nativePayload_.origins[ref] : 0;
 }
 
 camel::core::type::FunctionType *GCGraph::funcType() const { return funcType_; }

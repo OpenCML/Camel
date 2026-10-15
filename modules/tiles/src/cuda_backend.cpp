@@ -10,6 +10,9 @@
 
 // Load the NVIDIA APIs, select the device and cache compiled kernel modules.
 #include "tiles/internal/cuda_backend.h"
+
+#include <vector>
+#include <memory>
 #ifdef CAMEL_TILES_CUDA
 #include <algorithm>
 #include <cstdlib>

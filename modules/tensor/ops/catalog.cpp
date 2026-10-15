@@ -44,6 +44,7 @@ void registerTensorOps() {
                 defs.push_back(std::move(def));
             }
         }
+        attachSemantics(defs);
         OpRegistry::instance().add("tensor", std::move(defs));
         registerTensorTangentSpace();
     });

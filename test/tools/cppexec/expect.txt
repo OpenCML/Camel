@@ -10,6 +10,7 @@ test/cases/trans/cpp/exec_mod_scalar.cml
 test/cases/consistency/values/int_wrap.cml
 test/cases/consistency/values/int_min_div.cml
 test/cases/consistency/values/float_special.cml
+test/cases/consistency/values/max_min_special.cml
 test/cases/consistency/values/strings.cml
 test/cases/linear/operators/string_ordering.cml
 test/cases/compile/literals/real_literals.cml

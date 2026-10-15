@@ -14,6 +14,7 @@
 #include "tiles/internal/index_expr.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <sstream>
 #include <stdexcept>

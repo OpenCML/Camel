@@ -34,7 +34,7 @@ digraph GraphIR {
             label="__g_8__";
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N00 [label="x", type="PORT"];
+            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
             N01 [label="visit {}", type="DATA", origin=293, span="18:16-18:26", srcfile="exemplars/05_effect_order/program.cml"];
             N02 [label=":str/format", type="OPER", origin=294, span="18:34-18:37", srcfile="exemplars/05_effect_order/program.cml"];
             N03 [label=":io/println", type="OPER", role="effect", origin=295, span="18:8-18:15", srcfile="exemplars/05_effect_order/program.cml"];
@@ -64,9 +64,9 @@ digraph GraphIR {
                 label="__g_6__";
                 F05 [label="ARGS", type="ARGS"];
                 O05 [label="EXIT", type="EXIT"];
-                N08 [label="PORT", type="PORT"];
-                N09 [label="PORT", type="PORT"];
-                N0A [label="PORT", type="PORT"];
+                N08 [label="cb", type="PORT", param_name="cb", param_kind="capture", param_index="0", value_type="(x: int) => int"];
+                N09 [label="items", type="PORT", param_name="items", param_kind="capture", param_index="1", value_type="int[]"];
+                N0A [label="i", type="PORT", param_name="i", param_kind="capture", param_index="2", value_type="int"];
                 N0B [label=":op/idx_arr", type="OPER", origin=274, span="10:24-10:25", srcfile="exemplars/05_effect_order/program.cml"];
                 N0C [label="CALL", type="CALL", origin=275, span="10:18-10:28", srcfile="exemplars/05_effect_order/program.cml"];
                 N0D [label="1", type="DATA", origin=279, span="11:32-11:33", srcfile="exemplars/05_effect_order/program.cml"];
@@ -95,9 +95,9 @@ digraph GraphIR {
             }
             F03 [label="ARGS", type="ARGS"];
             O03 [label="EXIT", type="EXIT"];
-            N12 [label="items", type="PORT"];
-            N13 [label="i", type="PORT"];
-            N14 [label="cb", type="PORT"];
+            N12 [label="items", type="PORT", param_name="items", param_kind="normal", param_index="0", value_type="int[]"];
+            N13 [label="i", type="PORT", param_name="i", param_kind="normal", param_index="1", value_type="int"];
+            N14 [label="cb", type="PORT", param_name="cb", param_kind="normal", param_index="2", value_type="(x: int) => int"];
             N15 [label=":struct/len_arr", type="OPER", origin=266, span="9:19-9:22", srcfile="exemplars/05_effect_order/program.cml"];
             N16 [label=":op/ge_l", type="OPER", origin=267, span="9:16-9:18", srcfile="exemplars/05_effect_order/program.cml"];
             N17 [label="JOIN", type="JOIN", role="branch-contract", origin=269, span="9:11-12:5", srcfile="exemplars/05_effect_order/program.cml"];
@@ -157,8 +157,8 @@ digraph GraphIR {
         subgraph cluster_F06 {
             label="visit$spec3";
             O06 [label="EXIT", type="EXIT"];
-            N25 [label="items", type="PORT"];
-            N26 [label="i", type="PORT"];
+            N25 [label="items", type="PORT", param_name="items", param_kind="normal", param_index="0", value_type="int[]"];
+            N26 [label="i", type="PORT", param_name="i", param_kind="normal", param_index="1", value_type="(x: int) => int"];
             N27 [label=":struct/len_arr", type="OPER", origin=266, span="9:19-9:22", srcfile="exemplars/05_effect_order/program.cml"];
             N28 [label=":op/ge_l", type="OPER", origin=267, span="9:16-9:18", srcfile="exemplars/05_effect_order/program.cml"];
             N29 [label="JOIN", type="JOIN", role="branch-contract", origin=269, span="9:11-12:5", srcfile="exemplars/05_effect_order/program.cml"];
