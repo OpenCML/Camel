@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 29, 2026
- * Updated: Sep. 29, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,20 +117,28 @@ sumTo(const TensorObject *g, std::span<const int64_t> shape, mm::IAllocator &all
         --lead;
     }
     bool leadingOnly = true;
+    // Every axis in the reduced prefix must actually be broadcast. A preserved
+    // axis before a broadcast middle/trailing axis needs the general index walk.
+    for (size_t d = 0; d < lead; ++d) {
+        leadingOnly &= big[d] == 1 || strides[d] == 0;
+    }
     for (size_t d = lead; d < big.size(); ++d) {
         leadingOnly &= big[d] == 1 || strides[d] != 0;
     }
     if (leadingOnly) {
         const int64_t cols = static_cast<int64_t>(numelOf(big.subspan(lead)));
         const int64_t rows = static_cast<int64_t>(numelOf(big.subspan(0, lead)));
-        parallelFor(cols, std::max<int64_t>(64, 16384 / std::max<int64_t>(rows, 1)), [&](int64_t begin, int64_t end) {
-            for (int64_t r = 0; r < rows; ++r) {
-                const float *row = in + r * cols;
-                for (int64_t c = begin; c < end; ++c) {
-                    acc[c] += row[c];
+        parallelFor(
+            cols,
+            std::max<int64_t>(64, 16384 / std::max<int64_t>(rows, 1)),
+            [&](int64_t begin, int64_t end) {
+                for (int64_t r = 0; r < rows; ++r) {
+                    const float *row = in + r * cols;
+                    for (int64_t c = begin; c < end; ++c) {
+                        acc[c] += row[c];
+                    }
                 }
-            }
-        });
+            });
         return out;
     }
     forEachBroadcast(big, strides, [&](uint64_t i, int64_t j) { acc[j] += in[i]; });
@@ -172,9 +180,9 @@ TensorObject *geluGrad(const TensorObject *x, const TensorObject *dy, mm::IAlloc
     if (!xs->sameShape(gs)) {
         throw ShapeError("gelu gradient: dy shape differs from the input");
     }
-    const int64_t n        = static_cast<int64_t>(xs->numel());
-    constexpr float kScale = 0.7978845608028654f; // sqrt(2 / pi)
-    constexpr float kCubic = 0.044715f;
+    const int64_t n          = static_cast<int64_t>(xs->numel());
+    constexpr float kScale   = 0.7978845608028654f; // sqrt(2 / pi)
+    constexpr float kCubic   = 0.044715f;
     constexpr int64_t kGrain = 4096;
     const float *px          = xs->dataAs<float>();
     // tanh goes through the vectorized unary kernel; the polynomial parts vectorize as they are.
@@ -195,7 +203,7 @@ TensorObject *geluGrad(const TensorObject *x, const TensorObject *dy, mm::IAlloc
             const float v = px[i], t = pt[i];
             const float slope = 0.5f * (1.0f + t) +
                                 0.5f * v * (1.0f - t * t) * kScale * (1.0f + 3.0f * kCubic * v * v);
-            po[i] = pg[i] * slope;
+            po[i]             = pg[i] * slope;
         }
     });
     return out;
@@ -403,7 +411,8 @@ TensorObject *matmulGradGemm(
         M = static_cast<int64_t>(lhs->numel()) / std::max<int64_t>(K, 1);
     } else {
         if (lr != rr || !std::equal(
-                            lhs->shapeSpan().begin(), lhs->shapeSpan().end() - 2,
+                            lhs->shapeSpan().begin(),
+                            lhs->shapeSpan().end() - 2,
                             rhs->shapeSpan().begin())) {
             return nullptr;
         }
@@ -416,16 +425,40 @@ TensorObject *matmulGradGemm(
     const bool forLhs = which == MatmulOperand::Lhs;
     TensorObject *out =
         TensorObject::create(TypeCode::Float32, (forLhs ? lhs : rhs)->shapeSpan(), allocator);
-    float *o = out->dataAs<float>();
+    float *o            = out->dataAs<float>();
     const int64_t aSize = M * K, bSize = K * N, gSize = M * N;
     parallelFor(batches, 1, [&](int64_t begin, int64_t end) {
         for (int64_t i = begin; i < end; ++i) {
             if (forLhs) { // dA = dY @ B^T : [M, K]
-                sgemm(false, true, M, K, N, 1.0f, g + i * gSize, N, b + i * bSize, N, 0.0f,
-                      o + i * aSize, K);
+                sgemm(
+                    false,
+                    true,
+                    M,
+                    K,
+                    N,
+                    1.0f,
+                    g + i * gSize,
+                    N,
+                    b + i * bSize,
+                    N,
+                    0.0f,
+                    o + i * aSize,
+                    K);
             } else { // dB = A^T @ dY : [K, N]
-                sgemm(true, false, K, N, M, 1.0f, a + i * aSize, K, g + i * gSize, N, 0.0f,
-                      o + i * bSize, N);
+                sgemm(
+                    true,
+                    false,
+                    K,
+                    N,
+                    M,
+                    1.0f,
+                    a + i * aSize,
+                    K,
+                    g + i * gSize,
+                    N,
+                    0.0f,
+                    o + i * bSize,
+                    N);
             }
         }
     });
