@@ -1,0 +1,14 @@
+/// 7.3 and 8: how values print, and the two print forms with a format string.
+func main(): int sync {
+    println([1, 2, 3], (1, 'a'), { x: 1, y: 2.5 }, true, 'str', 1.0e-7, 3.0)
+    let n: int? = null
+    let m: int? = 5
+    println(n, m)
+    println('{} and {:.2f} and {:>5}|'->format<1, 2.0, 'ab'>)
+    println<'{}+{}'>(1, 2)
+    print('a', 'b')
+    print<'{}-{}'>(3, 4)
+    println('')
+    println(string(1.5), string([1.0, 2.0]))
+    return 0
+}

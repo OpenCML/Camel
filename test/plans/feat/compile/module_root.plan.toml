@@ -171,7 +171,7 @@ kind = "behavior"
 case = "../../../cases/compile/module_root/values_unused.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["generated::f_main(3.141590)"]
+expect_stdout_contains = ["return static_cast<int>(main_(0, 3.14159));"]
 
 [[tests]]
 name = "root.export_var"

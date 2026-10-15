@@ -62,13 +62,71 @@ slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *cell = variableOf(norm);
+    // The value leaves the variable: from here on something else may refer to it, so the
+    // variable no longer grows it in place (__builtin__assn_append__).
+    cell->setHoldsUnsharedArray(false);
+    return cell->get<slot_t>(0);
+}
+
+// A read of a variable whose value goes only to operations that cannot keep it (the length,
+// an element of scalars, a comparison, ...) and that all run before the variable is written
+// again (Builder::markNonRetainingReads). The array cannot be referred to by anything but the
+// variable after such a read, so the read leaves the variable's mark (holdsUnsharedArray) as
+// it is; otherwise it is :var/get.
+slot_t __builtin__var_peek__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return variableOf(norm)->get<slot_t>(0);
 }
 
 slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    slot_t rhs = norm.slot(1);
-    variableOf(norm)->set<slot_t>(0, rhs, static_cast<TupleType *>(norm.type(0)));
+    slot_t rhs  = norm.slot(1);
+    Tuple *cell = variableOf(norm);
+    cell->set<slot_t>(0, rhs, static_cast<TupleType *>(norm.type(0)));
+    // The value stored may be referred to from elsewhere.
+    cell->setHoldsUnsharedArray(false);
     return rhs;
+}
+
+// `acc = acc->append<v>` written as a statement (Builder::rebindingAppendOf). The meaning is
+// that of the rebinding: `append` returns a new array and the variable is bound to it, the
+// old array unchanged (design principles 2.12). Changing the array in place gives the same
+// result when nothing but the variable refers to it, which the cell records
+// (Tuple::holdsUnsharedArray): the flag is set only here, after storing an array made here,
+// and cleared by every read of the variable (:var/get) and every other write (:op/assn), so
+// while it is set no reference to the array has left the cell. The first append after the
+// variable was read copies (with room to grow); the appends that follow, as long as nothing
+// reads the variable in between, grow that copy in place, as `xs->append<v>` used to.
+//
+// Collectors: the array is changed with the write barrier of Array::append, as `append` used
+// to change it; the cell keeps it alive and a moving collector updates the cell's slot. The
+// flag is a field of the cell, so it moves with it. Parallel scheduler: the operator runs on one
+// thread and reads and writes only its own cell; two threads use one cell at the same time
+// only when the elements of a parallel `map` write a captured `var`, whose order the
+// language leaves to the program (design principles 2.7) and which raced already when
+// `append` changed the array in place.
+slot_t __builtin__assn_append__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    Tuple *cell         = variableOf(norm);
+    auto *cellType      = static_cast<TupleType *>(norm.type(0));
+    auto *arrType       = static_cast<ArrayType *>(cellType->typeAt(0));
+    const slot_t value  = norm.slot(1);
+    if (cell->holdsUnsharedArray()) {
+        Array *arr = cell->get<Array *>(0);
+        arr->append(value, arrType);
+        return toSlot(arr);
+    }
+    const Array *old = cell->get<Array *>(0);
+    const size_t n   = old->size();
+    // Room for the appends that are likely to follow, so that a loop of them stays linear.
+    // (Allocation never collects or moves an object: `old` stays valid; mm/gen.h.)
+    Array *res = Array::create(mm::autoSpace(), 0);
+    res->reserve(n + n / 2 + 1, arrType);
+    for (size_t i = 0; i < n; ++i) {
+        res->append(old->get<slot_t>(i), arrType);
+    }
+    res->append(value, arrType);
+    cell->set<slot_t>(0, toSlot(res), cellType);
+    cell->setHoldsUnsharedArray(true);
+    return toSlot(res);
 }
 
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, Context &ctx) {

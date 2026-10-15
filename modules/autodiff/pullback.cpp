@@ -1586,7 +1586,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             continue;
         }
         if (kindOf(forward_, node) == GCNodeKind::Oper &&
-            operId(node) == camel::core::oper::VarGet) {
+            camel::core::oper::isVariableRead(operId(node))) {
             continue;
         }
         // A function passed in from outside is given: it does not depend on a parameter.
@@ -1730,7 +1730,7 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
     case GCNodeKind::Accs:
         return "the function is read from a tuple, a struct or an array";
     case GCNodeKind::Oper:
-        if (operId(function) == camel::core::oper::VarGet) {
+        if (camel::core::oper::isVariableRead(operId(function))) {
             return "the function is read from a variable";
         }
         return std::format("the function is the result of '{}'", operUri(function));
@@ -1787,7 +1787,7 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
             if (kindOf(forward_, node) == GCNodeKind::Port) {
                 depends = tangentTypeOf(type) != nullptr;
             } else if (!(kindOf(forward_, node) == GCNodeKind::Oper &&
-                         operId(node) == camel::core::oper::VarGet)) {
+                         camel::core::oper::isVariableRead(operId(node)))) {
                 for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
                     for (gc_node_ref_t input : inputs) {
                         depends = depends || dependsOnParameter(input);
@@ -1800,7 +1800,7 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
     };
     for (gc_node_ref_t read : order) {
         if (kindOf(forward_, read) != GCNodeKind::Oper ||
-            operId(read) != camel::core::oper::VarGet ||
+            !camel::core::oper::isVariableRead(operId(read)) ||
             tangentTypeOf(typeOf(forward_, read)) == nullptr) {
             continue;
         }
@@ -1840,7 +1840,7 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
                     continue;
                 }
                 const bool isOper = kindOf(forward_, user) == GCNodeKind::Oper;
-                if (isOper && operId(user) == camel::core::oper::VarGet) {
+                if (isOper && camel::core::oper::isVariableRead(operId(user))) {
                     continue;
                 }
                 if (isOper && camel::core::OperatorTable::instance().isAssignment(operId(user))) {

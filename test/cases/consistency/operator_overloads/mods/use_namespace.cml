@@ -1,0 +1,9 @@
+/**
+ * `import m` (only the namespace of m) brings the operator overloads of m as well.
+ */
+import base
+import plus_a
+func main(): int sync {
+    println((base::mk(2) + base::mk(3)).x)
+    return 0
+}

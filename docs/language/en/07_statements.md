@@ -23,6 +23,8 @@ func main(): int sync {
 }
 ```
 
+**An unused result of a pure operation is an error.** When a statement is a call of an operator declared pure (`xs->append<5>`, `sort(xs)`, `a + b`) and its value is not used (it is not the last statement of its block, or the block's value is dropped: a body declared `: void`, an element function written in place for `foreach`, the arm of an `if` without `else`, a block written as a statement), it does nothing: such an operator returns a new value and changes none of its arguments (design principles 2.12). This is the compile-time error `SemanticDiag::UnusedPureResult`; when `xs` is a variable, the diagnostic suggests the rebinding `xs = xs->append<5>` ([3.6](03_data_model.md#36-let-var-and-references)).
+
 Using the value means taking it apart with `!!`, `?->` or `match`, passing it on, or returning it. To drop it on purpose write `let _ = ...` ([7.2](#72-let-and-var)). The same warning is given for what the arm of an `if` without `else` gives, and for the value a `main` **without a declared return type** ends with: only a `main` that declares its return type has a result ([4.1](04_execution_model.md#41-program-and-entry)), so an error value at the end of an undeclared one goes nowhere. Outside a sync block there is nothing to warn about: a value nothing uses is not evaluated at all. The warning can be turned off with `-Wno-unused-fallible-value`.
 
 ## 7.2 `let` and `var`
@@ -158,6 +160,45 @@ int 1 string a
 | `sync` | The function has side effects and needs to be synchronised ([4.3.3](04_execution_model.md#433-sync-func-function-modifier)) |
 | `macro` | Can be evaluated ahead of time by the `std::macro` pass ([4.5](04_execution_model.md#45-macro-functions)) |
 | `atomic`, `shared`, `inner`, `outer` | Reserved: they are parsed and have no semantics at all |
+
+### 7.4.5 Operator overloading
+
+```
+func operator <operator>(<parameters>): <return type> { <statements> }
+```
+
+(The notation is provisional.) Operators are calls of functions (`a + b` is `__add__(a, b)`, [2.4](02_lexical.md#24-keywords)), and a program can add overloads of those functions for its own types:
+
+```cml
+type Vec = { x: float, y: float }
+type Mask = { bits: int }
+
+func operator +(a: Vec, b: Vec): Vec { return { x: a.x + b.x, y: a.y + b.y } }
+func operator -(a: Vec): Vec { return { x: 0.0 - a.x, y: 0.0 - a.y } }    // unary
+func operator *(k: float, v: Vec): Vec { return { x: k * v.x, y: k * v.y } }
+func operator [](v: Vec, i: int): float { return if i == 0 then v.x else v.y }
+func operator &(a: Mask, b: Mask): Mask { return { bits: a.bits * b.bits } }
+
+func main(): int sync {
+    let v: Vec = { x: 1.0, y: 2.0 }
+    var acc: Vec = { x: 0.0, y: 0.0 }
+    acc += v                         // acc = acc + v
+    let w = 2.0 * (v + acc)
+    println(w.x, w[1], (-v).x, 1 + 2)
+    return 0
+}
+```
+
+```text
+4.0 8.0 -1.0 3
+```
+
+- **Can be overloaded**: the binary `+` `-` `*` `/` `%` `^` `@` `==` `!=` `<` `<=` `>` `>=` `&` `|`, indexing `[]` (the indexed value and at least one index), and the unary `-` `!` `~`. `-` with one parameter is negation, with two subtraction.
+- **Cannot be overloaded**: `&&`, `||` (branches), `??`, `!!`, `?->` (branches on a null or an error), `->` (passes a value to a function), `..`, `as`, assignment, and `===`, `!==`. Declaring one is `SemanticDiag::OperatorNotOverloadable`, with the reason. A compound assignment has no overload of its own: `a += b` is `a = a + b` and follows the overload of `+`.
+- An operator with the wrong number of parameters, with with-parameters or with a `var` parameter is `SemanticDiag::OperatorOverloadInvalid`. A generic overload writes `typeas` in a parameter's type (`func operator +(a: (typeas T)[], b: T[]): T[]`), not in angle brackets: angle brackets are with-parameters.
+- **The overloads of every layer form one set.** Every other name takes the nearest layer only (local > this module > imported > built-in); operators are the exception (design principles 2.12): the overloads of this module, those exported by imported modules, and the built-in and C++ module ones are one set, and a call takes the one that accepts its operands. Two that do are `SemanticDiag::AmbiguousOperatorCall`, which lists them; declaring parameter types a built-in or imported overload already takes (such as `func operator +(a: int, b: int)`) is `SemanticDiag::OperatorOverloadConflict`; two overloads with the same parameter types in one module are `SemanticDiag::Redeclaration`.
+- **Export**: `export func operator +(...)`. Importing a module (`import { V } from m`, or `import m`) brings all the operator overloads it exports, as for the operators of a C++ module; they are not, and cannot be, imported by name.
+- On the graph an operator overload is an ordinary function call. Names of the form `__x__` remain reserved; programs do not write them.
 
 ## 7.5 Generic functions
 

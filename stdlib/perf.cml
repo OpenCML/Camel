@@ -12,7 +12,7 @@ export sync func timeit(fn: () => void): void {
         let start = now()
         fn()
         let duration = now() - start
-        append<duration>(result)
+        result = result->append<duration>
         '[{:>3}] {:.6f} s'->format<repeat, duration>->println
         return timeit<result, repeat - 1>(fn)
     }

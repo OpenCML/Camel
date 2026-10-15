@@ -1,0 +1,9 @@
+/// 5.2: append changes the array in place; the change is seen through the variable.
+func main(): int sync {
+    var xs = [1, 2]
+    xs->append<3>
+    var n = 0
+    n = n + 5
+    println(xs, n)
+    return 0
+}

@@ -466,8 +466,14 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         result += any_cast<string>(visitModifiers(modifiers)) + " ";
     }
 
-    result += "func " + any_cast<string>(visitIdentRef(identRef)) +
-              any_cast<string>(visitParentParams(parentParams));
+    // An operator overload is written `func operator +(...)`: the word, one space, the symbol
+    // and the parameters right after it (design principles 2.12; the notation is provisional).
+    if (const auto operatorName = context->get<cst::OperatorName>()) {
+        result += "func operator " + operatorName->text().substr(std::string_view("operator").size());
+    } else {
+        result += "func " + any_cast<string>(visitIdentRef(identRef));
+    }
+    result += any_cast<string>(visitParentParams(parentParams));
 
     if (typeExpr) {
         result += ": " + any_cast<string>(visitType(typeExpr));

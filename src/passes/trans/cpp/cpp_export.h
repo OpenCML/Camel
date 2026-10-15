@@ -13,41 +13,41 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
 #include "camel/execute/pass/trans.h"
-#include "lower.h"
+#include "program_emitter.h"
 
 class CppDumpPass : public GraphTranslatePass {
   public:
     CppDumpPass(
-        const camel::core::context::context_ptr_t &ctx, CppEmitMode mode = CppEmitMode::Plain)
+        const camel::core::context::context_ptr_t &ctx, camel::passes::cpp::CppEmitMode mode = camel::passes::cpp::CppEmitMode::Plain)
         : GraphTranslatePass(ctx), mode_(mode) {}
 
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
   private:
-    CppEmitMode mode_;
+    camel::passes::cpp::CppEmitMode mode_;
 };
 
 class CppModuleDumpPass : public CppDumpPass {
   public:
     CppModuleDumpPass(const camel::core::context::context_ptr_t &ctx)
-        : CppDumpPass(ctx, CppEmitMode::Module) {}
+        : CppDumpPass(ctx, camel::passes::cpp::CppEmitMode::Module) {}
 };
 
 class CppInspectDumpPass : public CppDumpPass {
   public:
     CppInspectDumpPass(const camel::core::context::context_ptr_t &ctx)
-        : CppDumpPass(ctx, CppEmitMode::Inspect) {}
+        : CppDumpPass(ctx, camel::passes::cpp::CppEmitMode::Inspect) {}
 };
 
 class CppBenchDumpPass : public CppDumpPass {
   public:
     CppBenchDumpPass(const camel::core::context::context_ptr_t &ctx)
-        : CppDumpPass(ctx, CppEmitMode::Bench) {}
+        : CppDumpPass(ctx, camel::passes::cpp::CppEmitMode::Bench) {}
 };

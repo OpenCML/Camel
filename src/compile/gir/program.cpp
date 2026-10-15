@@ -595,6 +595,9 @@ bool Builder::buildProgram() {
     }
     if (ok) {
         settleEffectfulGraphs();
+        // Before the graphs are encoded: the reads whose value cannot be kept leave the mark
+        // that lets `acc = acc->append<v>` append in place (design principles 2.12).
+        markNonRetainingReads();
         for (ModuleUnit *unit : order) {
             UnitContext context(*this, *unit);
             try {

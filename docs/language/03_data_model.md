@@ -102,7 +102,7 @@ println(xs[0], len(xs), grid[0][1])
   | `zip(xs, ys)` | `(x, y)` 元组的数组；三个或更多数组得到相应元数的元组（`zip(xs, ys, zs)`）；长度必须相同 |
   | `strs->join<sep>` | 把 `string[]` 连成一个字符串 |
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
-  | `xs->append<v>`、`xs->extend<ys>` | **原地修改**，`xs` 必须是 `var`（见 3.6） |
+  | `xs->append<v>`、`xs->extend<ys>` | 在末尾加上 `v`（或 `ys` 的各个元素）的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.6） |
 
 - 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`any`、`all`、`count`、`sum`、`min`、`max`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
 
@@ -323,17 +323,23 @@ func main(): int sync {
 
     var xs = [1, 2]
     xs = concat(xs, [3])       // 给整个变量一个新数组
-    xs->append<4>              // 原地修改：要求 xs 是 var
-    println(xs)
+    let ys = xs->append<4>     // 新数组；xs 不变
+    xs = xs->append<5>         // 追加到变量上：与 x = x + 1 一样，绑定到新数组
+    println(xs, ys)
     return 0
 }
 ```
 
 ```text
 11
-[1, 2, 3, 4]
+[1, 2, 3, 5] [1, 2, 3, 4]
 ```
 
-Camel 崇尚不可变：`var` 与赋值只是为了方便留的口子，应当尽量少用。原地修改的算子（`append`、`extend`）修改的是对象本身，经别的名字拿到同一个对象的地方也会看到；优先使用返回新值的 `concat`。
+Camel 崇尚不可变：`var` 与赋值只是为了方便留的口子，应当尽量少用。
+
+**标准库的算子都返回新值，不修改参数**（设计原则 2.12）：`append`、`extend`、`apply`、`algo` 模块的 `sort` 等都是如此，`let ys = xs->append<5>` 之后 `xs` 不变。要"追加到变量上"写 `acc = acc->append<5>`，与 `x = x + 1` 一样；没有另设显式的就地算子。
+
+- **纯运算的结果没有被使用是编译期错误**（`SemanticDiag::UnusedPureResult`）：写成语句的 `xs->append<5>` 什么也不做，诊断提示改写为 `xs = xs->append<5>`（`xs` 不是变量时提示使用结果，或用 `let _ = ...` 有意丢弃）。这里的"纯运算"是算子表中声明为纯的算子（内建算子与 C++ 模块的算子，`camel inspect --ops` 列出纯度）作为一条语句、而这条语句的值没有被使用；用户函数的调用不在此列。块的最后一条语句是块的值：块的值被使用（被返回、绑定、传递）时不报；块的值被丢弃时——声明为 `: void` 的函数体、写在 `foreach` 上的元素函数、没有 `else` 的 `if` 的臂、写成语句的块——它的最后一条语句同样报这个错误。
+- **就地追加只是实现层面的优化，不进入语义。** `acc = acc->append<v>` 写成一条语句、`acc` 是变量、`append` 是内建的那个时，编译器把它写成同一个重新绑定的另一种实现：变量里的数组只被这个变量引用（自上一次就地追加以来没有任何对 `acc` 的读取）时在原处追加，否则先复制（并留出增长的余量）。于是循环里反复追加仍是线性的。中间读一次 `acc` 而读到的值可能被留住（`let snap = acc`、把它传给函数、取出的元素本身是数组），下一次追加就会复制，`snap` 不变；读到的值只交给留不住数组的运算（`len(acc)`、取数值元素 `acc[i]`、比较、`format`），且这些运算在同步块里、排在下一次写之前，这样的读不影响原处追加。
 
 赋值与 `wait` 的关系见 [4.4](04_execution_model.md#44-var引用与-wait)。

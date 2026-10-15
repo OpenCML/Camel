@@ -61,7 +61,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ReservedIdentifier",
                 "Identifiers starting and ending with double underscores are reserved for internal "
                 "use.",
-                "Avoid using names like '__example__'; choose different identifiers.",
+                "Avoid using names like '__example__'; choose different identifiers. To "
+                "overload an operator, write 'func operator +(a: V, b: V): V'.",
             },
         },
         {
@@ -723,6 +724,58 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "the left side does not decide, both sides are 'bool', and neither operator "
                 "can be overloaded. For logic that evaluates both sides (element-wise logic "
                 "on tensors, an operator of a type of your own) use '&' and '|'.",
+            },
+        },
+        {
+            SemanticDiag::UnusedPureResult,
+            {
+                "UnusedPureResult",
+                "The result of '{0}' is not used, and '{0}' changes nothing: it returns a new "
+                "value{1}.",
+                "The operations of the standard library return new values and leave their "
+                "arguments as they were: after 'let ys = xs->append<5>', 'xs' is unchanged. "
+                "To change a variable, bind it to the result, 'xs = xs->append<5>', as "
+                "'x = x + 1' does for a number.",
+            },
+        },
+        {
+            SemanticDiag::OperatorNotOverloadable,
+            {
+                "OperatorNotOverloadable",
+                "'{0}' cannot be overloaded: {1}.",
+                "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', "
+                "'^', '@', '==', '!=', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the "
+                "unary '-', '!', '~'. '&&', '||', '?\?', '!!', '->', '?->', '..', 'as', "
+                "assignment and compound assignment are constructs of the language.",
+            },
+        },
+        {
+            SemanticDiag::OperatorOverloadInvalid,
+            {
+                "OperatorOverloadInvalid",
+                "This overload of operator '{0}' is not valid: {1}.",
+                "A binary operator takes two parameters and a unary one takes one ('-' may "
+                "take one or two); indexing takes the indexed value and at least one index. An "
+                "operator has no with-parameters and no var parameters.",
+            },
+        },
+        {
+            SemanticDiag::OperatorOverloadConflict,
+            {
+                "OperatorOverloadConflict",
+                "Operator '{0}' is already defined for ({1}){2}.",
+                "The overloads of an operator from every module, the built-in ones included, "
+                "are one set: each must take parameter types that no other one takes.",
+            },
+        },
+        {
+            SemanticDiag::AmbiguousOperatorCall,
+            {
+                "AmbiguousOperatorCall",
+                "Operator '{0}' applies to ({1}) in more than one way.",
+                "More than one overload of the operator takes these arguments; make the "
+                "parameter types of one of them narrower, or convert an argument with 'as'. "
+                "The overloads that take them: {2}",
             },
         },
         {

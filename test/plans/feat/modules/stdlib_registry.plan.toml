@@ -28,13 +28,15 @@ assert(undeclared.length === 0, `operators without a purity declaration: ${undec
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
 const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'sys:get_env', 'sys:get_cwd',
   'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'os:whoami', 'os:cpu_count', 'os:sleep', 'os:exit',
-  ':io/print', ':io/println', ':io/input', ':op/assn', ':struct/append_arr', ':struct/extend_arr', 'algo:sort', 'para:rendezvous',
+  ':io/print', ':io/println', ':io/input', ':op/assn', ':op/assn_append', 'para:rendezvous',
   ':mark/map_arr', ':mark/foreach_arr']
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
 const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'math:pi', 'statistics:median', 'algo:sorted', 'algo:argsort',
-  're:test', 'json:encode', 'json:decode', 'crypto:sha256', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format']
+  're:test', 'json:encode', 'json:decode', 'crypto:sha256', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
+  // They return a new array and leave their argument unchanged (design principles 2.12).
+  ':struct/append_arr', ':struct/extend_arr', 'algo:sort', 'algo:quick_sort', 'algo:insert_sort', 'algo:merge_sort']
 for (const uri of pure) {
   assert(purity[uri] === 'pure', `${uri} is declared ${purity[uri]}, expected pure`)
 }

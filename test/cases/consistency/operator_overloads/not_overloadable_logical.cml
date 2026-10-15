@@ -1,0 +1,10 @@
+/**
+ * Refused declaration of an operator overload (design principles 2.12).
+ */
+module not_overloadable_logical
+
+type M = { v: int }
+
+func operator &&(a: M, b: M): M { return a }
+
+func main(): int { return 0 }

@@ -38,3 +38,8 @@ timeout_ms = 180000
 name = "lsp.graph"
 desc = "camel/graph: the std::rgir text of the function at the cursor, of the whole program, after a pass sequence, for unsaved text, and the compiler's report when the program is in error."
 case = "../../../cases/tools/lsp/graph.test.mjs"
+
+[[tests]]
+name = "lsp.operators"
+desc = "Operator overloads of the program (design principles 2.12): hover and definition on the operator of a call that took one (binary and unary), a built-in operator unchanged, the overloads in the outline, the formatter's `func operator +(`."
+case = "../../../cases/tools/lsp/operators.test.mjs"

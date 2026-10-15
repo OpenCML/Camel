@@ -1,0 +1,37 @@
+/// Arrays, tuples and structs: constants, values built from computed elements, elements and
+/// fields, the operators on arrays, and their text. `append` gives a new array (design
+/// principles 2.12).
+module composites
+
+type Point = { x: int, y: int }
+
+func norm1(p: Point): int {
+    return (if p.x < 0 then 0 - p.x else p.x) + (if p.y < 0 then 0 - p.y else p.y)
+}
+
+func pair(a: int, b: string): (int, string) {
+    return (a * 2, b + '!')
+}
+
+func main(): int sync {
+    let xs = [3, 1, 4, 1, 5]
+    var base = [3, 1, 4, 1, 5]
+    let ys = base->append<9>
+    println(ys, len(ys), ys[5], ys->slice<1, 3>, ys->contains<4>, ys->contains<7>)
+    println(range(0, 4), range(5, 1), concat([1], [2, 3]), head(xs), tail(xs))
+    let n = 7
+    let p = { x: n, y: 0 - n * 2 }
+    println(p, p.x, norm1(p), norm1({ x: 1, y: 2 }))
+    let t = pair(n, 'go')
+    println(t, t.0, t.1)
+    let grid = [[1, 2], [3, n]]
+    println(grid, grid[1][1], [(1, 'a'), (n, 'b')])
+    println([1.5, 2.0] == [1.5, 2.0], (1, 'a') == (1, 'b'), [p] == [{ x: 7, y: -14 }])
+    let words = ['b', 'a']
+    println(words, string(words), '{}|{:>8}'->format<words, 'x'>)
+    println(words->join<', '>, ['x']->join<'-'>, words->join<''>)
+    println(zip([1, 2], words), zip(words, [1.5, 2.5], [true, false]))
+    let none: int[] = []
+    println(zip(none, none), zip([1, 2, 3], words))
+    return 0
+}

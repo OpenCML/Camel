@@ -200,6 +200,12 @@ class Builder {
     node_ptr_t visitStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitDataDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
+    /// `func operator <symbol>(...)` (design principles 2.12): reports, and aborts, an operator
+    /// that cannot be overloaded (OperatorNotOverloadable) and a declaration that does not fit
+    /// its operator: the number of parameters, a with-parameter or a var parameter
+    /// (OperatorOverloadInvalid). `funcData` is the declaration's FuncData, `decl` the whole.
+    void checkOperatorDeclaration(
+        const std::string &symbol, const AST::node_ptr_t &funcData, const AST::node_ptr_t &decl);
     node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitUsingNamespaceDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitExprStmt(const AST::node_ptr_t &ast);

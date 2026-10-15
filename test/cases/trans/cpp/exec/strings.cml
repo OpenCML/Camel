@@ -1,0 +1,33 @@
+/// Strings: concatenation, comparison by bytes, one byte by index, length, contains, a string
+/// held in a local and returned (it did not compile, docs/design/cpp-memory appendix B D1),
+/// `match` on strings (it compared addresses, D3) and format specifications.
+module strings
+
+func greet(name: string, n: int): string {
+    return 'hello, ' + name + ' #' + string(n)
+}
+
+func kind(c: string): string {
+    return match c {
+        case 'a' => 'vowel'
+        case 'e' => 'vowel'
+        case _ => 'other'
+    }
+}
+
+func build(i: int, acc: string): string {
+    return if i == 0 then acc else build(i - 1, acc + string(i % 10))
+}
+
+func main(): int sync {
+    let a = greet('camel', 1)
+    println(greet(a, 2))
+    println(kind('a'), kind('e'), kind('x'))
+    println('abc' < 'abd', 'ab' < 'abc', 'b' > 'abc', 'x' == 'x', 'x' != 'y')
+    println('hello'[1], len('hello'), 'hello'->contains<'ell'>, 'hello'->contains<'z'>)
+    println(len(build(10000, '')))
+    println('{:>8}|{:<6}|{:^7}|{:+.3f}|{:8.2f}|{:.17g}'->format<'ab', 12, 'mid', 3.14159, 2.5, 0.1>)
+    println('{} and {:.2f} and {:>5}|'->format<1, 2.0, true>)
+    println('{0}-{0}-{1}'->format<'x', 'y'>)
+    return 0
+}

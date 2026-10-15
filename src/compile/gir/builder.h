@@ -20,7 +20,9 @@
 #include <any>
 #include <deque>
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <map>
 #include <set>
 
 #include "camel/common/scope.h"
@@ -858,6 +860,110 @@ class Builder {
     void reportUnusedFallibleValues();
     /// Values dropped on purpose by `let _ = e`.
     std::unordered_set<node_handle_t> discardedValues_;
+
+    // ---- Operator overloads of the program (design principles 2.12) ----------------------
+    //
+    // `func operator +(a: V, b: V): V` declares a function under the operator's reserved name
+    // (`__add__`). Unlike every other name, an operator does not take the first layer that has
+    // it (local, this module, imported, built-in): its overloads from every layer are one set,
+    // and a call takes the one overload of the set that accepts its arguments; two that do are
+    // an error, as is an overload whose parameters a built-in or imported overload takes.
+
+    /// The overloads of one operator visible at a use of it.
+    struct OperatorOverloads {
+        /// The program's own, from every enclosing scope and every module that exports some.
+        std::vector<compile_graph_ptr_t> graphs;
+        /// The generic ones (`typeas` in a parameter), in this module and imported.
+        std::vector<template_ptr_t> templates;
+        /// Those of the built-in module and of the C++ modules imported, one group.
+        oper_group_ptr_t ops;
+        /// The module each imported overload comes from, for diagnostics (absent: this one).
+        std::unordered_map<const void *, std::string> moduleOf;
+    };
+    /// The DREF of an operator (`__add__`) whose set has overloads of the program, with that
+    /// set. A DREF of an operator without any is an ordinary DREF to the operator group.
+    std::unordered_map<node_handle_t, OperatorOverloads> operatorOverloads_;
+    /// The generic overloads of an operator declared in this module, each with the scope it
+    /// was declared in (visible from that scope and the scopes inside it).
+    std::unordered_map<std::string, std::vector<std::pair<template_scope_ptr_t, template_ptr_t>>>
+        operatorTemplates_;
+    /// Signatures already checked by rejectOperatorConflict (a function is declared ahead and
+    /// then defined).
+    std::unordered_set<FunctionType *> checkedOperatorSignatures_;
+
+    /// Collects the overloads of the operator `group` visible here.
+    OperatorOverloads operatorOverloadsOf(const std::string &group);
+    /// The overloads of `group` the current module imported (Module::importedOperatorOverloads),
+    /// the operator groups merged into one; computed once per module and operator (the module
+    /// changes while an instance of an imported generic function is built).
+    const OperatorOverloads &importedOperatorOverloadsOf(const std::string &group);
+    std::map<std::pair<const void *, std::string>, OperatorOverloads> importedOperators_;
+    /// The DREF for a use of the operator `group` (visitDRefNode).
+    node_handle_t operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct);
+    /// The program's overload a call of an operator takes (an instance for a generic one), or
+    /// nullptr when the call is the built-in group's to resolve (no overload of the program
+    /// accepts the arguments; then the group reports what does not fit). Reports
+    /// AmbiguousOperatorCall when more than one overload, built-in ones included, accepts them.
+    compile_graph_ptr_t chooseOperatorOverload(
+        const OperatorOverloads &set, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
+        camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
+        const std::function<bool(FunctionType *, bool)> &accepts);
+    /// Whether the generic overload `tmpl` accepts arguments of the types `normTypes`: its type
+    /// variables bind and every argument then fits its parameter (resolveGenericCall without
+    /// the diagnostics).
+    bool genericOperatorAccepts(const template_ptr_t &tmpl, const camel::core::type::type_vec_t &normTypes);
+    /// OperatorOverloadConflict when the overload `funcType` of the operator `group` takes
+    /// parameter types a built-in, C++ module or imported overload of it takes.
+    void rejectOperatorConflict(
+        const std::string &group, FunctionType *funcType, const GCT::node_ptr_t &gct);
+    /// `export func operator ...`: exports the module's overloads of `group` (a generic one
+    /// under `group#k`). Every module that imports this one, in any form, finds them there
+    /// (Module::importedOperatorOverloads); they are not names an import lists.
+    void exportOperatorOverloads(const std::string &group, const GCT::node_ptr_t &gct);
+    /// True when the program has an overload of the operator `group` visible here.
+    bool hasProgramOperatorOverloads(const std::string &group);
+
+    // ---- Collections are not changed in place (design principles 2.12) --------------------
+
+    /// The statement of the block being built whose value nothing takes: every statement but
+    /// the last (which is the block's value), while it is visited. A call that is this
+    /// statement may be the rebinding `acc = acc->append<v>` (rebindingAppendOf) or a pure
+    /// operation whose result is lost (rejectUnusedPureResult).
+    const GCT::Node *unusedStatement_ = nullptr;
+    /// `acc = acc->append<v>` as the statement `gct`, `acc` a variable and `append` the
+    /// built-in one: the same rebinding, written with the operator __assn_append__, which
+    /// grows the array in place while only the variable refers to it. Returns nullptr when
+    /// `gct` is not that form; the call is then built as written.
+    node_handle_t rebindingAppendOf(const GCT::node_ptr_t &gct);
+    /// UnusedPureResult at the statement `stmt` when it is a call of an operator declared
+    /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
+    /// nothing, so the statement does nothing. `node` is what the statement built.
+    void rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t node);
+    /// The reads of variables (`:var/get`) made in a sync block, and the nodes the sync chain
+    /// orders (reads, calls, operators and branches made in a sync block, in the order they
+    /// were made): what markNonRetainingReads needs to know about a read and its users.
+    /// The last statement of the body of each graph and the node it made: the value of the
+    /// body. Where that value is dropped (a body declared `: void`, the element function of
+    /// `foreach`, the arm of an `if` without `else`), rejectDiscardedValue checks it as a
+    /// statement whose value nothing takes.
+    std::unordered_map<const DraftGraphBuilder *, std::pair<GCT::node_ptr_t, node_handle_t>>
+        bodyValueStatement_;
+    /// The last statement of the block visitExecNode finished most recently, and its node.
+    std::pair<GCT::node_ptr_t, node_handle_t> lastBlockStatement_{};
+    /// UnusedPureResult at the last statement of the body of `graph` when it is a call of a
+    /// pure operator: the body's value is dropped where `graph` is used (see above).
+    void rejectDiscardedValue(const DraftGraphBuilder *graph);
+    /// The graph of each function written in place (a lambda), by its construction node.
+    std::unordered_map<const GCT::Node *, const DraftGraphBuilder *> lambdaGraphs_;
+    std::vector<node_handle_t> syncedReads_;
+    std::unordered_set<node_handle_t> chainedNodes_;
+    /// Once every body is built: turns into `:var/peek` each read whose value cannot be kept by
+    /// anything but the variable, so that the read leaves the variable's sole-reference mark
+    /// set and the next `acc = acc->append<v>` still appends in place
+    /// (`out = out->append<i>; total += len(out)` in a loop stays linear). See the definition
+    /// for the conditions; a read that does not meet every one of them stays `:var/get`.
+    void markNonRetainingReads();
     /// Function graphs whose return type is not declared but taken from their body.
     std::unordered_set<DraftGraphBuilder *> inferredExitGraphs_;
 

@@ -148,8 +148,6 @@ std::string to_string(const MarkOpCode &op) {
     switch (op) {
     case MarkOpCode::MapArr:
         return "MapArr";
-    case MarkOpCode::ApplyArr:
-        return "ApplyArr";
     case MarkOpCode::ReduceArr:
         return "ReduceArr";
     case MarkOpCode::FilterArr:

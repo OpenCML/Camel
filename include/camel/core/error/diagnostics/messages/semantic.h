@@ -118,6 +118,13 @@ enum class SemanticDiag : uint32_t {
     // The condition and the cases of a branch (found with the `any` cases above).
     ConditionNotBool             = 0x0000E3,
     MatchCaseTypeMismatch        = 0x0000E4,
+    // Rulings of 2026-10-14 (design principles 2.12) on operators and on collections that
+    // are not changed in place: 0xF0 and up.
+    UnusedPureResult             = 0x0000F0,
+    OperatorNotOverloadable      = 0x0000F1,
+    OperatorOverloadInvalid      = 0x0000F2,
+    OperatorOverloadConflict     = 0x0000F3,
+    AmbiguousOperatorCall        = 0x0000F4,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

@@ -1,0 +1,36 @@
+/**
+ * `append` and the other library operators return a new value and leave their argument as it
+ * was (design principles 2.12): after `let ys = xs->append<4>` `xs` is unchanged; a variable is
+ * changed only by binding it to the result, `acc = acc->append<5>`, as `x = x + 1` does.
+ */
+module append_new
+
+import { sort, sorted } from algo
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let ys = xs->append<4>
+    let zs = xs->append<5>
+    println(xs, ys, zs)
+    println(xs->extend<[7, 8]>, xs)
+    println([1, 2, 3]->apply<(x: int): int => x * 10>, xs)
+    let unsorted = [3, 1, 2]
+    println(sort(unsorted), sorted(unsorted), unsorted)
+
+    var acc: int[] = []
+    acc = acc->append<1>
+    acc = acc->append<2>
+    let snapshot = acc          // a read: the next append copies, the snapshot stays
+    acc = acc->append<3>
+    acc = append<4>(acc)
+    println(snapshot, acc)
+
+    // The value appended is read from the variable itself.
+    var grid: int[][] = [[0]]
+    grid = grid->append<grid[0]>
+    grid = grid->append<[len(grid)]>
+    println(grid)
+
+    let _ = xs->append<9>       // dropped on purpose: allowed
+    return 0
+}

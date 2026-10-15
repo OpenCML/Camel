@@ -247,6 +247,17 @@ DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t 
     return node;
 }
 
+void DraftGraphBuilder::retargetOperNode(runtime::DraftNode *node, const oper_idx_ptr_t &op) {
+    ASSERT(node != nullptr && node->header.kind == runtime::GCNodeKind::Oper, "Not an OPER node.");
+    ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
+    auto payload = draft_->mutablePayloadOf(node);
+    ASSERT(payload.size() >= sizeof(runtime::GCOperBody), "OPER payload is too small.");
+    auto *body = reinterpret_cast<runtime::GCOperBody *>(payload.data());
+    body->op   = nullptr;
+    body->oper = camel::core::OperatorTable::instance().intern(op->uri());
+    registerOperTarget(node, op);
+}
+
 runtime::DraftNode *DraftGraphBuilder::addSyncNode() { return draft_->node(draft_->addSyncNode()); }
 
 runtime::DraftNode *DraftGraphBuilder::addGateNode(camel::core::type::Type *type) {

@@ -143,8 +143,7 @@ inline bool isDirectCallOpcode(OpCode opcode) {
 }
 
 enum class MarkOpCode {
-    MapArr,
-    ApplyArr,
+    MapArr, // also `apply`, which returns a new array as `map` does
     ReduceArr,
     FilterArr,
     ForeachArr,

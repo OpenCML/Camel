@@ -1,0 +1,25 @@
+/**
+ * An array variable grown with `acc = acc->append<v>` (design principles 2.12) in the exported
+ * function: an ONNX model has no growing arrays, so the export is refused with a located
+ * diagnostic, as other state is (export_var_parameter); it must not crash or translate the
+ * appends as something else.
+ */
+module export_var_append
+import { Tensor, reshape, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func forward(x: Tensor): Tensor sync {
+    var parts: float[] = []
+    parts = parts->append<sum(x)>
+    parts = parts->append<1.5>
+    return reshape(parts, [len(parts)])
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
+    println(forward(x))
+    export_model((x: Tensor): Tensor => forward(x), x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

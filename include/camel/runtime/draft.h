@@ -47,6 +47,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -203,15 +204,19 @@ class GraphDraft {
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
-    camel::core::type::TupleType *runtimeDataType() const;
+    /// The frame layout: the type of each frame slot, slot 0 (reserved) included. Empty when the
+    /// graph has no frame layout, or one without slots (hasFrameLayout tells them apart).
+    std::span<camel::core::type::Type *const> runtimeSlotTypes() const { return runtimeSlotTypes_; }
+    /// The frame layout as the encoder takes it: nullopt when the graph has none.
+    std::optional<std::span<camel::core::type::Type *const>> frameSlotTypes() const {
+        return hasFrameLayout_ ? std::optional(runtimeSlotTypes()) : std::nullopt;
+    }
     camel::core::type::TupleType *closureType() const { return closureType_; }
     size_t frameSize() const {
         ASSERT(hasFrameLayout(), "Runtime draft frame layout is not available.");
-        return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType()->size();
+        return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeSlotTypes_.size();
     }
-    bool hasFrameLayout() const {
-        return runtimeDataType_ != nullptr || !pendingRuntimeSlots_.empty();
-    }
+    bool hasFrameLayout() const { return hasFrameLayout_; }
     bool isMacroGraph() const { return funcType_ != nullptr && funcType_->modifiers().macro(); }
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
@@ -276,9 +281,10 @@ class GraphDraft {
     }
     /// Records that the function captures `name` (one entry per capture port, in order).
     void addCaptureName(std::string_view name);
-    void setRuntimeDataType(camel::core::type::TupleType *runtimeDataType) {
-        runtimeDataType_ = runtimeDataType;
-        pendingRuntimeSlots_.clear();
+    /// Gives the graph this frame layout (possibly one without slots).
+    void setRuntimeSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        runtimeSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
+        hasFrameLayout_ = true;
     }
     void setClosureType(camel::core::type::TupleType *closureType) { closureType_ = closureType; }
 
@@ -393,10 +399,10 @@ class GraphDraft {
 
     camel::core::type::FunctionType *funcType_     = nullptr;
     std::vector<camel::core::SymId> captureNames_;
-    // The frame layout. Slots allocated since it was last built are pending: building the tuple
-    // type once per allocation would cost memory quadratic in the slot count.
-    mutable camel::core::type::TupleType *runtimeDataType_ = nullptr;
-    mutable std::vector<camel::core::type::Type *> pendingRuntimeSlots_;
+    // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
+    // the graph's own block (TupleType::constructFrameLayout).
+    std::vector<camel::core::type::Type *> runtimeSlotTypes_;
+    bool hasFrameLayout_ = false;
     camel::core::type::TupleType *closureType_     = nullptr;
     DraftNodePool pool_;
     std::vector<DraftNode *> nodesById_;

@@ -2433,3 +2433,19 @@ expect_output_contains = ["a branch on a condition that depends on the model inp
 expect_output_not_contains = ["arm_out"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000
+
+[[tests]]
+name = "export_var_append"
+desc = "export_model of a function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_append`, design principles 2.12): refused with a located diagnostic naming the append; the program's own run before the export still prints the tensor."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_var_append.cml"
+args = ["${case}", "std::macro"]
+envs = ["ONNX_OUT=tmp/test/onnx/export_var_append.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 22
+expect_diagnostic_column = 5
+expect_output_contains = ["an array variable is appended to (`acc = acc->append<v>`)", "export_var_append.cml:16:12"]
+expect_output_not_contains = ["exported", "internal error", "Segmentation fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 6000

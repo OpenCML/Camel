@@ -18,6 +18,7 @@
  */
 
 #include "camel/parse/ast/builder.h"
+#include "camel/core/operator_names.h"
 
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
@@ -772,7 +773,25 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     }
     *funcTypeNode << typeOptNode;
 
-    Reference ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
+    // The name: an identifier, or the operator of an overload (`func operator +(a, b)`, design
+    // principles 2.12). An overload is a function under the reserved name of its operator
+    // (`__add__`), chosen by the symbol and the number of parameters (`-` with one is the
+    // negation). It is not qualified by an enclosing namespace: an operator has no name a
+    // program could qualify, and every overload of it is one set (2.12). A symbol that cannot
+    // be overloaded with that many parameters gets a name no program can write; the GCT
+    // builder reports it with the reason.
+    Reference ref;
+    std::string operatorSymbol;
+    syn::Node nameNode = context->get<cst::IdentRef>();
+    if (const auto operatorName = context->get<cst::OperatorName>()) {
+        nameNode               = operatorName;
+        operatorSymbol         = operatorName->text().substr(std::string_view("operator").size());
+        const size_t arity     = funcTypeNode->at(1)->size();
+        const auto group       = camel::core::overloadableOperatorGroup(operatorSymbol, arity);
+        ref = Reference(group ? std::string(*group) : "operator " + operatorSymbol);
+    } else {
+        ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
+    }
     if (context->tok(TK::KwExport)) {
         export_->addRef(ref);
     }
@@ -786,6 +805,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
 
     node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
     unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
+    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setOperatorSymbol(operatorSymbol);
     if (annoListNode) {
         *funcDeclNode << annoListNode;
     }
@@ -796,7 +816,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         {
             semanticPart(
                 camel::source::SemanticRole::FuncName,
-                deriveAstAnchorOrigin(funcDeclNode, context->get<cst::IdentRef>(), "ast.func.name"),
+                deriveAstAnchorOrigin(funcDeclNode, nameNode, "ast.func.name"),
                 -1,
                 ref.toString()),
             semanticPart(

@@ -27,6 +27,8 @@
 #include "camel/runtime/graph.h"
 
 #include <functional>
+#include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -87,15 +89,20 @@ createGraphDebugRecord(std::string stableId, std::string mangledName, std::strin
 /// calls it, so that nothing of the draft's debug data is lost on a commit.
 void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft);
 
+/// The frame layout of a graph being built: the slot types, slot 0 included, or nullopt for a
+/// graph without one. The encoder builds the layout inside the graph's block
+/// (TupleType::constructFrameLayout).
+using FrameSlotTypes = std::optional<std::span<camel::core::type::Type *const>>;
+
 struct GCGraphBuildAccess {
     static size_t requiredBytes(
         std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
         std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payload,
-        std::span<const slot_t> staticSlots);
+        std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots);
 
     static GCGraph *constructInPlace(
         void *memory, size_t bytes, GCGraphDebugRecord *debugRecord,
-        camel::core::type::FunctionType *funcType, camel::core::type::TupleType *runtimeDataType,
+        camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
         camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
         GCGraph *outerGraph, std::span<GCGraph *const> dependencies,
         std::span<GCGraph *const> subGraphs, std::span<GCGraph *const> staticGraphRefs,
@@ -105,7 +112,7 @@ struct GCGraphBuildAccess {
 
     static GCGraph *create(
         GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
-        camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
+        const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
         camel::core::type::TupleType *closureType, GCGraph *outerGraph,
         std::span<GCGraph *const> dependencies, std::span<GCGraph *const> subGraphs,
         std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,

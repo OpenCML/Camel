@@ -437,6 +437,24 @@ SemanticModel::Target SemanticModel::targetAt(uint32_t offset) const {
         target.range  = member->nameRange;
         target.name   = member->name;
         target.member = member;
+        return target;
+    }
+    // An operator that calls an overload the program declared (`a + b` with a
+    // `func operator +`): the operator stands for that declaration.
+    if (const int32_t token = file.syntax.tokenAt(offset); token >= 0) {
+        const Range at = file.syntax.tokens[token].range;
+        std::vector<Location> decls;
+        for (const auto &[range, location] : file.operatorTargets) {
+            if (range == at) {
+                decls.push_back(location);
+            }
+        }
+        if (!decls.empty()) {
+            target.kind  = Target::Kind::Decls;
+            target.range = at;
+            target.name  = file.text.substr(at.start, at.length());
+            target.decls = canonical(decls);
+        }
     }
     return target;
 }

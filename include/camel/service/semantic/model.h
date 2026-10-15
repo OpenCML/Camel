@@ -164,6 +164,10 @@ struct FileModel {
     /// Calls of operators written as operators (`a + b`): the range of the expression the
     /// compiler names as the callee and the type the call resolved to.
     std::vector<std::pair<Range, uint32_t>> operatorCalls;
+    /// The operator calls among them that took an overload the program declared
+    /// (`func operator +`, design principles 2.12): the range and that declaration, for
+    /// going to the definition from the operator.
+    std::vector<std::pair<Range, Location>> operatorTargets;
     bool parsed   = false; // the file has no syntax error
     bool compiled = false; // the module was built without an error
 };

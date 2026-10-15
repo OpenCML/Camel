@@ -1,0 +1,11 @@
+/**
+ * Two imported modules overload `+` for the same operands: a call is ambiguous, and the
+ * diagnostic names both modules.
+ */
+import { mk } from base
+import plus_a
+import plus_b
+func main(): int sync {
+    println((mk(1) + mk(2)).x)
+    return 0
+}

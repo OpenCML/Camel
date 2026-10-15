@@ -91,26 +91,25 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
 
   private:
     /// Runs a marked operator (camel/core/operator_table.h), which calls the function values it
-    /// receives.
-    void evalMarkedOperator(
+    /// receives. Kept out of line on purpose: call() recurses on the native stack once per Camel
+    /// call, and these helpers run once per higher-order operator, so inlining them (with their
+    /// locals) into call() would only enlarge every recursion level.
+    __attribute__((noinline)) void evalMarkedOperator(
         camel::core::OperId oper, camel::runtime::GCGraph *graph,
         camel::runtime::gc_node_ref_t nodeRef, ctx::Frame &currFrame);
-    void evalMarkedOperator_map_arr(
+    __attribute__((noinline)) void evalMarkedOperator_map_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
-    void evalMarkedOperator_apply_arr(
+    __attribute__((noinline)) void evalMarkedOperator_filter_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
-    void evalMarkedOperator_filter_arr(
+    __attribute__((noinline)) void evalMarkedOperator_reduce_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
-    void evalMarkedOperator_reduce_arr(
+    __attribute__((noinline)) void evalMarkedOperator_foreach_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
-    void evalMarkedOperator_foreach_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-        ctx::Frame &currFrame);
-    void evalMarkedOperator_isolate(
+    __attribute__((noinline)) void evalMarkedOperator_isolate(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
 };

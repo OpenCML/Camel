@@ -85,6 +85,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // variables
         {"var/new", __builtin__var_new__},
         {"var/get", __builtin__var_get__},
+        {"var/peek", __builtin__var_peek__},
 
         // ops
         {"op/assn_i", __builtin__assn__},
@@ -94,6 +95,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/assn_s", __builtin__assn__},
         {"op/assn_b", __builtin__assn__},
         {"op/assn", __builtin__assn__},
+        // `acc = acc->append<v>` as a statement; not a group a program can name.
+        {"op/assn_append", __builtin__assn_append__},
 
         {"op/assn_add_i", __builtin__assn_add_i__},
         {"op/assn_add_l", __builtin__assn_add_l__},
@@ -296,8 +299,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
 void registerBuiltinOperatorTraits() {
     // Pure: conversions, arithmetic, comparisons, logic, and indexing (everything under op/
-    // except the in-place assignment family), plus the non-mutating string and array helpers.
-    // io/, profiler/, input, and the in-place array operations stay unregistered (effectful).
+    // except the assignment family, which writes a variable), plus the string and array
+    // helpers, none of which changes its arguments: `append` and `extend` return a new array
+    // (design principles 2.12). io/, profiler/ and input are effectful.
     static const std::unordered_set<std::string_view> kPureHelpers = {
         "str/format",
         "str/join",
@@ -309,6 +313,8 @@ void registerBuiltinOperatorTraits() {
         "struct/range",
         "struct/slice_arr",
         "struct/concat_arr",
+        "struct/append_arr",
+        "struct/extend_arr",
         "struct/contains_arr",
         "struct/contains_str",
     };
@@ -353,6 +359,7 @@ void registerBuiltinOperatorTraits() {
     // Creating and reading a variable changes nothing outside the program's variables.
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});
+    registry.set(":var/peek", {.stateOnly = true});
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}

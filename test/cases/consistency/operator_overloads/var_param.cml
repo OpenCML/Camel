@@ -1,0 +1,10 @@
+/**
+ * Refused declaration of an operator overload (design principles 2.12).
+ */
+module var_param
+
+type M = { v: int }
+
+func operator +(var a: M, b: M): M sync { return a }
+
+func main(): int { return 0 }

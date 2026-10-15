@@ -16,7 +16,7 @@ with <fn: (x: int) => int>
 func map_one(xs: int[]): int[] sync {
     var out: int[] = []
     xs->foreach<(x: int) => sync {
-        out->append<fn(x)>
+        out = out->append<fn(x)>
         return null
     }>
     return out
@@ -26,7 +26,7 @@ func main(): int sync {
     var boxes: Box[] = []
     range(0, 16)->foreach<(i: int) => sync {
         let vals = [i, i + 1, i + 2]
-        boxes->append<{ label: 'box{}'->format<i>, values: vals }>
+        boxes = boxes->append<{ label: 'box{}'->format<i>, values: vals }>
         return null
     }>
 

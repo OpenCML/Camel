@@ -33,8 +33,7 @@ func main(): int sync {
     'Sorting {} sampled arrays in parallel...'->format<replicas>->println
     let sort_start = now()
     let medians = [b0, b1, b2, b3, b4, b5, b6, b7]->map<(arr: int[]): int => {
-        var sarr = arr
-        wait sort(sarr)
+        let sarr = sort(arr)
         return sarr[len(sarr) / 2]
     }>
     let sort_duration = now() - sort_start

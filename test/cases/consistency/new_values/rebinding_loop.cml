@@ -1,0 +1,61 @@
+/**
+ * The rebinding `acc = acc->append<v>` in loops: in a foreach over a captured variable, through
+ * a `var` parameter, with reads of the variable between the appends (each read means the next
+ * append copies, so what was read stays as it was), and with arrays of arrays and of structs as
+ * elements. Run under collection stress with both collectors (std::gc::verify), the output must
+ * be that of an undisturbed run.
+ */
+module rebinding_loop
+
+type Box = { label: string, values: int[] }
+
+func collect(n: int): int[] sync {
+    var out: int[] = []
+    range(0, n)->foreach<sync (i: int) => sync {
+        out = out->append<i * i>
+        return null
+    }>
+    return out
+}
+
+sync func push_all(var xs: int[], n: int): int sync {
+    range(0, n)->foreach<sync (i: int) => sync {
+        xs = xs->append<i>
+        return null
+    }>
+    return len(xs)
+}
+
+func snapshots(n: int): int[][] sync {
+    var acc: int[] = []
+    var seen: int[][] = []
+    range(0, n)->foreach<sync (i: int) => sync {
+        acc = acc->append<i>
+        // A read of acc: the array seen holds never changes afterwards.
+        seen = (if i % 3 == 0 then seen->append<acc> else seen)
+        return null
+    }>
+    return seen
+}
+
+func boxes(n: int): Box[] sync {
+    var out: Box[] = []
+    range(0, n)->foreach<sync (i: int) => sync {
+        out = out->append<{ label: 'b{}'->format<i>, values: [i, i + 1] }>
+        return null
+    }>
+    return out
+}
+
+func main(): int sync {
+    let squares = collect(200)
+    println(len(squares), squares[0], squares[199])
+    var xs = [100]
+    let n = push_all(xs, 50)
+    println(n, len(xs), xs[0], xs[50])
+    let seen = snapshots(10)
+    println(seen)
+    let bs = boxes(120)
+    println(len(bs), bs[119].label, bs[119].values, bs[0].values)
+    return 0
+}

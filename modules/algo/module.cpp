@@ -60,8 +60,8 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     "algo:sort",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {true}}},
-                        "<> (var array: T[]) => T[]",
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
                         [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -94,8 +94,8 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     "algo:insert_sort",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {true}}},
-                        "<> (var array: T[]) => T[]",
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
                         [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -128,8 +128,8 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     "algo:quick_sort",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {true}}},
-                        "<> (var array: T[]) => T[]",
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
                         [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -162,8 +162,8 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                 {
                     "algo:merge_sort",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {true}}},
-                        "<> (var array: T[]) => T[]",
+                        {{0, {}}, {1, {false}}},
+                        "<> (array: T[]) => T[]",
                         [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -227,11 +227,12 @@ bool AlgoModule::load() {
             {"flatten", true},
             {"unique", true},
             {"argsort", true},
-            // Sort the array they are given, in place.
-            {"sort", false},
-            {"insert_sort", false},
-            {"quick_sort", false},
-            {"merge_sort", false},
+            // The same, under the names that used to sort the array they were given in
+            // place: no operator changes its argument (design principles 2.12).
+            {"sort", true},
+            {"insert_sort", true},
+            {"quick_sort", true},
+            {"merge_sort", true},
         });
     loaded_ = true;
     return true;

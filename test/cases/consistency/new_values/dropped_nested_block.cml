@@ -1,0 +1,14 @@
+/**
+ * A block written as a statement drops the value of its last statement: `out->append<7>` at the
+ * end of the inner sync block is the error UnusedPureResult.
+ */
+module dropped_nested_block
+
+func main(): int sync {
+    var out: int[] = []
+    sync {
+        out->append<7>
+    }
+    println(out)
+    return 0
+}

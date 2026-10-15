@@ -103,7 +103,14 @@ inline constexpr OperId UnorderedReduceArr  = 7;  // ":mark/unordered_reduce_arr
 inline constexpr OperId ForeachArr          = 8;  // ":mark/foreach_arr"
 inline constexpr OperId UnorderedForeachArr = 9;  // ":mark/unordered_foreach_arr"
 inline constexpr OperId Isolate             = 10; // ":mark/isolate"  `attempt`
-inline constexpr OperId kWellKnownCount     = 11; // kNoOper included
+inline constexpr OperId VarPeek             = 11; // ":var/peek" a read whose value cannot be kept
+inline constexpr OperId kWellKnownCount     = 12; // kNoOper included
+
+/// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
+/// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
+/// Builder::markNonRetainingReads and __builtin__var_peek__). Whatever looks at reads of
+/// variables treats the two alike.
+inline constexpr bool isVariableRead(OperId id) { return id == VarGet || id == VarPeek; }
 } // namespace oper
 
 /// The URIs of the ids in namespace `oper`, indexed by id (index 0, kNoOper, is empty).
@@ -119,6 +126,7 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":mark/foreach_arr",
     ":mark/unordered_foreach_arr",
     ":mark/isolate",
+    ":var/peek",
 };
 
 struct OperatorTraits {

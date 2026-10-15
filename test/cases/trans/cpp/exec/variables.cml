@@ -1,0 +1,34 @@
+/// `var` variables: assigned in a function (a C++ local), passed as `var` arguments and captured
+/// by a closure (a shared cell: every holder sees the same value, design principles 2.5).
+module variables
+
+sync func bump(var x: int) {
+    wait x += 1
+}
+
+func count(n: int): int sync {
+    var total = 0
+    var i = 0
+    total = total + n * 2
+    total += 5
+    i = total * 2
+    return i + total
+}
+
+func main(): int sync {
+    var c = 10
+    wait bump(c)
+    wait bump(c)
+    println(c, count(3))
+    var s = 'a'
+    s = s + 'b'
+    s += 'c'
+    println(s)
+    var acc = 0
+    let add = sync (x: int): int => sync {
+        acc += x
+        return acc
+    }
+    println(add(5), add(7), acc)
+    return 0
+}
