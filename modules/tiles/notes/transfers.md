@@ -31,3 +31,38 @@ retains separate optimized/reference snapshots. This establishes program lifetim
 independence from the caller's stack; execution is still synchronous. Completion
 events, cross-stream dependencies, deferred fault propagation and context-safe
 cleanup remain prerequisites for asynchronous submission.
+
+## Pending-submission ownership constraints
+
+The next execution layer must own a completion event together with its program,
+module lease, argument table, fault word, stream and pinned staging allocations.
+An event alone does not retain any of those objects. Every exit path after the
+first enqueue, including construction failure, must drain or transfer ownership
+of the submitted work before releasing its resources.
+
+Device output allocations and submission state must have separate ownership:
+output values may retain their producer submission, but the submission must not
+retain those output values in turn. Dependency edges retain producer submissions
+until their input reads complete. Cleanup should release completed dependencies
+and staging rather than retaining an entire training history through the final
+device value.
+
+Ordering and fault observation are separate responsibilities. A consumer stream
+can wait on a producer event without blocking the host. That event establishes
+device execution order; it does not establish that the producer's scalar fault
+word reports success. Observing a consumer result must also observe failures from
+its required producers. Identity results, duplicate outputs and empty outputs
+must preserve those obligations even when they enqueue no arithmetic kernel.
+
+Current `Resources` cleanup and timing-event cleanup assume that the caller has
+made the owning CUDA context current. That assumption is valid for the existing
+synchronous call scope but cannot be retained for cross-thread destruction of a
+pending submission. Activation, cleanup and restoration of the prior context
+must be internal to that ownership boundary. Finalizers must not throw or acquire
+Camel allocator locks; a failed CUDA context activation must not trigger use of
+handles in an unrelated current context.
+
+Acceptance evidence must include producer/consumer work on distinct streams,
+dropping host references before completion, cache eviction while work is pending,
+cross-thread teardown, chained producer faults, and identities/empty outputs.
+The existing synchronous residency tests do not establish these properties.
