@@ -76,13 +76,13 @@ code --install-extension camel-lang-0.1.0.vsix
 | 诊断（推送） | `textDocument/publishDiagnostics` | 已实现。文档打开或变更后发布；只对没有声明拉取式诊断的客户端推送（否则每个问题会显示两次），可用 `initializationOptions.diagnostics` = `"push"`、`"pull"`、`"both"` 覆盖。 |
 | 诊断（拉取） | `textDocument/diagnostic` | 已实现。`data` 携带目录名、建议与附注，次要位置作为 `relatedInformation`。 |
 | 增量同步 | `textDocument/didChange`（增量） | 已实现（区间编辑，UTF-16 位置）。 |
-| 悬停 | `textDocument/hover` | 已实现：按源码写法显示声明与类型、声明上方的注释、泛型函数的各实例以及调用处选中的实例或重载、字段、字面量、库函数签名、光标处诊断码的 `--explain` 说明。 |
+| 悬停 | `textDocument/hover` | 已实现：按源码写法显示声明与类型、声明上方的注释、泛型函数的各实例以及调用处选中的实例或重载、字段、字面量、库函数签名、光标处诊断码的 `--explain` 说明。命名空间的成员按完整名字显示，如 `func Tools::inc(x: int): int`（设计原则 2.13）；大纲与补全同样如此。 |
 | 跳转到定义 | `textDocument/definition` | 已实现：局部变量、参数、函数（调用选中的重载）、类型别名、类型变量、跨文件的导入名。用 C++ 实现的库函数没有定义位置。 |
 | 查找引用 | `textDocument/references` | 已实现，范围是一个程序：打开的文件与它导入的模块。 |
 | 文档高亮 | `textDocument/documentHighlight` | 已实现。 |
 | 文档符号 | `textDocument/documentSymbol` | 已实现（层级结构；有语法错误的文件也可用）。 |
 | 工作区符号 | `workspace/symbol` | 已实现：已打开的文档与工作区目录下的 `.cml` 文件（只解析，不编译）。 |
-| 补全 | `textDocument/completion` | 已实现：作用域内的名字、`.` 之后的字段、`::` 之后的模块成员、关键字、带签名的内建与库函数；文本暂时无法解析时仍可用。 |
+| 补全 | `textDocument/completion` | 已实现：作用域内的名字、`.` 之后的字段、`::` 之后的模块成员、关键字、带签名的内建与库函数；文本暂时无法解析时仍可用。命名空间成员的标签是完整名字（`Tools::inc`），插入的是该处要写的部分（`inc`）。 |
 | 签名帮助 | `textDocument/signatureHelp` | 已实现，针对按名字调用的函数；不支持 `f<...>(`，不支持没有声明类型的函数值。 |
 | 重命名 | `textDocument/rename` | 已实现，带 `prepareRename`；只要可能漏掉引用就拒绝并说明原因（见已知限制）。 |
 | 语义标记 | `textDocument/semanticTokens/full` | 已实现（`full`）。 |

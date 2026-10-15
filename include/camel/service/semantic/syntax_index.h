@@ -99,6 +99,13 @@ struct Decl {
     std::string annotation;   // the type written after the name, if any
     std::string doc;          // the comment lines directly above
     std::string importedFrom; // Import, Module: the module name as written
+    /// A member of a namespace block (and a namespace): its name with the namespaces around
+    /// it, `Tools::inc`, as the language server shows it (design principles 2.13); empty for
+    /// any other declaration, which is shown by `name`.
+    std::string qualified;
+
+    /// The name the declaration is shown by: `qualified` when it has one, `name` otherwise.
+    const std::string &shownName() const { return qualified.empty() ? name : qualified; }
 };
 
 enum class ScopeKind : uint8_t { Module, Function, Lambda, Block, Namespace, Arm, Type };

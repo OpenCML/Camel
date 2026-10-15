@@ -202,6 +202,9 @@ struct Completion {
         Keyword,
     };
     std::string label;
+    /// The text written when the candidate is chosen, when it differs from `label` (a member
+    /// of a namespace is shown by its full name and written by its own); empty: the label.
+    std::string insert;
     Kind kind = Kind::Variable;
     std::string detail; // the type or the signature
     std::string doc;
