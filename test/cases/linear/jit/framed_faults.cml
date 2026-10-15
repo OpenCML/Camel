@@ -1,0 +1,81 @@
+/**
+ * Faults raised from code std::jit compiled as framed code, after the functions have run often
+ * enough to be compiled: an index out of range and a remainder by zero (faults of operators,
+ * raised in a helper called from compiled code), a division by zero (checked by the compiled
+ * code itself) and a recursion past the limit (refused by the driver of the compiled code).
+ * Each of them is first isolated with `attempt`, after which the same functions run again; then
+ * the fault named by the environment variable FAULT is raised without isolation and must give
+ * the same located diagnostic on every back end.
+ */
+module jit_framed_faults
+
+import { get_env } from sys
+
+func pick(xs: int[], i: int): int {
+    return xs[i] * 2
+}
+
+func picks(xs: int[], i: int, n: int, acc: int): int {
+    return if i == n then acc else picks(xs, i + 1, n, acc + pick(xs, i))
+}
+
+func rem(a: int, b: int): int {
+    return a % b + 1
+}
+
+func rems(a: int, b: int, low: int, acc: int): int {
+    return if b < low then acc else rems(a, b - 1, low, acc + rem(a, b))
+}
+
+func quot(xs: int[], d: int): int {
+    return len(xs) / d
+}
+
+func quots(xs: int[], d: int, low: int, acc: int): int {
+    return if d < low then acc else quots(xs, d - 1, low, acc + quot(xs, d))
+}
+
+func depth(xs: int[], n: int): int {
+    return if n == 0 then len(xs) else 1 + depth(xs, n - 1)
+}
+
+func kind(r: int!): string {
+    return match r {
+        case error e => e.kind
+        case v => format<v>('{}')
+    }
+}
+
+func main(): int sync {
+    let xs = [3, 1, 4, 1, 5, 9, 2, 6]
+    let fault = get_env('FAULT')
+    println(picks(xs, 0, 8, 0))
+    println(rems(100, 7, 1, 0))
+    println(quots(xs, 3, 1, 0))
+    println(depth(xs, 50))
+    println(kind(attempt(picks, xs, 0, 9, 0)))
+    println(kind(attempt(rems, 100, 7, 0, 0)))
+    println(kind(attempt(quots, xs, 3, 0, 0)))
+    println(kind(attempt(depth, xs, 5000)))
+    println(picks(xs, 0, 8, 0))
+    println(depth(xs, 50))
+    println('isolated')
+    if fault == 'index' then sync {
+        println(picks(xs, 0, 9, 0))
+        return null
+    }
+    if fault == 'rem' then sync {
+        println(rems(100, 7, 0, 0))
+        return null
+    }
+    if fault == 'div' then sync {
+        println(quots(xs, 3, 0, 0))
+        return null
+    }
+    if fault == 'depth' then sync {
+        println(depth(xs, 5000))
+        return null
+    }
+    println('done')
+    return 0
+}

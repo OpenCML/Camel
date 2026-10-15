@@ -1,0 +1,13 @@
+/// Float constants and arithmetic.
+module a06_float
+
+func area(r: float): float {
+    return 3.141592653589793 * r * r
+}
+
+func main(): int sync {
+    println(area(2.0))
+    println(1.0e-7 * 3.0)
+    println(123456789.123456789)
+    return 0
+}

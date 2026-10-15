@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 04, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -387,11 +387,18 @@ uint64_t entryOriginOf(core::context::Context &ctx, const GCGraph *root) {
     return graphOriginOf(ctx, root);
 }
 
+/// Whether node `ref` of `g` is the export request (the operator kRequestUri).
+bool isRequest(const GCGraph *g, gc_node_ref_t ref) {
+    static const camel::core::OperId request =
+        camel::core::OperatorTable::instance().intern(kRequestUri);
+    const auto *n = g->node(ref);
+    return n && n->kind == GCNodeKind::Oper &&
+           g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper == request;
+}
+
 bool holdsRequest(const GCGraph *g) {
     for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
-        const auto *n = *it;
-        if (n && n->kind == GCNodeKind::Oper &&
-            g->nodeBodyAs<camel::runtime::GCOperBody>(it.ref())->uri() == kRequestUri) {
+        if (isRequest(g, it.ref())) {
             return true;
         }
     }
@@ -552,8 +559,7 @@ std::vector<Request> collectRequests(const core::context::Context &ctx, GCGraph 
         if (!n) {
             continue;
         }
-        if (n->kind == GCNodeKind::Oper &&
-            root->nodeBodyAs<camel::runtime::GCOperBody>(it.ref())->uri() == kRequestUri) {
+        if (isRequest(root, it.ref())) {
             requests.push_back(readEntryRequest(ctx, root, it.ref()));
         } else if ((n->kind == GCNodeKind::Func || n->kind == GCNodeKind::Call) && !firstCall) {
             firstCall = it.ref();

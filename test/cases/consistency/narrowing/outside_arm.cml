@@ -1,0 +1,10 @@
+// Narrowing holds inside the arm only.
+func f(x: int?): int sync {
+    if x != null then println(x + 1)
+    return x + 1
+}
+
+func main(): int sync {
+    println(f(1))
+    return 0
+}

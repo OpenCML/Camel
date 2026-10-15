@@ -40,7 +40,7 @@ func step(m: Mlp, x: Tensor): (float, Mlp) {
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-sync func loop(m: Mlp, i: int, steps: int, nb: int): Mlp {
+sync func spin(m: Mlp, i: int, steps: int, nb: int): Mlp {
     return if i >= steps then m else sync {
         let si = '{}'->format<i>
         let bi = '{}'->format<i % nb>
@@ -49,7 +49,7 @@ sync func loop(m: Mlp, i: int, steps: int, nb: int): Mlp {
         'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
         let dump = get_env('CAMEL_FT_DUMP')
         if dump != '' then save_params(vg.1, dump + '/step_' + si)
-        return loop(vg.1, i + 1, steps, nb)
+        return spin(vg.1, i + 1, steps, nb)
     }
 }
 
@@ -61,6 +61,6 @@ func main(): int sync {
     }
     let steps = int(get_env('CAMEL_FT_STEPS'))
     let nb = int(get_env('CAMEL_FT_NBATCHES'))
-    let final = loop(m, 0, steps, nb)
+    let final = spin(m, 0, steps, nb)
     return 0
 }

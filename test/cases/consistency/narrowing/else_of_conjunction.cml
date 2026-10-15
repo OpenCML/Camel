@@ -1,0 +1,9 @@
+// When a conjunction does not hold, nothing is known about its names.
+func f(a: int?, b: int?): int {
+    return if a == null && b == null then 0 else a + 1
+}
+
+func main(): int sync {
+    println(f(1, 2))
+    return 0
+}

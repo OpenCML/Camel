@@ -21,7 +21,8 @@ import tempfile
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from model import BOOL, FLOAT, INT, N, STR, Reject, effect_violations, emit, evaluate, static_faults, walk
+from model import (BOOL, FLOAT, INT, N, STR, Reject, effect_violations, emit, emit_modules, evaluate,
+                   static_faults, walk)
 from runner import BACKENDS, run_program, signature
 
 STATEMENTS = {"let", "var", "expr", "ifs", "func", "case", "prog", "blk"}
@@ -95,7 +96,8 @@ class Reducer:
         if self.reference_ok:
             cells["ref"] = []
         for _ in range(self.repeats):
-            res = run_program(source, prog.a.get("env", {}), expected, cells, self.work, prog.a["module"])
+            res = run_program(source, prog.a.get("env", {}), expected, cells, self.work, prog.a["module"],
+                              modules=emit_modules(prog))
             if "ref" in res and res["ref"]["outcome"] != "OK":
                 return False
             if signature(res["fail"]) == self.target:

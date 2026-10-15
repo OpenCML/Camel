@@ -30,6 +30,7 @@
 #include <ostream>
 #include <span>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::runtime {
@@ -95,12 +96,19 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Most recent reason a ".cmo found but failed to load" case occurred, used by ModuleNotFound
      * diagnostics. */
     mutable std::string lastCmoLoadError_;
-    // The modules whose load is in progress, outermost first (see importModule).
-    std::vector<std::string> loadingModules_;
     /// See setPassFact.
     std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
     /// See setSemanticRecorder.
     camel::compile::SemanticRecorder *semanticRecorder_ = nullptr;
+    /// See graphBuildSession.
+    std::shared_ptr<void> graphBuildSession_;
+    /// The regular files of each directory a module was looked up in (getModulePathAndKind),
+    /// by their names without the extension, and the names that have a `.cmo`.
+    struct DirectoryListing {
+        std::unordered_map<std::string, std::string> byStem;
+        std::unordered_set<std::string> cmo;
+    };
+    std::unordered_map<std::string, DirectoryListing> directoryListings_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     std::vector<std::string>
@@ -225,6 +233,14 @@ class Context : public std::enable_shared_from_this<Context> {
         semanticRecorder_ = recorder;
     }
     camel::compile::SemanticRecorder *semanticRecorder() const { return semanticRecorder_; }
+
+    /**
+     * The graph builder of the program compiled on this context: one for all of its modules,
+     * which build their functions and their top-level values into one `__root__` graph
+     * (design principles 2.11). Opaque here: it belongs to camel/compile/gir, which creates
+     * it on first use (camel::compile::gir::Builder::of).
+     */
+    std::shared_ptr<void> &graphBuildSession() { return graphBuildSession_; }
 
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

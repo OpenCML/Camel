@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: May. 05, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,8 @@
 #include "camel/core/type/typevar.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/intern.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
@@ -66,40 +68,6 @@ TupleTypeLayout computeLayout(size_t size, size_t refCount) {
 
 TupleType *TupleTypeFactory::build() { return TupleType::fromFactory(*this); }
 
-TupleType::TupleType(
-    const TupleTypeLayout &layout, const Type *const *types, const TypeCode *typeCodes,
-    const size_t *refs)
-    : CompositeType(TypeCode::Tuple), size_(layout.size), refCount_(layout.refCount) {
-    auto p        = layout.ptrs(data_);
-    typesPtr_     = p.types;
-    typeCodesPtr_ = p.typeCodes;
-    refsPtr_      = p.refs;
-    for (size_t i = 0; i < size_; ++i) {
-        p.types[i]     = const_cast<Type *>(types[i]);
-        p.typeCodes[i] = typeCodes[i];
-    }
-    for (size_t i = 0; i < refCount_; ++i) {
-        p.refs[i] = refs[i];
-    }
-}
-
-TupleType::TupleType(TupleTypeFactory &factory, const TupleTypeLayout &layout)
-    : CompositeType(TypeCode::Tuple), size_(layout.size), refCount_(layout.refCount) {
-    auto p        = layout.ptrs(data_);
-    typesPtr_     = p.types;
-    typeCodesPtr_ = p.typeCodes;
-    refsPtr_      = p.refs;
-    size_t refIdx = 0;
-    for (size_t i = 0; i < size_; ++i) {
-        Type *t        = factory.types_[i];
-        p.types[i]     = t;
-        p.typeCodes[i] = t->code();
-        if (isRuntimeReferenceSlot(t)) {
-            p.refs[refIdx++] = i;
-        }
-    }
-}
-
 TupleType::TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &types)
     : CompositeType(TypeCode::Tuple), size_(layout.size), refCount_(layout.refCount) {
     auto p        = layout.ptrs(data_);
@@ -117,18 +85,7 @@ TupleType::TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &t
     }
 }
 
-TupleType *TupleType::create() {
-    TupleTypeLayout layout = computeLayout(0, 0);
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "TupleType",
-        "Allocating TupleType: (), size: {} bytes",
-        layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
-    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
-    return new (mem) TupleType(layout, nullptr, nullptr, nullptr);
-}
-
-TupleType *TupleType::create(const std::vector<Type *> &types) {
+TupleType *TupleType::allocate(const std::vector<Type *> &types) {
     size_t refCount = 0;
     for (Type *t : types) {
         if (isRuntimeReferenceSlot(t))
@@ -141,12 +98,34 @@ TupleType *TupleType::create(const std::vector<Type *> &types) {
         layout.size,
         layout.refCount,
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
-    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
+    void *mem = allocTypeStorage<TupleType>(TypeStorageKind::Tuple, layout.totalSize);
     return new (mem) TupleType(layout, types);
 }
 
+TupleType *TupleType::create() { return create(std::vector<Type *>{}); }
+
+TupleType *TupleType::create(const std::vector<Type *> &types) {
+    return create(std::span<Type *const>(types.data(), types.size()));
+}
+
 TupleType *TupleType::create(std::vector<Type *> &&types) { return create(types); }
+
+TupleType *TupleType::create(std::span<Type *const> types) {
+    // One object per sequence of element type objects (see intern.h). Frame and static-area
+    // layouts are asked for again at every commit of a rewrite, for graphs it did not change
+    // too, and the many small graphs of a program (branch arms above all) share a handful of
+    // them; a tuple type a program writes is shared by every place that writes it.
+    static_assert(sizeof(Type *) == sizeof(uintptr_t));
+    const std::span<const uintptr_t> key(
+        reinterpret_cast<const uintptr_t *>(types.data()),
+        types.size());
+    Type *type = TypeTable::instance().intern(TypeTable::Shape::Tuple, key, [&]() -> Type * {
+        return allocate(std::vector<Type *>(types.begin(), types.end()));
+    });
+    return static_cast<TupleType *>(type);
+}
+
+TupleType *TupleType::layout(std::span<Type *const> slotTypes) { return create(slotTypes); }
 
 TupleType *TupleType::cell(Type *valueType) {
     ASSERT(valueType != nullptr, "A variable cell needs a value type.");
@@ -158,8 +137,11 @@ TupleType *TupleType::cell(Type *valueType) {
             return known;
         }
     }
-    TupleType *type = create(std::vector<Type *>{valueType});
+    // Cells are shared by the equality of their value types, a wider rule than the type
+    // table's key, so they keep their own list and only take a TypeId from the table.
+    TupleType *type = allocate(std::vector<Type *>{valueType});
     type->cell_     = true;
+    TypeTable::instance().adopt(type);
     cells.push_back(type);
     return type;
 }
@@ -193,8 +175,9 @@ TupleType *TupleType::nullable(Type *payloadType) {
     static std::vector<TupleType *> known;
     std::lock_guard lock(mutex);
     return internTagged(known, payloadType, [&] {
-        TupleType *type = create(std::vector<Type *>{payloadType});
+        TupleType *type = allocate(std::vector<Type *>{payloadType});
         type->tag_      = Tag::Nullable;
+        TypeTable::instance().adopt(type);
         return type;
     });
 }
@@ -205,8 +188,9 @@ TupleType *TupleType::fallible(Type *payloadType) {
     static std::vector<TupleType *> known;
     std::lock_guard lock(mutex);
     return internTagged(known, payloadType, [&] {
-        TupleType *type = create(std::vector<Type *>{payloadType, errorType()});
+        TupleType *type = allocate(std::vector<Type *>{payloadType, errorType()});
         type->tag_      = Tag::Fallible;
+        TypeTable::instance().adopt(type);
         return type;
     });
 }
@@ -228,39 +212,7 @@ size_t camel::core::type::errorFieldIndex(std::string_view name) {
     return *index;
 }
 
-TupleType *TupleType::fromFactory(TupleTypeFactory &factory) {
-    size_t size     = factory.types_.size();
-    size_t refCount = 0;
-    for (Type *t : factory.types_) {
-        if (isRuntimeReferenceSlot(t))
-            ++refCount;
-    }
-    TupleTypeLayout layout = computeLayout(size, refCount);
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "TupleType",
-        "Allocating TupleType(fromFactory): size={}, refCount={}, totalSize: {} bytes",
-        layout.size,
-        layout.refCount,
-        layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
-    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
-    return new (mem) TupleType(factory, layout);
-}
-
-TupleType *TupleType::fromFactoryData(
-    const Type *const *types, const TypeCode *typeCodes, const size_t *refs, size_t size,
-    size_t refCount) {
-    TupleTypeLayout layout = computeLayout(size, refCount);
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "TupleType",
-        "Allocating TupleType(fromFactoryData): size={}, refCount={}, totalSize: {} bytes",
-        size,
-        refCount,
-        layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(TupleType));
-    ASSERT(mem != nullptr, "Failed to allocate TupleType from permSpace");
-    return new (mem) TupleType(layout, types, typeCodes, refs);
-}
+TupleType *TupleType::fromFactory(TupleTypeFactory &factory) { return create(factory.types_); }
 
 TupleType *TupleType::slice(size_t start, size_t end) const {
     ASSERT(start <= end && end <= size_, "TupleType slice indices out of range");
@@ -384,14 +336,11 @@ bool TupleType::equals(Type *other) const {
 }
 
 CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
-        return *r;
-    if (this == sourceType)
+    // Converting a value to its own type is legal and does nothing (design principles 2.12):
+    // decided by structure, so `t as (int, int)` passes for `t: (int, int)`.
+    if (equals(sourceType))
         return CastSafety::Safe;
     if (isTagged() && sourceType != nullptr) {
-        if (equals(sourceType)) {
-            return CastSafety::Safe;
-        }
         // `null` is the literal of every nullable type.
         if (isNullable() && sourceType->code() == TypeCode::Void) {
             return CastSafety::Safe;
@@ -412,11 +361,14 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
 }
 
 slot_t TupleType::castSlotFrom(slot_t value, Type *sourceType) const {
-    if (!isTagged() || sourceType == nullptr || sourceType->code() == TypeCode::Any) {
+    if (sourceType == nullptr) {
         return Type::castSlotFrom(value, sourceType);
     }
     if (equals(sourceType)) {
-        return value;
+        return value; // a conversion to the value's own type does nothing
+    }
+    if (!isTagged()) {
+        return Type::castSlotFrom(value, sourceType);
     }
     if (isNullable() && sourceType->code() == TypeCode::Void) {
         return NullSlot;
@@ -519,9 +471,9 @@ Type *camel::core::type::joinTypes(Type *a, Type *b) {
     }
     // A value and `null`: the value's type, nullable. (Asked first: `void` is assignable
     // from anything, which is not what joining with `null` means.)
-    // DESIGN-QUESTION(void-as-null): `null` has the type `void`, and so has every expression
-    // without a value (a call of a function that returns nothing). All of them join as
-    // `null` does. The alternative is to accept the literal only.
+    // Design principles 2.11: an arm without a value (`void`: the literal `null`, a call of
+    // a function that returns nothing, an empty block) and an arm of type `T` make the
+    // branch a `T?`; the arm without a value gives `null`.
     if (a->code() == TypeCode::Void || b->code() == TypeCode::Void) {
         Type *value = a->code() == TypeCode::Void ? b : a;
         return asNullable(value) != nullptr ? value : TupleType::nullable(value);

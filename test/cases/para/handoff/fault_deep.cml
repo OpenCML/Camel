@@ -1,0 +1,53 @@
+/**
+ * Faults raised several calls deep inside serial code (which the parallel scheduler runs on the
+ * bytecode interpreter), in the elements of a parallel map.
+ *
+ * `down(n, d)` recurses n levels (not in tail position) and then divides by d; with d == 0 the
+ * fault is raised with n calls open in the element. The first part isolates such faults many
+ * times over and goes on computing on the same threads: every fault must leave the interpreter
+ * of its thread as it was (frames given back, call count restored), or the later lines differ.
+ * The second part lets one through: of the elements that fault (5, 9 and 13), the one of the
+ * smallest index ends the program (design principles 2.10), with one located diagnostic that
+ * names index 105.
+ */
+module fault_deep
+
+func down(n: int, d: int): int {
+    return if n == 0 then 1000 / d else 1 + down(n - 1, d)
+}
+
+// Elements 3, 7, 11, ... fault at depth i + 2.
+func risky(i: int): int {
+    return down(i + 2, (i + 1) % 4)
+}
+
+func row(round: int): int[] {
+    return range(0, 16)->map<(i: int): int => risky(i) + round>
+}
+
+// Reads [1, 2, 3][k] after n levels: out of range for k >= 3, and the message names k.
+func pick(n: int, k: int): int {
+    return if n == 0 then [1, 2, 3][k] else 1 + pick(n - 1, k)
+}
+
+// Elements 5, 9 and 13 fault at depth 3 * i, reading index 100 + i.
+func late(i: int): int {
+    return pick(i * 3, if i % 4 == 1 && i > 4 then 100 + i else 2)
+}
+
+func main(): int sync {
+    range(0, 30)->foreach<(round: int) => sync {
+        let r = attempt(row, round)
+        let line = match r {
+            case error e => e.message
+            case v => 'no fault'
+        }
+        // a recursion to the same depth right after the fault, on whichever thread
+        let again = range(0, 16)->map<(i: int): int => down(i + 40, 4)>
+        if round % 10 == 0 then println(format<line, again[15]>('{} / {}'))
+    }>
+    println('before')
+    println(range(0, 16)->map<late>)
+    println('not reached')
+    return 0
+}

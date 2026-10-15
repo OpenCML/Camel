@@ -51,8 +51,8 @@
 
 ```camel
 // 尾递归：状态是参数
-func loop(xs: int[], i: int, acc: int): int {
-    return if i >= len(xs) then acc else loop(xs, i + 1, acc + xs[i] * xs[i])
+func spin(xs: int[], i: int, acc: int): int {
+    return if i >= len(xs) then acc else spin(xs, i + 1, acc + xs[i] * xs[i])
 }
 
 // 高阶算子：状态是 reduce 的累加值
@@ -70,7 +70,7 @@ func by_foreach(xs: int[]): int sync {
 
 ### 1.1 尾递归的图
 
-`camel examples/sum_tail.cml std::rgir`【实测】，下面是 `loop(i, n, acc) = if i > n then acc else loop(i + 1, n, acc + i)` 的输出，省略了 `ARGS`/`EXIT` 伪节点与源码位置属性：
+`camel examples/sum_tail.cml std::rgir`【实测】，下面是 `spin(i, n, acc) = if i > n then acc else spin(i + 1, n, acc + i)` 的输出，省略了 `ARGS`/`EXIT` 伪节点与源码位置属性：
 
 ```
 subgraph "loop" {
@@ -142,7 +142,7 @@ N=1000 ... std::macro std::tf                               -> 1.3677  0.367695�
 
 **L2 `std::macro` 提前求值循环最多 64 层。** `examples/macro_loop.cml`：`count(0, 20, 0)` 被求值，`count(0, 100, 0)` 是编译期错误 `'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls`。
 
-**L3 `std::opt::simplify` 把循环当递归逐轮展开。** `K=3 camel examples/invariant.cml std::opt::simplify std::rgir`：循环 `loop(0, 1000000, k, 0)` 的初值是常量，于是每一轮特化出一份 `i` 为下一个常量的副本，16 轮后图里有 `loop$spec7` … `loop$spec20` 逐层嵌套的 14 份循环体，再加原来的 `loop`；每一份里 `k * k` 的乘法都还在。`sum_tail.cml` 的统计：不加遍 5 张图 25 个节点，`std::opt::simplify` 之后 22 张图 68 个节点、20 个直接调用。循环没有变快，优化的轮数与增长预算花在了剥皮上。
+**L3 `std::opt::simplify` 把循环当递归逐轮展开。** `K=3 camel examples/invariant.cml std::opt::simplify std::rgir`：循环 `spin(0, 1000000, k, 0)` 的初值是常量，于是每一轮特化出一份 `i` 为下一个常量的副本，16 轮后图里有 `loop$spec7` … `loop$spec20` 逐层嵌套的 14 份循环体，再加原来的 `loop`；每一份里 `k * k` 的乘法都还在。`sum_tail.cml` 的统计：不加遍 5 张图 25 个节点，`std::opt::simplify` 之后 22 张图 68 个节点、20 个直接调用。循环没有变快，优化的轮数与增长预算花在了剥皮上。
 
 **L4 导出器要从递归里恢复循环。** `modules/onnx/exporter.cpp` 共 3997 行，其中尾递归到 `Loop`（`evalLoopBody`、`translateLoop`、`mergeOutcomes`，约 1037–1591 行）、线性递归到成对的 `Loop`（约 1593–2074 行）、作为值的回传函数（约 2076–2426 行）与辅助诊断合计约 1700 行【读码，按函数边界估算】。它是对函数的图做符号求值来认出循环的：先试算一遍、丢弃，找出哪些实参在变。结果：
 
@@ -404,7 +404,7 @@ L3 的逐轮展开不会发生在循环节点上；内联引擎对递归的各�
 
 `for`、`in` 已是词法记号；`while` 需要新增为关键字（现有 `.cml` 文件里没有把 `while` 用作标识符的【实测 grep `test/cases`、`stdlib`、`examples`】）。在 `ctrlExpr` 下增加两条产生式，循环体复用 `stmtBlock`（因此 `sync` 写在花括号前，与 `then sync { ... }` 一致）：
 
-```antlr
+```
 ctrlExpr
     : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     | MATCH identRef '{' matchCase+ '}'
@@ -414,7 +414,7 @@ ctrlExpr
     ;
 ```
 
-条件后面直接跟 `{` 不产生歧义：`logicalOrExpr` 的后缀只有下标、调用、尖括号实参和 `!`，`{` 不能接在表达式后面【读 `antlr/OpenCML.g4`】。
+条件后面直接跟 `{` 不产生歧义：`logicalOrExpr` 的后缀只有下标、调用、尖括号实参和 `!`，`{` 不能接在表达式后面【读 `src/parse/syntax/parser_expr.cpp` 的 `parseAnno`，即语言参考 8.5 的 `annoExpr`】。
 
 ```camel
 while i <= n sync { ... }                       // 语句形式
@@ -554,7 +554,7 @@ let h = while let (h, k) = (x, 0); k < 6 && sum(h * h) >= 1.0 {
 
 | 位置 | 改动 | 规模 | (a) 之下 |
 |---|---|---|---|
-| `antlr/OpenCMLLex.g4`、`OpenCML.g4` | `WHILE` 记号，两条产生式 | 约 10 行 | 相同 |
+| `include/camel/parse/syntax/token_kinds.def`、`node_kinds.def`、`src/parse/syntax/parser*.cpp` | 关键字记号、节点种类、解析函数（步骤见 `docs/technical/34_handwritten_parser.md` 第 4 节） | 约 10 行 | 相同 |
 | `src/parse/ast/builder.cpp`（2878 行）`visitCtrlExpr` | 两种循环的 AST 节点；`break`/`continue` 的诊断 | 约 150 行 | 相同 |
 | `src/compile/gct/builder.cpp`（2535 行），仿 `visitIfExpr`（1535 行处） | 新的 `LoopLoad`，子节点为状态声明、条件、循环体 | 约 150 行 | 相同 |
 | `src/compile/gir/builder.cpp`（3545 行），仿 `visitBrchNode`（2969–3224） | 为条件与循环体各开一张子图（`enterScope`）、建 `LOOP` 节点、连状态边与捕获边；语句形式用 `capturedUsesOf` / `recordWrite` 记为被捕获变量的写入者；同步链；状态类型的统一；`reportDroppedEffects` 认识循环 | 约 350 行 | 改为生成一张自递归子图与 `BRCH`，约 250 行 |

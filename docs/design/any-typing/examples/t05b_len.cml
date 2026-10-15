@@ -1,0 +1,7 @@
+module t05b_len
+func main(): int sync {
+    let ys = [1, 2, 3]
+    let a = ys as any
+    println(len(a))
+    return 0
+}

@@ -129,7 +129,7 @@ Module: main
   - **DECL**：对应函数/类型等声明，如 **DECL: func main**，下挂 **TYPE: () => int**。
   - **FUNC**：对应一个函数的图构造，如 **FUNC: main**，下挂 **TYPE** 与 **SYNC**（或 **EXEC**）块。
 
-### 4.3 节点类型（LoadType）含义
+### 4.3 节点种类（NodeKind）含义
 
 | 节点 | 含义 |
 |------|------|
@@ -179,10 +179,21 @@ GCT 中的 **DREF** 对应算子或函数符号，**LINK/WITH** 表示参数传�
 
 `as` 表达式的处理分两类：
 
-1. **静态字面量可转换**：左操作数为 `DATA`（编译期常量）且 `convertTo(targetType)` 成功时，直接产生新的 `DataLoad`，无需 GCT 节点。
-2. **需运行时转换**：左操作数为变量、调用结果等非 `DATA` 时，用 `CastLoad(targetType)` 包装，子节点 0 为原始值节点。若静态字面量转换失败，则报语义错误。
+1. **静态字面量可转换**：左操作数为 `DATA`（编译期常量）且 `convertTo(targetType)` 成功时，直接产生新的 `DATA` 节点，不加 `CAST`。
+2. **需运行时转换**：左操作数为变量、调用结果等非 `DATA` 时，用 `CAST` 节点（`Tree::makeCast(targetType)`）包装，子节点 0 为原始值节点。若静态字面量转换失败，则报语义错误。
 
 GIR Builder 在 `visitCastNode` 中递归访问子节点 0、创建 `CastNode`，并以 `Norm` 边将值节点连接到 `CastNode`。
+
+### 4.7 表示：`gct::Tree` 与 32 字节的节点
+
+一个模块的 GCT 由一个 `gct::Tree`（`include/camel/compile/gct/tree.h`）持有，节点只能由它的 `make*` 函数创建，读取一律经过 `gct::Node`（`node.h`）的访问器（`name()`、`data()`、`dataType()`、`argCount()`、`caseType()` ……，每个访问器断言节点种类）。
+
+- **节点**：32 字节、无虚函数、无析构：种类（1 字节）、种类专用的标志与小枚举（3 字节）、子节点数（4）、origin（8）、子节点指针数组（8）、一个载荷字（8：常量、类型、名字、数字或导出名列表之一）。
+- **内存**：节点、子节点数组与导出名列表从树的 arena 顺序分配（16 KiB 的块，按块大小对齐，块头记着所属的树，故 `*parent << child` 无需传入树），树销毁时整块释放；名字在树内驻留一次，节点只存指针；`DATA` 节点指向树保存的 `shared_ptr` 常量。
+- **不变量**：一个节点至多是一个节点的子节点（`<<` 断言）；同一子树要用两处时用 `Tree::clone` 复制；子节点只追加。
+- **生命周期**：模块（`UserDefinedModule`）持有树直到上下文结束；泛型函数在每次实例化时、也在导入它的模块里，从树重新降低，所以树必须与模块同寿。GIR Builder 自己合成的少量节点（复合赋值展开、`??` 的标签算子、装饰器调用）由当前模块的树创建。
+
+替换前每个节点是两个堆对象（`Node` 与多态的 `Load`），以 `shared_ptr` 相连，名字解析成 `Reference`；替换前后全仓库每个程序的 `camel inspect --gct` 输出逐字相同（`test/tools/gctcheck`）。数字见 [38_compile_pipeline_cost.md](38_compile_pipeline_cost.md)。
 
 ---
 

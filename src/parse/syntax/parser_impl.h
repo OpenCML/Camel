@@ -177,6 +177,8 @@ class ParserImpl {
     void parseModuleName();
     void parseModuleDecl();
     void parseImportDecl();
+    void parseBracedImports();
+    void parseImportItem();
     void parseExportDecl();
     void parseUsingNamespaceDecl();
     void parseNamespaceDecl();
@@ -184,7 +186,6 @@ class ParserImpl {
     void parseFuncDecl();
     void parseDataDecl();
     void parseTypeDecl();
-    void parseUseDecl();
     void parseRetStmt();
     void parseImplMark();
     void parseModifiers();
@@ -214,6 +215,7 @@ class ParserImpl {
     void parseRelational();
     void parseAdditive();
     void parseMultiplicative();
+    void parsePower();
     void parseNullable();
     void parseUnary();
     void parseLink();
@@ -231,6 +233,10 @@ class ParserImpl {
     void parseMatchCase();
     void parsePattern();
     void parseTry();
+    void parseLoop();
+    void parseOr();
+    void parseAnd();
+    void parseNeg(bool underMinus);
     void parseCatchClause();
     void parseIndexValue();
     void parseKeyValuePair();
@@ -245,8 +251,7 @@ class ParserImpl {
             (peek(1) != TK::Integer && peek(1) != TK::Real)) {
             return false;
         }
-        // A minus is the sign of the number only when it touches it: `- 2->f` negates `2->f`.
-        return cur_ == TK::Plus || !toks_[tree_.tokens_.nextSignificant(pos_ + 1)].spaceBefore();
+        return true;
     }
     bool pairStartsAt(uint32_t n) const {
         return peek(n) == TK::Identifier && peek(n + 1) == TK::Colon;

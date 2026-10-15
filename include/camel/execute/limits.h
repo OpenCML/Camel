@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 
 namespace camel::core::context {
@@ -100,6 +101,10 @@ size_t macroDepthLimit(const core::context::Context &context);
 /// `openCalls` calls open, before the count reached the limit.
 [[noreturn]] void throwNativeStackExhausted(std::string_view graphName, size_t openCalls);
 
+/// What stands in place of the limit in that diagnostic (throwNativeStackExhausted), for a back
+/// end that raises it itself.
+std::string nativeStackExhaustedDetail(size_t openCalls);
+
 /// False when the environment variable CAMEL_NATIVE_STACK_GUARD is 0: the checks of the native
 /// stack are then skipped and only the counts stop a recursion. A switch for measuring where
 /// the stack really ends (a raised limit then ends in a crash); not for normal use.
@@ -111,6 +116,11 @@ void nativeStackBounds(uintptr_t &low, uintptr_t &high);
 /// interpreter may need (the reserve covers the call and the unwinding of the diagnostic). Always
 /// false where the stack bounds cannot be read (!kNativeStackGuard).
 bool nativeStackNearlyExhausted();
+/// The lowest stack address at which the calling thread still passes that check: the low bound
+/// plus the reserve. Code that cannot call nativeStackNearlyExhausted (native code compiled by
+/// std::jit) compares its stack pointer with this. 0 where the bounds cannot be read or the
+/// guard is switched off: no stack pointer is below it.
+uintptr_t nativeStackFloor();
 /// Native stack the calling thread has used so far, in bytes (0 where it cannot be read).
 size_t nativeStackUsed();
 /// Size of the calling thread's native stack in bytes (0 where it cannot be read).

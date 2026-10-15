@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 03, 2024
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -77,9 +77,7 @@ std::optional<FunctionType *> DynamicFuncTypeResolver::resolve(
     for (size_t i = 0; i < norm.size(); i++) {
         normParams.emplace_back(norm[i], isVar(normVars_, i));
     }
-    return FunctionType::create(
-        std::move(withParams),
-        std::move(normParams),
-        *optResType,
-        modifiers);
+    // The same call shape resolves to the same signature object: a program resolves the same
+    // few operator signatures at every call, and the permanent space never frees.
+    return FunctionType::create(withParams, normParams, *optResType, modifiers);
 }

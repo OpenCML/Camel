@@ -1,0 +1,9 @@
+// Inside a namespace, a sibling is named without the qualifier.
+namespace N {
+    func a(): int { return 1 }
+    func b(): int { return a() + 1 }
+}
+func main(): int sync {
+    println(N::b())
+    return 0
+}

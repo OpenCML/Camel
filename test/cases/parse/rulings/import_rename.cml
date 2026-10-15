@@ -1,0 +1,10 @@
+// An imported name can be given another name; the original name is then not visible here.
+import { find as str_find, trim } from str
+import { find } from array
+
+func main(): int sync {
+    println('hello'->str_find<'l'> ?? -1)
+    println([1, 2, 3]->find<(v: int): bool => v > 1> ?? -1)
+    println(trim('  a  '))
+    return 0
+}

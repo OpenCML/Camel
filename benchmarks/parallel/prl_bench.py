@@ -207,7 +207,9 @@ def fmt(value: Optional[float], spec: str = "{:.3f}") -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("programs", nargs="+")
-    parser.add_argument("--build", action="append", default=[], metavar="NAME=CAMEL_HOME")
+    parser.add_argument(
+        "--build", action="append", default=[], metavar="NAME=CAMEL_HOME[,VAR=VALUE...]",
+        help="a build to run; VAR=VALUE pairs are set for this build only")
     parser.add_argument("--config", action="append", default=[], metavar="PASS[:T,T...]")
     parser.add_argument("--cpus", default="", help="CPU list to pin to, e.g. 0-7 or 0,2,4,6")
     parser.add_argument(
@@ -228,11 +230,16 @@ def main() -> int:
     args = parser.parse_args()
 
     builds: List[Tuple[str, str]] = []
+    # Environment of one build only: `name=HOME,VAR=VALUE,...` (the same home twice with a
+    # switch set for one of them compares the switch within one table).
+    build_envs: Dict[str, Dict[str, str]] = {}
     for spec in args.build or [f"cur={os.environ.get('CAMEL_HOME', '')}"]:
-        name, _, home = spec.partition("=")
+        name, _, rest = spec.partition("=")
+        home, *assignments = rest.split(",")
         if not os.path.exists(os.path.join(home, "bin", "camel")):
             parser.error(f"no camel under {home!r} (build {name!r})")
         builds.append((name, home))
+        build_envs[name] = dict(item.split("=", 1) for item in assignments)
     configs: List[Config] = []
     for spec in args.config or ["std::fvm", "std::prl:1,2,4,8"]:
         configs.extend(parse_config(spec))
@@ -262,8 +269,8 @@ def main() -> int:
             if cpus and args.pin_per_thread and cell.config.threads:
                 pinned = cpus[: max(1, min(len(cpus), cell.config.threads))]
             sample = run_once(
-                homes[cell.build], cell.program, cell.config, pinned, env_extra, args.timeout,
-                None)
+                homes[cell.build], cell.program, cell.config, pinned,
+                {**env_extra, **build_envs[cell.build]}, args.timeout, None)
             cell.samples.append(sample)
             if not args.quiet:
                 print(

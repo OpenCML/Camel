@@ -10,11 +10,11 @@ func mix(a: int, b: int): int {
     return (a + sq(b)) % 1000003
 }
 
-func loop(i: int, n: int, acc: int): int {
-    return if i == n then acc else loop(i + 1, n, mix(acc, i))
+func spin(i: int, n: int, acc: int): int {
+    return if i == n then acc else spin(i + 1, n, mix(acc, i))
 }
 
 func main(): int sync {
-    println(loop(0, 2000000, 0))
+    println(spin(0, 2000000, 0))
     return 0
 }

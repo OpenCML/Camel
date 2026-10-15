@@ -1,0 +1,9 @@
+// macro function: evaluated early by std::macro, the result becomes a constant.
+macro func square(x: int): int {
+    return x * x
+}
+
+func main(): int sync {
+    println(square(12))
+    return 0
+}

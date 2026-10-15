@@ -37,6 +37,6 @@ func main(): int sync {
     println('{:.17g}'->format<0.5>)
     println(0.7747 == float('0.7747'), 0.6906 == float('0.6906'), 1.0e23 == float('1.0e23'))
     println(0.1 + 0.2 == 0.3, 0.1 + 0.2 == 0.30000000000000004)
-    println(1e5, 1e5 + 1)
+    println(1e5, 1e5 + 1.0, 0e5, 1500e-2)
     return 0
 }

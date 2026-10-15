@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 06, 2026
- * Updated: May. 05, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -696,8 +696,7 @@ gc_node_ref_t resolveRuntimeBranchArmEntry(
         if (node && node->kind != camel::runtime::GCNodeKind::Data &&
             node->kind != camel::runtime::GCNodeKind::Port &&
             node->kind != camel::runtime::GCNodeKind::Sync &&
-            node->kind != camel::runtime::GCNodeKind::Gate &&
-            node->kind != camel::runtime::GCNodeKind::Dref) {
+            node->kind != camel::runtime::GCNodeKind::Gate) {
             return nodeRef;
         }
     }

@@ -20,10 +20,10 @@ func tap(a: int): int sync {
     return a * 3
 }
 
-func loop(i: int, n: int, acc: int): int {
+func spin(i: int, n: int, acc: int): int {
     return if i >= n then tap(acc) else {
         let a2 = acc + 1
-        loop(i + 1, n, a2)
+        spin(i + 1, n, a2)
     }
 }
 
@@ -31,7 +31,7 @@ func main(): int sync {
     let n = int(now() * 0.0) + 3
     let x = n + 37
     let r = if n > 2 then {
-        let a = loop(0, 2, x)
+        let a = spin(0, 2, x)
         a
     } else x
     println('r {}'->format<r>)

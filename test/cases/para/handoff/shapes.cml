@@ -1,0 +1,89 @@
+/**
+ * The shapes in which the parallel scheduler meets a graph with nothing to parallelise (it runs
+ * such a graph on the bytecode interpreter; design principles 2.11), next to graphs it evaluates
+ * itself. Every line of output is the same on every back end.
+ *
+ *   - `fib`, `gcd`, `collatz`, `mix`, `churn`, `norm`, `digits`: serial (built-in operators, an
+ *     operator of a module, direct calls, tail calls, an array built step by step).
+ *   - `main`, `inner_sum`, `drive`, `sum_to`: not serial (a higher-order operator in them or below
+ *     them).
+ */
+module shapes
+
+import { sqrt } from math
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func gcd(a: int, b: int): int {
+    return if b == 0 then a else gcd(b, a % b)
+}
+
+func collatz(n: int, steps: int): int {
+    return if n == 1 then steps
+        else if n % 2 == 0 then collatz(n / 2, steps + 1)
+        else collatz(3 * n + 1, steps + 1)
+}
+
+func mix(a: int, b: int): int {
+    return (a * 31 + b) % 1000003
+}
+
+func churn(i: int, n: int, acc: int): int {
+    return if i == n then acc else churn(i + 1, n, mix(acc, i))
+}
+
+func norm(x: float, y: float): float {
+    return sqrt(x * x + y * y)
+}
+
+// Builds an array in a tail-recursive loop: allocation inside serial code.
+func digits(n: int, acc: int[]): int[] {
+    return if n == 0 then acc else digits(n / 10, concat(acc, [n % 10]))
+}
+
+// A parallel inner function: a map whose element function is a serial recursion, with a
+// captured value.
+func inner_sum(seed: int): int {
+    return range(0, 12)
+        ->map<(i: int): int => fib(10 + (seed + i) % 4) + gcd(seed + 12, i + 18)>
+        ->reduce<(acc: int, cur: int): int => acc + cur, 0>
+}
+
+// A serial driver around the parallel inner function, with serial work of its own.
+func drive(step: int, steps: int, acc: int): int {
+    return if step == steps then acc
+        else drive(step + 1, steps, mix(acc, inner_sum(step) + churn(0, 200, step)))
+}
+
+// Not serial (a reduce in the first arm), and its other arm is a tail call of a serial graph.
+func sum_to(n: int): int {
+    return if n < 50 then range(0, n + 1)->reduce<(acc: int, cur: int): int => acc + cur, 0>
+        else churn(0, n, 7)
+}
+
+func main(): int sync {
+    // serial graphs called directly from a graph the scheduler evaluates
+    println(fib(20))
+    println(gcd(1071, 462))
+    println(collatz(27, 0))
+    println(norm(3.0, 4.0))
+    println(digits(907152, []))
+    // a parallel map over serial element functions
+    println(range(1, 9)->map<(n: int): int => collatz(n * 37, 0)>)
+    println(range(0, 6)->map<(i: int): float => norm(float(i), 1.0)>->map<(x: float): int => int(x * 1000.0)>)
+    // serial element functions that allocate (arrays built step by step on every worker)
+    println(range(0, 24)->map<(i: int): int => len(digits(i * 123457 + 1, [])) * 10 + digits(i + 7, [])[0]>)
+    // a filter over a serial predicate
+    println(range(1, 40)->filter<(n: int): bool => gcd(n, 36) == 1>)
+    // a serial driver that calls a parallel inner function
+    println(drive(0, 6, 1))
+    // a tail call from a graph of the scheduler into a serial graph, and the arm that stays
+    println(sum_to(10))
+    println(sum_to(300))
+    // serial code behind a fault-isolation boundary
+    println(attempt(gcd, 84, 36) !! -1)
+    println(attempt(mix, 5, 7) !! -1)
+    return 0
+}

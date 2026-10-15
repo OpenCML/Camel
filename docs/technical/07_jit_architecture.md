@@ -1,6 +1,6 @@
 # FastVM JIT 架构文档
 
-> **适用范围（2026-10 更正）**：JIT 目前只编译"自足"的图——字节码里只有算术、比较、`BRCH`/`JOIN`/`JUMP`/`RETN`，以及目标是**本图自身**的 `FUNC`/`TAIL`。含 `OPER`、`CAST`、`COPY`、`FILL`、`CALL`、`ACCS` 或调用其他图的图在入口处（`describeFramelessSelfFuncFailure`）就被拒绝，留给解释器；`-v` 日志会给出原因。因此编译出的代码**不调用任何 C++**：自调用是原生调用，自尾调用是跳转。本文中关于跨图调用、trampoline 的内容描述的是保留但当前不可达的代码，已逐处标注。典型来源是 `std::inline` 之后只剩自递归的小函数。
+> **适用范围（2026-10-13）**：JIT 把图编译成两种代码之一。**无帧代码**（frameless）是"自足"的图——字节码里只有算术、比较、`BRCH`/`JOIN`/`JUMP`/`RETN`，以及目标是**本图自身**的 `FUNC`/`TAIL`；它不调用任何 C++，自调用是原生调用，自尾调用是跳转。第 1 至 16 节描述的是它。**有帧代码**（framed）是其余所有的图（含 `OPER`、`CAST`、`COPY`、`FILL`、`ACCS`、`CALL`、`SCHD`、`match`，或调用其他图）：算子等经 C++ 辅助函数执行，调用 Camel 函数的字节码交回驱动循环执行，见第 17 节。哪一种由 `collectRuntimeConstructs` 一处决定，`-vv` 日志写明（`compiled & cached graph 'f' as framed code`）。只在 Linux x86-64 上构建和运行过；有帧代码新增编码的 Win64 分支写了但没有编译过。
 
 本文档描述 Camel FastVM 的 **JIT 编译 pipeline**：从字节码到 x86-64 机器码的完整流程，涵盖双入口函数布局、JIT 内部调用约定、Frame 池管理、frameless 栈分配优化、近期引入的 MIR 定向代码生成优化，以及与解释器/trampoline 的协同工作机制。
 
@@ -284,6 +284,8 @@ struct NativeJitCallParams {
 ```asm
 sub r15, 1                   ; 递归深度余量
 jb  .fault_depth             ; 用尽 → 故障桩（第 16 节）
+cmp rsp, [ctx + stackLimit]  ; 机器栈的余量（16.4；ctx 在 SysV 下是 r13，Win64 下是 rsi）
+jb  .fault_stack             ; 不足 → 故障桩
 push rdi                     ; 保存调用方 slot 基址
 sub rsp, N                   ; 被调方的帧
 mov [rsp + dst_i], reg_i     ; 已在寄存器里的实参
@@ -298,7 +300,7 @@ inc r15
 mov result_reg, rax
 ```
 
-rdi 在所有实参写完之后才切换，所以实参的来源始终按调用方的帧寻址；r11 不可分配，不会与装着实参的寄存器冲突。帧大于 `kMaxNativeFrameBytes`（2 KB）的图含自调用时不编译：256 层这样的帧在较小的机器栈上放不下。
+rdi 在所有实参写完之后才切换，所以实参的来源始终按调用方的帧寻址；r11 不可分配，不会与装着实参的寄存器冲突。帧大于 `kMaxNativeFrameBytes`（2 KB）的图含自调用时不编译成无帧代码（而是有帧代码）：上限那么多层这样的帧在较小的机器栈上放不下。
 
 ### 5.3 自尾调用（TAIL）
 
@@ -399,14 +401,9 @@ extra 字段布局如下：
 
 ---
 
-## 8. Trampoline 系统（当前不可达）
+## 8. 旧的 Trampoline（不可达）
 
-`trampoline.cpp` 中的 `trampolineFunc`、`trampolineTail`、`trampolineOper`、`trampolineCast`、`trampolineBytecode`、`directSelfFuncInvoke` 是为"JIT 代码调用 C++ 运行时"准备的桥接函数，`x64_backend.cpp` 中也保留着 `OPER`/`CAST`/`COPY`/`FILL`/`CALL`/`ACCS` 的下降代码。**入口处的过滤使它们全部不可达**：含这些字节码的图不编译。
-
-重新启用之前必须先解决两件事：
-
-1. 这些函数通过 `slots[0]` 的 `Frame*` 读写数据，而原生自调用的帧在机器栈上（见 6.2）。
-2. 它们会抛 C++ 异常（算子故障），而 JIT 代码没有展开信息；异常必须在 trampoline 边界上被接住，转成第 16 节的故障记录后由 JIT 代码走故障出口。
+`trampoline.cpp` 中的 `trampolineFunc`、`trampolineTail`、`trampolineOper`、`trampolineCast`、`trampolineBytecode`、`directSelfFuncInvoke` 是早先为"JIT 代码调用 C++ 运行时"准备的桥接函数。编译出的代码不引用它们：它们会抛 C++ 异常，并且在 C++ 里嵌套地调用被调函数。有帧代码用的是同一文件里的 `jitHelperOper`、`jitHelperBytecode`、`jitHelperBranchArm`（不抛异常、不调用 Camel 函数），调用则交给驱动循环，见第 17 节。
 
 ---
 
@@ -473,9 +470,11 @@ extra 字段布局如下：
 | JOIN | 简化路径：`VLoad/VCopy + VStore`；普通路径：`VCopy + VTest + VCmovnz + VStore` | 对“仅 else-path 可达”的 JOIN，可直接选择 `w1`；若下一条是 `RETN`，可直接发射 `VRet` |
 | JUMP | `JmpRel32` 或直达 `VRet` | 当目标 `JOIN` 后紧跟 `RETN` 且读取该 `JOIN.result` 时，可直接返回 |
 | RETN | `VLoad → VRet` 或被前驱折叠掉 | `mov rax, vr; ret`；部分模式下由前驱 `JUMP/JOIN` 直接发射 `VRet` |
-| FUNC | NativeJitFuncCall | 只可能是自调用，详见第 5 节 |
-| TAIL | 写形参槽 + `JmpRel32(entry)` | 只可能是自尾调用，详见 5.3 |
-| OPER / CAST / COPY / FILL / CALL / ACCS | — | 含这些字节码的图在入口处被拒绝，不编译（下降代码保留但不可达，见第 8 节） |
+| FUNC | 无帧：NativeJitFuncCall；有帧：`ExitToDriver(Call)` | 无帧代码里只可能是自调用，详见第 5 节；有帧代码见 17.3 |
+| TAIL | 写形参槽 + `JmpRel32(entry)`；有帧代码里目标是别的图时 `ExitToDriver(Tail)` | 详见 5.3 与 17.3 |
+| OPER / CAST / COPY / FILL / ACCS | `CallHelper` | 只出现在有帧代码里，见 17.2 |
+| CALL / SCHD | `ExitToDriver(Interp)` | 只出现在有帧代码里，见 17.3 |
+| BRCH（match）/ JOIN（多于两臂） | `CallHelper` + 比较链 | 只出现在有帧代码里，见 17.2 |
 
 **比较-分支融合示例**：
 
@@ -498,7 +497,7 @@ jg  .recurse
 
 **BRCH 与 JOIN 的配合**：融合路径不写分支索引。只有当第一臂为空（它在跳转表里的那一项就是到 JOIN 的 JUMP，被下降成"取 w0 后离开"）时，JOIN 才直接取 w1；否则在两臂的入口（BRCH 之后的两项跳转表）分别写入索引 0 / 1，JOIN 按索引选择。臂的布局顺序是任意的（哪一臂落入 JOIN、哪一臂跳转由字节码编译器决定），不能假设"落入 JOIN 的一定是 else 臂"。
 
-**不支持的 opcode**（OPER, CAST, COPY, ACCS, FILL, CALL, SCHD，以及目标不是本图的 FUNC/TAIL）使该图在入口处被拒绝，不进入 JIT 缓存。
+**没有不支持的 opcode。** 含 OPER、CAST、COPY、ACCS、FILL、CALL、SCHD、match 或目标不是本图的 FUNC/TAIL 的图编译成有帧代码（第 17 节）。还会被拒绝的只有没有帧布局、字节码为空或 `BRCH` 之后跳转表不完整的图（`collectBlockers`），以及两次下降寄存器都分配不下的图。
 
 ---
 
@@ -533,8 +532,8 @@ jg  .recurse
 |------|-----------|------|
 | 自递归（如 fib with inline） | ✅ | 所有调用同图自调用，无外部依赖 |
 | 同图内函数互调 | ✅ | `isSameGraph == true` |
-| 跨图函数调用 | ❌ 不编译 | 入口处拒绝调用其他图的图 |
-| 包含 OPER 调用的函数 | ❌ 不编译 | 入口处拒绝含 OPER 的图 |
+| 跨图函数调用 | ❌ 有帧代码 | 调用交给驱动循环（17.3） |
+| 包含 OPER 调用的函数 | ❌ 有帧代码 | 算子经辅助函数执行（17.2） |
 
 ---
 
@@ -544,10 +543,10 @@ jg  .recurse
 
 | 约束 | 位置 | 说明 |
 |------|------|------|
-| BRCH 仅支持 `withCnt()==0` | `x64_backend.cpp` BRCH case | 带 with 参数的 BRCH 无法编译，整个图退回解释器 |
+| 无帧代码的 BRCH 只有 `withCnt()==0` | `collectRuntimeConstructs` | 带 case 值的 BRCH（match）使图成为有帧代码 |
 | 调用的参数个数不限 | `NativeJitCallParams::args` | 不超过 4 个走寄存器，更多的经 r11 / 机器栈逐个移动 |
-| 自调用的帧不超过 2 KB | `kMaxNativeFrameBytes` | 更大的帧配合 256 层递归会占用过多机器栈，该图不编译 |
-| 不支持的 opcode 导致整图不编译 | `describeFramelessSelfFuncFailure` | OPER, CAST, COPY, ACCS, FILL, CALL，以及目标不是本图的 FUNC/TAIL |
+| 无帧代码自调用的帧不超过 2 KB | `kMaxNativeFrameBytes` | 更大的帧配合上限那么深的递归会占用过多机器栈，该图编译成有帧代码 |
+| 需要运行时的构造使图成为有帧代码 | `collectRuntimeConstructs` | OPER, CAST, COPY, ACCS, FILL, CALL, SCHD, match，以及目标不是本图的 FUNC/TAIL |
 | 寄存器分配失败时重新下降 | `X64Backend::compileBytecode` | 见 2.3 阶段 3 |
 | peephole 不跨控制流做传播 | `mir_optimize.cpp` | jump target、jump/call/native-call/push-pop rdi 都视为 barrier |
 | 只读 slot cache 只缓存“从不写入”的槽位 | `x64_backend.cpp` | 避免在无 CFG/别名分析下把可变 slot 的旧值错误传播过跳转或写回 |
@@ -560,7 +559,7 @@ jg  .recurse
 |------|------|------|
 | Frame 池图匹配失败 → 慢路径 | Frame-based 调用 | 池顶 Frame 的 graph_ 与目标不匹配时走 C++ 分配 |
 | rbx 必须始终保持有效 | 所有 Frame-based 操作 | 任何使用 rbx 作为 scratch 的代码必须 push/pop 保护 |
-| 递归深度上限 | 原生自调用 | 与解释器相同的 256，由 r15 计数，超限给出 `MaxRecursionDepthExceeded`（第 16 节） |
+| 递归深度上限 | 原生自调用 | 与解释器相同的上限（默认 1000，`--max-recursion-depth`），由 r15 计数；另外每次调用检查机器栈余量。两者超限都给出 `MaxRecursionDepthExceeded`（第 16 节） |
 | `fastop[1] == 0` 语义 | 跨图 JIT 状态检查 | 利用"第一条字节码的 targetPC 不会是 0"的不变量作为 JIT 编译标记 |
 | 静态常量内联以数值热点为主 | 编译期常量折叠 | 更复杂的引用/对象语义仍需后续更强类型约束 |
 
@@ -608,10 +607,19 @@ camel fib.cml std::inline std::asm    # 输出 x64 汇编（含偏移和指令�
 ### 14.2 调用路径
 
 ```
-解释器 FUNC/TAIL
-  ├─ jitCache 命中 → fn(frame->slotBase(), ctx)     [C++ wrapper 入口]
-  ├─ shouldJit(count) → compile → fn(...)
-  └─ 否则 → call(pc, frame) [解释执行]
+解释器 FUNC
+  ├─ 目标已编译 → invokeOwnedJitFrame：无帧代码直接进入；有帧代码进入驱动循环 runFramedJit
+  ├─ shouldJit(count) → compile → 同上
+  └─ 否则 → 解释执行
+
+解释器 TAIL，目标已编译
+  ├─ 当前激活是这次 call() 的根 → 把准备好的帧和入口交还调用者（CallResult::tailFn），由它运行
+  └─ 否则 → invokeOwnedJitFrame，结果当作被替换的激活的返回值
+
+有帧代码（第 17 节）
+  ├─ OPER / CAST / COPY / FILL / ACCS / match → call 辅助函数 → 检查故障
+  ├─ FUNC / 跨图 TAIL / CALL / SCHD → 记下 kind、pc、续点 → ret 回包装器 → 驱动循环执行 → 从续点再进入
+  └─ 自尾调用 → 查回收器标志（有请求则交给驱动循环）→ 改写形参槽 → jmp body 入口
 
 JIT body 内 FUNC（自调用）
   └─ sub r15,1 → 栈上分配帧 → call body → inc r15        [无 Frame，无 C++]
@@ -656,21 +664,177 @@ JIT 代码没有展开信息，C++ 异常穿不过它的栈帧。但编译出的
 | 整数除数为零（IDIV / LDIV） | 除法之前 | `RuntimeDiag::DivisionByZero`，位置是该除法 |
 | 浮点除数等于零（FDIV / DDIV，±0.0） | 除法之前 | 同上（解释器对浮点除零同样报故障） |
 | 原生自调用超过递归深度上限 | 调用之前 | `RuntimeDiag::MaxRecursionDepthExceeded`，位置是该调用，图名与上限同解释器 |
+| 原生自调用时机器栈将满 | 调用之前 | 同一个 `MaxRecursionDepthExceeded`，消息与解释器的嵌套调用相同（`N open calls: the native stack of the thread, K KiB, is full`） |
 
 最小整数除以 -1 不是故障：结果回绕（各后端一致）。整数取模是 `OPER`，含它的图不编译，由解释器检查。
 
 ### 16.4 递归深度的计数
 
-解释器的上限是 `FastVMSchedPass::maxRecursionDepth_`（256），按 `push` 的次数计。为了让同一个递归无论由谁执行都在同一次调用上超限：
+解释器的上限是 `FastVMSchedPass::maxRecursionDepth_`（默认 1000），按 `push` 的次数计。为了让同一个递归无论由谁执行都在同一次调用上超限：
 
 - 解释器从字节码 `FUNC` 进入 JIT 代码时照常 `push` / `pop`（`gotovm.cpp` / `casevm.cpp`）。
 - `invokeOwnedJitFrame` 进入前把 `maxRecursionDepth_ - stackDepth_` 写入 `JitContext::depthBudget`，包装器装入 r15。
 - 每次原生自调用 `sub r15, 1`，借位即故障；返回后 `inc r15`。尾调用不计数。
 
-### 16.5 扩展时的注意事项
+**机器栈的余量。** 上限可以设到一百万，而原生自调用每层都占机器栈（`depth` 每层 112 字节，8 MiB 的栈大约放七万层），所以只计数不够。`invokeOwnedJitFrame` 在写入 `depthBudget` 的同时把 `execute::nativeStackFloor()` 写入 `JitContext::stackLimit`：当前线程栈的下界加保留量（栈的十六分之一，至少 128 KiB，与解释器 `nativeStackNearlyExhausted` 用的是同一个保留量；栈界读不到或 `CAMEL_NATIVE_STACK_GUARD=0` 时为 0，任何栈指针都不低于它）。栈界按线程读取（`thread_local`），所以由哪个线程进入原生代码就用哪个线程的栈。每次原生自调用在计数之后执行 `cmp rsp, [ctx + stackLimit]; jb .fault_stack`。故障桩除了记录种类与 pc，还把 r15 存回 `depthBudget`，`raiseJitFault` 据此算出"已有多少次调用未返回"。故障出口本身不使用栈；保留量留给之后 C++ 一侧构造诊断。对不递归或浅递归的路径，代价是每次原生调用多一条比较和一条不跳转的条件跳转（fib(35)：改动前后在测量噪声之内）。
 
-这条出口依赖"JIT 代码不调用 C++"。一旦放开 `OPER` 等需要 trampoline 的字节码：
+### 16.5 有帧代码里的故障出口
 
-- trampoline 必须接住 C++ 异常，把它存进 `JitContext`（例如 `std::exception_ptr`）并正常返回；JIT 代码在调用之后检查并走故障出口；`invokeOwnedJitFrame` 重新抛出。
-- 如果 trampoline 会再次进入 JIT 代码或解释器，中间的 C++ 帧属于内层的包装器激活，仍然成立；但要保证 trampoline 持有的资源在返回前释放。
-- 更彻底的做法是为 JIT 代码注册展开信息（Linux 上 `__register_frame` 的 DWARF CFI，Windows 上 `RtlAddFunctionTable`），那样 C++ 异常可以直接穿过，也能在调试器和崩溃转储里看到 JIT 帧。
+有帧代码调用 C++ 辅助函数，所以多一种故障：辅助函数接住的 C++ 异常（`JitFaultKind::PendingException`）。辅助函数把异常存进 `JitContext::pending` 后正常返回，代码在每次辅助函数调用之后检查 `faultKind`，非零就走同一个公共出口；驱动循环重新抛出。见 17.2。
+
+为 JIT 代码注册展开信息（Linux 上 `__register_frame` 的 DWARF CFI，Windows 上 `RtlAddFunctionTable`）可以让 C++ 异常直接穿过，也能在调试器和崩溃转储里看到 JIT 帧；没有做。
+
+---
+
+## 17. 有帧代码（framed code）
+
+### 17.1 模型
+
+无帧代码只能表达不需要运行时的图。其余的图编译成有帧代码，它与解释器共用同一套状态：
+
+- **每个激活都有帧池里的一个 `Frame`**，`slot[0]` 是它的 `Frame*`（辅助函数由此找到帧）。没有机器栈上的帧。
+- **两条字节码之间，激活算出的一切都在帧里**：没有值留在寄存器或机器栈上。这由寄存器分配保证（辅助函数调用和离开点都算作调用，值不能跨过它们，见 2.3 阶段 3），死写消除在这些位置把所有槽视为活跃（`eliminateDeadFrameStores`）。
+- 因此它可以调用读写帧的 C++ 辅助函数，也可以在任意一条字节码处停下、之后从这条字节码后面再进入。
+- 对象常量不烧进代码：有帧代码从静态区读它（`VLoadFromMemAt`），回收器在静态区里维护这个引用。数值常量仍是立即数。（对象会移动时无帧代码也这样读，见 17.4。）
+
+由此得到一条不变式：**Camel 函数被有帧代码"调用"而运行时，以及回收器运行时，机器栈上没有编译出的代码**（例外见 17.4）。有帧代码在安全点上的"栈映射"是空的。
+
+### 17.2 辅助函数
+
+`MirOp::CallHelper` 调用 `slot_t helper(slot_t *slots, void *ctx, size_t pc)`（`trampoline.cpp`），做解释器对同一条字节码做的事：
+
+| 字节码 | 辅助函数 | 说明 |
+|---|---|---|
+| `OPER` | `jitHelperOper` | 用 `FrameArgsView` 调用算子，结果写进结果槽 |
+| `CAST` / `COPY` / `ACCS` / `FILL`，多于两臂的 `JOIN` | `jitHelperBytecode` | 在帧上执行这条字节码 |
+| 带 case 值的 `BRCH`（match） | `jitHelperBranchArm` | `selectBranchArm` 选出臂，下标写进结果槽并返回；代码用比较链跳到 `BRCH` 后面跳转表的那一项 |
+
+SysV 下的序列是 `push rdi; mov rsi, r13; mov edx, pc; mov rax, helper; call rax; pop rdi; cmp dword [r13+16], 0; jne .fault_exit`。body 入口处 RSP 模 16 余 8，`push rdi` 之后调用点对齐。
+
+**辅助函数不抛异常。** 算子的故障（`RuntimeFault`）先按这条字节码定位（与解释器相同的 `makePcExecutionSite`），然后任何异常都存进 `JitContext::pending`，`faultKind` 置为 `PendingException`，正常返回；代码走第 16 节的公共出口，驱动循环释放帧后重新抛出。**辅助函数不调用 Camel 函数，也不到达回收器的安全点**（分配不是安全点）。
+
+### 17.3 离开与再进入：驱动循环
+
+调用 Camel 函数的字节码不在编译出的代码里执行。`MirOp::ExitToDriver` 把续点地址（`lea r11, [rip+…]`）、离开的种类和字节码的 pc 写进 `JitContext`（`resumeAddr`、`exitKind`、`exitPc`），然后 `ret` 回包装器；有帧代码的 body 在字节码边界上不占机器栈，所以随处可以 `ret`。有帧代码的包装器在 `call body` 之前多一步：`resumeAddr` 非零就 `call` 那个地址。
+
+驱动循环是 `FastVMSchedPass::runFramedJit`（`invokeOwnedJitFrame` 对有帧代码转到它）。每种离开它都照解释器的做法处理：
+
+| `JitExitKind` | 字节码 | 驱动循环做什么 |
+|---|---|---|
+| `Call` | `FUNC`（目标是本图或别的图） | 安全点轮询、计热度（`materializeCallTarget`）、`push(pc, frame)`（递归上限在这里检查）、取新帧、拷实参。被调图有有帧代码：它成为当前激活，循环继续，**不在机器栈上嵌套**；是无帧代码：直接运行到返回；没有编译：`callBorrowed` 解释执行 |
+| `Tail` | 目标是别的图的 `TAIL`，或回收器有请求时的自尾调用 | 安全点轮询、取实参、释放当前帧、取新帧，然后同上，但不 `push` |
+| `Interp` | `CALL`、`SCHD` | 在当前帧上执行这一条字节码（经函数值的调用、高阶算子、`attempt`），与解释器一样在机器栈上嵌套并计数 |
+| `Return` | `RETN` | 释放帧；回到驱动循环的入口深度就返回，否则 `pop()`、把结果写进调用方的结果槽、从调用方的续点再进入 |
+
+有帧图之间的调用因此只用解释器的调用栈（`pcStack_` / `frameStack_`，外加续点的 `resumeStack_`），**递归上限、能到达的深度都与 `std::fvm` 相同**：上限一百万时 `depth(900000)` 在 `std::jit` 下算得完，与此前相同。故障在驱动循环里的处理也与解释器相同：释放它持有的帧、把调用栈退回入口深度、给还没有位置的故障补上当前字节码的位置。
+
+**自尾调用**仍是跳回入口（5.3）。这是一个没有调用的循环，所以跳之前轮询回收器的标志字节（`MirOp::SafepointPoll`：`cmp byte [flag], 0`）；标志置位时以 `Tail` 离开，由驱动循环在机器栈上没有编译代码的状态下到达安全点并完成这次尾调用。
+
+**解释器把对已编译图的尾调用交给编译出的代码。** 此前解释器遇到目标已编译的 `TAIL` 仍然解释执行目标，一个只从外面进入一次、之后自尾调用的循环即使被编译也永远不会以原生代码运行。现在：当前激活是这次 `callBorrowed` 的根时，解释器把准备好的帧和入口交还给调用者（`CallResult::tailFn`），由调用者（`call()` 或驱动循环）运行，解释器自己已经从机器栈上退出；否则就地 `invokeOwnedJitFrame`，结果当作被替换的激活的返回值。编译图与未编译图互相尾调用的循环因此不增长机器栈。
+
+### 17.4 与回收器的关系
+
+两种代码各自靠不同的理由在没有栈映射的情况下与回收器相容，标记-清除与分代（会移动对象）两种回收器都适用（规则的总表在 `36_gc_handle_rules.md` 第 4 节）：
+
+- **无帧代码**把帧放在机器栈上、值放在寄存器里，回收器看不见也不会更新它们；它在进入到返回之间不调用任何东西、不轮询，所以那期间不会回收。分配器拒绝在它之下到达安全点：`mm::detail::nativeCodeDepth` 只在 `invokeOwnedJitFrame` 进入无帧代码的那次调用前后计数；有帧代码走 `runFramedJit`，不在其中。
+- **有帧代码**的安全点与解释器的在同样的位置（`FUNC` / `TAIL` / `CALL`、高阶算子的每个元素、自尾调用的轮询），都在驱动循环或解释器里，此时它已经 `ret`。帧池的帧是已注册的根，回收器按帧布局扫描并就地更新；在辅助函数调用、离开点与轮询处没有值活在寄存器或机器栈上（寄存器分配拒绝跨过它们的值，之后代码重新读帧），所以这些位置上它的"栈映射"是空的。
+- **由此得出的结论（原 `DESIGN-QUESTION(jit-safepoint-under-framed-code)`）**：自己会到达安全点的算子（调用 Camel 函数的 C++ 算子；标准库的高阶算子是 `SCHD`，不在此列）经 `jitHelperOper` 调用时，机器栈上有它上面的有帧代码。这是允许的：那段代码不持有回收器需要看见或更新的东西。"编译出的代码之下不得有安全点"是关于无帧代码的规则。
+- **对象常量。** 回收器移动对象时（`--gc generational`），两种代码都不含对象的地址：对象常量在每次使用时从图的静态区读取，静态区是回收器就地更新的根（`36_gc_handle_rules.md` 第 5 节）。标记-清除下无帧代码仍把它当作立即数。唯一的例外是自调用或自尾调用在多于 4 个（经寄存器传递的上限）实参里传一个对象常量：那些实参作为立即数拷贝，这样的图在分代下编译成有帧代码（`collectRuntimeConstructs` 的 `object-constant-arg`）；在 17.5 的程序里没有出现。此前分代模式下含对象常量的图一律留给解释器，`test/cases/perf/gc/jit_const.cml`（返回字符串常量的双递归）因此慢 21 倍（`37_generational_gc_report.md` 6.1）；现在 `jit_const(36)` 在 `std::inline std::jit` 下标记-清除 102 毫秒、分代 101 毫秒，同一程序分代下的 `std::inline std::fvm` 是 2742 毫秒（各 5 轮中位数，2026-10-14）。
+- 验证：`test/plans/feat/linear/jit_framed.plan.toml` 的 `gc_stress` 用例每第 7 个（循环用例每个）安全点回收并校验堆；`*.moving` 用例在安全点投毒（`CAMEL_GC_POISON=1`：每个安全点移动全部年轻对象并毒化原处）下、且每张图第一次调用就编译时运行；完整测试集在两种回收器下各跑一遍，随机程序也在两种回收器与投毒下跑过（17.7）。
+
+### 17.5 覆盖面统计
+
+`CAMEL_FVM_STATS=<文件>` 让 `std::fvm` / `std::jit` 在结束时写出每张图的字节码数、解释器执行了其中多少条、JIT 的结论与原因（`fastvm_stats.cpp`）。`test/tools/jitcov/jitcov.py` 用它对一批程序在三条流水线下各跑 `std::fvm` 与 `std::jit`，汇总成表：
+
+```
+python3 test/tools/jitcov/jitcov.py --timeout 60 --out DIR      # 仓库里全部 .cml
+python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
+```
+
+**测量（2026-10-13，Linux x86-64，release）。** 程序是仓库里全部 `.cml`：`test/cases`、`examples`、`docs/tutorial/examples`、`benchmarks`，共 1015 个，其中 306 个在这种跑法下没有记录（不是完整程序、需要输入或模块不可用）。"改前"是只有无帧代码时（提交 `feat(jit): coverage statistics …`，当时的主干，893 + 85 个程序，每次运行限时 20 秒），"改后"是本节的实现（每次运行限时 60 秒）。"已编译"指编译并进入过；其余的图能编译但没有热到被编译（一张图在同一个调用点被调用第二次时才编译）。
+
+| 程序 | 流水线 | 图数（改前 → 改后） | 已编译：改前 | 已编译：改后（无帧 + 有帧） | 被拒绝：改前 → 改后 | 不经解释器执行的字节码：改前 → 改后 |
+|---|---|---|---|---|---|---|
+| test/cases | `std::jit` | 5881 → 6162 | 120（2.0%） | 956（15.5%；130 + 826） | 4919 → 0 | 0.0% → 98.0% |
+| test/cases | `std::inline std::jit` | 5889 → 6162 | 69（1.2%） | 404（6.6%；71 + 333） | 4759 → 0 | 47.5% → 97.7% |
+| test/cases | `std::opt std::jit` | 6527 → 6826 | 59（0.9%） | 342（5.0%；61 + 281） | 5252 → 0 | 37.5% → 97.7% |
+| examples | `std::jit` | 623 → 637 | 17（2.7%） | 126（19.8%；17 + 109） | 581 → 0 | 0.0% → 99.9% |
+| examples | `std::inline std::jit` | 623 → 637 | 2（0.3%） | 17（2.7%；2 + 15） | 575 → 0 | 98.6% → 99.9% |
+| examples | `std::opt std::jit` | 639 → 653 | 2（0.3%） | 18（2.8%；2 + 16） | 589 → 0 | 98.6% → 99.9% |
+| tutorial | `std::jit` | 169 → 171 | 2（1.2%） | 18（10.5%；2 + 16） | 132 → 0 | 0.0% → 99.9% |
+| tutorial | `std::inline std::jit` | 169 → 171 | 5（3.0%） | 6（3.5%；5 + 1） | 126 → 0 | 21.3% → 99.9% |
+| tutorial | `std::opt std::jit` | 173 → 175 | 3（1.7%） | 4（2.3%；3 + 1） | 127 → 0 | 21.3% → 99.9% |
+| benchmarks | `std::jit` | 342 → 342 | 0 | 38（11.1%；0 + 38） | 334 → 0 | 0.0% → 54.6% |
+| benchmarks | `std::inline std::jit` | 342 → 342 | 0 | 37（10.8%；0 + 37） | 334 → 0 | 0.0% → 54.1% |
+| benchmarks | `std::opt std::jit` | 443 → 443 | 0 | 33（7.4%；0 + 33） | 435 → 0 | 0.0% → 39.6% |
+
+"不经解释器执行的字节码"是 `1 - 解释器在 std::jit 下执行的条数 / 在 std::fvm 下执行的条数`；驱动循环替有帧代码执行的调用不计入解释器。`benchmarks` 下能出记录的程序只执行几千条字节码，大部分图只进入一次。
+
+**两种回收器（2026-10-14，主干 v0.2.9 之上）。** 同样的跑法，此时 `test/cases` 有 1010 个程序（325 至 327 个没有记录），`benchmarks` 有 43 个（16 个没有记录）。两种回收器下都没有被拒绝的图，也没有因为回收器而少编译的图：
+
+| 程序 | 流水线 | 已编译：标记-清除（无帧 + 有帧） | 已编译：分代（无帧 + 有帧） | 不经解释器执行的字节码（两者相同） |
+|---|---|---|---|---|
+| test/cases | `std::jit` | 992（136 + 856） | 1000（136 + 864） | 96.5% |
+| test/cases | `std::inline std::jit` | 420（77 + 343） | 421（77 + 344） | 96.1% |
+| test/cases | `std::opt std::jit` | 348（65 + 283） | 348（65 + 283） | 96.0% |
+| examples | `std::jit` | 126（17 + 109） | 126（17 + 109） | 99.9% |
+| examples | `std::inline std::jit` | 17（2 + 15） | 17（2 + 15） | 99.9% |
+| tutorial | `std::jit` | 18（2 + 16） | 18（2 + 16） | 99.9% |
+| benchmarks | `std::jit` | 67（0 + 67） | 67（0 + 67） | 98.5% |
+| benchmarks | `std::inline std::jit` | 44（2 + 42） | 44（2 + 42） | 98.1% |
+
+分代一列多出的几张图来自多出记录的两个程序。需要运行时的构造（标记-清除，`std::jit`，5520 张图）按图数是 `OPER` 45.0%、没有静态区 25.8%、`FILL` 24.6%、`CALL` 20.5%、跨图 `FUNC` 20.4%，按执行量是跨图 `TAIL` 70.4%、没有静态区 14.1%、跨图 `FUNC` 13.1%、`OPER` 11.4%，与 2026-10-13 的分布相同。
+
+**改前被拒绝的原因**（test/cases，`std::jit`，4919 张被拒绝的图；一张图含几种就各计一次；"权重"是这些图在 `std::fvm` 下执行的字节码占全部的比例，"唯一"是只含这一种的图）：
+
+| 构造 | 含它的图 | 权重 | 唯一原因的图 | 权重 |
+|---|---|---|---|---|
+| `OPER` | 2306（46.9%） | 8.5% | 414 | 0.8% |
+| `FILL` | 1328（27.0%） | 0.1% | 147 | 0.0% |
+| 没有静态区（图里没有常量） | 1172（23.8%） | 15.4% | 1172 | 15.4% |
+| `CALL` | 1050（21.3%） | 0.0% | 609 | 0.0% |
+| 目标是别的图的 `FUNC` | 1041（21.2%） | 14.2% | 99 | 13.8% |
+| `ACCS` | 766（15.6%） | 0.1% | 0 | 0.0% |
+| 目标是别的图的 `TAIL` | 581（11.8%） | 69.6% | 304 | 62.2% |
+| `SCHD` | 203（4.1%） | 0.0% | 14 | 0.0% |
+| `CAST` | 121（2.5%） | 0.0% | 33 | 0.0% |
+| `COPY` | 86（1.7%） | 0.0% | 3 | 0.0% |
+| match 的 `BRCH` / `JOIN` | 34 / 9 | 0.0% | 0 | 0.0% |
+
+按图数最多的是算子（出现最多的是 `:io/println`、张量算子、`:str/format`、`:op/idx_str`、`:var/get`），按执行量最多的是跨图的尾调用与调用：不经 `std::inline` 时分支的每个臂是一张单独的图，循环的每一轮都要跨图。`std::inline std::jit` 下按权重排第一的是 `OPER`（19.2%）。改后这些构造不再拒绝图，同一张表在工具的输出里变成"哪些构造使图成为有帧代码"，分布与上表相同（改后 `std::jit` 下 5172 张图需要运行时，被拒绝的 0 张）。
+
+### 17.6 性能
+
+`test/tools/jitcov/workloads.cml` 有九个负载，`test/tools/jitcov/bench.py` 交替运行各个变体并报告最小值与中位数。下表是 2026-10-14 在 Linux x86-64 上（主干 v0.2.9 之上）各 7 轮的中位数（毫秒，含进程启动与编译；`/proc/loadavg` 的一分钟值在 9.3 到 12.1 之间，机器上有别的任务，数值只说明量级）。"不编译"是 `std::jit` 加 `CAMEL_JIT_HOT_THRESHOLD=1000000000`：同一个解释器、同一套热度记账，但没有图被编译。
+
+| 负载 | `std::fvm` | `std::jit` | `std::jit`，不编译 | `std::inline std::fvm` | `std::inline std::jit` | 分代：`std::inline std::fvm` | 分代：`std::inline std::jit` |
+|---|---|---|---|---|---|---|---|
+| `fib`（N=30） | 152.0 | 176.9 | 183.4 | 136.9 | 30.5 | 133.5 | 32.5 |
+| `collatz`（60000） | 729.9 | 700.9 | 866.7 | 454.6 | 169.5 | 468.0 | 174.8 |
+| `strings`（600000） | 171.2 | 166.4 | 187.7 | 162.9 | 145.1 | 120.0 | 103.7 |
+| `arrays`（300000） | 97.4 | 104.0 | 115.8 | 108.9 | 96.3 | 95.3 | 77.9 |
+| `mutual`（4000000） | 345.4 | 298.6 | 387.7 | 234.4 | 190.2 | 246.5 | 202.8 |
+| `structs`（1000000） | 259.7 | 258.1 | 263.5 | 227.7 | 187.8 | 183.9 | 135.5 |
+| `calls`（2000000） | 341.1 | 450.4 | 441.1 | 233.8 | 79.8 | 192.0 | 84.6 |
+| `hof`（600000） | 128.4 | 128.8 | 138.3 | 133.8 | 137.6 | 118.8 | 114.3 |
+| `float`（3000000） | 339.0 | 321.3 | 436.7 | 247.2 | 142.7 | 263.3 | 130.6 |
+
+`std::inline` 之后编译出的代码在两种回收器下都不比 `std::fvm` 慢（`hof` 在噪声之内），`fib`、`collatz`、`calls`、`float` 快 1.7 到 4.5 倍。不经 `std::inline` 时七个负载与 `std::fvm` 相差在一成之内或更快，**`fib` 与 `calls` 慢约 16% 与 32%**。
+
+**原因不在编译出的代码里。** "不编译"一列与 `std::jit` 一列在这两个负载上几乎相同（183 对 177、441 对 450），都比 `std::fvm` 慢：慢在 `std::jit` 下的解释器自己的调用路径（每次调用的热度计数与调用目标的查询 `materializeCallTarget`、`invokeCallOrJit` 等），只有无帧代码时就已如此（改动前各一次的测量：`fib(27)` 83 对 61 毫秒，`calls` 161 对 132 毫秒）。在其余七个负载上编译出的代码把这份开销挣了回来；这两个负载几乎只做跨图调用，每次调用在有帧代码里是一次离开与再进入，挣回的很少。有帧代码每次离开再进入要过两次包装器；把有帧图之间的调用做成"辅助函数完成压栈与取帧、代码直接跳到被调方 body"可以去掉这两次包装器；解释器一侧的记账可以在目标编译失败或已编译后不再进行。两者都没有做。
+
+### 17.7 验证
+
+- `test/plans/feat/linear/jit_framed.plan.toml`：数值、故障（算子的故障、编译代码自己检查的除零、递归超限，各有隔离与不隔离两种）、三十万轮的循环、每个安全点都回收，在四个后端与 `std::inline std::jit` 上一致，并断言函数确实被编译成了预期的那种代码。
+- 随机程序（`test/tools/progen`，参考求值器独立于各后端）：`progen.py diff --matrix full --backends jit`（25 种重写序列各接 `std::jit`，加不带遍的运行，每个程序 26 格）。种子 20001–20300：7800 格，7790 格与参考一致，10 格是合法的拒绝（`MacroEvaluationFailed`），没有坏格。加 `CAMEL_JIT_HOT_THRESHOLD=0`、种子 21001–21400：10400 格，10369 格一致，5 格合法拒绝，26 格是同一个程序（种子 21364）在全部 26 格上的 `IndexOutOfRange`，包括不带遍的节点虚拟机，所以与 JIT 无关：程序里是 `false && xs[2].0`，参考求值器对 `&&` 短路，而实现先求了右边。
+- `test/tools/jitcov/deep_recursion.sh`：上限 100000 与 1000000、递归 50000 与 900000 层、机器栈 256 KiB 到 8 MiB、`std::nvm` / `std::fvm` / `std::jit` / `std::prl` 及其与 `std::inline`、`std::opt` 的组合、直接递归、经函数值、在 `map` 元素里、在 `attempt` 里，共 256 次运行：96 次算完，160 次给出带位置的 `MaxRecursionDepthExceeded`，没有一次以信号结束。
+- 2026-10-14（主干 v0.2.9 之上）：完整默认测试集在标记-清除下 4418 个中 4413 个通过，5 个因机器负载超时（都不经 JIT：`unordered_foreach_smoke.nvm`、`export_tree_recursion`、三个 `gc.collection_trees_tiny_*_young_nvm`），单独重跑全部通过；`CAMEL_GC=generational` 下 4418 个全部通过。默认测试集本身含安全点投毒的扫测（`mm.gc_poison_sweep`）。随机程序（生成器 VERSION 3，全矩阵 101 格）：种子 30001–30150 标记-清除 15150 格、30151–30300 分代 15150 格，全部与参考一致；种子 30301–30400 在投毒且第一次调用即编译下跑 `std::jit` 的 26 格，2600 格全部一致。`deep_recursion.sh` 在两种回收器下各 256 次，没有一次以信号结束。
+- `CAMEL_JIT_HOT_THRESHOLD=0` 让图在第一次调用时就编译（默认是同一调用点的第二次），用于让短程序也跑在编译出的代码上。
+- 调试器下 `std::jit` 按 `std::fvm` 运行（`35_debugger.md`）。带观察者钩子的解释循环（`inspectvm.cpp`）不把尾调用交给编译出的代码，驱动循环在有观察者时经 `call()` 运行解释的被调方，所以钩子不会被绕过。
+
+### 17.8 没有做的
+
+- Win64：`CallHelper`、`ExitToDriver`、包装器的续点分支按 Win64 的约定写了，没有编译或运行过。
+- 有帧图之间的原生调用与解释器一侧热度记账的精简（见 17.6）；算子的原生下降（整数取模、数组长度与下标等仍经辅助函数）。
+- `CALL` 与 `SCHD` 由驱动循环按解释器的方式嵌套执行，深度受机器栈限制，与 `std::fvm` 相同。
+- 为 JIT 代码注册展开信息（16.5）。

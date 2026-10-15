@@ -47,14 +47,19 @@ ctrlExpr   : if logicalOr then blockExpr (else blockExpr)?
 waitExpr   : wait? assignExpr
 assignExpr : logicalOr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOr)?
 logicalOr  : logicalAnd ('||' logicalAnd)*
-logicalAnd : equality ('&&' equality)*
+logicalAnd : or ('&&' or)*
+or         : and ('|' and)*
+and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
 relational : additive (('<' | '>' | '<=' | '>=') additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
-multiplicative : nullable (('*' | '/' | '^' | '@' | '%') nullable)*
+multiplicative : power (('*' | '/' | '@' | '%') power)*
+power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
-unary      : link (as type)? | ('!' | '-' | '~') link
-link       : comp (('->' | '?->') comp)*
+unary      : link (as type)?
+link       : neg (('->' | '?->') comp)*
+neg        : ('-' | '!' | '~') negPower | comp
+negPower   : ('-' | '!' | '~') negPower | comp ('^' negPower)?
 comp       : anno ('..' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
@@ -88,30 +93,32 @@ Every production of the language, one for one with the parser: each production i
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | dataDecl | funcDecl | typeDecl | useDecl
-stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt
+                     | dataDecl | funcDecl | typeDecl
+stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt
 blockStmt          : 'wait'? stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
-moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
+moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
 moduleDecl         : 'module' identDef
-importDecl         : 'import' (moduleName | (identDef | bracedIdents) 'from' moduleName)
+importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from' moduleName)
+bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
+importItem         : identDef ('as' identDef)?
 exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | useDecl
+                     | typeDecl | dataDecl
 funcAnno           : '@' identRef angledValues?
 funcDecl           : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
                      'func' identRef parentParams (':' typeExpr)? stmtBlock
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
+                     | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : implMark? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
-useDecl            : 'use' (identDef '=')? identRef
 retStmt            : ('return' | 'throw') dataList
 implMark           : 'inner' | 'outer'
 modifiers          : ('atomic' | 'shared' | 'sync' | 'macro')+
@@ -125,7 +132,7 @@ keyParamPair       : 'var'? identDef ':' typeExpr ('=' dataExpr)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
-dataExpr           : waitExpr | ctrlExpr
+dataExpr           : waitExpr | ctrlExpr | loopExpr
 waitExpr           : 'wait'? assignExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
                      | 'match' identRef '{' matchCase+ '}'
@@ -133,15 +140,19 @@ ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 assignExpr         : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&='
                      | '|=') logicalOrExpr)?
 logicalOrExpr      : logicalAndExpr ('||' logicalAndExpr)*
-logicalAndExpr     : equalityExpr ('&&' equalityExpr)*
+logicalAndExpr     : orExpr ('&&' orExpr)*
+orExpr             : andExpr ('|' andExpr)*
+andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
-multiplicativeExpr : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
+multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
+powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-                     | ('!' | '-' | '~') linkExpr
-linkExpr           : compExpr (('->' | '?->') compExpr)*
+linkExpr           : negExpr (('->' | '?->') compExpr)*
+negExpr            : ('-' | '!' | '~') negPower | compExpr
+negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
@@ -166,6 +177,10 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
                      | '{' (pairedValues | identList)? ','? '}' | '_'
+loopExpr           : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+loopState          : identDef | parentIdents
+loopFor            : 'for' identDef 'in' logicalOrExpr
+loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
 typeExpr           : unionType (('?' | '!')+ | '?' unionType)?
 unionType          : interType ('|' interType)*
@@ -203,7 +218,7 @@ Where there is more than one reading, the following rules decide, each on a boun
 | Arguments: positional or named | named from the first `name :` on |
 | `T ?` | the reserved form `T ? U` when a type can start after the `?` on the same line, the nullable mark otherwise |
 | `+` `-` `^` after a type | part of the type when a type can start after it (`x as T + U` casts to the type `T + U`) |
-| `-` before a number | the sign of the literal when it touches the number and no value precedes it |
+| Unary `-` | always an operator; looser than `^`, tighter than `->`; applied directly to a number it gives the negative literal |
 
 Related files:
 
@@ -233,12 +248,11 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Struct destructuring `let { x, y } = p`, array destructuring `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring is available) |
 | Keyword arguments `f(a: 1)` | `FeatureNotSupported` | Pass by position |
 | Parameter default values `b: int = 5` | `FeatureNotSupported` | Overloading; `with` parameters |
-| `use name = qualified-name` | `FeatureNotSupported` | `import { name } from module`; to rename, use `let new-name = module::name` ([5.5](05_modules.md#55-use)) |
 | Slice subscripts `xs[a:b]`, `xs[a:b:c]` | `SemanticDiag::NoMatchingFunction` (there is no dedicated diagnostic: it is reported as "the subscript operator has no overload that accepts these arguments") | `xs->slice<a, b>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
 | `typeof e`, `T ? U`, `name of T` | `FeatureNotSupported` | None |
 | `keyof`, `enum` | Syntax error | None |
-| `for`, `while` loops | Syntax error (there is no loop syntax) | Recursion; `map`/`filter`/`reduce`/`foreach` |
+| `loop state = init (for x in xs)? (while cond)? { body }` | `ConstructNotSupported` (the syntax and the AST are in place, the `LOOP` node of the graph is not; the notation is provisional) | Recursion; `map`/`filter`/`reduce`/`foreach` |
 | Modifiers `atomic`, `shared`, `inner`, `outer` | No diagnostic; no semantics | Do not write them |
 
 In addition there are a few things that "can be written but cannot be used at present": the union type `A | B` (values of the member types cannot enter it), and a declaration with a function type `let f: (x: int) => int = g`.

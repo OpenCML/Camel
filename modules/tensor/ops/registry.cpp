@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -134,7 +134,7 @@ class OpDefResolver final : public FuncTypeResolver {
         for (Type *t : norm) {
             normParams.emplace_back(t, false);
         }
-        return FunctionType::create(param_vec_t{}, std::move(normParams), *result, modifiers);
+        return FunctionType::create(param_vec_t{}, normParams, *result, modifiers);
     }
 
     std::optional<std::string> explainRejection(
@@ -180,14 +180,14 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         byUri_.emplace(uri, entries_.size());
         // Generic graph passes and autodiff engines see the definition through the core
         // registries.
-        camel::core::OperatorTraitsRegistry::instance().set(
+        camel::core::OperatorTable::instance().set(
             uri,
             {.pure = def.traits.pure, .elementwise = def.traits.elementwise});
         if (def.vjp) {
             camel::core::DerivativeRegistry::instance().setRule(uri, def.vjp);
         }
         if (def.foldFromTypes) {
-            camel::core::OperatorTypeFolderRegistry::instance().set(
+            camel::core::OperatorTable::instance().setTypeFolder(
                 uri,
                 [fold = def.foldFromTypes](
                     std::span<Type *const> types,
@@ -214,7 +214,7 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         // loses its static shape.
         const Entry &entry = entries_.back();
         if (entry.def->exports.empty() && entry.def->infer) {
-            camel::core::OperatorResolverRegistry::instance().set(
+            camel::core::OperatorTable::instance().setResolver(
                 entry.uri,
                 std::make_shared<OpDefResolver>(entry.def));
         }

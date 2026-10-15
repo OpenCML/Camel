@@ -52,8 +52,10 @@ safepoints and nowhere else. A safepoint is reached by exactly these:
 - **An operator call.** An operator (`slot_t op(ArgsView &with, ArgsView &norm, Context &)`)
   runs from entry to return without a safepoint, unless it does one of the things in the table
   itself (rule 5). Under the parallel scheduler an operator runs inside a region.
-- **JIT-compiled code.** It neither calls out nor polls; a safepoint reached while compiled code
-  is on the stack is refused (`GC invariant violated: ... JIT-compiled code is on the stack`).
+- **Frameless JIT-compiled code** (a graph that needs nothing of the runtime). It neither calls
+  out nor polls; a safepoint reached while it is on the stack is refused (`GC invariant
+  violated: ... JIT-compiled code is on the stack`). Framed code, the other kind `std::jit`
+  makes, reaches safepoints where the interpreter does (section 4).
 
 **A call**, in "across calls": one invocation of an operator, one node of the macro evaluator,
 one step of a pass.
@@ -190,12 +192,24 @@ root tracers), and nothing read before a call is used after it.
   up to 500 ms, gives up and retries at a later poll with a growing back-off; nothing fails
   meanwhile, because allocation never needs a collection (a full birth space sends new objects
   to the elder space, which grows).
-- **`std::jit`.** Compiled code has no stack maps. It is sound because no collection can run
-  while a native frame exists (compiled code calls nothing and polls nothing; the allocator
-  refuses a safepoint under a native frame), and because, when objects can move, a graph whose
-  static area holds an object constant is not compiled: the code would contain the constant's
-  address as an immediate. Turning on lowerings that call out of compiled code (operators,
-  indirect calls) requires stack maps first; this is stages 3 and 4 of the ruling.
+- **`std::jit`.** Compiled code has no stack maps, and each of its two kinds
+  (`docs/technical/07_jit_architecture.md`, section 17) is sound without them for its own
+  reason.
+  *Frameless code* keeps frames on the machine stack and values in registers, which the
+  collector neither sees nor updates; no collection can run while it is on the stack (it calls
+  nothing and polls nothing, and the allocator refuses a safepoint under it:
+  `mm::detail::nativeCodeDepth`, counted around the entry into frameless code in
+  `FastVMSchedPass::invokeOwnedJitFrame`).
+  *Framed code* calls operators through C++ helpers and hands calls of Camel functions to its
+  driver. Every activation of it has a pool frame, a registered root, and at each point where
+  a collection can run (a helper call, an exit to the driver, the poll of a self tail call) no
+  value is live in a register or on the machine stack: the register allocator refuses a value
+  that lives across one, and the code reads the frame again afterwards. Its stack map at those
+  points is empty, so a safepoint under it is allowed, including one reached by an operator it
+  called.
+  Neither kind contains the address of an object when objects can move: an object constant is
+  read from the static area of the graph, a root that is updated in place (section 5), each
+  time it is used. With mark-sweep frameless code still has such constants as immediates.
 - **The macro pass** evaluates all candidates of a round before it opens a graph draft: a draft
   holds plain copies of static slots, and evaluation reaches safepoints. Any pass that
   evaluates and rewrites must keep that order, or root what its drafts hold.
@@ -208,8 +222,10 @@ root tracers), and nothing read before a call is used after it.
 - Roots are updated in place: frame slots, static areas of graphs (roots, and graphs reached
   through function values), `RootHandle`s, the evaluator's value roots, registered tracers.
 - Objects carry no type. The collector traces an object with the static type of the slot it
-  was reached through, so a reference in a slot typed `any` is neither traced nor updated (see
-  the open question in section 9).
+  was reached through, or, for an object that describes itself (a function value, a tensor, a
+  foreign wrapper, a `Json`), with the types the object itself knows. Every slot has a
+  determined type (graph invariant, `src/runtime/graph_types.cpp`): `any`, which a slot could
+  have and the collector could not trace, is removed (section 9).
 - An object born old (large, or small while the birth space was full) is tracked until the
   next minor collection and scanned when a typed reference reaches it, so its creator may fill
   it with plain stores (rule 6). After that collection it is an ordinary old object.
@@ -251,7 +267,7 @@ generational collector as it was.
 | 10 | `gen.cpp` minor collection, `rtdata/func.cpp` | static area of a graph reached only through a `Function` | — | nothing moved | yes | fixed: such graphs are traced once per minor collection |
 | 11 | `gen.cpp` scan of copied objects | an object copied without a static type was not scanned | — | — | yes for self-describing objects (tensor views, optimizer state, functions) | fixed |
 | 12 | `gen.cpp` promotion | `std::bad_alloc` when the elder space was full | — | — | yes: the program ended | fixed: the elder space grows |
-| 13 | `fastvm/jit/backend/x64` (`emitLoadStaticConst`) | an object constant baked into machine code as its address | every later collection | constants never moved | yes | fixed: such a graph is not compiled when objects move; a safepoint under a native frame is refused |
+| 13 | `fastvm/jit/backend/x64` (`emitLoadStaticConst`) | an object constant baked into machine code as its address | every later collection | constants never moved | yes | fixed: when objects move the code reads the constant from the static area each time; a safepoint under frameless code is refused |
 | 14 | `modules/onnx/module.cpp`, `exporter.cpp` | function, path, examples, constants as raw slots; `unordered_map<slot_t, ...>` keyed by address | macro expansion inside the operator | nothing moved | yes | `NoCollectionScope` around the export |
 | 15 | `rtdata/foreign.cpp`, `modules/python/operators.cpp` | deleter ran inside the collection, allocator locked, and took the GIL | — | one thread | deadlock with a thread that holds the GIL and allocates; self-deadlock for a deleter that allocates (both collectors) | fixed: releases run after the collection, unlocked |
 | 16 | `modules/onnx/emitter.cpp`, `autodiff/pullback.cpp` | rooted, but the raw slot is what is read later | none today | no safepoint inside translate / rewrite | no; latent | rule 2 applies if a safepoint is ever added there |
@@ -259,7 +275,7 @@ generational collector as it was.
 | 18 | `src/compile/gir/builder.cpp` (`typeFoldedValues_`) | raw copy next to its `RootHandle` | none today | — | no; latent | — |
 | 19 | `rtdata/foreign.h` `movable` / `pinned` flags | never read | — | — | no; both descriptors use the defaults | left; a pinned wrapper needs `ForeignPinnedHandle` |
 | 20 | `rtdata/collection.cpp` (`compareKeys` default) | would order keys by address | — | unreachable: key types are restricted | no; latent | — |
-| 21 | slots typed `any` (frame, array element, tuple field) | a reference the collector does not see | any collection | large heap, rare collections | **use after free with both collectors** | not fixed: section 9 |
+| 21 | slots typed `any` (frame, array element, tuple field) | a reference the collector does not see | any collection | large heap, rare collections | **use after free with both collectors** | fixed: `any` removed, `json.decode` gives a self-describing `Json` (section 9) |
 
 Found clean: every `onMoved` (arrays re-derive `dataPtr_`, tensors their shape and data
 pointers; the others have no pointer into themselves); every `updateRefs` for typed slots; no
@@ -288,7 +304,7 @@ here and left to the standard-library work:
 | # | Where | What | Effect |
 |---|---|---|---|
 | 22 | `modules/algo/sequence.cpp` (`unique`, composite elements) | `equals(..., deep=false)` compares nested references by address | two equal `(string, int)` or `string[]` elements are both kept; built-in `==` and `contains` on such values do the same |
-| 23 | `modules/algo/sequence.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` are deduplicated by address (an instance of 21) |
+| 23 | `modules/algo/sequence.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` were deduplicated by address (an instance of 21); gone with `any` |
 | 24 | `rtdata/collection.cpp` (`Table::equals`, `deep == false`) | values compared with `memcmp` | reachable through 22 and through `contains` on an array of maps |
 
 ## 8. Tools
@@ -308,13 +324,16 @@ a stale pointer that is never used again; code that no test runs.
 
 ## 9. Open questions (for the language author)
 
-- **`any`.** A slot typed `any` may hold a reference (`json.decode` returns one), but the
-  collector, which knows values only by static type, neither traces nor updates it. With both
-  collectors a value kept in an `any` variable across a collection is freed while in use
-  (`let d = decode(s); f(); d as string[]`), and what a typed value refers to through an `any`
-  element or field is not kept alive either. Converting at once (`decode(s) as T`,
-  `decode_as`) is safe on `std::nvm` and `std::fvm`, where no safepoint lies between the two
-  nodes. Making `any` sound needs either a run-time tag on such values or their removal in
-  favour of generics; design principles section 6 lists the position of `any` as undecided.
+- **`any`** (settled). A slot typed `any` could hold a reference (`json.decode` returned
+  one) that the collector, which knows values only by static type, neither traced nor updated:
+  a value kept in an `any` variable across a collection was freed while in use, and what a
+  typed value referred to through an `any` element or field was not kept alive either.
+  Converting at once (`decode(s) as T`) was not safe either, contrary to what this section once
+  said: `CAST` is a pure node without a control edge, so a back end runs it where its result is
+  used, not right after `decode` (`docs/design/any-typing/examples/t21_cast_at_once.cml` failed
+  on all four back ends under forced collection). Design principles 2.11 and 2.12 settled it:
+  `any` is removed from the language and from the type system, `json.decode` gives a `Json`
+  (`modules/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
+  function value or a tensor), and a commit refuses a graph with an undetermined type.
 - **Whether the generational collector becomes the default** (measurements in
   `37_generational_gc_report.md`).

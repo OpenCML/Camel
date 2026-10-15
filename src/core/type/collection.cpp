@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,6 +25,7 @@
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/struct.h"
@@ -78,8 +79,6 @@ std::string collectionKeyProblem(Type *type) {
         return "a struct is not a key type; use a tuple of its fields";
     case TypeCode::Function:
         return "a function has no equality";
-    case TypeCode::Any:
-        return "a value of type 'any' has no type to compare by";
     default:
         break;
     }
@@ -283,16 +282,14 @@ MapType *MapType::get(Type *keyType, Type *valueType) {
     ASSERT(keyType != nullptr && valueType != nullptr, "Map needs a key and a value type.");
     Type *params[] = {keyType, valueType};
     return interned<MapType>(std::span<Type *const>(params), [&] {
-        void *mem = mm::permSpace().alloc(sizeof(MapType), alignof(MapType));
-        ASSERT(mem != nullptr, "Failed to allocate MapType from permSpace");
+        void *mem = allocTypeStorage<MapType>(TypeStorageKind::Collection);
         return new (mem) MapType(std::span<Type *const>(params));
     });
 }
 
 MapType *MapType::prototype() {
     static MapType *instance = [] {
-        void *mem = mm::permSpace().alloc(sizeof(MapType), alignof(MapType));
-        ASSERT(mem != nullptr, "Failed to allocate MapType from permSpace");
+        void *mem = allocTypeStorage<MapType>(TypeStorageKind::Collection);
         return new (mem) MapType(std::span<Type *const>());
     }();
     return instance;
@@ -332,16 +329,14 @@ SetType *SetType::get(Type *elemType) {
     ASSERT(elemType != nullptr, "Set needs an element type.");
     Type *params[] = {elemType};
     return interned<SetType>(std::span<Type *const>(params), [&] {
-        void *mem = mm::permSpace().alloc(sizeof(SetType), alignof(SetType));
-        ASSERT(mem != nullptr, "Failed to allocate SetType from permSpace");
+        void *mem = allocTypeStorage<SetType>(TypeStorageKind::Collection);
         return new (mem) SetType(std::span<Type *const>(params));
     });
 }
 
 SetType *SetType::prototype() {
     static SetType *instance = [] {
-        void *mem = mm::permSpace().alloc(sizeof(SetType), alignof(SetType));
-        ASSERT(mem != nullptr, "Failed to allocate SetType from permSpace");
+        void *mem = allocTypeStorage<SetType>(TypeStorageKind::Collection);
         return new (mem) SetType(std::span<Type *const>());
     }();
     return instance;

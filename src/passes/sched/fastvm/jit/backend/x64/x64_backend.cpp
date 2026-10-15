@@ -103,64 +103,209 @@ isTrapFreeConstDivisor(const Bytecode &bc, const camel::runtime::GCGraph *graph,
     return divisor != 0 && divisor != -1;
 }
 
-std::string describeFramelessSelfFuncFailure(const CompilationUnit &unit) {
-    if (unit.graphLength == 0)
-        return "graph bytecode span is empty";
-    // Compiled code has no stack maps: the collector neither sees nor updates what a native
-    // frame or a register holds. Two things keep that sound with the moving collector.
-    //
-    // 1. No collection runs while a native frame exists. What passes the checks below never
-    //    calls into C++ and contains no safepoint poll, so between the entry into compiled
-    //    code and the return from it the collector cannot run (std::jit is single-threaded).
-    //    A native frame may therefore hold object references, e.g. a var parameter that a
-    //    self call passes on. The allocator refuses a safepoint reached under a native frame
-    //    (mm::detail::nativeCodeDepth), which is what keeps this from being broken silently
-    //    by a later lowering that does call out.
-    // 2. A static slot that the code reads is baked into it as an immediate
-    //    (emitLoadStaticConst): for an object constant that is the address the object had at
-    //    compile time, and it outlives any number of collections. A graph with an object
-    //    constant in its static area is therefore not compiled when objects can move.
-    if (camel::core::mm::autoSpace().youngGenCopyingEnabled() && unit.runtimeGraph != nullptr) {
-        const auto *staticLayout = unit.runtimeGraph->staticDataType();
-        if (staticLayout != nullptr && staticLayout->refCount() != 0)
-            return "the graph has object constants (moving collector)";
+// A BRCH is followed by its jump table, one JUMP per arm: two for if-else; for a match one per
+// case value and then the default arm, when the match has one. This is the number of entries
+// that are certainly there; the lowering of a match also names the entry behind them, which it
+// reaches only when the match has a default arm.
+inline size_t branchTableEntries(const Bytecode &bc) {
+    return bc.withCnt() == 0 ? 2 : bc.withCnt();
+}
+
+// What keeps a unit out of the compiler altogether, in bytecode order. With `firstOnly` the scan
+// stops at the first finding (what compile() reports); without, every finding is listed (what
+// the coverage statistics count). Framed code takes every bytecode, so what is left is a unit
+// without the layout the compiler reads.
+std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstOnly) {
+    std::vector<JitBlocker> found;
+    auto add = [&](size_t pc, std::string kind, std::string text) {
+        found.push_back({pc, std::move(kind), std::move(text)});
+    };
+    if (!unit.runtimeGraph) {
+        add(0, "no-graph", "null runtime graph in JIT compilation unit");
+        return found;
+    }
+    if (!unit.runtimeGraph->hasFrameLayout()) {
+        add(
+            0,
+            "no-frame-layout",
+            "incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
+        return found;
+    }
+    if (unit.graphLength == 0) {
+        add(0, "empty", "graph bytecode span is empty");
+        return found;
     }
     const size_t graphEnd = unit.entryPc + unit.graphLength;
     ASSERT(
         graphEnd <= unit.bytecodes.size(),
         "Current graph bytecode range exceeds linked bytecode span.");
     for (size_t pc = unit.entryPc; pc < graphEnd;) {
+        if (firstOnly && !found.empty())
+            return found;
         const Bytecode &bc = unit.bytecodes[pc];
+        if (bc.opcode == OpCode::BRCH) {
+            // The lowering jumps to the entries of the jump table.
+            const size_t table = pc + bc.opsize;
+            bool complete = table + bc.withCnt() < graphEnd;
+            for (size_t arm = 0; complete && arm < branchTableEntries(bc); ++arm) {
+                complete = unit.bytecodes[table + arm].opcode == OpCode::JUMP;
+            }
+            if (!complete) {
+                add(pc,
+                    "BRCH-table",
+                    std::format("pc={} BRCH is not followed by one JUMP for each arm", pc));
+            }
+        }
+        pc += bc.opsize;
+    }
+    return found;
+}
+
+// Arguments of a call that are kept in registers at once; a call with more copies them one by
+// one through memory (see FUNC and TAIL in compileBytecodeWith).
+constexpr size_t kMaxRegisterArgs = 4;
+
+// What keeps a unit from being compiled as frameless code (mir.h, JitExitKind): every construct
+// that needs the runtime. The single place that says which code a unit gets: none of these,
+// frameless; any, framed.
+std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bool firstOnly) {
+    std::vector<JitBlocker> found;
+    auto add = [&](size_t pc, std::string kind, std::string text) {
+        found.push_back({pc, std::move(kind), std::move(text)});
+    };
+    if (!unit.runtimeGraph || !unit.runtimeGraph->hasFrameLayout() || unit.graphLength == 0) {
+        return found; // not compiled at all (collectBlockers)
+    }
+    if (!unit.runtimeGraph->staticArea()) {
+        // Frameless code reads its constants at compile time and expects the area to exist.
+        add(0, "no-static-area", "graph '" + unit.runtimeGraph->name() + "' has no static area");
+        return found;
+    }
+    // Frameless code has no stack maps: the collector neither sees nor updates what a native
+    // frame or a register holds. Two things keep that sound with the moving collector.
+    //
+    // 1. No collection runs while a native frame exists. Frameless code never calls into C++
+    //    and contains no safepoint poll, so between the entry into it and the return from it
+    //    the collector cannot run (std::jit is single-threaded). A native frame may therefore
+    //    hold object references, e.g. a var parameter that a self call passes on. The
+    //    allocator refuses a safepoint reached under frameless code
+    //    (mm::detail::nativeCodeDepth, counted in FastVMSchedPass::invokeOwnedJitFrame).
+    // 2. The code outlives any number of collections, so it must not contain the address of an
+    //    object. When objects can move, an object constant is read from the static area each
+    //    time (loadStaticConst in compileBytecodeWith): the area is a root the collector
+    //    updates in place. The one place that has no such load is a call or self tail call
+    //    with more arguments than are passed in registers, which copies constants as
+    //    immediates; a graph that passes an object constant there is framed code.
+    const bool objectsMove          = camel::core::mm::autoSpace().youngGenCopyingEnabled();
+    const auto *staticLayoutOfGraph = unit.runtimeGraph->staticDataType();
+    auto passesObjectConstantInMemory = [&](const Bytecode &bc) {
+        if (!objectsMove || staticLayoutOfGraph == nullptr)
+            return false;
+        const data_arr_t srcArgs  = bc.directCallSrcArgs();
+        const data_arr_t dstSlots = bc.directCallDstSlots();
+        size_t moved              = 0;
+        bool objectConstant       = false;
+        for (size_t i = 0; i < srcArgs.size() && i < dstSlots.size(); ++i) {
+            if (bc.opcode == OpCode::TAIL && srcArgs[i] == dstSlots[i])
+                continue;
+            ++moved;
+            const auto index = static_cast<size_t>(-srcArgs[i]);
+            objectConstant   = objectConstant ||
+                             (srcArgs[i] < 0 && index < staticLayoutOfGraph->size() &&
+                              camel::core::type::isGCTraced(staticLayoutOfGraph->codeAt(index)));
+        }
+        return objectConstant && moved > kMaxRegisterArgs;
+    };
+    const size_t graphEnd = unit.entryPc + unit.graphLength;
+    ASSERT(
+        graphEnd <= unit.bytecodes.size(),
+        "Current graph bytecode range exceeds linked bytecode span.");
+    const size_t frameBytes =
+        (unit.runtimeGraph->runtimeDataType()->size() * sizeof(slot_t) + 15u) & ~size_t{15};
+    for (size_t pc = unit.entryPc; pc < graphEnd;) {
+        if (firstOnly && !found.empty())
+            return found;
+        const Bytecode &bc      = unit.bytecodes[pc];
+        const std::string where = "pc=" + std::to_string(pc);
+        const std::string fallback = "graph needs the runtime: " + where;
         switch (bc.opcode) {
         case OpCode::OPER:
-            return "pc=" + std::to_string(pc) + " contains OPER";
+            add(pc, "OPER", fallback + " contains OPER");
+            break;
         case OpCode::CAST:
-            return "pc=" + std::to_string(pc) + " contains CAST";
+            add(pc, "CAST", fallback + " contains CAST");
+            break;
         case OpCode::COPY:
-            return "pc=" + std::to_string(pc) + " contains COPY";
+            add(pc, "COPY", fallback + " contains COPY");
+            break;
         case OpCode::FILL:
-            return "pc=" + std::to_string(pc) + " contains FILL";
+            add(pc, "FILL", fallback + " contains FILL");
+            break;
         case OpCode::CALL:
-            return "pc=" + std::to_string(pc) + " contains indirect CALL";
+            add(pc, "CALL", fallback + " contains indirect CALL");
+            break;
         case OpCode::ACCS:
-            return "pc=" + std::to_string(pc) + " contains ACCS";
+            add(pc, "ACCS", fallback + " contains ACCS");
+            break;
+        case OpCode::SCHD:
+            add(pc, "SCHD", where + " unsupported opcode SCHD");
+            break;
         case OpCode::FUNC:
-        case OpCode::TAIL:
-            if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph) {
-                const auto *target = getFuncExtraRuntimeGraph(&bc);
-                return std::format(
-                    "pc={} targets non-self graph '{}' ({:p})",
-                    pc,
-                    target ? target->name() : "<null>",
-                    static_cast<const void *>(target));
+        case OpCode::TAIL: {
+            const auto *target = getFuncExtraRuntimeGraph(&bc);
+            if (target != unit.runtimeGraph) {
+                add(pc,
+                    bc.opcode == OpCode::FUNC ? "FUNC-other-graph" : "TAIL-other-graph",
+                    std::format(
+                        "graph needs the runtime: pc={} targets non-self graph "
+                        "'{}' ({:p})",
+                        pc,
+                        target ? target->name() : "<null>",
+                        static_cast<const void *>(target)));
+            } else if (passesObjectConstantInMemory(bc)) {
+                add(pc,
+                    "object-constant-arg",
+                    std::format(
+                        "graph needs the runtime: pc={} passes an object constant among more "
+                        "arguments than fit registers, and the collector moves objects",
+                        pc));
+            } else if (bc.opcode == OpCode::FUNC && frameBytes > x64::kMaxNativeFrameBytes) {
+                add(pc,
+                    "frame-too-large",
+                    std::format(
+                        "pc={} self call with a frame of {} bytes (more than {}): the recursion "
+                        "would not fit the machine stack at the recursion limit",
+                        pc,
+                        frameBytes,
+                        x64::kMaxNativeFrameBytes));
             }
+            break;
+        }
+        case OpCode::BRCH:
+            if (bc.withCnt() != 0)
+                add(pc,
+                    "BRCH-match",
+                    where +
+                        " BRCH only supports simple if-else (withCnt=0); match-case (withCnt>0) "
+                        "not yet implemented, got " +
+                        std::to_string(bc.withCnt()));
+            break;
+        case OpCode::JOIN:
+            if (bc.result != 0 && bc.extra()->pType != camel::core::type::Type::Void() &&
+                bc.withCnt() != 2)
+                add(pc,
+                    "JOIN-match",
+                    where +
+                        " JOIN only supports withCnt=2 (if-else); match-case (withCnt>2) not yet "
+                        "implemented, got " +
+                        std::to_string(bc.withCnt()));
             break;
         default:
             break;
         }
         pc += bc.opsize;
     }
-    return {};
+    return found;
 }
 
 // Camel standard slot model: every slot is one word (8 bytes); bool / 32-bit / 64-bit / pointer
@@ -200,6 +345,14 @@ int X64Backend::slotDisp(int idx) const {
 
 void X64Backend::registerTrampoline(const char *name, void *addr) { trampolines_[name] = addr; }
 
+std::vector<JitBlocker> X64Backend::blockers(const CompilationUnit &unit) const {
+    return collectBlockers(unit, false);
+}
+
+std::vector<JitBlocker> X64Backend::runtimeConstructs(const CompilationUnit &unit) const {
+    return collectRuntimeConstructs(unit, false);
+}
+
 std::unique_ptr<CompiledCode>
 X64Backend::compile(const CompilationUnit &unit, std::string *failureReason) {
     auto result = std::make_unique<CompiledCode>();
@@ -207,6 +360,7 @@ X64Backend::compile(const CompilationUnit &unit, std::string *failureReason) {
         return nullptr;
     result->entryOffset    = 0;
     result->jitEntryOffset = jitEntryOffset_;
+    result->framed         = framed_;
     return result;
 }
 
@@ -245,13 +399,15 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         return LowerResult::Failed;
     };
 
-    if (!unit.runtimeGraph)
-        return fail("null runtime graph in JIT compilation unit");
-    if (!unit.runtimeGraph->hasFrameLayout())
-        return fail("incomplete frame layout for graph '" + unit.runtimeGraph->name() + "'");
-    // Graphs without constants are left to the interpreter.
-    if (!unit.runtimeGraph->staticArea())
-        return fail("graph '" + unit.runtimeGraph->name() + "' has no static area");
+    // What this back end compiles, and as which of its two kinds of code (mir.h, JitExitKind),
+    // is decided in two places, before anything is lowered. Frameless code never calls into
+    // C++: its calls are native self calls and its tail calls are jumps. Framed code calls the
+    // helpers of trampoline.h and leaves to its driver for calls of Camel functions.
+    if (const auto blocked = collectBlockers(unit, true); !blocked.empty()) {
+        return fail(blocked.front().text);
+    }
+    const bool framed = !collectRuntimeConstructs(unit, true).empty();
+    framed_           = framed;
 
     const Bytecode *base = unit.bytecodes.data();
     size_t entryPc       = unit.entryPc;
@@ -261,7 +417,10 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
                        ? std::min(unit.bytecodes.size(), entryPc + unit.graphLength)
                        : unit.bytecodes.size();
 
-    const slot_t *staticBase = unit.runtimeGraph->staticArea()->data();
+    // A graph without constants has no static area; no operand of it is a static slot then.
+    const slot_t *staticBase =
+        unit.runtimeGraph->staticArea() ? unit.runtimeGraph->staticArea()->data() : nullptr;
+    const auto *staticLayout = unit.runtimeGraph->staticDataType();
     auto staticSlotAddr      = [&](data_idx_t idx) -> uint64_t {
         return reinterpret_cast<uint64_t>(staticBase + static_cast<size_t>(-idx));
     };
@@ -276,23 +435,30 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     x64::MirBuffer mirBuf;
     x64::MirBuilder build(mirBuf);
     x64::VRegId nextVReg                     = 0;
-    const std::string framelessFailureReason = describeFramelessSelfFuncFailure(unit);
-    const bool canUseFramelessSelfFunc       = framelessFailureReason.empty();
-    // The current x64 JIT is only sound for graphs whose execution stays within
-    // the slot-native bytecode subset. Graphs that rely on runtime Function
-    // carriers, indirect CALL, or frame-dependent trampolines still execute
-    // correctly through the interpreter, while pure callee graphs such as
-    // recursive fib keep the hot-path JIT speedup.
-    //
-    // What passes this check never calls into C++: its calls are native self calls and its
-    // tail calls are jumps. The lowerings of OPER, CAST, COPY, FILL, CALL and ACCS further
-    // down are therefore not reached today.
-    if (!canUseFramelessSelfFunc)
-        return fail("graph requires interpreter fallback: " + framelessFailureReason);
-
-    // Arguments of a call that are kept in registers at once; a call with more copies them
-    // one by one through memory (see FUNC and TAIL).
-    constexpr size_t kMaxRegisterArgs = 4;
+    // A constant is read at compile time and becomes an immediate, except an object constant
+    // when the collector moves objects (the code outlives collections; the static area is
+    // where the collector keeps the reference up to date) and in framed code under either
+    // collector. A register that holds such a reference is not live across a safepoint:
+    // frameless code has none between its entry and its return, and in framed code no value
+    // lives across a helper call, an exit or a poll.
+    const bool objectsMove = camel::core::mm::autoSpace().youngGenCopyingEnabled();
+    auto loadStaticConst = [&](data_idx_t idx, x64::VRegId v) {
+        const auto index = static_cast<size_t>(-idx);
+        if ((framed || objectsMove) && staticLayout != nullptr && index < staticLayout->size() &&
+            camel::core::type::isGCTraced(staticLayout->codeAt(index))) {
+            build.emitVLoadFromMemAt(v, reinterpret_cast<uint64_t>(staticBase + index));
+        } else {
+            emitLoadStaticConst(staticBase, idx, v, build);
+        }
+    };
+    auto isObjectConstant = [&](data_idx_t idx) {
+        const auto index = static_cast<size_t>(-idx);
+        return idx < 0 && staticLayout != nullptr && index < staticLayout->size() &&
+               camel::core::type::isGCTraced(staticLayout->codeAt(index));
+    };
+    const uint64_t helperOper      = reinterpret_cast<uint64_t>(&jitHelperOper);
+    const uint64_t helperBytecode  = reinterpret_cast<uint64_t>(&jitHelperBytecode);
+    const uint64_t helperBranchArm = reinterpret_cast<uint64_t>(&jitHelperBranchArm);
     // Owns the parameter blocks the NativeJitFuncCall MIRs point to, until encoding is done.
     std::vector<std::unique_ptr<NativeJitCallParams>> callParams;
 
@@ -342,8 +508,8 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         const size_t next = p + base[p].opsize;
         switch (base[p].opcode) {
         case OpCode::BRCH:
-            blockStarts.insert(next);
-            blockStarts.insert(next + 1);
+            for (size_t arm = 0; arm <= branchTableEntries(base[p]); ++arm)
+                blockStarts.insert(next + arm);
             break;
         case OpCode::JUMP:
             blockStarts.insert(getJumpTargetPc(&base[p]));
@@ -373,7 +539,7 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             if (cacheable && keepValuesInRegisters && !writtenSlots.count(slotIdx))
                 slotCache[disp] = v;
         } else {
-            emitLoadStaticConst(staticBase, slotIdx, v, build);
+            loadStaticConst(slotIdx, v);
         }
     };
 
@@ -394,7 +560,8 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     // Keeping the body prologue-free is what makes direct JIT-to-JIT calls cheap.
 
     for (size_t pc = entryPc; pc < pcEnd;) {
-        const Bytecode &bc = base[pc];
+        const Bytecode &bc         = base[pc];
+        const size_t mirCountBefore = mirBuf.size();
         if (blockStarts.count(pc))
             slotCache.clear();
         build.setNextPc(static_cast<uint32_t>(pc));
@@ -783,15 +950,24 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             LCMP_HANDLER(LNE, VCmpSetNEImm, VCmpSetNE)
 #undef LCMP_HANDLER
         case OpCode::BRCH: {
-            if (bc.withCnt() != 0)
-                return fail(
-                    "pc=" + std::to_string(pc) +
-                    " BRCH only supports simple if-else (withCnt=0); match-case (withCnt>0) not "
-                    "yet implemented, got " +
-                    std::to_string(bc.withCnt()));
             int dr    = slotDisp(bc.result);
             size_t t0 = pc + bc.opsize;
             size_t t1 = pc + bc.opsize + 1;
+            if (bc.withCnt() != 0) {
+                // A match (framed code only): the helper compares the value with the case
+                // values, as the interpreter does, stores the index of the arm and returns it;
+                // the code then goes to that entry of the jump table.
+                build.emitCallHelper(static_cast<uint32_t>(pc), helperBranchArm);
+                x64::VRegId vArm = nextVReg++;
+                build.emitVMovFromRax(vArm);
+                for (size_t arm = 0; arm < bc.withCnt(); ++arm) {
+                    build.emitVCmpRegImm(vArm, static_cast<int32_t>(arm));
+                    build.emitJeRel32(static_cast<uint32_t>(t0 + arm));
+                }
+                build.emitJmpRel32(static_cast<uint32_t>(t0 + bc.withCnt()));
+                slotCache.clear();
+                break;
+            }
             if (fusedCmp.active) {
                 // Fused compare-branch: CPU flags already set by preceding cmp. The branch
                 // index is not computed here; see joinsTakingArm1 / armIndexWrites.
@@ -843,10 +1019,8 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
                 // materialize the branch index into the result slot, then emit
                 // the actual branch. Later JOIN may simplify this pattern.
                 data_idx_t condIdx = bc.nargs()[0];
-                if (condIdx <= 0)
-                    return fail(
-                        "pc=" + std::to_string(pc) +
-                        " BRCH cond slot index must be positive, got " + std::to_string(condIdx));
+                if (condIdx == 0)
+                    return fail("pc=" + std::to_string(pc) + " BRCH has no condition operand");
                 int dc            = slotDisp(condIdx);
                 x64::VRegId vCond = nextVReg++;
                 x64::VRegId vZero = nextVReg++;
@@ -877,12 +1051,13 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
                 build.emitVStoreToFrame(slotDisp(bc.result), vNull);
                 break;
             }
-            if (bc.withCnt() != 2)
-                return fail(
-                    "pc=" + std::to_string(pc) +
-                    " JOIN only supports withCnt=2 (if-else); match-case (withCnt>2) not yet "
-                    "implemented, got " +
-                    std::to_string(bc.withCnt()));
+            if (bc.withCnt() != 2) {
+                // The JOIN of a match (framed code only): the helper takes the operand of the
+                // arm whose index the BRCH stored.
+                build.emitCallHelper(static_cast<uint32_t>(pc), helperBytecode);
+                slotCache.clear();
+                break;
+            }
             data_idx_t idxSlot = bc.nargs()[0];
             data_idx_t w0      = bc.wargs()[0];
             data_idx_t w1      = bc.wargs()[1];
@@ -927,8 +1102,17 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             break;
         }
         case OpCode::FUNC: {
-            // Every call in a graph that gets here is a call to the graph itself
-            // (describeFramelessSelfFuncFailure). It is encoded natively, in the JIT's own
+            if (framed) {
+                // Framed code does not call: its driver makes the call (of this graph or of
+                // another, compiled or not) the way the interpreter does, on a pool frame and
+                // counted on the interpreter's stack, and continues the code behind this
+                // bytecode with the result stored.
+                build.emitExitToDriver(static_cast<uint32_t>(pc), x64::JitExitKind::Call);
+                slotCache.clear();
+                break;
+            }
+            // Every call in frameless code is a call to the graph itself
+            // (collectRuntimeConstructs). It is encoded natively, in the JIT's own
             // convention on every ABI: the callee's frame is allocated on the machine stack
             // and the body is entered directly, with no frame pool and no C++ in between.
             if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph)
@@ -958,7 +1142,12 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             for (size_t ai = 0; ai < srcArgs.size(); ++ai) {
                 NativeJitCallParams::Arg arg;
                 arg.dstDisp = slotDisp(dstSlots[ai]);
-                if (srcArgs[ai] <= 0) {
+                if (srcArgs[ai] < 0 && objectsMove && isObjectConstant(srcArgs[ai])) {
+                    // Read from the static area at every call (collectRuntimeConstructs keeps
+                    // such an argument to calls whose arguments are all in registers).
+                    arg.vreg = nextVReg++;
+                    loadStaticConst(srcArgs[ai], arg.vreg);
+                } else if (srcArgs[ai] <= 0) {
                     arg.isImm = true;
                     arg.imm   = staticBase[static_cast<size_t>(-srcArgs[ai])];
                 } else {
@@ -983,7 +1172,8 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             // A self tail call is "rewrite the parameter slots and jump to the entry", on
             // every ABI: no call instruction, no new frame, the recursion stays in the current
             // activation, whether its frame came from the pool or is on the machine stack.
-            if (getFuncExtraRuntimeGraph(&bc) != unit.runtimeGraph)
+            const bool selfTail = getFuncExtraRuntimeGraph(&bc) == unit.runtimeGraph;
+            if (!selfTail && !framed)
                 return fail("pc=" + std::to_string(pc) + " TAIL targets another graph");
             const data_arr_t srcArgs  = bc.directCallSrcArgs();
             const data_arr_t dstSlots = bc.directCallDstSlots();
@@ -994,6 +1184,29 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             for (size_t i = 0; i < srcArgs.size(); ++i) {
                 if (srcArgs[i] != dstSlots[i])
                     moved.push_back(i);
+            }
+            if (framed) {
+                // A tail call of another graph is the driver's (it replaces the frame). So is
+                // a self tail call that would stage an object constant on the machine stack.
+                bool viaDriver = !selfTail;
+                if (moved.size() > kMaxRegisterArgs) {
+                    for (const size_t i : moved)
+                        viaDriver = viaDriver || isObjectConstant(srcArgs[i]);
+                }
+                if (viaDriver) {
+                    build.emitExitToDriver(static_cast<uint32_t>(pc), x64::JitExitKind::Tail);
+                    slotCache.clear();
+                    break;
+                }
+                // The jump below is a loop without a call: the interpreter polls the collector
+                // at every TAIL, and so does this code, by leaving to the driver when the
+                // collector waits (the driver then makes the tail call itself).
+                if (unit.safepointFlagAddr != nullptr) {
+                    build.emitSafepointPoll(
+                        static_cast<uint32_t>(pc),
+                        reinterpret_cast<uint64_t>(unit.safepointFlagAddr));
+                    slotCache.clear();
+                }
             }
             // All sources are read before any parameter slot is written: an argument may be
             // another parameter (`f(b, a)`).
@@ -1081,58 +1294,32 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             build.emitVRet(v0);
             break;
         }
-        case OpCode::OPER: {
-            if (!unit.trampolineOper)
-                return fail("pc=" + std::to_string(pc) + " no OPER trampoline");
-            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineOper);
-#if defined(_WIN32) || defined(_WIN64)
-            build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), addr);
-#else
-            build.emitCallTrampolineOperSysV(static_cast<uint32_t>(pc), addr);
-#endif
-            x64::VRegId vRet = nextVReg++;
-            build.emitVMovFromRax(vRet);
-            build.emitVStoreToFrame(slotDisp(bc.result), vRet);
+        // The bytecodes below occur in framed code only (collectRuntimeConstructs).
+        case OpCode::OPER:
+            // The helper calls the operator on the frame and stores its result there.
+            build.emitCallHelper(static_cast<uint32_t>(pc), helperOper);
             slotCache.clear();
             break;
-        }
-        case OpCode::CAST: {
-            if (!unit.trampolineCast)
-                return fail("pc=" + std::to_string(pc) + " no CAST trampoline");
-            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineCast);
-#if defined(_WIN32) || defined(_WIN64)
-            build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), addr);
-#else
-            build.emitCallTrampolineOperSysV(static_cast<uint32_t>(pc), addr);
-#endif
-            x64::VRegId vRet = nextVReg++;
-            build.emitVMovFromRax(vRet);
-            build.emitVStoreToFrame(slotDisp(bc.result), vRet);
-            slotCache.clear();
-            break;
-        }
+        case OpCode::CAST:
         case OpCode::COPY:
         case OpCode::FILL:
-        case OpCode::CALL:
-        case OpCode::ACCS: {
-            if (!unit.trampolineBytecode) {
-                return fail("pc=" + std::to_string(pc) + " no generic bytecode trampoline");
-            }
-            uint64_t addr = reinterpret_cast<uint64_t>(unit.trampolineBytecode);
-#if defined(_WIN32) || defined(_WIN64)
-            build.emitCallTrampolineOperWin64(static_cast<uint32_t>(pc), addr);
-#else
-            build.emitCallTrampolineOperSysV(static_cast<uint32_t>(pc), addr);
-#endif
-            x64::VRegId vRet = nextVReg++;
-            build.emitVMovFromRax(vRet);
-            build.emitVStoreToFrame(slotDisp(bc.result), vRet);
+        case OpCode::ACCS:
+            build.emitCallHelper(static_cast<uint32_t>(pc), helperBytecode);
             slotCache.clear();
             break;
-        }
+        case OpCode::CALL:
+        case OpCode::SCHD:
+            // A call through a function value, and a higher-order operator or the fault
+            // isolation node: they call Camel functions, so the driver runs them.
+            build.emitExitToDriver(static_cast<uint32_t>(pc), x64::JitExitKind::Interp);
+            slotCache.clear();
+            break;
         default:
             return fail("pc=" + std::to_string(pc) + " unsupported opcode " + to_string(bc.opcode));
         }
+        // Every bytecode has an instruction that carries its pc (see MirBuilder::emitNop).
+        if (mirBuf.size() == mirCountBefore)
+            build.emitNop();
 
         pc += bc.opsize;
     }
@@ -1237,6 +1424,16 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
         // mov r14, rsp  — what a fault exit restores before it continues at the epilogue
         code.insert(code.end(), {0x49, 0x89, 0xE6});
         // call rel32(jitBody)
+        if (framed) {
+            // mov rax, [rsi + resumeAddr]; test rax, rax; jz +4; call rax; jmp +5
+            code.insert(
+                code.end(),
+                {0x48, 0x8B, 0x46, static_cast<uint8_t>(x64::kJitCtxResumeAddrOffset)});
+            code.insert(code.end(), {0x48, 0x85, 0xC0});
+            code.insert(code.end(), {0x74, 0x04});
+            code.insert(code.end(), {0xFF, 0xD0});
+            code.insert(code.end(), {0xEB, 0x05});
+        }
         code.push_back(0xE8);
         size_t callPatchPos = code.size();
         code.insert(code.end(), {0, 0, 0, 0});
@@ -1284,6 +1481,16 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             code.push_back(static_cast<uint8_t>((graphAddr >> (b * 8)) & 0xFF));
         // mov r14, rsp  — what a fault exit restores before it continues at the epilogue
         code.insert(code.end(), {0x49, 0x89, 0xE6});
+        if (framed) {
+            // mov rax, [rsi + resumeAddr]; test rax, rax; jz +4; call rax; jmp +5
+            code.insert(
+                code.end(),
+                {0x48, 0x8B, 0x46, static_cast<uint8_t>(x64::kJitCtxResumeAddrOffset)});
+            code.insert(code.end(), {0x48, 0x85, 0xC0});
+            code.insert(code.end(), {0x74, 0x04});
+            code.insert(code.end(), {0xFF, 0xD0});
+            code.insert(code.end(), {0xEB, 0x05});
+        }
         code.push_back(0xE8);
         size_t callPatchPos = code.size();
         code.insert(code.end(), {0, 0, 0, 0});

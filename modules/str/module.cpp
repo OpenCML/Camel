@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -103,7 +103,7 @@ bool StrModule::load() {
     context_->registerExecutorFactory("str", [ctx = context_]() { return createStrExecutor(ctx); });
     // Every operator of this module is a function of its arguments.
     for (const auto &[name, op] : getStrOpsMap()) {
-        camel::core::OperatorTraitsRegistry::instance().set(
+        camel::core::OperatorTable::instance().set(
             "str:" + name,
             {.pure = true, .elementwise = false});
     }

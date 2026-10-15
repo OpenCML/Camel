@@ -1,0 +1,23 @@
+// Converting a value to its own type is legal and does nothing (design principles 2.12, Q11 of
+// docs/design/graph-model): `xs as int[]` for `xs: int[]` passes exactly as a conversion
+// through an alias does, for arrays, tuples and structs, literals included.
+type A = int[]
+type S = { a: int, b: string }
+
+func through(p: A): A { return p as A }
+
+func main(): int sync {
+    let xs = [1, 2]
+    let ys = xs as int[]
+    let t = (1, "x")
+    let u = t as (int, string)
+    let s: S = { a: 3, b: "y" }
+    let r = s as S
+    println(ys)
+    println(u)
+    println(r.a, r.b)
+    println(through([4]))
+    println([5, 6] as int[])
+    println(len(ys as A))
+    return 0
+}

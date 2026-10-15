@@ -1,0 +1,9 @@
+// `if x != null then ...` : narrowing of a nullable value inside the arm.
+func len_or_zero(s: string?): int {
+    return if s != null then len(s) else 0
+}
+
+func main(): int sync {
+    println(len_or_zero('abc'), len_or_zero(null))
+    return 0
+}

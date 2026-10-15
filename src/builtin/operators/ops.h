@@ -101,8 +101,6 @@ slot_t __builtin__ge_s__(ArgsView &with, ArgsView &norm, camel::core::context::C
 
 slot_t __builtin__eq__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__ne__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__strict_eq__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __builtin__strict_ne__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __builtin__and__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__or__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

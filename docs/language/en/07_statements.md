@@ -10,6 +10,21 @@ A block is made up of statements. A statement is: an expression, a `let`/`var` d
 
 Any expression can be a statement. In a sync block it executes in order; outside a sync block, an expression whose value is not used does not execute ([4.2](04_execution_model.md#42-evaluation-by-dependency)).
 
+**A `T!` that is evaluated and not used is a warning.** In a sync block a statement runs whether or not anything takes its value; when that value is a `T!` ([3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t)), an error it holds is lost without a trace, and the compiler says so (`SemanticDiag::UnusedFallibleValue`):
+
+```cml
+func save(path: string): int! sync { ... }
+
+func main(): int sync {
+    save('a.txt')              // warning: the int! is not used
+    let r = save('b.txt')      // warning: r is never used
+    let _ = save('c.txt')      // dropped on purpose: no warning
+    return save('d.txt') !! -1 // used
+}
+```
+
+Using the value means taking it apart with `!!`, `?->` or `match`, passing it on, or returning it. To drop it on purpose write `let _ = ...` ([7.2](#72-let-and-var)). The same warning is given for what the arm of an `if` without `else` gives, and for the value a `main` **without a declared return type** ends with: only a `main` that declares its return type has a result ([4.1](04_execution_model.md#41-program-and-entry)), so an error value at the end of an undeclared one goes nowhere. Outside a sync block there is nothing to warn about: a value nothing uses is not evaluated at all. The warning can be turned off with `-Wno-unused-fallible-value`.
+
 ## 7.2 `let` and `var`
 
 ```
@@ -33,7 +48,8 @@ var count = 0
   ```
 
   Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`); use `p.x`, `xs[0]`.
-- A `let` at the module top level is a global constant. A top-level `var` can be read and written by functions, and a function that writes it should be declared `sync func`; this usage is not fully implemented and is best avoided.
+- **`let _ = e` drops the value of `e` on purpose.** `_` is not a name: nothing is bound, so it can be written any number of times in one block, and it cannot be read. The expression is evaluated like the initial value of any `let` (in a sync block, in order). It is the way to say that a `T!` is ignored deliberately ([7.1](#71-expression-statements)). Only this form exists: `var _`, and `_` among several names, are syntax errors.
+- A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions (a function that writes it is declared `sync func`), also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.7](05_modules.md#57-loading-modules)). A local `let` in a function body is still declared before it is used.
 
 ## 7.3 `return` and `throw`
 
@@ -181,7 +197,7 @@ func main(): int sync {
 - **The function body is checked at instantiation.** Type errors in the function body are reported at instantiation; the diagnostic gives the position of the error in the function body and states which instance it is and which call instantiated it. A generic function that is never called is not checked.
 - Recursive generic functions can be used (the return type must be written out). A function that switches to a larger type at every recursion cannot terminate instantiation, and an error is reported when the nesting reaches 8 levels.
 - `T` can be used in the function body: the parameter types of a lambda, `let z: T = 0`, `e as T`.
-- **Export**: a generic function can be `export`ed, and after an `import` another module calls it as usual (the qualified name `lib::f(x)` can also be written). What is exported is the template; instances are built by the module that calls it, and every module that imports it has its own instances. Names in the function body are resolved in the module that declares it, so it can use functions of that module that are not exported, other generic functions and its own imports. There is one restriction: a function body instantiated by another module cannot use top-level values (`let`/`var`) of the declaring module; write the constants it needs as functions. "In which module an instance is built" is behaviour of the current implementation, not yet decided.
+- **Export**: a generic function can be `export`ed, and after an `import` another module calls it as usual (the qualified name `lib::f(x)` can also be written). What is exported is the template; there is one instance per set of types in the whole program, whichever module calls it. Names in the function body are resolved in the module that declares it, so it can use functions of that module that are not exported, other generic functions, its own imports and the values of its top level.
 
 Binding is equally possible in `with` parameters:
 

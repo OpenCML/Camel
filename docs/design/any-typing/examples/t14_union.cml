@@ -1,0 +1,9 @@
+module t14_union
+// A union type as the type of a parameter of a user function.
+func show(x: int | string): string { return string(x) }
+func main(): int sync {
+    let n = 1 + 1
+    println(show(n))
+    println(show('a' + 'b'))
+    return 0
+}

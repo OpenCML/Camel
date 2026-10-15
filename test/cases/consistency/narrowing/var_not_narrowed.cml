@@ -1,0 +1,7 @@
+// A `var` is not narrowed: it may be rewritten between the test and the use.
+func main(): int sync {
+    var x: int? = 3
+    let y = if x != null then x + 1 else 0
+    println(y)
+    return 0
+}

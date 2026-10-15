@@ -45,12 +45,19 @@ FEATURES = {
     "nullable": "T?: null, values that enter a T? position (argument, typed let, branch arm, return), ?? chains",
     "partial": "functions with context (with) parameters, called in place (f<w>(x)) and partially applied (f<w> as a value)",
     "ifnoelse": "if statements without else whose arm is one expression of any type",
+    "logic": "&& and || with effects on the right side (branches: the right side runs only when needed), & and | (both sides run)",
+    "narrowing": "x == null / x != null as bool expressions, and the arm of if x != null (also joined by &&) where x is a T",
+    "modules": "top-level values written in any order, and the program split into three modules "
+               "(values and types; functions that call only each other; the rest), imported by "
+               "name; not in the default set",
 }
-DEFAULT_FEATURES = frozenset(FEATURES)
+# `modules` is left out of the default set: the feature set is part of every program's random
+# stream, and the recorded seeds must keep naming the same programs. `--features all,modules`.
+DEFAULT_FEATURES = frozenset(FEATURES) - {"modules"}
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
-VERSION = 3
+VERSION = 4
 
 
 def parse_features(text: Optional[str]) -> frozenset:
@@ -240,6 +247,8 @@ class Gen:
             o.append((0.9, lambda: self.reduce_expr(t, d)))
         if self.on("nullable") and k != "rec":
             o.append((1.1, lambda: self.coalesce(t, d)))
+        if self.on("narrowing") and self.nullable_lets(t):
+            o.append((1.2, lambda: self.narrowed_if(t, d)))
         applied = self.with_functions(ret=t)
         if applied:
             o.append((1.4, lambda: self.applied_call(self.r.choice(applied), d)))
@@ -254,7 +263,13 @@ class Gen:
             o.append((1.0, lambda: N("conv", [self.expr(INT, d - 1)], t=FLOAT, fn="float")))
         elif t == BOOL:
             o.append((4.0, lambda: self.compare(d)))
-            o.append((2.0, lambda: bin_(self.r.choice(["&&", "||"]), self.expr(BOOL, d - 1), self.expr(BOOL, d - 1), BOOL)))
+            o.append((2.0, lambda: self.logical(self.r.choice(["&&", "||"]), self.expr(BOOL, d - 1),
+                                                lambda: self.expr(BOOL, d - 1))))
+            if self.on("logic"):
+                o.append((0.8, lambda: bin_(self.r.choice(["&", "|"]), self.expr(BOOL, d - 1), self.expr(BOOL, d - 1), BOOL)))
+            if self.on("narrowing") and self.nullable_lets():
+                o.append((0.8, lambda: self.null_test(self.r.choice(self.nullable_lets()), self.chance(0.5))))
+                o.append((0.8, lambda: self.narrowed_and(d)))
             o.append((0.8, lambda: N("un", [self.expr(BOOL, d - 1)], t=BOOL, op="!")))
             if self.on("array"):
                 o.append((0.8, lambda: self.contains(d)))
@@ -360,10 +375,11 @@ class Gen:
 
     def branch_with_null(self, t, d):
         """`if c then e else null`: the arms join to `t?`."""
-        arms = [self.expr(t, max(d - 1, 0)), self.null(t)]
+        cond = self.expr(BOOL, max(d - 1, 0))
+        arms = [lambda: self.expr(t, max(d - 1, 0)), lambda: self.null(t)]
         if self.chance(0.4):
             arms.reverse()
-        return N("if", [self.expr(BOOL, max(d - 1, 0))] + arms, t=OPT(t))
+        return self.if_node(cond, arms[0], arms[1], OPT(t))
 
     def entering(self, t, d):
         """What is written where a `t?` is expected (an argument, a typed `let`, `return`): a
@@ -384,6 +400,132 @@ class Gen:
         self.scope.append(s)
         s.shown = True                     # printed by itself below, not through `format`
         return N("let", [e], name=s.name, ann=OPT(t))
+
+    # -- narrowing (design principles 2.11, 2.12) --------------------------------------------
+    def nullable_lets(self, t=None):
+        """The names a test against null narrows: `T?` names bound by `let` or parameters."""
+        return [s for s in self.scope if s.kind == "let" and not s.eff and s.t[0] == "opt" and
+                (t is None or s.t[1] == t)]
+
+    def null_test(self, s: Sym, is_null: bool):
+        """`s == null` / `s != null`, either way round."""
+        sides = [ref(s), self.null(s.t[1])]
+        if self.chance(0.3):
+            sides.reverse()
+        return bin_("==" if is_null else "!=", sides[0], sides[1], BOOL)
+
+    def narrowable(self, cond, holds: bool):
+        """The names in scope that `cond` narrows where it holds (`holds`) or where it does not
+        (design principles 2.11, 2.12): a test `x != null` (either order) that is `cond` or an
+        operand `&&` joins in it narrows where `cond` holds; `cond` being `x == null` narrows
+        where it does not. The generator writes the arm with those names as a `T`, as the
+        compiler sees them, also where the test was not written to narrow."""
+        def test(e):
+            if e.k == "bin" and e.a["op"] in ("==", "!="):
+                a, b = e.c
+                if a.k == "ref" and b.k == "null":
+                    return a.a["name"], e.a["op"] == "!="
+                if b.k == "ref" and a.k == "null":
+                    return b.a["name"], e.a["op"] == "!="
+            return None
+
+        def conjuncts(e):
+            if e.k == "bin" and e.a["op"] == "&&":
+                return conjuncts(e.c[0]) + conjuncts(e.c[1])
+            return [e]
+        names = set()
+        if holds:
+            for c in conjuncts(cond):
+                t = test(c)
+                if t and t[1]:
+                    names.add(t[0])
+        else:
+            t = test(cond)
+            if t and not t[1]:
+                names.add(t[0])
+        return [s for s in self.nullable_lets() if s.name in names]
+
+    def logical(self, op, left, make_right):
+        """`left op right` with `right` made as the arm it is."""
+        right = self.narrowed(self.narrowable(left, op == "&&"), make_right) if op in ("&&", "||") else make_right()
+        return bin_(op, left, right, BOOL)
+
+    def narrowed(self, syms, make):
+        """make() with each of `syms` a `T` instead of a `T?`, as inside the arm a test narrows.
+        The `T?` itself is out of scope there: the name means the value."""
+        saved = list(self.scope)
+        for s in syms:
+            if s not in self.scope:
+                continue
+            i = self.scope.index(s)
+            self.scope[i] = Sym(s.name, s.t[1], "let")
+        try:
+            return make()
+        finally:
+            self.scope = saved
+
+    def narrowed_if(self, t, d):
+        """`if x != null then A else B` with `x` a `T` in `A`; also `x == null` with the arms the
+        other way round, and several tests joined by `&&`, possibly with a plain condition."""
+        opts = self.nullable_lets()
+        s = self.r.choice(self.nullable_lets(t) if self.chance(0.6) else opts)
+        r = self.r.random()
+        if r < 0.5:
+            cond = self.null_test(s, False)
+            return self.if_node(cond, lambda: self.pure_arm(t, d - 1), lambda: self.pure_arm(t, d - 1), t)
+        if r < 0.75:
+            cond = self.null_test(s, True)
+            return self.if_node(cond, lambda: self.pure_arm(t, d - 1), lambda: self.pure_arm(t, d - 1), t)
+        syms = [s] + [x for x in self.r.sample(opts, min(len(opts), 2)) if x is not s][:1]
+
+        def test_of(x):
+            # Each operand of `&&` is the arm of the ones before it: a name they narrowed is a
+            # `T` there, and a `T` is not compared with null.
+            return lambda: self.null_test(x, False) if x in self.nullable_lets() else self.expr(BOOL, 1)
+        makers = [test_of(x) for x in syms]
+        if self.chance(0.4):
+            makers.insert(self.r.randint(0, len(makers)), lambda: self.expr(BOOL, 1))
+        cond = makers[0]()
+        for make in makers[1:]:
+            cond = self.logical("&&", cond, make)
+        return self.if_node(cond, lambda: self.pure_arm(t, d - 1), lambda: self.pure_arm(t, d - 1), t)
+
+    def if_node(self, cond, make_then, make_other, t):
+        """`if cond then .. else ..` with each arm made under the narrowing `cond` gives it."""
+        then = self.narrowed(self.narrowable(cond, True), make_then)
+        other = self.narrowed(self.narrowable(cond, False), make_other)
+        return N("if", [cond, then, other], t=t)
+
+    def narrowed_and(self, d):
+        """`x != null && e` with `x` a `T` in `e`: the right side of `&&` is the arm."""
+        s = self.r.choice(self.nullable_lets())
+        return self.logical("&&", self.null_test(s, False), lambda: self.expr(BOOL, d - 1))
+
+    # -- `&&` / `||` with effects on the right side (design principles 2.11) -----------------
+    def logic_probe(self):
+        """`func qN(a: int, b: bool): bool sync { println(...); b }`: an effect whose value is a
+        bool, to stand on the right side of `&&` and `||`."""
+        name = self.fresh("q")
+        params = [(self.fresh("a"), INT, False), (self.fresh("a"), BOOL, False)]
+        a, b = params[0][0], params[1][0]
+        body = N("blk", [[N("expr", [N("println", [N("fmt", [N("ref", t=INT, name=a)], t=STR, s=name + " {}")])])],
+                         N("ref", t=BOOL, name=b)], t=BOOL, sync=True)
+        sym = self.fn_sym(name, params, BOOL, eff=True)
+        sym.t = ("fneff",)
+        self.add_func(name, params, BOOL, body, sym)
+
+    def logic_stmt(self, d):
+        """`let n = c && q(..)` (or `||`, `&`, `|`): the effect of `q` happens only when the right
+        side is needed, or always for `&` and `|`."""
+        probes = [s for s in self.callables(BOOL, eff=True) if self.can_call(s)]
+        if not probes:
+            return self.println(d)
+        op = self.r.choice(["&&", "||", "&&", "||", "&", "|"])
+        probe = self.r.choice(probes)
+        e = self.logical(op, self.expr(BOOL, 2), lambda: self.call(probe, 2, eff=True))
+        s = Sym(self.fresh("n"), BOOL, "let")
+        self.scope.append(s)
+        return N("let", [e], name=s.name)
 
     def nullable_functions(self):
         """`func m(a: T, c: bool): T? { return if c then .. else null }` and
@@ -476,7 +618,8 @@ class Gen:
         return o
 
     def if_expr(self, t, d):
-        return N("if", [self.expr(BOOL, d - 1), self.pure_arm(t, d - 1), self.pure_arm(t, d - 1)], t=t)
+        cond = self.expr(BOOL, d - 1)
+        return self.if_node(cond, lambda: self.pure_arm(t, d - 1), lambda: self.pure_arm(t, d - 1), t)
 
     def pure_arm(self, t, d):
         if d > 0 and self.chance(0.25):
@@ -944,6 +1087,8 @@ class Gen:
             o.append((1.0, lambda: self.partial_let(2)))
         if self.on("ifnoelse") and self.on("effects"):
             o.append((1.3, lambda: self.if_without_else(d)))
+        if self.on("logic") and self.on("effects"):
+            o.append((1.3, lambda: self.logic_stmt(d)))
         if d > 0 and not simple:
             if self.on("if") and self.on("effects"):
                 o.append((1.4, lambda: self.if_statement(d)))
@@ -968,37 +1113,39 @@ class Gen:
 
     def if_statement(self, d):
         cond = self.expr(BOOL, 2)
-        then = self.effect_block(None, d)
-        other = self.effect_block(None, d) if self.chance(0.6) else None
+        then = self.narrowed(self.narrowable(cond, True), lambda: self.effect_block(None, d))
+        other = (self.narrowed(self.narrowable(cond, False), lambda: self.effect_block(None, d))
+                 if self.chance(0.6) else None)
         return N("ifs", [cond, then, other])
 
     def if_without_else(self, d):
         """`if c then e` as a statement: the arm is one expression of any type, whose value is
         dropped; an effect written there happens when the condition holds."""
         cond = self.expr(BOOL, 2)
-        r = self.r.random()
-        if r < 0.65:
-            arm = self.println(1).c[0]
-        elif r < 0.85:
-            call = self.effect_call(1)
-            # effect_call may bind the result; only the call itself can be the arm
-            if call.k == "let":
-                self.scope.pop()
-            arm = call.c[0]
-        else:
-            arm = self.expr(self.rand_type(0.2), 1)
+
+        def make():
+            r = self.r.random()
+            if r < 0.65:
+                return self.println(1).c[0]
+            if r < 0.85:
+                call = self.effect_call(1)
+                # effect_call may bind the result; only the call itself can be the arm
+                if call.k == "let":
+                    self.scope.pop()
+                return call.c[0]
+            return self.expr(self.rand_type(0.2), 1)
+        arm = self.narrowed(self.narrowable(cond, True), make)
         return N("ifs", [cond, arm, None])
 
     def if_value(self, d):
         t = self.rand_type(0.2)
         cond = self.expr(BOOL, 2)
-        then = self.effect_block(t, d)
-        other = self.effect_block(t, d) if self.chance(0.5) else self.expr(t, 2)
-        if self.chance(0.5):
-            then, other = other, then
+        block = lambda: self.effect_block(t, d)
+        other = lambda: self.effect_block(t, d) if self.chance(0.5) else self.expr(t, 2)
+        node = self.if_node(cond, other, block, t) if self.chance(0.5) else self.if_node(cond, block, other, t)
         s = Sym(self.fresh("n"), t, "let")
         self.scope.append(s)
-        return N("let", [N("if", [cond, then, other], t=t)], name=s.name)
+        return N("let", [node], name=s.name)
 
     def match_value(self, d):
         t = self.rand_type(0.2)
@@ -1075,7 +1222,41 @@ class Gen:
         return N("func", [body], name=name, params=params, ret=ret, syncfn=effectful and writes_captured(body))
 
     # -- the program ------------------------------------------------------------------------
+    def top_level_values(self) -> list:
+        """Feature `modules`: a few top-level `let`s of scalar types, each a pure expression
+        over literals and the ones before it, in scope for every function and for main. They
+        are written in a shuffled order (`global_order`): the top level does not depend on the
+        order it is written in."""
+        made = []
+        for _ in range(self.r.choice([2, 3, 3, 4]) * self.size):
+            t = self.scalar()
+            e = self.expr(t, 2)
+            s = Sym(self.fresh("k"), t, "let")
+            self.scope.append(s)
+            made.append(N("let", [e], name=s.name))
+        self.global_order = list(range(len(made)))
+        self.r.shuffle(self.global_order)
+        return made
+
+    def split(self) -> set:
+        """Feature `modules`: the functions that go to the second module, a random set closed
+        under the functions they name (the second module imports only the first one)."""
+        names = {f.a["name"] for f in self.funcs}
+        named = {f.a["name"]: {x.a["name"] for x in walk(f) if x.a.get("name") in names}
+                 for f in self.funcs}
+        chosen = set()
+        for f in self.funcs:
+            if self.chance(0.5):
+                todo = [f.a["name"]]
+                while todo:
+                    n = todo.pop()
+                    if n not in chosen:
+                        chosen.add(n)
+                        todo.extend(named.get(n, ()))
+        return chosen
+
     def program(self, module: str) -> N:
+        globals_ = self.top_level_values() if self.on("modules") else []
         if self.on("func"):
             for _ in range(self.r.choice([1, 2, 3, 3, 4]) * self.size):
                 if self.on("rec") and self.chance(0.3):
@@ -1094,10 +1275,14 @@ class Gen:
             if self.on("nullable"):
                 for _ in range(self.r.choice([1, 1, 2])):
                     self.nullable_functions()
+            if self.on("logic") and self.on("effects"):
+                for _ in range(self.r.choice([1, 1, 2])):
+                    self.logic_probe()
             if self.on("partial"):
                 for _ in range(self.r.choice([1, 2, 2])):
                     self.with_function()
-        declared = [s for s in self.scope if s.kind in ("fn", "wfn")]
+        top = {g.a["name"] for g in globals_}
+        declared = [s for s in self.scope if s.kind in ("fn", "wfn") or s.name in top]
         self.scope = list(declared)
         stmts = []
         if self.on("env"):
@@ -1117,7 +1302,10 @@ class Gen:
                 stmts.append(N("expr", [N("println", [N("fmt", [ref(s)], t=STR, s=f"L{self.label} {{}}")])]))
         body = N("blk", [stmts, lit(INT, 0)], t=INT, sync=True)
         main = N("func", [body], name="main", params=[], ret=INT)
-        return N("prog", [self.funcs + [main]], module=module, types=dict(self.types), env=dict(self.env))
+        if not self.on("modules"):
+            return N("prog", [self.funcs + [main]], module=module, types=dict(self.types), env=dict(self.env))
+        return N("prog", [self.funcs + [main], globals_], module=module, types=dict(self.types),
+                 env=dict(self.env), split=self.split(), global_order=self.global_order)
 
 
 def macro_safe(body: N) -> bool:

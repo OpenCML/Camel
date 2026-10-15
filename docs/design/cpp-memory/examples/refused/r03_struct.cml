@@ -1,0 +1,10 @@
+/// Refused by std::cpp: a struct value
+module r03_struct
+
+type P = { x: int, y: int }
+
+func main(): int sync {
+    let p: P = { x: 1, y: 2 }
+    println(p.x + p.y)
+    return 0
+}

@@ -21,7 +21,7 @@ func weights(): Tensor { return reshape([0.5, -0.25, 0.1, 0.3], [2, 2]) }
 
 with <m: P>
 func walk(h: Tensor, k: int): Tensor {
-    return if k >= 6 || sum(h * h) < 1.0 then h else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
+    return if k >= 6 | sum(h * h) < 1.0 then h else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 func mk(): P { return { w: weights() } }

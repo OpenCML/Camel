@@ -1,0 +1,10 @@
+/// Refused by std::cpp: a var cell
+module r08_var
+
+func main(): int sync {
+    var n = 0
+    n = n + 1
+    n = n + 1
+    println(n)
+    return 0
+}

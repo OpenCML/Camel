@@ -1,0 +1,25 @@
+/**
+ * A `T!` that is evaluated in a sync block and that nothing uses is a warning (design
+ * principles 2.11): the error it may hold is lost. `let _ = ...` drops it on purpose.
+ */
+module unused
+
+func parse(s: string): int! {
+    return parse_int(s)
+}
+
+func checked(s: string): int sync {
+    parse(s)                              // line 12: warned
+    let r = parse(s)                      // line 13: warned, `r` is never used
+    let _ = parse(s)                      // dropped on purpose
+    let _ = parse('x')                    // and again: `_` binds nothing
+    let kept = parse(s)
+    if len(s) > 1 then parse(s)           // line 17: warned, what the arm gives is dropped
+    return kept !! -1
+}
+
+func main(): int sync {
+    println(checked('12'))
+    println(checked('zz'))
+    return 0
+}

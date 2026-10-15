@@ -1,0 +1,6 @@
+// Higher-order operator: OPER :mark/map_arr with a function value.
+func main(): int sync {
+    let k = 2
+    println([1, 2, 3]->map<(x: int) => x * k>)
+    return 0
+}

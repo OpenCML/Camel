@@ -1,0 +1,4 @@
+/** Helper module: tries to export a `var`. */
+module export_var_lib
+
+export var count = 0

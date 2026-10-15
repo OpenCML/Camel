@@ -1,0 +1,34 @@
+// A sequential driver that calls a parallel inner function at every step. The driver is a
+// tail-recursive loop of 40 steps; a step calls `inner_sum`, a `map` over 16 independent elements
+// (each a scalar recursion), and then does scalar work of its own through small helpers
+// (`churn`: 20000 iterations of `mix`). The driver and `inner_sum` have a `map` below them; `fib`,
+// `mix` and `churn` have nothing to run concurrently.
+module driver_inner
+
+func fib(n: int): int {
+    return if n <= 1 then n else fib(n - 1) + fib(n - 2)
+}
+
+func mix(a: int, b: int): int {
+    return (a * 31 + b) % 1000003
+}
+
+func churn(i: int, n: int, acc: int): int {
+    return if i == n then acc else churn(i + 1, n, mix(acc, i))
+}
+
+func inner_sum(seed: int): int {
+    return range(0, 16)
+        ->map<(i: int): int => fib(18 + (seed + i) % 3)>
+        ->reduce<(acc: int, cur: int): int => acc + cur, 0>
+}
+
+func drive(step: int, steps: int, acc: int): int {
+    return if step == steps then acc
+        else drive(step + 1, steps, mix(acc, inner_sum(step) + churn(0, 20000, step)))
+}
+
+func main(): int sync {
+    println(drive(0, 40, 0))
+    return 0
+}

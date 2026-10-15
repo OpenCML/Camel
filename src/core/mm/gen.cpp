@@ -925,8 +925,7 @@ bool GenerationalAllocatorWithGC::inLargeObjSpace(ObjectHeader *header) const {
 }
 
 bool GenerationalAllocatorWithGC::isPreciseGCType(const type::Type *objectType) {
-    return objectType && objectType->isGCTraced() && objectType->code() != type::TypeCode::Ref &&
-           objectType->code() != type::TypeCode::Any;
+    return objectType && objectType->isGCTraced() && objectType->code() != type::TypeCode::Ref;
 }
 
 void GenerationalAllocatorWithGC::recordObjectTypeUnlocked(

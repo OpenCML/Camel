@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 11, 2026
- * Updated: Oct. 11, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -24,6 +24,7 @@
 #include "camel/core/type/typevar.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/type/storage.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -41,8 +42,7 @@ TypeVarType::TypeVarType(const std::string &name, bool binder)
     : Type(TypeCode::TypeVar), name_(name), binder_(binder) {}
 
 TypeVarType *TypeVarType::create(const std::string &name, bool binder) {
-    void *mem = mm::permSpace().alloc(sizeof(TypeVarType), alignof(TypeVarType));
-    ASSERT(mem != nullptr, "Failed to allocate TypeVarType from permSpace");
+    void *mem = allocTypeStorage<TypeVarType>(TypeStorageKind::TypeVar);
     return new (mem) TypeVarType(name, binder);
 }
 
@@ -85,8 +85,7 @@ TypeFunctionType::TypeFunctionType(
 
 TypeFunctionType *
 TypeFunctionType::create(const std::string &name, std::vector<std::string> params, Type *body) {
-    void *mem = mm::permSpace().alloc(sizeof(TypeFunctionType), alignof(TypeFunctionType));
-    ASSERT(mem != nullptr, "Failed to allocate TypeFunctionType from permSpace");
+    void *mem = allocTypeStorage<TypeFunctionType>(TypeStorageKind::TypeVar);
     return new (mem) TypeFunctionType(name, std::move(params), body);
 }
 
@@ -133,12 +132,13 @@ std::string paramNameOf(const FunctionType *func, size_t argIndex, const char *p
                                             : prefix + std::to_string(i);
 }
 
-FunctionType *
+/// A factory holding `func` with the variables replaced; `changed` tells whether any was.
+FunctionTypeFactory
 rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &changed) {
     FunctionTypeFactory factory;
     factory.setImplMark(func->implMark());
     factory.setModifiers(func->modifiers());
-    factory.setHasCompileInfo(func->hasMetaInfo());
+    factory.setHasCompileInfo(func->hasArgNames());
     const auto replaced = [&](Type *type) {
         Type *result = substituteTypeVars(type, bindings);
         changed |= result != type;
@@ -156,11 +156,8 @@ rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &c
             replaced(func->normTypeAt(i)),
             func->normIsVarAt(i));
     }
-    for (const auto ref : func->closureRefs()) {
-        factory.addClosureRef(std::string(ref));
-    }
     factory.setExitType(func->hasExitType() ? replaced(func->exitType()) : nullptr);
-    return factory.build();
+    return factory;
 }
 
 /// A module type whose arguments are plain types (OtherType::typeArguments): the algebra
@@ -310,9 +307,9 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     }
     case TypeCode::Function: {
         bool changed = false;
-        FunctionType *func =
+        FunctionTypeFactory factory =
             rebuildFunctionType(static_cast<FunctionType *>(type), bindings, changed);
-        return changed ? func : type;
+        return changed ? factory.build() : type;
     }
     case TypeCode::Union: {
         bool changed = false;
@@ -344,9 +341,9 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     return type;
 }
 
-FunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t &bindings) {
+OpenFunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t &bindings) {
     bool changed = false;
-    return rebuildFunctionType(type, bindings, changed);
+    return rebuildFunctionType(type, bindings, changed).buildOpen();
 }
 
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {

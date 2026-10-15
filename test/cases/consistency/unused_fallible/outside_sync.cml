@@ -1,0 +1,14 @@
+// Outside a sync block a value nothing uses is not evaluated at all: no error is lost.
+func parse(s: string): int! {
+    return parse_int(s)
+}
+
+func quiet(s: string): int {
+    let r = parse(s)
+    return 1
+}
+
+func main(): int sync {
+    println(quiet('zz'))
+    return 0
+}

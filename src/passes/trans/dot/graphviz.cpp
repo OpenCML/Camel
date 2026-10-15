@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2024
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -91,7 +91,7 @@ string portLabel(
     // `with` ports, one more for each capture; those are named by the captured names.
     // (Counting them as declared parameters gave a capture the name of the first parameter,
     // and that parameter no name.)
-    const auto captured    = graph->funcType()->closureRefs();
+    const auto captured    = graph->captureNames();
     const size_t withPorts = graph->withPorts().size();
     const size_t withCount =
         graph->closureNodes().empty() && captured.size() <= withPorts ? withPorts - captured.size()
@@ -102,7 +102,7 @@ string portLabel(
     for (size_t i = 0; i < withPorts; ++i) {
         if (graph->withPorts()[i] == nodeRef) {
             if (i >= withCount) {
-                return std::string(captured[i - withCount]);
+                return std::string(camel::core::symbolText(captured[i - withCount]));
             }
             argIndex = i;
             found    = true;
@@ -160,9 +160,6 @@ string recordLabel(
             record.bodyBytes() >= sizeof(camel::runtime::GCAccsBody),
             "GraphViz ACCS payload is smaller than its fixed header.");
         if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
-            ASSERT(
-                body->keyBytes <= record.bodyBytes() - sizeof(camel::runtime::GCAccsBody),
-                "GraphViz ACCS struct-key payload exceeds the node body.");
             const std::string_view key = body->key();
             return "." + std::string(key.data(), key.size());
         }
@@ -174,8 +171,6 @@ string recordLabel(
         return "JOIN";
     case camel::runtime::GCNodeKind::Call:
         return "CALL";
-    case camel::runtime::GCNodeKind::Bind:
-        return "BIND";
     case camel::runtime::GCNodeKind::Func: {
         auto *callee = graph->directCalleeGraphOf(nodeRef);
         return callee ? callee->name() : "FUNC";
@@ -184,17 +179,11 @@ string recordLabel(
         ASSERT(
             record.bodyBytes() >= sizeof(camel::runtime::GCOperBody),
             "GraphViz OPER payload is smaller than its fixed header.");
-        ASSERT(
-            graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uriBytes <=
-                record.bodyBytes() - sizeof(camel::runtime::GCOperBody),
-            "GraphViz OPER uri payload exceeds the node body.");
         return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
     case camel::runtime::GCNodeKind::Sync:
         return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
-    case camel::runtime::GCNodeKind::Dref:
-        return "DREF";
     default:
         return "NODE";
     }
@@ -220,8 +209,6 @@ string recordType(const camel::runtime::GCNode &record) {
         return "JOIN";
     case camel::runtime::GCNodeKind::Call:
         return "CALL";
-    case camel::runtime::GCNodeKind::Bind:
-        return "BIND";
     case camel::runtime::GCNodeKind::Func:
         return "FUNC";
     case camel::runtime::GCNodeKind::Oper:
@@ -230,8 +217,6 @@ string recordType(const camel::runtime::GCNode &record) {
         return "SYNC";
     case camel::runtime::GCNodeKind::Gate:
         return "GATE";
-    case camel::runtime::GCNodeKind::Dref:
-        return "DREF";
     default:
         return "NODE";
     }
@@ -246,7 +231,6 @@ string recordShape(const camel::runtime::GCNode &record) {
     case camel::runtime::GCNodeKind::Brch:
     case camel::runtime::GCNodeKind::Join:
     case camel::runtime::GCNodeKind::Call:
-    case camel::runtime::GCNodeKind::Bind:
     case camel::runtime::GCNodeKind::Oper:
     case camel::runtime::GCNodeKind::Sync:
     case camel::runtime::GCNodeKind::Gate:
@@ -584,8 +568,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const auto nodeRef = it.ref();
         const auto *node   = *it;
-        if (!node || node->kind == camel::runtime::GCNodeKind::Port ||
-            node->kind == camel::runtime::GCNodeKind::Dref) {
+        if (!node || node->kind == camel::runtime::GCNodeKind::Port) {
             continue;
         }
         string label   = recordLabel(graph, nodeRef, *node);

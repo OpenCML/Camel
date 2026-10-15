@@ -1,0 +1,7 @@
+module t05d_index
+func main(): int sync {
+    let ys = [1, 2, 3]
+    let a = ys as any
+    println(a[0])
+    return 0
+}

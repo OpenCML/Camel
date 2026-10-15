@@ -22,7 +22,9 @@ CAMEL_NODE(Program, Other)             // SEP? (decl SEP?)* EOF
 CAMEL_NODE(StmtList, Other)            // stmt (SEP? stmt)* SEP?
 CAMEL_NODE(ModuleName, Other)          // ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
 CAMEL_NODE(ModuleDecl, Other)          // 'module' identDef
-CAMEL_NODE(ImportDecl, Other)          // 'import' (moduleName | (identDef | bracedIdents) 'from' moduleName)
+CAMEL_NODE(ImportDecl, Other)          // 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
+CAMEL_NODE(BracedImports, Other)       // '{' (importItem (',' importItem)*)? ','? '}'
+CAMEL_NODE(ImportItem, Other)          // identDef ('as' identDef)?
 CAMEL_NODE(ExportDecl, Other)          // 'export' (dataDecl | typeDecl | bracedIdents)
 CAMEL_NODE(UsingNamespaceDecl, Other)  // 'using' 'namespace' identRef
 CAMEL_NODE(NamespaceDecl, Other)       // 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
@@ -32,7 +34,6 @@ CAMEL_NODE(FuncAnno, Other)            // '@' identRef angledValues?
 CAMEL_NODE(FuncDecl, Other)            // funcAnno* ('with' angledParams)? 'export'? implMark? modifiers? 'func' identRef parentParams (':' typeExpr)? stmtBlock
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
 CAMEL_NODE(TypeDecl, Other)            // implMark? 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING)
-CAMEL_NODE(UseDecl, Other)             // 'use' (identDef '=')? identRef
 CAMEL_NODE(RetStmt, Other)             // ('return' | 'throw') dataList
 CAMEL_NODE(ImplMark, Other)            // 'inner' | 'outer'
 CAMEL_NODE(Modifiers, Other)           // ('atomic' | 'shared' | 'sync' | 'macro')+
@@ -66,17 +67,23 @@ CAMEL_NODE(WaitExpr, Expr)             // 'wait' assignExpr
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' identRef '{' matchCase+ '}'
 CAMEL_NODE(TryExpr, Expr)              // 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
+CAMEL_NODE(LoopExpr, Expr)             // 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+CAMEL_NODE(LoopFor, Other)             // 'for' identDef 'in' logicalOrExpr
+CAMEL_NODE(LoopWhile, Other)           // 'while' logicalOrExpr
 CAMEL_NODE(AssignExpr, Expr)           // logicalOrExpr (('=' | '+=' | ...) logicalOrExpr)?
 CAMEL_NODE(LogicalOrExpr, Expr)        // logicalAndExpr ('||' logicalAndExpr)*
-CAMEL_NODE(LogicalAndExpr, Expr)       // equalityExpr ('&&' equalityExpr)*
+CAMEL_NODE(LogicalAndExpr, Expr)       // orExpr ('&&' orExpr)*
+CAMEL_NODE(OrExpr, Expr)               // andExpr ('|' andExpr)*
+CAMEL_NODE(AndExpr, Expr)              // equalityExpr ('&' equalityExpr)*
 CAMEL_NODE(EqualityExpr, Expr)         // relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 CAMEL_NODE(RelationalExpr, Expr)       // additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 CAMEL_NODE(AdditiveExpr, Expr)         // multiplicativeExpr (('+' | '-') multiplicativeExpr)*
-CAMEL_NODE(MultiplicativeExpr, Expr)   // nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
+CAMEL_NODE(MultiplicativeExpr, Expr)   // powerExpr (('*' | '/' | '@' | '%') powerExpr)*
+CAMEL_NODE(PowerExpr, Expr)            // nullableExpr ('^' powerExpr)?; also the operand of a prefix operator
 CAMEL_NODE(NullableExpr, Expr)         // unaryExpr (('??' | '!!') dataExpr)?
 CAMEL_NODE(CastExpr, Expr)             // linkExpr ('as' | 'is') typeExpr
-CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '-' | '~') linkExpr
-CAMEL_NODE(LinkExpr, Expr)             // compExpr (('->' | '?->') compExpr)*
+CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '~') linkExpr, '-' negPower
+CAMEL_NODE(LinkExpr, Expr)             // negExpr (('->' | '?->') compExpr)*
 CAMEL_NODE(CompExpr, Expr)             // annoExpr (('..' | '?..') annoExpr)*
 CAMEL_NODE(AnnoExpr, Expr)             // accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
 CAMEL_NODE(AccessExpr, Expr)           // primaryData ('.' (IDENTIFIER | INTEGER | REAL))*

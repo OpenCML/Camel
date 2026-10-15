@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 10, 2024
- * Updated: May. 01, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -138,11 +138,11 @@ class OperatorGroup {
     }
 
   private:
-    /// Makes each overload's resolver findable by its URI (see OperatorResolverRegistry).
+    /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver).
     void publishResolvers() const {
         for (const auto &[uri, resolver] : resolvers_) {
             if (!uri.empty() && resolver) {
-                camel::core::OperatorResolverRegistry::instance().set(uri, resolver);
+                camel::core::OperatorTable::instance().setResolver(uri, resolver);
             }
         }
     }

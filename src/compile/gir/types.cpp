@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 17, 2024
- * Updated: Mar. 29, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -26,43 +26,6 @@ namespace camel::compile::gir {
 
 std::string NodeDebugFingerprint::toEntityId() const {
     return std::format("gnode:{:016x}{:016x}", word0, word1);
-}
-
-std::string to_string(NodeType type) {
-    switch (type) {
-    case NodeType::DATA:
-        return "DATA";
-    case NodeType::PORT:
-        return "PORT";
-    case NodeType::CAST:
-        return "CAST";
-    case NodeType::COPY:
-        return "COPY";
-    case NodeType::FILL:
-        return "FILL";
-    case NodeType::ACCS:
-        return "ACCS";
-    case NodeType::BRCH:
-        return "BRCH";
-    case NodeType::JOIN:
-        return "JOIN";
-    case NodeType::CALL:
-        return "CALL";
-    case NodeType::BIND:
-        return "BIND";
-    case NodeType::FUNC:
-        return "FUNC";
-    case NodeType::OPER:
-        return "OPER";
-    case NodeType::DREF:
-        return "DREF";
-    case NodeType::SYNC:
-        return "SYNC";
-    case NodeType::GATE:
-        return "GATE";
-    }
-    ASSERT(false, "Unknown NodeType");
-    return "Unknown";
 }
 
 std::string to_string(LinkType type) {

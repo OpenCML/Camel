@@ -1,0 +1,13 @@
+// A local of the caller with the name of a top-level value that a callee uses does not take
+// its place (it did: the callee's capture was looked up by name in the caller, printing 6).
+let k = 10
+
+func add_k(x: int): int {
+    return x + k
+}
+
+func main(): int sync {
+    let k = 5
+    println(add_k(1), k)
+    return 0
+}

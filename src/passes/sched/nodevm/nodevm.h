@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 08, 2025
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,8 +90,10 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
 
   private:
+    /// Runs a marked operator (camel/core/operator_table.h), which calls the function values it
+    /// receives.
     void evalMarkedOperator(
-        const std::string &uri, camel::runtime::GCGraph *graph,
+        camel::core::OperId oper, camel::runtime::GCGraph *graph,
         camel::runtime::gc_node_ref_t nodeRef, ctx::Frame &currFrame);
     void evalMarkedOperator_map_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,

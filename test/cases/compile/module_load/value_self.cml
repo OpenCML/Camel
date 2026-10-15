@@ -1,0 +1,7 @@
+// A value computed from itself.
+let x = x + 1
+
+func main(): int sync {
+    println(x)
+    return 0
+}

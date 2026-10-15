@@ -1,0 +1,37 @@
+/**
+ * json.decode gives a `Json`: a value of a definite type whose content is known only when the
+ * program runs (design principles 2.12). The program looks into it with the operators of the
+ * json module, each of which gives a value of a definite type, and a missing member or a value
+ * of another kind is null.
+ */
+module json_value
+
+import { Json, decode, decode_as, encode, kind, is_null, get, as_bool, as_int, as_float, as_string, as_array, as_object } from json
+
+type Server = { host: string, port: int }
+
+func port_of(config: Json): int {
+    return config->get<'server'>->get<'port'>->as_int ?? 8080
+}
+
+func main(): int sync {
+    let j = decode('{"server": {"host": "example.org", "port": 9000}, "tags": ["a", "b", 3], "ratio": 2, "on": true, "none": null}')
+    println(j)
+    println(kind(j), kind(j->get<'tags'> ?? j), is_null(j->get<'none'> ?? j))
+    println(port_of(j), port_of(decode('{}')))
+    println(j->get<'server'>->get<'host'>->as_string ?? '?')
+    println(j->get<'tags'>->get<0>->as_string ?? '?', j->get<'tags'>->get<2>->as_int ?? -1)
+    println(j->get<'tags'>->get<5>->as_string ?? 'out of range', j->get<'tags'>->get<2>->as_string ?? 'not a string')
+    println(j->get<'ratio'>->as_float ?? 0.0, j->get<'ratio'>->as_int ?? 0, j->get<'on'>->as_bool ?? false)
+    let tags = j->get<'tags'>->as_array ?? []
+    println(len(tags), tags->map<(t: Json): string => kind(t)>)
+    let members = j->as_object ?? ([] as Map<string, Json>)
+    println(keys(members))
+    let server = decode_as(j->get<'server'> ?? j, { host: '', port: 0 }) !! { host: '-', port: -1 }
+    println(server.host, server.port)
+    let typed = decode_as('{"id": 7, "payload": {"any": [1, {"x": null}]}}', { id: 0, payload: j }) !! { id: -1, payload: j }
+    println(typed.id, typed.payload, kind(typed.payload))
+    println(encode(j->get<'tags'> ?? j), encode([j->get<'on'> ?? j, decode('1.5')]))
+    println(decode('18446744073709551615'), decode('-3'), decode('"s"'))
+    return 0
+}

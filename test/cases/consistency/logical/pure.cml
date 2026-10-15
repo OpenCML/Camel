@@ -1,0 +1,32 @@
+/**
+ * `&&` and `||` outside a sync block: the value is the same, and an effect on the right
+ * side follows the rule of every arm (it runs when the arm is entered and its value used).
+ */
+module pure
+
+func inside(x: int, lo: int, hi: int): bool {
+    return x >= lo && x <= hi
+}
+
+func outside(x: int, lo: int, hi: int): bool {
+    return x < lo || x > hi
+}
+
+func classify(x: int): string {
+    return if inside(x, 0, 9) && x % 2 == 0 then 'even digit'
+           else if inside(x, 0, 9) || outside(x, -99, 99) then 'odd digit or far'
+           else 'other'
+}
+
+func main(): int sync {
+    println([4, 7, 12, 120, -5]->map<classify>)
+    println(inside(5, 1, 9), inside(0, 1, 9), outside(5, 1, 9), outside(10, 1, 9))
+    let t = true
+    let f = false
+    println(t && t, t && f, f && t, f && f)
+    println(t || t, t || f, f || t, f || f)
+    println(t & t, t & f, f & t, f & f)
+    println(t | t, t | f, f | t, f | f)
+    println(!(t && f) == (!t || !f))
+    return 0
+}

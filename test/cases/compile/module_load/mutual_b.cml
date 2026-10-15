@@ -1,0 +1,18 @@
+/** Helper module: imports mutual_a, which imports it back. */
+module mutual_b
+import mutual_a
+import { Point, origin_x } from mutual_a
+
+export let scale = origin_x + 1
+
+export func is_odd(n: int): bool {
+    return if n == 0 then false else mutual_a::is_even(n - 1)
+}
+
+export func label(p: Point): string {
+    return '({}, {})'->format<p.x, p.y>
+}
+
+export func shifted(): Point {
+    return { x: origin_x, y: scale }
+}

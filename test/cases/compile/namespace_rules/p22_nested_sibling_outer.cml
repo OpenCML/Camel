@@ -1,0 +1,11 @@
+// A nested namespace names something of the enclosing namespace.
+namespace A {
+    func base(): int { return 1 }
+    namespace B {
+        func f(): int { return A::base() + 1 }
+    }
+}
+func main(): int sync {
+    println(A::B::f())
+    return 0
+}

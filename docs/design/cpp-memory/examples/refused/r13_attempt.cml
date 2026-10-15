@@ -1,0 +1,9 @@
+/// Refused by std::cpp: a fault boundary
+module r13_attempt
+
+func quot(a: int, b: int): int { return a / b }
+
+func main(): int sync {
+    println(attempt(quot, 7, 0) !! -1)
+    return 0
+}

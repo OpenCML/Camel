@@ -50,6 +50,14 @@ function(add_camel_module)
   if(UNIX AND NOT APPLE)
     set_target_properties(${_target} PROPERTIES BUILD_RPATH "\$ORIGIN")
   endif()
+  # The same on macOS, where a library is found by the install name recorded in what links it
+  # (the absolute path in the build tree by default): a module is named relative to the module
+  # that needs it, so nn.cmo opens the tensor.cmo next to itself. Not verified on macOS.
+  if(APPLE)
+    set_target_properties(${_target} PROPERTIES
+      INSTALL_NAME_DIR "@loader_path"
+      BUILD_WITH_INSTALL_NAME_DIR ON)
+  endif()
 
   if(WIN32)
     set_target_properties(${_target} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)

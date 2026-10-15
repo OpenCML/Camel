@@ -1,0 +1,20 @@
+/// Translated without passes; after std::inline the pass ends with the internal error
+/// "JOIN arm count mismatch".
+module d11_inline_join
+
+func noisy(x: int): int sync {
+    println('noisy')
+    return x * 2
+}
+
+func f(flag: bool, x: int): int sync {
+    return if flag then {
+        let t = noisy(x)
+        t + t
+    } else 0
+}
+
+func main(): int sync {
+    println(f(true, 21))
+    return 0
+}

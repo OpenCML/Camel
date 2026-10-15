@@ -28,14 +28,27 @@ The eight lines of `ZEN` outline this position: the first two say the graph is f
 | `sync` block | Control edges between adjacent expressions | Executes in written order inside the block |
 | `wait` expression | Control edges between that expression and the related operations before and after it | Locally ordered |
 | Function | Subgraph | Its behaviour is decided by the function itself; a call only places the subgraph node in a larger graph and does not change its structure |
+| `var x = v`, reading, assigning | Three kinds of operator node: make a cell, read it, write it; the name `x` is bound to the cell | What is mutable is the cell, not the value |
+| Lambda, function as a value | A function constant; with captures, one more node that puts the captured values in | A function value is "graph + captured values" |
+| `f<w>` as a value (partial application) | A function value that captured `w`; its graph hands the remaining arguments and `w` to `f` | The same structure as a lambda |
 | `macro` function | A subgraph that can be evaluated early, its result materialized as a constant of the graph | Builds a static graph dynamically |
+| `if`, `match` | A branch, one subgraph per arm | Only the chosen arm is evaluated |
 | `a ?? b`, `a !! b`, `x ?-> f` | A branch: the condition is a one-bit tag on the value (null / error), and the two arms are the original value and the substitute | The same structure as `if` |
+| `a && b`, `a \|\| b` | A branch: `a && b` is `if a then b else false`, `a \|\| b` is `if a then true else b` | The right side is an arm, evaluated only when needed; cannot be overloaded |
+| `a & b`, `a \| b` | An ordinary operator node | Both sides are evaluated; can be overloaded |
+| `if x != null then A else B` | The same graph as a `match` on `x`: the non-null arm is entered with the opened value | Narrowing is not a separate mechanism |
+| A value entering `T?`, `T!` | One entering node per level | Entering happens only where it is needed |
 | `throw e` | Returning an error value | The same structure as `return` |
 | Fault isolation (`attempt`) | One tagged call of a subgraph | The boundary of the fault is the boundary of the subgraph; the structure does not vary with the content of the subgraph |
+| `map`, `filter`, `reduce`, `foreach` | One operator node; the element function is passed in as a function value | Higher-order operators are not a new kind of node |
 | Generic function | A subgraph template; each call with a set of concrete types instantiates a subgraph whose types are all concrete | Only concrete types are on the graph |
 | Type function | Evaluated while the graph is built; leaves no node on the graph | A value of kind "type" does not exist at run time |
 | `loop` expression | One `LOOP` node with a condition subgraph, a body subgraph and state edges | The state is decided by the loop header, not by what the body contains |
 | A `let` at the top level of a module | A node of the common root graph | Evaluated when depended on; importing executes no code |
+| A function using a top-level value of a module | A capture port of the function graph, bound to "module + name"; the value is passed down along the calls | No node reference across graphs |
+| `import { f } from m`, `import { v } from m` | No node is built: calling `f` is an ordinary call; `v` is an ordinary edge on the root and a capture port inside a function | Importing executes no code |
+| Importing a generic function | No node is built; one instance per set of types, shared by the whole program, belonging to the module that declares it | Only concrete types are on the graph |
+| `namespace`, `using namespace`, `m::f` | No trace on the graph; they only decide which "module + qualified name" a name resolves to | A namespace is part of the name |
 | Pass | A program that turns one graph into another (or consumes a graph) | An open pipeline |
 
 ---
@@ -136,7 +149,7 @@ Inside a sync block it does not matter whether `wait` is written.
 - **Camel distinguishes two kinds of parameters at the language level.** One kind is the attributes a function is configured with (`with` parameters, that is, context parameters); the other is the inputs the function processes, that is, what flows through the function (ordinary parameters). In a sense this makes up for the limitation that Camel does not support object orientation: the configuration and state that other languages hold in the members of an object are, in Camel, the context parameters of a function.
 - **The return value of a pure `main`**: it is output through the existing command-line option `-o` / `--output <file>`, standard output by default. No dedicated option is added.
 - **Granularity of parallel scheduling**: do not go down to the atomic level. Creating a task for every very small function call is pointless and only adds burden.
-- **A value whose static type is `any` printing as `<any>` is normal**: Camel has no ability to determine a type at run time, and to prevent serious errors this is the safest course.
+- (Superseded by 2.12: `any` is being tightened.) **A value whose static type is `any` printing as `<any>` is normal**: Camel has no ability to determine a type at run time, and to prevent serious errors this is the safest course.
 - **`with` parameters are suited to expressing the parameters and weights of a model**: ordinary parameters are the data inputs, `with` parameters are the weights. Besides `f<w>(x)`, a call can also be written `x->f<w>`, which is convenient for chaining and for connecting the inputs and outputs of the layers of a model.
 - **When a pass of some module (such as `onnx::export`) is written on the command line, the compiler loads that module automatically**; a pure program does not have to `import` a module it does not use in order to be exported.
 - **An export pass does not have to check much**: translate what can be translated, and report an error when something cannot. No academic fastidiousness.
@@ -234,7 +247,7 @@ At present all complicated type computation is implemented directly by operators
 - **A line end ends a statement**, in the spirit of JavaScript's automatic semicolons, with intuition as the measure. In detail: a line continues while a bracket is open, when it ends in a binary operator, a comma or another token after which something must follow, and when the next line starts with an operator that can only be binary (`->`, `.`, `??`, ...); a next line that starts with a token that can begin an expression (`-`, `+`, `(`, `[`, ...) is a new statement. Semicolons may still be written.
 - **The parser** is a hand-written lexer and parser, no longer depending on ANTLR, for efficiency and determinism.
 - **`raise` is removed.** It is no longer part of the grammar and not a reserved word; an error value is returned with `throw`.
-- **A minus sign that touches a number literal and is not preceded by a value is part of that number**: `-2->f` is `(-2)->f`. `a-1` is still a subtraction.
+- (Superseded by 2.11.) **A minus sign that touches a number literal and is not preceded by a value is part of that number**: `-2->f` is `(-2)->f`. `a-1` is still a subtraction.
 - **`^` binds one level tighter than multiplication and division, and associates from right to left.** `2 * 3 ^ 2` is 18.
 - **A literal with an exponent or a decimal point is always a floating-point number.** `1e5` is `100000.0`.
 - **`===` is not supported for now.**
@@ -296,6 +309,102 @@ At present all complicated type computation is implemented directly by operators
 - The instruction-set baseline of release packages is `x86-64-v2`.
 - The graph, type and metadata spaces each have a total limit of 256 MB; an expansion that does not stop is halted by the exporter's own budget of rounds.
 
+### 2.11 Supplementary rulings (2026-10-13)
+
+#### Operators
+
+- **`&&` and `||` are reserved operators that cannot be overloaded, and they are translated into a branch.** `a && b` is `if a then b else false`, `a || b` is `if a then true else b`: the right side is an arm and is evaluated only when needed. Both sides are `bool`.
+- **`&` and `|` are ordinary logical operations that evaluate both sides, and they can be overloaded.** They are for a simple logical operation that needs no branch; the element-wise logical operations of tensors and the overloads of user types are this pair too. `a &= b` is `a = a & b`.
+- **The unary minus is always an operator and is never part of a literal**; it binds less tightly than `^` and more tightly than `->`. So `-2 ^ 2` and `-x ^ 2` are both -4, and `-2->f` and `-x->f` both negate first and then pass the value on: a literal and a variable read alike. `a-1` is still a subtraction. (This supersedes "a minus sign that touches a number literal is part of that number" in 2.10.)
+- **A symbol with two roles that stands at the start of a line takes the role that begins something new**: `@` at the start of a line is an annotation, `+` and `-` at the start of a line are unary. To write a matrix product or a sum over two lines, leave the operator at the end of the first line.
+
+#### Null and errors
+
+- **`x == null` and `x != null` may be written**; the result is a `bool`. Function values cannot be compared.
+- **In the non-null arm of `if x != null then ... else ...`, `x` is a `T`.** This is equivalent to a `match` on the nullable value: the port that enters that arm carries the opened value. It holds for `let` bindings and parameters only (a `var` may be rewritten elsewhere); only the direct forms count (`x != null`, `x == null`, and several of them joined with `&&`); it holds inside the arm only.
+- **A `T!` value that is not used in a sync block is a compile-time warning.** To drop it on purpose write `let _ = ...`. A `main` without a declared return type that ends in an error value is a special case of this.
+- **When one arm of a branch has no value (`void`) and the other is a `T`, the branch is a `T?`**, and the arm without a value gives `null`.
+
+#### Types
+
+- **`any` is only a shorthand**, an opening made for the time before the type system matures. No type should remain undetermined at run time: after compilation every value has a determined type.
+
+#### Operators and libraries
+
+- **A `slice` whose start lies after its end (`xs->slice<2, 1>`) gives the empty array**, not a fault; this is ordinary operator behaviour. A bound outside the array is still a fault.
+
+#### Modules
+
+- **How roots are merged**: the whole program has one `__root__`, the top-level nodes of every module are on it, and functions take values through capture ports; a capture is bound by "module + name", not looked up by name at the call site.
+- **Top-level values are evaluated before `main` starts, on the basis of static dependence**: every top-level value used by a function statically reachable from `main` along the call chain is evaluated, whether or not the arm that uses it is taken at run time.
+- **Modules may import each other.** Loading therefore has two phases: first the declarations of all modules are collected, then the function bodies are built. A cyclic dependence among top-level values is a compile-time error.
+- **A `var` cannot be exported**; export functions that read and write it. A `main` in an imported module is an ordinary function.
+- **A compiled module can be cached** (`.cmo`, cached module object), so that a module need not be compiled again. The cache of a module is one graph rooted at that module; it exists for convenience and speed and need not equal the final result of an actual compilation. C++ modules keep the same extension; the two are told apart by the file header.
+
+#### Directions for the implementation
+
+- **The data model of the graph is the most important design**: it is to be clearly defined, stable, and fit to be published. The module cache, passes written in Camel, compiling compute code into GPU kernels, and `std::cpp` are all built on it.
+- **The internal representations of the compiler core may be refactored thoroughly**, for speed and memory efficiency along the whole pipeline.
+- **How memory is managed is not part of the semantics of the language**: an object has no observable identity, the moment of collection is not observable, and C++ operators touch objects through handles. Each back end may choose what suits it. The constraints generational collection puts on the authors of C++ operators are acceptable.
+- **The parallel scheduler hands subgraphs with nothing to parallelize to the bytecode interpreter.**
+- **The output of a program and the text written by `fs` are the same bytes on every platform**; on Windows no `\r\n` is written.
+- **The debugger**: the arms of a branch are folded into the frame of the enclosing function by default, and the real subgraph structure can be shown on request; line stepping follows the order of execution, and when a line did not execute because nothing uses its result, an explanation is given.
+
+### 2.12 Supplementary rulings (2026-10-14)
+
+#### Modules and namespaces
+
+- **Top-level `let` and `var` of a module do not depend on the order of writing, only on dependence.** `let area = pi * r * r` may come before `let pi`; a cycle among top-level values is a compile-time error. A local `let` in a function body is still declared before use.
+- **Inside a namespace block, the names of the same block and of enclosing blocks can be used without a prefix.**
+- **`using namespace`**: may be used on a namespace of the module itself; takes effect only in the block where it is written (in a function body, only in that function); when two `using`s bring in names with the same name and signature that cannot be told apart, it is an error at the use.
+- **Name precedence has one rule**: local > this module (the enclosing namespaces and the module top level) > imported by name > brought in by `using namespace` > built in. The first layer that has the name is taken; functions of the same name in one layer form an overload set, and an identical signature is an error; layers are not merged. Operator overloads are the exception and are merged across layers.
+- **`import a from m` brings the name `a` in from `m`**, the same as `import { a } from m`, as the language documentation says; a module alias is written `import m as x`.
+- **`use` is not implemented** and the reserved word is retired; `import { … } from m::N` is allowed.
+- **A namespace block may hold values**: `namespace Config { export let limit = 10 }`, used as `Config::limit`; it differs from a top-level `let` only by the path in its name.
+- **A module may qualify its own things with its own name**: in `module shapes`, `shapes::area` is the same as `area`.
+- **Diagnostics, the debugger and graph names always show the full name** `module::path::name`, leaving out the module where that is unambiguous.
+- **The module cache lives in a `__cmo__/` directory beside the source file**; it is off by default at first; a module served from the cache does not replay compile-time warnings. An importer's cache is invalid when any of these change: the signature of an exported function (including the inferred return type), the module-level values it uses transitively, its effects, the body of a generic function.
+
+#### Types and conversion
+
+- **Converting a value to its own type is legal and does nothing**: `xs as int[]` (with `xs: int[]`) passes, as `p as A` through an alias does.
+- **The signature text of the standard library uses type variables, not `any`** (as `print<T>(x: T)`). Camel functions with a variable number of arguments of differing types are not made for now.
+- **`any` is to be tightened step by step.** An opening is made only temporarily, for a specific need that the type system cannot yet express; wherever a clear recommended form exists (generics, overloads, concrete types), `any` is rejected and the diagnostic gives the recommended form. `json.decode` becomes a self-describing `Json` type, with `decode_as<T>`. Compile-time errors from now on: `any` as the condition of `if`, `any` as the subject of `match`, the unchecked `as any as T`.
+- **A function with a `var` context parameter can be partially applied**: `add<t>` is a function value that writes a captured variable; its type carries `sync`, and each call counts as one write of `t`.
+
+#### Syntax and narrowing
+
+- **`!` and `~` behave like the unary minus**: they bind less tightly than `^` and more tightly than `->`; `!x->f` negates first and then passes the value on.
+- **The scope of narrowing**: both `x != null` and `null != x` narrow; in the then arm of `if x != null && ready then ...`, `x` is narrowed (any operand of `&&` that is a direct null test of `x` counts); the else arm of `||` is not narrowed for now. Writing `let x = ...` again inside a narrowed arm is a redeclaration.
+- **A nullable function value may be compared with `null`**; "function values cannot be compared" means two function values.
+- **`let r = ...` binding a `T!` whose `r` is never used is warned about too** (as the statement form in 2.11).
+- **Hovers and documentation take `///` comments only**; an ordinary `//` is not documentation.
+
+#### Operators
+
+- **Users can overload operators in Camel source**, written `func operator &(a: Mask, b: Mask): Mask` (notation provisional). The overloadable operators are those that today become `__x__` functions; `&&`, `||` and constructs such as `??`, `!!`, `->` cannot be overloaded. Names of the form `__x__` stay reserved and are not written by users.
+
+#### Modifying collections
+
+- **`append` returns a new array and does not modify the original**: after `let ys = xs->append<5>`, `xs` is unchanged; to "append to a variable" write `acc = acc->append<5>`, as `x = x + 1`. Changing in place is only an optimization of the implementation (when the old value is no longer used it can be extended where it is), not part of the semantics, and no explicit in-place operator is added. The other standard-library operators likewise. Migration: an unused result of a pure operation (such as `xs->append<5>` written as a statement) is a compile-time error that suggests rebinding.
+
+#### The graph
+
+- **The published node kinds**: `DATA PORT OPER FUNC CALL FILL ACCS CAST COPY BRCH JOIN LOOP GATE SYNC`. `BIND` and `DREF` are removed; higher-order operators such as `map`, and `attempt`, remain operator nodes, with "calls subgraphs" declared in the operator table; besides purity an operator declares whether it may fault, and an operator that declares nothing is treated as possibly faulting.
+- **Both forms of branch arms are legal graphs**: the front end produces "one subgraph per arm"; after inlining, the nodes of an arm merged into the enclosing graph as a stretch between the branch and the join are legal too.
+- **Whether an operator may fault need not be declared operator by operator**: module authors declare it where useful; an operator that declares nothing is treated as possibly faulting.
+- **How side-effect tracking is kept under passes**: effects are a summary on the graph (whether the exit of the graph depends on effects, which captured variables it writes), recomputed from the nodes and checked at every commit; a pass cannot commit a graph whose summary disagrees with its content. Whether a pass is right to delete or move an effect is still that pass's responsibility (section 4).
+- **`LOOP`**: the condition subgraph and the body subgraph share one capture table; `for … while` is a third form of the same node; with several state values the body returns a tuple, and the value of `LOOP` is that tuple.
+- **The direction for passes written in Camel**: graphs and nodes are immutable values, a pass is `(Program) => Program!`; a rewrite is "a set of changes → `apply` → a new graph or an error value", with no modification in place; a pattern rule is a pair of functions with the same parameters, the graph of the left one being the pattern and that of the right one the replacement. Details later.
+
+#### Back ends and run time
+
+- **The goal of `std::cpp` is programs that can be deployed without the runtime.** Where a faithful translation is impossible, the generated code may use Camel's runtime modules, kept as clean as possible. Generated programs report faults with source positions, keep the recursion limit, and do not grow the stack on tail calls.
+- **What has identity is to be listed**: `var` cells, objects modified in place through `var` parameters, objects wrapping a foreign library (Python objects and the like); every other value has no observable identity, and a back end may copy or share it freely. No type word is added to object headers. The module interface generated by `std::cpp` uses standard C++ types and does not expose the runtime's internal types.
+- **A back end may collect less garbage, or none**: when and whether collection happens is not observable (2.11).
+- **Generational collection is on by default once it is usable.**
+- **When the parallel scheduler hands serial subgraphs to the bytecode interpreter, the recursion limit is counted by the same rule**: with a raised `--max-recursion-depth`, a deep non-tail recursion completes on `std::prl` as it does on `std::fvm`.
+
 ---
 
 ## 3. `macro`
@@ -350,32 +459,13 @@ When you meet one of the following, ask the language author:
 - The concrete content of the type-expression language: the meaning and fate of each of the reserved type operators `&`, `\`, `+`, `-`, `^` and of `typeof`, `keyof`, `ident of T`; how conditions and matching are written in type functions.
 - How numeric parameters in types (such as the dimensions of a tensor) are bound to names, and how arithmetic is done on them.
 - The meaning of `typeof` applied to a constant value, and its use in generics.
-- The position of `any`: kept as an escape hatch, or replaced by generics; whether the currently unchecked `any as T` is tightened.
 - How failure or non-termination of the evaluation of a type function is handled.
 - The notation of the loop header (the one in 2.10 is provisional).
-- How exactly the module roots are merged (see 2.10).
 - Whether the type parameters of a generic function may be given explicitly at the call.
-- Whether generational collection is on by default.
 - The behaviour when the same mutable object is written through references in several places outside a sync block, none of them with `wait`.
-- How side-effect tracking is preserved under the various passes (see 2.7).
-- **A `main` without a declared return type whose body ends in an error value** (marked `main-undeclared-error` in the code):
-  `func main() sync { parse_int('x') }`. Implemented: a `main` that declares no return type has no result (2.10), so this error value is not reported either, and the exit code is 0.
-  Alternative: treat it as "an error value that reaches the exit of `main` unhandled", print it on standard error and exit non-zero.
-- **A `slice` whose two bounds lie inside the array, with the end before the start** (`slice-reversed-range`):
-  `[10, 20, 30]->slice<2, 1>`. Implemented: the empty array (the earlier behaviour; a bound outside the array is a fault by 2.10).
-  Alternative: a fault as well.
 - **After a fault in a parallel `map`, whether elements of smaller index that have not started still run** (`parallel-fault-lower-elements`):
   `range(0, 64)->map<bad>` where every element faults and a worker happens to run element 40 first. Implemented: only the elements with an index above 40 are not started, 0 to 39 still run, so the one reported is always element 0, as on the linear back ends and the same on every run.
   Alternative: start no element at all after a fault; "the smallest index" is then taken among the elements that happened to have started, and may differ from run to run.
-- **`!=` on a bare `T?`, `T!` or function value**: `let a: int? = 1`, `a != a`, or `f != g`. `!=` used to accept any two values of one type and compare references (a meaningless result);
-  with equality by content, `==` and `!=` are defined only for numbers, booleans, strings, maps, sets, and arrays, tuples and structs of comparable elements, and the two forms above are now compile-time errors.
-  Alternatives: keep them errors (open the value with `??`, `!!`, `match` first); or define equality by content for a bare `T?` and `T!` too.
-- **Whether an expression without a value counts as `null`** (marked `void-as-null` in the code): `null` has the type `void`, and so has a call of a function that returns nothing.
-  `if c then 1 else log()` (`log` returns nothing). Implemented: every `void` expression is treated as `null` where a value enters a form and where arms join, so this is an `int?`.
-  Alternative: accept the literal `null` only; any other `void` expression where a value is needed is a compile-time error.
 - **Whether arguments of built-in operators enter `T?` / `T!`** (`entering-operator-args`): `xs->append<5>` (with `xs: (int?)[]`), `len([])`.
   Implemented: they do not; the first needs `5 as int?`, and the `[]` of the second has no element type and is not reported. The parameter types of a built-in operator are computed from the arguments by its C++ type rule, so there is no target type before the call.
   Alternative: let a type rule name the types it accepts, so that built-in operators behave as user functions do.
-- **Whether a function with a `var` context parameter can be partially applied** (`partial-application-var`): `with <var total: int> sync func add(x: int)`, `let g = add<t>`.
-  Implemented: refused (`ConstructNotSupported`). Once configured, `g` is a function value that writes a captured variable; whether that agrees with "a modification is declared explicitly at every level" has not been ruled on.
-  Alternatives: allow it, each call of `g` counting as a write of `t`; or keep refusing.

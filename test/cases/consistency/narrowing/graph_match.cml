@@ -1,0 +1,11 @@
+// The `match` that `if s != null then len(s) else 0` is.
+func len_or_zero(s: string?): int {
+    return match s {
+        case null => 0
+        case v => len(v)
+    }
+}
+
+func main(): int {
+    return len_or_zero('abc')
+}

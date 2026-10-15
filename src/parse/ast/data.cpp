@@ -38,6 +38,8 @@ std::string to_string(DataType type) {
         return "MatchExpr";
     case DataType::TryExpr:
         return "TryExpr";
+    case DataType::LoopExpr:
+        return "LoopExpr";
     case DataType::Literal:
         return "Literal";
     case DataType::Array:
@@ -93,8 +95,12 @@ std::string to_string(BinaryDataOp op) {
     case BinaryDataOp::AssignOr:
         return "|=";
     case BinaryDataOp::Or:
-        return "||";
+        return "|";
     case BinaryDataOp::And:
+        return "&";
+    case BinaryDataOp::LogicalOr:
+        return "||";
+    case BinaryDataOp::LogicalAnd:
         return "&&";
     case BinaryDataOp::Eq:
         return "==";
@@ -191,5 +197,26 @@ const std::string FuncDataLoad::geneCode() const {
 }
 
 const std::string RefDataLoad::geneCode() const { return ref_.toString(); }
+
+} // namespace camel::parse::ast
+
+namespace camel::parse::ast {
+
+const std::string LoopExprLoad::toString() const {
+    std::string result = "LoopExpr: ";
+    if (tuple_) {
+        result += "(";
+    }
+    for (size_t i = 0; i < state_.size(); ++i) {
+        result += (i ? ", " : "") + state_[i].toString();
+    }
+    if (tuple_) {
+        result += ")";
+    }
+    if (hasFor()) {
+        result += " for " + binder_.toString();
+    }
+    return result + this->status();
+}
 
 } // namespace camel::parse::ast

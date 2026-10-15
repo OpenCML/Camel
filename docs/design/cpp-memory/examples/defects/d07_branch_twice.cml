@@ -1,0 +1,12 @@
+/// The value of a branch used twice. Schedulers run the chosen arm once.
+module d07_branch_twice
+
+func f(flag: bool): int sync {
+    let r = if flag then println(1) else println(2)
+    return r + r
+}
+
+func main(): int sync {
+    println(f(true))
+    return 0
+}

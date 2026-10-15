@@ -48,7 +48,8 @@ enum class SemanticDiag : uint32_t {
     ReturnTypeMismatch           = 0x000011,
     ElementTypeMismatch          = 0x000012,
     CallingIncompleteFunction    = 0x000013,
-    ClosureCaptureAfterSelfCall  = 0x000014,
+    // 0x000014 was ClosureCaptureAfterSelfCall, replaced by CaptureAfterRecursiveCall: with
+    // function bodies built when first needed it is only met in recursion.
     ImportNameNotExported        = 0x000015,
     LiteralStaticCastFailed      = 0x000016,
     DynamicCastForbidden         = 0x000017,
@@ -64,8 +65,9 @@ enum class SemanticDiag : uint32_t {
     ArgumentNeedsConversion      = 0x000021,
     ReturnNeedsConversion        = 0x000022,
     LiteralOutOfRange            = 0x000023,
-    ImportCycle                  = 0x000025,
-    ImportedFunctionUsesModuleValue = 0x000026,
+    // 0x000025 was ImportCycle: modules may import each other (design principles 2.11).
+    // 0x000026 was ImportedFunctionUsesModuleValue: a function of another module may use the
+    // top level of its own module since every module builds into one root graph.
     ImportNameConflict           = 0x000027,
     // An error: the construct it reports is not compiled, so a program that uses it must not
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
@@ -102,6 +104,20 @@ enum class SemanticDiag : uint32_t {
     EmptyArrayWithoutType        = 0x0000B2,
     PartialApplicationRefused    = 0x0000B3,
     ComprehensionSourceRefused   = 0x0000B4,
+    // Rulings of 2026-10-13 (design principles 2.11): 0xC0 and up.
+    LogicalOperandNotBool        = 0x0000C0,
+    // Modules and namespaces (design principles 2.11, 2.12): 0xD0 and up.
+    ExportedVariable             = 0x0000D0,
+    ModuleValueCycle             = 0x0000D1,
+    CaptureAfterRecursiveCall    = 0x0000D2,
+    AmbiguousName                = 0x0000D3,
+    // `any` (design principles 2.11, 2.12), 0xE0 and up. 0xE0 (AnyUncheckedCast) and 0xE1
+    // (AnyBranchSubject) reported reading a slot typed `any`; with the type gone they are
+    // retired, and their codes are not reused.
+    AnyNotAllowed                = 0x0000E2,
+    // The condition and the cases of a branch (found with the `any` cases above).
+    ConditionNotBool             = 0x0000E3,
+    MatchCaseTypeMismatch        = 0x0000E4,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,
@@ -111,6 +127,8 @@ enum class SemanticDiag : uint32_t {
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
     ExitInUnusedBranch           = 0x100090,
     IntegerLiteralTruncated      = 0x1000A0,
+    // Rulings of 2026-10-13 (design principles 2.11): 0xC0 and up.
+    UnusedFallibleValue          = 0x1000C0,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

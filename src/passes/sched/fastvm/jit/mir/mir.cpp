@@ -383,6 +383,15 @@ std::string mirToString(const Mir &m) {
     case MirOp::MovRsiR13:
         os << "mov rsi, r13";
         break;
+    case MirOp::CallHelper:
+        os << "call_helper 0x" << std::hex << m.imm64 << std::dec << " pc=" << m.imm32;
+        break;
+    case MirOp::ExitToDriver:
+        os << "exit_to_driver kind=" << m.imm64 << " pc=" << m.imm32;
+        break;
+    case MirOp::SafepointPoll:
+        os << "safepoint_poll pc=" << m.imm32;
+        break;
     case MirOp::Nop:
         os << "nop";
         break;
@@ -678,6 +687,12 @@ size_t mirSizeBytes(const Mir &m) {
         return 64;
     case MirOp::MovRsiR13:
         return 3;
+    case MirOp::CallHelper:
+        return 40;
+    case MirOp::ExitToDriver:
+        return 32;
+    case MirOp::SafepointPoll:
+        return 56;
     case MirOp::PushFrameSlot:
     case MirOp::PopFrameSlot:
         return fitsDisp8(m.disp) ? 3 : 6;

@@ -32,6 +32,7 @@ enum class DataType {
     MatchExpr,
     MatchCase,
     TryExpr,
+    LoopExpr,
     Literal,
     Array,
     Tuple,
@@ -53,8 +54,10 @@ enum class BinaryDataOp {
     AssignExp,
     AssignAnd,
     AssignOr,
-    Or,
-    And,
+    Or,         // `|`: both sides evaluated, an ordinary operator
+    And,        // `&`
+    LogicalOr,  // `||`: reserved, the right side evaluated only when it decides
+    LogicalAnd, // `&&`
     Eq,
     Neq,
     StrictEq,
@@ -202,6 +205,44 @@ class TryExprLoad : public DataLoad {
 
     const std::string toString() const override { return "TryExpr" + this->status(); }
     const std::string geneCode() const override;
+};
+
+/// loop STATE = INIT (for BINDER in SEQUENCE)? (while CONDITION)? { BODY }
+///
+/// A loop is an expression with a state (design principles 2.10). The load holds the names:
+///   state()    the names of the state, one for `loop acc = ...`, several for the tuple
+///              pattern `loop (i, acc) = ...` (isTuple() tells `loop (a,) = ...` from
+///              `loop a = ...`);
+///   binder()   the name bound to the element of each round; empty without `for`.
+/// The node has four children, always in this order:
+///   [0] Data          INIT: the first value of the state, evaluated once, outside the scope
+///                     of the state names and of the binder;
+///   [1] Optional Data SEQUENCE: what `for` iterates over, evaluated once, outside that scope
+///                     too; empty without `for`;
+///   [2] Optional Data CONDITION of `while`: evaluated before each round with the state names
+///                     (and the binder, with `for`) in scope; empty without `while`;
+///   [3] StmtBlock     BODY: evaluated each round with the same names in scope; its value is
+///                     the state of the next round.
+/// The value of the expression is the state after the last round: of the type of INIT, a
+/// tuple when the state is a tuple pattern. With `for` and `while` both, a round runs while
+/// there is an element left and the condition holds.
+class LoopExprLoad : public DataLoad {
+  public:
+    LoopExprLoad(std::vector<Reference> state, bool tuple, Reference binder)
+        : DataLoad(DataType::LoopExpr), state_(std::move(state)), tuple_(tuple),
+          binder_(std::move(binder)) {}
+
+    const std::vector<Reference> &state() const { return state_; }
+    bool isTuple() const { return tuple_; }
+    bool hasFor() const { return !binder_.empty(); }
+    const Reference &binder() const { return binder_; }
+
+    const std::string toString() const override;
+
+  private:
+    std::vector<Reference> state_;
+    bool tuple_;
+    Reference binder_;
 };
 
 class LiteralLoad : public DataLoad {

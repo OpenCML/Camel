@@ -1,0 +1,14 @@
+module t17_python
+import { py_wrap, py_unwrap, py_eval } from python
+
+// The Python bridge does not use `any`: a Python value has the type PyObject (or PyObject<T>
+// when it was wrapped from a Camel value of type T), an object the collector knows.
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>) }
+func main(n: int): int sync {
+    let o = py_wrap('abc' + string(1))
+    let e = py_eval('[1, 2, 3]')
+    let c = churn(n)
+    println(c, py_unwrap(o))
+    println(e)
+    return 0
+}

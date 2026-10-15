@@ -1,0 +1,6 @@
+// m::f, m::N::f, m::A::B::f
+import lib
+func main(): int sync {
+    println(lib::root(), lib::Tools::inc(1), lib::Deep::Inner::three())
+    return 0
+}

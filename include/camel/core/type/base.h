@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -80,7 +80,8 @@ enum class TypeCode : uint32_t {
     Struct   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00A),
     Function = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00B),
     Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00C),
-    Any      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00D),
+    // 0x00D was `any`, removed (design principles 2.11, 2.12): no value has a type that is
+    // undetermined after compilation.
     Union    = makeTypeCode(TypeFlag::Composite | TypeFlag::Auxiliary, 0x00E),
     // Compile-time only (camel/core/type/typevar.h): a type variable of a generic function
     // or of a parameterised type declaration, and a parameterised type declaration itself.
@@ -139,12 +140,21 @@ extern const signed char primitiveTypeConvMatrix[8][8];
 class Type;
 using type_vec_t = std::vector<Type *>;
 
+/// Index of a type in the TypeTable (camel/core/type/intern.h). Equal non-zero ids mean the
+/// same type object.
+using TypeId = uint32_t;
+/// The id of a type that is not in the table.
+inline constexpr TypeId kNoTypeId = 0;
+
 class Type {
+    friend class TypeTable;
+
   protected:
     TypeCode code_;
 
-    /** Any-cast rule: converting between Any and any other type is always Safe. */
-    static std::optional<CastSafety> checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType);
+  private:
+    // Set once by the TypeTable, before the object is handed to anyone else.
+    TypeId typeId_ = kNoTypeId;
 
   public:
     Type() = delete;
@@ -152,6 +162,13 @@ class Type {
     virtual ~Type() noexcept = default;
 
     const TypeCode &code() const;
+
+    /// The id of this type in the TypeTable, or kNoTypeId when it is not interned (see
+    /// intern.h for which types are). Lock-free.
+    TypeId typeId() const { return typeId_; }
+    /// True when the TypeTable holds this object: it is the one object of its structure (as
+    /// far as its components are interned) and must not be modified.
+    bool isInterned() const { return typeId_ != kNoTypeId; }
 
     inline bool isPrimitive() const { return type_impl::isPrimitive(code_); }
     inline bool isOtherType() const { return type_impl::isOtherType(code_); }
@@ -197,7 +214,6 @@ class Type {
     static Type *Void();
     static Type *String();
     static Type *Ref();
-    static Type *Any();
 };
 
 } // namespace camel::core::type

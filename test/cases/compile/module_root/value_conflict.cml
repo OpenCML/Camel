@@ -1,0 +1,8 @@
+// Two imports by name that bring values of one name conflict: neither is taken silently.
+import { limit } from value_conflict_a
+import { limit } from value_conflict_b
+
+func main(): int sync {
+    println(limit)
+    return 0
+}

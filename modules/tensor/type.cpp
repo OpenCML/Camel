@@ -192,8 +192,8 @@ Type *TensorType::unify(Type *other) const {
 Type *TensorType::widened() const { return Default(); }
 
 CastSafety TensorType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType)) {
-        return *r;
+    if (sourceType == nullptr) {
+        return CastSafety::Forbidden;
     }
     if (assignableFrom(sourceType)) {
         return CastSafety::Safe;

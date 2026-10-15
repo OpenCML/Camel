@@ -44,7 +44,6 @@ class Generator {
     void collectParams(
         const AST::node_ptr_t &node, std::vector<std::string> &paramsVec, Generator *generator);
     std::string generateTypeDeclLoad(const AST::node_ptr_t &node);
-    std::string generateNameDeclLoad(const AST::node_ptr_t &node);
 
     std::string generateStmtLoad(const AST::node_ptr_t &node);
     std::string generateExprStmtLoad(const AST::node_ptr_t &node);

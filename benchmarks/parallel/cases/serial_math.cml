@@ -1,0 +1,19 @@
+// A tail-recursive loop whose body calls an operator of a module (math::sqrt) through a small
+// helper: 1e6 iterations. The granularity rule calls these graphs heavy (a module operator), but
+// every step depends on the one before: nothing here can run concurrently.
+module serial_math
+
+import { sqrt } from math
+
+func norm(x: float, y: float): float {
+    return sqrt(x * x + y * y)
+}
+
+func spin(i: int, n: int, acc: float): float {
+    return if i == n then acc else spin(i + 1, n, acc + norm(float(i % 1000), 3.0))
+}
+
+func main(): int sync {
+    println(spin(0, 1000000, 0.0))
+    return 0
+}

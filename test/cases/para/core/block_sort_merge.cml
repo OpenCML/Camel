@@ -15,7 +15,7 @@ func sort_block(arr: int[], lo: int, hi: int): int[] {
 
 func main(): int sync {
     let blocks = 8
-    let block_size = 5e5
+    let block_size = 500000
     let n = blocks * block_size
     let preview = 16
     let s = 20260309

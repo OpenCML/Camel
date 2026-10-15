@@ -26,21 +26,26 @@
  *   assignExpr      =  +=  -=  *=  /=  %=  ^=  @=  &=  |=      one, not associative
  *   logicalOrExpr   ||                                          left
  *   logicalAndExpr  &&                                          left
+ *   orExpr          |                both sides evaluated        left
+ *   andExpr         &                both sides evaluated        left
  *   equalityExpr    ===  !==  ==  !=                            left
  *   relationalExpr  <  >  <=  >=                                left
  *   additiveExpr    +  -                                        left
- *   multiplicative  *  /  ^  @  %                               left
+ *   multiplicative  *  /  @  %                                  left
+ *   powerExpr       ^                                           right
  *   nullableExpr    ??  !!           right operand: a whole dataExpr
- *   unaryExpr       prefix !  -  ~   (operand: linkExpr);  postfix `as T`, `is T`
+ *   unaryExpr       prefix !  ~      (operand: linkExpr);  postfix `as T`, `is T`
  *   linkExpr        ->  ?->                                     left
+ *   negExpr         prefix -         tighter than `->`, looser than `^`:
+ *                                    `-x->f` is `(-x)->f`, `-x ^ 2` is `-(x ^ 2)`
  *   compExpr        ..  ?..                                     left
  *   annoExpr        [index]  (arguments)  <arguments>  !  .member   postfix, touching
  *   accessExpr      .member
  *   primaryData     name, literal, [array], {struct}, (tuple), lambda
  *
  * Line breaks (rule 2). Where `nl_` is set, an operator that could also start a statement does
- * not continue an expression across a line break: `+`, `-` (a signed literal, a negation) and
- * `@` (an annotation). Every other operator of the table can only be binary and continues the
+ * not continue an expression across a line break: `+`, `-` (a negation) and `@` (an
+ * annotation). A symbol of two roles that starts a line has the role that starts something. Every other operator of the table can only be binary and continues the
  * expression wherever it stands. A token the grammar requires (the operand after an operator,
  * `then`, `=>`, a closing bracket) is taken wherever it stands, too.
  */
@@ -73,6 +78,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     case TK::KwIf:
     case TK::KwMatch:
     case TK::KwTry:
+    case TK::KwLoop:
     case TK::KwSync:
     case TK::KwMacro:
     case TK::KwAtomic:
@@ -83,7 +89,7 @@ bool ParserImpl::startsExpr(TK kind) const {
     }
 }
 
-/// dataExpr : waitExpr | ctrlExpr
+/// dataExpr : waitExpr | ctrlExpr | loopExpr
 /// waitExpr : 'wait'? assignExpr
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
@@ -101,6 +107,8 @@ void ParserImpl::parseExpr() {
         return parseMatch();
     case TK::KwTry:
         return parseTry();
+    case TK::KwLoop:
+        return parseLoop();
     case TK::KwWait: {
         const size_t m = mark();
         bump();
@@ -154,18 +162,48 @@ void ParserImpl::parseLogicalOr() {
     close(m, NK::LogicalOrExpr);
 }
 
-/// logicalAndExpr : equalityExpr ('&&' equalityExpr)*
+/// logicalAndExpr : orExpr ('&&' orExpr)*
 void ParserImpl::parseLogicalAnd() {
     const size_t m = mark();
-    parseEquality();
+    parseOr();
     if (cur_ != TK::AmpAmp) {
         return;
     }
     while (cur_ == TK::AmpAmp && !panic_) {
         bump();
-        parseEquality();
+        parseOr();
     }
     close(m, NK::LogicalAndExpr);
+}
+
+/// orExpr : andExpr ('|' andExpr)*
+/// `|` and `&` are ordinary operators that evaluate both sides (and can be overloaded); `||`
+/// and `&&` are reserved and evaluate their right side only when it decides the result.
+void ParserImpl::parseOr() {
+    const size_t m = mark();
+    parseAnd();
+    if (cur_ != TK::Pipe) {
+        return;
+    }
+    while (cur_ == TK::Pipe && !panic_) {
+        bump();
+        parseAnd();
+    }
+    close(m, NK::OrExpr);
+}
+
+/// andExpr : equalityExpr ('&' equalityExpr)*
+void ParserImpl::parseAnd() {
+    const size_t m = mark();
+    parseEquality();
+    if (cur_ != TK::Amp) {
+        return;
+    }
+    while (cur_ == TK::Amp && !panic_) {
+        bump();
+        parseEquality();
+    }
+    close(m, NK::AndExpr);
 }
 
 /// equalityExpr : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
@@ -230,27 +268,39 @@ void ParserImpl::parseAdditive() {
     }
 }
 
-/// multiplicativeExpr : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
+/// multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 /// Rule 2: an `@` that starts a line starts an annotated function declaration.
 void ParserImpl::parseMultiplicative() {
     const size_t m = mark();
-    parseNullable();
+    parsePower();
     bool any = false;
     while (!panic_) {
         if (cur_ == TK::At) {
             if (lineBreak()) {
                 break;
             }
-        } else if (cur_ != TK::Star && cur_ != TK::Slash && cur_ != TK::Caret &&
-                   cur_ != TK::Percent) {
+        } else if (cur_ != TK::Star && cur_ != TK::Slash && cur_ != TK::Percent) {
             break;
         }
         bump();
-        parseNullable();
+        parsePower();
         any = true;
     }
     if (any) {
         close(m, NK::MultiplicativeExpr);
+    }
+}
+
+/// powerExpr : nullableExpr ('^' powerExpr)?
+/// One level above the multiplicative operators and right-associative: `2 * 3 ^ 2` is 18,
+/// `2 ^ 3 ^ 2` is `2 ^ (3 ^ 2)`.
+void ParserImpl::parsePower() {
+    const size_t m = mark();
+    parseNullable();
+    if (cur_ == TK::Caret && !panic_) {
+        bump();
+        parsePower();
+        close(m, NK::PowerExpr);
     }
 }
 
@@ -266,17 +316,9 @@ void ParserImpl::parseNullable() {
 }
 
 /// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
-///           | ('!' | '-' | '~') linkExpr
-/// The second alternative does not apply to a `-` that is the sign of a number: a `-` that
-/// touches a number (and a `+` before one) belongs to the literal, so `-2->f` passes the
-/// literal -2 to `f`, while `-a->f` and `- 2->f` negate the call.
+/// (The prefix operators `-`, `!` and `~` are taken by negExpr, under `->`.)
 void ParserImpl::parseUnary() {
     const size_t m = mark();
-    if ((cur_ == TK::Bang || cur_ == TK::Minus || cur_ == TK::Tilde) && !literalSignAhead()) {
-        bump();
-        parseLink();
-        return close(m, NK::UnaryExpr);
-    }
     parseLink();
     if ((cur_ == TK::KwAs || cur_ == TK::KwIs) && !panic_) {
         bump();
@@ -288,10 +330,10 @@ void ParserImpl::parseUnary() {
     }
 }
 
-/// linkExpr : compExpr (('->' | '?->') compExpr)*
+/// linkExpr : negExpr (('->' | '?->') compExpr)*
 void ParserImpl::parseLink() {
     const size_t m = mark();
-    parseComp();
+    parseNeg(false);
     bool any = false;
     while ((cur_ == TK::Arrow || cur_ == TK::QuestionArrow) && !panic_) {
         bump();
@@ -300,6 +342,31 @@ void ParserImpl::parseLink() {
     }
     if (any) {
         close(m, NK::LinkExpr);
+    }
+}
+
+/// negExpr : ('-' | '!' | '~') negPower | compExpr
+/// negPower : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
+/// The minus is always an operator, never part of a number, and reads the same before a
+/// literal and before a name: it binds less tightly than `^` and more tightly than `->` and
+/// every other binary operator. `-2 ^ 2` is `-(2 ^ 2)`, `-x->f` is `(-x)->f`, `-a * b` is
+/// `(-a) * b`. `!` and `~` are at the same level (design principles 2.12): `!x->f` is
+/// `(!x)->f`, `!a ^ b` is `!(a ^ b)`. Under a prefix operator the power is taken here;
+/// elsewhere it is powerExpr, whose right operand reaches this function too, so `2 ^ -1` has
+/// a signed exponent.
+void ParserImpl::parseNeg(bool underMinus) {
+    const size_t m = mark();
+    if (cur_ == TK::Minus || cur_ == TK::Bang || cur_ == TK::Tilde) {
+        Depth depth(*this);
+        bump();
+        parseNeg(true);
+        return close(m, NK::UnaryExpr);
+    }
+    parseComp();
+    if (underMinus && cur_ == TK::Caret && !panic_) {
+        bump();
+        parseNeg(true);
+        close(m, NK::PowerExpr);
     }
 }
 
@@ -434,11 +501,10 @@ void ParserImpl::parsePrimary() {
     case TK::KwNull:
         return parseLiteral();
     case TK::Plus:
-    case TK::Minus:
         if (literalSignAhead()) {
             return parseLiteral();
         }
-        if (cur_ == TK::Plus && lineBreak()) {
+        if (lineBreak()) {
             // Rule 2: the line was meant to continue the one before it.
             error(SyntaxError::Kind::LineStartsWithSign, {SyntaxError::Expression}, pos_);
             return;
@@ -465,6 +531,8 @@ void ParserImpl::parsePrimary() {
 
 /// literal : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
 ///         | 'true' | 'false' | 'null'
+/// The `-` is taken here in a pattern only (`case -1 =>`); in an expression a minus is the
+/// operator of negExpr. A `+` before a number is part of the literal in both.
 void ParserImpl::parseLiteral() {
     const size_t m = mark();
     if (cur_ == TK::Plus || cur_ == TK::Minus) {
@@ -842,6 +910,57 @@ void ParserImpl::parseTry() {
         parseStmtBlock();
     }
     close(m, NK::TryExpr);
+}
+
+/// loopExpr : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+/// loopState : identDef | parentIdents
+/// loopFor : 'for' identDef 'in' logicalOrExpr
+/// loopWhile : 'while' logicalOrExpr
+/// A loop is an expression with a state (design principles 2.10): the state is named after
+/// `loop` and given its first value; the block is evaluated once per round and its value is
+/// the state of the next round; the value of the loop is the last state. `for` takes the
+/// elements of a sequence one per round, `while` goes on as long as its condition holds, and
+/// with both the loop ends when either does.
+/// The first value, the sequence and the condition are operator expressions, not `if`, `match`
+/// or an assignment (write those in parentheses), so each ends at the keyword or the `{` that
+/// follows, since a `{` can never continue an expression. The body is always a block.
+void ParserImpl::parseLoop() {
+    const size_t m = mark();
+    bump();
+    if (cur_ == TK::LParen) {
+        parseBracketedIdents(TK::RParen, NK::ParentIdents);
+    } else {
+        parseIdentDef();
+    }
+    if (panic_ || !expect(TK::Assign)) {
+        return close(m, NK::LoopExpr);
+    }
+    parseLogicalOr();
+    bool clause = false;
+    if (cur_ == TK::KwFor && !panic_) {
+        const size_t fm = mark();
+        bump();
+        parseIdentDef();
+        if (!panic_ && expect(TK::KwIn)) {
+            parseLogicalOr();
+        }
+        close(fm, NK::LoopFor);
+        clause = true;
+    }
+    if (cur_ == TK::KwWhile && !panic_) {
+        const size_t wm = mark();
+        bump();
+        parseLogicalOr();
+        close(wm, NK::LoopWhile);
+        clause = true;
+    }
+    if (!clause && !panic_) {
+        unexpected({e(TK::KwFor), e(TK::KwWhile)});
+    }
+    if (!panic_) {
+        parseStmtBlock();
+    }
+    close(m, NK::LoopExpr);
 }
 
 /// catchClause : 'catch' identDef ':' typeExpr stmtBlock

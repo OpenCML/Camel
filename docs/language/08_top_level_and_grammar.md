@@ -19,7 +19,7 @@ decl    : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceD
 | 声明 | 文法 | 章节 |
 |---|---|---|
 | 模块 | `module 名字` | [5.1](05_modules.md#51-模块声明) |
-| 导入 | `import (模块 \| (名字 \| { 名字, ... }) from 模块)` | [5.2](05_modules.md#52-导入) |
+| 导入 | `import (模块 \| (名字 \| { 名字 (as 新名)?, ... }) from 模块)` | [5.2](05_modules.md#52-导入) |
 | 导出 | `export (dataDecl \| typeDecl \| { 名字, ... })`；函数的 `export` 写在 `func` 前 | [5.3](05_modules.md#53-导出) |
 | 命名空间 | `namespace 限定名 { ... }` | [5.4](05_modules.md#54-命名空间) |
 | 展开命名空间 | `using namespace 限定名` | [5.2](05_modules.md#52-导入) |
@@ -47,14 +47,19 @@ ctrlExpr   : if logicalOr then blockExpr (else blockExpr)?
 waitExpr   : wait? assignExpr
 assignExpr : logicalOr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&=' | '|=') logicalOr)?
 logicalOr  : logicalAnd ('||' logicalAnd)*
-logicalAnd : equality ('&&' equality)*
+logicalAnd : or ('&&' or)*
+or         : and ('|' and)*
+and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
 relational : additive (('<' | '>' | '<=' | '>=') additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
-multiplicative : nullable (('*' | '/' | '^' | '@' | '%') nullable)*
+multiplicative : power (('*' | '/' | '@' | '%') power)*
+power      : nullable ('^' power)?
 nullable   : unary (('??' | '!!') dataExpr)?
-unary      : link (as 类型)? | ('!' | '-' | '~') link
-link       : comp (('->' | '?->') comp)*
+unary      : link (as 类型)?
+link       : neg (('->' | '?->') comp)*
+neg        : ('-' | '!' | '~') negPower | comp
+negPower   : ('-' | '!' | '~') negPower | comp ('^' negPower)?
 comp       : anno ('..' anno)*
 anno       : primary ( '.'字段 | '[' 下标 ']' | '(' 实参 ')' | '<' with 实参 '>' )*
 primary    : 名字 | 字面量 | '[' 元素, ... ']' | '{' 键: 值, ... '}' | '(' 表达式, ... ')' | lambda
@@ -88,30 +93,32 @@ primaryType : 名字 | '(' 类型 ')' | '(' 类型, ... ')' | '{' 名字: 类型
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | dataDecl | funcDecl | typeDecl | useDecl
-stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt
+                     | dataDecl | funcDecl | typeDecl
+stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt
 blockStmt          : 'wait'? stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
-moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
+moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
 moduleDecl         : 'module' identDef
-importDecl         : 'import' (moduleName | (identDef | bracedIdents) 'from' moduleName)
+importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from' moduleName)
+bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
+importItem         : identDef ('as' identDef)?
 exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | useDecl
+                     | typeDecl | dataDecl
 funcAnno           : '@' identRef angledValues?
 funcDecl           : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
                      'func' identRef parentParams (':' typeExpr)? stmtBlock
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
+                     | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : implMark? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
-useDecl            : 'use' (identDef '=')? identRef
 retStmt            : ('return' | 'throw') dataList
 implMark           : 'inner' | 'outer'
 modifiers          : ('atomic' | 'shared' | 'sync' | 'macro')+
@@ -125,7 +132,7 @@ keyParamPair       : 'var'? identDef ':' typeExpr ('=' dataExpr)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
-dataExpr           : waitExpr | ctrlExpr
+dataExpr           : waitExpr | ctrlExpr | loopExpr
 waitExpr           : 'wait'? assignExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
                      | 'match' identRef '{' matchCase+ '}'
@@ -133,15 +140,19 @@ ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 assignExpr         : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&='
                      | '|=') logicalOrExpr)?
 logicalOrExpr      : logicalAndExpr ('||' logicalAndExpr)*
-logicalAndExpr     : equalityExpr ('&&' equalityExpr)*
+logicalAndExpr     : orExpr ('&&' orExpr)*
+orExpr             : andExpr ('|' andExpr)*
+andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : additiveExpr (('<' | '>' | '<=' | '>=') additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
-multiplicativeExpr : nullableExpr (('*' | '/' | '^' | '@' | '%') nullableExpr)*
+multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
+powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-                     | ('!' | '-' | '~') linkExpr
-linkExpr           : compExpr (('->' | '?->') compExpr)*
+linkExpr           : negExpr (('->' | '?->') compExpr)*
+negExpr            : ('-' | '!' | '~') negPower | compExpr
+negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | angledValues | '!' | memberAccess)*
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
@@ -166,6 +177,10 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
                      | '{' (pairedValues | identList)? ','? '}' | '_'
+loopExpr           : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+loopState          : identDef | parentIdents
+loopFor            : 'for' identDef 'in' logicalOrExpr
+loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
 typeExpr           : unionType (('?' | '!')+ | '?' unionType)?
 unionType          : interType ('|' interType)*
@@ -203,7 +218,7 @@ typeList           : typeExpr (',' typeExpr)*
 | 实参：位置实参还是具名实参 | 第一个 `名字 :` 起是具名实参 |
 | `T ?` | 同一行上 `?` 后面能开始一个类型时是保留写法 `T ? U`，否则是可空标记 |
 | 类型之后的 `+` `-` `^` | 其后能开始一个类型时属于类型（`x as T + U` 是转换为类型 `T + U`） |
-| 数字前的 `-` | 紧贴数字且前面不是一个值时是字面量的符号 |
+| 一元 `-` | 永远是运算符；比 `^` 松、比 `->` 紧；直接作用在数字上时给出负的字面量 |
 
 相关文件：
 
@@ -233,12 +248,11 @@ typeList           : typeExpr (',' typeExpr)*
 | 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |
 | 关键字实参 `f(a: 1)` | `FeatureNotSupported` | 按位置传 |
 | 形参默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参 |
-| `use 名字 = 限定名` | `FeatureNotSupported` | `import { 名字 } from 模块`；换名用 `let 新名 = 模块::名字`（[5.5](05_modules.md#55-use)） |
 | 切片下标 `xs[a:b]`、`xs[a:b:c]` | `SemanticDiag::NoMatchingFunction`（没有专门的诊断：按“下标运算符没有接受这些实参的重载”报告） | `xs->slice<a, b>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`T ? U`、`名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof`、`enum` | 语法错误 | 无 |
-| `for`、`while` 循环 | 语法错误（没有循环语法） | 递归；`map`/`filter`/`reduce`/`foreach` |
+| `loop 状态 = 初值 (for x in xs)? (while 条件)? { 体 }` | `ConstructNotSupported`（语法与 AST 已有，图上的 `LOOP` 节点尚未实现；写法是暂定的） | 递归；`map`/`filter`/`reduce`/`foreach` |
 | 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
 
 此外有几处“能写出来但目前用不了”：联合类型 `A | B`（成员类型的值不能进入它）、带函数类型的声明 `let f: (x: int) => int = g`。

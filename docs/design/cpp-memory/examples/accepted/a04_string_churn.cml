@@ -1,0 +1,16 @@
+/// Two million short-lived strings (in chunks of a thousand, see a03).
+/// Under a scheduler the collector reclaims them; in the emitted program nothing ever collects.
+module a04_string_churn
+
+func chunk(i: int, acc: int): int {
+    return if i == 0 then acc else chunk(i - 1, acc + len('item-' + string(i)))
+}
+
+func rounds(k: int, acc: int): int {
+    return if k == 0 then acc else rounds(k - 1, acc + chunk(1000, 0))
+}
+
+func main(): int sync {
+    println(rounds(2000, 0))
+    return 0
+}

@@ -9,8 +9,8 @@ import { sort } from algo
 import { mean, stdev } from statistics
 
 func main(): int sync {
-    let source_size = 2e6
-    let sample_size = 4e5
+    let source_size = 2000000
+    let sample_size = 400000
     let replicas = 8
     let s = 20260309
 

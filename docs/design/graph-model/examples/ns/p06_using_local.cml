@@ -1,0 +1,9 @@
+// using namespace over a namespace of the same module
+namespace N {
+    func a(): int { return 1 }
+}
+using namespace N
+func main(): int sync {
+    println(a())
+    return 0
+}

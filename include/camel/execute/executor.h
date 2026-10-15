@@ -66,6 +66,10 @@ class ExecutorManager {
     void registerExecutorFactory(std::string name, executor_factory_t fact);
 
     std::optional<operator_t> find(const std::string &uri) const;
+    /// find() for whoever must not import a module by asking: the operator when the executor of
+    /// its protocol is loaded or registered already, nothing when finding it would import the
+    /// module first (or when there is no such operator).
+    std::optional<operator_t> findWithoutImport(const std::string &uri) const;
     std::string getNameOfAnOperator(const operator_t &op) const;
 };
 

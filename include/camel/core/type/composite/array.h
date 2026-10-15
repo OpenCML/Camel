@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: May. 01, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,13 +54,14 @@ class ArrayType : public CompositeType {
     ArrayType(const ArrayType &)            = delete;
     ArrayType &operator=(const ArrayType &) = delete;
 
-    // Create an ArrayType whose only unresolved state is the element type itself.
+    /// The array type of `elemType` (void when null). Interned (camel/core/type/intern.h): the
+    /// same element type object always gives the same immutable ArrayType object.
     static ArrayType *create(Type *elemType = nullptr);
 
-    // Build from a factory.
+    /// create() with the factory's element type.
     static ArrayType *fromFactory(ArrayTypeFactory &factory);
 
-    // Build directly from data (internal use, e.g. clone).
+    /// create(), under the name the other composite types use for it.
     static ArrayType *fromData(Type *elemType);
 
     Type *elemType() const { return elemType_; }
@@ -73,6 +74,7 @@ class ArrayType : public CompositeType {
     virtual Type *clone(bool deep = false) const override;
     virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
+    virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
     /// Widens every element type, so `var` bindings never hold refined aggregates (mutation
     /// through `var` parameters would otherwise break covariant assignability).

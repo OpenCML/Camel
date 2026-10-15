@@ -1,0 +1,88 @@
+/**
+ * Comparison with null and narrowing (design principles 2.11, 2.12). `x == null` and
+ * `x != null` are defined for a `T?` and give a bool. Where such a comparison is the
+ * condition of an `if`, or one of the operands `&&` joins in it, the name is a `T` in the arm
+ * that excludes null: the same branch as `match x { case null => B  case v => A }`.
+ */
+module narrow
+
+func len_or_zero(s: string?): int {
+    return if s != null then len(s) else 0
+}
+
+func len_or_minus(s: string?): int {
+    return if s == null then -1 else len(s)
+}
+
+// several comparisons joined by `&&`: all of them hold in the then arm
+func sum_or_minus(a: int?, b: int?): int {
+    return if a != null && b != null then a + b else -1
+}
+
+// `null != x` narrows as `x != null` does, and so does a test among the operands of `&&`
+func ready_plus(x: int?, ready: bool): int {
+    return if null != x && ready then x + 1 else 0
+}
+
+// `p && q` is `if p then q else false`: `x` is an int on the right side
+func positive(x: int?): bool {
+    return x != null && x > 0
+}
+
+// `p || q` is `if p then true else q`
+func missing_or_zero(x: int?): bool {
+    return x == null || x == 0
+}
+
+func describe(x: int?): string sync {
+    // an `if` without `else`: the arm is narrowed all the same
+    if x != null then println(x + 1)
+    return if x == null then 'none' else format<x>('some {}')
+}
+
+func nested(a: int?, b: int?): int {
+    return if a != null then (if b != null then a * b else a) else 0
+}
+
+// the narrowed name is an ordinary value of the arm: a lambda captures it as an int
+func add_to_all(x: int?, xs: int[]): int[] {
+    return if x != null then xs->map<(y: int) => y + x> else xs
+}
+
+// the elements of an array literal see the narrowed value too (they are names kept in the
+// constant, not DREF nodes)
+func pair(x: int?): int[] {
+    return if x != null then [x, x + 1] else [0]
+}
+
+// the arm that does not exclude null still sees the `T?`
+func keep(x: int?): int? {
+    return if x == null then x else x + 100
+}
+
+func main(): int sync {
+    let present: string? = 'abc'
+    let absent: string?  = null
+    println(len_or_zero(present), len_or_zero(absent))
+    println(len_or_minus(present), len_or_minus(absent))
+    println(sum_or_minus(1, 2), sum_or_minus(1, null), sum_or_minus(null, 2))
+    println(ready_plus(1, true), ready_plus(1, false), ready_plus(null, true))
+    println(positive(3), positive(-3), positive(null))
+    println(missing_or_zero(null), missing_or_zero(0), missing_or_zero(7))
+    println(describe(41), describe(null))
+    println(nested(3, 4), nested(3, null), nested(null, 4))
+    println(add_to_all(10, [1, 2]), add_to_all(null, [1, 2]))
+    println(pair(4), pair(null))
+    println(keep(1) ?? -1, keep(null) ?? -1)
+    // the comparison is an ordinary expression, in either order
+    let has = present != null
+    println(has, absent != null, absent == null, null == absent, null != present)
+    println([present, absent]->map<(s: string?) => s == null>)
+    // a nullable function value can be compared with null too (two functions cannot)
+    let callback: ((x: int) => int)? = null
+    println(callback == null, callback != null)
+    // a name bound by `let` is narrowed like a parameter
+    let n: int? = 41
+    println(if n != null then n + 1 else 0)
+    return 0
+}

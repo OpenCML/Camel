@@ -1,0 +1,2 @@
+import { sqrt, floor } from math     // the names listed
+import math                          // the namespace only

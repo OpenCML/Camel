@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 02, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -48,27 +48,15 @@ std::vector<std::byte> bytesForStruct(const auto &body) {
 std::vector<std::byte> bytesForAccsStructKey(std::string_view key) {
     GCAccsBody body;
     body.accsKind = GCAccsKind::StructKey;
-    body.keyBytes = static_cast<uint16_t>(key.size());
-
-    std::vector<std::byte> bytes(sizeof(GCAccsBody) + key.size());
-    std::memcpy(bytes.data(), &body, sizeof(body));
-    if (!key.empty()) {
-        std::memcpy(bytes.data() + sizeof(GCAccsBody), key.data(), key.size());
-    }
-    return bytes;
+    body.value    = camel::core::internSymbol(key);
+    return bytesForStruct(body);
 }
 
 std::vector<std::byte> bytesForOperPayload(operator_t op, std::string_view uri) {
     GCOperBody body;
-    body.op       = op;
-    body.uriBytes = static_cast<uint16_t>(uri.size());
-
-    std::vector<std::byte> bytes(sizeof(GCOperBody) + uri.size());
-    std::memcpy(bytes.data(), &body, sizeof(body));
-    if (!uri.empty()) {
-        std::memcpy(bytes.data() + sizeof(GCOperBody), uri.data(), uri.size());
-    }
-    return bytes;
+    body.op   = op;
+    body.oper = camel::core::OperatorTable::instance().intern(uri);
+    return bytesForStruct(body);
 }
 
 std::vector<std::byte> bytesForBranchPayload(
@@ -266,12 +254,6 @@ gc_node_ref_t GraphDraft::addCallNode(
             .kind      = GCNodeKind::Call,
             .payload   = payload,
         });
-}
-
-gc_node_ref_t GraphDraft::addBindNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
-    dataIndex = ensureValueSlot(*this, type, dataIndex);
-    return addNode(
-        DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Bind});
 }
 
 gc_node_ref_t GraphDraft::addFuncNode(

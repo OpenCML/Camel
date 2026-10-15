@@ -2,8 +2,8 @@ module shapes
 
 type Point = { x: int, y: int }
 
-// The squared length of p.
-// Second line of the comment.
+/// The squared length of p.
+/// Second line of the comment.
 export func norm2(p: Point): int {
     return p.x * p.x + p.y * p.y
 }

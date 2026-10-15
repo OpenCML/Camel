@@ -1,0 +1,9 @@
+// How graphs of namespaced functions are named in dumps and diagnostics.
+namespace N {
+    func f(x: int): int { return 1 / x }
+}
+func f(x: int): int { return x }
+func main(): int sync {
+    println(f(1), N::f(0))
+    return 0
+}

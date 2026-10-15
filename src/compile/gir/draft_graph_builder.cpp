@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,6 +28,8 @@
 #include "camel/compile/gir/draft_graph_builder.h"
 
 #include "camel/core/rtdata/conv.h"
+#include "camel/core/symbol.h"
+#include "camel/core/type/composite/func.h"
 
 #include <algorithm>
 #include <format>
@@ -69,6 +71,25 @@ DraftGraphBuilder *DraftGraphBuilder::fromDraft(const runtime::GraphDraft *draft
 
 void DraftGraphBuilder::setFuncType(camel::core::type::FunctionType *funcType) {
     draft_->setFuncType(funcType);
+}
+
+void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
+    camel::core::type::FunctionType *funcType = draft_->funcType();
+    ASSERT(funcType != nullptr, "A graph under construction has a function type.");
+    if (auto *open = funcType->asOpen()) {
+        open->setExitType(exitType);
+    } else {
+        draft_->setFuncType(funcType->withExitType(exitType));
+    }
+}
+
+std::vector<std::string_view> DraftGraphBuilder::captureNames() const {
+    std::vector<std::string_view> names;
+    names.reserve(draft_->captureNames().size());
+    for (camel::core::SymId name : draft_->captureNames()) {
+        names.push_back(camel::core::symbolText(name));
+    }
+    return names;
 }
 
 void DraftGraphBuilder::setClosureType(camel::core::type::TupleType *closureType) {
@@ -198,10 +219,6 @@ runtime::DraftNode *DraftGraphBuilder::addJoinNode(
 runtime::DraftNode *
 DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body) {
     return draft_->node(draft_->addCallNode(type, body));
-}
-
-runtime::DraftNode *DraftGraphBuilder::addBindNode(camel::core::type::Type *type) {
-    return draft_->node(draft_->addBindNode(type));
 }
 
 runtime::DraftNode *

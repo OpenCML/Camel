@@ -1,5 +1,9 @@
 /**
  * Uses wall-clock time as a correctness proxy: PRL should not serialize an unordered_foreach of independent sleeps.
+ * Eight sleeps of 200 ms one after another take at least 1.6 s, however fast the machine. The
+ * bound is one sleep less, 1.4 s: under it at least two sleeps overlapped. Waiting longer than
+ * asked only adds time, so a slow or loaded runner cannot pass a serialized run, and a run with
+ * as few as two workers (four rounds, 0.8 s) keeps 0.6 s for its overhead.
  */
 module unordered_foreach_timing
 
@@ -9,7 +13,7 @@ import { unordered_foreach } from para
 
 func main(): int sync {
     let jobs = range(0, 8)
-    let delay_ms = 120
+    let delay_ms = 200
 
     let start = now()
     unordered_foreach<(i: int) => sync {
@@ -18,5 +22,5 @@ func main(): int sync {
     let duration = now() - start
 
     'unordered_foreach duration = {:.3f}s'->format<duration>->println
-    return if duration < 0.50 then 0 else 1
+    return if duration < 1.4 then 0 else 1
 }

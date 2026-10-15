@@ -1,0 +1,5 @@
+func main(): int sync {
+    let n = 3
+    println(n && true)
+    return 0
+}

@@ -291,7 +291,6 @@ bool ParserImpl::startsDecl(TK kind) const {
     case TK::KwVar:
     case TK::KwFunc:
     case TK::KwType:
-    case TK::KwUse:
     case TK::KwWith:
     case TK::KwInner:
     case TK::KwOuter:
@@ -312,7 +311,6 @@ bool ParserImpl::startsStmt(TK kind) const {
     case TK::KwVar:
     case TK::KwFunc:
     case TK::KwType:
-    case TK::KwUse:
     case TK::KwUsing:
     case TK::KwWith:
     case TK::KwExport:
@@ -369,7 +367,7 @@ uint32_t ParserImpl::afterModifiers() const {
 }
 
 /// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-///      | dataDecl | funcDecl | typeDecl | useDecl
+///      | dataDecl | funcDecl | typeDecl
 /// Decided on the first token; after `export`, `inner` and `outer` on the next one or two
 /// (`export inner type` is an exported type, `export inner func` a function).
 void ParserImpl::parseDecl() {
@@ -387,8 +385,6 @@ void ParserImpl::parseDecl() {
         return parseDataDecl();
     case TK::KwType:
         return parseTypeDecl();
-    case TK::KwUse:
-        return parseUseDecl();
     case TK::KwExport: {
         const TK next = peek(1);
         if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType ||
@@ -406,7 +402,7 @@ void ParserImpl::parseDecl() {
     }
 }
 
-/// stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | useDecl | retStmt
+/// stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
 ///      | blockStmt
 /// blockStmt : 'wait'? stmtBlock
 /// Decided on the first token, except:
@@ -428,8 +424,6 @@ void ParserImpl::parseStmt() {
         return parseTypeDecl();
     case TK::KwUsing:
         return parseUsingNamespaceDecl();
-    case TK::KwUse:
-        return parseUseDecl();
     case TK::KwReturn:
     case TK::KwThrow:
         return parseRetStmt();
@@ -548,7 +542,8 @@ void ParserImpl::parseBlockExpr() {
 
 // ---- Declarations ----
 
-/// moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
+/// moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
+/// A path after `::` names a namespace of the module (`import { f } from m::N`).
 void ParserImpl::parseModuleName() {
     const size_t m = mark();
     if (cur_ == TK::Dot || cur_ == TK::DotDot || cur_ == TK::Ellipsis) {
@@ -557,6 +552,10 @@ void ParserImpl::parseModuleName() {
     if (cur_ == TK::Identifier) {
         bump();
         while (cur_ == TK::Dot && peek(1) == TK::Identifier) {
+            bump();
+            bump();
+        }
+        while (cur_ == TK::ColonColon && peek(1) == TK::Identifier) {
             bump();
             bump();
         }
@@ -576,23 +575,63 @@ void ParserImpl::parseModuleDecl() {
     close(m, NK::ModuleDecl);
 }
 
-/// importDecl : 'import' (moduleName | (identDef | bracedIdents) 'from' moduleName)
-/// A name followed by `from` is the imported name, otherwise the start of the module name.
+/// importDecl : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from' moduleName)
+/// A name followed by `from` is the one name imported (design principles 2.12: `import a from m`
+/// is `import { a } from m`), otherwise the start of the module name; `import m as x` gives the
+/// module another name.
 void ParserImpl::parseImportDecl() {
     const size_t m = mark();
     bump();
     if (cur_ == TK::LBrace) {
-        parseBracketedIdents(TK::RBrace, NK::BracedIdents);
+        parseBracedImports();
         expect(TK::KwFrom);
         parseModuleName();
-    } else if (cur_ == TK::Identifier && peek(1) == TK::KwFrom) {
-        parseIdentDef();
-        bump();
+    } else if (cur_ == TK::Identifier && (peek(1) == TK::KwFrom || peek(1) == TK::KwAs) &&
+               (peek(1) == TK::KwFrom || peek(3) == TK::KwFrom)) {
+        parseImportItem();
+        expect(TK::KwFrom);
         parseModuleName();
     } else {
         parseModuleName();
+        if (cur_ == TK::KwAs && !panic_) {
+            bump();
+            parseIdentDef();
+        }
     }
     close(m, NK::ImportDecl);
+}
+
+/// bracedImports : '{' (importItem (',' importItem)*)? ','? '}'
+void ParserImpl::parseBracedImports() {
+    const size_t m = mark();
+    bump();
+    {
+        Scope scope(*this, false);
+        if (cur_ != TK::RBrace && cur_ != TK::Comma) {
+            parseImportItem();
+            while (cur_ == TK::Comma && peek(1) != TK::RBrace && !panic_) {
+                bump();
+                parseImportItem();
+            }
+        }
+        eat(TK::Comma);
+    }
+    if (!panic_) {
+        expectListEnd(TK::RBrace);
+    }
+    close(m, NK::BracedImports);
+}
+
+/// importItem : identDef ('as' identDef)?
+/// `find as str_find`: the name in the module, then the name it has in this file.
+void ParserImpl::parseImportItem() {
+    const size_t m = mark();
+    parseIdentDef();
+    if (cur_ == TK::KwAs && !panic_) {
+        bump();
+        parseIdentDef();
+    }
+    close(m, NK::ImportItem);
 }
 
 /// exportDecl : 'export' (dataDecl | typeDecl | bracedIdents)
@@ -620,7 +659,7 @@ void ParserImpl::parseUsingNamespaceDecl() {
 
 /// namespaceDecl : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 /// namespaceItem : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-///               | typeDecl | useDecl
+///               | typeDecl | dataDecl
 void ParserImpl::parseNamespaceDecl() {
     Depth depth(*this);
     const size_t m = mark();
@@ -636,8 +675,7 @@ void ParserImpl::parseNamespaceDecl() {
             const uint32_t before = pos_;
             if (cur_ == TK::Semi) {
                 error(SyntaxError::Kind::ExtraSemicolon, {}, pos_);
-            } else if (startsDecl(cur_) && cur_ != TK::KwModule && cur_ != TK::KwLet &&
-                       cur_ != TK::KwVar) {
+            } else if (startsDecl(cur_) && cur_ != TK::KwModule) {
                 parseDecl();
                 if (!panic_) {
                     eat(TK::Semi);
@@ -706,11 +744,27 @@ void ParserImpl::parseFuncDecl() {
 }
 
 /// dataDecl : ('let' | 'var') carrier (':' typeList)? '=' dataList
+///          | 'let' '_' (':' typeList)? '=' dataList
 /// carrier  : identList | parentIdents | bracedIdents | bracketIdents
 void ParserImpl::parseDataDecl() {
-    const size_t m = mark();
+    const size_t m   = mark();
+    const bool isLet = cur_ == TK::KwLet;
     bump();
     switch (cur_) {
+    case TK::Underscore: {
+        // `let _ = e`: the value of `e` is dropped on purpose (design principles 2.11). `_`
+        // is not a name; it is taken in this one place, alone, and stands where the single
+        // name of a declaration does, so the tree has the shape of `let x = e`.
+        if (!isLet) {
+            unexpected({e(TK::Identifier)});
+            return close(m, NK::DataDecl);
+        }
+        const size_t list = mark();
+        const size_t name = mark();
+        bump();
+        close(name, NK::IdentDef);
+        close(list, NK::IdentList);
+    } break;
     case TK::LParen:
         parseBracketedIdents(TK::RParen, NK::ParentIdents);
         break;
@@ -789,18 +843,6 @@ void ParserImpl::parseTypeDecl() {
         parseType();
     }
     close(m, NK::TypeDecl);
-}
-
-/// useDecl : 'use' (identDef '=')? identRef
-void ParserImpl::parseUseDecl() {
-    const size_t m = mark();
-    bump();
-    if (cur_ == TK::Identifier && peek(1) == TK::Assign) {
-        parseIdentDef();
-        bump();
-    }
-    parseIdentRef(NK::IdentRef);
-    close(m, NK::UseDecl);
 }
 
 /// retStmt : ('return' | 'throw') dataList

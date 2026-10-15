@@ -1,0 +1,8 @@
+// Values in namespace blocks, exported, used through the module and by name (N5).
+import lib_values
+import { Config } from lib_values
+
+func main(): int sync {
+    println(lib_values::Config::limit, Config::doubled(), lib_values::base)
+    return 0
+}

@@ -15,9 +15,9 @@
  *   the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
  *   `sort_by` and `zip_with`. None of them stops early: the function is applied to every
  *   element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
- * - These are generic functions: each call builds the instance for its element types in the
- *   module that calls it (DESIGN-QUESTION(generic-export)). `group_by` is not here: it needs
- *   the map type.
+ * - These are generic functions: there is one instance per set of element types in the whole
+ *   program, whichever module calls it (one root graph, design principles 2.11). `group_by`
+ *   is not here: it needs the map type.
  */
 module array
 

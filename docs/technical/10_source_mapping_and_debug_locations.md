@@ -111,7 +111,7 @@
 
 入口在：
 
-- `include/camel/compile/gct/load.h`
+- `include/camel/compile/gct/node.h`
 - `src/compile/gct/builder.cpp`
 
 当前实现不再把 `tokenStart_/tokenEnd_` 传播到 GCT，而是直接传播 `OriginId`：
@@ -225,7 +225,7 @@
 - `include/camel/parse/parse.h`
 - `include/camel/parse/ast/base.h`
 - `src/parse/ast/builder.cpp`
-- `include/camel/compile/gct/load.h`
+- `include/camel/compile/gct/node.h`
 - `src/compile/gct/builder.cpp`
 - `src/compile/gir/builder.cpp`
 - `src/passes/sched/fastvm/compile.cpp`

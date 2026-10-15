@@ -41,6 +41,9 @@ STATEMENTS = [
     "let v = a - -1", "let v = -1->f", "let v = -a->f", "let v = -2 ^ 2", "let v = 2 * -3",
     "let v = !a", "let v = ~a", "let v = !a as bool", "let v = -a as int", "let v = [-1, +2]",
     "let v = f(-1)", "let v = 1e5 + 0x1f + 0b11 + 017 + 1.5e-3",
+    "let v = -a ^ 2", "let v = 2 ^ -1", "let v = -a ^ -b ^ 2", "let v = -a * b", "let v = - -a",
+    "let v = -2->f ^ 2", "let v = -9223372036854775808", "let v = -(2)", "let v = !a->f",
+    "let v = a & b | c & d", "let v = a == b & c == d || e | f && g", "let v = a | b ?? c",
     # operators
     "let v = a ?? b ?? c", "let v = a !! b + c", "let v = a * b ?? c + d", "let v = a ?? b = c",
     "let v = a -> f -> g", "let v = a ?-> f", "let v = f .. g", "let v = f ?.. g",

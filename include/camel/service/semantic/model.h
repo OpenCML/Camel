@@ -137,11 +137,11 @@ struct RefFacts {
     bool macroCall  = false;
 };
 
-/// A name that is visible without being declared in a file of the model: a function or type
-/// of the built-in module or of an imported module.
+/// A name that is visible without being declared in a file of the model: a function, type or
+/// value of the built-in module or of an imported module. A value's one signature is its type.
 struct ExternalName {
     std::string name;
-    enum class Kind : uint8_t { Function, Type, Namespace } kind = Kind::Function;
+    enum class Kind : uint8_t { Function, Type, Namespace, Value } kind = Kind::Function;
     std::vector<std::string> signatures;
     std::string module;
     bool macro = false;

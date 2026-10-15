@@ -13,13 +13,16 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Apr. 10, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/alloc/allocator.h"
+#include "camel/core/symbol.h"
+#include "camel/core/type/intern.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -84,22 +87,30 @@ StructType::StructType(
     }
 }
 
-StructType *StructType::create() {
-    StructTypeLayout layout = computeLayout(0, 0, 0);
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "StructType",
-        "Allocating StructType: (), size: {} bytes",
-        layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
-    ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
-    return new (mem) StructType(layout, nullptr, nullptr, nullptr, nullptr, nullptr);
-}
+StructType *StructType::create() { return fromFactoryData({}, {}); }
 
 StructType *StructType::fromFactory(StructTypeFactory &factory) {
     return fromFactoryData(factory.fields_, factory.refs_);
 }
 
 StructType *StructType::fromFactoryData(
+    const std::vector<std::pair<std::string, Type *>> &fields,
+    const std::vector<std::string> &refs) {
+    // One object per sequence of (field name, field type object); see intern.h. `refs` names
+    // the fields whose type is Ref, which the fields already determine.
+    std::vector<uintptr_t> key;
+    key.reserve(fields.size() * 2);
+    for (const auto &[name, type] : fields) {
+        key.push_back(camel::core::internSymbol(name));
+        key.push_back(reinterpret_cast<uintptr_t>(type));
+    }
+    Type *interned = TypeTable::instance().intern(TypeTable::Shape::Struct, key, [&]() -> Type * {
+        return allocate(fields, refs);
+    });
+    return static_cast<StructType *>(interned);
+}
+
+StructType *StructType::allocate(
     const std::vector<std::pair<std::string, Type *>> &fields,
     const std::vector<std::string> &refs) {
     size_t size     = fields.size();
@@ -141,8 +152,7 @@ StructType *StructType::fromFactoryData(
         size,
         refCount,
         layout.totalSize));
-    void *mem = mm::permSpace().alloc(layout.totalSize, alignof(StructType));
-    ASSERT(mem != nullptr, "Failed to allocate StructType from permSpace");
+    void *mem = allocTypeStorage<StructType>(TypeStorageKind::Struct, layout.totalSize);
     return new (mem) StructType(
         layout,
         types.data(),
@@ -292,10 +302,19 @@ bool StructType::equals(Type *type) const {
     return true;
 }
 
+// Converting a value to its own type is legal and does nothing (design principles 2.12).
 CastSafety StructType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
-        return *r;
-    return CastSafety::Forbidden;
+    if (sourceType == nullptr)
+        return CastSafety::Forbidden;
+    return equals(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
+}
+
+// Every conversion castSafetyFrom admits (to the same type) keeps the value.
+slot_t StructType::castSlotFrom(slot_t value, Type *sourceType) const {
+    ASSERT(
+        castSafetyFrom(sourceType) == CastSafety::Safe,
+        "castSlotFrom only allowed when castSafetyFrom returns Safe");
+    return value;
 }
 
 // Fields are immutable, so a struct accepts any struct with the same field names whose field

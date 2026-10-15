@@ -58,8 +58,8 @@ pointers to collectable objects, and the spaces hold only what is never moved.
 
 What a function costs (measured, release build, `CAMEL_GC_STATS=1`): about 0.8 KB of the graph
 space for a function of one expression, 1.9 KB with an `if` (three graphs), 1.5 KB with a
-lambda; 0.6 to 1.8 KB of the permanent space (5 to 17 type objects: composite types are created
-anew at every use, not shared); about 1.2 KB of the meta space when its graph owns a constant
+lambda; 0.6 to 1.8 KB of the permanent space before the type table (5 to 17 type objects:
+composite types were created anew at every use; see below for what is shared now); about 1.2 KB of the meta space when its graph owns a constant
 object or a function value (the first block of its arena, see
 `include/camel/compile/gir/arena.h`). That first block was 256 KB, which is what limited a
 program to 62 such graphs.
@@ -79,9 +79,33 @@ Two rules follow, and code on a query or probe path has to keep them:
   tuple type (`draftStaticDataType` in `src/runtime/draft_session.cpp`) instead of creating an
   equal one for the size computation and another for the encoding.
 
-Composite types are otherwise not canonical: two equal array, tuple or function types are two
-objects, and type equality is structural (`equals`). That costs the 5 to 17 type objects per
-function counted above, which is proportional to the program and was left as it is.
+Since 2026-10-13/14 (graph data model, migration step 2) the type table
+(`include/camel/core/type/intern.h`) shares types at the constructor instead of at each
+caller:
+
+- Tuple types (`TupleType::create`, frame and static-area layouts among them) and array types
+  (`ArrayType::create`) are interned by their component type objects: re-encoding an unchanged
+  graph, graphs with equal layouts and every place a program writes `int[]` allocate nothing
+  new. This became possible when converting a value to its own type was ruled legal (design
+  principles 2.12): the cast rule of these types compares structure, not object identity.
+- Function types (`FunctionType::create`, `FunctionTypeFactory::build`) are interned with their
+  parameter names: an operator's signature for a call, a function type a program writes, a
+  branch arm's signature, every signature a rewrite re-infers. The one exception is the
+  signature of a function the front end is building (`OpenFunctionType`, one per function the
+  program defines), whose result type the body decides after values of the function exist.
+  Capture names are no longer part of a function type; they are held by the graph
+  (`GCGraph::captureNames`).
+- Struct types are interned by field names and field type objects.
+
+Not interned: open signatures, unions and type variables. An interned type is immutable by
+construction: no type class has a mutator except `OpenFunctionType::setExitType`, and the table
+never holds an open signature. `CAMEL_TYPE_STATS=1` prints what a program allocated per kind
+of type and how many constructions the table answered.
+
+What still grows with commits is the frame layout of a graph a rewrite changed: its slot types
+differ, so the layout is a new tuple type each time the graph is re-encoded differently. The
+frozen-block layout (graph model step 3) replaces the layout object by a `TypeId` array in the
+graph block, freed with the graph.
 
 `CAMEL_SPACE_SEGMENT_KB=<kilobytes>` sets the first segment of all three spaces. It is a test
 control: with 64 KB a program of a few hundred functions makes every space grow several times,

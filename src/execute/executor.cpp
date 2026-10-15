@@ -61,6 +61,15 @@ void ExecutorManager::registerExecutorFactory(std::string name, executor_factory
     executorFactories[name] = fact;
 }
 
+std::optional<operator_t> ExecutorManager::findWithoutImport(const std::string &uri) const {
+    const size_t pos = uri.find(":");
+    if (pos == std::string::npos || !factoryRegistered(uri.substr(0, pos))) {
+        return std::nullopt;
+    }
+    // The protocol has a factory: find() loads its executor at most, it imports nothing.
+    return find(uri);
+}
+
 std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
     const size_t pos = uri.find(":");
     if (pos == std::string::npos) {

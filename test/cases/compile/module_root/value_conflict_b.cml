@@ -1,0 +1,4 @@
+/** Helper module: exports another value named `limit`. */
+module value_conflict_b
+
+export let limit = 2

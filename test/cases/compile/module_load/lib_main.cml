@@ -1,0 +1,6 @@
+/** Helper module: has a function named main, which is an ordinary function here. */
+module lib_main
+
+export func main(): int {
+    return 42
+}
