@@ -1,0 +1,4 @@
+name, uuid, utilization.gpu [%], memory.used [MiB], clocks.current.sm [MHz]
+NVIDIA GeForce RTX 3090, GPU-3f004a76-d412-8387-cf5d-ad7269221858, 0 %, 5746 MiB, 210 MHz
+name, uuid, utilization.gpu [%], memory.used [MiB], clocks.current.sm [MHz]
+NVIDIA GeForce RTX 3090, GPU-3f004a76-d412-8387-cf5d-ad7269221858, 2 %, 5746 MiB, 1695 MHz

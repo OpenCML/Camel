@@ -33,7 +33,15 @@ The eight-step affine benchmark's optimized median was 0.025792 ms strictly and
 deviation from the unfused reference was 1.1921e-7 for the contracted version.
 These are device-event timings for this workload, not end-to-end or Triton claims;
 raw reports and local plan logs are retained in docs/performance/tiles.
-Remote validation and final evidence are recorded subsequently.
+Remote RTX 3090 validation passed 97/97 primary cases plus 63/63 core/parse cases,
+and the five execution paths also passed moving-GC stress. GPU 7's timing run was
+contended by an existing Python process (100% utilization on the subsequent check),
+so those timings are retained only as an excluded observation. A fresh run on
+GPU 0, observed idle before measurement, gave strict 0.015424 ms and contracted
+0.015712 ms: no measured speedup there. Before/after GPU 0 state and the GPU 7
+contention snapshot are retained. A single short device-event run is not evidence
+of a general performance gain; the authorized instruction selection is verified
+independently by source and exact cancellation cases.
 The benchmark comparison limitation for relaxed algorithms is explicit in README;
 its tolerance gate is not weakened by this change.
 
