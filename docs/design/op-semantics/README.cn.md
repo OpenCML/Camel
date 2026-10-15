@@ -990,7 +990,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 ```
 
 - 语义：每一轮先求条件（`While`、`ForWhile`；条件看得到状态，看不到元素），再取下一个元素（`For`、`ForWhile`），再求循环体；条件为假或元素取完即结束；循环的值是最后的状态。`camel/core/loop_kind.h` 写明了这一点。
-- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它；`std::nvm`、`std::fvm`、`std::jit` 原生执行它，所以 `tiles.run<f>` 在这三个后端上收到的 `f` 的图里也是 `LOOP`。`std::prl` 与 `std::cpp` 在私有副本上降级，`tiles.run` 在 `std::prl` 下看到的是降级后的递归（`f.loopN.rec` 等图）。
+- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它。运行时 `tiles.run<f>` 收到的是正在执行的那份程序里 `f` 的图：`std::nvm` 原生执行 `LOOP`（默认的后端），所以那里的 `f` 里是 `LOOP`；`std::fvm`、`std::jit` 默认在私有副本上降级（今天更快，见 `docs/technical/39_loops.md` 第 5 节），只在调试器下或 `CAMEL_FVM_NATIVE_LOOP=1` 时原生执行；`std::prl`、`std::cpp` 降级。在降级的后端上 `tiles.run` 看到的是递归（`f.loopN.rec`、`.next`、`.done` 三张图）。
 - Tiles 自己决定原生处理还是在自己的入口降级：降级用 `lowerLoopsToTailRecursion(context, root)`，它返回一个脱离主程序的副本，不改共享的程序。
 - 校验已保证：初值能赋给状态类型、循环体返回状态类型、条件返回 `bool`、元素端口类型是数组的元素类型、两张子图的捕获端口个数、次序、类型相同并与 `captures()` 一一对应（I18、I19）。
 

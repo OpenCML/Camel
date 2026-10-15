@@ -92,7 +92,7 @@ analysis look into its two graphs, and nothing lowers it in the shared program.
 | Consumer | How it runs a LOOP |
 |---|---|
 | `std::nvm` | natively (`NodeVMSchedPass::evalLoop`): one call of the condition graph and one of the body graph per round, the state in the node's slot |
-| `std::fvm`, `std::jit` | natively: one `SCHD` instruction (marks `LoopWhile`, `LoopFor`, `LoopForWhile`, the two graphs in extra words), run by `FastVMSchedPass::evalLoop` through the call path of the higher-order operators (a compiled body runs compiled) |
+| `std::fvm`, `std::jit` | the private lowering at its entry, by default (faster today, section 5). Natively under a debugger and with `CAMEL_FVM_NATIVE_LOOP=1`: one `SCHD` instruction (marks `LoopWhile`, `LoopFor`, `LoopForWhile`, the two graphs in extra words), run by `FastVMSchedPass::evalLoop` through the call path of the higher-order operators (a compiled body runs compiled), so that a debugger shows the loop's own graphs |
 | `std::macro` evaluator | natively, round by round, at most 1,000,000 rounds |
 | `std::prl` | the private lowering at its entry |
 | `std::cpp` | the private lowering at its entry; the generated tail calls are loops |
@@ -114,23 +114,28 @@ on every back end: `linear.loops` `loops.not_recursion`).
 
 ## 5. Timings
 
-Ten million rounds, whole process, one container, three runs each
-(`docs/design/loops/examples/bench_loop.cml` and `bench_tail.cml`):
+Ten million rounds, whole process, one container, three runs each, the median
+(`docs/design/loops/examples/bench_loop.cml` with two values of state and `bench_tail.cml`, the
+same as a hand-written tail recursion; the one-value pair counts `i` to 10,000,000):
 
-| Program | `std::nvm` | `std::fvm` | `std::jit` | `std::inline std::jit` |
-|---|---|---|---|---|
-| loop, two values of state | 2.9 s | 3.6–3.8 s | 3.4–3.8 s | 3.9–4.1 s |
-| the same tail recursion | 1.9–2.0 s | 0.8 s | 0.6–0.7 s | 0.14–0.20 s |
-| loop, one value of state | 1.6 s | 1.1 s | 0.9 s | 1.0 s |
-| the same tail recursion | 1.2 s | 0.45 s | 0.58 s | |
+| Program | `std::nvm` | `std::fvm` | `std::jit` |
+|---|---|---|---|
+| loop, two values of state (default: nvm native, fvm/jit lowered) | 1.71 s | 1.33 s | 1.50 s |
+| the same, native instruction (`CAMEL_FVM_NATIVE_LOOP=1`) | | 2.61 s | 2.62 s |
+| the same, hand-written tail recursion | 0.98 s | 0.49 s | 0.49 s |
+| loop, one value of state (default) | 0.94 s | 0.48 s | 0.82 s |
+| the same, native instruction | | 0.62 s | 0.59 s |
+| the same, hand-written tail recursion | 0.70 s | 0.38 s | 0.37 s |
 
-With the private lowering instead of the native loop, std::fvm ran the two-value loop in 2.0 s
-and the one-value loop in 0.9 s (measured once, then removed). The native loop pays a nested
-interpreter entry for each of its two calls a round and a tuple a round for two values of
-state; a tail call stays in the dispatch loop. Next steps: a bytecode loop (the state in frame
-slots of its own, a backward jump, the calls in the dispatch loop), then compiling the loop with
-the JIT; the other consumers (std::prl, std::cpp, ONNX, autodiff) each replace the lowering or
-the refusal on their own.
+The native instruction pays a nested interpreter entry for each of its two calls a round, where
+the lowered loop's calls stay in the dispatch loop; it is therefore not the default on std::fvm
+and std::jit. A loop with several values of state also builds the tuple of the next state every
+round (the body's FILL), which a hand-written recursion over separate parameters does not.
+
+Next steps: a bytecode loop on std::fvm (the state in frame slots of its own, the two calls in
+the dispatch loop, a backward jump), at least as fast as the lowering, then made the default;
+compiling it with the JIT; passing the k values of the state separately in the lowering when the
+body ends in a tuple FILL; and in their turn std::prl, std::cpp, ONNX and autodiff.
 
 ## 6. Tests
 

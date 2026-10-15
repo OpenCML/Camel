@@ -18,6 +18,8 @@
  */
 
 #include "fastvm.h"
+#include "camel/execute/observer.h"
+#include "camel/runtime/loop_lowering.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/core/module/module.h"
 #include "camel/runtime/graph.h"
@@ -474,6 +476,18 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
     (void)os;
     ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
 
+    // Loops. By default they run as the tail recursion they mean, on a private copy of the
+    // program (camel/runtime/loop_lowering.h): today that is faster here than the native
+    // instruction (evalLoop), which enters the interpreter again for each of its two calls a
+    // round (docs/technical/39_loops.md, section 5). Under a debugger, and with
+    // CAMEL_FVM_NATIVE_LOOP=1, the program's own LOOP nodes run natively, so that the frames
+    // shown are the loop's condition and body (folded into their function). Making the native
+    // loop a bytecode loop, at least as fast as the lowering, is the next step.
+    const char *nativeLoops = std::getenv("CAMEL_FVM_NATIVE_LOOP");
+    if (camel::execute::executionObserver() == nullptr &&
+        !(nativeLoops != nullptr && std::string_view(nativeLoops) == "1")) {
+        graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
+    }
     camel::runtime::GCGraph *runtimeRoot = graph;
     precompile(runtimeRoot);
 
