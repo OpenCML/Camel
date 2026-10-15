@@ -688,8 +688,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "MatchCaseTypeMismatch",
                 "This case of a 'match' on a value of type '{0}' is a value of type '{1}'.",
-                "A case is compared with the value matched, so it must have the same type. "
-                "Write the case as a value of that type, or convert the value matched first.",
+                "A case is compared with the value matched, so the type of that value must "
+                "accept it (design principles 2.13). Write the case as a value of that type, or "
+                "convert the value matched first.",
             },
         },
         {

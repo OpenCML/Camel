@@ -2584,7 +2584,7 @@ This case of a 'match' on a value of type '{0}' is a value of type '{1}'.
 **Help**
 
 ```text
-A case is compared with the value matched, so it must have the same type. Write the case as a value of that type, or convert the value matched first.
+A case is compared with the value matched, so the type of that value must accept it (design principles 2.13). Write the case as a value of that type, or convert the value matched first.
 ```
 
 **Example** (`test/cases/compile/any_typing/match_subject.cml`, run as `camel test/cases/compile/any_typing/match_subject.cml`)
