@@ -64,7 +64,9 @@ std::vector<OperatorDescription> describeOperators(const Module &module);
 /// One line `OPERATOR {json}` per overload. An operator with declared semantics has a member
 /// "semantics": {"key", "numeric", "compute", "ulp" (bounded only), "sensitive_to" (a
 /// list of permission names, finite_math for its four together), "not_ieee" (the special
-/// values it does not treat as IEEE does, when there are any), "faults" (when declared), "algorithm"}.
+/// values it does not treat as IEEE does, when there are any), "faults" (when declared),
+/// "indexing": true (when it declares index semantics; `camel inspect --instances` shows them
+/// per node), "laws" (the names of its reduction laws, when it has any), "algorithm"}.
 void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os);
 
 /// Logs a warning naming the operators of `module` whose purity is not declared; returns how

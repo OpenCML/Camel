@@ -80,3 +80,44 @@ case = "../../../cases/consistency/values/max_min_special.cml"
 args = ["${case}", "test::index_semantics"]
 expect_exit = 1
 expect_output_not_contains = ["INDEX "]
+
+[[tests]]
+name = "instances"
+desc = "`camel inspect --instances` prints the instance of every operator node whose operator declares index semantics (runtime::instanceOf on the frozen graph: input types and static inputs). Shapes fixed by the types: matmul's (m, n, k) with k the reduction, fma_f32 and the K extents required equal; the broadcast bias reads (d1); transpose reads (d1, d0); a slice reads start + d0; reshape across axes linearizes and delinearizes; max with keepdims writes 0 on the reduced axis. An open extent is a parameter without a value; an unknown rank or two open extents that may broadcast give no instance (Q9). The sum in a function with @numeric(reassociate) may be regrouped and permuted, not without it; unordered_reduce's own Unordered law allows regrouping; max_pool2d excludes the window's elements outside the input."
+kind = "behavior"
+case = "../../../cases/modules/tensor/index_semantics.cml"
+args = ["inspect", "--instances", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const rows = input.normalized.stdout.split('\n').filter((l) => l.startsWith('INSTANCE ')).map((l) => JSON.parse(l.slice(9)))
+const find = (graph, uri) => rows.filter((r) => r.graph === graph && r.uri === uri)
+const one = (graph, uri) => { const r = find(graph, uri); assert(r.length === 1, `${graph} ${uri}: ${r.length} nodes`); return r[0] }
+const has = (r, line) => assert(r.instance && r.instance.includes(line), `${r.graph} ${r.uri}: missing '${line}' in ${JSON.stringify(r.instance)}`)
+const mm = one('layers', 'tensor:matmul')
+assert(mm.key === 'tensor:matmul@1.1', mm.key)
+has(mm, 'domain   d0 < s0_0 parallel; d1 < s1_1 parallel; d2 < s0_1 reduction')
+has(mm, 'where    s0_1 = s1_0')
+has(mm, 'norm 0   (d0, d2)'); has(mm, 'norm 1   (d2, d1)')
+has(mm, 'write    (d0, d1) combine law fma_f32')
+has(one('layers', 'tensor:add'), 'norm 1   (d1)')
+has(one('layers', 'tensor:transpose'), 'norm 0   (d1, d0)')
+has(one('layers', 'tensor:slice'), 'norm 0   (start + d0, d1)')
+has(one('layers', 'tensor:reshape'), 'norm 0   ((2*d0 + d1) floordiv 4, (2*d0 + d1) mod 4)')
+has(one('layers', 'tensor:permute'), 'norm 0   (d1, d0)')
+const mx = one('layers', 'tensor:max_axis')
+has(mx, 'write    (d0, 0) combine law max_axis_f32')
+assert(JSON.stringify(mx.freedom) === '["regroup","permute","block_identity"]', `max freedom ${JSON.stringify(mx.freedom)}`)
+const sums = find('layers', 'tensor:sum')
+assert(sums.length === 2 && sums.every((r) => JSON.stringify(r.freedom) === '[]'), 'a float sum without permissions may not be reordered')
+has(one('rows', 'tensor:add'), 'params   s0_0 = extent(0, 0); s0_1 = extent(0, 1) = 3')
+assert(one('open', 'tensor:add').instance === null, 'two open extents: no instance (Q9)')
+assert(one('unknown', 'tensor:multiply').instance === null, 'unknown rank: no instance')
+const rg = one('regrouped', 'tensor:sum_axis')
+assert(rg.permissions === 'reassociate' && JSON.stringify(rg.freedom) === '["regroup","permute"]', `regrouped: ${rg.permissions} ${JSON.stringify(rg.freedom)}`)
+const ur = one('main', ':mark/unordered_reduce_arr')
+has(ur, 'write    () combine law unordered_reduce')
+assert(JSON.stringify(ur.freedom) === '["regroup"]', `unordered_reduce freedom ${JSON.stringify(ur.freedom)}`)
+has(one('pooled', 'nn:max_pool2d'), 'norm 0   (d0, d1, stride*d2 + d4 - pad, stride*d3 + d5 - pad) valid [0 <= stride*d2 + d4 - pad, stride*d2 + d4 - pad < s0_2, 0 <= stride*d3 + d5 - pad, stride*d3 + d5 - pad < s0_3] else excluded')
+}
+"""

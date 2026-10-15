@@ -28,6 +28,8 @@
 
 #include "op_stats.h"
 
+#include "indexing.h"
+
 #include "../dtype.h"
 #include "camel/core/derivative.h"
 #include "camel/core/operator_traits.h"
@@ -190,6 +192,9 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
             if (semantics.key.name == core::kEmptySym) {
                 semantics.key =
                     core::sem::OperatorKey::of(uri, semantics.key.major, semantics.key.minor);
+            }
+            if (def.index) {
+                semantics.indexing = indexingFrom(def.index);
             }
             try {
                 camel::core::OperatorTable::instance().declareSemantics(uri, std::move(semantics));

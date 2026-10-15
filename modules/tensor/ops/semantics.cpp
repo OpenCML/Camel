@@ -24,9 +24,10 @@
  *
  * Phase 1 declares the numeric part of the operators a compiler of tensor graphs (Tiles) meets
  * first: elementwise arithmetic, the unary maps exp, log, sqrt, rsqrt, abs, neg, relu, the
- * reductions sum, mean, max, min, matmul, and the layout operators. Their index semantics
- * (iteration domain, access maps, reduction laws) are phase 2. Every other tensor operator has
- * no declaration and reads as opaque.
+ * reductions sum, mean, max, min, matmul, and the layout operators. Phase 2 adds their index
+ * semantics (iteration domain, access maps, reduction laws: indexing.cpp), attached here to the
+ * same records at version 1.1. Every other tensor operator has no declaration and reads as
+ * opaque.
  *
  * A tensor operator works on several element types; the declaration describes its float32
  * case. On int64 and bool elements every operator listed here is exact (integer arithmetic
@@ -37,6 +38,7 @@
  * that its declaration lists in sensitiveTo.
  */
 
+#include "indexing.h"
 #include "op_def.h"
 
 #include <string>
@@ -232,6 +234,7 @@ void attachSemantics(std::vector<OpDef> &defs) {
     for (OpDef &def : defs) {
         if (auto it = table.find(def.name); it != table.end()) {
             def.semantics = it->second;
+            attachIndexing(def);
         }
     }
 }

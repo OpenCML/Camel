@@ -35,6 +35,7 @@
 #include "camel/core/operator_semantics.h"
 #include "camel/runtime/graph.h"
 
+#include <iosfwd>
 #include <optional>
 
 namespace camel::runtime {
@@ -52,5 +53,14 @@ instanceOf(const GCGraph &graph, gc_node_ref_t node);
  */
 std::optional<camel::core::sem::ReorderFreedom>
 reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node);
+
+/**
+ * `camel inspect --instances`: one line `INSTANCE {json}` per OPER node, of every graph
+ * reachable from `root`, whose operator declares index semantics: {"graph", "node", "uri",
+ * "key", "instance": the text form as a list of lines (sem::toString), or null when the facts
+ * at the node give no instance, "permissions" (the node's, when it has any), "freedom" (what
+ * reorderFreedomOf allows, when the instance reduces)}.
+ */
+void dumpOperatorInstances(GCGraph *root, std::ostream &os);
 
 } // namespace camel::runtime
