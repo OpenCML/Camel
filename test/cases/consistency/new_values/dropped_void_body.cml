@@ -1,0 +1,16 @@
+/**
+ * The last statement of a body declared `: void` gives a value nothing takes: `xs->append<1>`
+ * there is the error UnusedPureResult, as anywhere else its result is dropped.
+ */
+module dropped_void_body
+
+sync func push(var xs: int[]): void sync {
+    xs->append<1>
+}
+
+func main(): int sync {
+    var xs: int[] = []
+    push(xs)
+    println(xs)
+    return 0
+}

@@ -1,0 +1,20 @@
+/**
+ * `acc = acc->append<v>` in a macro function evaluated ahead of time by std::macro (and run
+ * as an ordinary function without it): the array it returns becomes a constant of the graph.
+ */
+module macro_append
+
+macro func squares(n: int): int[] sync {
+    var out: int[] = []
+    out = out->append<0>
+    out = out->append<1>
+    let k = len(out)
+    out = out->append<n * n>
+    out = out->append<k>
+    return out
+}
+
+func main(): int sync {
+    println(squares(5), len(squares(3)))
+    return 0
+}
