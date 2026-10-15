@@ -17,6 +17,8 @@
 #include <thread>
 using namespace camel::tiles::cuda_detail;
 
+void testScalarDevice();
+
 namespace {
 void testPrecision() {
     auto backend = std::make_shared<Backend>();
@@ -176,6 +178,7 @@ int main() {
         std::cout << "tiles module lease: eviction, launch and teardown passed\n";
         testResourceThread();
         testPrecision();
+        testScalarDevice();
         return 0;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

@@ -13,6 +13,7 @@
 
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
+#include "tiles/dtype.h"
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -29,7 +30,6 @@ namespace camel::tiles {
 
 using Shape = std::vector<int64_t>;
 struct DeviceValue;
-enum class DType { F32, F64 };
 struct Argument {
     slot_t value;
     core::type::Type *type;

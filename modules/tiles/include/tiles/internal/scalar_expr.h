@@ -10,7 +10,7 @@
 
 // Typed immutable scalar arithmetic; explicit rounding boundaries and host evaluation.
 #pragma once
-#include "tiles/program.h"
+#include "tiles/dtype.h"
 #include <cstdint>
 #include <memory>
 #include <string>

@@ -16,7 +16,7 @@ target_link_libraries(tiles-plan-check PRIVATE libcamel fmt::fmt)
 # Load the driver and NVRTC lazily: importing tiles never requires a GPU.
 find_package(CUDAToolkit QUIET)
 if(CUDAToolkit_FOUND)
-  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp src/cuda_backend.cpp src/cuda_resources.cpp)
+  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp ../../test/cases/modules/tiles/scalar_device.cpp src/scalar_expr.cpp src/cuda_backend.cpp src/cuda_resources.cpp)
   target_compile_features(tiles-module-lease PRIVATE cxx_std_23)
   target_include_directories(tiles-module-lease PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(tiles-module-lease PRIVATE ${CMAKE_DL_LIBS})
