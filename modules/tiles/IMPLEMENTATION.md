@@ -19,9 +19,14 @@ f64 representation is 0x7ff8000000000000 (Tiles extrema currently use f32).
 
 Manual raw-word tests passed on the local RTX 4060 Ti with NVM/FVM/JIT, including
 quiet/signaling payloads, operand reversal, fused relu, singleton reductions and
-widths 127/128/257/513 across the parallel threshold. The pre-addition integration
-suite passed 98/98, including the new core operator semantics plan. Final local
-and remote evidence follows after the complete merged-tree checks.
+widths 127/128/257/513 across the parallel threshold. The final integration suite passed 99/99 locally and on the RTX 3090 server
+(the remote main plan has 96 tests, plus 3 core semantic protocol tests).
+Raw logs are in `docs/performance/tiles/2026-10-16-*-core-integration-tests.txt`.
+The unchanged max benchmark reports 14.90x (4060 Ti) and 1.32x (3090) over its
+serial CUDA baseline, not Triton; device-specific scheduling still needs tuning.
+Both complete JSON reports are retained as `*-canonical-extrema-benchmark.jsonl`.
+The wider developer suite exposed a pre-existing formatter token-boundary bug;
+its isolated fix and verification are tracked separately.
 
 The source-template cache is committed independently as 944f9d24. Its native
 checks cover runtime value independence, literal sensitivity, borrowed/owned
