@@ -339,12 +339,15 @@ Server::analysisOptions(const std::string &path, const std::string &text) const 
     return options;
 }
 
-void Server::invalidateModels() {
+void Server::invalidateModels(Document *edited) {
     // Imports can change while a previous model is incomplete. Invalidate conservatively;
     // models remain lazy and are rebuilt only for queries or pushed diagnostics.
     for (auto &[uri, doc] : documents_) {
         doc.stale = true;
-        doc.lastCompiled.reset();
+        // Keep the edited document's last successful analysis for completion and signature
+        // help while its new text is incomplete. Importers must discard their older models.
+        if (&doc != edited)
+            doc.lastCompiled.reset();
     }
     workspaceCache_.clear();
     projectModels_.clear();
@@ -562,7 +565,7 @@ void Server::didChange(const json &params) {
     }
     doc->version = params.at("textDocument").contains("version") ? params["textDocument"]["version"]
                                                                  : json(nullptr);
-    invalidateModels();
+    invalidateModels(doc);
 }
 
 void Server::didClose(const json &params) {

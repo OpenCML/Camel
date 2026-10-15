@@ -88,7 +88,7 @@ class Server {
     Document *document(const json &params);
     const semantic::SemanticModel &modelOf(Document &doc);
     void refreshStale();
-    void invalidateModels();
+    void invalidateModels(Document *edited = nullptr);
     semantic::AnalysisOptions
     analysisOptions(const std::string &path, const std::string &text) const;
     void checkCancelled();
