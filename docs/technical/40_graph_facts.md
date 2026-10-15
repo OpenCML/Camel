@@ -41,6 +41,7 @@ The core's kinds (`core_facts.h`):
 | `core.effects` | Graph | ii | the effect summary through calls and loops (`effectSummaryOf`) |
 | `core.loopDomain` | CrossGraph | ii | a LOOP node and its body graph: the form, `t < len(xs)` with the extent when the array is a constant, the element port (design 11.3) |
 | `core.permissions` | Node | i | the permissions granted to the node |
+| `core.resources` | Node | ii | what the node does to resources (`resourcesOf`, `docs/technical/41_resources_and_definitions.md`), at the nodes that touch any |
 
 ## 3. The store and stamps
 

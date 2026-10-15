@@ -3,9 +3,11 @@
 
 > **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 2.13。
 >
-> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）尚未实现。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
+> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）已实现，见下面的第四阶段一段与第 8、9 节开头的实施状态。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
 >
 > **第二阶段已实现（`lane/opsem-p2`）**：下标语义的数据结构与查询（`camel/core/index_semantics.h`：准仿射表达式、迭代域、访问与写映射、四种越界策略、间接访问的形式、归约律与 `reorderFreedom`、`splitDims`、`rowMajorView`；`camel/runtime/operator_instance.h`：冻结图节点上的实例）；第一批声明（逐元素族连同广播、`transpose`/`permute`/`slice`/`reshape`/`flatten`/`unsqueeze`/`broadcast_like`/`expand_axis`、`sum`/`mean` 全量与按轴、`max`/`min` 按轴（张量模块没有全量的 `max`/`min`）、`sum_to`、`matmul`、`nn` 的两种池化作为窗口的例子、`unordered_reduce` 的律）；`camel inspect --instances`；声明求值器 `tensor::test_index_eval`（与 CPU 内核逐位比较，见第 12 节）。给 Tiles 的说明见 14.2 节。与本稿字面不同的几处（均为窄读，见 14.2 与各处注释）：实例只有一个 `law` 下标（`Write` 不另存）；`Domain::guard` 表示分块尾部不存在的点；`LawInit::Operand`（`unordered_reduce` 的 `initial`）；`LawEmpty::Fault` 指归约维为空即故障（`max_axis` 的内核在结果为空时也拒绝空轴）；声明附在张量算子的 `OpDef::index` 上，与 `infer` 并列。
+> **第四阶段已实现（`lane/opsem-p4`）**：资源的声明与查询（`camel/core/resource_semantics.h`、`camel/runtime/resources.h`；事实种类 `core.resources`），见第 8 节开头；定义图的登记、构建与检查、展开（`OperatorTable::declareDefinition`、`camel/runtime/definitions.h`；`stdlib/tensor_definitions.cml`），见第 9 节开头。给 Tiles 的说明见 14.4 节。没有改变任何程序的结果与图的转储；没有遍或后端默认展开定义图。`Indirect` 访问的 gather/scatter 算子仍不存在（数据结构自第二阶段就有），本阶段没有声明。
+
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
 依据：`docs/design-principles.cn.md`（2.9–2.13，尤其 2.13 的"浮点的数值契约"与 `do` 式循环头；第 6 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
 基线提交：`6bf31d1f`（`fsh-dev`，v0.2.12 合入之后）。
@@ -697,6 +699,17 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 
 ## 8. 资源
 
+> **实施状态（2026-10-16，`lane/opsem-p4`）**：8.1 的声明是 `sem::ResourceSpec`（`camel/core/resource_semantics.h`），作为 `OperatorSemantics::resources`，由 `OperatorTable::declareResources` 登记（没有记录的算子得到 `uri@1.0`，已有记录的次版本加一）；登记检查的第 5 条拒绝自身不一致的声明与和 traits 矛盾的声明。与下文的差别（都是窄读）：
+>
+> - **资源的类**：`Variable`（`var` 单元）、`Object`（就地改的对象）、`Foreign`（模块包装的对象，带名字，如 `tiles:device`）之外，加了 **`Ambient`**：没有值指名的状态（文件系统 `fs`、控制台 `io:stdout`/`io:stdin`、模块的随机数发生器 `rand:generator`、时钟、进程环境），以名字为身份。下文的 `Binding` 只有三类有身份的值；文件与随机数状态没有值指名它，不加这一类就无法声明（任务要求声明它们）。`Unknown` 只是未声明时的保守读法，不能声明。
+> - **区域**：`Mapped` 不另存表达式，而是指明节点下标实例里的哪一张映射（某个操作数的访问映射或写映射），区域就是该映射在域上取到的元素；`regionBounds` 给出包围盒，`regionsMayOverlap` 判断重叠（算不出就按整体）。今天没有声明 `Mapped` 区域的算子（张量没有就地算子），由测试用手造的实例覆盖。
+> - **结果**：`ResultAlias` 照 8.1；另有 `allocates`：结果是新的资源（`:var/new` 新建单元，`tiles:upload` 新建设备内存）。
+> - **外部效应与 traits**：声明的 `externalEffect` 只能在 traits 允许外部效应时为真（不是 pure、不是 stateOnly）；反过来可以细化：赋值族在 traits 里算外部效应（没有"写变量"这一位），资源声明说它只写程序自己的单元。效应摘要（`effectSummaryOf`）仍由 traits 算出，不变（8.3）。随机数的生成照 8.1 的注释算外部效应，见 14.4 的待问。
+> - **查询**（`camel/runtime/resources.h`）：`resourcesOf`（每个节点：OPER 读声明；FUNC、LOOP、被调函数可知的 CALL 读所运行的图的足迹并映射到节点的输入）、`footprintOf`（一张图对它收到的资源、环境状态与程序外做了什么；递归按最小不动点，按图的序号与声明纪元缓存）、`originOf`/`mayAlias`（同一次激活里两个不同的新建、或新建与收到的值，不是同一资源；两个端口可能是）、`resourceConflict`（`Resource`：重叠区域且至少一写；`External`：都有外部效应）、`dependsOn`（只看数据边）与 `orderedBefore`（含控制边）分开（8.2）、`requiredOrderings`（一张图里必须保持先后的成对节点，分支的不同臂不算一对；图没有排序的一对即设计原则第 6 节未决的情形）。
+> - **已声明**：`:var/*` 与赋值族、控制台与 profiler、`fs`、`random`、`time`、`os`、`sys`、`nn:save_params`、`para:rendezvous`、`algo` 的就地形式、张量的有效应算子、Tiles 的算子（14.4）。`:mark/` 高阶算子、`python`、`pyplot`、`onnx`、`autodiff` 未声明，照保守读法，与今天一样排序。
+>
+> 细节见 `docs/technical/41_resources_and_definitions.md` 第 1 节。
+
 ### 8.1 声明
 
 ```cpp
@@ -752,6 +765,17 @@ struct ResourceSpec {
 ---
 
 ## 9. 定义图
+
+> **实施状态（2026-10-16，`lane/opsem-p4`）**：`sem::Definition{module, function, params}`（`camel/core/operator_semantics.h`）作为 `OperatorSemantics::definition`，由 `OperatorTable::declareDefinition` 登记（次版本加一：多了一条事实）；`params` 给出算子的每个操作数绑定定义函数的哪个参数，可省略的操作数带缺省值（`softmax` 的轴为 `-1`）。构建与展开在 `camel/runtime/definitions.h`：
+>
+> - **构建**（`Context::definitions().definitionOf(oper)`，第一次被问到时）：定义库是普通的 Camel 模块（张量的是 `stdlib/tensor_definitions.cml`），程序已导入就用程序编好的，否则由一个**自己的图构建器**单独编译（`UserDefinedModule::compileAsLibrary`、`Builder::buildLibrary`：从库而不是入口模块构建，不调用 `main`）；它只能导入 C++ 写的模块。导出函数的图单独编码，连同它调用的图**钉在上下文的图管理器里**（`GCGraphManager::pin`），随上下文存活、被回收器追踪，不属于程序；展开时提交把它拷进程序。这是 9.2"生命周期"一行在第 5 步之前的形态：不是"模块装载时建出"，而是第一次被问到时建出，因为在装载时编译会让每个导入 `tensor` 的程序多编一个库（改变编译的代价与诊断）。
+> - **检查**（拒绝时给出理由）：签名（恰好是声明的参数，没有 with 参数与捕获，不是泛型）；效应（纯算子的定义不得有外部效应或写变量；声明不会故障的算子，定义不得可能故障）；递归（沿"定义图里用到的算子 → 它们的定义"做环检测，环上的每个定义都被拒绝；声明纪元变了就重查，后来声明的定义可以把先前的接成环）。
+> - **版本**：定义随算子的键（次版本）；建好的定义记下图的可移植内容散列（`portableGraphHash`），缓存展开结果或"已对照定义检查过的内核"时以它为键。
+> - **展开**（`expandDefinition(session, draft, node, {inlineBody})`）：把一个 OPER 节点换成对定义图的直接调用（值、控制边、源码位置照旧），省略的操作数换成常量；默认再内联。定义自己的运算节点加上被展开节点的许可（6.4）。操作数的类型须是定义接受的（`Tensor<f32>`；元素类型未知的 `Tensor` 不展开）。**没有任何遍或后端默认调用它**（9.3）；测试遍 `test::expand_definitions` 用它对照内核。
+> - **第一批定义**：`softmax`（带稳定化与轴；f64 累加的 `sum`；没有元素的张量就是自己的结果）、`log_softmax`、`mean`（全量：f64 的和除以个数）、`relu`（`maximum(x, +0)`）、组合激活 `sigmoid`（`1 / (1 + exp(-x))`）。
+> - **与内核的对照**：`softmax`、`mean`、`relu`、`sigmoid` 的内核与展开后的定义在 nvm/fvm/jit/prl 上逐位一致（含 NaN、无穷、±0、次正规数、空张量；NaN 只按"是 NaN"比较）。**`log_softmax` 不一致**：内核是 `(x - m) - f32(log_f64(sum_f64))`，在 f64 里取对数；张量没有 f64 的元素类型，定义只能写成先把和舍入为 f32 再取 f32 的对数，最后几位不同。按 Q10（定义是规范）应改内核，但那会改变现有程序的结果（本阶段不许），所以登记为已知分歧，留待裁定（14.4）。经定义求导与算子自己的导数规则相对差小于 1e-7（契约：1e-5，不是逐位，因为是不同的算法）；先展开再求导两边完全相同。
+>
+> 细节见 `docs/technical/41_resources_and_definitions.md` 第 2 节。
 
 ### 9.1 是什么
 
@@ -1016,7 +1040,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 | **2** | 第一批声明：逐元素族（`add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`）连同广播；`transpose`、`permute`、`slice`、`reshape`；`sum`/`mean`/`max`/`min` 的按轴与全量、`sum_to`；`matmul` 及其 k 维的律；内建 `:op/` 的 f64 标量算子 | 这些算子的实例（域、映射、律）；Tiles 的 `reindex`、广播、归约的累加选择都从声明推出 | **声明的性质测试**：一个只用于测试的"声明求值器"——按实例遍历域、按访问映射取值、按律与规范算法合并——对随机形状（含空、1、奇数、负轴、广播）与特殊值（NaN、±∞、±0、次正规数）算出结果，与 CPU 内核**逐位**比较（`Bounded` 类按 ulp 上界）；映射的健全性测试：小形状上穷举域，验证声称 `Unreachable` 的访问都在界内、`Unique` 的写确实单射。这一步会把 2.3 与 6.9 的核心审计项变成失败的测试，先登记为已知缺陷，等 Q4–Q7 裁定后修 |
 | **3a** | `LOOP` 的消费接口（第 11 节），随图模型第 10 步 | 结构化的 `LOOP` 与访问器；降级只在入口 | 前端产出的三种形式各一例，访问器逐项核对；I18–I20 各一个违反的变异；降级后四个后端输出一致 |
 | **3b**（已实现，`tx.keep` 与两级校验除外，见第 10 节开头） | 事实库：种类登记、印记、过渡期的图序号、`tx.keep`、两级校验 | 在核心的事实库里存放自己的分析结果，并得到"永不读到过期事实"的保证 | 变异测试：算一条事实 → 改上游节点 / 改形参类型 / 改被调图 / 换声明 → 读出为"没有"；发布构建下同样的测试；`--verify-graphs` 下一个故意 `keep` 错误事实的遍被提交拒绝 |
-| **4** | 资源区域与别名的声明（第 8 节）；`Indirect` 访问与 gather/scatter 的声明；定义图（第 9 节）的登记、递归检测、展开遍 | 资源与别名事实；有定义图的算子可以展开或保留 | 就地算子与 `var` 形参的声明与效应摘要一致；定义图与内核的逐位比较（这会暴露 `softmax`，见 Q10）；有环的定义图被拒绝 |
+| **4**（已实现，gather/scatter 的声明除外：没有这样的算子；见第 8、9 节开头） | 资源区域与别名的声明（第 8 节）；`Indirect` 访问与 gather/scatter 的声明；定义图（第 9 节）的登记、递归检测、展开遍 | 资源与别名事实；有定义图的算子可以展开或保留 | 就地算子与 `var` 形参的声明与效应摘要一致；定义图与内核的逐位比较（这会暴露 `softmax`，见 Q10）；有环的定义图被拒绝 |
 
 先把接口的形状与语义的边界定稳（第 1 阶段），再铺声明。第 1、2 阶段不依赖图模型的第 5 步（用进程内的 `OperId` 与过渡期的图序号）；第 3b 阶段的完整形态在第 5 步之后；事实的跨进程缓存在第 9 步之后，并且不急。
 
@@ -1213,6 +1237,64 @@ auto cached = facts.get<MyLayout>(kLayout, fact::Anchor{graph, ref}, target); //
 登记的规则（违反时 `std::invalid_argument`，消息里有键与原因）：键是 `owner.name`；同一个键再登记必须是同一种（版本、值类型、类、范围），返回同一个编号；必须给 `print`；`Dependency::Cone` 必须给锥散列。与目标无关、可由程序推出的结果（例如 Tiles 自己的下标映射复合）可以登记为 `Derived`，带 `compute` 时 `FactStore::verify` 能重算比较。
 
 **印记怎样保护 Tiles**：每条事实带着它锚点所在各图的 `(lineage, serial)`、算子声明的纪元（若种类读声明）与目标散列；每次读都比较（发布构建里也比较），任何一项不同就读为"没有"并删除。`serial` 在某个遍真的改了这张图、或改了它直接间接调用的图时才变（`std::inline`、`std::opt` 的各部分、`std::macro`、特化、后端私有的降级都经由同一个提交）；所以特化成新形状的图是另一张图，旧图上的布局不会被错用；`declareSemantics` 改了算子的声明，读声明的事实全部过期；换了设备或编译选项，`targetHash` 不同。事实是进程内的；跨进程的编译缓存仍由 Tiles 自己保存，键按 10.6 (iii)。
+
+### 14.4 第四阶段给 Tiles 的（`lane/opsem-p4`）
+
+**CPU 的结果、图的转储、程序的输出都没有变**；没有遍或后端默认展开定义图。因为加了定义，`tensor:relu`、`tensor:mean` 的键升为 `@1.2`，`tensor:softmax`、`tensor:log_softmax`、`tensor:sigmoid` 第一次有语义记录（`@1.0`，只有定义）；编译缓存若记了这些键，次版本变化按 4.1 处理。
+
+**Tiles 自己的算子已声明资源**（`modules/tiles/src/module.cpp` 的 `load()`，核心为此对 Tiles 做的第二处改动；若 Tiles 想自己维护，直接改那一段即可）：设备内存是外部对象 `tiles:device`，驱动与设备是环境状态 `tiles:driver`；`upload` 新建 `tiles:device`；`download`、`run`、`benchmark` 读第 0 个操作数里的设备值；`run_device` 同样读，并新建 `tiles:device`，结果可能与输入别名（"returned inputs share native ownership"）；`source`、`inspect` 读 `tiles:driver`；全部有外部效应（与 traits 一致）。
+
+**查询一个节点碰了什么、两个节点要不要保持先后：**
+
+```cpp
+#include "camel/runtime/resources.h"
+namespace rt = camel::runtime;
+rt::NodeResources r = rt::resourcesOf(*graph, node);
+for (const rt::NodeAccess &a : r.accesses) {
+    a.resource.cls;    // Variable / Object / Foreign / Ambient / Unknown（未声明的保守读法）
+    a.resource.name;   // "tiles:device"、"fs"、"rand:generator"
+    a.mode;            // Read / Write / ReadModifyWrite
+    a.value;           // 同一张图里指名这个资源的节点（anyValue 时为 kInvalidNodeRef）
+    a.region;          // Whole / Mapped（某个下标映射取到的元素）/ Unknown
+}
+r.result;              // Fresh / Same / View / MayAlias / Unknown：结果与操作数的资源的关系
+r.allocates;           // 结果是新资源（upload）
+r.external;            // 程序外可见的效应：这类节点之间保持程序给的先后
+
+rt::ResourceConflict c = rt::resourceConflict(*graph, a, b);   // None / Resource / External，why 是一行说明
+bool data  = rt::dependsOn(*graph, b, a);      // 计算依赖：只看数据边
+bool order = rt::orderedBefore(*graph, a, b);  // 任何路径（含前端插入的控制边）
+for (const rt::RequiredOrdering &o : rt::requiredOrderings(*graph)) {
+    o.first; o.second; o.why; o.ordered; o.byData;   // 冲突的一对，图是否已经排序、是否经由数据
+}
+rt::GraphFootprint fp = rt::footprintOf(calleeGraph);   // 一张图对收到的资源（端口、捕获）做了什么
+bool alias = rt::mayAlias(*graph, x, y);                  // 两个值可能是同一个资源吗
+```
+
+事实种类 `core.resources`（`fact::coreKinds().resources`，值是 `NodeResources`）在碰了资源的节点上，`camel inspect --facts` 打印。异步完成不在核心：Tiles 的流与事件仍是它自己的，交出 Camel 值之前完成（8.2）；`sync`、`wait` 不是 GPU 原语。
+
+**定义图：**
+
+```cpp
+#include "camel/runtime/definitions.h"
+const camel::runtime::DefinitionGraph *d = ctx.definitions().definitionOf(operId, &why);
+// nullptr：没有定义，或被拒绝（why 说明）。d->graph 是定义函数的冻结图（上下文持有）；
+// d->definition.params：算子的第 i 个操作数绑定哪个参数、缺省值；d->contentHash：内容散列，
+// Tiles 若缓存"按定义展开后的内核"，键里放 d->key 与 d->contentHash。
+// 在 Tiles 自己的私有副本上展开（不要提交到共享的程序上，9.3）：
+camel::runtime::RuntimeGraphDraftSession session(ctx, privateRoot);
+auto &draft = session.edit(graph);
+auto r = camel::runtime::expandDefinition(session, draft, draft.draftIdOfSourceRef(node));  // r.value / r.problem
+GCGraph *expanded = session.commit(/*detached=*/true);
+```
+
+保留高层算子（映射到自己的内核）与展开后融合都可以，二者都必须与定义一致：`softmax`、`mean`、`relu`、`sigmoid` 在 CPU 上已逐位一致，Tiles 的实现按同一标准对照（`exp`/`log` 按声明的上界）。Tiles 今天把 softmax 写成组合，正与定义同形；注意定义里"没有元素的张量就是自己的结果"这一分支，以及 `max_axis` 用 IEEE `maximum`（14.1）。
+
+**待问（给负责人）**：
+1. `log_softmax` 的内核与定义不一致（第 9 节开头）：改内核为 f32 的和与 f32 的 `log`（结果的最后几位会变），还是给张量加能在 f64 里取对数的写法、让定义照内核写？在裁定之前定义按"能写出来的"登记，内核不动。
+2. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rand:generator`）。
+3. `mean` 对空张量：内核的故障是"mean of an empty tensor"，定义是标量除以零（`DivisionByZero`）；都是故障，诊断不同。是否要求故障的种类也一致？
+4. 定义库在第一次被问到时编译，而不是模块装载时（第 9 节开头的理由）；若要"装载时建出"，每个导入 `tensor` 的程序都要多编一个库。
 
 ---
 
