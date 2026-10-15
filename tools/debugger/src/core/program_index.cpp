@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -52,8 +52,6 @@ const char *kindName(GCNodeKind kind) {
         return "JOIN";
     case GCNodeKind::Call:
         return "CALL";
-    case GCNodeKind::Bind:
-        return "BIND";
     case GCNodeKind::Func:
         return "FUNC";
     case GCNodeKind::Oper:
@@ -62,8 +60,10 @@ const char *kindName(GCNodeKind kind) {
         return "SYNC";
     case GCNodeKind::Gate:
         return "GATE";
+    case GCNodeKind::Bind:
     case GCNodeKind::Dref:
-        return "DREF";
+        // Reserved kinds: never part of a frozen graph (see GCNodeKind).
+        break;
     }
     return "NODE";
 }
@@ -80,8 +80,6 @@ bool executesKind(GCNodeKind kind) {
     case GCNodeKind::Port:
     case GCNodeKind::Sync:
     case GCNodeKind::Gate:
-    case GCNodeKind::Dref:
-    case GCNodeKind::Bind:
         return false;
     default:
         return true;
@@ -456,9 +454,9 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
                 portNames[norm[i]] = std::string(names[with.size() + i]);
             }
         }
-        const auto captured = type->closureRefs();
+        const auto captured = g->captureNames();
         for (size_t i = 0; i < closure.size() && i < captured.size(); ++i) {
-            portNames[closure[i]] = std::string(captured[i]);
+            portNames[closure[i]] = std::string(camel::core::symbolText(captured[i]));
         }
     }
     // A graph the compiler made itself (the arm of a branch) takes the values it uses from the

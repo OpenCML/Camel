@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 07, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -919,10 +919,11 @@ createGraphDebugRecord(std::string stableId, std::string mangledName, std::strin
     return record;
 }
 
-void recordDraftNodeOrigins(GCGraphDebugRecord *record, const GraphDraft &draft) {
+void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
     if (!record) {
         return;
     }
+    record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
     const DraftPayloadPlan plan = planDraftPayload(draft);
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id) || plan.runtimeRefsByDraftId[id] == kInvalidNodeRef) {
@@ -1174,8 +1175,9 @@ void emitDraftNativePayload(
 
 void validateRuntimeGraphPayload(const GCGraph *graph) {
     validateRuntimeGraphPayloadImpl(graph);
-    // The references are sound; now what the back ends assume about branches.
+    // The references are sound; now what the back ends assume about branches and types.
     validateRuntimeBranchArms(graph);
+    validateRuntimeGraphTypes(graph);
 }
 
 void validateRuntimeGraphCalls(const GCGraph *graph) {
@@ -1226,6 +1228,11 @@ const std::string &GCGraph::mangledName() const {
 const std::string &GCGraph::name() const {
     static const std::string kEmpty;
     return debug_ ? debug_->name : kEmpty;
+}
+
+std::span<const camel::core::SymId> GCGraph::captureNames() const {
+    return debug_ ? std::span<const camel::core::SymId>(debug_->captureNames)
+                  : std::span<const camel::core::SymId>();
 }
 
 uint64_t GCGraph::nodeOrigin(gc_node_ref_t ref) const {

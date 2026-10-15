@@ -1,0 +1,41 @@
+/**
+ * The recursion limit across the boundary between the parallel scheduler and the bytecode
+ * interpreter. The limit is on the calls open at once that are not tail calls, whoever runs
+ * them: `descend` is evaluated by the scheduler (a map in its body), `depth` is serial and runs
+ * as bytecode, and the count goes on from one into the other, on the thread that runs the map
+ * element as well.
+ *
+ * Open calls at the deepest point, with A = the environment variable A and B = B (the entry's
+ * call of main is not counted):
+ *   descend(A) ... descend(1)          A calls of descend
+ *   bottom                             1 (a tail call: it replaces descend(0))
+ *   the element call of the map        1
+ *   depth(B) ... depth(0)              B + 1 calls of depth
+ * so A + B + 3 calls: the program runs when A + B + 3 <= limit and stops with
+ * MaxRecursionDepthExceeded at the recursive call of `depth` when it is one more.
+ */
+module depth_across
+
+import { get_env } from sys
+
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
+
+func bottom(b: int): int {
+    let ys = [b]->map<(x: int): int => 0 + depth(x)>
+    return ys[0]
+}
+
+func descend(a: int, b: int): int {
+    return if a == 0 then bottom(b) else 1 + descend(a - 1, b)
+}
+
+func main(): int sync {
+    let a = int(get_env('A'))
+    let b = int(get_env('B'))
+    println('start')
+    println(descend(a, b))
+    println('done')
+    return 0
+}

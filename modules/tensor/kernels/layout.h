@@ -70,7 +70,8 @@ randomUniform(std::span<const int64_t> shape, double low, double high, mm::IAllo
 /// Normal(mean, std) float32 samples from the module RNG.
 TensorObject *
 randomNormal(std::span<const int64_t> shape, double mean, double stddev, mm::IAllocator &allocator);
-/// Reseeds the module RNG. Until called, the RNG is seeded from std::random_device.
+/// Reseeds the module RNG. Until called, the RNG is seeded from std::random_device. The samples
+/// are drawn with camel/utils/random.h: after a seed they are the same on every platform.
 void seedRandom(uint64_t seed);
 
 } // namespace camel::tensor::kernels

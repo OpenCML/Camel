@@ -1,0 +1,12 @@
+/// Recursion that is not a tail call, three million deep.
+/// Schedulers stop with a located fault at the limit of 1000; the emitted program has no limit.
+module d02_deep_recursion
+
+func depth(n: int): int {
+    return if n == 0 then 0 else 1 + depth(n - 1)
+}
+
+func main(): int sync {
+    println(depth(3000000))
+    return 0
+}

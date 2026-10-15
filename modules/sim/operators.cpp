@@ -15,12 +15,14 @@
 #include "operators.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/utils/random.h"
 
 #include <cmath>
-#include <random>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
+// camel/utils/random.h, not <random>: the same seed gives the same result on every platform.
+namespace rnd = camel::utils::random;
 
 std::unordered_map<std::string, operator_t> getSimOpsMap() {
     return {
@@ -36,13 +38,12 @@ slot_t __sim_pi_hits__(ArgsView &with, ArgsView &norm, Context &ctx) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "<pi_hits> requires samples >= 0");
     }
 
-    std::mt19937_64 rng(static_cast<std::mt19937_64::result_type>(seed));
-    std::uniform_real_distribution<double> dist(-1.0, 1.0);
+    rnd::Engine rng(static_cast<rnd::Engine::result_type>(seed));
 
     int64_t hits = 0;
     for (int64_t i = 0; i < samples; ++i) {
-        double x = dist(rng);
-        double y = dist(rng);
+        double x = rnd::uniformDouble(rng, -1.0, 1.0);
+        double y = rnd::uniformDouble(rng, -1.0, 1.0);
         if (x * x + y * y <= 1.0) {
             ++hits;
         }
@@ -69,8 +70,8 @@ slot_t __sim_asian_call_price__(ArgsView &with, ArgsView &norm, Context &ctx) {
     double drift           = (r - 0.5 * sigma * sigma) * dt;
     double vol             = sigma * std::sqrt(dt);
 
-    std::mt19937_64 rng(static_cast<std::mt19937_64::result_type>(seed));
-    std::normal_distribution<double> normal(0.0, 1.0);
+    rnd::Engine rng(static_cast<rnd::Engine::result_type>(seed));
+    rnd::NormalSource<double> normal;
 
     double payoff_sum = 0.0;
     for (int64_t p = 0; p < paths; ++p) {

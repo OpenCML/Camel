@@ -1,0 +1,33 @@
+module recommended_forms
+
+// The forms the diagnostic AnyNotAllowed recommends, each where `any` used to be written
+// (docs/design/any-typing, 4.2): a type parameter for a parameter, for a `with` parameter and
+// for the result of a function-typed parameter; an inferred return type; a tuple and a struct
+// for values of different types side by side.
+func keep(x: typeas T, n: int): T {
+    return if n > 0 then x else x
+}
+with <tag: typeas T>
+func tagged(x: int): (int, T) {
+    return (x, tag)
+}
+func apply(f: (x: int) => typeas R, x: int): R {
+    return f(x)
+}
+func wrap(x: int) {
+    return x
+}
+func pair(): (int, string) {
+    return (1, 'one')
+}
+func record(): { id: int, payload: string } {
+    return { id: 7, payload: 'p' + 'q' }
+}
+func main(): int sync {
+    println(keep('abc' + string(1), 3), keep(2.5, 1))
+    println(tagged<'t'>(1), tagged<[1, 2]>(2))
+    println(apply((x: int): string => 'n' + string(x), 4), apply((x: int): bool => x > 3, 4))
+    println(wrap(2) + 1)
+    println(pair(), record().payload)
+    return 0
+}

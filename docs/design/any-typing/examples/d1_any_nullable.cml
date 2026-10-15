@@ -1,0 +1,11 @@
+module d1_any_nullable
+
+// Defect D1: an `any` value entering `any?` is not boxed, and `??` then reads it as a box.
+func wrap(x: int): any { return x }
+func opt(x: any): any? { return x }
+func main(): int sync {
+    let a = opt(wrap(7))
+    let v = a ?? wrap(0)
+    println(v as int)
+    return 0
+}

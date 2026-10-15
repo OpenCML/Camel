@@ -1,0 +1,57 @@
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="len_or_zero";
+            subgraph cluster_F03 {
+                label="__g_4__";
+                O03 [label="EXIT", type="EXIT"];
+                N00 [label="0", type="DATA", origin=92, span="3:21-3:22", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+                N00 -> O03 [label="0", type="EXIT"];
+            }
+            subgraph cluster_F04 {
+                label="__g_6__";
+                F04 [label="ARGS", type="ARGS"];
+                O04 [label="EXIT", type="EXIT"];
+                N01 [label="PORT", type="PORT"];
+                N02 [label=":op/tag_null_value", type="OPER", origin=95, span="4:8-4:24", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+                N03 [label=":struct/len_str", type="OPER", origin=97, span="4:18-4:21", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+                F04 -> N01 [label="0", type="WITH_PORT"];
+                N03 -> O04 [label="0", type="EXIT"];
+                N01 -> N02 [label="0|0", type="NORM"];
+                N02 -> N03 [label="0|0", type="NORM"];
+            }
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N04 [label="s", type="PORT"];
+            N05 [label=":op/tag_is_null", type="OPER", origin=90, span="2:11-5:5", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+            N06 [label="JOIN", type="JOIN", origin=99, span="2:11-5:5", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+            N07 [label="BRCH", type="BRCH", origin=98, span="2:11-5:5", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+            N08 [label="__g_4__", type="FUNC", origin=91, span="3:21-3:22", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+            N09 [label="__g_6__", type="FUNC", origin=93, span="4:18-4:24", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+            F02 -> N04 [label="0", type="NORM_PORT"];
+            N06 -> O02 [label="0", type="EXIT"];
+            N04 -> N05 [label="0|0", type="NORM"];
+            N08 -> N06 [label="0|0", type="WITH"];
+            N09 -> N06 [label="0|1", type="WITH"];
+            N07 -> N06 [label="0|0", type="NORM"];
+            N05 -> N07 [label="0|0", type="NORM"];
+            N04 -> N07 [label="0|0", type="CTRL"];
+            N07 -> N08 [label="0|0", type="CTRL"];
+            N04 -> N09 [label="0|0", type="WITH"];
+            N07 -> N09 [label="1|0", type="CTRL"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N0A [label="abc", type="DATA", origin=102, span="9:23-9:28", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+        N0B [label="len_or_zero", type="FUNC", origin=104, span="9:22-9:29", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+        N0C [label="CAST", type="CAST", origin=103, span="9:23-9:28", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+        N0B -> O01 [label="0", type="EXIT"];
+        N0C -> N0B [label="0|0", type="NORM"];
+        N0A -> N0C [label="0|0", type="NORM"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N0D [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=100, span="8:0-10:1", srcfile="<ROOT>/test/cases/consistency/narrowing/graph_match.cml"];
+    N0E [label="CALL", type="CALL"];
+    N0E -> O00 [label="0", type="EXIT"];
+    N0D -> N0E [label="0|0", type="WITH"];
+}

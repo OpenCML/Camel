@@ -181,7 +181,8 @@ ExecutionSite makePcExecutionSite(
 /// Reports a fault at `site`. Outside every fault-isolation boundary the diagnostic is recorded
 /// in the context's sink; inside one (FaultIsolationScope) a fault that can be isolated is only
 /// described: the diagnostic returned was not recorded, and whoever catches it at the boundary
-/// turns it into an error value. Either way the caller throws what is returned.
+/// turns it into an error value. Inside a DescribedFaultScope nothing is recorded either.
+/// Either way the caller throws what is returned.
 Diagnostic reportRuntimeFault(
     camel::core::context::Context &ctx, const RuntimeFault &fault, const ExecutionSite &site);
 
@@ -221,6 +222,19 @@ class InheritedFaultIsolation {
 
   private:
     uint32_t saved_;
+};
+
+/// Opened by a scheduler that decides itself which fault is recorded (the parallel scheduler:
+/// of the faults of elements that ran concurrently, only the one of the smallest index is the
+/// fault of the run). While one is open on the calling thread, reportRuntimeFault describes
+/// every fault and records none, whatever interpreter raises it; the scheduler records the
+/// diagnostic it lets through. Scopes nest; a task on another thread opens its own.
+class DescribedFaultScope {
+  public:
+    DescribedFaultScope();
+    ~DescribedFaultScope();
+    DescribedFaultScope(const DescribedFaultScope &)            = delete;
+    DescribedFaultScope &operator=(const DescribedFaultScope &) = delete;
 };
 
 template <typename... Args>

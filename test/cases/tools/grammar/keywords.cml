@@ -4,9 +4,8 @@ module keywords
 import { now } from time
 import os
 import math_tools from .local.tools
+import os as system
 export { helper }
-use short = some::long::name
-use other::name
 using namespace std::io
 
 let immutable = 1

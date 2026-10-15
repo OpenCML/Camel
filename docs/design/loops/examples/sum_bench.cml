@@ -5,8 +5,8 @@
 module sum_bench
 import { now } from time
 
-func loop(i: int, n: int, acc: int): int {
-    return if i > n then acc else loop(i + 1, n, acc + i)
+func spin(i: int, n: int, acc: int): int {
+    return if i > n then acc else spin(i + 1, n, acc + i)
 }
 
 func by_reduce(n: int): int {
@@ -24,7 +24,7 @@ func by_foreach(n: int): int sync {
 func main(): int sync {
     let n = 3000000
     let t0 = now()
-    let a = loop(1, n, 0)
+    let a = spin(1, n, 0)
     let t1 = now()
     let b = by_reduce(n)
     let t2 = now()

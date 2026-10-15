@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 05, 2025
- * Updated: Oct. 06, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "taskflow.h"
+#include "handoff.h"
 
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
@@ -53,6 +54,8 @@ using namespace camel::core::context;
 using namespace camel::core::error;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
+using camel::core::OperatorTable;
+namespace oper = camel::core::oper;
 
 namespace {
 
@@ -474,10 +477,11 @@ bool TaskflowExecSchedPass::graphIsHeavy(GCGraph *graph) {
                 heavy = true;
             } else if (node->kind == GCNodeKind::Oper) {
                 const auto *body = current->nodeBodyAs<GCOperBody>(it.ref());
-                // Built-in operators have an empty protocol (":op/add_l"); ":mark/..." are
-                // the higher-order ones.
-                heavy = body == nullptr || !body->uri().starts_with(":") ||
-                        body->uri().starts_with(":mark/");
+                // Built-in operators have an empty protocol (":op/add_l"); the marked ones
+                // (":mark/...") are the higher-order ones.
+                const auto &table = OperatorTable::instance();
+                heavy =
+                    body == nullptr || !table.isBuiltin(body->oper) || table.isMarked(body->oper);
             } else if (node->kind == GCNodeKind::Func) {
                 GCGraph *callee = current->directCalleeGraphOf(it.ref());
                 if (callee == nullptr) {
@@ -692,8 +696,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
         plan.anchorOk && plan.lastNode < blocks ? pos[plan.lastNode] : kNo;
 
     const auto isElided = [](GCNodeKind kind) {
-        return kind == GCNodeKind::Data || kind == GCNodeKind::Port || kind == GCNodeKind::Sync ||
-               kind == GCNodeKind::Bind || kind == GCNodeKind::Dref;
+        return kind == GCNodeKind::Data || kind == GCNodeKind::Port || kind == GCNodeKind::Sync;
     };
 
     // Where each executable node lives: its scope and its item there. BRCH and JOIN map to the
@@ -797,9 +800,9 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                 break;
             case GCNodeKind::Oper: {
                 const auto *body = graph->nodeBodyAs<GCOperBody>(ref);
-                item.kind =
-                    body->uri().starts_with(":mark/") ? ItemKind::Mark : ItemKind::Leaf;
-                item.leaveAfter = !body->uri().starts_with(":");
+                const auto &table = OperatorTable::instance();
+                item.kind         = table.isMarked(body->oper) ? ItemKind::Mark : ItemKind::Leaf;
+                item.leaveAfter   = !table.isBuiltin(body->oper);
                 break;
             }
             default:
@@ -1065,15 +1068,34 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
     linearArmEntryCache_.clear();
     const bool gcStats = envSwitch("CAMEL_TF_GC_STATS");
     TaskflowGcGate::instance().resetStats();
-    Frame *rootFrame = framePool_.acquire(graph);
+    prepareBytecodeHandoff(graph);
+    // The bytecode side of the run, on the line after the collector's.
+    const auto reportHandoff = [this]() {
+        if (handoff_) {
+            const auto stats = handoff_->stats();
+            std::cerr << std::format(
+                "[taskflow] bytecode: graphs={} bytecodes={} calls={} interpreters={}\n",
+                stats.graphs,
+                stats.bytecodes,
+                stats.calls,
+                stats.interpreters);
+        } else {
+            std::cerr << "[taskflow] bytecode: off\n";
+        }
+    };
     try {
-        slot_t result = evalGraphTF(graph, rootFrame);
+        slot_t result = NullSlot;
+        {
+            // The entry graph is called like any other graph: a program with nothing to
+            // parallelise runs as bytecode from here.
+            TaskflowGcRegion region;
+            result = callGraph(graph, nullptr, region, [](Frame *) {});
+        }
         context_->captureProcessExitCode(graph, result);
-        framePool_.release(rootFrame);
     } catch (Diagnostic &fault) {
-        framePool_.release(rootFrame);
         if (gcStats) {
             TaskflowGcGate::instance().reportStats(std::cerr);
+            reportHandoff();
         }
         // The one fault that ends the run is recorded here, after everything that had started
         // has ended (raiseFault only describes a fault). Recording gives the diagnostic back
@@ -1084,14 +1106,15 @@ TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os
         }
         throw;
     } catch (...) {
-        framePool_.release(rootFrame);
         if (gcStats) {
             TaskflowGcGate::instance().reportStats(std::cerr);
+            reportHandoff();
         }
         throw;
     }
     if (gcStats) {
         TaskflowGcGate::instance().reportStats(std::cerr);
+        reportHandoff();
         std::cerr << std::format(
             "[taskflow] run: task_graphs={} workers={}\n",
             taskGraphsRun_.load(std::memory_order_relaxed),
@@ -1176,6 +1199,25 @@ slot_t TaskflowExecSchedPass::evalGraph(
             }
         }
         if (entry == nullptr) {
+            GraphPlan *targetPlan = planFor(target);
+            if (targetPlan->bytecodeEntry != kNoBytecode) {
+                // A tail call of a serial graph: the rest of this activation is the callee, and
+                // the callee runs as bytecode. Its value is this activation's value. The call
+                // replaces the one open for this activation, so the count is the thread's as
+                // it stands. (A serial graph tail-calls serial graphs only: nothing comes back
+                // here.)
+                return handoff_->call(
+                    targetPlan->bytecodeEntry,
+                    target,
+                    region,
+                    [&](Frame *dest) {
+                        camel::execute::fillFrameForDirectInvoke(
+                            lastFrame,
+                            dest,
+                            callerGraph,
+                            tailRef);
+                    });
+            }
             if (tailFrames.count < tailFrames.entries.size()) {
                 entry = &tailFrames.entries[tailFrames.count];
             } else {
@@ -1191,8 +1233,7 @@ slot_t TaskflowExecSchedPass::evalGraph(
                 --tailFrames.count;
                 entry = &tailFrames.entries[tailFrames.count];
             }
-            GraphPlan *targetPlan = planFor(target);
-            *entry                = {target, framePool_.acquire(target), targetPlan};
+            *entry = {target, framePool_.acquire(target), targetPlan};
             ++tailFrames.count;
         }
         plan      = entry->plan;
@@ -1405,11 +1446,9 @@ void TaskflowExecSchedPass::runLinearBody(
         case GCNodeKind::Data:
         case GCNodeKind::Port:
         case GCNodeKind::Sync:
-        case GCNodeKind::Bind:
-        case GCNodeKind::Dref:
             break;
         case GCNodeKind::Oper:
-            if (graph->nodeBodyAs<GCOperBody>(nodeRef)->uri().starts_with(":mark/")) {
+            if (OperatorTable::instance().isMarked(graph->nodeBodyAs<GCOperBody>(nodeRef)->oper)) {
                 region.leave();
                 (void)executeLinearMarkedOperator(graph, nodeRef, frame);
                 break;
@@ -1489,16 +1528,42 @@ void TaskflowExecSchedPass::executeCallNode(
     auto &thread = region.thread();
     requireCallRoom(thread, graph, nodeRef);
     OpenCall openCall(thread.callDepth);
-    Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
-    slot_t result      = NullSlot;
+    const bool indirect = node->kind == GCNodeKind::Call;
+    const slot_t result = callGraph(targetGraph, nullptr, region, [&](Frame *dest) {
+        if (indirect) {
+            camel::execute::fillFrameForIndirectCall(frame, dest, graph, nodeRef);
+        } else {
+            camel::execute::fillFrameForDirectInvoke(frame, dest, graph, nodeRef);
+        }
+    });
+    frame->set(node->dataIndex, result);
+}
+
+template <typename Fill>
+slot_t TaskflowExecSchedPass::callGraph(
+    GCGraph *target, GraphPlan *plan, TaskflowGcRegion &region, Fill &&fill) {
+    if (plan == nullptr) {
+        plan = planFor(target);
+    }
+    // The arguments move into the callee frame, and the value comes back to the caller, each
+    // inside the region.
+    region.enter();
+    if (plan->bytecodeEntry != kNoBytecode) {
+        return handoff_->call(plan->bytecodeEntry, target, region, fill);
+    }
+    Frame *callee = framePool_.acquire(target);
+    fill(callee);
+    slot_t result = NullSlot;
     try {
-        result = evalGraph(targetGraph, calleeFrame, region);
+        result = evalGraph(target, callee, region, plan);
     } catch (...) {
-        framePool_.release(calleeFrame);
+        framePool_.release(callee);
         throw;
     }
-    frame->set(node->dataIndex, result);
-    framePool_.release(calleeFrame);
+    // evalGraph returns inside the region and giving the frame back polls nothing: the value
+    // is still safe when the caller stores it.
+    framePool_.release(callee);
+    return result;
 }
 
 template <typename FillArgs, typename Sink>
@@ -1512,19 +1577,14 @@ void TaskflowExecSchedPass::callClosure(
     OpenCall openCall(region.thread().callDepth);
     region.enter();
     fillArgs(std::span<slot_t>(args.data(), argCount));
-    Frame *callee = acquirePreparedClosureCallFrame(
-        targetGraph,
-        closureAt(funcFrame, funcIdx),
-        std::span<const slot_t>(args.data(), argCount));
-    slot_t result = NullSlot;
-    try {
-        result = evalGraph(targetGraph, callee, region, targetPlan);
-    } catch (...) {
-        framePool_.release(callee);
-        throw;
-    }
+    const slot_t result = callGraph(targetGraph, targetPlan, region, [&](Frame *dest) {
+        fillClosureCallFrame(
+            dest,
+            targetGraph,
+            closureAt(funcFrame, funcIdx),
+            std::span<const slot_t>(args.data(), argCount));
+    });
     sink(result);
-    framePool_.release(callee);
 }
 
 void TaskflowExecSchedPass::runOnExecutor(tf::Taskflow &flow) {
@@ -1560,27 +1620,35 @@ slot_t TaskflowExecSchedPass::runPreparedSubgraph(tf::Subflow &sf, GCGraph *grap
 
 slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
-    if (camel::execute::isFaultIsolationUri(graph->nodeBodyAs<GCOperBody>(nodeRef)->uri())) {
-        return executeIsolateNode(graph, nodeRef, frame);
-    }
     // On the calling thread: an operator decides itself whether its elements are worth
     // tasks (runElements). A task graph per operator, as before, cost more than a `reduce`
     // over a handful of elements.
-    const std::string_view uri = graph->nodeBodyAs<GCOperBody>(nodeRef)->uri();
-    if (uri == ":mark/map_arr") {
+    switch (graph->nodeBodyAs<GCOperBody>(nodeRef)->oper) {
+    case oper::Isolate:
+        return executeIsolateNode(graph, nodeRef, frame);
+    case oper::MapArr:
         mark_map_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/apply_arr") {
+        break;
+    case oper::ApplyArr:
         mark_apply_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/filter_arr") {
+        break;
+    case oper::FilterArr:
         mark_filter_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/reduce_arr") {
+        break;
+    case oper::ReduceArr:
         mark_reduce_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/unordered_reduce_arr") {
+        break;
+    case oper::UnorderedReduceArr:
         mark_unordered_reduce_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/foreach_arr") {
+        break;
+    case oper::ForeachArr:
         mark_foreach_arr(graph, nodeRef, frame);
-    } else if (uri == ":mark/unordered_foreach_arr") {
+        break;
+    case oper::UnorderedForeachArr:
         mark_unordered_foreach_arr(graph, nodeRef, frame);
+        break;
+    default:
+        break;
     }
     const auto *node = requireNode(graph, nodeRef);
     return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
@@ -1720,7 +1788,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
 
     case GCNodeKind::Oper: {
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
-        if (body->uri().starts_with(":mark/")) {
+        if (OperatorTable::instance().isMarked(body->oper)) {
             return executeLinearMarkedOperator(graph, nodeRef, frame);
         }
         const slot_t result = executePreparedOperator(graph, nodeRef, frame, plan);
@@ -1729,10 +1797,6 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
     }
 
     case GCNodeKind::Brch:
-        return NullSlot;
-
-    case GCNodeKind::Bind:
-    case GCNodeKind::Dref:
         return NullSlot;
 
     default: {
@@ -1775,7 +1839,12 @@ Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
     GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
     ASSERT(targetGraph != nullptr, "Taskflow closure call requires a runtime graph target.");
     Frame *dest = framePool_.acquire(targetGraph);
+    fillClosureCallFrame(dest, targetGraph, closure, args);
+    return dest;
+}
 
+void TaskflowExecSchedPass::fillClosureCallFrame(
+    Frame *dest, GCGraph *targetGraph, Tuple *closure, std::span<const slot_t> args) {
     const auto normPorts = targetGraph->normPorts();
     ASSERT(args.size() == normPorts.size(), "Taskflow closure call norm-arg count mismatch.");
     for (size_t i = 0; i < args.size(); ++i) {
@@ -1784,7 +1853,7 @@ Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
 
     const auto closureNodes = targetGraph->closureNodes();
     if (closureNodes.empty()) {
-        return dest;
+        return;
     }
 
     ASSERT(closure != nullptr, "Taskflow closure tuple is null.");
@@ -1792,7 +1861,6 @@ Frame *TaskflowExecSchedPass::acquirePreparedClosureCallFrame(
     for (size_t i = 0; i < closureNodes.size(); ++i) {
         dest->set(dataIndexOf(targetGraph, closureNodes[i]), closure->get<slot_t>(i));
     }
-    return dest;
 }
 
 slot_t TaskflowExecSchedPass::executePreparedOperator(
@@ -2036,27 +2104,35 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Oper: {
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
-        const std::string uri(body->uri());
-        if (uri == ":mark/map_arr") {
+        switch (body->oper) {
+        case oper::MapArr:
             mark_map_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/apply_arr") {
+            break;
+        case oper::ApplyArr:
             mark_apply_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/filter_arr") {
+            break;
+        case oper::FilterArr:
             mark_filter_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/reduce_arr") {
+            break;
+        case oper::ReduceArr:
             mark_reduce_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/unordered_reduce_arr") {
+            break;
+        case oper::UnorderedReduceArr:
             mark_unordered_reduce_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/foreach_arr") {
+            break;
+        case oper::ForeachArr:
             mark_foreach_arr(graph, nodeRef, frame);
-        } else if (uri == ":mark/unordered_foreach_arr") {
+            break;
+        case oper::UnorderedForeachArr:
             mark_unordered_foreach_arr(graph, nodeRef, frame);
-        } else if (camel::execute::isFaultIsolationUri(uri)) {
+            break;
+        case oper::Isolate:
             return executeIsolateNode(graph, nodeRef, frame);
-        } else {
+        default: {
             const slot_t result = executePreparedOperator(graph, nodeRef, frame);
             frame->set(node->dataIndex, result);
             return result;
+        }
         }
         return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
     }
@@ -2069,6 +2145,8 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Bind:
     case GCNodeKind::Dref:
+        // Reserved kinds: never part of a frozen graph (see GCNodeKind). Listed only to keep
+        // this switch exhaustive.
         return NullSlot;
     }
 
@@ -2105,9 +2183,6 @@ void TaskflowExecSchedPass::buildRuntimeNodeTasks(
             continue;
         }
         if (nodeRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[nodeRef] != 0) {
-            continue;
-        }
-        if (node->kind == GCNodeKind::Bind || node->kind == GCNodeKind::Dref) {
             continue;
         }
 
@@ -2755,15 +2830,9 @@ void TaskflowExecSchedPass::mark_unordered_reduce_arr(
             OpenCall openCall(foldRegion.thread().callDepth);
             foldRegion.enter();
             std::array<slot_t, 2> args{acc, valueAt(i)};
-            Frame *callee =
-                acquirePreparedClosureCallFrame(target, closureAt(frame, funcIdx), args);
-            try {
-                acc = evalGraph(target, callee, foldRegion);
-            } catch (...) {
-                framePool_.release(callee);
-                throw;
-            }
-            framePool_.release(callee);
+            acc = callGraph(target, nullptr, foldRegion, [&](Frame *dest) {
+                fillClosureCallFrame(dest, target, closureAt(frame, funcIdx), args);
+            });
         }
         return acc;
     };
@@ -2910,7 +2979,7 @@ slot_t TaskflowExecSchedPass::executeIsolateNode(
     for (size_t i = 1; i < normInputs.size(); ++i) {
         args.push_back(frame->get<slot_t>(dataIndexOf(graph, normInputs[i])));
     }
-    Frame *callee = acquirePreparedClosureCallFrame(target, func->tuple(), args);
+    Tuple *closure = func->tuple();
 
     TaskflowFaultDomain domain;
 
@@ -2927,9 +2996,11 @@ slot_t TaskflowExecSchedPass::executeIsolateNode(
             TaskflowGcGate::ThreadState &thread;
             TaskflowFaultDomain *saved;
         } domainScope(thread, &domain);
-        value = evalGraph(target, callee, region);
+        // Nothing polls between reading `closure` above and filling the callee frame here.
+        value = callGraph(target, nullptr, region, [&](Frame *dest) {
+            fillClosureCallFrame(dest, target, closure, args);
+        });
     } catch (const Diagnostic &fault) {
-        framePool_.release(callee);
         if (!isIsolatedFault(fault)) {
             throw;
         }
@@ -2937,9 +3008,6 @@ slot_t TaskflowExecSchedPass::executeIsolateNode(
         const slot_t failed = camel::execute::isolatedFaultToError(fault);
         frame->set(node->dataIndex, failed);
         return failed;
-    } catch (...) {
-        framePool_.release(callee);
-        throw;
     }
     region.enter();
     const auto *calleeType   = target->funcType();
@@ -2949,7 +3017,6 @@ slot_t TaskflowExecSchedPass::executeIsolateNode(
         calleeResult,
         frame->typeAt<Type>(node->dataIndex));
     frame->set(node->dataIndex, result);
-    framePool_.release(callee);
     return result;
 }
 

@@ -1,0 +1,7 @@
+// Only the comparison with `null` is defined for a `T?`.
+func main(): int sync {
+    let a: int? = 1
+    let b: int? = 1
+    println(a == b)
+    return 0
+}

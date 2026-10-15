@@ -1,0 +1,12 @@
+module t16_macro_const
+import { decode } from json
+
+// An `any` value computed by std::macro becomes a constant in the static area of main.
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>) }
+macro func table(): any { return decode('["alpha", "beta", "gamma"]') }
+func main(n: int): int sync {
+    let d = table()
+    let c = churn(n)
+    println(c, d as string[])
+    return 0
+}

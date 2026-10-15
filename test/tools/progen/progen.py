@@ -31,7 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from generate import DEFAULT_FEATURES, FEATURES, generate, parse_features  # noqa: E402
-from model import emit  # noqa: E402
+from model import emit, emit_modules  # noqa: E402
 from reduce import Reducer  # noqa: E402
 from runner import BACKENDS, BAD, matrix, run_program, signature  # noqa: E402
 
@@ -52,12 +52,13 @@ def one(seed: int, features, cells, out, keep_all=False, size=1):
     source = emit(prog)
     name = f"progen_{seed}"
     work = None if out is None else Path(out) / "work" / name
-    res = run_program(source, prog.a["env"], expected, cells, work, name)
+    res = run_program(source, prog.a["env"], expected, cells, work, name, modules=emit_modules(prog))
     bad = {cid: info for cid, info in res.items() if info["outcome"] in BAD}
     for n, (cid, info) in enumerate(bad.items()):       # is it the same on two more runs?
         if info["outcome"] in ("CRASH", "HANG") and n >= 2:
             continue                                    # crashes are slow to collect: two cells are enough
-        again = [run_program(source, prog.a["env"], expected, {cid: cells[cid]}, work, name)[cid] for _ in range(2)]
+        again = [run_program(source, prog.a["env"], expected, {cid: cells[cid]}, work, name,
+                             modules=emit_modules(prog))[cid] for _ in range(2)]
         info["repeat"] = [signature(a) for a in again]
         info["stable"] = all(signature(a) == signature(info) and a.get("got") == info.get("got") for a in again)
     refused = {cid: info for cid, info in res.items() if info["outcome"] == "REFUSED"}
@@ -68,6 +69,8 @@ def one(seed: int, features, cells, out, keep_all=False, size=1):
         d = Path(out) / "failures"
         d.mkdir(parents=True, exist_ok=True)
         (d / f"{name}.cml").write_text(source, encoding="utf-8", newline="\n")
+        for stem, text in emit_modules(prog).items():
+            (d / f"{stem}.cml").write_text(text, encoding="utf-8", newline="\n")
         (d / f"{name}.json").write_text(json.dumps({"seed": seed, "features": sorted(features), "size": size,
                                                     "env": prog.a["env"],
                                                     "expected": expected, "bad": bad}, indent=1), encoding="utf-8")
@@ -144,6 +147,9 @@ def summarize(records, cells, features, title):
 def cmd_show(args):
     prog, expected, attempts = generate(args.seed, parse_features(args.features), size=args.size)
     print(emit(prog))
+    for stem, text in emit_modules(prog).items():
+        print(f"// ---- {stem}.cml ----")
+        print(text)
     print("// environment:", prog.a["env"])
     print(f"// reference output ({attempts} attempt(s)):")
     for line in expected:
@@ -198,7 +204,8 @@ def cmd_reduce(args):
     passes = args.passes.split() if args.passes is not None else cells[args.cell]
     target = None
     for _ in range(args.repeats):
-        res = run_program(emit(prog), prog.a["env"], expected, {"fail": passes, "ref": []}, workdir, prog.a["module"])
+        res = run_program(emit(prog), prog.a["env"], expected, {"fail": passes, "ref": []}, workdir, prog.a["module"],
+                          modules=emit_modules(prog))
         if res["fail"]["outcome"] in BAD:
             target = signature(res["fail"])
             break
@@ -225,7 +232,8 @@ def write_case(out: Path, name: str, prog, passes, seed, features, last, runs: i
     seen = collections.Counter()
     shown = None
     for _ in range(runs):
-        res = run_program(source, prog.a["env"], expected, {"fail": passes}, out, name)["fail"]
+        res = run_program(source, prog.a["env"], expected, {"fail": passes}, out, name,
+                          modules=emit_modules(prog))["fail"]
         seen[res["outcome"]] += 1
         if res["outcome"] in BAD and shown is None:
             shown = res

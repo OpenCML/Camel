@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 04, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -117,7 +117,7 @@ bool ParaModule::load() {
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("para", [ctx]() { return createParaExecutor(ctx); });
     // The purity of every operator (design principles 2.9).
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "para",
         {
             // Blocks until other calls arrive.
@@ -125,7 +125,7 @@ bool ParaModule::load() {
         });
     // The unordered counterparts of foreach and reduce run a function the program passes in;
     // what they do is what that function does.
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "",
         {{"mark/unordered_foreach_arr", false}, {"mark/unordered_reduce_arr", false}});
     loaded_ = true;

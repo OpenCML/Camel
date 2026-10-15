@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #include <nlohmann/json.hpp>
@@ -37,12 +37,15 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "operators.h"
+#include "value.h"
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
+using camel::json::isJsonType;
+using camel::json::JsonValue;
 
 namespace {
 
@@ -53,10 +56,8 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
     if (!t) {
         throwRuntimeFault(RuntimeDiag::JsonEncodeUnsupported, "<unknown>");
     }
-    if (t->code() == TypeCode::Any) {
-        throwRuntimeFault(
-            RuntimeDiag::JsonEncodeUnsupported,
-            "any");
+    if (isJsonType(t)) {
+        return fromSlot<JsonValue *>(s)->toJson();
     }
     switch (t->code()) {
     case TypeCode::Int32:
@@ -83,8 +84,6 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
             return json::array();
         const ArrayType *arrayType = static_cast<const ArrayType *>(t);
         Type *elemType             = arrayType->elemType();
-        if (!elemType)
-            elemType = Type::Any();
         json jarr = json::array();
         for (size_t i = 0; i < arr->size(); ++i) {
             auto elem = camelToJson(elemType, arr->data()[i], ctx);
@@ -102,8 +101,6 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         json jarr                  = json::array();
         for (size_t i = 0; i < tupleType->size(); ++i) {
             Type *elemType = tupleType->typeAt(i);
-            if (!elemType)
-                elemType = Type::Any();
             auto elem = camelToJson(elemType, tuple->data()[i], ctx);
             if (!elem)
                 return std::nullopt;
@@ -119,8 +116,6 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         json jobj;
         for (size_t i = 0; i < structType->size(); ++i) {
             Type *fieldType = structType->typeAt(i);
-            if (!fieldType)
-                fieldType = Type::Any();
             auto val = camelToJson(fieldType, st->data()[i], ctx);
             if (!val)
                 return std::nullopt;
@@ -199,6 +194,11 @@ bool jsonToTyped(const json &j, Type *type, const std::string &path, slot_t &out
         error = "at " + path + ": expected " + wanted + ", found " + jsonKindName(j);
         return false;
     };
+    // A member typed Json takes whatever is there: the part of the shape left open.
+    if (isJsonType(type)) {
+        out = toSlot(JsonValue::fromJson(j));
+        return true;
+    }
     switch (type->code()) {
     case TypeCode::Bool:
         if (!j.is_boolean())
@@ -347,6 +347,9 @@ bool jsonToTyped(const json &j, Type *type, const std::string &path, slot_t &out
 /// Whether jsonToTyped can produce a value of `type` at all, so that a call asking for a
 /// type without a JSON form is rejected when it is compiled.
 bool hasJsonForm(Type *type) {
+    if (isJsonType(type)) {
+        return true;
+    }
     switch (type->code()) {
     case TypeCode::Bool:
     case TypeCode::Int64:
@@ -386,50 +389,6 @@ bool hasJsonForm(Type *type) {
     return false;
 }
 
-// 递归：将 JSON 转为 Camel slot（参考 pyToCamel）
-static slot_t jsonToCamel(const json &j, Context &ctx) {
-    if (j.is_null())
-        return toSlot(0); // Void-like
-    if (j.is_boolean())
-        return toSlot(j.get<bool>());
-    if (j.is_number_integer()) {
-        try {
-            return toSlot(j.get<Int64>());
-        } catch (const json::exception &) {
-            return toSlot(j.get<Float64>()); // 大整数退化为 float
-        }
-    }
-    if (j.is_number_float())
-        return toSlot(j.get<Float64>());
-    if (j.is_string()) {
-        std::string str = j.get<std::string>();
-        return toSlot(String::from(str, mm::autoSpace()));
-    }
-    if (j.is_array()) {
-        size_t n   = j.size();
-        Array *arr = Array::create(mm::autoSpace(), n);
-        for (size_t i = 0; i < n; ++i)
-            arr->set(i, jsonToCamel(j[i], ctx));
-        return toSlot(arr);
-    }
-    if (j.is_object()) {
-        StructTypeFactory factory;
-        std::vector<slot_t> slots;
-        slots.reserve(j.size());
-        for (auto &[k, v] : j.items()) {
-            factory.add(k, Type::Any());
-            slots.push_back(jsonToCamel(v, ctx));
-        }
-        StructType *structType = StructType::fromFactory(factory);
-        size_t n               = structType->size();
-        Struct *st             = Struct::create(n, mm::autoSpace());
-        for (size_t i = 0; i < n; ++i)
-            st->set(i, slots[i]);
-        return toSlot(st);
-    }
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "<json.decode> unexpected JSON type");
-}
-
 } // namespace
 
 slot_t __json_encode__(ArgsView &, ArgsView &norm, Context &ctx) {
@@ -450,8 +409,7 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
     if (!str)
         return NullSlot;
     try {
-        json j = json::parse(str->c_str());
-        return jsonToCamel(j, ctx);
+        return toSlot(JsonValue::fromJson(json::parse(str->c_str())));
     } catch (const json::exception &e) {
         // nlohmann's text is "[json.exception.parse_error.101] parse error at line 1, column
         // 2: ...": the bracketed id is the library's, the rest says where and what.
@@ -474,6 +432,49 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
 
 bool jsonTypeHasForm(Type *type) { return type != nullptr && hasJsonForm(type); }
 
+bool jsonTypeEncodable(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (isJsonType(type)) {
+        return true;
+    }
+    // The cases of camelToJson, which faults on anything else.
+    switch (type->code()) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::Bool:
+    case TypeCode::Byte:
+    case TypeCode::Void:
+    case TypeCode::String:
+        return true;
+    case TypeCode::Array:
+        return jsonTypeEncodable(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Tuple:
+        for (Type *member : static_cast<TupleType *>(type)->types()) {
+            if (!jsonTypeEncodable(member))
+                return false;
+        }
+        return true;
+    case TypeCode::Struct:
+        for (Type *member : static_cast<StructType *>(type)->types()) {
+            if (!jsonTypeEncodable(member))
+                return false;
+        }
+        return true;
+    default:
+        break;
+    }
+    if (const CollectionType *coll = asCollectionType(type)) {
+        if (!coll->isMap())
+            return jsonTypeEncodable(coll->keyType());
+        return coll->keyType()->code() == TypeCode::String && jsonTypeEncodable(coll->valueType());
+    }
+    return false;
+}
+
 // decode_as<shape>(text), decode_as(text, shape): the type of `shape` is the type decoded to;
 // its value is not read (DESIGN-QUESTION(json-typed-decode)). The result is a `T!`: text that
 // is not JSON, and JSON that does not have the shape of `T`, are error values, not faults.
@@ -481,16 +482,22 @@ slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
     static const char *kWhere = "<json::decode_as>";
     Type *target              = with.size() > 0 ? with.type(0) : norm.type(1);
     const TupleType *result   = TupleType::fallible(target);
-    String *str               = norm.get<String *>(0);
     json document;
-    try {
-        document = json::parse(str ? str->view() : std::string_view());
-    } catch (const json::exception &e) {
-        std::string what = e.what();
-        if (auto close = what.find("] "); what.starts_with("[") && close != std::string::npos) {
-            what = what.substr(close + 2);
+    if (isJsonType(norm.type(0))) {
+        // A Json decoded before: its document, read again with a type.
+        document = fromSlot<JsonValue *>(norm.slot(0))->toJson();
+    } else {
+        String *str = norm.get<String *>(0);
+        try {
+            document = json::parse(str ? str->view() : std::string_view());
+        } catch (const json::exception &e) {
+            std::string what = e.what();
+            if (auto close = what.find("] ");
+                what.starts_with("[") && close != std::string::npos) {
+                what = what.substr(close + 2);
+            }
+            return makeError("JsonParseError", what, kWhere);
         }
-        return makeError("JsonParseError", what, kWhere);
     }
     slot_t value = NullSlot;
     std::string error;
@@ -500,10 +507,125 @@ slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return makeOk(value, result);
 }
 
+// ---- looking into a Json (value.h) ----
+
+namespace {
+
+/// The Json argument `i` of an accessor, which may also be a `Json?`; nullptr for a null.
+const JsonValue *jsonArgument(ArgsView &norm, size_t i) {
+    slot_t slot = norm.slot(i);
+    if (asTagged(norm.type(i)) != nullptr) {
+        if (isNullValue(slot)) {
+            return nullptr;
+        }
+        slot = nullablePayload(slot);
+    }
+    return fromSlot<JsonValue *>(slot);
+}
+
+/// `value` as a `T?` of `payloadType`.
+slot_t some(slot_t value, Type *payloadType) {
+    return makeSome(value, TupleType::nullable(payloadType));
+}
+
+/// The payload of the Json argument as a `T?` when it is of `kind`, null otherwise.
+slot_t payloadIf(ArgsView &norm, JsonValue::Kind kind) {
+    const JsonValue *value = jsonArgument(norm, 0);
+    if (value == nullptr || value->kind() != kind) {
+        return NullSlot;
+    }
+    return some(value->payload(), JsonValue::payloadType(kind));
+}
+
+} // namespace
+
+slot_t __json_kind__(ArgsView &, ArgsView &norm, Context &) {
+    const JsonValue *value = fromSlot<JsonValue *>(norm.slot(0));
+    return toSlot(String::from(JsonValue::kindName(value->kind()), mm::autoSpace()));
+}
+
+slot_t __json_is_null__(ArgsView &, ArgsView &norm, Context &) {
+    return toSlot<Bool>(fromSlot<JsonValue *>(norm.slot(0))->kind() == JsonValue::Kind::Null);
+}
+
+slot_t __json_as_bool__(ArgsView &, ArgsView &norm, Context &) {
+    return payloadIf(norm, JsonValue::Kind::Bool);
+}
+
+slot_t __json_as_int__(ArgsView &, ArgsView &norm, Context &) {
+    return payloadIf(norm, JsonValue::Kind::Int);
+}
+
+// JSON has one number type: an integer is also a float (as decode_as reads it), a fraction is
+// never an int.
+slot_t __json_as_float__(ArgsView &, ArgsView &norm, Context &) {
+    const JsonValue *value = jsonArgument(norm, 0);
+    if (value == nullptr) {
+        return NullSlot;
+    }
+    if (value->kind() == JsonValue::Kind::Int) {
+        const auto number = static_cast<Float64>(fromSlot<Int64>(value->payload()));
+        return some(toSlot<Float64>(number), Type::Float64());
+    }
+    return payloadIf(norm, JsonValue::Kind::Float);
+}
+
+slot_t __json_as_string__(ArgsView &, ArgsView &norm, Context &) {
+    return payloadIf(norm, JsonValue::Kind::String);
+}
+
+slot_t __json_as_array__(ArgsView &, ArgsView &norm, Context &) {
+    return payloadIf(norm, JsonValue::Kind::Array);
+}
+
+slot_t __json_as_object__(ArgsView &, ArgsView &norm, Context &) {
+    return payloadIf(norm, JsonValue::Kind::Object);
+}
+
+// get<key>(j) and get<index>(j): the member or element, or null.
+slot_t __json_get__(ArgsView &with, ArgsView &norm, Context &) {
+    const JsonValue *value = jsonArgument(norm, 0);
+    if (value == nullptr) {
+        return NullSlot;
+    }
+    if (with.type(0)->code() == TypeCode::Int64) {
+        const Int64 index = fromSlot<Int64>(with.slot(0));
+        if (value->kind() != JsonValue::Kind::Array) {
+            return NullSlot;
+        }
+        const Array *elements = fromSlot<Array *>(value->payload());
+        if (index < 0 || static_cast<size_t>(index) >= elements->size()) {
+            return NullSlot;
+        }
+        return some(elements->data()[index], camel::json::JsonType::get());
+    }
+    if (value->kind() != JsonValue::Kind::Object) {
+        return NullSlot;
+    }
+    slot_t member = NullSlot;
+    if (!table::lookup(
+            fromSlot<Table *>(value->payload()),
+            with.slot(0),
+            Type::String(),
+            member)) {
+        return NullSlot;
+    }
+    return some(member, camel::json::JsonType::get());
+}
+
 std::unordered_map<std::string, operator_t> getJsonOpsMap() {
     return {
         {"encode", __json_encode__},
         {"decode", __json_decode__},
         {"decode_as", __json_decode_as__},
+        {"kind", __json_kind__},
+        {"is_null", __json_is_null__},
+        {"as_bool", __json_as_bool__},
+        {"as_int", __json_as_int__},
+        {"as_float", __json_as_float__},
+        {"as_string", __json_as_string__},
+        {"as_array", __json_as_array__},
+        {"as_object", __json_as_object__},
+        {"get", __json_get__},
     };
 }

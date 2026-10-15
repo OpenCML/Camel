@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -46,9 +46,21 @@ std::string_view operUriOf(const GraphDraft &draft, gc_node_ref_t id) {
     return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->uri();
 }
 
+camel::core::OperId operIdOf(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto *h = draft.header(id);
+    if (!h || h->kind != GCNodeKind::Oper) {
+        return camel::core::kNoOper;
+    }
+    return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper;
+}
+
 bool isPureOper(const GraphDraft &draft, gc_node_ref_t id) {
-    const std::string_view uri = operUriOf(draft, id);
-    return !uri.empty() && camel::core::OperatorTraitsRegistry::instance().isPure(uri);
+    const auto *h = draft.header(id);
+    if (!h || h->kind != GCNodeKind::Oper) {
+        return false;
+    }
+    const auto *body = reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data());
+    return camel::core::OperatorTable::instance().isPure(body->oper);
 }
 
 bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {

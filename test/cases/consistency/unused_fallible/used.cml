@@ -1,0 +1,28 @@
+// Every use of a `T!` counts: `!!`, `?->`, `match`, an argument, a return. No warning.
+func parse(s: string): int! {
+    return parse_int(s)
+}
+
+func double(x: int): int {
+    return x * 2
+}
+
+func show(r: int!): string {
+    return match r {
+        case error e => 'failed'
+        case v => format<v>('ok {}')
+    }
+}
+
+func forward(s: string): int! sync {
+    let r = parse(s)
+    return r
+}
+
+func main(): int sync {
+    println(parse('1') !! 0)
+    println(parse('2') ?-> double !! 0)
+    println(show(parse('3')), show(parse('x')))
+    println(forward('4') !! 0)
+    return 0
+}

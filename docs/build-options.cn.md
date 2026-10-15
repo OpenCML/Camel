@@ -45,6 +45,7 @@ Camel 将可配置的 CMake 选项集中在 `cmake/Options.cmake`，并在配置
 - **设置方式**：直接调用 CMake 时传 `-DCAMEL_TARGET_ARCH=<取值>`；经 `npm run build` / `debug` / `profile` / `pypi:rollup` 构建时设置**环境变量 `CAMEL_TARGET_ARCH`**。环境变量只在当次配置中优先于缓存，不写回缓存，取消后即回到缓存值（默认 `native`）。
 - **作用范围**：只影响 `libcamel`。各模块（`*.cmo`）与工具不带 `-march`；tensor 模块把 AVX2/AVX-512 内核编译成独立单元，运行时经 CPUID 检测后选用。FastVM JIT 只生成 SSE2 标量指令。
 - **发布包**不得使用 `native`；`.github/workflows/build-pypi.yml` 中固定了取值。
+- **舍入不随它变化。** 全部代码以 `-ffp-contract=off` 编译：无论 `-march` 允许什么，`a * b + c` 都不合并为一次乘加，于是程序在各平台上打印相同的数（`docs/design-principles.cn.md` 2.11；arm64 总有 FMA，Clang 默认会合并）。只有 tensor 的 GEMM 与一元运算单元重新打开合并（`modules/tensor/CMakeLists.txt`）；它们在有 FMA 的处理器上都合并，因此 x86-64 的 AVX2/AVX-512 单元与 arm64 的可移植单元算出相同的位。
 
 ### 无 Python 开发环境时
 

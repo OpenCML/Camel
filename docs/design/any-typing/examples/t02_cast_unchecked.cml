@@ -1,0 +1,16 @@
+module t02_cast_unchecked
+
+// `any as T` is not checked: an int goes in, a float, a string and an array come out.
+func main(): int sync {
+    let bits = 4607182418800017408          // the bit pattern of 1.0
+    let a = bits as any
+    let f = a as float
+    println(f)
+    let x = 3.5
+    let i = x as any
+    println(i as int)
+    let h = 'hel' + 'lo'
+    let s = h as any
+    println(len(s as int[]))
+    return 0
+}

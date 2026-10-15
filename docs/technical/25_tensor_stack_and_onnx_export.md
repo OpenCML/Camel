@@ -196,7 +196,7 @@ Tensor`) and convert the value where it is read.
 
 ### 3.4 Operator traits and generic graph passes (core)
 
-`camel::core::OperatorTraitsRegistry` (`include/camel/core/operator_traits.h`)
+`camel::core::OperatorTable` (`include/camel/core/operator_table.h`)
 maps operator URIs to traits: `pure` (no side effects, no hidden state) and
 `elementwise`. The builtin table registers its pure operators (`op/*` except the
 in-place assignment family, and the non-mutating string/array helpers); the

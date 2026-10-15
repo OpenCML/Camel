@@ -1,0 +1,182 @@
+id = "para.handoff"
+order = 351
+tier = "feat"
+tags = ["feat", "para", "consistency"]
+desc = "The parallel scheduler runs serial graphs on the bytecode interpreter (design principles 2.11): same output, faults and recursion limit as the other back ends"
+
+# std::prl hands every graph with nothing to parallelise to a bytecode interpreter of the
+# calling thread (docs/technical/06_runtime_and_execution.md, 4.3.3). These tests check the
+# boundary between the two: output, the fault of the smallest index from serial code in map
+# elements, the recursion limit counted across the boundary, and the collector with several
+# threads inside interpreters. Every behaviour test also runs with the hand-off switched off
+# (CAMEL_TF_BYTECODE=0): the two must agree.
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+timeout_ms = 60000
+
+# --- the shapes -------------------------------------------------------------------------------
+
+[[tests]]
+name = "shapes"
+desc = "Serial graphs called from graphs of the scheduler, as map/filter element functions, from a serial driver around a parallel inner function, by a tail call, behind attempt; allocation in serial code on several workers. The same output on std::nvm, std::fvm and std::prl."
+case = "../../../cases/para/handoff/shapes.cml"
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
+
+[[tests]]
+name = "shapes.prl_counts"
+desc = "Under std::prl the serial graphs of the program did run as bytecode, on more than one thread: the statistics line of the hand-off (CAMEL_TF_GC_STATS) shows compiled graphs, hosted calls and interpreters."
+case = "../../../cases/para/handoff/shapes.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const m = /bytecode: graphs=([0-9]+) bytecodes=([0-9]+) calls=([0-9]+) interpreters=([0-9]+)/.exec(input.normalized.stderr)
+assert(m !== null, `no bytecode statistics line: ${input.normalized.stderr}`)
+assert(Number(m[1]) >= 7, `only ${m[1]} graph(s) compiled; fib, gcd, collatz, mix, churn, norm and digits are serial`)
+assert(Number(m[3]) > 0, 'no hosted call was made')
+}
+"""
+
+[[tests]]
+name = "shapes.prl_off"
+desc = "CAMEL_TF_BYTECODE=0 switches the hand-off off: the statistics line says so, and the output is the same."
+case = "../../../cases/para/handoff/shapes.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_TF_GC_STATS=1", "CAMEL_TF_BYTECODE=0"]
+expect_exit = 0
+expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
+expect_stderr_contains = ["[taskflow] bytecode: off"]
+
+[[tests]]
+name = "shapes.prl_gc_stress_generational"
+desc = "The generational (moving) collector with a verified minor collection at every safepoint, four workers: the frames of the interpreters of several threads are roots that are updated, and the collector stops every thread at a safepoint of the scheduler or of an interpreter."
+case = "../../../cases/para/handoff/shapes.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
+
+[[tests]]
+name = "shapes.prl_gc_stress_major"
+desc = "The same with the default collector and a verified major collection at every safepoint."
+case = "../../../cases/para/handoff/shapes.cml"
+args = ["-t", "4", "${case}", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_starts_with = "6765\n21\n111\n5.0\n[2, 5, 1, 7, 0, 9]\n"
+
+# --- faults raised in serial code -----------------------------------------------------------
+
+[[tests]]
+name = "fault_deep"
+desc = "Faults raised deep in serial recursions inside map elements: isolated thirty times over (the interpreters must be left as they were), then one let through: of elements 5, 9 and 13 the fault of element 5 ends the program (design principles 2.10), with one diagnostic at the index expression."
+kind = "negative"
+case = "../../../cases/para/handoff/fault_deep.cml"
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 30
+expect_diagnostic_column = 36
+expect_stdout_starts_with = "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+expect_output_contains = ["Index 105 is out of range"]
+
+[[tests]]
+name = "fault_deep.prl_off"
+desc = "The same with the hand-off off."
+kind = "negative"
+case = "../../../cases/para/handoff/fault_deep.cml"
+args = ["${case}", "${run_prl}"]
+envs = ["CAMEL_TF_BYTECODE=0"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
+expect_diagnostic_line = 30
+expect_diagnostic_column = 36
+expect_stdout_starts_with = "Attempted division by zero. / 305\nAttempted division by zero. / 305\nAttempted division by zero. / 305\nbefore\n"
+expect_output_contains = ["Index 105 is out of range"]
+
+# --- the recursion limit across the boundary ------------------------------------------------
+#
+# depth_across: A levels of a recursion the scheduler evaluates (a map below it), then a map
+# element, then B levels of a serial recursion that runs as bytecode. A + B + 3 calls are open
+# at the bottom; the default limit of 1000 is reached at the same call on every back end, with
+# the hand-off and without it.
+
+[[tests]]
+name = "depth_across.fits"
+desc = "Default limit: A = 10, B = 987 (1000 calls open) runs."
+case = "../../../cases/para/handoff/depth_across.cml"
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+envs = ["A=10", "B=987"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n997\ndone\n"
+
+[[tests]]
+name = "depth_across.exceeds"
+desc = "Default limit: A = 10, B = 988 stops with MaxRecursionDepthExceeded (1000) at the recursive call of the serial function, the same diagnostic on every back end."
+kind = "negative"
+case = "../../../cases/para/handoff/depth_across.cml"
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+envs = ["A=10", "B=988"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 22
+expect_diagnostic_column = 43
+expect_stdout_starts_with = "start\n"
+expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
+
+[[tests]]
+name = "depth_across.bytecode_only.fits"
+desc = "Default limit: A = 0, B = 997: the bottom of the recursion is all bytecode, entered from a map element."
+case = "../../../cases/para/handoff/depth_across.cml"
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+envs = ["A=0", "B=997"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n997\ndone\n"
+
+[[tests]]
+name = "depth_across.bytecode_only.exceeds"
+desc = "Default limit: A = 0, B = 998 stops at the same call on every back end."
+kind = "negative"
+case = "../../../cases/para/handoff/depth_across.cml"
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+envs = ["A=0", "B=998"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 22
+expect_diagnostic_column = 43
+expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
+
+[[tests]]
+name = "depth_across.prl_off.fits"
+desc = "The same boundary with the hand-off off: A = 10, B = 987 runs."
+case = "../../../cases/para/handoff/depth_across.cml"
+args = ["${case}", "${run_prl}"]
+envs = ["A=10", "B=987", "CAMEL_TF_BYTECODE=0"]
+expect_exit = 0
+expect_stdout_starts_with = "start\n997\ndone\n"
+
+[[tests]]
+name = "depth_across.prl_off.exceeds"
+desc = "The same boundary with the hand-off off: A = 10, B = 988 stops."
+kind = "negative"
+case = "../../../cases/para/handoff/depth_across.cml"
+args = ["${case}", "${run_prl}"]
+envs = ["A=10", "B=988", "CAMEL_TF_BYTECODE=0"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
+expect_diagnostic_line = 22
+expect_diagnostic_column = 43
+expect_output_contains = ["Maximum recursion depth (1000) exceeded"]

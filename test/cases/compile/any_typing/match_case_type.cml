@@ -1,0 +1,13 @@
+module match_case_type
+
+// A case of a `match` has the type of the value matched. `case 1` on a string used to be
+// compared as a string, reading the integer 1 as its address (segmentation fault).
+func main(): int sync {
+    let s = 'a' + 'b'
+    println(match s {
+        case 1 => 'one'
+        case 'ab' => 'ab'
+        case _ => 'other'
+    })
+    return 0
+}

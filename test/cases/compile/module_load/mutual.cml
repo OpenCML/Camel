@@ -1,0 +1,12 @@
+// Modules that import each other (design principles 2.11): functions calling each other
+// across the two, values of one used by the other in both directions (without a cycle), and
+// a type of one used by the other.
+import mutual_a
+import mutual_b
+
+func main(): int sync {
+    println(mutual_a::is_even(10), mutual_b::is_odd(7))
+    println(mutual_a::derived, mutual_b::scale)
+    println(mutual_a::describe(mutual_b::shifted()))
+    return 0
+}

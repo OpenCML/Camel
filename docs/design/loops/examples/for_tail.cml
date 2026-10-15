@@ -4,8 +4,8 @@
  */
 module for_tail
 
-func loop(xs: int[], i: int, acc: int): int {
-    return if i >= len(xs) then acc else loop(xs, i + 1, acc + xs[i] * xs[i])
+func spin(xs: int[], i: int, acc: int): int {
+    return if i >= len(xs) then acc else spin(xs, i + 1, acc + xs[i] * xs[i])
 }
 
 func by_reduce(xs: int[]): int {
@@ -22,7 +22,7 @@ func by_foreach(xs: int[]): int sync {
 
 func main(): int sync {
     let xs = range(0, 1000)
-    println(loop(xs, 0, 0))
+    println(spin(xs, 0, 0))
     println(by_reduce(xs))
     println(by_foreach(xs))
     return 0

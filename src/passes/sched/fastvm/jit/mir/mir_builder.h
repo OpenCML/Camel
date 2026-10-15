@@ -723,6 +723,33 @@ class MirBuilder {
         emitPopRdi();
     }
 
+    // A bytecode that needs no code still needs an instruction to carry its pc: jumps are
+    // resolved to the first instruction of their target bytecode.
+    void emitNop() { push(MirOp::Nop, 0, 0); }
+
+    // Framed code (mir.h, JitExitKind).
+    void emitCallHelper(uint32_t pc, uint64_t helperAddr) {
+        Mir m;
+        m.op    = MirOp::CallHelper;
+        m.imm32 = pc;
+        m.imm64 = helperAddr;
+        push(m);
+    }
+    void emitExitToDriver(uint32_t pc, JitExitKind kind) {
+        Mir m;
+        m.op    = MirOp::ExitToDriver;
+        m.imm32 = pc;
+        m.imm64 = static_cast<uint64_t>(kind);
+        push(m);
+    }
+    void emitSafepointPoll(uint32_t pc, uint64_t flagAddr) {
+        Mir m;
+        m.op    = MirOp::SafepointPoll;
+        m.imm32 = pc;
+        m.imm64 = flagAddr;
+        push(m);
+    }
+
   private:
     MirBuffer &buf_;
     uint32_t nextPc_{kMirInvalidPc};

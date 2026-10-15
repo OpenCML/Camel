@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,7 +23,9 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/composite.h"
+#include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
@@ -115,8 +117,6 @@ string typeCodeToString(TypeCode code) {
         return "function";
     case TypeCode::Ref:
         return "ref";
-    case TypeCode::Any:
-        return "any";
     case TypeCode::Union:
         return "union";
     case TypeCode::TypeVar:
@@ -157,8 +157,6 @@ std::string Type::mangle() const {
         return "s";
     case TypeCode::Ref:
         return "r";
-    case TypeCode::Any:
-        return "a";
     default:
         ASSERT(false, "Unknown TypeCode");
         return "";
@@ -185,28 +183,16 @@ Type *Type::unify(Type *other) const { return equals(other) ? const_cast<Type *>
 
 Type *Type::widened() const { return const_cast<Type *>(this); }
 
-std::optional<CastSafety> Type::checkCastSafetyWithAny(TypeCode targetCode, Type *sourceType) {
-    if (!sourceType)
-        return CastSafety::Forbidden;
-    // Generic rule: any type <-> Any is Safe.
-    if (targetCode == TypeCode::Any || sourceType->code() == TypeCode::Any)
-        return CastSafety::Safe;
-    return std::nullopt;
-}
-
 CastSafety Type::castSafetyFrom(Type *sourceType) const {
     ASSERT(
         !camel::core::type::isComposite(code_),
         "Composite type cannot call Type::castSafetyFrom");
     ASSERT(!camel::core::type::isOtherType(code_), "Other type cannot call Type::castSafetyFrom");
 
-    if (auto r = checkCastSafetyWithAny(code_, sourceType))
-        return *r;
-
     if (!sourceType)
         return CastSafety::Forbidden;
 
-    // Exclude auxiliary types first (Any is already handled by checkCastSafetyWithAny).
+    // Exclude auxiliary types first.
     if (camel::core::type::isAuxiliary(code_) ||
         camel::core::type::isAuxiliary(sourceType->code())) {
         return CastSafety::Forbidden;
@@ -230,11 +216,6 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
-    // When Any converts to or from any other type, pass the slot value through
-    // directly. This must happen before all ASSERTs to support composite types.
-    if (code_ == TypeCode::Any || sourceType->code() == TypeCode::Any)
-        return value;
-
     ASSERT(
         !camel::core::type::isComposite(code_),
         "castSlotFrom not implemented for composite types");
@@ -439,13 +420,6 @@ bool Type::assignableFrom(Type *from) const {
     if (from->code_ == TypeCode::Void)
         return false;
 
-    // Any can receive assignment from any type (Any as the target accepts any source).
-    if (to->code_ == TypeCode::Any)
-        return true;
-    // Any cannot be assigned to other types (source is Any while target is not Any).
-    if (from->code_ == TypeCode::Any)
-        return false;
-
     // Third-party types rely on their own overridden assignableFrom. This must be
     // checked before the composite flag: an Other type may also be flagged
     // Composite (e.g. Tensor) but is never a CompositeType object.
@@ -470,92 +444,67 @@ Type *Type::create(TypeCode code) {
         "Allocating Type: {}, size: {} bytes",
         typeCodeToString(code),
         sizeof(Type)));
-    void *mem = mm::permSpace().alloc(sizeof(Type), alignof(Type));
-    ASSERT(mem != nullptr, "Failed to allocate Type from permSpace");
+    void *mem = allocTypeStorage<Type>(TypeStorageKind::Primitive);
     return new (mem) Type(code);
 }
 
+namespace {
+
+/// The one object of a primitive type, registered with the type table so that it has a TypeId.
+Type *primitiveSingleton(TypeCode code) {
+    Type *type = Type::create(code);
+    TypeTable::instance().adopt(type);
+    return type;
+}
+
+} // namespace
+
 Type *Type::Int32() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Int32);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Int32);
     return type;
 }
 
 Type *Type::Int64() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Int64);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Int64);
     return type;
 }
 
 Type *Type::Int() { return Type::Int64(); }
 
 Type *Type::Float32() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Float32);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Float32);
     return type;
 }
 
 Type *Type::Float64() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Float64);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Float64);
     return type;
 }
 
 Type *Type::Float() { return Type::Float64(); }
 
 Type *Type::Bool() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Bool);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Bool);
     return type;
 }
 
 Type *Type::Byte() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Byte);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Byte);
     return type;
 }
 
 Type *Type::Void() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Void);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Void);
     return type;
 }
 
 Type *Type::String() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::String);
-    }
+    static Type *type = primitiveSingleton(TypeCode::String);
     return type;
 }
 
 Type *Type::Ref() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Ref);
-    }
-    return type;
-}
-
-Type *Type::Any() {
-    static Type *type = nullptr;
-    if (type == nullptr) {
-        type = Type::create(TypeCode::Any);
-    }
+    static Type *type = primitiveSingleton(TypeCode::Ref);
     return type;
 }
 

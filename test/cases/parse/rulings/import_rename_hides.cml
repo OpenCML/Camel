@@ -1,0 +1,7 @@
+// After `find as str_find` the name `find` is not declared in this module.
+import { find as str_find } from str
+
+func main(): int sync {
+    println('hello'->find<'l'> ?? -1)
+    return 0
+}

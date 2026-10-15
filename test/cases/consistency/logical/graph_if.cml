@@ -1,0 +1,8 @@
+// The `if` that `a && b` is: the same graph.
+func both(a: bool, b: int): bool {
+    return if a then b > 1 else false
+}
+
+func main(): bool {
+    return both(true, 2)
+}

@@ -48,7 +48,7 @@ await withServer(async (ls) => {
     h = await hover('norm2(p)')
     check(h.includes('export func norm2(p: Point): int'), 'an imported function: its header as written', h)
     check(h.includes('The squared length of p.\nSecond line of the comment.'),
-        'the comment above the declaration is the documentation', h)
+        'the `///` lines above the declaration are the documentation', h)
     check(h.includes('shapes.cml'), 'the file of the definition is named', h)
     h = await hover('identity(n)')
     check(h.includes('func identity(x: typeas T): T'), 'a generic function: its header', h)
@@ -74,7 +74,7 @@ await withServer(async (ls) => {
     h = await hover('pair.0', 1, 5)
     check(h.includes('(field) 0: int'), 'a tuple element shows its type', h)
     h = await hover('println')
-    check(h.includes('println: <fmt?: string> (...args: any) => void') && h.includes('module `io`'),
+    check(h.includes('println: <fmt?: string> (x: T, ...rest: U...) => T') && h.includes('module `io`'),
         'a library function shows its signature and its module', h)
     h = await hover('double(sum)')
     check(h.includes('let double: (v: int) => int'), 'a function value shows its type', h)

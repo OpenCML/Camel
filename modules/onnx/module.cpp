@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -138,7 +138,7 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
             {{"onnx:export_model",
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
-                  "(fn: (...) => any, example: Tensor | tuple | struct, path: string, "
+                  "(fn: (...) => R, example: Tensor | tuple | struct, path: string, "
                   "dynamic_axes?: int[], target?: string) => void",
                   [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                       -> std::optional<Type *> {
@@ -178,7 +178,7 @@ bool OnnxModule::load() {
     });
     // The purity of every operator (design principles 2.9). export_model writes a file;
     // supported_operators is declared with effects until someone has checked that it is not.
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "onnx",
         {{"export_model", false}, {"supported_operators", false}});
     // Where an export would stop: an operator the ONNX backend has no lowering for.

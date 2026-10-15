@@ -6,38 +6,115 @@
  * (scripts/stdlib-reference.mjs).
  */
 
-/// The JSON text of a value, on one line.
+/// The JSON text of a value, on one line. The type of the value must have a JSON form:
+/// numbers, bool, string, null, and arrays, tuples, structs, sets and maps with string keys
+/// of those; a function or a tensor is refused when the call is compiled.
 /// @pure
-/// @fails fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold
 /// @example encode([1, 2])    // '[1,2]'
-inner func encode(value: any): string {
+inner func encode(value: T): string {
     return 'json:encode'
 }
 
 /// The JSON text of a value, indented by indent spaces per level; a negative indent gives one
 /// line.
 /// @pure
-/// @fails fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold
 /// @example encode([1, 2], 2)    // '[\n  1,\n  2\n]'
-inner func encode(value: any, indent: int): string {
+inner func encode(value: T, indent: int): string {
     return 'json:encode'
 }
 
-/// The value a JSON text describes. Its static type is `any`.
+/// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
+/// known only when the program runs. Look into it with get, as_int, as_array and the other
+/// operators below, each of which gives a value of a definite type; read a part whose shape is
+/// known with decode_as. Prints as its JSON text.
 /// @pure
 /// @fails fault `JsonDecodeFailed` when the text is not JSON
-/// @example decode('[1, 2]')    // an array of 1 and 2, typed any
-inner func decode(text: string): any {
+/// @example decode('{"port": 80}')->get<'port'>->as_int ?? 0    // 80
+inner func decode(text: string): Json {
     return 'json:decode'
 }
 
-/// The value a JSON text describes, decoded to the type of shape; the value of shape is not
-/// read. The result is an error value when the text does not have that type.
+/// The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
+/// the value of shape is not read. The result is an error value when the JSON does not have
+/// that type. A part of the shape typed `Json` takes whatever is there.
 /// @pure
-/// @fails error value `JsonTypeError` when the text is JSON of another type, with the path of
-///   the mismatch; error value `JsonDecodeFailed` when the text is not JSON
+/// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON
 /// @example decode_as<[] as Map<string, int>>('{"a": 1}')    // {a: 1}
-with <shape: any>
-inner func decode_as(text: string): any {
+with <shape: T>
+inner func decode_as(text: string | Json): T! {
     return 'json:decode_as'
+}
+
+/// The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
+/// @pure
+/// @example kind(decode('[1]'))    // 'array'
+inner func kind(j: Json): string {
+    return 'json:kind'
+}
+
+/// Whether a Json is the JSON null.
+/// @pure
+/// @example is_null(decode('null'))    // true
+inner func is_null(j: Json): bool {
+    return 'json:is_null'
+}
+
+/// The member key of an object; null when j is not an object, has no such member, or is null
+/// itself (so that calls chain: j->get<'a'>->get<'b'>).
+/// @pure
+/// @example decode('{"a": 1}')->get<'a'>    // 1, a Json?
+with <key: string>
+inner func get(j: Json | Json?): Json? {
+    return 'json:get'
+}
+
+/// The element index of an array; null when j is not an array, the index is out of range, or j
+/// is null itself.
+/// @pure
+/// @example decode('[5, 6]')->get<1>->as_int ?? 0    // 6
+with <index: int>
+inner func get(j: Json | Json?): Json? {
+    return 'json:get'
+}
+
+/// The bool a Json holds; null for any other kind.
+/// @pure
+/// @example decode('true')->as_bool ?? false    // true
+inner func as_bool(j: Json | Json?): bool? {
+    return 'json:as_bool'
+}
+
+/// The integer a Json holds; null for any other kind (a number with a fraction is not an int).
+/// @pure
+/// @example decode('42')->as_int ?? 0    // 42
+inner func as_int(j: Json | Json?): int? {
+    return 'json:as_int'
+}
+
+/// The number a Json holds, an integer included; null for any other kind.
+/// @pure
+/// @example decode('2')->as_float ?? 0.0    // 2.0
+inner func as_float(j: Json | Json?): float? {
+    return 'json:as_float'
+}
+
+/// The string a Json holds; null for any other kind.
+/// @pure
+/// @example decode('"hi"')->as_string ?? ''    // 'hi'
+inner func as_string(j: Json | Json?): string? {
+    return 'json:as_string'
+}
+
+/// The elements of a JSON array; null for any other kind.
+/// @pure
+/// @example len(decode('[1, "a"]')->as_array ?? [])    // 2
+inner func as_array(j: Json | Json?): Json[]? {
+    return 'json:as_array'
+}
+
+/// The members of a JSON object, by name; null for any other kind.
+/// @pure
+/// @example keys(decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>))    // ['a', 'b']
+inner func as_object(j: Json | Json?): Map<string, Json>? {
+    return 'json:as_object'
 }

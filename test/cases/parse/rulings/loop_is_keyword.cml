@@ -1,0 +1,3 @@
+func loop(i: int): int {
+    return i
+}

@@ -22,6 +22,7 @@
 #include <set>
 #include <unordered_set>
 #include <iostream>
+#include <memory>
 #include <regex>
 #include <string>
 
@@ -48,21 +49,25 @@ class Builder {
     };
     virtual ~Builder() = default;
 
-    node_ptr_t build(AST::node_ptr_t node, camel::core::error::diagnostics_ptr_t diags) {
+    /// The tree of the module whose AST is `node`. Null when the module could not be lowered
+    /// at all; errors that leave a tree behind are in `diags`.
+    std::unique_ptr<Tree> build(AST::node_ptr_t node, camel::core::error::diagnostics_ptr_t diags) {
         idIndex_ = 0;
         diags_   = diags;
+        tree_    = std::make_unique<Tree>();
         initInnerTypes();
         try {
-            root_ = visitModule(node);
+            tree_->setRoot(visitModule(node));
         } catch (camel::core::error::Diagnostic &d) {
             diags_->add(std::move(d));
-            root_ = nullptr;
+            tree_.reset();
         }
-        return root_;
+        return std::move(tree_);
     }
 
   private:
-    node_ptr_t root_;
+    // The tree being built: every node of the module is made by it.
+    std::unique_ptr<Tree> tree_;
     size_t idIndex_ = 0;
     scope_ptr_t<Reference, Type *> typeScope_;
     // Type names whose declaration (or whose import) failed: a use of one is a consequence of
@@ -71,6 +76,29 @@ class Builder {
     // type is reported at all.
     std::unordered_set<std::string> poisonedTypes_;
     bool wholeImportFailed_ = false;
+    // Namespaces (design principles 2.12). The namespace path of the top-level declaration
+    // being lowered (`A::B` for `A::B::f`): a type name written in it is looked up there, then
+    // in the enclosing namespaces, then at the top level. The `using namespace` in force, one
+    // frame per block (the module's, a namespace block's, a block of a function body). The
+    // namespaces the module declares (prefixes of its qualified names).
+    std::vector<std::string> namespacePath_;
+    std::vector<std::vector<Reference>> usingFrames_;
+    std::unordered_set<std::string> ownNamespaces_;
+    // The type a name written in a type position stands for, by the one rule of precedence:
+    // the module's types (from the innermost namespace out; the module's own name may qualify
+    // them), then imported by name, then through a `using namespace`, then built in. Reports
+    // and throws when there is none, or when two `using` give different types (AmbiguousName).
+    Type *lookupType(const Reference &ref, const AST::node_ptr_t &ast);
+    // Whether `ref` names a namespace a `using namespace` can open: one of the module (also
+    // relative to the namespace being lowered) or one bound by an import.
+    bool usableNamespace(const Reference &ref) const;
+    // The names the module exports (visitModule), and the modules its imports bound, with the
+    // import that bound each (compileImportedModules).
+    std::unordered_set<std::string> exportedRefs_;
+    std::vector<std::pair<AST::node_ptr_t, camel::core::module::module_ptr_t>> importedModules_;
+    // Compiles the imported modules written in Camel as far as their declarations; one in
+    // error is reported at its import (ImportedModuleHasErrors).
+    void compileImportedModules();
     std::unordered_map<void *, FunctionType *> funcDecls_;
 
     camel::core::context::context_ptr_t context_;
@@ -93,10 +121,41 @@ class Builder {
     // `Name<...>` (typeFunctionBase_).
     bool funcDeclPending_  = false;
     bool declSignature_    = false;
+    // The function type visited next is the signature of a function being defined (a
+    // FuncData): it is built open (camel/core/type/composite/func.h), so that the graph
+    // builder can set the result type the body decides when none is written. Every other
+    // function type is interned.
+    bool openSignature_    = false;
     bool typeasAllowed_    = false;
     bool inDeclReturnType_ = false;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
+
+    // `any` is not a type a program can write (design principles 2.11, 2.12): the name is
+    // not in the type scope, and visitRefType reports it with the form recommended for the
+    // position it was written in. The visitors of those positions set this around the
+    // type they visit (TypePositionGuard in builder.cpp). A type nested in another one is
+    // reported for the innermost of those positions: `any` in `g: (x: int) => any` is the
+    // return type of a function type, in `xs: any[]` the type of a parameter.
+    enum class TypePosition {
+        Other,
+        Parameter,
+        WithParameter,
+        ReturnType,
+        CastTarget,
+        Annotation,
+        TypeDeclaration,
+    };
+    TypePosition typePosition_ = TypePosition::Other;
+    /// Sets typePosition_ while the type of one position is visited.
+    struct TypePositionGuard {
+        TypePositionGuard(Builder &builder, TypePosition position);
+        ~TypePositionGuard();
+        Builder &builder;
+        TypePosition saved;
+    };
+    /// Reports `any` written as a type (AnyNotAllowed) and aborts the declaration.
+    [[noreturn]] void reportAnyType(const AST::node_ptr_t &ast);
 
     // Where the value of what is being lowered goes, as far as the warning
     // ExitInUnusedBranch needs it. A `return` / `throw` in a branch arm ends the arm and
@@ -142,7 +201,6 @@ class Builder {
     node_ptr_t visitDataDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
-    node_ptr_t visitNameDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitUsingNamespaceDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitExprStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitExitStmt(const AST::node_ptr_t &ast);
@@ -152,6 +210,8 @@ class Builder {
     node_ptr_t visitData(const AST::node_ptr_t &ast);
     node_ptr_t visitUnaryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitBinaryExpr(const AST::node_ptr_t &ast);
+    /// `a && b` / `a || b`: the branch they stand for (design principles 2.11).
+    node_ptr_t visitLogicalExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitReservedExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitIfExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);

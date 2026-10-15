@@ -1,0 +1,13 @@
+module t10_gc_tuple_field
+
+// A tuple and a struct with an `any` field.
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>) }
+func pair(i: int): (int, any) { return (i, ('v' + string(i)) as any) }
+func rec(i: int): { id: int, payload: any } { return { id: i, payload: ('w' + string(i)) as any } }
+func main(n: int): int sync {
+    let p = pair(1)
+    let r = rec(2)
+    let c = churn(n)
+    println(c, p.0, p.1 as string, r.id, r.payload as string)
+    return 0
+}

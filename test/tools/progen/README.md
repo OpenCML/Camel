@@ -52,7 +52,10 @@ python test/tools/progen/progen.py fixed                         # the findings 
 
 ## What a generated program contains
 
-Each switch is a feature (`progen.py features`); all are on by default and they nest freely.
+Each switch is a feature (`progen.py features`); all but `modules` are on by default and they
+nest freely. `modules` is left out of the default set because the feature set is part of every
+program's random stream and the recorded seeds must keep naming the same programs; turn it on
+with `--features all,modules`.
 
 | Feature | Constructs |
 |---|---|
@@ -76,6 +79,7 @@ Each switch is a feature (`progen.py features`); all are on by default and they 
 | `nullable` | `T?`: functions that return `T?` (`if c then e else null`) and take one (`x ?? d`); `let o: T? = ...`; a plain value, `null` or a `T?` written where a `T?` is expected (argument, typed `let`, `return`); `a ?? d` and `a ?? b ?? d`, with a nullable right side too; a nullable value printed by itself |
 | `partial` | functions with one or two context parameters (`with <k: T>`), called in place (`f<w>(x)`), bound (`let g = f<w>`), and handed to `map` / `filter` / user functions as `f<w>` |
 | `ifnoelse` | `if c then e` as a statement of a sync block with one expression as its arm: a `println`, a call with effects, or a pure value of any type that is dropped |
+| `modules` (not on by default) | two to four top-level `let`s of scalar types (each a pure expression over literals and the ones made before it), written in a shuffled order and used by functions and by `main`; and the program split into three modules: `<name>_vals` exports the values and the struct types, `<name>_funcs` exports a random set of functions that call only each other and imports what it uses from `<name>_vals`, the entry module imports both by name and keeps the rest. The reference is the same as for the program in one file: the values are evaluated once, before `main` |
 
 The spelling of a program varies without touching the random stream (a seed still names the
 same program): `+`, `-` and `*` are written with both spaces, with none, or with one (`a - b`,
@@ -194,7 +198,9 @@ the rewrite sequence it was found with and under `std::inline`, `std::opt`,
   one variable from several places without `wait` (principles section 6, undecided).
 - Effects that run on demand: nothing checks that an unused effect outside a sync block does
   *not* run.
-- Module-level variables, `with` parameters, imports of user modules, namespaces, decorators.
+- Module-level variables (`var`), imports of whole modules and qualified names (`m::f`),
+  mutual imports, namespaces, decorators. (Module-level `let`s and imports by name of user
+  modules: feature `modules`.)
 - Faults and their diagnostics (division by zero, index out of range, recursion limits, macro
   evaluation failure by depth), `!!`, `?->`, `throw`, `T!`, `match` on a `T?`, arrays of `T?`.
 - Generic functions (as callees or as values), partial application of a function value that

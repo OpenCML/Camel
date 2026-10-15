@@ -1,0 +1,10 @@
+/// Refused by std::cpp: a tuple value
+module r02_tuple
+
+func pair(a: int): (int, int) { return (a, a + 1) }
+
+func main(): int sync {
+    let p = pair(1)
+    println(p.0 + p.1)
+    return 0
+}

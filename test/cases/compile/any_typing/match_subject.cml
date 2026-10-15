@@ -1,0 +1,17 @@
+module match_subject
+
+import { decode } from json
+
+// A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
+// bit, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing, defect D5). It
+// is a `Json` now, and a case has the type of the value matched.
+func main(): int sync {
+    let v = decode('"ab"')
+    let r = match v {
+        case 1 => 'one'
+        case 'ab' => 'ab'
+        case _ => 'other'
+    }
+    println(r)
+    return 0
+}

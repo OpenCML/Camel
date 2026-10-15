@@ -1,0 +1,43 @@
+/**
+ * `&&` and `||` are branches (design principles 2.11): `a && b` is `if a then b else false`,
+ * `a || b` is `if a then true else b`. The right side is an arm, evaluated only when the left
+ * side does not decide. `&` and `|` are the operators that evaluate both sides.
+ */
+module short_circuit
+
+func noisy(tag: string, v: bool): bool sync {
+    println(tag)
+    return v
+}
+
+func main(): int sync {
+    // the right side runs only when the left does not decide
+    println(noisy('a1', false) && noisy('a2', true))
+    println(noisy('b1', true) && noisy('b2', false))
+    println(noisy('c1', true) || noisy('c2', false))
+    println(noisy('d1', false) || noisy('d2', true))
+    // `&` and `|` evaluate both sides, left first
+    println(noisy('e1', false) & noisy('e2', true))
+    println(noisy('f1', true) | noisy('f2', false))
+    // chains stop at the first side that decides
+    println(noisy('g1', true) && noisy('g2', false) && noisy('g3', true))
+    println(noisy('h1', false) || noisy('h2', true) || noisy('h3', true))
+    // `&&` binds tighter than `||`
+    println(noisy('i1', true) || noisy('i2', true) && noisy('i3', false))
+    println((noisy('k1', false) || noisy('k2', true)) && noisy('k3', true))
+    // a fault on the right side is not reached
+    let zero = 0
+    println(zero != 0 && 10 / zero > 1)
+    println(zero == 0 || 10 / zero > 1)
+    // `&=` and `|=` are `a = a & b` and `a = a | b`: the right side is always evaluated
+    var acc = false
+    acc &= noisy('j1', true)
+    acc |= noisy('j2', true)
+    acc |= noisy('j3', false)
+    println(acc)
+    // as a condition, and with a lambda's captured value on the right
+    let limit = 3
+    println([1, 2, 3, 4, 5]->filter<(x: int) => x > 1 && x < limit + 2>)
+    if noisy('m1', true) && noisy('m2', true) then println('both')
+    return 0
+}

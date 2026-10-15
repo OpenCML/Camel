@@ -13,28 +13,31 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
-#include <format>
 #include "operators.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/utils/random.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
+#include <format>
 
 namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
-#include <random>
+namespace rnd = camel::utils::random;
 
-static std::mt19937_64 g_rng;
+// The distributions are camel/utils/random.h's, not <random>'s: the same seed gives the same
+// numbers on every platform.
+static rnd::Engine g_rng;
 
 std::unordered_map<std::string, operator_t> getRandomOpsMap() {
     return {
@@ -54,18 +57,20 @@ slot_t __rand_seed__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __rand_rand__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return toSlot(std::uniform_real_distribution<double>(0.0, 1.0)(g_rng));
+    return toSlot(rnd::unitDouble(g_rng));
 }
 
 slot_t __rand_randn__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return toSlot(std::normal_distribution<double>(0.0, 1.0)(g_rng));
+    // A fresh source per call: the second value of a pair is not kept, so the numbers after
+    // seed() depend on nothing but the calls made since.
+    return toSlot(rnd::NormalSource<double>{}(g_rng));
 }
 
 slot_t __rand_randint__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 low = norm.get<Int64>(0), high = norm.get<Int64>(1);
     if (low > high)
         std::swap(low, high);
-    return toSlot(std::uniform_int_distribution<int64_t>(low, high)(g_rng));
+    return toSlot(rnd::between(g_rng, low, high));
 }
 
 static void shuffleArray(Array *arr) {
@@ -106,7 +111,7 @@ slot_t __rand_choice__(ArgsView &with, ArgsView &norm, Context &ctx) {
             "random.choice",
             "the array is empty, so there is nothing to choose");
     }
-    size_t idx = std::uniform_int_distribution<size_t>(0, arr->size() - 1)(g_rng);
+    const size_t idx = static_cast<size_t>(rnd::below(g_rng, arr->size()));
     return arr->get<slot_t>(idx);
 }
 

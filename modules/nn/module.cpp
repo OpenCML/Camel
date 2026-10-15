@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 04, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -53,10 +53,10 @@ bool NnModule::load() {
     context_->registerExecutorFactory("nn", [ctx = context_]() { return createNnExecutor(ctx); });
     // The optimizers are functions of their arguments: they return new trees and states.
     for (const char *uri : {"nn:sgd", "nn:adam_state", "nn:adam"}) {
-        camel::core::OperatorTraitsRegistry::instance().set(uri, {.pure = true, .elementwise = false});
+        camel::core::OperatorTable::instance().set(uri, {.pure = true, .elementwise = false});
     }
     // Writes a file.
-    camel::core::OperatorTraitsRegistry::instance().declare("nn", {{"save_params", false}});
+    camel::core::OperatorTable::instance().declare("nn", {{"save_params", false}});
     loaded_ = true;
     return true;
 }

@@ -14,7 +14,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -609,8 +609,7 @@ bool foldStaticCast(
 /// registered type folder. Returns false when there is none or the types do not fix the result.
 bool foldFromTypes(
     GraphDraft &draft, gc_node_ref_t id, std::deque<camel::core::mm::RootHandle> &roots) {
-    const auto *folder =
-        camel::core::OperatorTypeFolderRegistry::instance().find(operUriOf(draft, id));
+    const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(draft, id));
     type::Type *resultType = draft.header(id)->dataType;
     if (!folder || !resultType || !draft.withInputsOf(id).empty()) {
         return false;
@@ -793,7 +792,8 @@ size_t cseDraft(GraphDraft &draft) {
             for (gc_node_ref_t in : inputs) {
                 const auto *h = draft.header(in);
                 if (isWrittenInPlace(draft, in) ||
-                    (h && h->kind == GCNodeKind::Oper && operUriOf(draft, in) == ":var/get")) {
+                    (h && h->kind == GCNodeKind::Oper &&
+                     operIdOf(draft, in) == camel::core::oper::VarGet)) {
                     return true;
                 }
             }

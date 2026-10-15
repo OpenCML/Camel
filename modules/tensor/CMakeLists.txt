@@ -34,14 +34,22 @@ add_camel_module(
     passes/fuse.cpp
 )
 
+# The GEMM and unary units are written for fused multiply-add: they are compiled with
+# contraction on (the rest of the project has it off, see the top-level CMakeLists.txt). Every
+# unit then rounds each product-sum once wherever the processor has FMA: the AVX2 and AVX-512
+# units on x86-64 and the portable unit on arm64 compute the same bits. The portable unit on an
+# x86-64 processor without AVX2 has no FMA and rounds twice.
+set_source_files_properties(kernels/gemm_generic.cpp kernels/unary_generic.cpp
+  PROPERTIES COMPILE_OPTIONS "-ffp-contract=on")
+
 # x86-64: add AVX2+FMA and AVX-512F GEMM and unary units, selected at runtime after a CPU check.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
   target_sources(tensor_cmo PRIVATE
     kernels/gemm_avx2.cpp kernels/gemm_avx512.cpp kernels/unary_avx2.cpp kernels/unary_avx512.cpp)
   set_source_files_properties(kernels/gemm_avx2.cpp kernels/unary_avx2.cpp
-    PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
+    PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma;-ffp-contract=on")
   set_source_files_properties(kernels/gemm_avx512.cpp kernels/unary_avx512.cpp
-    PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx2;-mfma")
+    PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx2;-mfma;-ffp-contract=on")
   target_compile_definitions(tensor_cmo PRIVATE CAMEL_TENSOR_HAS_AVX2_UNIT=1)
 endif()
 

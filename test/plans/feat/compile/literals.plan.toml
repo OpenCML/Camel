@@ -44,7 +44,7 @@ const want = [
   "0.5",
   "true true true",
   "false true",
-  "100000 100001",
+  "100000.0 100001.0 0.0 15.0",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -91,7 +91,7 @@ const want = [
   "0.5",
   "true true true",
   "false true",
-  "100000 100001",
+  "100000.0 100001.0 0.0 15.0",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -138,7 +138,7 @@ const want = [
   "0.5",
   "true true true",
   "false true",
-  "100000 100001",
+  "100000.0 100001.0 0.0 15.0",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -185,7 +185,7 @@ const want = [
   "0.5",
   "true true true",
   "false true",
-  "100000 100001",
+  "100000.0 100001.0 0.0 15.0",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -199,7 +199,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "literal_range.limits"
-desc = "The largest and the smallest literals an int and an i32 hold are accepted, -9223372036854775808 included, in every base and with an exponent; the four back ends print the same."
+desc = "The largest and the smallest literals an int and an i32 hold are accepted, -9223372036854775808 included, in every base; the four back ends print the same."
 kind = "behavior"
 case = "../../../cases/compile/literals/integer_limits.cml"
 args = ["${case}", "${backend}"]
@@ -214,7 +214,7 @@ const out = input.normalized.stdout.trim()
 const want = [
   "-9223372036854775808 9223372036854775807",
   "9223372036854775807 -9223372036854775808 7 511 -511",
-  "1000000000000000000 9000000000000000000 -9000000000000000000 15 1 0 0 0",
+  "0 0",
   "2147483647 -2147483648 1.5 -2147483648",
   "9223372036854775806 -9223372036854775807 -9223372036854775808",
 ].join('\n')
@@ -252,7 +252,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "literal_range.int_exponent_too_large"
-desc = "1e400 is an integer literal (no decimal point) and does not fit an int."
+desc = "1e400 is a floating-point literal (it has an exponent) and does not fit a float."
 kind = "behavior"
 case = "../../../cases/compile/literals/int_exponent_too_large.cml"
 args = ["-E", "short", "${case}"]
@@ -354,22 +354,15 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "literal_range.negative_exponent_warns"
-desc = "`1e-2` is the int 0 and `15e-1` the int 1, as before (whether such a literal is a float or an error is not decided); the dropped fraction is now a located warning. `1500e-2` is exactly 15 and is not reported."
+name = "literal_range.exponent_is_float"
+desc = "A literal with an exponent is a floating-point number (design principles 2.10): `1e-2` is 0.01 and `15e-1` is 1.5; nothing is truncated and nothing is warned about."
 kind = "behavior"
 case = "../../../cases/compile/literals/int_negative_exponent.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
-expect_stdout_contains = ["0 1 15"]
-expect_stderr_contains = ["name=SemanticDiag::IntegerLiteralTruncated", "'1e-2'", "'1.0e-2'", "'15e-1'"]
+expect_stdout_contains = ["0.01 1.5 15"]
+expect_output_not_contains = ["IntegerLiteralTruncated", "Warn"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const warnings = input.normalized.stderr.split('\n').filter((l) => l.includes('IntegerLiteralTruncated'))
-assert(warnings.length === 2, `expected 2 warnings, got ${warnings.length}: ${input.normalized.stderr}`)
-assert(warnings[0].includes(':2:13:'), warnings[0])
-}
-"""
 timeout_ms = 8000
 
 [[tests]]

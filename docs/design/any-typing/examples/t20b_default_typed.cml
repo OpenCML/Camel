@@ -1,0 +1,14 @@
+module t20b_default_typed
+
+// Control for t20_default_collector.cml: the same program with `string` in place of `any`.
+func churn(n: int): int { return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>) }
+func make(n: int): string[] {
+    return range(0, n)->map<(i: int): string => 'a-long-payload-string-number-' + string(i)>
+}
+func main(n: int): int sync {
+    let xs = make(3)
+    let c1 = churn(n)
+    let c2 = churn(n)
+    println(c1 + c2, xs[0], xs[1], xs[2])
+    return 0
+}

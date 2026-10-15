@@ -25,6 +25,8 @@
 
 namespace camel::parse::ast {
 
+// `Name` was the retired `use` declaration (design principles 2.12); the value is kept so that
+// the numbering of the others does not change.
 enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace };
 
 enum class UnpackType { Array, Tuple, Struct };
@@ -38,8 +40,27 @@ class StmtLoad : public Load {
     StmtType stmtType() const { return StmtType_; }
     const std::string geneCode() const override;
 
+    /// The documentation of a declaration: the text of the `///` lines right above it, without
+    /// the markers; empty if there is none.
+    const std::string &doc() const { return doc_; }
+    void setDoc(std::string doc) { doc_ = std::move(doc); }
+
+    /// For a declaration written in namespace blocks: the `using namespace` written in those
+    /// blocks (design principles 2.12: a `using` applies to the block it is written in; the
+    /// blocks are flattened into the module's declarations, so each declaration carries them).
+    const std::vector<Reference> &scopeUsings() const { return scopeUsings_; }
+    void addScopeUsings(const std::vector<Reference> &usings) {
+        scopeUsings_.insert(scopeUsings_.end(), usings.begin(), usings.end());
+    }
+
+  protected:
+    /// ` /// first line (+n lines)` for the dump of a documented declaration, else nothing.
+    std::string docSuffix() const;
+
   private:
     StmtType StmtType_;
+    std::string doc_;
+    std::vector<Reference> scopeUsings_;
 };
 
 class DataDeclLoad : public StmtLoad {
@@ -65,7 +86,9 @@ class FuncDeclLoad : public StmtLoad {
 
     const Reference &ref() const { return ref_; }
 
-    const std::string toString() const override { return "FuncDecl: " + ref_.toString(); }
+    const std::string toString() const override {
+        return "FuncDecl: " + ref_.toString() + docSuffix();
+    }
     const std::string geneCode() const override;
 
   private:
@@ -95,22 +118,6 @@ class TypeDeclLoad : public StmtLoad {
     std::vector<std::string> params_;
 };
 
-class NameDeclLoad : public StmtLoad {
-  public:
-    NameDeclLoad(Reference ref, Reference alias)
-        : StmtLoad(StmtType::Name), ref_(ref), alias_(alias) {}
-    const std::string toString() const override {
-        return "NameDecl: " + ref_.toString() + " as " + alias_.toString();
-    }
-
-    const Reference &ref() const { return ref_; }
-    const Reference &alias() const { return alias_; }
-    const std::string geneCode() const override;
-
-  private:
-    Reference ref_;
-    Reference alias_;
-};
 
 class UsingNamespaceLoad : public StmtLoad {
   public:

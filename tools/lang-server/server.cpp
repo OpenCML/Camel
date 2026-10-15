@@ -677,7 +677,10 @@ json Server::workspaceSymbol(const json &params) {
                 continue;
             }
             const std::string stamp =
-                std::to_string(fs::last_write_time(path, ec).time_since_epoch().count()) + ":" +
+                // The tick count is __int128 with libc++, which std::to_string does not take.
+                std::to_string(static_cast<long long>(
+                    fs::last_write_time(path, ec).time_since_epoch().count())) +
+                ":" +
                 std::to_string(fs::file_size(path, ec));
             auto &cached = workspaceCache_[normal];
             if (!cached.second || cached.first != stamp) {

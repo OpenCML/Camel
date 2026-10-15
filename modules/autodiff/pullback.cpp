@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 29, 2026
- * Updated: Oct. 03, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -687,6 +687,7 @@ class Backward final : public VjpBuilder {
     /// active value.
     void refuseActiveCollection(gc_node_ref_t node, Type *type);
     std::string_view operUri(gc_node_ref_t node) const;
+    camel::core::OperId operId(gc_node_ref_t node) const;
     /// Why the gradient cannot pass the call `call` (a CALL, or a FUNC left alone).
     std::string refusalReason(gc_node_ref_t call) const;
     /// Why the function the value `function` is is not known here.
@@ -1186,7 +1187,14 @@ void ForwardRewrite::rewriteClosureCall(
         return nullptr;
     }
     const auto *body = reinterpret_cast<const rt::GCOperBody *>(draft_.payloadOf(callee).data());
-    const std::string_view uri = body->uri();
+    // The three operators of this module that take a function, recognised by id.
+    static const camel::core::OperId kGrad =
+        camel::core::OperatorTable::instance().intern("autodiff:grad");
+    static const camel::core::OperId kValueAndGrad =
+        camel::core::OperatorTable::instance().intern("autodiff:value_and_grad");
+    static const camel::core::OperId kVjp =
+        camel::core::OperatorTable::instance().intern("autodiff:vjp");
+    const camel::core::OperId oper = body->oper;
     const auto staticFunction  = [&](gc_node_ref_t node) -> ::Function  *{
         const auto value = staticValue(draft_, node);
         auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
@@ -1194,15 +1202,13 @@ void ForwardRewrite::rewriteClosureCall(
     };
     const auto norm    = draft_.normInputsOf(callee);
     ::Function *result = nullptr;
-    if ((uri == "autodiff:grad" || uri == "autodiff:value_and_grad") && norm.size() == 1) {
+    if ((oper == kGrad || oper == kValueAndGrad) && norm.size() == 1) {
         ::Function *function = staticFunction(norm.front());
         if (function == nullptr) {
             return nullptr;
         }
-        GCGraph *graph = buildGradientGraph(
-            engine_.context(),
-            function->graph(),
-            uri == "autodiff:value_and_grad");
+        GCGraph *graph =
+            buildGradientGraph(engine_.context(), function->graph(), oper == kValueAndGrad);
         // The gradient reads the same captured values as f.
         result = ::Function::create(graph, function->tupleType(), mm::autoSpace());
         if (::Tuple *closure = function->tuple()) {
@@ -1210,8 +1216,7 @@ void ForwardRewrite::rewriteClosureCall(
                 result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), function->tupleType());
             }
         }
-    } else if (
-        uri == "autodiff:vjp" && norm.size() == 1 && draft_.withInputsOf(callee).size() == 1) {
+    } else if (oper == kVjp && norm.size() == 1 && draft_.withInputsOf(callee).size() == 1) {
         ::Function *function = staticFunction(norm.front());
         ::Function *rule     = staticFunction(draft_.withInputsOf(callee).front());
         if (function == nullptr || rule == nullptr) {
@@ -1580,7 +1585,8 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             refuseActiveCollection(node, type);
             continue;
         }
-        if (kindOf(forward_, node) == GCNodeKind::Oper && operUri(node) == ":var/get") {
+        if (kindOf(forward_, node) == GCNodeKind::Oper &&
+            operId(node) == camel::core::oper::VarGet) {
             continue;
         }
         // A function passed in from outside is given: it does not depend on a parameter.
@@ -1724,7 +1730,7 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
     case GCNodeKind::Accs:
         return "the function is read from a tuple, a struct or an array";
     case GCNodeKind::Oper:
-        if (operUri(function) == ":var/get") {
+        if (operId(function) == camel::core::oper::VarGet) {
             return "the function is read from a variable";
         }
         return std::format("the function is the result of '{}'", operUri(function));
@@ -1752,6 +1758,11 @@ std::string_view Backward::operUri(gc_node_ref_t node) const {
     return reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
 }
 
+camel::core::OperId Backward::operId(gc_node_ref_t node) const {
+    const auto payload = forward_.payloadOf(node);
+    return reinterpret_cast<const rt::GCOperBody *>(payload.data())->oper;
+}
+
 // Gradients do not flow through variables. A read of a variable of a differentiable type is
 // taken as a constant, which is only right when the content cannot depend on a differentiated
 // parameter. That is established here, and only for the differentiated function's own graph,
@@ -1776,7 +1787,7 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
             if (kindOf(forward_, node) == GCNodeKind::Port) {
                 depends = tangentTypeOf(type) != nullptr;
             } else if (!(kindOf(forward_, node) == GCNodeKind::Oper &&
-                         operUri(node) == ":var/get")) {
+                         operId(node) == camel::core::oper::VarGet)) {
                 for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
                     for (gc_node_ref_t input : inputs) {
                         depends = depends || dependsOnParameter(input);
@@ -1788,7 +1799,8 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
         return depends;
     };
     for (gc_node_ref_t read : order) {
-        if (kindOf(forward_, read) != GCNodeKind::Oper || operUri(read) != ":var/get" ||
+        if (kindOf(forward_, read) != GCNodeKind::Oper ||
+            operId(read) != camel::core::oper::VarGet ||
             tangentTypeOf(typeOf(forward_, read)) == nullptr) {
             continue;
         }
@@ -1828,10 +1840,10 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
                     continue;
                 }
                 const bool isOper = kindOf(forward_, user) == GCNodeKind::Oper;
-                if (isOper && operUri(user) == ":var/get") {
+                if (isOper && operId(user) == camel::core::oper::VarGet) {
                     continue;
                 }
-                if (isOper && operUri(user).starts_with(":op/assn")) {
+                if (isOper && camel::core::OperatorTable::instance().isAssignment(operId(user))) {
                     const auto stored = forward_.normInputsOf(user);
                     if (stored.size() > 1 && !dependsOnParameter(stored[1])) {
                         continue; // plain data: whenever it is stored, the read is a constant

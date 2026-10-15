@@ -1,0 +1,313 @@
+id = "compile.namespace_rules"
+order = 336
+tier = "feat"
+tags = ["feat", "compile", "semantic", "modules", "namespace"]
+desc = "Namespaces and imports by the rulings of 2026-10-14: lookup in namespace blocks, scoped using, one precedence rule, import forms, values in namespaces, own-module qualification"
+
+# Design principles 2.12 ("模块与命名空间"); docs/design/graph-model/README.cn.md section 8.
+# p01-p26 are the probes of the table in 8.1 (docs/design/graph-model/examples/ns), one test per
+# row, with the outcome the rulings give; p27-p32 are new.
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "ns.p01_qualified"
+desc = "Row 1: m::f, m::N::f, m::A::B::f."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p01_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "4 2 3\n"
+
+[[tests]]
+name = "ns.p02_using_module"
+desc = "Row 2: using namespace <module>, then f and N::f."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p02_using_module.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "4 2\n"
+
+[[tests]]
+name = "ns.p03_using_nested"
+desc = "Row 3: using namespace <module>::<namespace>."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p03_using_nested.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2 0\n"
+
+[[tests]]
+name = "ns.p04_sibling"
+desc = "Row 4 (N1): a name of the same namespace block without the prefix (it was UnresolvedReference)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p04_sibling.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n"
+
+[[tests]]
+name = "ns.p05_sibling_qualified"
+desc = "Row 4: the same name with the qualifier."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p05_sibling_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n"
+
+[[tests]]
+name = "ns.p20_type_sibling"
+desc = "Row 5 (N1): a type of the same namespace block without the prefix (it was UnresolvedTypeReference)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p20_type_sibling.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+
+[[tests]]
+name = "ns.p06_using_local"
+desc = "Row 6 (N2): using namespace over a namespace of the module itself (it was UnresolvedReference)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p06_using_local.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "ns.p07_reopen"
+desc = "Row 7: one namespace written in two blocks."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p07_reopen.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+
+[[tests]]
+name = "ns.p08_let_in_ns"
+desc = "Row 8 (N5): a value in a namespace block (it was a syntax error)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p08_let_in_ns.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "10\n"
+
+[[tests]]
+name = "ns.p09_import_one_name"
+desc = "Row 9 (N4): `import T from lib` imports the name T (it was an alias of the module); lib has no T."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p09_import_alias.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
+expect_diagnostic_line = 4
+
+[[tests]]
+name = "ns.p10_import_as"
+desc = "Row 10 (N4): `import lib as L` (it was a syntax error)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p10_import_as.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "4\n"
+
+[[tests]]
+name = "ns.p11_rename"
+desc = "Row 11: import { a as b } from m."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p11_rename.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "4\n"
+
+[[tests]]
+name = "ns.p12_use_retired"
+desc = "Row 12 (N6): `use` is no longer a declaration (it was FeatureNotSupported); the word is an ordinary name now, so this is a syntax error."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p12_use.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_line = 3
+
+[[tests]]
+name = "ns.p13_using_in_func"
+desc = "Row 13: using namespace in a function body applies there."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p13_using_in_func.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n"
+
+[[tests]]
+name = "ns.p24_using_scope"
+desc = "Row 13 (N2): a using in one function does not reach another (it applied to the whole module and printed 2 11)."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p24_using_scope.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 12
+
+[[tests]]
+name = "ns.p14_using_conflict"
+desc = "Row 14 (N2): two using bring inc with the same signature: AmbiguousName where it is used, with both sources (the first was taken silently)."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p14_using_conflict.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AmbiguousName"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 13
+expect_output_contains = ["The name 'inc' is ambiguous here: lib::Tools::inc, lib2::Tools::inc"]
+
+[[tests]]
+name = "ns.p15_using_shadow"
+desc = "Row 15 (N3): the module's own inc(int) comes before the one a using brings."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p15_using_shadow.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1001\n"
+
+[[tests]]
+name = "ns.p25_overload_layers"
+desc = "Row 16 (N3): the module's inc(string) and the inc(int) a using brings are in different layers and are not merged: inc(1) has no match, by the rule now."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p25_overload_merge.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["p25_overload_merge.cml:6:16: [Error]: No matching function found for argument types: <> (int)", "name=SemanticDiag::NoMatchingFunction"]
+
+[[tests]]
+name = "ns.p16_import_named_ns"
+desc = "Row 17: a namespace imported by name."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p16_import_named_ns.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n"
+
+[[tests]]
+name = "ns.p17_ns_path_decl"
+desc = "Row 18: namespace A::B { ... }."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p17_ns_path_decl.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5\n"
+
+[[tests]]
+name = "ns.p18_self_module"
+desc = "Row 19 (N7): the module qualifies its own name with its own name (it was UnresolvedReference)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p18_self_module.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
+
+[[tests]]
+name = "ns.p19_unexported"
+desc = "A name of a namespace the module did not export is not imported; the module itself compiles (its sibling call resolves in its namespace, N1)."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p19_unexported.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
+expect_diagnostic_line = 4
+expect_output_not_contains = ["hidden.cml"]
+
+[[tests]]
+name = "ns.p21_fn_value"
+desc = "Row 20: a qualified name as a function value."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p21_fn_value.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[2, 3, 4]\n"
+
+[[tests]]
+name = "ns.p22_nested_sibling_outer"
+desc = "A nested namespace names something of the enclosing namespace."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p22_nested_sibling_outer.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n"
+
+[[tests]]
+name = "ns.p26_ns_value_today"
+desc = "A top-level value used from a namespace function."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p26_ns_value_today.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "20\n"
+
+[[tests]]
+name = "ns.p27_import_from_ns"
+desc = "N6: import { ... } from m::N, with a renaming."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p27_import_from_ns.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2 0\n"
+
+[[tests]]
+name = "ns.p28_ns_values_export"
+desc = "N5: values of a namespace block, exported, used through the module and through a namespace imported by name; a value of the block that is not exported used by a function of the block."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p28_ns_values_export.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "10 20 11\n"
+
+[[tests]]
+name = "ns.p29_using_block"
+desc = "N2: a using in a namespace block applies to the declarations of that block only."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p29_using_block.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 12
+
+[[tests]]
+name = "ns.p30_using_own_nested"
+desc = "N2, N1, N7: using of a nested namespace of the module in a function body, a relative qualified name, and the module's own name as a qualifier."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p30_using_own_nested.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "12\n"
+
+[[tests]]
+name = "ns.p31_import_one"
+desc = "N4: import a from m brings the name a; import m as x names the module."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p31_import_one.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "4 2\n"
+
+[[tests]]
+name = "ns.p32_layers"
+desc = "N3: a function imported by name comes before the built-in function of the same name (they were merged, and the built-in one was taken)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p32_layers.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "100\n"
+
+[[tests]]
+name = "ns.p23_graph_names"
+desc = "Row 21 (N8): graph names in the dump; a function of the entry module is shown without the module, an imported one with it (see ns.p01_rgir)."
+kind = "behavior"
+case = "../../../cases/compile/namespace_rules/p01_qualified.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["lib::root", "lib::Tools::inc", "lib::Deep::Inner::three"]

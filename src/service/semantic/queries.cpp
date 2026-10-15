@@ -169,7 +169,7 @@ bool isKeywordToken(uint16_t type) {
 
 const std::vector<std::string> &builtinTypeNames() {
     static const std::vector<std::string> names = {
-        "int", "float", "bool", "string", "any", "void", "i32", "i64", "f32", "f64", "Map", "Set"};
+        "int", "float", "bool", "string", "void", "i32", "i64", "f32", "f64", "Map", "Set"};
     return names;
 }
 
@@ -935,8 +935,10 @@ Completion completionOf(const ExternalName &ext, int rank) {
     item.label = ext.name;
     item.kind  = ext.kind == ExternalName::Kind::Type
                      ? Completion::Kind::Type
-                     : (ext.kind == ExternalName::Kind::Namespace ? Completion::Kind::Module
-                                                                  : Completion::Kind::Function);
+                     : (ext.kind == ExternalName::Kind::Namespace
+                            ? Completion::Kind::Module
+                            : (ext.kind == ExternalName::Kind::Value ? Completion::Kind::Variable
+                                                                     : Completion::Kind::Function));
     item.detail = ext.signatures.empty() ? "" : ext.signatures.front();
     if (ext.signatures.size() > 1) {
         item.detail += "  (+" + std::to_string(ext.signatures.size() - 1) + " overloads)";
@@ -1434,12 +1436,17 @@ std::vector<SemanticToken> SemanticModel::semanticTokens() const {
             }
         }
         if (ext != nullptr) {
-            const uint8_t type = ext->kind == ExternalName::Kind::Type
-                                     ? TType
-                                     : (ext->kind == ExternalName::Kind::Namespace
-                                            ? TNamespace
-                                            : (ext->macro || facts.macroCall ? TMacro : TFunction));
-            put(ref.nameRange(), type, ext->module.empty() ? MDefaultLibrary : 0);
+            if (ext->kind == ExternalName::Kind::Value) {
+                put(ref.nameRange(), TVariable, MReadonly);
+            } else {
+                const uint8_t type = ext->kind == ExternalName::Kind::Type
+                                         ? TType
+                                         : (ext->kind == ExternalName::Kind::Namespace
+                                                ? TNamespace
+                                                : (ext->macro || facts.macroCall ? TMacro
+                                                                                 : TFunction));
+                put(ref.nameRange(), type, ext->module.empty() ? MDefaultLibrary : 0);
+            }
         }
         // Otherwise unknown: no token, the editor's grammar colours it.
     }

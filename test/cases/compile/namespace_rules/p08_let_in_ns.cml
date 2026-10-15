@@ -1,0 +1,8 @@
+// A value inside a namespace.
+namespace Config {
+    let limit = 10
+}
+func main(): int sync {
+    println(Config::limit)
+    return 0
+}

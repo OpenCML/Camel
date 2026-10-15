@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 09, 2025
- * Updated: Apr. 11, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,5 +29,5 @@ class BasicBuiltinExecutor : public Executor {
     static executor_ptr_t create(camel::core::context::context_ptr_t ctx);
 };
 
-/// Registers the builtin operators' traits (purity) with the core OperatorTraitsRegistry.
+/// Registers the builtin operators' traits (purity) with the core OperatorTable.
 void registerBuiltinOperatorTraits();

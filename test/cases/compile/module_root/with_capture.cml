@@ -1,0 +1,14 @@
+// A function with a `with` parameter that also uses a top-level value, called directly: the
+// `with` argument and the captured value reach the right ports (they were swapped, printing
+// 32 instead of 16).
+let k = 10
+
+with <s: int>
+func f(x: int): int {
+    return x * s + k
+}
+
+func main(): int sync {
+    println(f<2>(3))
+    return 0
+}

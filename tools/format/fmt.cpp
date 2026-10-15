@@ -50,7 +50,7 @@ Formatter::Formatter(const syn::Tree &tree, Options options) : tree(tree) {
         int channel = 0;
         if (token.kind == TK::Command) {
             channel = 2;
-        } else if (token.kind == TK::LineComment) {
+        } else if (token.kind == TK::LineComment || token.kind == TK::DocComment) {
             channel = 3;
         } else if (token.kind == TK::BlockComment) {
             channel = 4;
@@ -241,9 +241,11 @@ any Formatter::visitProgram(cst::Program context) {
         TrailingC | Multiline | PaddingNL | PRightOnly,
         1,
         headTokenRanges);
+    // A file of imports only: the comments have been written with the imports. An empty list
+    // with a context writes every comment of the context, which wrote them a second time.
     tailStr = formatList(
         tail,
-        context,
+        tail.empty() && !head.empty() ? syn::Node() : syn::Node(context),
         "; ",
         (this->preferSemis ? ";" : ""),
         TrailingC | Multiline | PaddingNL | PRightOnly,
@@ -288,16 +290,31 @@ any Formatter::visitImportDecl(cst::ImportDecl context) {
     string result            = "import ";
     const string path        = any_cast<string>(visitModuleName(context->get<cst::ModuleName>()));
     const auto &identDef     = context->get<cst::IdentDef>();
-    const auto &bracedIdents = context->get<cst::BracedIdents>();
+    const auto braced        = context->get<cst::BracedImports>();
+    const auto single        = context->get<cst::ImportItem>();
     if (context->tok(TK::KwFrom)) {
-        if (identDef) {
-            result += any_cast<string>(visitIdentDef(identDef));
+        if (single) {
+            // `import a from m`, `import a as b from m`: one name.
+            result += any_cast<string>(visit(single));
+        } else if (braced->all<cst::ImportItem>().empty()) {
+            result += "{}";
         } else {
-            result += any_cast<string>(visitBracedIdents(bracedIdents));
+            result += "{" +
+                      formatList(
+                          vec(braced->all<cst::ImportItem>()),
+                          braced,
+                          ", ",
+                          ",",
+                          PaddingSP | PaddingNL | PushScope) +
+                      "}";
         }
         result += " from " + path;
     } else {
         result += path;
+        if (identDef) {
+            // `import m as x`: the module under another name.
+            result += " as " + any_cast<string>(visitIdentDef(identDef));
+        }
     }
     return result;
 }
@@ -552,18 +569,6 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
         result += formatStringLiteral(context->tok(TK::String)->text());
     }
     return result;
-}
-
-/*
-useDecl    : USE (identDef '=')? identRef ;
-*/
-any Formatter::visitUseDecl(cst::UseDecl context) {
-    string result        = "use ";
-    const auto &identDef = context->get<cst::IdentDef>();
-    if (identDef) {
-        result += any_cast<string>(visitIdentDef(identDef)) + " = ";
-    }
-    return result + any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
 }
 
 /*
@@ -969,10 +974,6 @@ any Formatter::visitUnaryExpr(syn::Node context) {
                any_cast<string>(visitType(context->type()));
     }
     const string op = context->child(0)->text();
-    // `- 1` negates the number 1; written together it would be the literal -1.
-    if (op == "-" && !operand.empty() && std::isdigit(static_cast<unsigned char>(operand[0]))) {
-        return op + " " + operand;
-    }
     return op + operand;
 }
 
@@ -1292,7 +1293,9 @@ any Formatter::visitFuncType(cst::FuncType context) {
 identDef : IDENTIFIER ;
 */
 any Formatter::visitIdentDef(cst::IdentDef context) {
-    return context->tok(TK::Identifier)->text();
+    // The text of the node, not of an Identifier token: the `_` of `let _ = e` is a token of
+    // its own kind.
+    return context->text();
 }
 
 /*
@@ -1320,7 +1323,6 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(DataDecl)
         CAMEL_FORMAT(TypeDecl)
-        CAMEL_FORMAT(UseDecl)
         CAMEL_FORMAT(RetStmt)
         CAMEL_FORMAT(ImplMark)
         CAMEL_FORMAT(Modifiers)
@@ -1357,6 +1359,32 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(RelationalExpr)
         CAMEL_FORMAT(AdditiveExpr)
         CAMEL_FORMAT(MultiplicativeExpr)
+    case NK::LoopExpr: {
+        // loop state = init (for x in xs)? (while c)? { body }
+        string text = "loop " + any_cast<string>(visit(context.child(1).node())) + " = " +
+                      any_cast<string>(visit(context.expr()));
+        if (const auto clause = context.get<cst::LoopFor>()) {
+            text += " for " + any_cast<string>(visitIdentDef(clause.get<cst::IdentDef>())) +
+                    " in " + any_cast<string>(visit(clause.expr()));
+        }
+        if (const auto clause = context.get<cst::LoopWhile>()) {
+            text += " while " + any_cast<string>(visit(clause.expr()));
+        }
+        return text + " " + any_cast<string>(visitStmtBlock(context.get<cst::StmtBlock>()));
+    }
+    case NK::ImportItem: {
+        // name, or name as local
+        string item = any_cast<string>(visitIdentDef(context.get<cst::IdentDef>(0)));
+        if (context.get<cst::IdentDef>(1)) {
+            item += " as " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>(1)));
+        }
+        return item;
+    }
+    case NK::OrExpr:
+    case NK::AndExpr:
+        return formatBiOpsList(context, true);
+    case NK::PowerExpr:
+        return formatBiOpsList(context, true);
         CAMEL_FORMAT(NullableExpr)
         CAMEL_FORMAT(LinkExpr)
         CAMEL_FORMAT(CompExpr)

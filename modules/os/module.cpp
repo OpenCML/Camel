@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 04, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -78,7 +78,7 @@ bool OSModule::load() {
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("os", [ctx]() { return createOSExecutor(ctx); });
     // The purity of every operator (design principles 2.9).
-    camel::core::OperatorTraitsRegistry::instance().declare(
+    camel::core::OperatorTable::instance().declare(
         "os",
         {
             // The terminal, the process and the machine it runs on.

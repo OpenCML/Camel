@@ -280,32 +280,46 @@ These kinds require no body beyond `GCNode`:
 - `Cast`
 - `Sync`
 - `Gate`
-- `Bind`
-- `Dref`
+
+`Bind` and `Dref` are reserved kind values that never appear in a frozen graph
+(nothing creates `Bind`; `Dref` is a build-time placeholder that encoding
+rejects), so no consumer of `GCGraph` handles them.
 
 For these nodes, `blockCount` is just the number of blocks required by the
 header itself.
 
 ### 11.2 `OPER`
 
-`OPER` stores both the executable handle and its URI inline in the node body.
-
-The agreed direction is:
-
-- the operator handle belongs to the hot runtime node body
-- the URI string is short enough that inline storage is acceptable
-- no separate cold lookup table is required for URIs
-
-A representative layout is:
+`OPER` stores the executable handle and the operator's index in the operator
+table (`camel/core/operator_table.h`). The body is fixed-size:
 
 ```cpp
 struct GCOperBody {
-    operator_t op = nullptr;
-    uint16_t uriBytes = 0;
-    uint16_t reserved = 0;
-    // followed by URI bytes, padded to the next block boundary
+    operator_t op = nullptr;          // implementation, cached by a scheduler
+    camel::core::OperId oper = 0;     // operator table index
+    uint32_t reserved = 0;
+
+    std::string_view uri() const;     // resolved through the table, lock-free
 };
 ```
+
+- the operator handle belongs to the hot runtime node body
+- the URI, the declared traits (`pure`, `stateOnly`, `elementwise`, `mayFault`,
+  `callsGraphs`), the type resolver and the type folder are stored once per
+  operator in the table, not per node; passes ask the table by `OperId`
+- an `OperId` is process-local and never renumbered while the process lives
+- passes and schedulers recognise an operator by its `OperId`, never by comparing
+  the URI text: the operators the core knows have compile-time ids
+  (`camel::core::oper::VarGet`, `oper::MapArr`, `oper::Isolate`, ...; the table
+  interns their URIs first, in a fixed order), a module's pass interns the URIs
+  of its own operators once and compares ids, and the families "built-in"
+  (`:` prefix), "marked" (`:mark/`) and "assignment" (`:op/assn...`) are flags
+  of the entry (`isBuiltin`, `isMarked`, `isAssignment`). The URI is still how
+  a scheduler finds the implementation (the executor manager) and what messages
+  print
+
+(Until 2026-10-13 the URI characters were stored inline after the body, once per
+node.)
 
 ### 11.3 `FUNC`
 
@@ -328,7 +342,10 @@ heavy call descriptor.
 `ACCS` stores the accessor mode plus its compact parameter:
 
 - tuple index, or
-- interned struct-key id
+- the `SymId` of the struct field name (`camel/core/symbol.h`)
+
+The body is fixed-size: field names are interned in the process-wide symbol
+table and resolved through `GCAccsBody::key()`, which takes no lock.
 
 ### 11.6 `FILL`
 

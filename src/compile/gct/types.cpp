@@ -22,46 +22,46 @@
 
 namespace camel::compile::gct {
 
-std::string to_string(LoadType type) {
-    switch (type) {
-    case LoadType::DECL:
+std::string to_string(NodeKind kind) {
+    switch (kind) {
+    case NodeKind::DECL:
         return "DECL";
-    case LoadType::FUNC:
+    case NodeKind::FUNC:
         return "FUNC";
-    case LoadType::DATA:
+    case NodeKind::DATA:
         return "DATA";
-    case LoadType::TYPE:
+    case NodeKind::TYPE:
         return "TYPE";
-    case LoadType::NREF:
+    case NodeKind::NREF:
         return "NREF";
-    case LoadType::DREF:
+    case NodeKind::DREF:
         return "DREF";
-    case LoadType::VARI:
+    case NodeKind::VARI:
         return "VARI";
-    case LoadType::WAIT:
+    case NodeKind::WAIT:
         return "WAIT";
-    case LoadType::LINK:
+    case NodeKind::LINK:
         return "LINK";
-    case LoadType::WITH:
+    case NodeKind::WITH:
         return "WITH";
-    case LoadType::ACCS:
+    case NodeKind::ACCS:
         return "ACCS";
-    case LoadType::BRCH:
+    case NodeKind::BRCH:
         return "BRCH";
-    case LoadType::CASE:
+    case NodeKind::CASE:
         return "CASE";
-    case LoadType::CAST:
+    case NodeKind::CAST:
         return "CAST";
-    case LoadType::ANNO:
+    case NodeKind::ANNO:
         return "ANNO";
-    case LoadType::EXIT:
+    case NodeKind::EXIT:
         return "EXIT";
-    case LoadType::EXEC:
+    case NodeKind::EXEC:
         return "EXEC";
-    case LoadType::EXPT:
+    case NodeKind::EXPT:
         return "EXPT";
     default:
-        ASSERT(false, "Unknown LoadType");
+        ASSERT(false, "Unknown NodeKind");
     }
     return "UNKNOWN";
 }

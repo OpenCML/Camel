@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-128 diagnostics: 118 errors, 10 warnings.
+134 diagnostics: 123 errors, 11 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -60,7 +60,6 @@ prints one entry.
 | `0x03000011` | [SemanticDiag::ReturnTypeMismatch](#returntypemismatch) | Error |
 | `0x03000012` | [SemanticDiag::ElementTypeMismatch](#elementtypemismatch) | Error |
 | `0x03000013` | [SemanticDiag::CallingIncompleteFunction](#callingincompletefunction) | Error |
-| `0x03000014` | [SemanticDiag::ClosureCaptureAfterSelfCall](#closurecaptureafterselfcall) | Error |
 | `0x03000015` | [SemanticDiag::ImportNameNotExported](#importnamenotexported) | Error |
 | `0x03000016` | [SemanticDiag::LiteralStaticCastFailed](#literalstaticcastfailed) | Error |
 | `0x03000017` | [SemanticDiag::DynamicCastForbidden](#dynamiccastforbidden) | Error |
@@ -76,8 +75,6 @@ prints one entry.
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
 | `0x03000023` | [SemanticDiag::LiteralOutOfRange](#literaloutofrange) | Error |
-| `0x03000025` | [SemanticDiag::ImportCycle](#importcycle) | Error |
-| `0x03000026` | [SemanticDiag::ImportedFunctionUsesModuleValue](#importedfunctionusesmodulevalue) | Error |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
 | `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
@@ -104,12 +101,21 @@ prints one entry.
 | `0x030000B2` | [SemanticDiag::EmptyArrayWithoutType](#emptyarraywithouttype) | Error |
 | `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error |
 | `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error |
+| `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error |
+| `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error |
+| `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error |
+| `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error |
+| `0x030000D3` | [SemanticDiag::AmbiguousName](#ambiguousname) | Error |
+| `0x030000E2` | [SemanticDiag::AnyNotAllowed](#anynotallowed) | Error |
+| `0x030000E3` | [SemanticDiag::ConditionNotBool](#conditionnotbool) | Error |
+| `0x030000E4` | [SemanticDiag::MatchCaseTypeMismatch](#matchcasetypemismatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
 | `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
+| `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -414,7 +420,13 @@ To compare, write '==': if x == 1 then ...
 Choose another name, for example '{0}_'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/rulings/loop_is_keyword.cml`, run as `camel -E short test/cases/parse/rulings/loop_is_keyword.cml`)
+
+```camel
+func loop(i: int): int {
+    return i
+}
+```
 
 ### MissingComma
 
@@ -1124,24 +1136,6 @@ func main(): int sync {
 }
 ```
 
-### ClosureCaptureAfterSelfCall
-
-`0x03000014` · Error · `SemanticDiag::ClosureCaptureAfterSelfCall`
-
-**Message**
-
-```text
-Closure variable '{0}' declared after the function '{1}' has already called itself.
-```
-
-**Help**
-
-```text
-All closure captures must be declared before the first call to the function. If the function is recursive, ensure closure captures are declared before any self-call to avoid changes in its calling convention.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### ImportNameNotExported
 
 `0x03000015` · Error · `SemanticDiag::ImportNameNotExported`
@@ -1158,7 +1152,16 @@ Reference '{0}' is declared as imported but is not exported by its module.
 Check that the module exports the name '{0}' or remove the import declaration.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/namespace_rules/p09_import_alias.cml`, run as `camel -E short test/cases/compile/namespace_rules/p09_import_alias.cml`)
+
+```camel
+// `import <name> from <module>`: what does the single name mean?
+import T from lib
+func main(): int sync {
+    println(T::root())
+    return 0
+}
+```
 
 ### LiteralStaticCastFailed
 
@@ -1404,13 +1407,21 @@ func main(): int sync {
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/module_imports/d2_value.cml`, run as `camel -E short test/cases/compile/module_imports/d2_value.cml`)
+**Example** (`test/cases/compile/not_supported/pattern_identifier.cml`, run as `camel test/cases/compile/not_supported/pattern_identifier.cml`)
 
 ```camel
-import { pi } from mi_values
+module pattern_identifier
+
+func f(n: int): int {
+    return match n {
+        case other => 1
+        case _ => 0
+    }
+}
 
 func main(): int sync {
-    println(pi)
+    println('never printed')
+    println(f(1))
     return 0
 }
 ```
@@ -1538,64 +1549,6 @@ func main(): int sync {
 }
 ```
 
-### ImportCycle
-
-`0x03000025` · Error · `SemanticDiag::ImportCycle`
-
-**Message**
-
-```text
-The module '{0}' is imported while it is itself being loaded ({1}).
-```
-
-**Help**
-
-```text
-A module cannot import itself, directly or through the modules it imports. A file that imports a module of its own name imports itself. Move what the modules share into another module.
-```
-
-**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
-
-```camel
-import { even } from cyc_a
-
-func main(): int sync {
-    println(even(10))
-    return 0
-}
-```
-
-### ImportedFunctionUsesModuleValue
-
-`0x03000026` · Error · `SemanticDiag::ImportedFunctionUsesModuleValue`
-
-**Message**
-
-```text
-The function '{0}' is used from another module, but it uses '{1}' of the top level of its own module, directly or through a function it calls.
-```
-
-**Help**
-
-```text
-A function used from another module cannot yet read a 'let' or a 'var' of the top level of the module that declares it: the name would be looked up in the importing module. Pass the value as a parameter or a 'with' parameter, or write it as a function without parameters ('func base(): int { return 10 }').
-```
-
-**Example** (`test/cases/compile/generics/err_export_capture.cml`, run as `camel test/cases/compile/generics/err_export_capture.cml`)
-
-```camel
-module err_export_capture
-
-import { biased } from export_lib
-
-func main(): int sync {
-    // DESIGN-QUESTION(generic-export): the instance is built in this module, so the body
-    // cannot capture a top-level value of the module that declares it.
-    println(biased(1))
-    return 0
-}
-```
-
 ### ImportNameConflict
 
 `0x03000027` · Error · `SemanticDiag::ImportNameConflict`
@@ -1603,13 +1556,13 @@ func main(): int sync {
 **Message**
 
 ```text
-The name '{0}' is imported from the modules '{1}' and '{2}' with the same signature {3}.
+The name '{0}' is imported from the modules '{1}' and '{2}' with {3}.
 ```
 
 **Help**
 
 ```text
-Two imports that bring the same name with the same parameter types conflict; neither is chosen silently. Import the name from one of the modules only, and reach the other through its module ('import m' and then 'm::name').
+Two imports that bring the same name with the same parameter types conflict, and so do two that bring a value of the same name; neither is chosen silently. Give one of them another name where it is imported ('import { name as other_name } from m'), or import the name from one of the modules only and reach the other through its module ('import m', then 'm::name').
 ```
 
 **Example** (`test/cases/compile/module_imports/d5_conflict.cml`, run as `camel -E short test/cases/compile/module_imports/d5_conflict.cml`)
@@ -2188,13 +2141,14 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-**Example** (`test/cases/compile/module_imports/d3_mutual.cml`, run as `camel -E short test/cases/compile/module_imports/d3_mutual.cml`)
+**Example** (`test/cases/compile/module_load/value_cycle_modules.cml`, run as `camel -E short test/cases/compile/module_load/value_cycle_modules.cml`)
 
 ```camel
-import { even } from cyc_a
+// Values of two modules that depend on each other: ModuleValueCycle across the modules.
+import cycle_x
 
 func main(): int sync {
-    println(even(10))
+    println(cycle_x::x)
     return 0
 }
 ```
@@ -2396,6 +2350,256 @@ func main(): int sync {
 }
 ```
 
+### LogicalOperandNotBool
+
+`0x030000C0` · Error · `SemanticDiag::LogicalOperandNotBool`
+
+**Message**
+
+```text
+The {1} side of '{0}' has type '{2}', not 'bool'.
+```
+
+**Help**
+
+```text
+'&&' and '||' are branches on a 'bool': 'a && b' is 'if a then b else false', 'a || b' is 'if a then true else b'. The right side is evaluated only when the left side does not decide, both sides are 'bool', and neither operator can be overloaded. For logic that evaluates both sides (element-wise logic on tensors, an operator of a type of your own) use '&' and '|'.
+```
+
+**Example** (`test/cases/consistency/logical/left_not_bool.cml`, run as `camel -E short test/cases/consistency/logical/left_not_bool.cml`)
+
+```camel
+func main(): int sync {
+    let n = 3
+    println(n && true)
+    return 0
+}
+```
+
+### ExportedVariable
+
+`0x030000D0` · Error · `SemanticDiag::ExportedVariable`
+
+**Message**
+
+```text
+The variable '{0}' cannot be exported.
+```
+
+**Help**
+
+```text
+A 'var' of the top level of a module is read and written only by the module's own functions (design principles 2.11): export the functions that read and write it ('export sync func bump(): int sync { wait cnt += 1; return cnt }'). A 'let' can be exported.
+```
+
+**Example** (`test/cases/compile/module_root/export_var.cml`, run as `camel -E short test/cases/compile/module_root/export_var.cml`)
+
+```camel
+// A `var` cannot be exported (design principles 2.11).
+import export_var_lib
+
+func main(): int sync {
+    return 0
+}
+```
+
+### ModuleValueCycle
+
+`0x030000D1` · Error · `SemanticDiag::ModuleValueCycle`
+
+**Message**
+
+```text
+The value '{0}' depends on itself: {1}.
+```
+
+**Help**
+
+```text
+The values of the top level of modules are computed before 'main' starts, each from the values it uses (design principles 2.11): directly, through the functions its initializer calls, and through the values those use, in any module. A value cannot be computed from itself. Compute one of the values in the chain without the other, or turn it into a function.
+```
+
+**Example** (`test/cases/compile/module_load/value_cycle.cml`, run as `camel -E short test/cases/compile/module_load/value_cycle.cml`)
+
+```camel
+// Top-level values that depend on each other: ModuleValueCycle, with the chain.
+let a = b + 1
+let b = c * 2
+let c = a - 3
+
+func main(): int sync {
+    println(a)
+    return 0
+}
+```
+
+### CaptureAfterRecursiveCall
+
+`0x030000D2` · Error · `SemanticDiag::CaptureAfterRecursiveCall`
+
+**Message**
+
+```text
+The function '{1}' uses '{0}' only after it is called in its own recursion, where the call could not pass it.
+```
+
+**Help**
+
+```text
+A function that calls itself, directly or through other functions, must use a variable it captures, or be complete, before the recursive call that would pass it: a call is ordered among the uses of the variables it was known to use, and a function value holds what the function captured when it was made. Use '{0}' before the recursive call, or pass it as a parameter.
+```
+
+**Example** (`test/cases/compile/module_load/recursive_late_var.cml`, run as `camel -E short test/cases/compile/module_load/recursive_late_var.cml`)
+
+```camel
+// A recursive function that uses a captured variable only after it calls itself: the call
+// could not pass it (CaptureAfterRecursiveCall).
+var count = 0
+
+sync func walk(n: int): int sync {
+    let rest = if n > 0 then walk(n - 1) else 0
+    wait count += 1
+    return rest + count
+}
+
+func main(): int sync {
+    println(walk(3))
+    return 0
+}
+```
+
+### AmbiguousName
+
+`0x030000D3` · Error · `SemanticDiag::AmbiguousName`
+
+**Message**
+
+```text
+The name '{0}' is ambiguous here: {1}.
+```
+
+**Help**
+
+```text
+Two 'using namespace' in force bring something of this name that cannot be told apart (design principles 2.12): a value or a type from each, or functions of the same parameter types. Write the qualified name of the one meant.
+```
+
+**Example** (`test/cases/compile/namespace_rules/p14_using_conflict.cml`, run as `camel -E short test/cases/compile/namespace_rules/p14_using_conflict.cml`)
+
+```camel
+// Two using-directives that bring the same name with the same signature.
+import lib
+import lib2
+using namespace lib::Tools
+using namespace lib2::Tools
+func main(): int sync {
+    println(inc(1))
+    return 0
+}
+```
+
+### AnyNotAllowed
+
+`0x030000E2` · Error · `SemanticDiag::AnyNotAllowed`
+
+**Message**
+
+```text
+'any' is not a type a program can write: {0}.
+```
+
+**Help**
+
+```text
+Every value has a definite type after compilation (design principles 2.11, 2.12). A type parameter ('typeas T') takes values of several types, a tuple or a struct holds values of different types side by side, and 'decode_as' of the json module reads JSON of a known shape.
+```
+
+**Example** (`test/cases/compile/any_typing/written_parameter.cml`, run as `camel test/cases/compile/any_typing/written_parameter.cml`)
+
+```camel
+module written_parameter
+
+// `any` is not a type a program can write (design principles 2.12). A parameter that takes
+// values of several types declares a type parameter: `func keep(x: typeas T, n: int): T`.
+func keep(x: any, n: int): any {
+    return x
+}
+func main(): int sync {
+    println(keep('abc', 3))
+    return 0
+}
+```
+
+### ConditionNotBool
+
+`0x030000E3` · Error · `SemanticDiag::ConditionNotBool`
+
+**Message**
+
+```text
+The condition of this 'if' has type '{0}'; a condition is a 'bool'.
+```
+
+**Help**
+
+```text
+There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 'x != null').
+```
+
+**Example** (`test/cases/compile/any_typing/if_condition.cml`, run as `camel test/cases/compile/any_typing/if_condition.cml`)
+
+```camel
+module if_condition
+
+import { decode } from json
+
+// A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
+// bool (docs/design/any-typing, defect D5). It is a `Json` now, and a condition is a bool.
+func main(): int sync {
+    let a = decode('true')
+    println(if a then 1 else 2)
+    return 0
+}
+```
+
+### MatchCaseTypeMismatch
+
+`0x030000E4` · Error · `SemanticDiag::MatchCaseTypeMismatch`
+
+**Message**
+
+```text
+This case of a 'match' on a value of type '{0}' is a value of type '{1}'.
+```
+
+**Help**
+
+```text
+A case is compared with the value matched, so it must have the same type. Write the case as a value of that type, or convert the value matched first.
+```
+
+**Example** (`test/cases/compile/any_typing/match_subject.cml`, run as `camel test/cases/compile/any_typing/match_subject.cml`)
+
+```camel
+module match_subject
+
+import { decode } from json
+
+// A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
+// bit, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing, defect D5). It
+// is a `Json` now, and a case has the type of the value matched.
+func main(): int sync {
+    let v = decode('"ab"')
+    let r = match v {
+        case 1 => 'one'
+        case 'ab' => 'ab'
+        case _ => 'other'
+    }
+    println(r)
+    return 0
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -2591,6 +2795,32 @@ A number written without a decimal point is an 'int', with an exponent too. For 
 func main(): int sync {
     println(1e-2, 15e-1, 1500e-2)
     return 0
+}
+```
+
+### UnusedFallibleValue
+
+`0x031000C0` · Warn · `SemanticDiag::UnusedFallibleValue`
+
+**Message**
+
+```text
+This value has type '{0}' and nothing uses it: an error it holds is lost{1}.
+```
+
+**Help**
+
+```text
+A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '?->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
+```
+
+**Example** (`test/cases/consistency/unused_fallible/main_undeclared.cml`, run as `camel -E short test/cases/consistency/unused_fallible/main_undeclared.cml`)
+
+```camel
+// A `main` without a declared return type that ends in an error value: nothing takes it.
+func main() sync {
+    println('start')
+    parse_int('zz')
 }
 ```
 

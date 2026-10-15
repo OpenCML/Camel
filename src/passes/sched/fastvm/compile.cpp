@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 21, 2025
- * Updated: May. 04, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
+#include <unordered_map>
 
 using namespace std;
 using namespace camel::core::error;
@@ -75,8 +78,34 @@ static std::vector<data_idx_t> directCallDstSlotsOf(camel::runtime::GCGraph *tar
     return dstSlots;
 }
 
-const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() {
-    static const std::unordered_map<std::string, OpCode> supportedInlineOperators = {
+/// The instruction that runs a marked operator (camel/core/operator_table.h), if the bytecode
+/// has one.
+static std::optional<MarkOpCode> markOpCodeOf(camel::core::OperId id) {
+    namespace oper = camel::core::oper;
+    switch (id) {
+    case oper::MapArr:
+        return MarkOpCode::MapArr;
+    case oper::ApplyArr:
+        return MarkOpCode::ApplyArr;
+    case oper::ReduceArr:
+    case oper::UnorderedReduceArr:
+        return MarkOpCode::ReduceArr;
+    case oper::FilterArr:
+        return MarkOpCode::FilterArr;
+    case oper::ForeachArr:
+    case oper::UnorderedForeachArr:
+        return MarkOpCode::ForeachArr;
+    case oper::Isolate:
+        return MarkOpCode::Isolate;
+    default:
+        return std::nullopt;
+    }
+}
+
+/// The operators the bytecode runs as one instruction, by OperId (the table is built once, from
+/// the URIs, when the first graph is compiled).
+const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperatorsMap() {
+    static const std::unordered_map<std::string_view, OpCode> byUri = {
         {":op/add_i", OpCode::IADD}, {":op/add_l", OpCode::LADD},
         {":op/add_f", OpCode::FADD}, {":op/add_d", OpCode::DADD},
 
@@ -107,6 +136,13 @@ const std::unordered_map<std::string, OpCode> &getSupportedInlineOperatorsMap() 
         {":op/ge_i", OpCode::IGE},   {":op/ge_l", OpCode::LGE},
         {":op/ge_f", OpCode::FGE},   {":op/ge_d", OpCode::DGE},
     };
+    static const std::unordered_map<camel::core::OperId, OpCode> supportedInlineOperators = [] {
+        std::unordered_map<camel::core::OperId, OpCode> byId;
+        for (const auto &[uri, code] : byUri) {
+            byId.emplace(camel::core::OperatorTable::instance().intern(uri), code);
+        }
+        return byId;
+    }();
     return supportedInlineOperators;
 }
 
@@ -431,10 +467,6 @@ static bytecode_vec_t compileRuntimeGraph(
             appendBytecode(bytecodes, OpCode::CALL, record->dataIndex, {}, normOps, withOps);
             break;
 
-        case camel::runtime::GCNodeKind::Bind:
-            ASSERT(false, "BIND node not implemented.");
-            break;
-
         case camel::runtime::GCNodeKind::Func: {
             bool isTail = runtimeNodeIndex == tailValueNode && hasOnlyTrivialSuffixAfter(i);
             auto *targetRuntimeGraph = graph->directCalleeGraphOf(runtimeNodeIndex);
@@ -480,7 +512,7 @@ static bytecode_vec_t compileRuntimeGraph(
 
             if (opt.enableInlineOperators) {
                 const auto &inlineOpMap = getSupportedInlineOperatorsMap();
-                auto it                 = inlineOpMap.find(uri);
+                auto it                 = inlineOpMap.find(operBody->oper);
                 if (it != inlineOpMap.end()) {
                     requireInputCount("OPER", runtimeNodeIndex, "norm", normOps.size(), 2);
                     appendBytecode(
@@ -495,21 +527,9 @@ static bytecode_vec_t compileRuntimeGraph(
                 }
             }
 
-            if (uri.starts_with(":mark/")) {
-                MarkOpCode markOp;
-                if (uri == ":mark/map_arr") {
-                    markOp = MarkOpCode::MapArr;
-                } else if (uri == ":mark/apply_arr") {
-                    markOp = MarkOpCode::ApplyArr;
-                } else if (uri == ":mark/reduce_arr" || uri == ":mark/unordered_reduce_arr") {
-                    markOp = MarkOpCode::ReduceArr;
-                } else if (uri == ":mark/filter_arr") {
-                    markOp = MarkOpCode::FilterArr;
-                } else if (uri == ":mark/foreach_arr" || uri == ":mark/unordered_foreach_arr") {
-                    markOp = MarkOpCode::ForeachArr;
-                } else if (camel::execute::isFaultIsolationUri(uri)) {
-                    markOp = MarkOpCode::Isolate;
-                } else {
+            if (camel::core::OperatorTable::instance().isMarked(operBody->oper)) {
+                const std::optional<MarkOpCode> markOp = markOpCodeOf(operBody->oper);
+                if (!markOp) {
                     ctx->rtmDiags()->of(RuntimeDiag::UnrecognizedOperatorURI).commit(uri);
                     break;
                 }
@@ -523,7 +543,7 @@ static bytecode_vec_t compileRuntimeGraph(
                     withOps,
                     true,
                     {
-                        .mark = markOp,
+                        .mark = *markOp,
                     });
                 break;
             }
@@ -564,8 +584,6 @@ static bytecode_vec_t compileRuntimeGraph(
         case camel::runtime::GCNodeKind::Port:
             [[fallthrough]];
         case camel::runtime::GCNodeKind::Sync:
-            [[fallthrough]];
-        case camel::runtime::GCNodeKind::Dref:
             continue;
 
         default:
@@ -646,13 +664,18 @@ compileAndLink(context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileS
 LinkedBytecodeResult compileAndLinkFrom(
     context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt,
     const KnownEntryPc &known, size_t baseOffset) {
-    bytecode_vec_t linked;
-    std::vector<BytecodeIndex> graphs;
-    std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
-
     std::vector<camel::runtime::GCGraph *> uniqueGraphs =
         camel::runtime::collectReachableGraphs(entry);
     reverse(uniqueGraphs.begin(), uniqueGraphs.end());
+    return compileAndLinkGraphs(std::move(ctx), uniqueGraphs, opt, known, baseOffset);
+}
+
+LinkedBytecodeResult compileAndLinkGraphs(
+    context_ptr_t ctx, std::span<camel::runtime::GCGraph *const> uniqueGraphs,
+    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset) {
+    bytecode_vec_t linked;
+    std::vector<BytecodeIndex> graphs;
+    std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
 
     for (auto *runtimeGraph : uniqueGraphs) {
         ASSERT(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");

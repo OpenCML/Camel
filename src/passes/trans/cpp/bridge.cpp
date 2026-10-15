@@ -279,8 +279,6 @@ std::string primitiveTypeExpr(Type *type) {
         return "Type::String()";
     case TypeCode::Ref:
         return "Type::Ref()";
-    case TypeCode::Any:
-        return "Type::Any()";
     default:
         throw std::runtime_error(std::format("unsupported primitive type '{}'", type->toString()));
     }
@@ -301,7 +299,6 @@ std::string serializeTypeInitExpr(Type *type, const std::function<std::string(Ty
     case TypeCode::Void:
     case TypeCode::String:
     case TypeCode::Ref:
-    case TypeCode::Any:
         return primitiveTypeExpr(type);
 
     case TypeCode::Array: {
@@ -461,7 +458,6 @@ bool isAtomicTypeForCpp(Type *type) {
     case TypeCode::Void:
     case TypeCode::String:
     case TypeCode::Ref:
-    case TypeCode::Any:
         return true;
     default:
         return false;

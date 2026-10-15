@@ -1,0 +1,8 @@
+// namespace A::B { ... } written with a path
+namespace A::B {
+    func f(): int { return 5 }
+}
+func main(): int sync {
+    println(A::B::f())
+    return 0
+}

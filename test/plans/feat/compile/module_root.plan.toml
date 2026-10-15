@@ -1,0 +1,194 @@
+id = "compile.module_root"
+order = 334
+tier = "feat"
+tags = ["feat", "compile", "semantic", "modules", "import"]
+desc = "All modules build into one root graph; a capture is bound to the value it captures, not to its name"
+
+# Design principles 2.11 ("模块"); docs/design/graph-model/README.cn.md 3.7 and 3.9. Every
+# program here runs on several back ends: the root graph and the capture ports are ordinary
+# graph structure, which no back end treats specially.
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+# ---- Exported functions use the top level of their own module ----
+
+[[tests]]
+name = "root.own_values"
+desc = "An exported function reads and writes a top-level `var` of its module and reads a `let` of it."
+kind = "behavior"
+case = "../../../cases/compile/module_root/own_values.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n4\n4\n"
+
+[[tests]]
+name = "root.own_values_fvm"
+desc = "The same on the bytecode VM."
+kind = "behavior"
+case = "../../../cases/compile/module_root/own_values.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "2\n4\n4\n"
+
+[[tests]]
+name = "root.own_values_prl"
+desc = "The same on the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/compile/module_root/own_values.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_stdout_exact = "2\n4\n4\n"
+
+[[tests]]
+name = "root.own_values_shadow"
+desc = "The importing module has a `let` and a `var` of the same names: the imported functions use their own module's."
+kind = "behavior"
+case = "../../../cases/compile/module_root/own_values_shadow.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n2\n1000 1000\n"
+
+[[tests]]
+name = "root.lib_uses"
+desc = "A function of another module reaches its module's values directly, through a private function, as a generic instance, as a function value and as an element function."
+kind = "behavior"
+case = "../../../cases/compile/module_root/lib_uses.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
+
+[[tests]]
+name = "root.lib_uses_inline"
+desc = "The same after inlining."
+kind = "behavior"
+case = "../../../cases/compile/module_root/lib_uses.cml"
+args = ["${case}", "std::inline", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
+
+[[tests]]
+name = "root.lib_uses_simplify"
+desc = "The same after the macro evaluator and the simplifier."
+kind = "behavior"
+case = "../../../cases/compile/module_root/lib_uses.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "11 61 11\n21 [11, 12] [15]\n"
+
+[[tests]]
+name = "root.diamond"
+desc = "Two modules use a function of a third that uses its top-level value: computed once, before `main` starts."
+kind = "behavior"
+case = "../../../cases/compile/module_root/diamond.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "computing the common value\nmain starts\n41 42\n"
+
+[[tests]]
+name = "root.diamond_jit"
+desc = "The same with the JIT."
+kind = "behavior"
+case = "../../../cases/compile/module_root/diamond.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "computing the common value\nmain starts\n41 42\n"
+
+# ---- A capture is bound to its value, within one module ----
+
+[[tests]]
+name = "root.capture_shadow"
+desc = "A local of the caller named like a top-level value the callee uses does not take its place (it did: 6 instead of 11)."
+kind = "behavior"
+case = "../../../cases/compile/module_root/capture_shadow.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "11 5\n"
+
+[[tests]]
+name = "root.with_capture"
+desc = "A `with` argument and a captured value of a function called directly reach their own ports (they were swapped: 32 instead of 16)."
+kind = "behavior"
+case = "../../../cases/compile/module_root/with_capture.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "16\n"
+
+[[tests]]
+name = "root.with_capture_fvm"
+desc = "The same on the bytecode VM."
+kind = "behavior"
+case = "../../../cases/compile/module_root/with_capture.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "16\n"
+
+# ---- Exported values (graph model step 7) ----
+
+[[tests]]
+name = "root.values"
+desc = "Exported values imported by name and through the module, used at the top level and in functions; the effectful one is computed once, before `main`."
+kind = "behavior"
+case = "../../../cases/compile/module_root/values.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "geometry: making the unit vector\nmain starts\n3.14159 12.56636 6.28318\n6.28318 1.0\n"
+
+[[tests]]
+name = "root.values_prl"
+desc = "The same on the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/compile/module_root/values.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_stdout_exact = "geometry: making the unit vector\nmain starts\n3.14159 12.56636 6.28318\n6.28318 1.0\n"
+
+[[tests]]
+name = "root.values_simplify"
+desc = "The same after the macro evaluator and the simplifier, which fold the constant values."
+kind = "behavior"
+case = "../../../cases/compile/module_root/values.cml"
+args = ["${case}", "std::macro", "std::opt::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "geometry: making the unit vector\nmain starts\n3.14159 12.56636 6.28318\n6.28318 1.0\n"
+
+[[tests]]
+name = "root.values_unused"
+desc = "A value of the imported module that nothing uses is not computed (its initializer would print), and gets no warning: a library's value unused by one program is not a mistake."
+kind = "behavior"
+case = "../../../cases/compile/module_root/values_unused.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3.14159\n"
+expect_output_not_contains = ["making the unit vector", "Warn"]
+
+[[tests]]
+name = "root.values_cpp"
+desc = "std::cpp passes an imported literal value to the entry function like one of the entry module."
+kind = "behavior"
+case = "../../../cases/compile/module_root/values_unused.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["generated::f_main(3.141590)"]
+
+[[tests]]
+name = "root.export_var"
+desc = "A `var` cannot be exported (design principles 2.11): ExportedVariable at the variable, in the module that exports it."
+kind = "negative"
+case = "../../../cases/compile/module_root/export_var.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["export_var_lib.cml:4:12: [Error]: The variable 'count' cannot be exported", "name=SemanticDiag::ExportedVariable", "name=SemanticDiag::ImportedModuleHasErrors"]
+
+[[tests]]
+name = "root.value_conflict"
+desc = "Two imports by name that bring values of one name conflict: ImportNameConflict at the second."
+kind = "negative"
+case = "../../../cases/compile/module_root/value_conflict.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameConflict"
+expect_diagnostic_line = 3
+expect_output_contains = ["The name 'limit' is imported from the modules 'value_conflict_a' and 'value_conflict_b' with a value in both"]

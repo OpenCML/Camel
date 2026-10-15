@@ -1,0 +1,9 @@
+module lib_values
+
+namespace Config {
+    export let limit = 10
+    let hidden = 5
+    export func doubled(): int { return limit * 2 + hidden - 5 }
+}
+
+export let base = Config::limit + 1

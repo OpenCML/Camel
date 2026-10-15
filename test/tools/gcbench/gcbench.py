@@ -135,7 +135,7 @@ def run_once(camel, args, mode, extra_env):
             stats[key] = float(value)
     # Timings that a program prints differ from run to run; its other lines must not.
     lines = [text for text in stdout.strip().splitlines() if "_ms=" not in text and " seconds" not in text]
-    return {"wall": wall, "exit": status, "rss_kb": usage.ru_maxrss, "stats": stats, "stdout": lines}
+    return {"wall": wall, "exit": status, "rss_kb": usage.ru_maxrss // (1024 if sys.platform == "darwin" else 1), "stats": stats, "stdout": lines}
 
 
 def main():

@@ -14,13 +14,13 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
  * Generic, module-agnostic graph optimizations. They consult only the core
- * OperatorTraitsRegistry, never module knowledge:
+ * OperatorTable, never module knowledge:
  *
  *   std::opt::fold  evaluates pure operators whose inputs are all static and
  *                   replaces them by static values, and replaces an element

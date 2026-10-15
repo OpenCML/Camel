@@ -316,7 +316,7 @@ Precedence, most specific first:
 Operators without a rule are an error on differentiated paths. Structurally
 non-differentiable operators (`shape`, `zeros`, comparisons, integer arithmetic)
 stop gradients silently. The builder interface and the rule registry move from
-the nn module to core, beside `OperatorTraitsRegistry`, because the transform
+the nn module to core, beside the operator table (`OperatorTable`), because the transform
 is a core pass and must not depend on nn.
 
 Correctness is checked mechanically: every rule gets a finite-difference test,
@@ -465,7 +465,7 @@ What differs from the design above:
     the leaf's type and rank stand in (they are never read); a constant needs
     no output. An integer counter stays an int64 scalar and is an int64
     output of the model, a bool a bool output. This is the usual shape of a
-    data-dependent loop: `func loop(h: Tensor, k: int): (Tensor, int)`,
+    data-dependent loop: `func spin(h: Tensor, k: int): (Tensor, int)`,
     stopped by a threshold on the state or a maximum count.
   Refused, each with a diagnostic at the recursive call or the export request:
   a carried value whose dtype or shape changes between calls; a tuple, struct
@@ -531,7 +531,7 @@ What differs from the design above:
     number in the loss and as an output of the model. What is accepted for
     the gradient is NARROWER than for the forward loop: ONE if / else must
     decide the recursion (write a maximum count into the condition,
-    `if k >= limit || done(h) then (h, k) else loop(step(h), k + 1)`; a
+    `if k >= limit || done(h) then (h, k) else spin(step(h), k + 1)`; a
     second, nested branch that also ends the loop exports forward and is
     refused in the gradient as "several branches decide"). The cost is that
     of the route: no tape, the step is recomputed, quadratic in the number of

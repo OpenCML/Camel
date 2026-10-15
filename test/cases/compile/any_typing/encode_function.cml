@@ -1,0 +1,12 @@
+module encode_function
+
+import { encode } from json
+
+// encode takes a value of every type that has a JSON form, by a type rule (design principles
+// 2.12: no parameter of type `any`). A function has none: refused when the call is compiled.
+// It used to be accepted and fault at run time.
+func inc(x: int): int { return x + 1 }
+func main(): int sync {
+    println(encode(inc))
+    return 0
+}

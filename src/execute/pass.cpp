@@ -48,6 +48,7 @@
 #include "passes/trans/tns/topo_node_seq.h"
 
 #include "camel/utils/log.h"
+#include "camel/utils/phase_timer.h"
 
 #include <algorithm>
 #include <atomic>
@@ -75,6 +76,19 @@ using PassScopePtr = scope_ptr_t<std::string, PassFactory, std::string>;
 namespace {
 
 FastVMConfig makeDefaultFastVmJitConfig() {
+#if !ENABLE_FASTVM_JIT
+    // The JIT has a code generator for x86-64 only; in a build without it std::jit is the
+    // bytecode interpreter of std::fvm, with the same results. Said once per process, in the log
+    // (-v) and not as a warning: the same command line must run on every platform, also under
+    // -Werror.
+    static std::once_flag said;
+    std::call_once(said, [] {
+        CAMEL_LOG_WARN_S(
+            "JIT",
+            "std::jit: this build has no native code generator (x86-64 only); the program runs "
+            "on the bytecode interpreter, as under std::fvm.");
+    });
+#endif
     FastVMConfig config{};
     config.jitMode           = FastVMConfig::JitMode::OnDemand;
     config.jitHotThreshold   = 1;
@@ -795,6 +809,7 @@ PassApplyResult applyPassesDetailed(
         if (factory) {
             camel::core::mm::autoSpace().safepoint(std::format("before pass {}", p));
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), graph); });
+            camel::utils::phase::Scope phaseScope("pass", p);
             auto pass = factory(ctx);
             // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
             // pass (the program executes), "pass:<name>" for rewrite and translation passes.

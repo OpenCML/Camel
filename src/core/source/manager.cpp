@@ -351,12 +351,32 @@ void OriginSemanticMap::registerBundle(origin_id_t origin, SemanticBundle bundle
     if (bundle.mainOrigin == kInvalidOriginId) {
         bundle.mainOrigin = origin;
     }
-    bundles_[origin] = std::move(bundle);
+    if (origin >= kDenseLimit) {
+        sparse_[origin] = std::move(bundle);
+        return;
+    }
+    const auto index = static_cast<size_t>(origin);
+    if (index >= slots_.size()) {
+        slots_.resize(index + 1, 0);
+    }
+    if (slots_[index] != 0) {
+        bundles_[slots_[index] - 1] = std::move(bundle);
+        return;
+    }
+    bundles_.push_back(std::move(bundle));
+    slots_[index] = static_cast<uint32_t>(bundles_.size());
 }
 
 const SemanticBundle *OriginSemanticMap::bundle(origin_id_t origin) const {
-    auto it = bundles_.find(origin);
-    return it == bundles_.end() ? nullptr : &it->second;
+    if (origin < slots_.size()) {
+        const uint32_t slot = slots_[static_cast<size_t>(origin)];
+        return slot == 0 ? nullptr : &bundles_[slot - 1];
+    }
+    if (sparse_.empty()) {
+        return nullptr;
+    }
+    auto it = sparse_.find(origin);
+    return it == sparse_.end() ? nullptr : &it->second;
 }
 
 void EntitySemanticMap::registerBundle(const std::string &entityId, SemanticBundle bundle) {

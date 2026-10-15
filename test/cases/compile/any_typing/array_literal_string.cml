@@ -1,0 +1,10 @@
+module array_literal_string
+
+// The same defect without `any`: the literal `5` fixed the element type to `int`, and the
+// computed element `s` (a string) was stored as an `int` without a check.
+func main(): int sync {
+    let s = 'a' + 'b'
+    let xs = [s, 5]
+    println(xs[0] + xs[1] > 1000)
+    return 0
+}

@@ -1,0 +1,8 @@
+/// Refused by std::cpp: an array value
+module r01_array
+
+func main(): int sync {
+    let xs = [1, 2, 3]
+    println(len(xs))
+    return 0
+}

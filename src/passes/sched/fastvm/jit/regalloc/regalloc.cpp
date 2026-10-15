@@ -555,8 +555,11 @@ bool linearScanVReg(const x64::MirBuffer &buf, VRegAllocation *out, std::string 
     std::vector<size_t> calls;
     for (size_t i = 0; i < buf.size(); ++i) {
         const x64::MirOp op = buf[i].op;
+        // A helper call clobbers them as any C++ call; an exit to the driver comes back, if it
+        // does, with nothing but the frame.
         if (op == x64::MirOp::CallRax || op == x64::MirOp::CallRel32 ||
-            op == x64::MirOp::NativeJitFuncCall)
+            op == x64::MirOp::NativeJitFuncCall || op == x64::MirOp::CallHelper ||
+            op == x64::MirOp::ExitToDriver || op == x64::MirOp::SafepointPoll)
             calls.push_back(i);
     }
 

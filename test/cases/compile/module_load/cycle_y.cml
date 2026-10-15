@@ -1,0 +1,5 @@
+/** Helper module: the other half of the cycle. */
+module cycle_y
+import cycle_x
+
+export let y = cycle_x::x * 2

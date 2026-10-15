@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: May. 29, 2024
- * Updated: May. 05, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,6 +30,7 @@
 
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
+#include "camel/compile/gir/value_entity.h"
 #include "camel/compile/semantic_recorder.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
@@ -54,25 +55,212 @@ using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
 using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
 
+/// The graph builder of a program (design principles 2.11, "模块"; the graph model,
+/// docs/design/graph-model/README.cn.md 3.9). One builder serves every module of the program:
+/// the functions of all modules are graphs of their own, and the values of the top level of
+/// every module are nodes of ONE root graph, `__root__`, whose exit is the call of the entry
+/// module's `main`. A function reaches a value of the top level of any module through a
+/// capture port bound to that value's node (captureInto), never by looking up its name where
+/// the function is called, so that a function keeps its meaning wherever it is used.
 class Builder {
   public:
-    Builder(
-        const camel::core::context::context_ptr_t &context,
-        const camel::core::module::module_ptr_t &module)
-        : context_(context), module_(module) {}
+    explicit Builder(const camel::core::context::context_ptr_t &context) : context_(context) {}
 
-    compile_graph_ptr_t build(GCT::node_ptr_t &gct, camel::core::error::diagnostics_ptr_t diags);
+    /// The builder of the program compiled on `context`, created on first use.
+    static Builder &of(const camel::core::context::context_ptr_t &context);
+
+    // Loading is three steps (the graph model, 3.9.4): declare every module, build, link.
+
+    /// Step one for the module `module`, whose construction tree is `tree`: makes the graphs
+    /// of its functions (without bodies), registers its generic functions, its top-level
+    /// values and its types, and fills its export table. Nothing of another module is looked
+    /// at, so modules may import each other. Diagnostics go to `diags`. The tree must outlive
+    /// the program's graphs: function bodies and generic instances are lowered from it.
+    void declareModule(
+        const camel::core::module::module_ptr_t &module, GCT::Tree &tree,
+        camel::core::error::diagnostics_ptr_t diags);
+
+    /// Steps two and three for the program whose entry is Context::mainModule (every module
+    /// it imports, directly or not, declared): builds the function bodies and the top-level
+    /// values of every module, in the order of the imports, each one when it is first needed
+    /// (so the top level of a module does not depend on the order it is written in); then
+    /// links (captures, the call of the entry module's `main`, the summaries of effects and
+    /// the warnings that need them). False when a module is in error.
+    bool buildProgram();
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
   private:
+    // ---- The modules of the program ----
+    // What the builder keeps of one module: its tree, its diagnostics and the scopes of its
+    // top level (the names it declares; its functions are graphs whose scopes are entered
+    // from these). A function body of the module is built with these in force, whichever
+    // module asks for it.
+    struct GenericTemplate;
+    struct BuiltFunction;
+    struct PendingIgnoredWrite;
+    struct ModuleUnit;
+    // A top-level declaration of a module that is built when first needed (step two): a value
+    // declaration (`let`/`var`, one or several names) or a function.
+    enum class BuildState { Declared, Building, Built, Failed };
+    struct TopLevelDeclaration {
+        GCT::node_ptr_t gct;
+        ModuleUnit *unit = nullptr;
+        BuildState state = BuildState::Declared;
+        // The names a value declaration binds; the function's name for a function.
+        std::vector<std::string> names;
+        bool isVar = false;
+        // The graph of a function (made when the module was declared).
+        compile_graph_ptr_t graph;
+    };
+    struct ModuleUnit {
+        camel::core::module::module_ptr_t module;
+        GCT::Tree *tree = nullptr;
+        camel::core::error::diagnostics_ptr_t diags;
+        node_scope_ptr_t nodeScope;
+        graph_scope_ptr_t graphScope;
+        decorated_scope_ptr_t decoratedScope;
+        std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
+        // The types the module declares, for its exports.
+        std::unordered_map<Reference, Type *> typeDecls;
+        // Whether the module is the entry of the program.
+        bool entry = false;
+        // Its top-level declarations to build, in the order they are written, and the value
+        // declaration of each name of its top level.
+        std::vector<std::unique_ptr<TopLevelDeclaration>> declarations;
+        std::unordered_map<std::string, TopLevelDeclaration *> values;
+        // The values it exports (their entities point here), and its export list.
+        std::vector<std::unique_ptr<ExportedValue>> exportedValues;
+        GCT::node_ptr_t exportList = nullptr;
+        // Whether step two found it in error.
+        bool failed = false;
+        // What the link step reports per module, collected while its bodies are built.
+        std::vector<BuiltFunction> builtFunctions;
+        std::vector<compile_graph_ptr_t> builtBodies;
+        std::vector<PendingIgnoredWrite> pendingIgnoredWrites;
+    };
+    std::unordered_map<const camel::core::module::Module *, std::unique_ptr<ModuleUnit>> units_;
+    // The module being built.
+    ModuleUnit *unit_ = nullptr;
+    // The module whose top level put each node on the root graph, by node id: the warnings
+    // about the top level of a module (EffectNotExecuted) are about its own nodes only.
+    std::vector<const ModuleUnit *> rootNodeOwners_;
+    // The modules in the order they were declared.
+    std::vector<ModuleUnit *> unitOrder_;
+    // The full name of `name` of `unit`: `module::path::name`, without the module for the
+    // entry module (design principles 2.12: the module is left out where it is not needed).
+    static std::string qualifiedName(const ModuleUnit &unit, const std::string &name);
+    // The top-level functions of every module by their graphs.
+    std::unordered_map<DraftGraphBuilder *, TopLevelDeclaration *> topLevelFunctions_;
+    // The module of each graph made directly under the root graph (a top-level function, a
+    // generic instance of one, a lambda at the top level): the root graph lists as its own
+    // functions only the entry module's, so that what the program does not use of the
+    // modules it imports is not part of it.
+    std::unordered_map<DraftGraphBuilder *, const ModuleUnit *> rootSubGraphOwners_;
+    // What is being built on demand, outermost first: a top-level value or function. A value
+    // asked for while it is in here depends on itself (ModuleValueCycle).
+    std::vector<TopLevelDeclaration *> buildStack_;
+    // Where the name being resolved is written: a diagnostic about what resolving it found
+    // (a cycle, a late capture) is reported there.
+    camel::source::origin_id_t refOrigin_ = camel::source::kInvalidOriginId;
+    // ---- Names (names.cpp; design principles 2.12) ----
+    // The namespace path of the top-level declaration being built (`A::B` for `A::B::f`; for
+    // a generic instance, its template's): a name written in it is looked up there first.
+    std::vector<std::string> namespacePath_;
+    // The `using namespace` in force, one frame per block (the module's, the namespace blocks
+    // of the declaration, the blocks of the body down to the current one).
+    std::vector<const std::vector<Reference> *> usingFrames_;
+    // What a name a `using namespace` brings stands for: a name of the module itself, or an
+    // entity of an imported module; `shown` is the qualified name for diagnostics.
+    struct UsingMatch {
+        std::string ownName;
+        std::optional<camel::core::module::entity> entity;
+        std::string shown;
+    };
+    static bool isOperatorName(const std::string &name);
+    static bool sameParameterTypes(FunctionType *a, FunctionType *b);
+    // The unit of the module whose names are being resolved (module_).
+    ModuleUnit *currentModuleUnit() const;
+    // Whether `name` is declared in a scope below the module's top level (layer 1).
+    bool declaredLocally(const std::string &name) const;
+    // Whether `name` (with its namespaces) is declared at the top level of `unit`.
+    bool declaredAtTopLevel(const ModuleUnit &unit, const std::string &name) const;
+    // The name to look up in the scopes for `written` (layers 1 and 2): `written` itself when
+    // it is local or not the module's; else the module's name it stands for, from the
+    // innermost namespace out, the module's own name stripped from it (N1, N7).
+    std::string moduleLevelName(const std::string &written) const;
+    // Layer 4: what the `using namespace` in force bring under the name `written`; null when
+    // none does. Reports AmbiguousName at `at` when two bring things that cannot be told apart.
+    std::optional<UsingMatch> throughUsing(const std::string &written, const GCT::node_ptr_t &at);
+    // Enters the frame of `using namespace` of `node` (a block, a top-level declaration) for as
+    // long as it lives.
+    struct UsingScope {
+        Builder &self;
+        bool pushed = false;
+        UsingScope(Builder &b, const std::vector<Reference> *usings) : self(b) {
+            if (usings != nullptr) {
+                self.usingFrames_.push_back(usings);
+                pushed = true;
+            }
+        }
+        ~UsingScope() {
+            if (pushed) {
+                self.usingFrames_.pop_back();
+            }
+        }
+        UsingScope(const UsingScope &)            = delete;
+        UsingScope &operator=(const UsingScope &) = delete;
+    };
+    // Switches the builder to the top level of a module for as long as it lives, and back.
+    class UnitContext;
+    friend class UnitContext;
+    // Step two for one module: its top-level declarations in the order they are written.
+    void buildModuleBody(ModuleUnit &unit);
+    // Builds the top-level value declaration `declaration` unless it is built: in its own
+    // module's top level, wherever the builder is. A value already being built depends on
+    // itself: ModuleValueCycle.
+    void buildTopLevelValue(TopLevelDeclaration &declaration);
+    // Builds the body of the top-level function `graph` unless it is built or being built (a
+    // recursive call). An error in it is reported and leaves the caller's build going.
+    void ensureFunctionBuilt(const compile_graph_ptr_t &graph);
+    // When `name` names a top-level value of the current module not built yet: builds it and
+    // returns true (nodeAt then finds it).
+    bool buildTopLevelValueNamed(const std::string &name);
+    // The node of a value another module exports, built if it is not.
+    node_handle_t exportedValueNode(ExportedValue &value);
+    // Reports ModuleValueCycle: `declaration` is asked for while it is being built.
+    [[noreturn]] void reportValueCycle(const TopLevelDeclaration &declaration);
+    // The name a top-level declaration is shown by in a diagnostic of the current module.
+    std::string shownName(const TopLevelDeclaration &declaration) const;
+    // Fills the export table of the current module from its export list `expt`: at step one
+    // everything but the functions with decorators, which exist once their bodies are built
+    // (`decorated`).
+    void exportDeclarations(const GCT::node_ptr_t &expt, bool decorated);
+    // Notes the nodes of the root graph added since `firstNode` as nodes of the current module.
+    void claimRootNodes(size_t firstNode);
+    // Makes the root graph the first time a module is declared.
+    void ensureRootGraph();
+    // The exit of the root graph: the call of the entry module's `main` (EntryModuleMissingMain
+    // when it has none), which takes the parameters `main` takes.
+    void buildEntryCall();
+    // The value of the top level of a module that a node of the root graph is: the module that
+    // declares it and its name there (with the namespaces it is declared in). A capture of
+    // such a node is a capture of that value; diagnostics name it so.
+    struct TopLevelValue {
+        const camel::core::module::Module *module;
+        std::string name;
+    };
+    std::unordered_map<node_handle_t, TopLevelValue> topLevelValues_;
+
+    // The tree of the module being built. Nodes the builder writes itself (a compound
+    // assignment spelled out, the tag operators of `??`) are made by it.
+    GCT::Tree *tree_ = nullptr;
     compile_graph_ptr_t rootGraph_;
     compile_graph_ptr_t currGraph_;
 
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
     decorated_scope_ptr_t decoratedScope_;
-    std::unordered_map<Reference, Type *> typeDecls_;
 
     camel::core::context::context_ptr_t context_;
     camel::core::module::module_ptr_t module_;
@@ -118,14 +306,72 @@ class Builder {
     // An argument of a call: its value node and the expression it was written as.
     struct Argument {
         node_handle_t node;
-        GCT::node_ptr_t expr;
+        GCT::node_ptr_t expr = nullptr;
     };
 
-    // Track whether this Graph has already been used (via createFuncDataNode).
-    // A used Graph can no longer accept additional closure captures.
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
 
-    std::unordered_set<DraftGraphBuilder *> usedGraphs_;
+    // ---- Captures (the graph model, 3.7: a capture port is bound to what it captures) ----
+    // A graph (function, lambda, branch arm, ...) that uses a value of an enclosing graph
+    // holds it in a capture port. The port is bound to the node it stands for, its origin:
+    // a node of the enclosing graph the value is computed in, or, for a value of the top
+    // level of a module, its node on the root graph. Wherever the graph is called or made a
+    // function value, the caller supplies the value of that same origin, as the caller sees
+    // it (captureInto): the origin itself when it is in the caller's graph, the caller's own
+    // capture port of it otherwise. A name is never looked up again where a function is
+    // used: before, `k` was resolved where a function capturing `k` was called, and a local
+    // `k` of the caller, or another module's `k`, silently took the place of the right one.
+    struct CapturedValue {
+        node_handle_t origin;
+        node_handle_t port;
+        // The name the graph uses it by, for dumps and diagnostics.
+        std::string name;
+    };
+    // The capture ports of each graph, in the order they were made: the order of the closure
+    // ports, or, once the graph is called directly, of the with-ports after its declared ones.
+    std::unordered_map<DraftGraphBuilder *, std::vector<CapturedValue>> capturedValues_;
+    // The origin of each capture port, and the name each origin was first captured by (a
+    // variable is named by it in diagnostics).
+    std::unordered_map<node_handle_t, node_handle_t> captureOriginOf_;
+    std::unordered_map<node_handle_t, std::string> originNames_;
+    // Graphs whose function value has been made (a DATA node of the function, or a FILL of it
+    // with its captures). The value holds the captures the graph had then, so the graph
+    // cannot take one more.
+    std::unordered_set<DraftGraphBuilder *> valueUsedGraphs_;
+    // The captures refused so (CaptureAfterRecursiveCall), each reported once.
+    std::set<std::pair<DraftGraphBuilder *, node_handle_t>> lateCaptures_;
+    // A direct call of a graph (a FUNC node): its captures are passed as With inputs after
+    // the declared `with` arguments, in the order of the callee's capture ports, by the link
+    // step (linkCaptureSites) once the module is built. `values` are the callee's captures as
+    // the caller saw them when the call was built; a capture the callee makes later (a
+    // recursive function that calls itself before it uses a value) is looked up then.
+    struct CaptureSite {
+        compile_graph_ptr_t caller;
+        node_handle_t call;
+        compile_graph_ptr_t callee;
+        std::vector<node_handle_t> values;
+        // When the call is a branch arm: the BRCH, which every captured value must precede.
+        node_handle_t branch = nullptr;
+        // How many of the callee's captures are linked already.
+        size_t linked = 0;
+    };
+    std::vector<CaptureSite> captureSites_;
+    /// The value of `origin` as `graph` sees it: `origin` when it is a node of `graph`;
+    /// otherwise the capture port of `graph` bound to it, made (with the ports of the graphs
+    /// between `graph` and the origin's graph) when there is none yet. `name` is the name
+    /// the new ports are shown with.
+    node_handle_t
+    captureInto(const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name);
+    /// The name a capture of `origin` is shown with: the qualified name of a top-level value
+    /// (with its module when it is not the current module's), `fallback` otherwise.
+    std::string captureNameOf(node_handle_t origin, const std::string &fallback) const;
+    /// Registers the direct call `call` of `callee` in the current graph: its captures, as
+    /// the current graph sees them now, to be linked by linkCaptureSites.
+    void addCaptureSite(
+        node_handle_t call, const compile_graph_ptr_t &callee, node_handle_t branch = nullptr);
+    /// The link step for captures: passes to every direct call the captures of its callee,
+    /// including the ones the callee made after the call was built, until nothing changes.
+    void linkCaptureSites();
     // The decorated form of each function declared with decorators, by its own graph.
     std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> decoratedOf_;
     // The functions that stand for library operators named as values (operatorValueGraphOf),
@@ -147,7 +393,7 @@ class Builder {
     std::unordered_set<node_handle_t> variables_;
     // What the compiler knows about a node's value beyond static data, for operators whose
     // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
-    // operator result that its argument types fix (OperatorTypeFolderRegistry), e.g. the shape
+    // operator result that its argument types fix (its type folder), e.g. the shape
     // of a tensor whose type carries it. `arrayElementStatics_`: for an array written in place
     // with some elements computed (`[n, 3]`), the elements that are constants. The graph is not
     // changed by either: the operator and the FILL stay, std::opt folds them later.
@@ -178,51 +424,51 @@ class Builder {
     // the call or branch is then a use of each captured variable, and a write of those the
     // graph writes (design principles 2.6: tracking of modifications is complete).
     struct CaptureSummary {
-        // Names of the captured variables, in capture order.
-        std::vector<std::string> variables;
+        // The captured variables (the origins of the capture ports that hold a cell), in
+        // capture order.
+        std::vector<node_handle_t> variables;
         // Those the body itself stores into or hands to a `var` parameter. What its callees
         // and arms write is derived from `callees` (capturedWritesOf), not recorded here: at
         // a recursive call it is only an upper bound.
-        std::set<std::string> written;
+        std::set<node_handle_t> written;
         // The graphs the body calls directly or enters as arms.
         std::vector<DraftGraphBuilder *> callees;
     };
     enum class BodyState { Open, Built };
     std::unordered_map<DraftGraphBuilder *, CaptureSummary> captures_;
     std::unordered_map<DraftGraphBuilder *, BodyState> bodyStates_;
-    std::unordered_map<node_handle_t, std::string> capturePortNames_;
-    // A captured variable as the current graph sees it at a call or branch.
+    // A captured variable as the current graph sees it at a call or branch: the node of the
+    // current graph that holds it, and the variable itself (its origin).
     struct CapturedUse {
         node_handle_t variable;
-        std::string name;
+        node_handle_t origin;
         bool written;
     };
     // An unwaited write of captured variables outside a sync block, reported once every body
     // is built: while a recursive function's body is open its writes are only an upper bound.
     struct PendingIgnoredWrite {
         std::vector<DraftGraphBuilder *> graphs;
-        std::vector<std::string> names;
+        std::vector<node_handle_t> variables;
         camel::source::origin_id_t origin;
         std::string subject;
         std::string verb;
     };
-    std::vector<PendingIgnoredWrite> pendingIgnoredWrites_;
-    // The functions and lambdas of the module, in source order, for the check that a function
-    // with side effects declares them (the `sync` function modifier).
+    // (ModuleUnit::pendingIgnoredWrites.) The functions and lambdas of the module, in source
+    // order, for the check that a function with side effects declares them (the `sync`
+    // function modifier): ModuleUnit::builtFunctions.
     struct BuiltFunction {
         DraftGraphBuilder *graph;
         camel::source::origin_id_t origin;
         std::string name;
     };
-    std::vector<BuiltFunction> builtFunctions_;
     // Dropped effects (design principles 2.1): outside a sync block an effectful expression
     // whose result nothing uses is not connected to the graph's exit and does not run. That
     // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
     // graphs that are branch arms (reported through their branch, not as calls).
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
     std::unordered_set<DraftGraphBuilder *> armGraphs_;
-    // The function bodies and arms of the module, in the order they were built.
-    std::vector<compile_graph_ptr_t> builtBodies_;
+    // The function bodies and arms of a module, in the order they were built, are in
+    // ModuleUnit::builtBodies.
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -239,30 +485,29 @@ class Builder {
         compile_graph_ptr_t graph;
         // An error was found in the body: later calls with the same types fail quietly.
         bool failed = false;
-        // The root graph of the module the instance was built in. A module that imports a
-        // generic function builds its own instances (DESIGN-QUESTION(generic-export)).
-        DraftGraphBuilder *owner = nullptr;
     };
     struct GenericTemplate {
         std::string name;
-        GCT::node_ptr_t func;
+        GCT::node_ptr_t func = nullptr;
         // The declared type with the variables of enclosing instances replaced; the function's
         // own variables remain.
         FunctionType *funcType = nullptr;
         // The bindings in force where the template was declared (a generic function declared
         // inside an instance of another one).
         camel::core::type::type_bindings_t outerBindings;
-        // Where the function was declared: instances are built there, not at the call.
+        // Where the function was declared: instances are built there, not at the call. There is
+        // one instance per set of types in the whole program, whichever module calls it.
         compile_graph_ptr_t ownerGraph;
-        // The module that declares the function and the root graph of its builder. A builder
-        // with another root graph is an importing module: it builds the instance under its
-        // own root graph, and resolves the names of the body in the declaring module.
+        // The module that declares the function: the names of the body are resolved there.
         camel::core::module::module_ptr_t module;
-        DraftGraphBuilder *homeRoot = nullptr;
         node_scope_ptr_t nodeScope;
         graph_scope_ptr_t graphScope;
         decorated_scope_ptr_t decoratedScope;
         std::shared_ptr<Scope<std::string, std::shared_ptr<GenericTemplate>>> templateScope;
+        // The namespace and the `using namespace` in force where it was declared: its body
+        // resolves its names as if it were built there.
+        std::vector<std::string> namespacePath;
+        std::vector<const std::vector<Reference> *> usingFrames;
         std::vector<GenericInstance> instances;
         // Instances whose bodies are being built right now, one inside another.
         size_t openInstances = 0;
@@ -285,11 +530,6 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
-    // Set while an instance of a generic function imported from another module is built: the
-    // name of that function. Such a body cannot capture a module-level value of its module.
-    std::string foreignInstanceOf_;
-    // Where each function imported from another module was last named in this module.
-    std::unordered_map<const void *, camel::source::origin_id_t> importedUseOrigins_;
     std::unordered_map<node_handle_t, template_ptr_t> genericDrefs_;
     // The templates of functions written in place (anonymousTemplateOf): nothing else owns
     // them.
@@ -375,7 +615,13 @@ class Builder {
                 });
             CAMEL_LOG_DEBUG_S("GIR Builder", "Accessing node '{}' from scope {}", name, ss.str());
         });
-        return nodeScope_->get(name);
+        auto found = nodeScope_->get(name);
+        // A value of the top level written further down, or in a module not yet built: built
+        // now (the top level does not depend on the order it is written in).
+        if (!found.has_value() && buildTopLevelValueNamed(name)) {
+            found = nodeScope_->get(name);
+        }
+        return found;
     }
     std::optional<graph_set_ptr_t> graphsAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
@@ -417,11 +663,13 @@ class Builder {
 
     // Reports a name imported from two modules with the same signature (ImportNameConflict).
     void reportImportNameConflicts();
-    // Refuses the use of a function of another module that captures values of the top level
-    // of its own module (ImportedFunctionUsesModuleValue).
-    void rejectImportedFunctionWithCaptures(const compile_graph_ptr_t &graph);
+    // A use of the function `graph` in the current graph: its function value
+    // (`callableAsResult`), or a direct call of it (`allowParameterization`; a FUNC node, or a
+    // CALL of its value when its value was made before). `branch` is the BRCH node when the
+    // call is a branch arm.
     node_handle_t createFuncDataNode(
-        const compile_graph_ptr_t &graph, bool getCallableNode, bool allowParameterization);
+        const compile_graph_ptr_t &graph, bool callableAsResult, bool allowParameterization,
+        node_handle_t branch = nullptr);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
     node_handle_t valueNodeOf(const std::any &res);
@@ -506,7 +754,7 @@ class Builder {
     // The captured variables `graph` writes: by its own body, by its arms and by the functions
     // it calls directly, transitively. Exact once every graph reached is built; for a graph
     // whose body is still open (a recursive call) every variable it captured counts as written.
-    std::set<std::string> capturedWritesOf(DraftGraphBuilder *graph) const;
+    std::set<node_handle_t> capturedWritesOf(DraftGraphBuilder *graph) const;
     // The captured variables of `callee` as nodes of the current graph, which becomes a
     // caller of `callee`.
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
@@ -522,14 +770,15 @@ class Builder {
     // warns (EffectNotExecuted) about the effects that the exit does not depend on.
     // With `report` false it only records whether the exit depends on an effect.
     void reportDroppedEffects(const compile_graph_ptr_t &graph, bool report = true);
-    // Once every body is built: settles which graphs are effectful (a callee may be written
-    // after its caller) and then warns for each body.
+    // Once every body of the program is built: settles which graphs are effectful (a callee
+    // may be written after its caller, in another module).
+    void settleEffectfulGraphs();
+    // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     compile_graph_ptr_t buildDecoratedGraph(
         const std::string &funcName, const compile_graph_ptr_t &rawGraph,
         const std::vector<GCT::node_ptr_t> &annoNodes);
     node_handle_t applyDecoratorAnno(const GCT::node_ptr_t &annoNode, node_handle_t funcValueNode);
-    node_handle_t resolveCrossGraphRef(node_handle_t node, const std::string &name);
     node_handle_t resolveNodeByRef(const std::string &name);
     bool isVariable(node_handle_t node) const { return variables_.contains(node); }
     // A new variable holding the value of `value` (`:var/new`).
@@ -570,9 +819,11 @@ class Builder {
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
     /// No arm is added to those the program wrote (design principles 2.10).
+    /// `valueless` (with `arms`): the branch is an `if` without `else`, whose join takes no
+    /// value from its arms.
     node_handle_t buildBranch(
         const GCT::node_ptr_t &gct, node_handle_t condNode,
-        const std::vector<compile_graph_ptr_t> *arms = nullptr);
+        const std::vector<compile_graph_ptr_t> *arms = nullptr, bool valueless = false);
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
@@ -589,6 +840,27 @@ class Builder {
     /// `match x { case null => ..  case v => .. }` and `case error e` over a tagged `x`.
     node_handle_t visitTaggedMatch(
         const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::TupleType *type);
+    // ---- Conditions (design principles 2.11, 2.12). `&&` and `||` are branches; a `T?` can
+    // be compared with `null`; and where such a comparison is the condition (or an operand
+    // `&&` joins in it), the name is a `T` in the arm that excludes null. Each is the
+    // BRCH/JOIN pair the equivalent `if` or `match` gives: nothing here adds a node kind. ----
+    /// The branch of `a && b`, `a || b`, or of an `if` whose condition compares names with
+    /// `null`. nullptr (nothing built) for any other branch, which visitBrchNode builds.
+    node_handle_t visitConditionBrchNode(const GCT::node_ptr_t &gct);
+    /// `x == null` / `x != null` (either order) where `x` is a `T?`: the test of its tag, a
+    /// `bool`. nullptr when the call `gct` of the operator group `group` is not that.
+    node_handle_t nullComparison(
+        const std::string &group, const GCT::node_ptr_t &gct,
+        const std::vector<Argument> &operands, const camel::core::type::type_vec_t &types);
+    /// Warns about every `T!` that is evaluated in a body and that nothing takes
+    /// (UnusedFallibleValue): a statement of a sync block, the arm of an `if` without
+    /// `else`, and what a `main` without a declared return type ends with.
+    void reportUnusedFallibleValues();
+    /// Values dropped on purpose by `let _ = e`.
+    std::unordered_set<node_handle_t> discardedValues_;
+    /// Function graphs whose return type is not declared but taken from their body.
+    std::unordered_set<DraftGraphBuilder *> inferredExitGraphs_;
+
     /// Binds `node` to a fresh name no program can write, so that arms can capture it.
     std::string bindTemporary(node_handle_t node);
     /// The call `op(<name>)` of one of the built-in operators over tagged values.
@@ -643,7 +915,6 @@ class Builder {
     void checkDeclaredReturn(
         const compile_graph_ptr_t &graph, camel::core::type::Type *resultType, uint64_t origin,
         const GCT::node_ptr_t &value = nullptr);
-    void_ptr_t visitExptNode(const GCT::node_ptr_t &gct);
 };
 
 } // namespace camel::compile::gir

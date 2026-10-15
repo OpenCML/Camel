@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,7 +90,7 @@ using camel::runtime::GCOperBody;
 using camel::runtime::GraphDraft;
 using camel::runtime::validateRuntimeGraphPayload;
 
-TupleType *ensureRuntimeTupleType(TupleType *type) { return type ? type : TupleType::create(); }
+TupleType *ensureRuntimeTupleType(TupleType *type) { return type ? type : TupleType::layout({}); }
 
 bool canEncodeRuntimeStaticSlotType(Type *type) {
     if (type == nullptr || type->code() == TypeCode::Ref) {
@@ -139,15 +139,10 @@ template <typename Body> std::vector<std::byte> toPayloadBytes(const Body &body)
 std::vector<std::byte> toOperPayloadBytes(const oper_idx_ptr_t &oper) {
     GCOperBody body{
         .op       = nullptr,
-        .uriBytes = static_cast<uint16_t>(oper->uri().size()),
+        .oper     = camel::core::OperatorTable::instance().intern(oper->uri()),
         .reserved = 0,
     };
-    std::vector<std::byte> bytes(sizeof(GCOperBody) + oper->uri().size());
-    std::memcpy(bytes.data(), &body, sizeof(body));
-    if (!oper->uri().empty()) {
-        std::memcpy(bytes.data() + sizeof(GCOperBody), oper->uri().data(), oper->uri().size());
-    }
-    return bytes;
+    return toPayloadBytes(body);
 }
 
 void collectCompileStaticGraphRefsRecursive(
@@ -398,6 +393,7 @@ class EncodeSession {
         prepared.draft  = std::make_unique<GraphDraft>();
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setFuncType(graph->funcType());
+        prepared.draft->setCaptureNames(graph->draft().captureNames());
         prepared.draft->setRuntimeDataType(
             ensureRuntimeTupleType(graph->draft().runtimeDataType()));
         prepared.draft->setClosureType(graph->closureType());
@@ -842,7 +838,7 @@ class EncodeSession {
         }
         auto *debugRecord =
             createGraphDebugRecord(source->stableId(), source->name(), source->name());
-        recordDraftNodeOrigins(debugRecord, *prepared.draft);
+        recordDraftDebugData(debugRecord, *prepared.draft);
 
         const auto &deps = source->dependencyGraphs();
         const auto &subs = source->subGraphs();
@@ -942,7 +938,7 @@ class EncodeSession {
                     type = Type::Void();
                 }
             }
-            staticDataType = TupleType::create(types);
+            staticDataType = TupleType::layout(types);
             CAMEL_LOG_INFO_S(
                 "GIREncode",
                 "Static runtime tuple type built for graph '{}'.",

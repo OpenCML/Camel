@@ -11,7 +11,7 @@ This chapter describes the lexical structure of source code. The token table is 
 - Spaces and tabs are only separators. **A line break ends a statement**, unless the line is visibly unfinished:
   - a round bracket, a square bracket, an angle-bracket argument list or the braces of a struct literal are still open;
   - the line ends with a binary operator, `,`, `=`, `=>`, `->`, `:`, `then`, `else`, `return` or another token that must be followed by something;
-  - the next line starts with an operator that **can only be binary**: `->` `?->` `.` `..` `?..` `??` `!!` `*` `/` `%` `^` `&&` `||` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `as` `is` and the assignment operators; in a type also `|` `&` `\`;
+  - the next line starts with an operator that **can only be binary**: `->` `?->` `.` `..` `?..` `??` `!!` `*` `/` `%` `^` `&` `|` `&&` `||` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `as` `is` and the assignment operators; in a type also `\`. **A symbol of two roles (`+`, `-`, `@`) that starts a line has the role that starts something new**: `-x` is a new statement, `@name` an annotation. To continue a line, leave it at the end of the line before (a matrix product: `a @`, line break, `b`);
   - the next line is the next part of the same construct: `else`, `then`, `catch`, `finally`, `=>`, `from`.
 
   A next line that starts with `-`, `+`, `!`, `~`, `@`, `(`, `[`, `{`, a name, a literal or a statement keyword is a **new statement**. To write an addition or a subtraction on two lines, leave the operator at the end of the first (`a +`, then `b`); a line that starts with `+` is not a statement and gives `SyntaxDiag::LineStartsWithOperator`.
@@ -28,12 +28,13 @@ let c = a + b
 ## 2.2 Comments
 
 - `//` to the end of the line is a line comment.
+- **A line that starts with `///` is a documentation comment**: the consecutive `///` lines right above a declaration (`func`, `let`/`var`, `type`, with the annotations, `with` and `export` before it), without an empty line in between, are the documentation of that declaration. An editor shows it on hover, `camel inspect --ast` lists it on the declaration, and the formatter keeps it in place. A line that starts with `////` is an ordinary comment.
 - `/* ... */` is a block comment; it may span lines and cannot be nested.
 - `#` to the end of the line is also ignored, so the first line of a script can be `#!/usr/bin/env camel`.
 
 ## 2.3 Identifiers
 
-An identifier starts with a letter or an underscore, followed by letters, digits and underscores: `[a-zA-Z_][a-zA-Z_0-9]*`. Identifiers are case-sensitive. A lone `_` is the wildcard pattern of `match`.
+An identifier starts with a letter or an underscore, followed by letters, digits and underscores: `[a-zA-Z_][a-zA-Z_0-9]*`. Identifiers are case-sensitive. A lone `_` is not a name: it is the wildcard pattern of `match`, and in `let _ = e` it says that the value of `e` is dropped on purpose ([7.2](07_statements.md#72-let-and-var)).
 
 A reference to a name may be qualified with `::`: `math::sqrt`, `Tensor::ones` (see chapter 5).
 
@@ -44,10 +45,10 @@ The following words are reserved and cannot be used as names (using one gives `S
 | Category | Keywords |
 |---|---|
 | Declarations | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `macro` |
+| Control | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `macro` `loop` `while` |
 | Types and conversion | `as` `typeas` `const` |
 | Literals | `null` `true` `false` |
-| Reserved, not implemented | `is` `use` `enum` `for` `in` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
+| Reserved, not implemented | `is` `enum` `for` `in` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
 
 For the status of each word in the last row see [8.6](08_top_level_and_grammar.md#86-constructs-reserved-but-not-implemented).
 
@@ -63,19 +64,18 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 | Hexadecimal | `0xff` | 255 |
 | Binary | `0b1010` | 10 |
 | Octal (`0` followed by octal digits) | `077` | 63 |
-| With exponent | `1e6`, `1e3` | 1000000, 1000 |
 
 - The type of an integer literal is `int` (64-bit signed), with range -9223372036854775808 to 9223372036854775807.
 - **A literal out of range is a compile-time error** (`SemanticDiag::LiteralOutOfRange`): `9223372036854775808`, `1e400` and `0x8000000000000000` all are. `-9223372036854775808` is in range. A declaration with a type that puts a literal into a narrower type is checked in the same way: `let b: i32 = 3000000000` and `let c: f32 = 1.0e39` are errors. A floating-point literal larger than the largest `float` (`1.0e400`) is this error too.
-- **An integer with an exponent is still an integer**: `1e6` is an `int`, not a `float`; a negative exponent truncates towards zero, so `1e-2` is `0` and `15e-1` is `1`, with the warning `SemanticDiag::IntegerLiteralTruncated` (none when the result is exact, as for `1500e-2`). For a floating-point number write a decimal point: `1.0e-2`. Whether a literal with a negative exponent should be a float or an error has not been decided.
+- **A literal with an exponent or a decimal point is a floating-point number** ([2.5.2](#252-floating-point-numbers)): `1e6` is a `float` with the value `1000000.0`; `1e-2` is `0.01`. An integer literal has only the four forms of the table above.
 - An exponent is for decimal numbers only: `0b1e5` and `07e2` are `SemanticDiag::InvalidLiteral` (in a hexadecimal number `e` is a digit).
 - There are no digit separators (`1_000` is a syntax error) and no `0o` prefix.
-- **A number token carries no sign.** Between two operands `+` and `-` are always the binary operators, whatever the spacing: `n - 1`, `n-1` and `n -1` are all subtractions. Where an operand is expected (no value precedes), a `-` that **touches** a number is part of that number: `-1`, `-2.5`, `[-1, 2]`, `f(-1)`, `case -1 =>`, `-9223372036854775808`. A signed literal is one operand, so `-2->f` passes `-2` to `f` and `-2 ^ 2` is `(-2) ^ 2`; `-a->f` is `-(a->f)`, and so is `- 2->f` (white space after the minus) ([6.12](06_expressions.md#612-operator-precedence)). A `+` before a number is read as its sign too (`+2.5`). The sign of an exponent belongs to the number token itself: `1.0e-2`.
+- **A number token carries no sign, and a minus is always an operator.** Between two operands `+` and `-` are always the binary operators, whatever the spacing: `n - 1`, `n-1` and `n -1` are all subtractions. Where an operand is expected (no value precedes) `-` is the unary minus, and it reads the same before a literal and before a name: it binds less tightly than `^` and more tightly than `->` and the other binary operators ([6.12](06_expressions.md#612-operator-precedence)). `-2 ^ 2` is `-(2 ^ 2)`, that is `-4`; `-2->f` is `(-2)->f`; `-x->f` is `(-x)->f`. A minus applied directly to a number gives the negative literal, so `-1`, `-2.5`, `[-1, 2]`, `f(-1)`, `-9223372036854775808` and `let b: i32 = -2147483648` are written as ever; a `match` pattern may be `case -1 =>`. A `+` before a number is read as its sign (`+2.5`). The sign of an exponent belongs to the number token itself: `1.0e-2`.
 - A line break ends a statement ([2.1](#21-lines-whitespace-and-separators)), so a line that starts with `-x` or `-1` is a new statement and is not joined to the line before it as a subtraction.
 
 ### 2.5.2 Floating-point numbers
 
-- The form is "digits `.` digits", optionally with an exponent: `1.0`, `0.5`, `2.5e+3`, `1.0e-2`. There must be digits on both sides of the decimal point (`.5` and `5.` are syntax errors).
+- The form is "digits `.` digits", optionally with an exponent (`1.0`, `0.5`, `2.5e+3`, `1.0e-2`), or decimal digits directly followed by an exponent (`1e6`, `1E5`, `1e-2`). There must be digits on both sides of a decimal point (`.5` and `5.` are syntax errors).
 - The type is `float` (64-bit double precision). The value of a literal is the double-precision number nearest to the decimal number written (round to even), the same value that `float('...')` gives for the same text.
 - **A float has one text: the shortest that reads back as the same number.** `println`, `print`, `string(x)`, a `{}` of `format`, and a float element of an array, tuple, struct or `Map` all write the same text:
 
@@ -120,7 +120,8 @@ pi is about 3.14
 | `+` `-` `*` `/` `%` `^` `@` | Arithmetic: addition, subtraction, multiplication, division, remainder, power, matrix multiplication |
 | `==` `!=` `<` `>` `<=` `>=` | Comparison |
 | `===` `!==` | Reserved, not supported for now (compile-time error) |
-| `&&` `\|\|` `!` | Logical and, or, not |
+| `&&` `\|\|` `!` | Logical and, or, not; `&&` and `\|\|` are branches (the right side is evaluated only when needed), reserved, and cannot be overloaded |
+| `&` `\|` | And, or with both sides evaluated; ordinary operators, which can be overloaded |
 | `~` | Bitwise not |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Assignment and compound assignment |
 | `??` `!!` `?->` | Unwrap a nullable value, unwrap a fallible value, pass the error on if there is one |

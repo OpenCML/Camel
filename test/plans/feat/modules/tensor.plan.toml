@@ -258,7 +258,7 @@ desc = "reshape shares its input's buffer: views that outlive their owners read 
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
 args = ["${case}", "${run_nvm}"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -270,7 +270,7 @@ desc = "reshape shares its input's buffer: views that outlive their owners read 
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
 args = ["${case}", "${run_fvm}"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -282,7 +282,7 @@ desc = "reshape shares its input's buffer: views that outlive their owners read 
 kind = "behavior"
 case = "../../../cases/modules/tensor/reshape_view_gc.cml"
 args = ["${case}", "${run_jit}"]
-envs = ["CAMEL_GC_ENABLE_YOUNG_COPYING=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
 expect_exit = 0
 expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

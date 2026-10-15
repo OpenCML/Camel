@@ -113,12 +113,13 @@ bool containsTypeVar(Type *type);
 Type *substituteTypeVars(Type *type, const type_bindings_t &bindings);
 
 /**
- * A new function type: `type` with the variables replaced as substituteTypeVars does, and with
- * its parameter names, `var` marks, modifiers and implementation mark kept. Always a new
- * object, also when nothing was replaced: a graph completes its function type in place (return
- * type, captures), so two graphs never share one.
+ * A new open function type (camel/core/type/composite/func.h): `type` with the variables
+ * replaced as substituteTypeVars does, and with its parameter names, `var` marks, modifiers and
+ * implementation mark kept. Always a new object, also when nothing was replaced: it is the
+ * signature of a graph about to be built, whose result type the body may still decide, so two
+ * graphs never share one.
  */
-FunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t &bindings);
+OpenFunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t &bindings);
 
 /**
  * Binds the variables `pattern` binds (its `typeas` occurrences) from the type `actual` found

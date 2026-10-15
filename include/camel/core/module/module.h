@@ -79,11 +79,30 @@ using type_ns_ptr_t   = std::shared_ptr<Namespace<std::string, Type *>>;
 
 using context_ptr_t = camel::core::context::context_ptr_t;
 
+/// Which imports a lookup of an imported name looks at (design principles 2.12: one rule of
+/// precedence, local > own module > imported by name > `using namespace` > built in, the first
+/// layer that has the name). `Named`: the names an `import` of this module brings, by name or
+/// through a module or namespace prefix (`m::f`); `Ambient`: what comes along without being
+/// asked for (the built-in module, the operator groups a module of operators brings); `All`:
+/// both, merged, as operators are (their overloads come from every layer).
+enum class ImportLayer { All, Named, Ambient };
+
 class Module : public std::enable_shared_from_this<Module> {
   public:
+    /// One `import` of a module: the module, and where the import stands (its origin, or its
+    /// tokens for an import without an origin).
+    struct ImportSite {
+        std::shared_ptr<Module> mod;
+        camel::source::origin_id_t origin;
+        size_t tokenStart;
+        size_t tokenEnd;
+    };
+
     /// One `import { name } from mod`: the module, and where the import stands.
     struct NamedImport {
         std::shared_ptr<Module> mod;
+        /// The name in that module (with the namespaces the import takes it from).
+        Reference remote;
         camel::source::origin_id_t origin;
         /// The tokens of the import, for an import without an origin.
         size_t tokenStart;
@@ -94,6 +113,8 @@ class Module : public std::enable_shared_from_this<Module> {
     struct ImportedRefBinding {
         std::shared_ptr<Module> mod;
         Reference remoteRef;
+        // Brought along by the built-in module or as a module's default names, not asked for.
+        bool ambient = false;
     };
 
     struct ImportedNamespaceBinding {
@@ -104,6 +125,7 @@ class Module : public std::enable_shared_from_this<Module> {
 
     bool loaded_;
     std::string name_;
+    std::string declaredName_;
     std::string path_;
     context_ptr_t context_;
     type_ns_ptr_t exportedTypeNS_;
@@ -114,12 +136,16 @@ class Module : public std::enable_shared_from_this<Module> {
     std::unordered_map<Reference, std::vector<ImportedRefBinding>> importedRefMap_;
     /// Namespace imports map a local prefix to an exported prefix in another module.
     std::vector<ImportedNamespaceBinding> importedNamespaceBindings_;
-    /// Cache merged imported entities to avoid re-merging on every query.
-    mutable std::unordered_map<Reference, entity> importedEntityCache_;
+    /// Cache merged imported entities to avoid re-merging on every query, per layer.
+    mutable std::unordered_map<Reference, entity> importedEntityCache_[3];
     /// The imports by name, in the order they were written (see noteNamedImport).
     std::vector<std::pair<Reference, NamedImport>> namedImports_;
+    /// Every import of a module, in the order they were written (see noteImport).
+    std::vector<ImportSite> importSites_;
 
-    std::vector<ImportedRefBinding> importedBindingsForRef(const Reference &ref) const;
+    std::vector<ImportedRefBinding>
+    importedBindingsForRef(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
+    void clearImportedEntityCache();
 
   public:
     Module(const std::string &name, const std::string &path, context_ptr_t ctx);
@@ -127,13 +153,42 @@ class Module : public std::enable_shared_from_this<Module> {
 
     const std::string &name() const { return name_; }
     const std::string &path() const { return path_; }
+    /// The name the module gives itself (`module shapes`), empty when it has no declaration.
+    /// The module may qualify its own names with it, as with name() (design principles 2.12).
+    const std::string &declaredName() const { return declaredName_; }
+    void setDeclaredName(std::string name) { declaredName_ = std::move(name); }
 
     virtual bool load() = 0;
     virtual bool loaded() const { return loaded_; }
+    /// Makes the types the module exports readable (getExportedType). A module written in
+    /// Camel declares them while its construction tree is built, so that modules importing
+    /// each other can use each other's types (design principles 2.11); a module of another
+    /// kind is loaded.
+    virtual void declareTypes() {
+        if (!loaded()) {
+            load();
+        }
+    }
+    /// Makes the names the module wants imported along with it (defaultImportedRefs: the
+    /// operator groups of a module of operators) readable.
+    virtual void declareDefaultRefs() {
+        if (!loaded()) {
+            load();
+        }
+    }
+    /// Makes the entities the module exports readable (getExportedEntity, exportedEntityNS):
+    /// for a module written in Camel, once its declarations are known, before any function
+    /// body of the program is built.
+    virtual void declareEntities() {
+        if (!loaded()) {
+            load();
+        }
+    }
 
     void markImportedRefFromMod(const Reference &ref, const std::shared_ptr<Module> &mod);
     void markImportedRefFromMod(
-        const Reference &localRef, const Reference &remoteRef, const std::shared_ptr<Module> &mod);
+        const Reference &localRef, const Reference &remoteRef, const std::shared_ptr<Module> &mod,
+        bool ambient = false);
     void
     markImportedNamespaceFromMod(const Reference &localPrefix, const std::shared_ptr<Module> &mod);
     void markImportedNamespaceFromMod(
@@ -142,12 +197,18 @@ class Module : public std::enable_shared_from_this<Module> {
     bool importAllRefsFromImportedNamespace(const Reference &localPrefix);
     void importDefaultRefsFromMod(const std::shared_ptr<Module> &mod);
     void importAllRefsFromMod(const std::shared_ptr<Module> &mod);
-    bool hasImportedRef(const Reference &ref) const;
+    bool hasImportedRef(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
 
     /// Records that `ref` was imported by name from `mod` by the import at `origin`.
     void noteNamedImport(
-        const Reference &ref, const std::shared_ptr<Module> &mod,
+        const Reference &ref, const Reference &remote, const std::shared_ptr<Module> &mod,
         camel::source::origin_id_t origin, size_t tokenStart, size_t tokenEnd);
+    /// Records an import of `mod` (any form) at `origin`.
+    void noteImport(
+        const std::shared_ptr<Module> &mod, camel::source::origin_id_t origin, size_t tokenStart,
+        size_t tokenEnd);
+    /// Every import of a module this module has, in the order they were written.
+    const std::vector<ImportSite> &importSites() const { return importSites_; }
     /// The names imported by name from more than one module, each with its imports in the
     /// order they were written.
     std::vector<std::pair<Reference, std::vector<NamedImport>>> namesImportedMoreThanOnce() const;
@@ -159,8 +220,13 @@ class Module : public std::enable_shared_from_this<Module> {
     /// Return true if this module imports the given module.
     bool imports(const std::shared_ptr<Module> &mod) const;
 
-    std::optional<Type *> getImportedType(const Reference &ref) const;
-    std::optional<entity> getImportedEntity(const Reference &ref) const;
+    std::optional<Type *>
+    getImportedType(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
+    std::optional<entity>
+    getImportedEntity(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
+    /// Whether some import binds a module or namespace prefix that `prefix` names, or begins
+    /// with (`using namespace lib::Tools` after `import lib`).
+    bool hasImportedPrefix(const Reference &prefix) const;
 
     std::optional<Type *> getExportedType(const Reference &ref) const;
     std::optional<entity> getExportedEntity(const Reference &ref) const;

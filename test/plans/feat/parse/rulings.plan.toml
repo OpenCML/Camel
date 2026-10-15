@@ -1,0 +1,212 @@
+id = "parse.rulings"
+order = 306
+tier = "feat"
+tags = ["feat", "parse", "syntax"]
+desc = "The syntax rulings of design principles 2.10: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block."
+
+[[tests]]
+name = "rulings.power"
+desc = "`^` binds one level tighter than `*` and `/` and associates from right to left; the minus applies to the whole power, before a name and before a number alike (`-x ^ 2` is -(x ^ 2), `-2 ^ 2` is -4)."
+kind = "behavior"
+case = "../../../cases/parse/rulings/power.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["18 512 64 2", "-9 9 -4 -4 12", "0.5 2 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.exponent_is_float"
+desc = "A literal with an exponent or a decimal point is a floating-point number: `1e5` is 100000.0 and can be passed where a float is wanted."
+kind = "behavior"
+case = "../../../cases/parse/rulings/exponent.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["100000.0 100000.0 0.01 2500.0 1.0", "50.0 100.5 6"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.import_rename"
+desc = "`import { find as str_find, trim } from str` next to `import { find } from array`: the two `find` no longer conflict, renamed and plain names mix in one import."
+kind = "behavior"
+case = "../../../cases/parse/rulings/import_rename.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["ImportNameConflict", "Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.import_rename_hides_original"
+desc = "After `find as str_find` the original name is not visible in the importing module."
+kind = "negative"
+case = "../../../cases/parse/rulings/import_rename_hides.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 5
+expect_output_contains = ["'find'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.doc_comment_in_ast"
+desc = "The `///` lines right above a declaration are its documentation: `camel inspect --ast` lists it on a function, a `let` and an exported `let`; a `//` comment and a `////` line are not documentation."
+kind = "behavior"
+case = "../../../cases/parse/rulings/doc_comment.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["FuncDecl: square /// The square of a number. (+1 line)", "DataDecl: answer /// The answer.", "DataDecl: common /// Exported and documented."]
+expect_output_not_contains = ["FuncDecl: plain ///", "TypeDecl: Pair ///"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.doc_comment_formatting"
+desc = "The formatter keeps documentation comments where they are: formatting the file twice gives the same text, with each `///` block right above its declaration."
+kind = "behavior"
+tool = "camel-format"
+case = "../../../cases/parse/rulings/doc_comment.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["/// The square of a number.\n/// Negative numbers are fine.\nfunc square", "/// The answer.\nlet answer", "/// Exported and documented.\nexport let common"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.if_statement_without_block"
+desc = "`if c then stmt`, without a block and without `else`, is syntactically a statement (`camel check -s`); what such an `if` means is the business of the semantic rules."
+kind = "behavior"
+case = "../../../cases/parse/rulings/if_statement.cml"
+args = ["check", "-s", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_ast"
+desc = "`loop state = init (for x in xs)? (while c)? { body }` parses to a LoopExpr node with its four children: the first value, the optional sequence, the optional condition, the body block."
+kind = "behavior"
+case = "../../../cases/parse/rulings/loop_forms.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["LoopExpr: (i, acc)", "LoopExpr: acc for x", "LoopExpr: found for x"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_not_implemented"
+desc = "A loop is reported where it stands as not implemented yet (the LOOP node of the graph is the next step), not compiled into something else."
+kind = "negative"
+case = "../../../cases/parse/rulings/loop_forms.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 20
+expect_output_contains = ["'loop' is not supported: loops are not implemented yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_needs_for_or_while"
+desc = "A loop head without `for` and without `while` is a syntax error that says what is expected."
+kind = "negative"
+case = "../../../cases/parse/rulings/loop_needs_clause.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_line = 2
+expect_output_contains = ["expected 'for' or 'while'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_is_a_keyword"
+desc = "`loop` is a keyword: a function cannot be named `loop`."
+kind = "negative"
+case = "../../../cases/parse/rulings/loop_is_keyword.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::KeywordAsIdentifier"
+expect_diagnostic_line = 1
+expect_output_contains = ["'loop' is a keyword"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.minus_by_precedence"
+desc = "The minus is always an operator (ruling of October 13): looser than `^`, tighter than `->` and the other binary operators, the same before a literal and a name. `-2 ^ 2` and `-x ^ 2` are -4, `-2->inc` and `-x->inc` are -1; the smallest int and i32 can still be written; `2.0 ^ -1.0 ^ 2.0` has a signed exponent."
+kind = "behavior"
+case = "../../../cases/parse/rulings/minus.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["-4 -4 4 0.5", "-1 -1 -6 7 4 1", "-9223372036854775808 -2.5 [-1, 2] -3", "-2147483648"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.eager_and_or"
+desc = "`&` and `|` are ordinary binary operators that evaluate both sides: `&` above `|`, both above `&&` and below the comparisons; both operands of `&` are evaluated when the left one is false."
+kind = "behavior"
+case = "../../../cases/parse/rulings/eager_logic.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["true true true true", "left\nright\nfalse"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.logical_operators_marked_in_ast"
+desc = "In the AST `&&` and `||` are operators of their own kind (LogicalAnd, LogicalOr, printed `&&` and `||`), distinct from `&` and `|`, so that a later stage can turn them into branches."
+kind = "behavior"
+case = "../../../cases/parse/rulings/eager_logic.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["BinaryExpr: &&", "BinaryExpr: &\n", "BinaryExpr: |\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.null_comparison_parses"
+desc = "`x == null` and `x != null` are syntactically ordinary comparisons (`camel check -s`)."
+kind = "behavior"
+case = "../../../cases/parse/rulings/null_compare.cml"
+args = ["check", "-s", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.operator_names_reserved"
+desc = "A function cannot take the name of an operator: the names of the form `__x__` are the compiler's, `__and__` and `__or__` among them."
+kind = "negative"
+case = "../../../cases/parse/rulings/reserved_and.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ReservedIdentifier"
+expect_diagnostic_line = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.not_by_precedence"
+desc = "`!` and `~` are at the level of the unary minus (ruling of October 14): looser than `^`, tighter than `->` and the other binary operators. `!t->show` is `(!t)->show`, `~n->inc` is `(~n)->inc`, `~n * 3` is `(~n) * 3`."
+kind = "behavior"
+case = "../../../cases/parse/rulings/not_by_precedence.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["no no false\n-2 -4 -9 3\ntrue true true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

@@ -10,7 +10,7 @@
 - **运行时实现（`operator_t`）**：执行时按算子 URI 找到的函数指针。
 - **语义性质（`OperatorTraits`）**：算子是否为纯函数等，供常量折叠、公共子表达式消除、内联等图遍查询。
 
-模块通过 `OperatorGroup` 导出算子声明，通过 `Executor` 提供实现，通过 `OperatorTraitsRegistry` 声明性质。三者都以算子 URI 为键相互对应。
+模块通过 `OperatorGroup` 导出算子声明，通过 `Executor` 提供实现，通过算子表 `OperatorTable` 声明性质。三者都以算子 URI 为键相互对应。
 
 模块分两类：
 
@@ -51,7 +51,7 @@ OperatorGroup::create(
     });
 ```
 
-构造 `OperatorGroup` 时，每个重载的解析器同时登记到 `OperatorResolverRegistry`（`include/camel/core/operator_traits.h`），以 URI 为键。图上的 `OPER` 节点只记录解析得到的 URI；改变了实参已知信息的遍（例如绑定输入形状）通过该注册表重新运行对应重载的解析器。
+构造 `OperatorGroup` 时，每个重载的解析器同时登记到算子表（`OperatorTable::setResolver`，`include/camel/core/operator_table.h`），以 URI 为键。图上的 `OPER` 节点只记录解析得到的算子编号（`OperId`）；改变了实参已知信息的遍（例如绑定输入形状）通过算子表重新运行对应重载的解析器。
 
 ### 2.2 类型解析器
 
@@ -141,25 +141,35 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 ## 4. 语义性质（纯度）注册
 
-`OperatorTraitsRegistry`（`include/camel/core/operator_traits.h`）以 URI 为键保存 `OperatorTraits`：
+算子表 `OperatorTable`（`include/camel/core/operator_table.h`）为每个算子 URI 保存一项，项的编号是 `OperId`，`OPER` 节点的负载里存的就是这个编号（URI 文本驻留在符号表里，全进程只存一份）。表项上的 `OperatorTraits`：
 
 | 字段 | 含义 |
 |------|------|
 | `pure` | 无副作用、无隐藏状态，结果只依赖实参。这样的调用可以在编译期求值、与相同调用合并、未被使用时删除。 |
 | `elementwise` | 输出的第 i 个元素只依赖各输入（广播后）的第 i 个元素。 |
 | `stateOnly` | 不是纯函数，但效果不超出程序自身的变量（创建或读取变量）。不会被折叠、合并或跨越写操作移动，也不作为用户可观察的效果报告。 |
+| `mayFault` | 可能出故障（除零、越界、转换放不进目标类型）。**缺省为真**；确定不会出故障的才声明为假。目前没有任何遍依据它改变行为（图数据模型设计稿 Q1 待定）。 |
+| `callsGraphs` | 执行中会调用实参里的函数值（`map`、`reduce` 等高阶算子与 `attempt`），它做什么取决于传进来的函数。 |
+
+遍与调度器按编号认算子，不比较 URI 文本：
+
+- 核心认得的算子有编译期常量形式的编号（`camel::core::oper::VarNew`、`VarGet`、`MapArr` 等 `:mark/` 算子、`Isolate`），算子表构造时按固定顺序先驻留它们的 URI；
+- 模块自己的遍要认本模块的算子时，把 URI 驻留一次（函数内的静态量）再比较编号，例如 `autodiff:grad`、`tensor:matmul`、`onnx:export_model`；
+- 三个族是表项上的标志，在 URI 第一次驻留时由前缀定下：`isBuiltin`（`:` 开头，没有模块协议）、`isMarked`（`:mark/`，调度器自己执行、会调用收到的函数值）、`isAssignment`（`:op/assn` 开头的赋值与复合赋值）。
+
+URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显示的名字。
 
 **没有登记的算子按保守方式处理，即视为有副作用。** 新增一个纯算子时若不登记，结果仍然正确，但通用图遍不会对它做折叠、合并或删除。
 
 登记发生在模块加载时：
 
 - 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get` 登记为 `stateOnly`；`io/`、`profiler/` 以及原地修改数组的算子不登记。
-- `.cmo` 模块：在 `load()` 中直接调用 `OperatorTraitsRegistry::instance().set(uri, traits)`。例如 `modules/math/module.cpp` 把 `getMathOpsMap()` 中的全部算子登记为纯。
+- `.cmo` 模块：在 `load()` 中直接调用 `OperatorTable::instance().set(uri, traits)`。例如 `modules/math/module.cpp` 把 `getMathOpsMap()` 中的全部算子登记为纯。
 
-同一头文件中还有两个按 URI 或按值类型登记的注册表，供需要的模块使用：
+另有两处按 URI 或按值类型登记的信息，供需要的模块使用：
 
-- `OperatorTypeFolderRegistry`：当实参类型已能确定结果时（如类型带形状的张量的形状、元素个数），给出该常量结果。
-- `ValueTypeRefinerRegistry`：给出常量的精确类型（如张量常量的 dtype 与形状）。
+- 算子表上的类型折叠（`OperatorTable::setTypeFolder`）：当实参类型已能确定结果时（如类型带形状的张量的形状、元素个数），给出该常量结果。
+- `ValueTypeRefinerRegistry`（`include/camel/core/operator_traits.h`）：给出常量的精确类型（如张量常量的 dtype 与形状）。
 
 可微算子的反向规则登记在 `DerivativeRegistry`（`include/camel/core/derivative.h`）。
 
@@ -196,7 +206,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 | **重载顺序** | 同一算子组内按声明顺序匹配，第一个接受实参的重载生效。 |
 | **数量检查** | `DynamicFuncTypeResolver` 已做参数个数检查，`ResolverFunc` 中无需再检查 `norm.size()` / `with.size()`。 |
 | **var_declare 一致** | `{count, vector<bool>}` 中 `count != -1` 时，`count` 必须等于 `vector<bool>.size()`。 |
-| **纯度默认保守** | 未在 `OperatorTraitsRegistry` 登记的算子视为有副作用；只有确实不读写外部状态的算子才能登记为 `pure`。 |
+| **纯度默认保守** | 未在算子表中声明的算子视为有副作用、可能出故障；只有确实不读写外部状态的算子才能登记为 `pure`。 |
 | **工厂只注册一次** | 同一 protocol 重复调用 `registerExecutorFactory` 会触发断言；`load()` 应以 `loaded_` 判重。 |
 | **Executor 加载时机** | Executor 按需懒加载，首次查找该 protocol 的算子时才实例化。并行调度器可能从多个工作线程同时查找，`ExecutorManager` 内部已加锁。 |
 | **`load()` 的职责** | `load()` 中应完成 Executor 工厂注册、性质登记和所需初始化（如 Python 解释器）。 |
@@ -208,7 +218,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 - 模块在 `load()` 里为**每一个**算子声明，有副作用的也要写出来：
 
   ```cpp
-  camel::core::OperatorTraitsRegistry::instance().declare(
+  camel::core::OperatorTable::instance().declare(
       "fs",
       {
           // 读取的结果取决于当时文件系统里有什么
@@ -244,7 +254,8 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 ## 9. 参考
 
 - `include/camel/core/operator.h`：`operator_t`、`ArgsView`、`OperatorGroup`、`OperatorIndex`。
-- `include/camel/core/operator_traits.h`：`OperatorTraits` 及各注册表。
+- `include/camel/core/operator_table.h`：`OperId`、`OperatorTraits`、`OperatorTable`（性质、类型解析器、类型折叠）；`include/camel/core/symbol.h`：符号表。
+- `include/camel/core/operator_traits.h`：`ValueTypeRefinerRegistry`。
 - `include/camel/core/type/resolver.h`：`FuncTypeResolver`、`StaticFuncTypeResolver`、`DynamicFuncTypeResolver`。
 - `include/camel/execute/executor.h`、`src/execute/executor.cpp`：`Executor`、`ExecutorManager`，URI 解析与分派。
 - `include/camel/core/module/builtin.h`、`include/camel/core/module/dynamic.h`：`BuiltinModule`、`.cmo` 的 ABI 与加载入口。

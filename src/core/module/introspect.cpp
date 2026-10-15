@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -63,7 +63,7 @@ std::vector<OperatorDescription> describeOperators(const Module &module) {
     if (!entities) {
         return result;
     }
-    const auto &traits = OperatorTraitsRegistry::instance();
+    const auto &traits = OperatorTable::instance();
     entities->forEach([&](const Reference &ref, const entity &ent) {
         if (!ent.isOperGroup() || !ent.operGroup()) {
             return;
@@ -142,7 +142,7 @@ size_t warnUndeclaredOperatorTraits(const Module &module) {
         CAMEL_LOG_WARN_S(
             "Module",
             "Module '{}' does not declare whether {} of its operators are pure ({}{}); they are "
-            "treated as having side effects. Declare each with OperatorTraitsRegistry::declare.",
+            "treated as having side effects. Declare each with OperatorTable::declare.",
             module.name(),
             count,
             names,

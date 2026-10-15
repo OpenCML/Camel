@@ -687,18 +687,6 @@ string Generator::generateTypeDeclLoad(const AST::node_ptr_t &node) {
     return code + ";\n";
 }
 
-string Generator::generateNameDeclLoad(const AST::node_ptr_t &node) {
-    if (!node)
-        return "";
-    auto nameDeclLoad = dynamic_pointer_cast<AST::NameDeclLoad>(node->load());
-    if (!nameDeclLoad)
-        return "";
-
-    string code = nameDeclLoad->geneCode();
-    code += generateChildren(node);
-    return code + ";\n";
-}
-
 string Generator::generateStmtLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
@@ -714,8 +702,6 @@ string Generator::generateStmtLoad(const AST::node_ptr_t &node) {
         return generateFuncDeclLoad(node);
     case AST::StmtType::Type:
         return generateTypeDeclLoad(node);
-    case AST::StmtType::Name:
-        return generateNameDeclLoad(node);
     case AST::StmtType::Expr:
         return generateExprStmtLoad(node);
     case AST::StmtType::Exit:

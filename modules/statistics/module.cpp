@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -127,7 +127,7 @@ bool StatisticsModule::load() {
     });
     // Every operator of this module is a function of its arguments.
     for (const auto &[name, op] : getStatisticsOpsMap()) {
-        camel::core::OperatorTraitsRegistry::instance().set(
+        camel::core::OperatorTable::instance().set(
             "statistics:" + name,
             {.pure = true, .elementwise = false});
     }

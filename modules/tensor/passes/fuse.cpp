@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -47,12 +47,25 @@ using camel::runtime::RuntimeGraphDraftSession;
 
 namespace {
 
-std::string_view operUri(const GraphDraft &draft, gc_node_ref_t id) {
+/// The operator of an OPER node, kNoOper for any other node.
+camel::core::OperId operOf(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *h = draft.header(id);
     if (!h || h->kind != GCNodeKind::Oper) {
-        return {};
+        return camel::core::kNoOper;
     }
-    return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->uri();
+    return reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper;
+}
+
+/// The operators the pattern is made of, interned once.
+struct PatternOperators {
+    camel::core::OperId add    = camel::core::OperatorTable::instance().intern("tensor:add");
+    camel::core::OperId matmul = camel::core::OperatorTable::instance().intern("tensor:matmul");
+    camel::core::OperId relu   = camel::core::OperatorTable::instance().intern("tensor:relu");
+};
+
+const PatternOperators &patternOperators() {
+    static const PatternOperators operators;
+    return operators;
 }
 
 /// True when nothing outside the pattern observes `id`: its value feeds only `next` (as a norm
@@ -78,8 +91,9 @@ struct Match {
 /// The first fusable pattern in the draft's current state. Rewrites change operands of other
 /// patterns (a fused add may be the bias of the next one), so matches are found one at a time.
 std::optional<Match> findMatch(const GraphDraft &draft) {
+    const PatternOperators &ops = patternOperators();
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (operUri(draft, id) != "tensor:add") {
+        if (operOf(draft, id) != ops.add) {
             continue;
         }
         const auto ins = draft.normInputsOf(id);
@@ -89,13 +103,13 @@ std::optional<Match> findMatch(const GraphDraft &draft) {
         // Float addition is commutative, so the product may be either operand.
         for (size_t k = 0; k < 2; ++k) {
             const gc_node_ref_t mm = ins[k];
-            if (operUri(draft, mm) != "tensor:matmul" || draft.normInputsOf(mm).size() != 2 ||
+            if (operOf(draft, mm) != ops.matmul || draft.normInputsOf(mm).size() != 2 ||
                 !isPrivateIntermediate(draft, mm, id)) {
                 continue;
             }
             Match m{.matmul = mm, .add = id, .relu = kInvalidNodeRef, .bias = ins[1 - k]};
             const auto users = draft.normUsersOf(id);
-            if (users.size() == 1 && operUri(draft, users[0]) == "tensor:relu" &&
+            if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
                 isPrivateIntermediate(draft, id, users[0])) {
                 m.relu = users[0];
             }

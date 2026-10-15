@@ -167,6 +167,18 @@ enum class MirOp : uint8_t {
     // SysV AMD64 keeps jitCtx in r13 across helper calls because rsi is caller-saved there.
     // Win64 can encode this as a nop because rsi is already callee-saved.
     MovRsiR13,
+    // --- Framed code (see the JitExitKind note below): calls out of compiled code and exits
+    // to the driver. imm32 = bytecode pc. All three clobber every allocatable register.
+    // Call of a C++ helper `slot_t helper(slot_t *slots, void *ctx, size_t pc)` (imm64 = its
+    // address) for the bytecode at pc; the result is in rax afterwards. A helper never throws:
+    // it records a fault in the JitContext, and the code leaves through the fault exit.
+    CallHelper,
+    // Leave to the driver with exit kind imm64 for the bytecode at pc, and continue behind
+    // this instruction when the driver enters the code again.
+    ExitToDriver,
+    // If the collector asked for a safepoint (the byte at address imm64 is not zero), leave to
+    // the driver with JitExitKind::Tail for the self tail call at pc; otherwise fall through.
+    SafepointPoll,
     Nop,
 };
 
@@ -178,12 +190,44 @@ enum class JitFaultKind : uint32_t {
     None                      = 0,
     DivisionByZero            = 1,
     MaxRecursionDepthExceeded = 2,
+    // A native call refused because the machine stack of the thread is nearly full, before the
+    // count reached the limit: the same diagnostic the interpreters give for their nested calls.
+    NativeStackExhausted = 3,
+    // A helper called from compiled code caught a C++ exception (a fault of an operator, a
+    // failed cast): it is kept in JitContext::pending and thrown again by the driver.
+    PendingException = 4,
+};
+
+// Two kinds of compiled code.
+//
+// Frameless code is a graph that needs nothing of the runtime (arithmetic, branches, calls of
+// itself): it calls no C++, its self calls put their frames on the machine stack, and it returns
+// only when the activation it was entered for has returned.
+//
+// Framed code is every other graph. Each of its activations has a frame of the frame pool, and
+// between two bytecodes everything it computed is in that frame: nothing is kept in a register
+// or on the machine stack. So it can call C++ helpers that read and write the frame (operators,
+// casts, ...), and it can stop at a bytecode and be entered again behind it. It does not call
+// functions itself: for a bytecode that calls a Camel function, or that reaches a safepoint of
+// the collector, it leaves to its driver (FastVMSchedPass::runFramedJit) with the kind below and
+// the bytecode's pc, and the driver does what the interpreter does for that bytecode. Hence no
+// compiled code is on the machine stack while a Camel function called from it runs, and none
+// while the collector runs.
+enum class JitExitKind : uint32_t {
+    Return = 0, // the activation returned; the value is the result of the entry function
+    Call   = 1, // FUNC at exitPc: call the target, store the result, continue behind it
+    Tail   = 2, // TAIL at exitPc: replace this activation by one of the target
+    Interp = 3, // CALL or SCHD at exitPc: run this one bytecode, continue behind it
 };
 
 // Where compiled code finds the fields of JitContext (runtime/trampoline.h asserts them).
 constexpr int32_t kJitCtxFaultKindOffset   = 16;
 constexpr int32_t kJitCtxFaultPcOffset     = 20;
 constexpr int32_t kJitCtxDepthBudgetOffset = 24;
+constexpr int32_t kJitCtxStackLimitOffset  = 32;
+constexpr int32_t kJitCtxExitKindOffset    = 40;
+constexpr int32_t kJitCtxExitPcOffset      = 44;
+constexpr int32_t kJitCtxResumeAddrOffset  = 48;
 
 // A native self call puts a frame of the graph on the machine stack, up to the interpreter's
 // recursion limit deep. A graph whose frame is larger than this is left to the interpreter, so

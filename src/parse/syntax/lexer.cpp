@@ -206,6 +206,38 @@ size_t TokenBuffer::nextSignificant(size_t index) const {
     return index;
 }
 
+std::string TokenBuffer::docAbove(size_t index) const {
+    if (index >= tokens_.size()) {
+        return {};
+    }
+    std::vector<std::string_view> lines;
+    size_t expectLine = lineOf(tokens_[index].begin);
+    for (size_t i = index; i-- > 0;) {
+        const Token &token = tokens_[i];
+        const size_t line  = lineOf(token.begin);
+        if (token.kind != TokenKind::DocComment || line + 1 != expectLine) {
+            break;
+        }
+        std::string_view body = text(token).substr(3);
+        if (!body.empty() && body.front() == ' ') {
+            body.remove_prefix(1);
+        }
+        while (!body.empty() && (body.back() == '\r' || body.back() == ' ')) {
+            body.remove_suffix(1);
+        }
+        lines.push_back(body);
+        expectLine = line;
+    }
+    std::string doc;
+    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+        if (!doc.empty()) {
+            doc += '\n';
+        }
+        doc.append(*it);
+    }
+    return doc;
+}
+
 size_t TokenBuffer::previousSignificant(size_t index) const {
     while (index != SIZE_MAX && index < tokens_.size() && isTrivia(tokens_[index].kind)) {
         index = index == 0 ? SIZE_MAX : index - 1;
@@ -340,8 +372,13 @@ TokenBuffer Lexer::tokenize(std::string source) {
                     }
                 }
             }
-            end = exponentEnd(end);
-            emit(TokenKind::Integer, i, end);
+            // A decimal number with an exponent is a floating-point literal (`1e5` is
+            // 100000.0). On a hexadecimal, binary or octal number an exponent is an error
+            // the AST builder reports; the token stays an integer for it.
+            const size_t digitsEnd = end;
+            end                    = exponentEnd(end);
+            const bool decimal     = c != '0' || digitsEnd == i + 1;
+            emit(end > digitsEnd && decimal ? TokenKind::Real : TokenKind::Integer, i, end);
             i = end;
             continue;
         }
@@ -519,7 +556,8 @@ TokenBuffer Lexer::tokenize(std::string source) {
                     while (j < n && s[j] != '\n' && s[j] != '\r') {
                         ++j;
                     }
-                    emitTrivia(TokenKind::LineComment, i, j, false);
+                    const bool doc = at(i + 2) == '/' && at(i + 3) != '/';
+                    emitTrivia(doc ? TokenKind::DocComment : TokenKind::LineComment, i, j, false);
                     i = j;
                     continue;
                 }

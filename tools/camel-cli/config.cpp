@@ -232,6 +232,13 @@ const char *kWarningOptionsHelp =
     "        -Wno-error=<name>  keep <name> a warning under -Werror\n"
     "        <name> is a diagnostic name as --explain prints it; case, '-' and '_' are ignored.\n";
 
+/// `--time-phases` is taken out of argv by main() before the parser runs (camel-cli/main.cpp).
+const char *kMeasurementOptionsHelp =
+    "\nMEASUREMENT\n"
+    "        --time-phases         write the time of each phase of the run as JSON to stderr\n"
+    "        --time-phases=<file>  write it to <file> (also: CAMEL_TIME_PHASES=<file>); with\n"
+    "                              the counting allocator shim preloaded, also the allocations\n";
+
 } // namespace
 
 int exitCode = 0;
@@ -693,6 +700,7 @@ bool parseArgs(int argc, char *argv[]) {
     if (showHelp) {
         cout << make_man_page(cli, "camel");
         cout << kWarningOptionsHelp;
+        cout << kMeasurementOptionsHelp;
     }
 
     if (showDocs) {
@@ -746,7 +754,11 @@ bool parseArgs(int argc, char *argv[]) {
         } else if (!Run::inputFile.empty()) {
             Run::resolvedPassList = Run::targetFiles;
         } else {
-            Run::resolvedPassList.assign(Run::targetFiles.begin() + 1, Run::targetFiles.end());
+            // No positional argument at all (the program comes from standard input):
+            // there are no passes either.
+            if (!Run::targetFiles.empty()) {
+                Run::resolvedPassList.assign(Run::targetFiles.begin() + 1, Run::targetFiles.end());
+            }
         }
         if (Run::timeitEnabled && Run::resolvedPassList.empty()) {
             Run::resolvedPassList.push_back(Run::timeitPass);

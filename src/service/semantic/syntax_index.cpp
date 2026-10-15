@@ -207,6 +207,7 @@ class Walker {
             info.type    = static_cast<uint16_t>(token.kind);
             info.channel = token.kind == TK::Command        ? 2
                            : token.kind == TK::LineComment  ? 3
+                           : token.kind == TK::DocComment   ? 3
                            : token.kind == TK::BlockComment ? 4
                                                             : 0;
             info.line    = static_cast<uint32_t>(buffer_.lineOf(token.begin));
@@ -214,78 +215,10 @@ class Walker {
         }
     }
 
-    /// The comment block right above a declaration: consecutive `//` lines ending on the line
-    /// before it, or one `/* */` block. Without the comment markers.
+    /// The documentation of a declaration: the `///` lines right above it (design principles
+    /// 2.10).
     std::string docAbove(syn::TokenRef first) const {
-        if (!first) {
-            return {};
-        }
-        std::vector<std::string> lines;
-        size_t expectLine = first.line();
-        for (size_t i = first.index(); i-- > 0;) {
-            const syn::Token &token = buffer_[i];
-            const size_t line       = buffer_.lineOf(token.begin);
-            if (token.kind == TK::LineComment) {
-                if (line + 1 != expectLine) {
-                    break;
-                }
-                std::string text(buffer_.text(token));
-                size_t from = text.find_first_not_of('/');
-                text        = from == std::string::npos ? "" : text.substr(from);
-                if (!text.empty() && text.front() == ' ') {
-                    text.erase(0, 1);
-                }
-                while (!text.empty() && (text.back() == '\r' || text.back() == ' ')) {
-                    text.pop_back();
-                }
-                lines.push_back(text);
-                expectLine = line;
-                continue;
-            }
-            if (token.kind == TK::BlockComment && lines.empty()) {
-                std::string body(buffer_.text(token));
-                const size_t newlines =
-                    static_cast<size_t>(std::count(body.begin(), body.end(), '\n'));
-                if (line + newlines + 1 != expectLine) {
-                    break;
-                }
-                if (body.size() >= 4) {
-                    body = body.substr(2, body.size() - 4);
-                }
-                std::string cleaned;
-                size_t pos = 0;
-                while (pos <= body.size()) {
-                    size_t eol       = body.find('\n', pos);
-                    std::string text = body.substr(pos, eol == std::string::npos ? eol : eol - pos);
-                    size_t from      = text.find_first_not_of(" \t*");
-                    text             = from == std::string::npos ? "" : text.substr(from);
-                    while (!text.empty() && (text.back() == '\r' || text.back() == ' ')) {
-                        text.pop_back();
-                    }
-                    if (!cleaned.empty() || !text.empty()) {
-                        cleaned += text;
-                        cleaned += '\n';
-                    }
-                    if (eol == std::string::npos) {
-                        break;
-                    }
-                    pos = eol + 1;
-                }
-                while (!cleaned.empty() && cleaned.back() == '\n') {
-                    cleaned.pop_back();
-                }
-                return cleaned;
-            }
-            break;
-        }
-        std::string doc;
-        for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
-            if (!doc.empty()) {
-                doc += '\n';
-            }
-            doc += *it;
-        }
-        return doc;
+        return first ? buffer_.docAbove(first.index()) : std::string();
     }
 
     // ---- scopes and declarations ----
@@ -380,8 +313,6 @@ class Walker {
             return dataDecl(cst::DataDecl(node));
         case NK::TypeDecl:
             return typeDecl(cst::TypeDecl(node));
-        case NK::UseDecl:
-            return useDecl(cst::UseDecl(node));
         case NK::KeyTypePair:
             addKey(node.get<cst::IdentDef>(), true);
             return walk(node.type());
@@ -406,6 +337,8 @@ class Walker {
             return;
         case NK::IfExpr:
             return ifExpr(cst::IfExpr(node));
+        case NK::LoopExpr:
+            return loopExpr(cst::LoopExpr(node));
         case NK::AnnoExpr:
             return annoExpr(cst::AnnoExpr(node));
         case NK::AccessExpr:
@@ -454,11 +387,15 @@ class Walker {
         const auto moduleName  = ctx.get<cst::ModuleName>();
         const std::string from = moduleName ? textOf(rangeOf(moduleName)) : std::string();
         const Range whole      = rangeOf(ctx);
-        const auto single      = ctx.get<cst::IdentDef>();
-        const auto braced      = ctx.get<cst::BracedIdents>();
-        if (!ctx.has(TK::KwFrom) && !single && !braced) {
-            // `import a.b`: the module is known by its last name.
-            if (const syn::TokenRef last = lastNameOf(moduleName)) {
+        const auto alias       = ctx.get<cst::IdentDef>();
+        const auto single      = ctx.get<cst::ImportItem>();
+        const auto braced      = ctx.get<cst::BracedImports>();
+        if (!ctx.has(TK::KwFrom)) {
+            // `import a.b`: the module is known by its last name; `import a.b as x` by x.
+            if (alias && nameOf(alias)) {
+                Decl &decl        = declare(DeclKind::Module, nameOf(alias), whole, whole);
+                decl.importedFrom = from;
+            } else if (const syn::TokenRef last = lastNameOf(moduleName)) {
                 Decl &decl        = declare(DeclKind::Module, last, whole, whole);
                 decl.importedFrom = from;
             }
@@ -466,10 +403,14 @@ class Walker {
         }
         std::vector<cst::IdentDef> names;
         if (single) {
-            names.push_back(single);
+            // `import a from m` is `import { a } from m` (design principles 2.12).
+            const auto local = single.get<cst::IdentDef>(1);
+            names.push_back(local ? local : single.get<cst::IdentDef>(0));
         }
-        for (const auto ident : braced.get<cst::IdentList>().all<cst::IdentDef>()) {
-            names.push_back(ident);
+        // `{ find as str_find }` declares str_find; the name in the module is not visible.
+        for (const auto item : braced.all<cst::ImportItem>()) {
+            const auto local = item.get<cst::IdentDef>(1);
+            names.push_back(local ? local : item.get<cst::IdentDef>(0));
         }
         for (const auto ident : names) {
             if (nameOf(ident)) {
@@ -677,14 +618,6 @@ class Walker {
         popScope();
     }
 
-    void useDecl(cst::UseDecl ctx) {
-        addRef(ctx.get<cst::IdentRef>(), RefKind::Namespace);
-        const Range whole = rangeOf(ctx);
-        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
-            declare(DeclKind::Alias, nameOf(ident), whole, whole);
-        }
-    }
-
     void matchCase(cst::MatchCase ctx) {
         pushScope(ScopeKind::Arm, rangeOf(ctx));
         for (const auto pattern : ctx.all<cst::Pattern>()) {
@@ -720,6 +653,32 @@ class Walker {
         if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
             declare(DeclKind::Binding, nameOf(ident), rangeOf(ctx), rangeOf(ctx));
         }
+        walkBlockBody(ctx.get<cst::StmtBlock>());
+        popScope();
+    }
+
+    /// loop state = init for x in xs while c { body }: init and xs are outside the scope of the
+    /// state names and of x; c and the body are inside.
+    void loopExpr(cst::LoopExpr ctx) {
+        const auto forClause   = ctx.get<cst::LoopFor>();
+        const auto whileClause = ctx.get<cst::LoopWhile>();
+        walk(ctx.expr());
+        walk(forClause.expr());
+        const Range whole = rangeOf(ctx);
+        pushScope(ScopeKind::Arm, whole);
+        if (auto tuple = ctx.get<cst::ParentIdents>()) {
+            for (const auto ident : tuple.get<cst::IdentList>().all<cst::IdentDef>()) {
+                if (nameOf(ident)) {
+                    declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
+                }
+            }
+        } else if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
+        }
+        if (auto ident = forClause.get<cst::IdentDef>(); ident && nameOf(ident)) {
+            declare(DeclKind::Binding, nameOf(ident), whole, rangeOf(ident));
+        }
+        walk(whileClause.expr());
         walkBlockBody(ctx.get<cst::StmtBlock>());
         popScope();
     }

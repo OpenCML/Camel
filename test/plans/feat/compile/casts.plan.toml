@@ -1,0 +1,101 @@
+id = "compile.casts"
+order = 334
+tier = "feat"
+tags = ["feat", "compile", "casts"]
+desc = "Conversions with `as` that the type system decides by itself."
+
+[[tests]]
+name = "same_type.nvm"
+desc = "Converting an array, a tuple or a struct to its own type is legal and does nothing, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (nvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/same_type.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[1, 2]",
+  "(1, x)",
+  "3 y",
+  "[4]",
+  "[5, 6]",
+  "2",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "same_type.fvm"
+desc = "Converting an array, a tuple or a struct to its own type is legal and does nothing, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (fvm)"
+kind = "behavior"
+case = "../../../cases/compile/casts/same_type.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[1, 2]",
+  "(1, x)",
+  "3 y",
+  "[4]",
+  "[5, 6]",
+  "2",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "same_type.jit"
+desc = "Converting an array, a tuple or a struct to its own type is legal and does nothing, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (jit)"
+kind = "behavior"
+case = "../../../cases/compile/casts/same_type.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[1, 2]",
+  "(1, x)",
+  "3 y",
+  "[4]",
+  "[5, 6]",
+  "2",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "same_type.prl"
+desc = "Converting an array, a tuple or a struct to its own type is legal and does nothing, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (prl)"
+kind = "behavior"
+case = "../../../cases/compile/casts/same_type.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "[1, 2]",
+  "(1, x)",
+  "3 y",
+  "[4]",
+  "[5, 6]",
+  "2",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000

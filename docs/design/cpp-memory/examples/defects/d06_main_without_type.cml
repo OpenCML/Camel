@@ -1,0 +1,7 @@
+/// `main` without a declared result type. std::cpp ends with an unlocated PassInternalError
+/// instead of a refusal.
+module d06_main_without_type
+
+func main() sync {
+    println('hello')
+}

@@ -200,6 +200,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "self_recursion_shapes.inline.jit.compiled"
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 desc = "The four functions are executed as machine code, not left to the interpreter: the JIT log names each as compiled, and the values are still the node VM's."
 kind = "behavior"
 case = "../../../cases/linear/jit/self_recursion_shapes.cml"

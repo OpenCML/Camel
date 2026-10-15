@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 13, 2024
- * Updated: May. 01, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -40,31 +40,12 @@ namespace camel::compile::gir {
 // Enum and string-conversion declarations
 // =============================================================================
 
-enum class NodeType {
-    DATA,
-    PORT,
-    CAST,
-    COPY,
-    FILL,
-    ACCS,
-    BRCH,
-    JOIN,
-    CALL,
-    BIND,
-    FUNC,
-    OPER,
-    SYNC,
-    GATE,
-    DREF,
-};
-
 enum class LinkType {
     Norm,
     With,
     Ctrl,
 };
 
-std::string to_string(NodeType type);
 std::string to_string(LinkType type);
 
 // =============================================================================

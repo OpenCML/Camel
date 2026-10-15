@@ -106,12 +106,12 @@ expect_output_contains = ["import_missing.cml:3:1: [Error]: Module 'nosuch_modul
 
 [[tests]]
 name = "surface.self_import"
-desc = "A file that imports a module of its own name imports itself: ImportCycle at the import (the compiler crashed)."
-kind = "negative"
+desc = "A file that imports a module of its own name imports itself (the compiler crashed, then it was ImportCycle): modules may import each other (design principles 2.11), and a module importing itself is that cycle at its shortest; nothing is wrong."
+kind = "behavior"
 case = "../../../cases/compile/surface/self_import.cml"
 args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_output_contains = ["name=SemanticDiag::ImportCycle", "self_import.cml:1:1", "name=SemanticDiag::ImportedModuleHasErrors"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Segmentation fault", "internal error"]
 
 [[tests]]
 name = "surface.composition"

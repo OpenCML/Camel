@@ -335,6 +335,30 @@ class Encoder {
         emitBytes({0x49, 0x83, 0xef, 0x01});
         asmLineAt(at, "sub r15, 1  ; recursion budget");
     }
+    // cmp rsp, [ctx + disp]: CF is set when the stack pointer is below the field.
+    void cmpRspCtxField(int8_t disp) {
+        size_t at = here();
+#if defined(_WIN32) || defined(_WIN64)
+        emitBytes({0x48, 0x3b, 0x66, static_cast<uint8_t>(disp)});
+        const char *reg = "rsi";
+#else
+        emitBytes({0x49, 0x3b, 0x65, static_cast<uint8_t>(disp)});
+        const char *reg = "r13";
+#endif
+        asmLineAt(at, std::string("cmp rsp, [") + reg + "+" + std::to_string(disp) + "]");
+    }
+    // mov [ctx + disp], r15
+    void movCtxFieldR15(int8_t disp) {
+        size_t at = here();
+#if defined(_WIN32) || defined(_WIN64)
+        emitBytes({0x4c, 0x89, 0x7e, static_cast<uint8_t>(disp)});
+        const char *reg = "rsi";
+#else
+        emitBytes({0x4d, 0x89, 0x7d, static_cast<uint8_t>(disp)});
+        const char *reg = "r13";
+#endif
+        asmLineAt(at, std::string("mov [") + reg + "+" + std::to_string(disp) + "], r15");
+    }
     void returnDepthBudget() {
         size_t at = here();
         emitBytes({0x49, 0xff, 0xc7});

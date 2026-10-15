@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Apr. 12, 2026
- * Updated: May. 01, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -41,8 +41,10 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
+#include <vector>
 
 class OperatorIndex;
 
@@ -72,12 +74,10 @@ class DraftGraphBuilder {
     bool hasFrameLayout() const { return draft_->hasFrameLayout(); }
     size_t frameSize() const { return draft_->frameSize(); }
     bool parameterized() const { return parameterized_; }
-    bool looped() const { return looped_; }
     void setName(std::string name) { name_ = std::move(name); }
     void setStableId(std::string stableId) { stableId_ = std::move(stableId); }
     void setOuterGraph(const graph_ptr_t &graph) { outerGraph_ = graph; }
     const graph_ptr_t &outerGraph() const { return outerGraph_; }
-    void setLooped(bool looped) { looped_ = looped; }
     void setParameterized(bool parameterized) { parameterized_ = parameterized; }
     template <typename T, std::size_t Index> T *getExtra() const { return extras_.get<T, Index>(); }
     template <typename T, std::size_t Index> void setExtra(T *ptr) const {
@@ -85,6 +85,15 @@ class DraftGraphBuilder {
     }
 
     void setFuncType(camel::core::type::FunctionType *funcType);
+    /// Completes the signature with the result type its body decided: an open signature (the
+    /// type of a function the program declared, camel/core/type/composite/func.h) is completed
+    /// in place, so every value of the function sees it; any other is replaced by the interned
+    /// signature with that result type. Interned types are never modified.
+    void setExitType(camel::core::type::Type *exitType);
+    /// The names the function captures, in capture order (runtime::GraphDraft::captureNames).
+    std::vector<std::string_view> captureNames() const;
+    /// Records that the function captures `name` (one entry per capture port, in order).
+    void addCaptureName(std::string_view name) { draft_->addCaptureName(name); }
     void setClosureType(camel::core::type::TupleType *closureType);
 
     runtime::gc_slot_idx_t addStaticSlot(slot_t slot);
@@ -113,7 +122,6 @@ class DraftGraphBuilder {
         camel::core::type::Type *type, runtime::DraftNode *brchNode, runtime::gc_cnt_t armCount);
     runtime::DraftNode *
     addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body = {});
-    runtime::DraftNode *addBindNode(camel::core::type::Type *type);
     runtime::DraftNode *addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
     runtime::DraftNode *addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);
     runtime::DraftNode *addSyncNode();
@@ -208,7 +216,6 @@ class DraftGraphBuilder {
     std::string name_;
     std::string stableId_;
     graph_ptr_t outerGraph_;
-    bool looped_        = false;
     bool parameterized_ = false;
 
     std::unordered_map<const runtime::DraftNode *, std::string> nodeDebugIds_;

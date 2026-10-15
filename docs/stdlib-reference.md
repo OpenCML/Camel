@@ -42,7 +42,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [fs](#fs) | `import { ... } from fs` | C++ | 10 |
 | [os](#os) | `import { ... } from os` | C++ | 8 |
 | [sys](#sys) | `import { ... } from sys` | C++ | 2 |
-| [json](#json) | `import { ... } from json` | C++ | 3 |
+| [json](#json) | `import { ... } from json` | C++ | 12 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
 | [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
@@ -135,7 +135,7 @@ x as a 32-bit float.
 #### `string`
 
 ```camel
-string: (x: any) => string
+string: (x: T) => string
 ```
 
 x as text, as println writes it. A float is written as the shortest text that reads back as
@@ -185,10 +185,12 @@ position of the call. `throw error(...)` returns it from a function declared `T!
 #### `print`
 
 ```camel
-print: (...args: any) => void
+print: (x: T, ...rest: U...) => T
 ```
 
-Writes the arguments, separated by spaces, without a line end.
+Writes the arguments, separated by spaces, without a line end, and gives back the first one
+(so that the write can be part of the data flow). The other arguments may each have a type
+of their own.
 
 - With effects: writes to standard output.
 - Example: `print('a', 1)` gives `a 1`
@@ -196,10 +198,12 @@ Writes the arguments, separated by spaces, without a line end.
 #### `println`
 
 ```camel
-println: (...args: any) => void
+println: (x: T, ...rest: U...) => T
 ```
 
-Writes the arguments, separated by spaces, and a line end.
+Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
+that the write can be part of the data flow). The other arguments may each have a type of
+their own.
 
 - With effects: writes to standard output.
 - Example: `println('a', 1)` gives `a 1`
@@ -243,7 +247,7 @@ Ends the program with the given exit code, after writing buffered output.
 #### `format`
 
 ```camel
-format: <...args: any> (fmt: string) => string
+format: <...args: T...> (fmt: string) => string
 ```
 
 The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
@@ -937,9 +941,9 @@ argument.
   the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
   `sort_by` and `zip_with`. None of them stops early: the function is applied to every
   element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
-- These are generic functions: each call builds the instance for its element types in the
-  module that calls it (DESIGN-QUESTION(generic-export)). `group_by` is not here: it needs
-  the map type.
+- These are generic functions: there is one instance per set of element types in the whole
+  program, whichever module calls it (one root graph, design principles 2.11). `group_by`
+  is not here: it needs the map type.
 
 ### Rearranging
 
@@ -1901,6 +1905,14 @@ primitive behind `sort_by` of the `array` module.
 One generator for the whole process. Every function reads or advances it and is declared with
 effects; none is ever folded or merged by a pass.
 
+After a seed the numbers are the same on every platform. The generator is the 64-bit Mersenne
+Twister (std::mt19937_64, seeded with the value as an unsigned 64-bit integer), and the draws
+are made by the project's own code (include/camel/utils/random.h), not by the C++ library's
+distributions, which differ between libraries: a float in [0, 1) is the generator's 64 bits
+times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
+method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
+output modulo the number of places left.
+
 #### `seed`
 
 ```camel
@@ -2281,53 +2293,168 @@ The current working directory.
 #### `encode`
 
 ```camel
-encode: (value: any) => string
+encode: (value: T) => string
 ```
 
-The JSON text of a value, on one line.
+The JSON text of a value, on one line. The type of the value must have a JSON form:
+numbers, bool, string, null, and arrays, tuples, structs, sets and maps with string keys
+of those; a function or a tensor is refused when the call is compiled.
 
 - Pure.
-- Failure: fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold.
 - Example: `encode([1, 2])` gives `'[1,2]'`
 
 #### `encode`
 
 ```camel
-encode: (value: any, indent: int) => string
+encode: (value: T, indent: int) => string
 ```
 
 The JSON text of a value, indented by indent spaces per level; a negative indent gives one
 line.
 
 - Pure.
-- Failure: fault `JsonEncodeUnsupported` when the value has a type JSON cannot hold.
 - Example: `encode([1, 2], 2)` gives `'[\n  1,\n  2\n]'`
 
 #### `decode`
 
 ```camel
-decode: (text: string) => any
+decode: (text: string) => Json
 ```
 
-The value a JSON text describes. Its static type is `any`.
+The value a JSON text describes, as a `Json`: a value of a definite type whose content is
+known only when the program runs. Look into it with get, as_int, as_array and the other
+operators below, each of which gives a value of a definite type; read a part whose shape is
+known with decode_as. Prints as its JSON text.
 
 - Pure.
 - Failure: fault `JsonDecodeFailed` when the text is not JSON.
-- Example: `decode('[1, 2]')` gives `an array of 1 and 2, typed any`
+- Example: `decode('{"port": 80}')->get<'port'>->as_int ?? 0` gives `80`
 
 #### `decode_as`
 
 ```camel
-decode_as: <shape: any> (text: string) => any
+decode_as: <shape: T> (text: string | Json) => T!
 ```
 
-The value a JSON text describes, decoded to the type of shape; the value of shape is not
-read. The result is an error value when the text does not have that type.
-  the mismatch; error value `JsonDecodeFailed` when the text is not JSON
+The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
+the value of shape is not read. The result is an error value when the JSON does not have
+that type. A part of the shape typed `Json` takes whatever is there.
 
 - Pure.
-- Failure: error value `JsonTypeError` when the text is JSON of another type, with the path of.
+- Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON.
 - Example: `decode_as<[] as Map<string, int>>('{"a": 1}')` gives `{a: 1}`
+
+#### `kind`
+
+```camel
+kind: (j: Json) => string
+```
+
+The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
+
+- Pure.
+- Example: `kind(decode('[1]'))` gives `'array'`
+
+#### `is_null`
+
+```camel
+is_null: (j: Json) => bool
+```
+
+Whether a Json is the JSON null.
+
+- Pure.
+- Example: `is_null(decode('null'))` gives `true`
+
+#### `get`
+
+```camel
+get: <key: string> (j: Json | Json?) => Json?
+```
+
+The member key of an object; null when j is not an object, has no such member, or is null
+itself (so that calls chain: j->get<'a'>->get<'b'>).
+
+- Pure.
+- Example: `decode('{"a": 1}')->get<'a'>` gives `1, a Json?`
+
+#### `get`
+
+```camel
+get: <index: int> (j: Json | Json?) => Json?
+```
+
+The element index of an array; null when j is not an array, the index is out of range, or j
+is null itself.
+
+- Pure.
+- Example: `decode('[5, 6]')->get<1>->as_int ?? 0` gives `6`
+
+#### `as_bool`
+
+```camel
+as_bool: (j: Json | Json?) => bool?
+```
+
+The bool a Json holds; null for any other kind.
+
+- Pure.
+- Example: `decode('true')->as_bool ?? false` gives `true`
+
+#### `as_int`
+
+```camel
+as_int: (j: Json | Json?) => int?
+```
+
+The integer a Json holds; null for any other kind (a number with a fraction is not an int).
+
+- Pure.
+- Example: `decode('42')->as_int ?? 0` gives `42`
+
+#### `as_float`
+
+```camel
+as_float: (j: Json | Json?) => float?
+```
+
+The number a Json holds, an integer included; null for any other kind.
+
+- Pure.
+- Example: `decode('2')->as_float ?? 0.0` gives `2.0`
+
+#### `as_string`
+
+```camel
+as_string: (j: Json | Json?) => string?
+```
+
+The string a Json holds; null for any other kind.
+
+- Pure.
+- Example: `decode('"hi"')->as_string ?? ''` gives `'hi'`
+
+#### `as_array`
+
+```camel
+as_array: (j: Json | Json?) => Json[]?
+```
+
+The elements of a JSON array; null for any other kind.
+
+- Pure.
+- Example: `len(decode('[1, "a"]')->as_array ?? [])` gives `2`
+
+#### `as_object`
+
+```camel
+as_object: (j: Json | Json?) => Map<string, Json>?
+```
+
+The members of a JSON object, by name; null for any other kind.
+
+- Pure.
+- Example: `keys(decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>))` gives `['a', 'b']`
 
 <a id="re"></a>
 

@@ -1,0 +1,16 @@
+/** Helper module: imports mutual_b, which imports it back; functions, values and a type. */
+module mutual_a
+import mutual_b
+
+export type Point = { x: int, y: int }
+
+export let origin_x = 10
+export let derived = mutual_b::scale * 2
+
+export func is_even(n: int): bool {
+    return if n == 0 then true else mutual_b::is_odd(n - 1)
+}
+
+export func describe(p: Point): string {
+    return mutual_b::label(p)
+}

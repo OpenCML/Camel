@@ -285,8 +285,24 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             &&label_DGE,
         };
 
+        // Coverage statistics (opCounts_, fastvm_stats.cpp; a switch for the whole process):
+        // when they are on, every entry of the dispatch table is redirected, once, to
+        // label_COUNT, which counts the bytecode and continues at its handler through the
+        // saved table. When they are off nothing here runs and the dispatch is untouched.
+        static void *handlerTable[256];
+        if (opCounts_ != nullptr && handlerTable[0] == nullptr) [[unlikely]] {
+            for (size_t i = 0; i < 256; ++i) {
+                handlerTable[i]  = dispatchTable[i];
+                dispatchTable[i] = &&label_COUNT;
+            }
+        }
+
         // Initial dispatch
         JUMP();
+
+    label_COUNT:
+        ++opCounts_[pc];
+        goto *handlerTable[static_cast<size_t>(bc->opcode)];
 
     label_RETN: {
         EXEC_WHEN_DEBUG(
@@ -648,12 +664,36 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 framePool_._resetTop();
                 return frame;
             }();
+#ifdef CAMEL_FVM_INSPECTED_LOOP
+            // Under an execution observer the target stays on this loop, whose hooks compiled
+            // code does not have. (A debugger runs std::jit as std::fvm, so this is not
+            // reached from one; it keeps the loop correct for any other observer.)
             if (currFrame == rootActiveFrame) {
                 rootActiveFrame = newFrame;
             }
             pc        = getFuncExtraTargetPc(bc);
             currFrame = newFrame;
             JUMP();
+#else
+            // The target is compiled: its code takes over. A tail call replaces the current
+            // activation, so the result of the code is the result of that activation.
+            JitEntryFn fn = reinterpret_cast<JitEntryFn>(getFuncExtraFn(bc));
+            if (currFrame == rootActiveFrame) {
+                // It was the activation call() was entered for: the caller of the interpreter
+                // runs the code (CallResult::tailFn), once this function is off the native
+                // stack. A loop of tail calls between compiled and interpreted graphs therefore
+                // does not grow that stack.
+                return CallResult{NullSlot, newFrame, reinterpret_cast<void *>(fn)};
+            }
+            currFrame     = newFrame;
+            slot_t result = invokeOwnedJitFrame(fn, newFrame, currentJitCtx_);
+            auto [lastPC, lastFrame] = pop();
+            pc                       = lastPC;
+            bc                       = &bytecodes_[pc];
+            currFrame                = lastFrame;
+            fastFrameSetSlot(currFrame, bc->result, result);
+            NEXT();
+#endif
         }
         size_t targetPc = getFuncExtraTargetPc(bc);
         slot_t tailArg0 = NullSlot;

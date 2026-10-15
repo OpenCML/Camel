@@ -359,6 +359,7 @@ Each is implemented as recommended; none changes the behaviour of an existing pr
   is an `int?`.
 - **Q10. `null` given to a parameter.** Ruled on (2.10): `f(null)` with `f(x: int?)`.
 - **Q11. A void expression where a `T?` is expected.** `null` has the type `void`, so any
-  `void` expression is accepted where `null` is: under `as T?`, as an argument, as a branch
-  arm (`if c then 1 else f()` with a `f` that returns nothing is an `int?`). Should only the
-  literal be? `DESIGN-QUESTION(void-as-null)`.
+  `void` expression is accepted where `null` is. For a branch arm this is ruled on (2.11):
+  an arm without a value and an arm of type `T` make the branch a `T?`
+  (`if c then 1 else f()` with a `f` that returns nothing is an `int?`). Under `as T?` and
+  as an argument the same holds in the implementation and has not been ruled on.

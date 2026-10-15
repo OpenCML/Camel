@@ -1,0 +1,8 @@
+// `if s != null then A else B` on the graph: the branch of the `match` in graph_match.cml.
+func len_or_zero(s: string?): int {
+    return if s != null then len(s) else 0
+}
+
+func main(): int {
+    return len_or_zero('abc')
+}

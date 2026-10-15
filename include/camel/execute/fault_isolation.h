@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -44,11 +44,9 @@ namespace camel::execute {
 /// contain it.
 inline constexpr const char *kFaultIsolationName = "attempt";
 
-/// The URI of the operator, and the same without the ":mark/" prefix.
-inline constexpr std::string_view kFaultIsolationUri  = ":mark/isolate";
-inline constexpr std::string_view kFaultIsolationMark = "isolate";
-
-inline bool isFaultIsolationUri(std::string_view uri) { return uri == kFaultIsolationUri; }
+/// The URI of the operator. Schedulers recognise it by its id, camel::core::oper::Isolate
+/// (camel/core/operator_table.h), which the operator table gives this URI.
+inline constexpr std::string_view kFaultIsolationUri = ":mark/isolate";
 
 /// The result type of the operator applied to arguments of the types `norm` (the function value
 /// first), or nullopt when it does not apply: `f: (A...) => T` gives `T!`; a function that

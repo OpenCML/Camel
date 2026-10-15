@@ -35,6 +35,21 @@
 #              ^^^^ keyword.control.import.from.camel
 #                   ^ punctuation.separator.module.relative.camel
 #                    ^^^^^^^^^^^^ entity.name.namespace.module.camel
+>import ..sibling as near
+#^^^^^^ keyword.control.import.camel
+#       ^^ punctuation.separator.module.relative.camel
+#         ^^^^^^^ entity.name.namespace.module.camel
+#                 ^^ keyword.operator.expression.camel
+>import { helper as dist } from shapes::detail::impl
+#^^^^^^ keyword.control.import.camel
+#       ^ meta.block.camel punctuation.section.block.begin.camel
+#                ^^ meta.block.camel keyword.operator.expression.camel
+#                        ^ meta.block.camel punctuation.section.block.end.camel
+#                          ^^^^ keyword.control.import.from.camel
+#                               ^^^^^^ entity.name.namespace.module.camel
+#                                     ^^ punctuation.separator.namespace.camel
+#                                       ^^^^^^ entity.name.namespace.camel
+#                                             ^^ punctuation.separator.namespace.camel
 >
 >namespace shapes {
 #^^^^^^^^^ storage.type.namespace.camel
@@ -119,15 +134,6 @@
 #^^^^^ keyword.control.import.camel
 #      ^^^^^^^^^ storage.type.namespace.camel
 #                ^^^^^^ entity.name.namespace.camel
->use dist = shapes::detail::impl::helper
-#^^^ keyword.control.import.camel
-#         ^ keyword.operator.assignment.camel
-#           ^^^^^^ entity.name.namespace.camel
-#                 ^^ punctuation.separator.namespace.camel
-#                   ^^^^^^ entity.name.namespace.camel
-#                         ^^ punctuation.separator.namespace.camel
-#                           ^^^^ entity.name.namespace.camel
-#                               ^^ punctuation.separator.namespace.camel
 >
 >export let ORIGIN = shapes::origin()
 #^^^^^^ keyword.control.import.camel

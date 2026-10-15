@@ -1,0 +1,57 @@
+digraph GraphIR {
+    subgraph cluster_F01 {
+        label="main";
+        subgraph cluster_F02 {
+            label="both";
+            subgraph cluster_F03 {
+                label="__g_4__";
+                F03 [label="ARGS", type="ARGS"];
+                O03 [label="EXIT", type="EXIT"];
+                N00 [label="PORT", type="PORT"];
+                N01 [label="1", type="DATA", origin=90, span="2:25-2:26", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+                N02 [label=":op/gt_l", type="OPER", origin=91, span="2:23-2:24", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+                F03 -> N00 [label="0", type="WITH_PORT"];
+                N02 -> O03 [label="0", type="EXIT"];
+                N00 -> N02 [label="0|0", type="NORM"];
+                N01 -> N02 [label="0|1", type="NORM"];
+            }
+            subgraph cluster_F04 {
+                label="__g_6__";
+                O04 [label="EXIT", type="EXIT"];
+                N03 [label="false", type="DATA", origin=93, span="2:32-2:37", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+                N03 -> O04 [label="0", type="EXIT"];
+            }
+            F02 [label="ARGS", type="ARGS"];
+            O02 [label="EXIT", type="EXIT"];
+            N04 [label="a", type="PORT"];
+            N05 [label="b", type="PORT"];
+            N06 [label="JOIN", type="JOIN", origin=87, span="2:11-2:37", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+            N07 [label="BRCH", type="BRCH", origin=86, span="2:11-2:37", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+            N08 [label="__g_4__", type="FUNC", origin=88, span="2:21-2:26", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+            N09 [label="__g_6__", type="FUNC", origin=92, span="2:32-2:37", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+            F02 -> N04 [label="0", type="NORM_PORT"];
+            F02 -> N05 [label="1", type="NORM_PORT"];
+            N06 -> O02 [label="0", type="EXIT"];
+            N08 -> N06 [label="0|0", type="WITH"];
+            N09 -> N06 [label="0|1", type="WITH"];
+            N07 -> N06 [label="0|0", type="NORM"];
+            N04 -> N07 [label="0|0", type="NORM"];
+            N05 -> N07 [label="0|0", type="CTRL"];
+            N05 -> N08 [label="0|0", type="WITH"];
+            N07 -> N08 [label="0|0", type="CTRL"];
+            N07 -> N09 [label="1|0", type="CTRL"];
+        }
+        O01 [label="EXIT", type="EXIT"];
+        N0A [label="true", type="DATA", origin=96, span="6:16-6:20", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+        N0B [label="2", type="DATA", origin=97, span="6:22-6:23", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+        N0C [label="both", type="FUNC", origin=98, span="6:15-6:24", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+        N0C -> O01 [label="0", type="EXIT"];
+        N0A -> N0C [label="0|0", type="NORM"];
+        N0B -> N0C [label="0|1", type="NORM"];
+    }
+    O00 [label="EXIT", type="EXIT"];
+    N0D [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=94, span="5:0-7:1", srcfile="<ROOT>/test/cases/consistency/logical/graph_if.cml"];
+    N0E [label="CALL", type="CALL"];
+    N0E -> O00 [label="0", type="EXIT"];
+    N0D -> N0E [label="0|0", type="WITH"];
+}

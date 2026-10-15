@@ -13,13 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: May. 01, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "camel/core/type/composite/array.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/intern.h"
+#include "camel/core/type/storage.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
@@ -41,40 +43,28 @@ ArrayType *ArrayType::create(Type *elemType) {
     if (!elemType) {
         elemType = Type::Void();
     }
-
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "ArrayType",
-        "Allocating ArrayType: {}[], size: {} bytes",
-        elemType->toString(),
-        sizeof(ArrayType)));
-
-    void *mem = mm::permSpace().alloc(sizeof(ArrayType), alignof(ArrayType));
-    ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
-    return new (mem) ArrayType(elemType);
+    // One object per element type object (camel/core/type/intern.h): every `int[]` a program
+    // writes, every array a rule infers, and every re-encoding of a graph share it.
+    const auto make = [elemType]() -> Type * {
+        EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
+            "ArrayType",
+            "Allocating ArrayType: {}[], size: {} bytes",
+            elemType->toString(),
+            sizeof(ArrayType)));
+        void *mem = allocTypeStorage<ArrayType>(TypeStorageKind::Array);
+        return new (mem) ArrayType(elemType);
+    };
+    const uintptr_t key = reinterpret_cast<uintptr_t>(elemType);
+    Type *type          = TypeTable::instance().intern(
+        TypeTable::Shape::Array,
+        std::span<const uintptr_t>(&key, 1),
+        make);
+    return static_cast<ArrayType *>(type);
 }
 
-ArrayType *ArrayType::fromFactory(ArrayTypeFactory &factory) {
-    if (!factory.elemType_) {
-        factory.elemType_ = Type::Void();
-    }
-    return fromData(factory.elemType_);
-}
+ArrayType *ArrayType::fromFactory(ArrayTypeFactory &factory) { return create(factory.elemType_); }
 
-ArrayType *ArrayType::fromData(Type *elemType) {
-    if (!elemType) {
-        elemType = Type::Void();
-    }
-
-    EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
-        "ArrayType",
-        "Allocating ArrayType: {}[], size: {} bytes",
-        elemType->toString(),
-        sizeof(ArrayType)));
-
-    void *mem = mm::permSpace().alloc(sizeof(ArrayType), alignof(ArrayType));
-    ASSERT(mem != nullptr, "Failed to allocate ArrayType from permSpace");
-    return new (mem) ArrayType(elemType);
-}
+ArrayType *ArrayType::fromData(Type *elemType) { return create(elemType); }
 
 Type *ArrayType::resolve(const type_vec_t &typeList) const {
     ASSERT(typeList.size() > 0, "Type list is empty");
@@ -82,8 +72,8 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
 
     Type *newElemType = elemType_;
     for (const auto &type : typeList) {
-        if (newElemType->code() == TypeCode::Void || newElemType->code() == TypeCode::Any ||
-            newElemType->code() == TypeCode::Ref) {
+        // Void and Ref stand for "no element seen yet".
+        if (newElemType->code() == TypeCode::Void || newElemType->code() == TypeCode::Ref) {
             newElemType = type;
         } else if (Type *joined = newElemType->unify(type)) {
             // Elements of refinement-carrying types (e.g. tensors of different shapes) share
@@ -110,8 +100,8 @@ std::string ArrayType::mangle() const {
 }
 
 Type *ArrayType::clone(bool deep /* = false */) const {
-    Type *newElemType = deep ? elemType_->clone(true) : elemType_;
-    return fromData(newElemType);
+    // Interned: a shallow clone is this very object, which is what an immutable type allows.
+    return create(deep ? elemType_->clone(true) : elemType_);
 }
 
 bool ArrayType::equals(Type *other) const {
@@ -125,12 +115,20 @@ bool ArrayType::equals(Type *other) const {
     return elemType_->equals(otherArr.elemType_);
 }
 
+// Converting a value to its own type is legal and does nothing (design principles 2.12): the
+// rule compares structure, so `xs as int[]` passes for `xs: int[]` however each was written.
 CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType))
-        return *r;
-    if (this == sourceType)
-        return CastSafety::Safe;
-    return CastSafety::Forbidden;
+    if (sourceType == nullptr)
+        return CastSafety::Forbidden;
+    return equals(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
+}
+
+// Every conversion castSafetyFrom admits (to the same type) keeps the value.
+slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
+    ASSERT(
+        castSafetyFrom(sourceType) == CastSafety::Safe,
+        "castSlotFrom only allowed when castSafetyFrom returns Safe");
+    return value;
 }
 
 // Arrays have no element mutation, so they accept arrays of assignable element types

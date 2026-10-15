@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 04, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,7 +21,7 @@
  * Effect trace: an ordered log of the effectful operators a process executed.
  *
  * When the environment variable CAMEL_EFFECT_TRACE names a file, every operator that is not
- * registered as pure in OperatorTraitsRegistry appends one JSON line when it is called:
+ * registered as pure in OperatorTable appends one JSON line when it is called:
  *
  *   {"seq":0,"uri":":io/println","stage":"run",
  *    "origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...",

@@ -1,0 +1,14 @@
+// The importing module has top-level values of the same names: the imported functions still
+// use their own module's (before, the capture was looked up by name where the function was
+// called, and this program printed 1001 and 1000).
+import { bump, current } from counter
+
+let step = 1000
+var cnt = 1000
+
+sync func main(): int sync {
+    println(bump())
+    println(current())
+    println(step, cnt)
+    return 0
+}

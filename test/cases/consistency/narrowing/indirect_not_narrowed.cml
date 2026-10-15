@@ -1,0 +1,9 @@
+// A test under `||` does not narrow the arms of the `if` (design principles 2.12).
+func f(x: int?, flag: bool): int {
+    return if x != null || flag then x + 1 else 0
+}
+
+func main(): int sync {
+    println(f(1, true))
+    return 0
+}

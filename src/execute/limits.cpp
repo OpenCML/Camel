@@ -157,14 +157,26 @@ void throwRecursionLimitReached(std::string_view graphName, size_t limit) {
         limit);
 }
 
+std::string nativeStackExhaustedDetail(size_t openCalls) {
+    return std::format(
+        "{} open calls: the native stack of the thread, {} KiB, is full",
+        openCalls,
+        nativeStackSize() / 1024);
+}
+
 void throwNativeStackExhausted(std::string_view graphName, size_t openCalls) {
     core::error::throwRuntimeFault(
         core::error::RuntimeDiag::MaxRecursionDepthExceeded,
         std::string(graphName),
-        std::format(
-            "{} open calls: the native stack of the thread, {} KiB, is full",
-            openCalls,
-            nativeStackSize() / 1024));
+        nativeStackExhaustedDetail(openCalls));
+}
+
+uintptr_t nativeStackFloor() {
+    const StackBounds &bounds = threadStackBounds();
+    if (bounds.low == 0 || !nativeStackGuardEnabled()) {
+        return 0;
+    }
+    return bounds.low + stackReserve(bounds);
 }
 
 bool nativeStackGuardEnabled() {

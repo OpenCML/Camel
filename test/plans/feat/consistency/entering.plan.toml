@@ -316,3 +316,14 @@ kind = "behavior"
 case = "../../../cases/consistency/entering/arms_folded.cml"
 args = ["${case}", "std::inline", "std::opt::fold", "${backend}"]
 expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
+
+[[tests]]
+name = "entering.void_arm_and_reversed_slice"
+desc = "Rulings of 2026-10-13 confirmed: an arm without a value and an arm of type T make the branch a T? (the arm without a value gives null); `slice<2, 1>` is the empty array, not a fault. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/entering/void_arm.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "7 -1\nnone b\n[] 0 [] [1, 2]\n"

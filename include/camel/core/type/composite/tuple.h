@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 06, 2024
- * Updated: May. 05, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -90,13 +90,20 @@ class TupleType : public CompositeType {
     TupleType(const TupleType &)            = delete;
     TupleType &operator=(const TupleType &) = delete;
 
-    // Create a resolved TupleType.
+    /// The tuple type with these element types. Interned (camel/core/type/intern.h): the same
+    /// element type objects in the same order always give the same immutable object. Never a
+    /// variable cell or a tagged form, which have constructors of their own.
     static TupleType *create();
     static TupleType *create(const std::vector<Type *> &types);
     static TupleType *create(std::vector<Type *> &&types);
+    static TupleType *create(std::span<Type *const> types);
 
     // Build from a factory.
     static TupleType *fromFactory(TupleTypeFactory &factory);
+
+    /// The layout of a frame or of a static area: the slot types in order. The tuple type of
+    /// those slot types (create()); the name says what the caller uses it for.
+    static TupleType *layout(std::span<Type *const> slotTypes);
 
     /// The type of a variable cell: the one-slot mutable object that a `var` variable denotes
     /// and that is shared, by pointer, with every `var` parameter and capture bound to it. It
@@ -124,11 +131,6 @@ class TupleType : public CompositeType {
         ASSERT(isTagged(), "payloadType() is defined for T? and T! only");
         return typeAt(0);
     }
-
-    // Helper: build from raw data (internal use).
-    static TupleType *fromFactoryData(
-        const Type *const *types, const TypeCode *typeCodes, const size_t *refs, size_t size,
-        size_t refCount);
 
     size_t size() const { return size_; }
     Type *typeAt(size_t index) const {
@@ -168,14 +170,10 @@ class TupleType : public CompositeType {
     virtual Type *widened() const override;
 
   private:
-    // Copy once from the precomputed layout + data pointers.
-    TupleType(
-        const TupleTypeLayout &layout, const Type *const *types, const TypeCode *typeCodes,
-        const size_t *refs);
-    // Fill directly from the factory, with no temporary vector.
-    TupleType(TupleTypeFactory &factory, const TupleTypeLayout &layout);
-    // Fill in one pass from vector<Type*> (used by create).
+    // Fill in one pass from vector<Type*>.
     TupleType(const TupleTypeLayout &layout, const std::vector<Type *> &types);
+    // A new, unshared object: what every constructor of this class starts from.
+    static TupleType *allocate(const std::vector<Type *> &types);
 
     bool cell_ = false;      // A variable cell, see cell().
     Tag tag_   = Tag::None;  // A tagged form, see nullable() and fallible().

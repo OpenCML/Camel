@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 03, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -405,10 +405,24 @@ std::string_view operUriOf(const GCGraph *g, gc_node_ref_t ref) {
     return g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
 }
 
+/// The operator of an OPER node, kNoOper for any other node.
+core::OperId operIdOf(const GCGraph *g, gc_node_ref_t ref) {
+    const auto *n = g->node(ref);
+    if (n == nullptr || n->kind != GCNodeKind::Oper) {
+        return core::kNoOper;
+    }
+    return g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->oper;
+}
+
+/// Reading a variable (`:var/get`) or storing into one (`=`, `+=`, ...).
+bool readsOrAssignsVariable(core::OperId id) {
+    return id == core::oper::VarGet || core::OperatorTable::instance().isAssignment(id);
+}
+
 /// A variable declared in `g` itself (`var v = e` is the operator `:var/new`): its content
 /// never leaves the function, so reads and assignments of it are not effects of the model.
 bool isLocalVariable(const GCGraph *g, gc_node_ref_t cell) {
-    return operUriOf(g, cell) == ":var/new";
+    return operIdOf(g, cell) == core::oper::VarNew;
 }
 
 /// An assignment operator, taken apart: `:op/assn[_T]` stores its operand; `:op/assn_<op>[_T]`
@@ -487,18 +501,18 @@ void Evaluator::refuseEffects(GCGraph *root) {
             const auto *n       = g->node(ref);
             GCGraph *referenced = nullptr;
             if (n->kind == GCNodeKind::Oper) {
-                const std::string uri(g->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+                const auto *body = g->nodeBodyAs<camel::runtime::GCOperBody>(ref);
                 // Declaring, reading and assigning a variable of the function itself is no
                 // effect of the model (evalVariableRead translates the reads).
                 const bool onLocalVariable =
-                    uri == ":var/new" ||
-                    ((uri == ":var/get" || assignmentKindOf(uri).isAssignment) &&
-                     !g->normInputsOf(ref).empty() &&
+                    body->oper == core::oper::VarNew ||
+                    (readsOrAssignsVariable(body->oper) && !g->normInputsOf(ref).empty() &&
                      isLocalVariable(g, g->normInputsOf(ref).front()));
-                if (!onLocalVariable && !core::OperatorTraitsRegistry::instance().isPure(uri)) {
+                if (!onLocalVariable && !core::OperatorTable::instance().isPure(body->oper)) {
+                    const std::string uri(body->uri());
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
-                        uri == ":var/get" || assignmentKindOf(uri).isAssignment
+                        readsOrAssignsVariable(body->oper)
                             ? std::string(kOuterVariable)
                             : std::format("impure operator '{}' cannot be exported", uri);
                     throw ExportError(
@@ -2480,12 +2494,12 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
             if (user == at) {
                 continue;
             }
-            const std::string_view uri = operUriOf(g, user);
-            if (uri == ":var/get") {
+            const core::OperId id = operIdOf(g, user);
+            if (id == core::oper::VarGet) {
                 continue;
             }
-            if (!assignmentKindOf(uri).isAssignment || g->normInputsOf(user).size() != 2 ||
-                g->normInputsOf(user).front() != cell) {
+            if (!core::OperatorTable::instance().isAssignment(id) ||
+                g->normInputsOf(user).size() != 2 || g->normInputsOf(user).front() != cell) {
                 unsupported(
                     act,
                     "a variable of the exported function is passed to a call, a branch arm or "
@@ -2530,10 +2544,10 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
 Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     GCGraph *g       = act.graph;
     const auto *body = g->nodeBodyAs<camel::runtime::GCOperBody>(ref);
-    const std::string uri(body->uri());
-    if (uri == ":var/get") {
+    if (body->oper == core::oper::VarGet) {
         return evalVariableRead(act, ref);
     }
+    const std::string uri(body->uri());
     std::vector<Value> norm = evalAll(act, g->normInputsOf(ref));
     std::vector<Value> with = evalAll(act, g->withInputsOf(ref));
     return applyOper(act, uri, std::move(norm), g->node(ref)->dataType, std::move(with));
@@ -2548,7 +2562,7 @@ Value Evaluator::applyOper(
 
     // Simplification has evaluated every pure operator whose arguments are constants; what is
     // left is translated. Side effects have no ONNX counterpart.
-    if (!core::OperatorTraitsRegistry::instance().isPure(uri)) {
+    if (!core::OperatorTable::instance().isPure(uri)) {
         unsupported(act, std::format("impure operator '{}' cannot be exported", uri));
     }
     if (allConstant(norm) && allConstant(with) && !std::ranges::any_of(norm, isDeferredClosure) &&

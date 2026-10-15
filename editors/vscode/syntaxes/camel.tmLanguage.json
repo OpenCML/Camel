@@ -46,6 +46,11 @@
           "endCaptures": { "0": { "name": "punctuation.definition.comment.end.camel" } }
         },
         {
+          "name": "comment.line.documentation.camel",
+          "match": "(///)(?!/).*$",
+          "captures": { "1": { "name": "punctuation.definition.comment.camel" } }
+        },
+        {
           "name": "comment.line.double-slash.camel",
           "match": "(//).*$",
           "captures": { "1": { "name": "punctuation.definition.comment.camel" } }
@@ -362,7 +367,7 @@
         },
         {
           "name": "keyword.control.loop.camel",
-          "match": "\\b(?:for|in)\\b"
+          "match": "\\b(?:loop|while|for|in)\\b"
         },
         {
           "name": "keyword.control.exception.camel",
@@ -374,7 +379,7 @@
         },
         {
           "name": "keyword.control.import.camel",
-          "match": "\\b(?:module|import|export|from|use|using)\\b"
+          "match": "\\b(?:module|import|export|from|using)\\b"
         },
         {
           "name": "storage.type.function.camel",
@@ -432,7 +437,7 @@
       "patterns": [
         {
           "name": "support.type.primitive.camel",
-          "match": "\\b(?:int|i32|i64|float|f32|f64|bool|string|any|void)\\b"
+          "match": "\\b(?:int|i32|i64|float|f32|f64|bool|string|void)\\b"
         },
         {
           "name": "support.type.collection.camel",

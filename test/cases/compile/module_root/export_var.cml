@@ -1,0 +1,6 @@
+// A `var` cannot be exported (design principles 2.11).
+import export_var_lib
+
+func main(): int sync {
+    return 0
+}

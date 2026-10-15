@@ -144,9 +144,8 @@
 
 7. 每个 `FUNC` 的普通实参数与 `with` 实参数等于被调图的端口数。
 
-`src/compile/gir/validate.cpp` 中的 `assertGraphSealingPreconditions` /
-`assertGraphTreeSealingPreconditions` 是旧的检查（以 `ASSERT` 实现）；除了后者调用前者之外没有任何调用点
-（2026-10-12 检索 `src/`、`include/`），在任何构建模式下都不执行。上面的检查取代了它。
+旧的 `src/compile/gir/validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
+已于 2026-10-13 删除（图数据模型迁移第 1 步）；上面的检查取代了它。
 
 测试用的故障注入遍（`src/passes/test/fault.cpp`）只在设置环境变量 `CAMEL_ENABLE_TEST_PASSES` 时可用，
 用来验证破坏结构的图会在提交时被拒绝：`test::drop_call_argument`（条款 7）与

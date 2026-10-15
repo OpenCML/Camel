@@ -1,0 +1,7 @@
+// Values of two modules that depend on each other: ModuleValueCycle across the modules.
+import cycle_x
+
+func main(): int sync {
+    println(cycle_x::x)
+    return 0
+}

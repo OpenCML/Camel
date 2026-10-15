@@ -1,0 +1,352 @@
+id = "modules.json_value"
+order = 352
+tier = "feat"
+tags = ["feat", "modules", "json", "gc"]
+
+# json.decode gives a `Json` (design principles 2.12; modules/json/value.h): a value of a
+# definite type whose content describes itself, looked into with the accessors of the json
+# module, and traced by both collectors through the types its kinds fix.
+
+[[tests]]
+name = "json.value.nvm"
+desc = "decode gives a Json; kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (nvm)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_value.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_starts_with = "{\"none\":null,\"on\":true,\"ratio\":2,\"server\":{\"host\":\"example.org\",\"port\":9000},\"tags\":[\"a\",\"b\",3]}\nobject array true\n9000 8080\nexample.org\na 3\nout of range not a string\n2.0 2 true\n3 [string, string, int]\n[none, on, ratio, server, tags]\nexample.org 9000\n7 {\"any\":[1,{\"x\":null}]} object\n[\"a\",\"b\",3] [true,1.5]\n1.8446744073709552e+19 -3 \"s\""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "json.value.fvm"
+desc = "decode gives a Json; kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (fvm)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_value.cml"
+args = ["${case}", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_starts_with = "{\"none\":null,\"on\":true,\"ratio\":2,\"server\":{\"host\":\"example.org\",\"port\":9000},\"tags\":[\"a\",\"b\",3]}\nobject array true\n9000 8080\nexample.org\na 3\nout of range not a string\n2.0 2 true\n3 [string, string, int]\n[none, on, ratio, server, tags]\nexample.org 9000\n7 {\"any\":[1,{\"x\":null}]} object\n[\"a\",\"b\",3] [true,1.5]\n1.8446744073709552e+19 -3 \"s\""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "json.value.jit"
+desc = "decode gives a Json; kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (jit)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_value.cml"
+args = ["${case}", "${run_jit}"]
+expect_exit = 0
+expect_stdout_starts_with = "{\"none\":null,\"on\":true,\"ratio\":2,\"server\":{\"host\":\"example.org\",\"port\":9000},\"tags\":[\"a\",\"b\",3]}\nobject array true\n9000 8080\nexample.org\na 3\nout of range not a string\n2.0 2 true\n3 [string, string, int]\n[none, on, ratio, server, tags]\nexample.org 9000\n7 {\"any\":[1,{\"x\":null}]} object\n[\"a\",\"b\",3] [true,1.5]\n1.8446744073709552e+19 -3 \"s\""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "json.value.prl"
+desc = "decode gives a Json; kind, get (by key and by index, chained over Json?), the as_ accessors, decode_as of a Json and of a shape with a Json member, encode and printing (prl)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_value.cml"
+args = ["${case}", "${run_prl}"]
+expect_exit = 0
+expect_stdout_starts_with = "{\"none\":null,\"on\":true,\"ratio\":2,\"server\":{\"host\":\"example.org\",\"port\":9000},\"tags\":[\"a\",\"b\",3]}\nobject array true\n9000 8080\nexample.org\na 3\nout of range not a string\n2.0 2 true\n3 [string, string, int]\n[none, on, ratio, server, tags]\nexample.org 9000\n7 {\"any\":[1,{\"x\":null}]} object\n[\"a\",\"b\",3] [true,1.5]\n1.8446744073709552e+19 -3 \"s\""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "json.gc.default.nvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=20000", "${run_nvm}"]
+envs = []
+expect_exit = 0
+expect_stdout_starts_with = "20000 [alpha, beta, gamma] x-20000\n20000 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.generational.nvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=20000", "${run_nvm}"]
+envs = ["CAMEL_GC=generational"]
+expect_exit = 0
+expect_stdout_starts_with = "20000 [alpha, beta, gamma] x-20000\n20000 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.forced_major.nvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.forced_minor.nvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_nvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor", "CAMEL_GC_PROMOTION_AGE=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.poison.nvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_nvm}"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.default.fvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=20000", "${run_fvm}"]
+envs = []
+expect_exit = 0
+expect_stdout_starts_with = "20000 [alpha, beta, gamma] x-20000\n20000 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.generational.fvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=20000", "${run_fvm}"]
+envs = ["CAMEL_GC=generational"]
+expect_exit = 0
+expect_stdout_starts_with = "20000 [alpha, beta, gamma] x-20000\n20000 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.forced_major.fvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.forced_minor.fvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor", "CAMEL_GC_PROMOTION_AGE=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.poison.fvm"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_fvm}"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.default.prl"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=20000", "${run_prl}"]
+envs = []
+expect_exit = 0
+expect_stdout_starts_with = "20000 [alpha, beta, gamma] x-20000\n20000 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.generational.prl"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=20000", "${run_prl}"]
+envs = ["CAMEL_GC=generational"]
+expect_exit = 0
+expect_stdout_starts_with = "20000 [alpha, beta, gamma] x-20000\n20000 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.forced_major.prl"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_prl}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.forced_minor.prl"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_prl}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor", "CAMEL_GC_PROMOTION_AGE=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc.poison.prl"
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc.cml"
+args = ["${case}", "--arg", "n=300", "${run_prl}"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [alpha, beta, gamma] x-300\n300 [v-0, v-1, v-2]"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.default.nvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, no forced collection; nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=20000", "std::macro", "${run_nvm}"]
+envs = []
+expect_exit = 0
+expect_stdout_starts_with = "20000 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.generational.nvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational; nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=20000", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC=generational"]
+expect_exit = 0
+expect_stdout_starts_with = "20000 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.forced_major.nvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, a major collection at every safepoint; nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=300", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.forced_minor.nvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=300", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor", "CAMEL_GC_PROMOTION_AGE=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.poison.nvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (safepoint poisoning; nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=300", "std::macro", "${run_nvm}"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.default.fvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, no forced collection; fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=20000", "std::macro", "${run_fvm}"]
+envs = []
+expect_exit = 0
+expect_stdout_starts_with = "20000 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.generational.fvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational; fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=20000", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC=generational"]
+expect_exit = 0
+expect_stdout_starts_with = "20000 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.forced_major.fvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, a major collection at every safepoint; fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=300", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.forced_minor.fvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=300", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor", "CAMEL_GC_PROMOTION_AGE=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "json.gc_macro.poison.fvm"
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (safepoint poisoning; fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+kind = "behavior"
+case = "../../../cases/modules/std/json/json_gc_macro.cml"
+args = ["${case}", "--arg", "n=300", "std::macro", "${run_fvm}"]
+envs = ["CAMEL_GC_POISON=1"]
+expect_exit = 0
+expect_stdout_starts_with = "300 [r0, r1, r2] t"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

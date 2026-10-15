@@ -1,0 +1,7 @@
+/// Refused by std::cpp: a fallible value
+module r07_fallible
+
+func main(): int sync {
+    println(parse_int('12') !! -1)
+    return 0
+}

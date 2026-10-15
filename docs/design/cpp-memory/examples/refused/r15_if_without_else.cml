@@ -1,0 +1,14 @@
+/// Refused by std::cpp: an `if` without `else` (its empty arm is a constant of type void).
+/// Schedulers print: start, inside, end.
+module r15_if_without_else
+
+func f(flag: bool): int sync {
+    println('start')
+    if flag then println('inside')
+    println('end')
+    return 0
+}
+
+func main(): int sync {
+    return f(true)
+}

@@ -92,6 +92,33 @@ void encodeMirBuffer(
     auto emitFaultIf = [&](Encoder::Cond cc, uint32_t pc, JitFaultKind kind) {
         faultStubs.push_back({enc.jccRel32(cc, 0), pc, kind});
     };
+    // Jumps straight to the common fault exit: the fault is recorded already (by a helper).
+    std::vector<size_t> recordedFaultRels;
+    // Framed code leaving to its driver (JitExitKind): the address behind the exit (which the
+    // driver passes back in the same field to continue there), the kind and the pc go to the
+    // JitContext, and the body returns to its wrapper. Nothing of the activation is on the
+    // machine stack at a bytecode boundary of framed code.
+    auto emitExitToDriver = [&](uint32_t pc, JitExitKind kind) {
+        size_t at = enc.here();
+        enc.emitBytes({0x4c, 0x8d, 0x1d}); // lea r11, [rip + rel32]
+        const size_t relPos = enc.here();
+        enc.emitDisp32(0);
+        enc.asmLineAt(at, "lea r11, [rip + .resume]");
+        at = enc.here();
+#if defined(_WIN32) || defined(_WIN64)
+        enc.emitBytes({0x4c, 0x89, 0x5e, static_cast<uint8_t>(kJitCtxResumeAddrOffset)});
+        enc.asmLineAt(at, "mov [rsi+48], r11  ; where to continue");
+#else
+        enc.emitBytes({0x4d, 0x89, 0x5d, static_cast<uint8_t>(kJitCtxResumeAddrOffset)});
+        enc.asmLineAt(at, "mov [r13+48], r11  ; where to continue");
+#endif
+        enc.movCtxFieldImm32(
+            static_cast<int8_t>(kJitCtxExitKindOffset),
+            static_cast<uint32_t>(kind));
+        enc.movCtxFieldImm32(static_cast<int8_t>(kJitCtxExitPcOffset), pc);
+        enc.ret();
+        enc.patchRel32At(relPos, static_cast<int32_t>(enc.here() - (relPos + 4)));
+    };
     // Signed division: the quotient of left / right in dst. idiv takes the dividend in
     // rdx:rax and leaves quotient and remainder there, so whatever else lives in the two is
     // saved around it, and the divisor is moved out of their way first. A checked division
@@ -569,6 +596,13 @@ void encodeMirBuffer(
             // than its limit, and so does this one, at the same call.
             enc.takeDepthBudget();
             emitFaultIf(Encoder::kCondB, p->pc, JitFaultKind::MaxRecursionDepthExceeded);
+            // The count alone does not promise that the machine stack holds the recursion (the
+            // limit can be set far above what the stack of this thread takes): like every
+            // nested call of the interpreters, the call is refused when the stack is nearly
+            // full. The reserve behind the limit covers the callee's frame, and the fault exit
+            // itself uses no stack.
+            enc.cmpRspCtxField(static_cast<int8_t>(kJitCtxStackLimitOffset));
+            emitFaultIf(Encoder::kCondB, p->pc, JitFaultKind::NativeStackExhausted);
 
             // The callee's frame is built below the saved slot base, with rdi still on the
             // caller's frame; arguments already in registers are not disturbed (r11 is not
@@ -619,6 +653,61 @@ void encodeMirBuffer(
             } else {
                 enc.movToFrame(p->resultDisp, kRegRax);
             }
+            break;
+        }
+        case MirOp::CallHelper: {
+            // slot_t helper(slot_t *slots, void *ctx, size_t pc). The body runs with the stack
+            // pointer 8 off a 16-byte boundary under SysV and on one under Win64 (see the
+            // wrappers in x64_backend.cpp), so the call below is made on an aligned stack.
+#if defined(_WIN32) || defined(_WIN64)
+            // rdi and rsi are callee-saved; callRax() gives the callee its 32 bytes of home
+            // space. Not compiled or run so far: this branch has only been built on Linux.
+            enc.emitBytes({0x48, 0x89, 0xf9}); // mov rcx, rdi
+            enc.asmLine("mov rcx, rdi");
+            enc.emitBytes({0x48, 0x89, 0xf2}); // mov rdx, rsi
+            enc.asmLine("mov rdx, rsi");
+            enc.emitBytes({0x41, 0xb8}); // mov r8d, imm32
+            enc.emitDisp32(static_cast<int>(m.imm32));
+            enc.asmLine("mov r8d, " + std::to_string(m.imm32));
+            enc.movRaxImm64(m.imm64);
+            enc.callRax();
+            {
+                size_t at = enc.here();
+                enc.emitBytes(
+                    {0x83, 0x7e, static_cast<uint8_t>(kJitCtxFaultKindOffset), 0x00}); // cmp
+                enc.asmLineAt(at, "cmp dword [rsi+16], 0  ; fault recorded by the helper?");
+            }
+#else
+            enc.pushRdi();
+            enc.emitBytes({0x4c, 0x89, 0xee}); // mov rsi, r13
+            enc.asmLine("mov rsi, r13  ; jitCtx");
+            enc.emitBytes({0xba}); // mov edx, imm32
+            enc.emitDisp32(static_cast<int>(m.imm32));
+            enc.asmLine("mov edx, " + std::to_string(m.imm32));
+            enc.movRaxImm64(m.imm64);
+            enc.callRax();
+            enc.popRdi();
+            {
+                size_t at = enc.here();
+                enc.emitBytes(
+                    {0x41, 0x83, 0x7d, static_cast<uint8_t>(kJitCtxFaultKindOffset), 0x00});
+                enc.asmLineAt(at, "cmp dword [r13+16], 0  ; fault recorded by the helper?");
+            }
+#endif
+            recordedFaultRels.push_back(enc.jccRel32(Encoder::kCondNE, 0));
+            break;
+        }
+        case MirOp::ExitToDriver:
+            emitExitToDriver(m.imm32, static_cast<JitExitKind>(m.imm64));
+            break;
+        case MirOp::SafepointPoll: {
+            enc.emitMovRegImm64(kRegR11, m.imm64);
+            size_t at = enc.here();
+            enc.emitBytes({0x41, 0x80, 0x3b, 0x00}); // cmp byte [r11], 0
+            enc.asmLineAt(at, "cmp byte [r11], 0  ; safepoint requested?");
+            const size_t skipRel = enc.jccRel32(Encoder::kCondE, 0);
+            emitExitToDriver(m.imm32, JitExitKind::Tail);
+            enc.patchRel32At(skipRel, static_cast<int32_t>(enc.here() - (skipRel + 4)));
             break;
         }
         case MirOp::PushFrameSlot:
@@ -841,14 +930,17 @@ void encodeMirBuffer(
         }
     }
     // Fault stubs and the exit they share.
-    if (!faultStubs.empty()) {
-        std::vector<size_t> exitRels;
+    if (!faultStubs.empty() || !recordedFaultRels.empty()) {
+        std::vector<size_t> exitRels = recordedFaultRels;
         for (const FaultStub &stub : faultStubs) {
             enc.patchRel32At(stub.relPos, static_cast<int32_t>(enc.here() - (stub.relPos + 4)));
             enc.movCtxFieldImm32(
                 static_cast<int8_t>(kJitCtxFaultKindOffset),
                 static_cast<uint32_t>(stub.kind));
             enc.movCtxFieldImm32(static_cast<int8_t>(kJitCtxFaultPcOffset), stub.pc);
+            // How many calls were open is part of this diagnostic: hand back the budget left.
+            if (stub.kind == JitFaultKind::NativeStackExhausted)
+                enc.movCtxFieldR15(static_cast<int8_t>(kJitCtxDepthBudgetOffset));
             exitRels.push_back(enc.jmpRel32Patchable());
         }
         for (const size_t rel : exitRels)

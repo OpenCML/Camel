@@ -104,7 +104,7 @@ on Windows, on macOS or on an idle machine. The programs and the scripts are in
 
 | What | When | Cost now | Before (trunk of 2026-10-12) |
 |---|---|---|---|
-| A node of a graph | every executed node | the evaluator's dispatch on the node kind, operands read through the graph. About the cost of `std::nvm`; `std::fvm` runs the same graph as bytecode 4 to 6 times faster | the same, plus resolving every operator by its URI (two string copies, two hash lookups, the read lock of the operator table) |
+| A node of a graph | every executed node | the evaluator's dispatch on the node kind, operands read through the graph. About the cost of `std::nvm`; `std::fvm` runs the same graph as bytecode 4 to 6 times faster. A node of a serial graph: its bytecode, as on `std::fvm` (4.3.3; this table describes the scheduler's own evaluator) | the same, plus resolving every operator by its URI (two string copies, two hash lookups, the read lock of the operator table) |
 | A call | every `FUNC`, `CALL` and element call | a frame from the calling thread's own list, the callee's plan from the thread's own cache, one check whether a collector is waiting | the mutex of the callee's graph twice, a hash insert and erase for the set of active frames, the shared lock of the plan table, two sequentially consistent stores |
 | A built-in operator, a branch | every one | nothing (the collector's region stays held; a branch checks whether a collector is waiting) | two sequentially consistent stores each |
 | A step of `reduce` / `foreach` | every element | a call | a task, in a chain of one task per element, inside a task graph per operator |
@@ -192,15 +192,9 @@ independent calls of heavy graphs. For a program that is sequential by its depen
 
 **Remaining gaps, and questions that are not the scheduler's to decide.**
 
-- `DESIGN-QUESTION(prl-light-graph-evaluator)`: the remaining factor of 4 to 6 on scalar code is
-  the difference between walking the nodes of a graph and running its bytecode, not scheduling.
-  It can only go away by running light graphs (the ones the granularity rule never makes tasks
-  of) on the bytecode interpreter inside a worker. Candidates: (a) `std::prl` compiles light
-  graphs with FastVM's compiler and runs them on a per-worker interpreter: this needs the
-  interpreter to be re-entrant per thread, to take frames the collector's handshake can see, and
-  to count calls and report faults the way the scheduler does; (b) a pass before `std::prl` that
-  marks or outlines light regions, with the same requirements at run time; (c) leave it and say
-  that scalar-heavy programs belong on `std::fvm`. (a) and (b) change how back ends are composed.
+- The remaining factor of 4 to 6 on scalar code was the difference between walking the nodes
+  of a graph and running its bytecode (`prl-light-graph-evaluator`). Decided by the owner
+  (design principles 2.11) and done as candidate (a): 4.3.3.
 - `DESIGN-QUESTION(prl-coarsening-pass)`: for scopes, the granularity is still the static rule
   of 4.3.1: two unordered calls of heavy graphs become a task graph every time, whatever their
   size at run time (a recursive split keeps making task graphs down to its leaves), and two
@@ -221,6 +215,152 @@ independent calls of heavy graphs. For a program that is sequential by its depen
   the stop-the-world handshake is unchanged, and the stress tests with a verified major
   collection at every safepoint pass).
 
+**The stack of a worker thread, and a dependency on the inside of Taskflow.** The evaluator nests
+on the native stack, and the default recursion limit is measured against 8 MiB (section 4.4).
+`tf::Executor` starts its workers with `std::thread`, which cannot be told a stack size: a
+worker would have the process's stack limit with glibc, the executable's value on Windows (1 MiB
+under `python.exe`) and 512 KiB on macOS. Taskflow has no hook for the creation of its threads
+(`WorkerInterface` runs on the thread after it exists), so the build replaces the thread type:
+`cmake/TaskflowWorkerStack.cmake` copies the Taskflow headers of the Conan package into the build
+tree at configure time, rewrites three lines (the member `std::thread _thread;` and its accessor
+in `taskflow/core/worker.hpp`, and `_workers[id]._thread = std::thread(` in
+`Executor::_spawn`, `taskflow/core/executor.hpp`) to `camel::utils::BigStackThread`
+(`include/camel/utils/big_stack_thread.h`: `pthread_create` / `_beginthreadex` with 8 MiB at
+least, joinable and movable like the part of `std::thread` Taskflow uses), and puts the copy
+before the package on libcamel's include path. Only libcamel includes Taskflow, so there is one
+definition of `tf::Worker`.
+
+This depends on how Taskflow 3.10.0 is written, not on its interface. **When the version of
+Taskflow in `conanfile.txt` changes, look at it again**: the configuration stops with an error
+that names the line it did not find when one of the three is gone; if Taskflow has come to
+create its threads elsewhere, or uses more of `std::thread` (`get_id`, `native_handle`,
+`detach`), the rewrite or `BigStackThread` has to follow, and
+`-DCAMEL_TASKFLOW_WORKER_STACK=OFF` builds with Taskflow as it is (workers then have the
+platform's default stack) until that is done. The class does nothing a collector has to know
+about: a worker registers with the stop-the-world gate on its first safepoint
+(`TaskflowGcGate::self`), whichever way its thread was started, and reads its stack bounds from
+the thread itself.
+
+#### 4.3.3 Serial graphs run as bytecode (字节码移交)
+
+Design principles 2.11: the parallel scheduler hands subgraphs that have nothing to parallelise
+to the bytecode interpreter. Walking a graph node by node costs 4 to 6 times what its bytecode
+costs (4.3.2), and where nothing can run concurrently that is all the scheduler adds. The code
+is `src/passes/sched/taskflow/handoff.{h,cpp}` (the scheduler's side) and
+`src/passes/sched/fastvm/hosted.{h,cpp}` (the interpreter's side).
+
+**Which graphs.** A graph is *serial* when the scheduler would run all of it, and everything it
+calls, on the calling thread in the linear order. Precisely: G is serial when every graph H
+that G reaches through direct calls (`FUNC`, G included) satisfies all of
+
+1. H has no higher-order operator (`:mark/...`: `map`, `apply`, `filter`, `reduce`, `foreach`,
+   their unordered forms, and `attempt`). The unordered ones are where elements run
+   concurrently, and all of them call a function value.
+2. H has no call of a function value (`CALL`): the callee is not known before the run and may
+   not be serial.
+3. No scope of H runs as a task graph: H has no two unordered items that the granularity rule
+   (4.3.1) would fork.
+4. Every operator of H is found without importing a module, and H has a frame layout (what the
+   bytecode compiler needs). An operator of a module the program did not import, such as the
+   global `exit` without `import ... from os`, keeps its graph on the scheduler.
+
+The set is closed under direct calls by definition, so the bytecode never calls back into the
+scheduler: a serial graph reaches serial graphs only, through `FUNC` and `TAIL` bytecodes the
+interpreter runs itself. Whether a graph is serial does not depend on how long it runs: a
+serial `fib(35)` runs on one thread whether it takes a microsecond or seconds, as it did before
+(4.3.1 already never made tasks of it). What changes is only how its nodes are executed.
+
+Examples: `fib`, a tail-recursive loop, a helper that calls `math::sqrt`, a function that builds
+an array step by step are serial. `main` with a `map` in it, a driver that calls such a
+function, and the element function of a `map` that itself contains a `map` are not; the element
+function of a `map` that only computes is serial, and each worker runs it as bytecode.
+
+**When.** Before the run starts, on the thread that starts it (`prepareBytecodeHandoff`): every
+graph reachable from the entry graph is classified (its plan is built for condition 3), and the
+serial ones are compiled once, with the strategy of `std::fvm`, into one image
+(`FastVMHostImage`). The image and the debug map's pc origins are written then and only read
+while the workers run, so no thread takes a lock for them. A graph created during the run (a
+gradient built at run time) is not in the image and is evaluated by the scheduler.
+`CAMEL_TF_DIAG=1` prints the decision for every graph and the reason when a graph stays.
+
+**Where.** The scheduler reaches a graph at a call (`callGraph`: `FUNC`, `CALL`, an element call
+of a higher-order operator, the call made by `attempt`, the entry graph) and at a tail call (the
+loop of `evalGraph`). Both look at `GraphPlan::bytecodeEntry` and, for a serial graph, enter the
+interpreter of the calling thread instead of `evalGraph`. A program with nothing to
+parallelise therefore runs as bytecode from its entry graph on, like `std::fvm`.
+
+**One interpreter per thread.** Each thread that makes a hosted call gets its own
+`FastVMSchedPass`, constructed over the shared image (it never compiles and never runs
+`apply`; the JIT stays off). Its frame pool, its call stack and its counters belong to that
+thread. The hand-off object owns all of them and destroys them before the image; a thread finds
+its own through a thread-local slot that names the run.
+
+**The boundary** (`TaskflowBytecodeHandoff::call`):
+
+| | |
+|---|---|
+| Arguments | written into a frame of the interpreter's own pool, inside the thread's region (the collector's handshake, 4.3.2); the value comes back inside the region and the caller stores it before a collection can run |
+| Collector | the interpreter runs inside the region like any leaf work. Its safepoints (every `FUNC`, `TAIL`) call a hook the scheduler installs for the call (`FastVmSafepointScope`): when a collector wants in, leave the region, poll, enter again, which is what the scheduler does at a graph boundary. The interpreter's frames are roots through its frame pool and are traced only while their thread is stopped there |
+| Recursion limit | the interpreter counts its calls on top of the calls open on the thread (`ThreadState::callDepth`, which includes the hosted one), so the limit of 1000 is reached at the same call as on the scheduler, also inside a `map` element (`test/plans/feat/para/handoff.plan.toml`, `depth_across`) |
+| Faults | a fault leaves the interpreter as a located diagnostic that nothing has recorded (`DescribedFaultScope`), like one from `raiseFault`: the scheduler chooses among concurrent faults (design principles 2.10) and records the one that ends the run. An `attempt` boundary open on the thread is seen by the interpreter (thread-local state). Anything else an operator throws (`exit`) puts the interpreter back as it was before it passes on |
+| Call-backs | none (see "Which graphs") |
+
+**What changes that can be seen.** Nothing in the output, the exit code or the diagnostics of a
+program. Two things a program cannot observe but a test can: the number of collections and
+where they run (the interpreter polls at calls, the evaluator at calls and branches), and how
+deep a non-tail recursion can go when `--max-recursion-depth` is raised far above the default:
+a serial recursion no longer nests on the native stack, so it completes on `std::prl` as it does
+on `std::fvm` instead of stopping when the thread's stack is nearly full (design principles
+2.12; `para.core.recursion_too_deep.prl`).
+
+**Switch.** `CAMEL_TF_BYTECODE=0` turns the hand-off off: every graph is evaluated by the
+scheduler as before. For A/B measurements and as an escape hatch. The hand-off is also off under
+`CAMEL_TF_LINEAR=1` and while an execution observer or the inspection mode is active (both keep
+state for one thread; a debugger runs a program on `std::fvm` anyway). `CAMEL_TF_GC_STATS=1`
+prints `[taskflow] bytecode: graphs=G bytecodes=B calls=C interpreters=I` (or `off`) next to the
+collector's line.
+
+**Measured.** Wall seconds of the whole process, median [min, max] of 5 rounds in which the
+configurations ran in turn (`benchmarks/parallel/run.sh` with
+`BUILDS="on=... off=...,CAMEL_TF_BYTECODE=0"`, one release build of 2026-10-14, Linux x86-64
+in a container, 18 logical CPUs, load average 15 to 25 from other builds). "off" is the
+scheduler as it was before (its evaluator for every graph); `std::prl` uses 18 workers unless
+the row says `-t`.
+
+| Case | `std::fvm` | `std::prl` off, `-t 1` | `std::prl` on, `-t 1` | `std::prl` off | `std::prl` on | `-t 4` off / on |
+|---|---|---|---|---|---|---|
+| `fib` | 0.29 [0.16, 0.44] | 1.41 [0.90, 1.49] | 0.18 [0.16, 0.23] | 1.27 [1.03, 1.58] | 0.21 [0.15, 0.25] | 1.47 / 0.20 |
+| `small_calls` | 0.30 [0.24, 0.35] | 1.11 [1.03, 1.66] | 0.30 [0.28, 0.46] | 1.16 [1.04, 1.56] | 0.29 [0.26, 0.53] | 1.13 / 0.32 |
+| `serial_math` | 0.19 [0.13, 0.22] | 0.65 [0.59, 0.85] | 0.20 [0.15, 0.25] | 0.63 [0.59, 1.01] | 0.20 [0.14, 0.30] | 0.72 / 0.17 |
+| `map_light` | 0.08 [0.07, 0.10] | 0.15 [0.11, 0.21] | 0.07 [0.06, 0.11] | 0.05 [0.04, 0.08] | 0.03 [0.03, 0.06] | 0.07 / 0.04 |
+| `map_medium` | 0.16 [0.14, 0.20] | 0.68 [0.66, 0.98] | 0.19 [0.15, 0.29] | 0.49 [0.49, 0.51] | 0.05 [0.04, 0.08] | 0.47 / 0.06 |
+| `map_heavy` | 0.30 [0.21, 0.35] | 1.57 [1.44, 1.61] | 0.28 [0.20, 0.28] | 0.28 [0.27, 0.30] | 0.07 [0.06, 0.08] | 0.52 / 0.11 |
+| `collatz_reduce` | 0.57 [0.42, 0.67] | 2.16 [1.49, 2.33] | 0.61 [0.50, 0.76] | 0.56 [0.40, 0.68] | 0.19 [0.18, 0.28] | 0.76 / 0.25 |
+| `driver_inner` | 1.71 [0.73, 2.45] | 4.30 [3.85, 7.94] | 0.92 [0.70, 1.66] | 2.57 [1.66, 3.10] | 0.73 [0.47, 0.76] | 2.94 / 0.55 |
+| `mc_pi` | 5.50 [5.19, 13.25] | 5.62 [4.84, 9.99] | 6.68 [5.15, 9.94] | 1.43 [1.28, 1.95] | 1.47 [1.44, 1.74] | 2.44 / 2.05 |
+| `asian_mc` | 3.30 [2.90, 4.99] | 3.19 [2.72, 3.79] | 2.85 [2.54, 4.19] | 0.74 [0.64, 1.08] | 0.83 [0.62, 0.98] | 1.31 / 1.16 |
+| `merge_sort` | 1.95 [1.33, 3.17] | 1.58 [1.17, 2.09] | 1.99 [1.32, 2.49] | 1.13 [0.87, 1.31] | 1.06 [0.81, 1.26] | 1.01 / 0.98 |
+| `tensor_train` (after `std::macro`) | 0.24 [0.19, 0.24] | 0.22 [0.20, 0.26] | 0.21 [0.18, 0.27] | 0.22 [0.21, 0.27] | 0.22 [0.17, 0.22] | 0.23 / 0.22 |
+
+Reading: serial programs (`fib`, `small_calls`, `serial_math`) now run at the speed of
+`std::fvm` on any number of workers, 3 to 6 times faster than before. Maps whose elements are
+Camel code keep scaling with the workers and are 1.4 to 10 times faster than before (the
+smallest gain for `map_light`, whose elements are a few operators); on 18 workers `map_medium`
+and `map_heavy` are 3 to 4 times faster than `std::fvm`. A serial driver around a parallel inner function (`driver_inner`) gains on both
+sides. Programs whose elements are module operators (`mc_pi`, `asian_mc`, `merge_sort`) and the
+tensor program are unchanged within the noise: their time is in the operators.
+
+**Not handed off, and why.**
+
+- Graphs with a higher-order operator, even an ordered one (`reduce`, `foreach`) whose element
+  function is serial, and `attempt`: the function they call is a value, and running it in the
+  interpreter would run a parallel callee serially. The element function itself is handed off
+  at each element call, so only the operator's own loop stays on the scheduler.
+- Graphs that call a function value, for the same reason.
+- A serial driver around a parallel inner function stays on the scheduler as a whole (the
+  decision is per graph); its serial helpers run as bytecode at every call.
+- Graphs created during the run.
+
 ### 4.4 How each back end runs a call, a fault and the end of a program
 
 Facts established while the four back ends were made to agree (`test/plans/feat/consistency`).
@@ -234,7 +374,7 @@ Linux x86-64 with a release build; nothing here has been run on Windows or macOS
 | `std::nvm` | a nested activation of `NodeVMSchedPass::call` on the native stack, for a direct call (`FUNC`), a call through a function value (`CALL`) and every element call of a higher-order operator alike | rebinds graph and frame inside the same activation (`goto loop_start`) | `FramePool`, a bump allocator over one block |
 | `std::fvm` | a direct call pushes its return pc and frame on the interpreter's own stack (`pcStack_` / `frameStack_`, vectors that grow up to the limit) and jumps: no native stack. A call through a function value and an element call of a higher-order operator run in a nested `callBorrowed` on the native stack | the `TAIL` bytecode: releases the frame, takes the callee's, jumps | `FramePool` |
 | `std::jit` | the interpreter of `std::fvm` for every graph the JIT does not compile (any graph with an operator, or that calls another graph). A compiled self-recursion nests on the native stack through the trampolines, uncounted | compiled as a jump | `FramePool` |
-| `std::tf` | `executeCallNode` -> `evalGraph` on the native stack of the thread that runs the call; a scope with independent heavy items becomes a task graph, whose tasks may run on other threads | the `for (;;)` loop of `evalGraph` | `TaskflowFramePool`: per graph, grown in chunks |
+| `std::tf` | `executeCallNode` -> `evalGraph` on the native stack of the thread that runs the call; a scope with independent heavy items becomes a task graph, whose tasks may run on other threads. A call of a serial graph runs on the thread's bytecode interpreter instead, with the calls of `std::fvm` from there on (4.3.3) | the `for (;;)` loop of `evalGraph`; `TAIL` in the interpreter | `TaskflowFramePool`: per graph, grown in chunks; the interpreter's `FramePool` per thread |
 | macro evaluator (`std::macro`) | `executeFunction` -> `executeGraph` on the native stack; no tail calls, every call nests | none | its own `FramePool` |
 
 Measured cost of one open call of `func depth(n) = if n == 0 then 0 else 1 + depth(n - 1)`:
@@ -257,7 +397,10 @@ higher-order operator; the entry graph's call of `main` is not counted (`kEntryC
   through a function value was unbounded and overflowed the native stack.
 - `std::tf` counts per thread (`ThreadState::callDepth`), and a task continues from the count of
   the thread that started it (`InheritedDepth`), so the count follows a recursion across
-  workers. It applies the limit only when one is given; by default the native stack bounds it.
+  workers. The limit is the same as on the other back ends (1000 by default). A serial graph
+  it hands to the bytecode interpreter (4.3.3) is counted by the interpreter on top of the
+  thread's count, so the limit is reached at the same call; such a recursion does not nest on
+  the native stack (design principles 2.12).
 - All of them raise the fault with `camel::execute::throwRecursionLimitReached`, in the caller
   and before the callee's frame is taken, so the diagnostic is the same text at the same call
   expression.
@@ -323,7 +466,7 @@ was never finalized, so a file a Python object held open was not flushed.
 
 - **operator_t**（`core/operator.h`）：算子索引类型，与 GIR 的 **OperNode** 对应。
 - 运行时根据操作数类型选择具体实现（如整型加法、浮点加法），OPER 字节码或 NodeVM 的 **evalMarkedOperator** 会调用到这些实现。
-- **FunctionType**：函数类型（with 参数、普通参数、返回类型），与 Graph 的 **funcType_** 一致，用于调用约定与类型检查。
+- **FunctionType**：函数类型（with 参数、普通参数、形参名、返回类型），与 Graph 的 **funcType_** 一致，用于调用约定与类型检查。驻留在类型表里、不可变；只有前端正在建的函数的签名是 `OpenFunctionType`（不驻留，返回类型由函数体定下后填入）。图捕获了哪些名字记在图上（`GCGraph::captureNames`），不在函数类型里。
 
 ## 6. 数据与类型（Data / Type）
 

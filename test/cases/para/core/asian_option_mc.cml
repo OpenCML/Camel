@@ -8,7 +8,7 @@ import { asian_call_price } from sim
 
 func main(): int sync {
     let workers = 50
-    let paths_per_worker = 2e5
+    let paths_per_worker = 200000
     let steps = 256
     let base_seed = 20260309
 

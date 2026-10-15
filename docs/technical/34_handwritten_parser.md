@@ -138,10 +138,10 @@ Tokens at the start of a line, in full:
 
 Two entries need a word.
 
-- `@` is both the matrix product and the mark of an annotation. A line starting with `@` is read
-  as an annotation, by the principle of the rule (a token that can start a statement does). The
-  author's table listed `@` among the binary operators; the corpus has no line that starts with
-  a binary `@` and has annotations at the start of a line throughout. **Open for the author.**
+- `@` is both the matrix product and the mark of an annotation. A line starting with `@` is an
+  annotation (ruled on October 13): a symbol of two roles (`+`, `-`, `@`) that starts a line has
+  the role that starts something new. A matrix product continued on the next line leaves the
+  `@` at the end of the line before.
 - `<` at the start of a line continues as a comparison, as the table says, although a lambda
   with `with` parameters can start with `<`. A statement that is a bare lambda does nothing.
 
@@ -208,6 +208,76 @@ reports an error instead of exhausting the stack.
 Nothing else changes: no tables to regenerate, no prediction to re-check. For an expression form
 (`loop … while … { }` as an operand) step 3 is a `case` in `parseExpr` or `parsePrimary`
 instead.
+
+### The minus, and `&` `|` beside `&&` `||` (rulings of October 13)
+
+The minus is always an operator; the parser no longer takes a `-` that touches a number into
+the literal. Its level is its own (`negExpr`, the first operand of `linkExpr`): tighter than
+`->` and every other binary operator, looser than `^`, which under a minus is taken by
+`negPower`. So `-2 ^ 2` and `-x ^ 2` are `-(… ^ 2)`, `-2->f` and `-x->f` are `(-…)->f`. Without
+a minus nothing changed: `x->f ^ 2` is still `(x->f) ^ 2` through `powerExpr`, whose right
+operand reaches `negExpr` (`2 ^ -1`). The AST builder turns a minus applied directly to a
+number literal into the negative literal, which keeps `-9223372036854775808`, typed literals
+(`let b: i32 = -2147483648`) and every snapshot of `-1` as they were; `-(2)` and `-2 ^ 2` are
+negations. `!` and `~` keep their place (they apply to the `->` chain after them). In a pattern
+(`case -1 =>`) the sign is still part of the literal.
+
+`orExpr` (`|`) and `andExpr` (`&`) sit between `&&` and the comparisons, `&` the tighter. In
+the AST they are `BinaryDataOp::Or` and `And`, the ordinary operators that become calls of
+`__or__` and `__and__`; `||` and `&&` are `LogicalOr` and `LogicalAnd`, for the stage that will
+turn them into branches (the GCT builder compiles them as `|` and `&` until then). In a type
+`|` and `&` are parsed by the type functions and never meet these.
+
+### The `loop` expression (provisional notation)
+
+```
+loopExpr  : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
+loopState : identDef | parentIdents
+loopFor   : 'for' identDef 'in' logicalOrExpr
+loopWhile : 'while' logicalOrExpr
+```
+
+`loop` and `while` are keywords. The CST node `LoopExpr` has the children `loop`, the state
+(`IdentDef` or `ParentIdents`), `=`, the first value, `LoopFor`?, `LoopWhile`?, `StmtBlock`. The AST
+node is `AST::LoopExprLoad` (`include/camel/parse/ast/data.h`), which the next stage is to turn
+into the `LOOP` node of the graph:
+
+| | |
+|---|---|
+| `state()` | the names of the state: one for `loop acc = …`, several for `loop (i, acc) = …` |
+| `isTuple()` | whether the state was written as a tuple pattern |
+| `binder()`, `hasFor()` | the name `for` binds each round; empty without `for` |
+| child 0, Data | the first value of the state; evaluated once, outside the scope of the names |
+| child 1, Optional Data | the sequence of `for`; evaluated once, outside that scope; empty without `for` |
+| child 2, Optional Data | the condition of `while`; state names and binder in scope; empty without `while` |
+| child 3, StmtBlock | the body; same scope; its value is the state of the next round |
+
+The value of the expression is the last state. With both clauses a round runs while an element
+is left and the condition holds. The GCT builder reports `ConstructNotSupported` at the loop
+for now; the formatter, the syntax index (scopes and bindings) and the editor grammar know the
+form.
+
+What the notation leaves awkward or open (for the language author):
+
+1. **The body block and struct literals.** The body is always a block, so `{ x: 1 }` after the
+   head is a block whose first statement fails at the `:`; a struct state needs `{ { x: 1 } }`.
+   Elsewhere (`if` arms, lambda bodies) `{ name: …` is read as a struct literal; here the block
+   was preferred because the body is mandatory and most states are not structs.
+2. **Where the first value, the sequence and the condition end.** They end at `for`, `while` or
+   `{`. A `{` never continues an operator expression, so there is no ambiguity as long as they
+   are operator expressions; `if`, `match`, a lambda with an expression body, and `??` (whose
+   right side is a whole expression) would swallow the `{` or the keyword, so the three are
+   restricted to `logicalOrExpr` and anything else goes in parentheses. `loop a = x ?? 0 while …`
+   therefore reads the `??` operand as `0`, then expects the clause: it works, but only because
+   the right side of `??` stops at `while`; `loop a = x ?? if c then 1 else 2 while …` does not.
+3. **`loop` and `while` as keywords** take two common names away. 18 files of the repository (57 places)
+   named a function `loop` (the usual name of a tail-recursive helper); they were renamed to `spin`.
+4. **A loop without a state** (`loop for x in xs { println(x) }`) is not in the notation: the
+   ruling says effects are iterated with `foreach`.
+5. **A tuple state of one name**, `loop (a,) = …`, is accepted and distinguished from
+   `loop a = …` (`isTuple()`); whether it should be is not said.
+6. `loop … for x in xs while c`: the order `for` then `while` is fixed; `while … for …` is a
+   syntax error.
 
 ## 5. The tree
 
@@ -407,6 +477,19 @@ Time per step, microseconds (minimum of 41 rounds; of 5 for the last file):
   about 1 µs per CST node, spent in what the AST is made of, a `shared_ptr` node and load per
   node, an origin and a span record per node, semantic bundles with strings. That code was
   ported, not redesigned; the AST's shape was not to change in this work.
+- A first pass over the builder (October 13) removed two thirds of its allocations without
+  changing the tree (the AST hash snapshot is unchanged): the nodes and loads of a tree come
+  from an arena that the tree keeps alive (`NodeArena`), a builder function returns a `Value`
+  with room for a node pointer where `std::any` allocated, and the span and origin tables are
+  reserved once per file. On a 3 300-line file (39 985 tokens, 35 041 CST nodes) one front-end
+  round went from 158 531 calls of `malloc` to 52 119, and "to the AST" from a minimum of
+  13.7 ms to 10.8 to 11.9 ms (lexer and parser: 0.9 ms), on the same busy machine; on files of
+  a few hundred lines the difference is within the noise. **The aim, the same order of
+  magnitude as lexer and parser, is not reached.** Sampling shows no single place any more:
+  the origin and span records, the semantic bundles with their strings and hash table, the
+  construction and the destruction of some 39 000 nodes with their loads and child vectors
+  each take a tenth to a quarter. Going further means recording less per node (origins made
+  on demand, labels that are not strings), which changes what the later stages read.
 - ANTLR's time on the small file is dominated by building its prediction tables on first use;
   on the large file by the full-LL fallback. Its time grows faster than the input.
 

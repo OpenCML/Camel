@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 04, 2026
- * Updated: Oct. 04, 2026
+ * Updated: Oct. 13, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -310,7 +310,7 @@ constexpr std::array<operator_t, kMaxWrapped> kTrampolines =
 bool enabled() { return tracePath() != nullptr; }
 
 operator_t wrap(std::string_view uri, operator_t op) {
-    if (!enabled() || op == nullptr || !OperatorTraitsRegistry::instance().hasExternalEffect(uri)) {
+    if (!enabled() || op == nullptr || !OperatorTable::instance().hasExternalEffect(uri)) {
         return op;
     }
     Registry &r = registry();

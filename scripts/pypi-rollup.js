@@ -37,6 +37,13 @@ import { spawnSync } from 'child_process'
 
 const isWin = process.platform === 'win32'
 
+/** Tools that are built for the test suite only and are not part of a release. */
+const TEST_ONLY_TOOLS = ['camel-parsecheck']
+
+function isTestOnlyTool(fileName) {
+    return TEST_ONLY_TOOLS.includes(fileName.replace(/[.]exe$/i, ''))
+}
+
 /**
  * Basenames of tool binaries under collect-out bin/ (same rules as collect-out: skip .o/.pdb etc. on Unix).
  * @param {string} binDir
@@ -52,6 +59,9 @@ function listToolBinaries(binDir) {
             continue
         }
         const f = ent.name
+        if (isTestOnlyTool(f)) {
+            continue
+        }
         if (isWin) {
             if (f.endsWith('.exe')) {
                 names.push(f)
@@ -261,6 +271,15 @@ function packageWheelBundle({
     logStep('Copying files to pypi directory')
     removeDir(CMLENV)
     copyDir(OUT_ROOT, CMLENV)
+    // The build collects every tool into out/; the ones the tests alone use stay out of the wheel.
+    const bundledBin = path.join(CMLENV, 'bin')
+    if (fs.existsSync(bundledBin)) {
+        for (const f of fs.readdirSync(bundledBin)) {
+            if (isTestOnlyTool(f)) {
+                fs.rmSync(path.join(bundledBin, f))
+            }
+        }
+    }
 
     const libInCmlenv = path.join(CMLENV, 'libs', libName)
     if (!fs.existsSync(libInCmlenv)) {

@@ -1,0 +1,11 @@
+/// Scalar recursion over floats (the test suite's math_scalar shape, runnable).
+module a07_fib_float
+
+func fibf(x: float): float {
+    return if x <= 1.0 then x else fibf(x - 1.0) + fibf(x - 2.0)
+}
+
+func main(): int sync {
+    println(fibf(27.0))
+    return 0
+}

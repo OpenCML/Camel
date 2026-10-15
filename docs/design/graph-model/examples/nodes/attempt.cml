@@ -1,0 +1,10 @@
+// attempt: a marked call of a subgraph (OPER :mark/isolate).
+func risky(d: int): int {
+    return 100 / d
+}
+
+func main(): int sync {
+    let b = attempt(risky, 0) !! -1
+    println(b)
+    return 0
+}

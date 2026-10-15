@@ -2386,7 +2386,7 @@ envs = ["CAMEL_GRAPH_SPACE_LIMIT_MB=64"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_output_contains = ["did not end", "unended_unrolling.cml:24:54", "arguments more specific than the loop's own (a more precise type, or a constant)", "types that say their element type and shape"]
+expect_output_contains = ["did not end", "unended_unrolling.cml:24:53", "arguments more specific than the loop's own (a more precise type, or a constant)", "types that say their element type and shape"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "Runtime draft encoding failed to allocate"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000
@@ -2400,7 +2400,7 @@ args = ["${case}"]
 envs = ["CAMEL_GRAPH_SPACE_LIMIT_MB=64"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the simplification of the exported function did not end: unrolling the recursion of 'walk'", "filled the memory the compiler keeps graphs in", "unended_unrolling.cml:24:54"]
+expect_output_contains = ["the simplification of the exported function did not end: unrolling the recursion of 'walk'", "filled the memory the compiler keeps graphs in", "unended_unrolling.cml:24:53"]
 expect_output_not_contains = ["Runtime draft encoding failed to allocate"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000

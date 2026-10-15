@@ -61,9 +61,6 @@ bool OptimizerStateType::equals(Type *type) const {
 }
 
 CastSafety OptimizerStateType::castSafetyFrom(Type *sourceType) const {
-    if (auto r = Type::checkCastSafetyWithAny(code(), sourceType)) {
-        return *r;
-    }
     return assignableFrom(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
 }
 

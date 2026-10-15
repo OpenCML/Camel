@@ -1,0 +1,15 @@
+module placeholders
+
+import { encode } from json
+
+// The operators whose signatures used `any` as a placeholder take each argument with its own
+// static type: string(x) of a bool, an array, a tuple and a struct; println gives back its
+// first argument; format and encode of composite values.
+func main(): int sync {
+    println(string(true), string([1, 2]), string((1, 'a')), string({ k: 2.5 }))
+    let n = println(41) + 1
+    println(n)
+    println('{} and {}'->format<[1], (2, 'b')>)
+    println(encode({ a: [1, 2], b: (true, 'x') }), encode([1.5], 2))
+    return 0
+}
