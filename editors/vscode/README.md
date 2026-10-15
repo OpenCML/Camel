@@ -12,12 +12,16 @@ Editor support for [Camel](https://github.com/OpenCML/Camel) source files (`.cml
 - **Camel: Run Current File with Passes…**: runs `camel <file> <pass>...` in the integrated
   terminal.
 
-- **Debugging** (type `camel`): breakpoints, stepping, call stack and variables through
-  `camel-db --dap`, a debug adapter that is built with the rest of the repository. Press F5 in a
-  `.cml` file, or add a configuration from the snippets. What stepping, the stack and variables
-  mean in Camel is explained in [`docs/debugging.en.md`](../../docs/debugging.en.md). The debugger
-  has been tested by speaking the protocol to the adapter; the VS Code user interface on top of it
-  has not been tried by hand.
+- **Debugging** (type `camel`): breakpoints on lines and on functions, stepping, call stack and
+  variables through `camel-db --dap`, a debug adapter that is built with the rest of the
+  repository. Press F5 in a `.cml` file, or add a configuration from the snippets. What stepping,
+  the stack and variables mean in Camel is explained in
+  [`docs/debugging.en.md`](../../docs/debugging.en.md). **Camel: Toggle Subgraph Frames** (also a
+  button in the title of the Call Stack view during a session) switches between the arms of
+  branches shown as part of their function's frame (the default, launch attribute
+  `"frames": "functions"`) and every subgraph as a frame (`"subgraphs"`). The debugger has been
+  tested by speaking the protocol to the adapter; the VS Code user interface on top of it has not
+  been tried by hand.
 
 The extension is a thin client: everything that needs to understand a program is done by
 `camel-ls`, and everything that controls a running one by `camel-db`.
