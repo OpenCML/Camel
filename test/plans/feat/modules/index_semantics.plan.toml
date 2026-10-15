@@ -28,7 +28,7 @@ for (const l of [
   'INDEX product_of_dims rejected: a product of two expressions that are not constants or parameters is not quasi-affine',
   'INDEX mod_by_zero rejected: a floordiv or mod divides by a positive constant or by a parameter',
   'INDEX div_by_dim rejected: a floordiv or mod divides by a positive constant or by a parameter',
-  'INDEX overflow rejected: index arithmetic overflows 64 bits',
+  'INDEX overflow rejected: index arithmetic overflows 64 bits', 'INDEX scale_pool_growth ok',
   'INDEX validate_matmul ok',
   'INDEX validate_combine_without_law rejected: a combining write names no reduction law',
   'INDEX validate_reduction_written_unique rejected: a domain with a reduction dim writes each result element more than once, not uniquely',

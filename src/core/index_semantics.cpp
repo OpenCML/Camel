@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -146,7 +146,8 @@ ExprId ExprPool::mul(ExprId factor, ExprId e) {
         return mul(e, factor); // the constant is the factor: 2 * p, not p * 2
     }
     if (c) {
-        const Expr &inner = exprs_[e];
+        // constant() below may grow exprs_; keep a value across that mutation.
+        const Expr inner = exprs_[e];
         // c1 * (c2 * x) = (c1 * c2) * x; c * (x + y) is kept as written (distributing would
         // grow the expression without making it more analysable).
         if (inner.op == ExprOp::Mul) {
@@ -200,8 +201,7 @@ int64_t ExprPool::evaluate(ExprId id, std::span<const int64_t> dims, ParamValues
     case ExprOp::Param: {
         const auto &value = params[static_cast<size_t>(e.value)];
         if (!value) {
-            throw std::invalid_argument(
-                std::format("parameter {} has no known value", e.value));
+            throw std::invalid_argument(std::format("parameter {} has no known value", e.value));
         }
         return *value;
     }
@@ -234,8 +234,7 @@ bool ExprPool::mentionsDim(ExprId id) const {
     }
 }
 
-std::optional<AffineForm>
-ExprPool::affine(ExprId id, size_t dimCount, ParamValues params) const {
+std::optional<AffineForm> ExprPool::affine(ExprId id, size_t dimCount, ParamValues params) const {
     const Expr &e = exprs_[id];
     AffineForm form;
     form.coeffs.assign(dimCount, 0);
@@ -303,8 +302,7 @@ std::string ExprPool::text(
     auto operand = [&](ExprId sub) {
         const std::string t = text(sub, dimNames, paramNames);
         const ExprOp op     = exprs_[sub].op;
-        return op == ExprOp::Add || op == ExprOp::FloorDiv || op == ExprOp::Mod ? "(" + t + ")"
-                                                                                 : t;
+        return op == ExprOp::Add || op == ExprOp::FloorDiv || op == ExprOp::Mod ? "(" + t + ")" : t;
     };
     switch (e.op) {
     case ExprOp::Const:
@@ -534,9 +532,10 @@ class Validator {
         }
         const Param &p = inst_.domain.params[static_cast<size_t>(d.value)];
         if (p.value) {
-            return *p.value > 0 ? std::nullopt
-                                : std::optional<std::string>(std::format(
-                                      "a floordiv or mod divides by {} = {}", p.name, *p.value));
+            return *p.value > 0
+                       ? std::nullopt
+                       : std::optional<std::string>(
+                             std::format("a floordiv or mod divides by {} = {}", p.name, *p.value));
         }
         // An unknown parameter: some constraint must require p >= c with c >= 1 (written
         // c <= p or c < p).
@@ -668,14 +667,18 @@ class Printer {
         return id == kNoExpr ? "_" : inst_.exprs.text(id, dims_, params_);
     }
 
-    std::string tuple(const std::vector<ExprId> &coords, const std::optional<Indirect> &indirect,
-                      std::string_view operandWord) const {
+    std::string tuple(
+        const std::vector<ExprId> &coords, const std::optional<Indirect> &indirect,
+        std::string_view operandWord) const {
         std::string out = "(";
         for (size_t i = 0; i < coords.size(); ++i) {
             out += i ? ", " : "";
             if (indirect && indirect->axis == i) {
-                out += std::format("{} {}[{}]", operandWord, indirect->indexOperand,
-                                   list(indirect->indexCoords));
+                out += std::format(
+                    "{} {}[{}]",
+                    operandWord,
+                    indirect->indexOperand,
+                    list(indirect->indexCoords));
             } else {
                 out += expr(coords[i]);
             }
@@ -697,7 +700,8 @@ class Printer {
             const char *rel = c.rel == Constraint::Rel::Eq   ? "="
                               : c.rel == Constraint::Rel::Le ? "<="
                                                              : "<";
-            out += std::format("{}{} {} {}", out.empty() ? "" : ", ", expr(c.lhs), rel, expr(c.rhs));
+            out +=
+                std::format("{}{} {} {}", out.empty() ? "" : ", ", expr(c.lhs), rel, expr(c.rhs));
         }
         return out;
     }
@@ -745,7 +749,8 @@ std::string accessText(const Printer &pr, const Access &a) {
         break;
     }
     if (!a.valid.empty()) {
-        out += " valid [" + pr.predicate(a.valid) + "] else " + std::string(onInvalidName(a.onInvalid));
+        out += " valid [" + pr.predicate(a.valid) + "] else " +
+               std::string(onInvalidName(a.onInvalid));
         if (a.onInvalid == OnInvalid::Padding) {
             out += std::format("(0x{:x})", a.padding);
         }
@@ -766,8 +771,12 @@ std::string toString(const IndexedInstance &instance, const OperatorSemantics *s
     out += "params   " + params + "\n";
     std::string dims;
     for (const Dim &d : instance.domain.dims) {
-        dims += std::format("{}{} < {} {}", dims.empty() ? "" : "; ", d.name, pr.expr(d.extent),
-                            dimRoleName(d.role));
+        dims += std::format(
+            "{}{} < {} {}",
+            dims.empty() ? "" : "; ",
+            d.name,
+            pr.expr(d.extent),
+            dimRoleName(d.role));
     }
     out += "domain   " + dims + "\n";
     if (!instance.domain.constraints.empty()) {
@@ -901,7 +910,8 @@ IndexedInstance splitDims(const IndexedInstance &instance, std::span<const DimSp
         }
         const ExprId f = out.exprs.constant(factor[d]);
         out.domain.dims.push_back(
-            {old.name + "_o", out.exprs.floorDiv(out.exprs.add(extent, out.exprs.constant(factor[d] - 1)), f),
+            {old.name + "_o",
+             out.exprs.floorDiv(out.exprs.add(extent, out.exprs.constant(factor[d] - 1)), f),
              old.role});
         out.domain.dims.push_back({old.name + "_i", f, old.role});
     }

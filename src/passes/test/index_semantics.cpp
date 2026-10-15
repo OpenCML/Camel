@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,9 +54,9 @@ template <typename Fn> void attempt(std::ostream &os, std::string_view check, Fn
  */
 IndexedInstance matmulInstance(int64_t M, int64_t N, int64_t K) {
     IndexedInstance inst;
-    ExprPool &x   = inst.exprs;
-    auto &params  = inst.domain.params;
-    params        = {
+    ExprPool &x  = inst.exprs;
+    auto &params = inst.domain.params;
+    params       = {
         Param{.name = "M", .source = ParamSource::Extent, .operand = 0, .axis = 0, .value = M},
         Param{.name = "K", .source = ParamSource::Extent, .operand = 0, .axis = 1, .value = K},
         Param{.name = "N", .source = ParamSource::Extent, .operand = 1, .axis = 1, .value = N},
@@ -93,8 +93,8 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
         os << "INDEX scale_nested " << show(x, x.scale(3, x.scale(4, d0))) << "\n";
         os << "INDEX param_factor " << show(x, x.mul(d0, p0)) << "\n";
         os << "INDEX const_factor_first " << show(x, x.mul(p0, x.constant(2))) << "\n";
-        os << "INDEX div_mod " << show(x, x.mod(x.floorDiv(x.add(d0, d1), x.constant(4)), x.constant(3)))
-           << "\n";
+        os << "INDEX div_mod "
+           << show(x, x.mod(x.floorDiv(x.add(d0, d1), x.constant(4)), x.constant(3))) << "\n";
         os << "INDEX div_by_one " << show(x, x.floorDiv(d0, x.constant(1))) << " "
            << show(x, x.mod(d0, x.constant(1))) << "\n";
         os << "INDEX interned "
@@ -102,12 +102,14 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
         // Mathematical floor division and modulo: -7 floordiv 2 = -4, -7 mod 2 = 1.
         os << "INDEX floor_negative " << show(x, x.floorDiv(x.constant(-7), x.constant(2))) << " "
            << show(x, x.mod(x.constant(-7), x.constant(2))) << "\n";
-        const ExprId e                            = x.add(x.mul(p0, d0), x.mod(d1, x.constant(3)));
-        const std::vector<int64_t> point          = {4, 7};
+        const ExprId e                   = x.add(x.mul(p0, d0), x.mod(d1, x.constant(3)));
+        const std::vector<int64_t> point = {4, 7};
         const std::vector<std::optional<int64_t>> values = {5};
         os << "INDEX evaluate " << x.evaluate(e, point, values) << "\n";
         const auto form = x.affine(x.add(x.mul(p0, d0), x.scale(-2, d1)), 2, values);
-        os << "INDEX affine " << (form ? std::format("{} {} {}", form->constant, form->coeffs[0], form->coeffs[1]) : "none")
+        os << "INDEX affine "
+           << (form ? std::format("{} {} {}", form->constant, form->coeffs[0], form->coeffs[1])
+                    : "none")
            << "\n";
         os << "INDEX affine_mod " << (x.affine(e, 2, values) ? "some" : "none") << "\n";
         const std::vector<std::optional<int64_t>> unknown = {std::nullopt};
@@ -116,6 +118,20 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
         attempt(os, "mod_by_zero", [&] { return show(x, x.mod(d0, x.constant(0))); });
         attempt(os, "div_by_dim", [&] { return show(x, x.floorDiv(d0, d1)); });
         attempt(os, "overflow", [&] { return show(x, x.scale(INT64_MAX, x.constant(2))); });
+    }
+
+    // Exercise nested constant folding across repeated pool reallocations.
+    {
+        ExprPool x;
+        const auto d                     = x.dim(0);
+        const std::vector<int64_t> point = {7};
+        for (int64_t factor = 2; factor < 4096; ++factor) {
+            const auto nested = x.scale(factor, x.scale(3, d));
+            if (x.evaluate(nested, point, {}) != factor * 21) {
+                throw std::runtime_error("nested scale changed while the expression pool grew");
+            }
+        }
+        os << "INDEX scale_pool_growth ok\n";
     }
 
     // ---- Validation. ----
@@ -132,18 +148,19 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
         IndexedInstance unique = matmulInstance(2, 3, 4);
         unique.output.mode     = WriteMode::Unique;
         check("reduction_written_unique", unique);
-        IndexedInstance dimExtent = matmulInstance(2, 3, 4);
+        IndexedInstance dimExtent       = matmulInstance(2, 3, 4);
         dimExtent.domain.dims[1].extent = dimExtent.exprs.dim(0);
         check("extent_mentions_dim", dimExtent);
         IndexedInstance badParam = matmulInstance(2, 3, 4);
-        badParam.domain.params.push_back(Param{.name = "s", .source = ParamSource::Runtime, .operand = 2});
+        badParam.domain.params.push_back(
+            Param{.name = "s", .source = ParamSource::Runtime, .operand = 2});
         badParam.norm[0].coords[1] =
             badParam.exprs.floorDiv(badParam.exprs.dim(2), badParam.exprs.param(3));
         check("divisor_not_known_positive", badParam);
         badParam.domain.constraints.push_back(
             {badParam.exprs.constant(1), Constraint::Rel::Le, badParam.exprs.param(3)});
         check("divisor_required_positive", badParam);
-        IndexedInstance outOfRange = matmulInstance(2, 3, 4);
+        IndexedInstance outOfRange   = matmulInstance(2, 3, 4);
         outOfRange.norm[1].coords[0] = 999;
         check("expression_out_of_range", outOfRange);
     }
@@ -171,7 +188,8 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
             return inst;
         });
         camel::core::type::Type *const two[] = {
-            camel::core::type::Type::Int64(), camel::core::type::Type::Int64()};
+            camel::core::type::Type::Int64(),
+            camel::core::type::Type::Int64()};
         const InstanceContext cx{.norm = two};
         const InstanceContext one{.norm = std::span(two, 1)};
         auto query = [&](std::string_view uri, const InstanceContext &c) {
@@ -221,12 +239,14 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
     {
         // transpose of [3, 5]: domain (i, j) over [5, 3], x read at (j, i).
         IndexedInstance t;
-        ExprPool &x      = t.exprs;
-        t.domain.dims    = {{"i", x.constant(5), DimRole::Parallel}, {"j", x.constant(3), DimRole::Parallel}};
-        t.norm           = {Access{.kind = AccessKind::Affine, .coords = {x.dim(1), x.dim(0)}}};
-        t.output         = Write{.coords = {x.dim(0), x.dim(1)}};
+        ExprPool &x   = t.exprs;
+        t.domain.dims = {
+            {"i", x.constant(5), DimRole::Parallel},
+            {"j", x.constant(3), DimRole::Parallel}};
+        t.norm   = {Access{.kind = AccessKind::Affine, .coords = {x.dim(1), x.dim(0)}}};
+        t.output = Write{.coords = {x.dim(0), x.dim(1)}};
         const int64_t shape[] = {3, 5};
-        auto view = [&](const Access &a, std::span<const int64_t> s) {
+        auto view             = [&](const Access &a, std::span<const int64_t> s) {
             const auto v = rowMajorView(t, a, s);
             if (!v) {
                 return std::string("none");
@@ -240,7 +260,8 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
         os << "INDEX view_transpose " << view(t.norm[0], shape) << "\n";
         // slice with start 1, step 2 on axis 1 of [3, 5]: (i, 1 + 2*j).
         const Access sliced{
-            .kind = AccessKind::Affine, .coords = {x.dim(1), x.add(x.constant(1), x.scale(2, x.dim(0)))}};
+            .kind   = AccessKind::Affine,
+            .coords = {x.dim(1), x.add(x.constant(1), x.scale(2, x.dim(0)))}};
         os << "INDEX view_slice " << view(sliced, shape) << "\n";
         const Access reshaped{
             .kind   = AccessKind::Affine,
