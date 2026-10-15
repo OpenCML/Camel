@@ -232,6 +232,15 @@ function collect(config) {
     const libPath = findBuiltLibcamel(config)
     if (fs.existsSync(libPath)) {
         fs.copyFileSync(libPath, path.join(libsDir, libName))
+        // Windows consumers of the runtime bridge link its import library, not the DLL.
+        if (isWindows) {
+            const importLib = libPath.replace(/\.dll$/i, '.lib')
+            if (fs.existsSync(importLib)) {
+                fs.copyFileSync(importLib, path.join(libsDir, path.basename(importLib)))
+            } else {
+                logWarn(`Import library not found: ${importLib}`)
+            }
+        }
         if (isWindows && config === 'Debug') {
             fs.copyFileSync(libPath.replace('.dll', '.pdb'), path.join(libsDir, libName.replace('.dll', '.pdb')))
         }

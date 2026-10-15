@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 11, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,8 +94,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    const fs::path home  = camel::utils::resolveInstallRoot();
-    fs::path tool        = camel::utils::detail::executableDirectoryRaw() / "camel";
+    const fs::path home = camel::utils::resolveInstallRoot();
+    fs::path tool       = camel::utils::detail::executableDirectoryRaw() / "camel";
 #ifdef _WIN32
     tool += ".exe";
 #endif
@@ -120,14 +120,16 @@ int main(int argc, char *argv[]) {
     text << in.rdbuf();
     const bool bridged = text.str().find("camel/standalone/bridge.h") != std::string::npos;
 
-    std::string build = compiler() + " -std=c++20 -O2 -ffp-contract=off -I" + quoted(home / "include") + " " +
-                        quoted(cpp) + " -o " + quoted(executable);
+    std::string build = compiler() + " -std=c++20 -O2 -ffp-contract=off -I" +
+                        quoted(home / "include") + " " + quoted(cpp) + " -o " + quoted(executable);
     if (bridged) {
         // The program uses operators of runtime modules: it links the runtime, and finds it
         // (and the modules) through the installation when it runs.
         const fs::path lib = home / "libs";
+#ifdef _WIN32
+        build += " " + quoted(lib / "libcamel.lib");
+#else
         build += " -L" + quoted(lib) + " -lcamel";
-#ifndef _WIN32
         build += " -Wl,-rpath," + quoted(lib);
 #endif
     }
