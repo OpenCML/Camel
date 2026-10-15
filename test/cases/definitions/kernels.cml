@@ -3,7 +3,7 @@
 // the kernels compute; run after test::expand_definitions, the definitions do: the two outputs
 // must be the same text, every element printed exactly (the shortest decimal that reads back to
 // the same float; a NaN prints without its sign or payload).
-import { Tensor, reshape, zeros, softmax, mean, relu, sigmoid, numel, random, seed } from tensor
+import { Tensor, reshape, zeros, softmax, log_softmax, mean, relu, sigmoid, numel, random, seed } from tensor
 
 func elems(t: Tensor<f32>): float[] {
     let v = reshape(t, [numel(t)])
@@ -43,6 +43,14 @@ func main(): int sync {
     show("softmax specials", softmax(reshape(specials, [3, 4]), 1))
     show("softmax specials 0", softmax(reshape(specials, [3, 4]), 0))
     show("softmax empty", softmax(empty, 1))
+    show("log_softmax clean", log_softmax(clean))
+    show("log_softmax clean 0", log_softmax(clean, 0))
+    show("log_softmax large", log_softmax(large, 1))
+    show("log_softmax random", log_softmax(r, 1))
+    show("log_softmax random 0", log_softmax(r, 0))
+    show("log_softmax cube 1", log_softmax(cube, 1))
+    show("log_softmax specials", log_softmax(reshape(specials, [3, 4]), 1))
+    show("log_softmax empty", log_softmax(empty, 1))
     println(mean(clean))
     println(mean(r))
     println(mean(large))

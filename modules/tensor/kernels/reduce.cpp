@@ -223,7 +223,9 @@ enum class SoftmaxKind { Softmax, LogSoftmax };
  *                                         rounding to f32 at the end (sum_axis)
  *     softmax = e / s                     f32 division (not a multiplication by 1 / s)
  *
- * log_softmax shares the first three steps and returns (x - m) - f32(log(f64 sum)).
+ * log_softmax shares the first three steps and returns (x - m) - log(s): s rounded to f32 as
+ * above, its logarithm by the loop of the log operator, one f32 subtraction (its definition in
+ * stdlib/tensor_definitions.cml, d - log(sum(exp(d), axis, keepdims)) with d = x - m).
  *
  * The work is three passes so the middle one can call the vectorized exp loop on the whole
  * tensor: per lane, the maximum and x - m; exp in place; per lane, the sum and the result.
@@ -267,8 +269,10 @@ TensorObject *softmaxImpl(
                 dst[base + k * stride] /= s;
             }
         } else {
-            const float m      = laneMax[static_cast<size_t>(lane)];
-            const float logSum = static_cast<float>(std::log(sum));
+            const float m = laneMax[static_cast<size_t>(lane)];
+            const float s = static_cast<float>(sum);
+            float logSum  = 0.0f;
+            unaryF32(UnaryOp::Log, &s, &logSum, 1);
             for (int64_t k = 0; k < split.extent; ++k) {
                 const int64_t idx = base + k * stride;
                 dst[idx]          = src[idx] - m - logSum;
