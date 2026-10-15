@@ -980,7 +980,12 @@ any Formatter::visitUnaryExpr(syn::Node context) {
                any_cast<string>(visitType(context->type()));
     }
     const string op = context->child(0)->text();
-    return op + operand;
+    // A space where the operator and the operand's first character would read as one token:
+    // `! !x` is two negations, `!!x` the error branch; likewise `- -x`, `- >`, `! =`.
+    const char next  = operand.empty() ? '\0' : operand[0];
+    const bool joins = (op == "!" && (next == '!' || next == '=')) ||
+                       (op == "-" && (next == '-' || next == '>' || next == '='));
+    return joins ? op + " " + operand : op + operand;
 }
 
 /*
