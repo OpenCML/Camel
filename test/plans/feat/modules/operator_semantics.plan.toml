@@ -1,0 +1,129 @@
+id = "modules.operator_semantics"
+order = 363
+tier = "feat"
+tags = ["feat", "modules", "tensor", "semantics"]
+desc = "The registration and query interface of operator semantics (camel/core/operator_semantics.h, docs/design/op-semantics section 4): the checks a declaration must pass, the version rules of bind, the declaration epoch, and the numeric semantics declared for the built-in scalar arithmetic and the tensor operators, as `camel inspect --ops` shows them."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "registration_and_queries"
+desc = "test::operator_semantics (CAMEL_ENABLE_TEST_PASSES): each registration check of design 4.4 rejects one declaration, naming the operator and the reason; a well-formed one is accepted. bind accepts a recorded key of the same major version whose minor version is not above the declared one, and refuses another major version, a higher minor version, an unknown operator and one without semantics. Every accepted declaration increments the epoch, a rejected one leaves it. Permission names, finite_math for its four assumptions."
+kind = "behavior"
+case = "../../../cases/consistency/values/max_min_special.cml"
+args = ["${case}", "test::operator_semantics"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l), `missing: ${l}`)
+line('SEMANTICS valid accepted')
+for (const [check, reason] of [
+  ['key_names_other_operator', "'semtest:a' are rejected: its key semtest:b@1.0 names another operator"],
+  ['lower_version', 'it would replace semtest:ok@1.2 by the lower version semtest:ok@1.1'],
+  ['faults_against_traits', 'it declares faults, but its traits say it never faults'],
+  ['bounded_without_ulp', 'a bounded operator declares a positive ulp bound'],
+  ['bounded_not_approx', 'a bounded operator is sensitive to approx_math'],
+  ['bounded_without_type', 'a bounded operator names the type it computes in'],
+  ['exact_with_rounding_permission', 'an exact operator has no rounding for reassociate to change'],
+  ['exact_with_ulp', 'an exact operator has no ulp bound'],
+  ['rounded_with_ulp', 'a correctly rounded operator has no ulp bound'],
+  ['rounded_without_float_type', 'a correctly rounded operator names the type its steps are rounded in'],
+  ['opaque_not_sensitive_to_all', 'an opaque operator is sensitive to every permission'],
+]) {
+  const m = out.match(new RegExp(`SEMANTICS ${check} (.*)`))
+  assert(m && m[1].startsWith('rejected:') && m[1].includes(reason), `${check}: ${m ? m[1] : 'missing'}`)
+}
+line('SEMANTICS key semtest:ok@1.2')
+line('SEMANTICS undeclared_key none')
+for (const [key, result] of [['semtest:ok@1.0', 'bound'], ['semtest:ok@1.2', 'bound'], ['semtest:ok@1.3', 'refused'],
+  ['semtest:ok@2.0', 'refused'], ['semtest:missing@1.0', 'refused'], ['semtest:never@1.0', 'refused'],
+  ['semtest:ok@1', 'unparsable'], ['semtest:ok@1.x', 'unparsable']]) {
+  line(`SEMANTICS bind ${key} ${result}`)
+}
+line('SEMANTICS replace_higher accepted')
+line('SEMANTICS epoch_increments yes')
+line('SEMANTICS epoch_unchanged_on_reject yes')
+line("SEMANTICS builtin_key :op/add_d@1.0 protocol=''")
+line('SEMANTICS permission finite_math [finite_math]')
+line('SEMANTICS permission no_nans [no_nans]')
+line('SEMANTICS permission fast unknown')
+line('SEMANTICS permissions_text [reassociate, contract, no_nans, no_infs]')
+}
+"""
+
+[[tests]]
+name = "test_pass_needs_the_environment"
+desc = "test::operator_semantics is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
+kind = "negative"
+case = "../../../cases/consistency/values/max_min_special.cml"
+args = ["${case}", "test::operator_semantics"]
+expect_exit = 1
+expect_output_not_contains = ["SEMANTICS"]
+
+[[tests]]
+name = "declared_numeric_semantics"
+desc = "`camel inspect --ops` shows the declared semantics: the stable key, the numeric class, the type the steps are rounded in, the ulp bound of a bounded operator, the permissions that can change the result, the special values it departs from IEEE on, the faults. Covers the operators a tensor compiler meets first and the built-in scalar arithmetic; an operator without a declaration has no semantics member."
+kind = "behavior"
+case = "../../../cases/modules/tensor/numeric_contract.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+const byUri = new Map(ops.map((o) => [o.uri, o]))
+const expect = {
+  'tensor:add': ['correctly_rounded', 'f32', ['reassociate', 'contract', 'change_precision', 'finite_math']],
+  'tensor:subtract': ['correctly_rounded', 'f32', ['reassociate', 'contract', 'change_precision', 'finite_math']],
+  'tensor:multiply': ['correctly_rounded', 'f32', ['reassociate', 'contract', 'change_precision', 'finite_math']],
+  'tensor:divide': ['correctly_rounded', 'f32', ['approx_math', 'change_precision', 'finite_math']],
+  'tensor:maximum': ['exact', 'f32', ['finite_math']],
+  'tensor:minimum': ['exact', 'f32', ['finite_math']],
+  'tensor:neg': ['exact', 'f32', ['finite_math']],
+  'tensor:abs': ['exact', 'f32', ['finite_math']],
+  'tensor:relu': ['exact', 'f32', ['finite_math']],
+  'tensor:sqrt': ['correctly_rounded', 'f32', ['approx_math', 'change_precision', 'finite_math']],
+  'tensor:rsqrt': ['correctly_rounded', 'f32', ['approx_math', 'change_precision', 'finite_math']],
+  'tensor:exp': ['bounded', 'f32', ['approx_math', 'change_precision', 'finite_math']],
+  'tensor:log': ['bounded', 'f32', ['approx_math', 'change_precision', 'finite_math']],
+  'tensor:sum': ['correctly_rounded', 'f64', ['reassociate', 'change_precision', 'finite_math']],
+  'tensor:sum_axis': ['correctly_rounded', 'f64', ['reassociate', 'change_precision', 'finite_math']],
+  'tensor:mean': ['correctly_rounded', 'f64', ['reassociate', 'change_precision', 'finite_math']],
+  'tensor:mean_axis': ['correctly_rounded', 'f64', ['reassociate', 'change_precision', 'finite_math']],
+  'tensor:max_axis': ['exact', 'f32', ['finite_math']],
+  'tensor:min_axis': ['exact', 'f32', ['finite_math']],
+  'tensor:matmul': ['correctly_rounded', 'f32', ['reassociate', 'change_precision', 'finite_math']],
+  'tensor:reshape': ['exact', undefined, []],
+  'tensor:transpose': ['exact', undefined, []],
+  'tensor:permute': ['exact', undefined, []],
+  'tensor:slice': ['exact', undefined, []],
+  ':op/add_i': ['exact', undefined, []],
+  ':op/add_d': ['correctly_rounded', 'f64', ['reassociate', 'contract', 'change_precision', 'finite_math']],
+  ':op/mul_f': ['correctly_rounded', 'f32', ['reassociate', 'contract', 'change_precision', 'finite_math']],
+  ':op/div_d': ['correctly_rounded', 'f64', ['approx_math', 'change_precision', 'finite_math']],
+  ':op/div_l': ['exact', undefined, []],
+  ':op/neg_d': ['exact', 'f64', ['finite_math']],
+  ':op/lt_d': ['exact', 'f64', ['finite_math']],
+}
+for (const [uri, [cls, compute, sensitive]] of Object.entries(expect)) {
+  const op = byUri.get(uri)
+  assert(op, `operator ${uri} is not listed`)
+  const s = op.semantics
+  assert(s, `${uri} has no semantics`)
+  assert(s.key === `${uri}@1.0`, `${uri}: key ${s.key}`)
+  assert(s.numeric === cls, `${uri}: numeric ${s.numeric}, expected ${cls}`)
+  assert(s.compute === compute, `${uri}: compute ${s.compute}, expected ${compute}`)
+  assert(JSON.stringify(s.sensitive_to) === JSON.stringify(sensitive), `${uri}: sensitive_to ${JSON.stringify(s.sensitive_to)}`)
+  assert(typeof s.algorithm === 'string' && s.algorithm.length > 0, `${uri}: no algorithm`)
+}
+assert(byUri.get('tensor:exp').semantics.ulp === 2 && byUri.get('tensor:log').semantics.ulp === 2, 'exp and log are declared within 2 ulp')
+assert(JSON.stringify(byUri.get('tensor:exp').semantics.not_ieee) === '["subnormals"]', 'exp flushes subnormal results')
+assert(JSON.stringify(byUri.get(':op/div_d').semantics.faults) === '["division_by_zero"]', 'scalar float division faults on a zero divisor')
+assert(JSON.stringify(byUri.get(':op/add_d').semantics.faults) === '[]', 'scalar float addition never faults')
+assert(byUri.get('tensor:matmul').semantics.faults === undefined, 'tensor faults are not declared yet')
+assert(!byUri.get('tensor:softmax').semantics, 'softmax has no declaration in phase 1')
+}
+"""

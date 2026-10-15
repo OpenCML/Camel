@@ -450,6 +450,21 @@ At present all complicated type computation is implemented directly by operators
   Dimensions allow addition and multiplication by a constant (linear forms, whose equality is decidable); other results are unknown. Where an argument's dimension is unknown (`?`), compilation lets it pass and the call checks it at run time (as `as` does). Named dimensions are only checked; they create no instances: a function still has one graph.
 
 - **The reserved `T ? U` is retired**: a value that may fail is written `T!` only, and error values have one type (told apart by their Kind). Should typed errors be needed later, they come as `T ! E` once `enum` exists. The special reading of `T ?` followed by a type goes with it: `?` is only the nullable mark.
+- **The numeric contract of floating point** (2.11's "same bytes" was about output text; this completes it for the computation itself):
+  - **The reference is a canonical algorithm, not a machine's implementation**: addition, subtraction, multiplication, division and square root are each correctly rounded as IEEE specifies, strictly in the order the program writes them, never contracted to fused multiply-add. Within this, every back end and device gives bit-identical results.
+  - **Transcendental functions** (`exp`, `log`, `sin`, ...) need not be bit-identical across devices; they promise a stated error bound (in ulp).
+  - **Relaxations are granted explicitly, and no permission implies another**: reordering or reassociating reductions, contracting to fused multiply-add, approximate math functions, reduced input or accumulation precision, extra assumptions about NaN, infinities, negative zero and subnormals. A module declares only what its operator does; it cannot widen the caller's permissions.
+  - **`unordered_reduce`** grants only "the combining order of this reduction may change", nothing else.
+  - **A permission applies to the code it is written on**: called functions do not inherit it; on inlining or expanding a definition graph it stays with the nodes, and it is kept in caches. The granting form is leaning towards an annotation on a function or block (such as `@numeric(reassociate, contract)`); details in `docs/design/op-semantics`.
+
+- **Details of the numeric contract** (see `docs/design/op-semantics`):
+  - **The canonical algorithm of matrix multiplication is a chain of fused multiply-adds in ascending k** (an FMA is itself one correctly rounded IEEE operation, so this is equally bit-reproducible); this is matmul's own canonical algorithm, not a relaxation of "no contraction".
+  - **`max` and `min` are IEEE 754-2019 `maximum` and `minimum`**: NaN propagates, −0 is less than +0. They are associative and commutative, so max/min reductions may be reordered without permission. **`relu` is defined as `maximum(x, +0)`**.
+  - **Permission names**: `reassociate`, `contract`, `approx_math`, `change_precision`, `finite_math` (the latter combining `no_nans`, `no_infs`, `no_signed_zeros`, `flush_subnormals`). Raising accumulation precision also falls under `change_precision`.
+  - **Scope**: written on a function or a block; branch arms, loop bodies and lambdas lexically inside count as the same code. No module-level default permission and no command-line or pipeline switch; back-end entry points (such as `tiles.run`) accept no permissions.
+  - **Transcendental functions** declare their error bound one by one; the library target is at most 2 ulp for `exp` and `log`; special values (NaN, infinities, zeros) are exact.
+  - **A definition graph is normative**: fused or hand-written implementations must agree with the operator's definition graph. A broadcast whose dimension may be 1 gives no index map until the shape is known.
+
 - **`std::cpp`**: the fault reports of generated programs are byte-identical to the interpreter's; recursion is counted exactly (as on every back end); the extra blank line of `println<fmt>` and the extra line feed of `print<fmt>` are defects of the interpreter and are fixed there; `std::cpp::bench` is removed; `map`/`filter` run sequentially in generated programs for now; `main` takes its parameters as `--arg name=value`, as the command line does.
 
 ---

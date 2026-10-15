@@ -35,6 +35,7 @@
 
 #include "../interop.h"
 #include "cpu.h"
+#include "minmax.h"
 #include "parallel.h"
 
 #include <algorithm>
@@ -261,9 +262,9 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
     case BinaryOp::Pow:
         return static_cast<T>(std::pow(a, b));
     case BinaryOp::Max:
-        return std::max(a, b);
+        return maximum(a, b); // IEEE 754-2019 maximum (minmax.h)
     case BinaryOp::Min:
-        return std::min(a, b);
+        return minimum(a, b);
     }
     return T{};
 }
@@ -364,7 +365,7 @@ template <UnaryOp Op, typename T> inline T unaryInt(T x) {
     } else if constexpr (Op == UnaryOp::Abs) {
         return x < T{} ? static_cast<T>(-x) : x;
     } else if constexpr (Op == UnaryOp::Relu) {
-        return x > T{} ? x : T{};
+        return relu(x);
     } else {
         return x;
     }
@@ -473,6 +474,10 @@ TensorObject *unary(UnaryOp op, const TensorObject *input, mm::IAllocator &alloc
         runUnaryInt<T>(op, static_cast<const T *>(in.data), out->dataAs<T>(), count);
     });
     return out;
+}
+
+void unaryF32(UnaryOp op, const float *src, float *dst, int64_t count) {
+    runUnaryF32(op, src, dst, count);
 }
 
 TensorObject *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) {

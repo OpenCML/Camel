@@ -106,6 +106,11 @@ Shape broadcastShapes(std::span<const int64_t> lhs, std::span<const int64_t> rhs
 
 TensorObject *unary(UnaryOp op, const TensorObject *input, mm::IAllocator &allocator);
 
+/// dst[i] = op(src[i]) for float data (src may equal dst), split across threads, with the
+/// per-ISA loop `unary` itself uses. A kernel that applies a math function inside a larger
+/// computation (softmax's exp) calls this so that it gives the bits the operator gives.
+void unaryF32(UnaryOp op, const float *src, float *dst, int64_t count);
+
 /// Result dtype is the promotion of both operands (float32 for Div/Pow).
 TensorObject *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator);
 

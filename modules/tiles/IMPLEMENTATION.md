@@ -7,6 +7,42 @@ the [architecture proposal](../../docs/design/indexed-computation/README.md).
 Unresolved language semantics require an author decision. Backend policy and
 module operator contracts must be explicit; they do not redefine Camel syntax.
 
+## Core integration and canonical extrema (2026-10-16)
+
+Integrated remote fsh-dev through d05050f7 into the Tiles working branch: stable
+operator semantic records, source-position columns, approved route documents,
+and CPU numeric contract corrections. CUDA extrema now use canonical NaN
+0x7fc00000 and IEEE signed-zero ordering throughout elementwise, fused and
+serial/parallel reduction paths. Singleton reductions also canonicalize NaNs.
+The remaining payload decision was explicitly delegated by the user; the chosen
+f64 representation is 0x7ff8000000000000 (Tiles extrema currently use f32).
+
+Manual raw-word tests passed on the local RTX 4060 Ti with NVM/FVM/JIT, including
+quiet/signaling payloads, operand reversal, fused relu, singleton reductions and
+widths 127/128/257/513 across the parallel threshold. The final integration suite passed 99/99 locally and on the RTX 3090 server
+(the remote main plan has 96 tests, plus 3 core semantic protocol tests).
+Raw logs are in `docs/performance/tiles/2026-10-16-*-core-integration-tests.txt`.
+The unchanged max benchmark reports 14.90x (4060 Ti) and 1.32x (3090) over its
+serial CUDA baseline, not Triton; device-specific scheduling still needs tuning.
+Both complete JSON reports are retained as `*-canonical-extrema-benchmark.jsonl`.
+The wider developer suite exposed a pre-existing formatter token-boundary bug;
+its isolated fix and verification are tracked separately.
+
+The complete developer run finished with 4,908 passes, 10 skips and two failures
+out of 4,920 cases. Both failures were repaired: repeated type postfix tokens in
+the formatter (16d29a1a), and explicit standard includes in Tiles (344c192d).
+After rebuilding, the entire parse and portability subset passed 48/48, followed
+by native plan/cache, CUDA lease/resource/precision and NVM/FVM/JIT extrema tests.
+Linux formatter corpus and 3,000 mutations also passed. The original full-run
+log is retained rather than relabeled as an all-green run; the targeted rerun
+records the repairs. No remaining failure from that run is unresolved.
+
+The source-template cache is committed independently as 944f9d24. Its native
+checks cover runtime value independence, literal sensitivity, borrowed/owned
+storage changes, owner release, bounded eviction and concurrent generation.
+It remains a process-local physical-plan cache, not the future versioned graph
+semantic fingerprint cache.
+
 ## Delivery sequence
 
 1. **Executable baseline.** Bundled module, direct graph inspection, CUDA/NVRTC
@@ -465,3 +501,192 @@ alongside their existing registration/export URI interface. URI text is material
 only for diagnostics. This reuses the established core identity contract without
 introducing another identity space or changing operator semantics. Rich operation
 interfaces for indexing, numerics and resources remain separate design work.
+
+## Strict matrix-product rounding
+
+Following the language author's numerical contract (design principles 2.13,
+verified on fsh-dev at d23d262d), matrix products now use separate explicitly
+rounded f32 multiplication and addition. No FMA permission is inferred from GPU
+execution. A cancellation regression produced -2^-46 before the correction and
+positive zero afterward. The local RTX 4060 Ti and remote RTX 3090 device 7 pass
+85/85 relevant cases, including this test under NVM, FVM and JIT. Remote evidence:
+`docs/performance/tiles/2026-10-15-rtx3090-strict-matmul-tests.txt`.
+
+This fixes one concrete contraction violation, not the entire numerical contract.
+See `notes/numerical-contract-audit.md` for the reproduced CPU/GPU subnormal exp
+difference and remaining error-bound and comparison-mode work.
+
+## Execution ownership and cross-thread resource cleanup
+
+Execution retains an immutable native Program snapshot, including borrowed input
+owners, until stream cleanup completes. Compiled programs move into the snapshot
+without copying their input payloads. CUDA execution resources independently own
+their backend and activate/restore its context during allocation and destruction.
+Destruction drains the stream before releasing device buffers, pinned staging and
+the stream itself, including when destruction occurs on another host thread.
+
+Commit 9831d00c rebuilds and passes 85/85 relevant cases on local RTX 4060 Ti and
+remote RTX 3090 device 7. The native lifetime test now additionally queues an
+upload, transfers resource ownership to another thread, and checks successful
+draining, all three resource releases, restored context and eventual backend
+destruction. Remote evidence is in
+`docs/performance/tiles/2026-10-15-rtx3090-resources-tests.txt`.
+
+The remote checkout was updated to the merged core before this verification;
+its old core headers were incompatible with the updated graph accessor API.
+Public execution remains synchronous. Completion events, pending-output
+dependencies and deferred fault propagation are not implemented by this change.
+
+## Structured address expressions
+
+Broadcast and reindex address lowering now builds immutable unsigned expression
+trees instead of concatenating arithmetic source fragments. The representation
+supports constants, variables, addition, multiplication, division and remainder,
+substitution, checked host evaluation and final CUDA serialization. Constant
+arithmetic is checked for overflow and zero divisors; host evaluation also checks
+bindings and runtime arithmetic. Existing plan validation still establishes valid
+access domains before device execution; checked host evaluation is not a proof
+that arbitrary expressions are safe on a GPU.
+
+The native verifier exercises transpose/slice composition, constant folding,
+unbound variables, invalid variable names, zero divisors and overflow. Manual GPU
+index-map and mapped-fusion cases retain their expected results. This is the
+address-expression portion of the physical kernel representation, not a complete
+structured kernel IR: loops, masks, scalar operations, barriers and load/store
+statements still require migration. Core semantic access maps remain the intended
+source of truth; these expressions are a physical lowering representation.
+
+Commit 3b377edf rebuilds and passes 85/85 relevant cases on local RTX 4060 Ti and
+remote RTX 3090 device 7, including the added native expression checks and existing
+GPU mapping/fusion cases. Remote output is retained in
+`docs/performance/tiles/2026-10-15-rtx3090-index-expr-tests.txt`.
+# Explicit NVRTC precision policy (2026-10-16)
+
+Commit `de33ecd5` fixes division, square-root and subnormal options explicitly,
+includes all compile arguments in the in-process module cache identity and
+reports those arguments in benchmarks. The native lease test checks cache hits
+and rejects an entry with an incompatible precision policy. The committed code
+passed the 85-case Tiles/GPU/tensor suite on local RTX 4060 Ti and RTX 3090 device
+7 on `88zjwei`; remote output is recorded in
+`docs/performance/tiles/2026-10-16-rtx3090-precision-tests.txt`.
+This validates the compiler-policy change, not the still-pending full numerical
+contract audit or cross-device ULP guarantees.
+
+# Normative matrix FMA chain (2026-10-16)
+
+Commit `e1bf35da` applies design principles 2.13 / op-semantics Q7B from
+`fsh-dev` at `d7d192de`: matrix multiplication starts at +0 and performs f32 FMA
+in increasing k order. This supersedes the earlier separate-rounding correction.
+The two-term rounding probe returns exactly -2^-46; a 34-term probe spanning
+three tiles returns 1, distinguishing a continuous accumulator from separate
+panel sums. Both probes run on nvm/fvm/jit. The committed implementation passed
+85/85 relevant tests on local RTX 4060 Ti and remote RTX 3090 device 7; remote
+evidence is `docs/performance/tiles/2026-10-16-rtx3090-fma-contract-tests.txt`.
+This is not yet a proof of full CPU/GPU numerical equivalence.
+
+# Numeric policy bit probes (2026-10-16)
+
+Commit `cb749c40` adds runtime-input CUDA probes for binary32 subnormal handling,
+division, square root, ordinary multiply/add and explicit FMA. Raw result words
+are checked against exact expected values. Manual local execution passed before
+the plan assertion was added; local GPU plan passed 59/59. The isolated RTX 3090
+device 7 checkout rebuilt this commit and passed all 85 Tiles/GPU/tensor cases;
+evidence is `docs/performance/tiles/2026-10-16-rtx3090-bit-probes-tests.txt`.
+The numerical audit also records versioned NVIDIA documentation and its ULP
+metric; vendor error tables are supporting evidence, not exhaustive proofs.
+
+# Structured predicated accesses (2026-10-16)
+
+Commit `b07df4a2` adds physical Boolean predicates and buffer accesses with a
+shared coordinate-substitution interface. Host evaluation short-circuits masks
+and does not evaluate a masked-out address. Matrix tile loads now consume these
+objects; their CUDA printer uses conditional loads and exact fallback bits.
+This is a physical lowering facility, not a second definition of Camel tensor
+semantics or a complete structured kernel IR. Arithmetic, loops, barriers and
+stores remain to be migrated.
+
+Manual native checks and the matrix FMA probe passed before extending the plan
+assertion. Local relevant tests passed 85/85; after the formatting hook, the
+standard build, native checks and matrix probe passed again. RTX 3090 device 7
+rebuilt the committed tree and passed all 85 relevant tests; see
+`docs/performance/tiles/2026-10-16-rtx3090-access-tests.txt`. No speedup is claimed.
+
+# Ordered producer/reduction fusion (2026-10-16)
+
+Commit `1aa02be3` fuses single-use pointwise/index-map producers into axis
+sum/mean. A shared scalar emitter preserves each producer's f32 rounding point;
+one thread per output retains the ordered f64 accumulator, including across all
+axis positions. Reductions use 32-thread blocks. Shared producers and observable
+outputs stay materialized. Native plan checks reject invalid reduction strategy
+and launch mutations. The three host VMs pass byte-for-byte CPU/GPU checks for
+broadcast, transpose, non-last axes, cancellation, empty axes and empty outputs.
+
+The initial producer policy regressed the 512x1025 exponential workload on RTX
+3090: 0.65x the unfused CUDA baseline. Commit `cd906d69` retains expensive math in
+a pointwise stage below 2048 output rows. Final RTX 3090 median ratios for
+4x513, 512x1025 and 4096x65 are approximately 1.20x, 1.04x and 1.67x; corresponding
+kernel counts are 2, 2 and 1, versus four unfused kernels. Near-unity differences
+are not evidence of a reliable speedup. This is a static heuristic, not an
+autotuner or a guarantee across devices/shapes. Full softmax/layernorm fusion,
+shared-producer fusion and device-specific tuning remain unfinished.
+
+The committed final policy rebuilt and passed 86/86 relevant tests on both RTX
+4060 Ti and RTX 3090 device 7. Evidence under `docs/performance/tiles/`:
+
+- `2026-10-16-rtx3090-reduction-tests.txt`: initial feature, 86/86.
+- `2026-10-16-rtx3090-reduction-cost-tests.txt`: final policy, 86/86.
+- `2026-10-16-{rtx4060ti,rtx3090}-ordered-reduction.jsonl`: initial feature samples.
+- `2026-10-16-{rtx4060ti,rtx3090}-reduction-cost-policy.jsonl`: final samples.
+
+Reproduce with `test/cases/modules/tiles/reduction_benchmark.cml` using the normal
+build and selected CUDA device. Reports preserve 21 raw event samples per variant,
+compiler options and correctness gates. The performance reference is unfused
+CUDA with the same ordered arithmetic, not Triton, cuBLAS or a CPU baseline.
+
+# Ordered reduction epilogues (2026-10-16)
+
+Commit `a82d3de9` joins a single ordered axis sum/mean with a same-shape
+pointwise epilogue. The reducer's f64 accumulator is explicitly rounded to f32
+before the epilogue, even when the intermediate has no allocation. The planner
+keeps shape changes and multiple reducers outside a combined stage; validator
+mutations check these boundaries. New byte-level cases cover affine epilogues,
+two independent reductions and `sum([2^24,1]) - 2^24 == +0`, which would expose
+a missing f32 boundary.
+
+Local relevant tests passed 86/86; the committed build then passed native plan
+checks and all reduction byte probes on nvm/fvm/jit. The isolated RTX 3090
+device 7 checkout rebuilt the commit and passed 86/86. Evidence:
+
+- `docs/performance/tiles/2026-10-16-rtx3090-epilogue-tests.txt`.
+- `docs/performance/tiles/2026-10-16-rtx4060ti-reduction-epilogue.jsonl`.
+- `docs/performance/tiles/2026-10-16-rtx3090-reduction-epilogue.jsonl`.
+
+The last two benchmark records add affine epilogues to 512x1025 and 4096x65
+reductions; kernel counts drop from six to two and one. These measurements
+compare the complete optimized schedule against unfused CUDA, not the isolated
+incremental contribution of epilogue fusion or any external compiler. Shared
+row intermediates and full normalization fusion remain unfinished.
+
+# Runtime host scalar inputs (2026-10-16)
+
+Commit `23ede28d` snapshots host float arguments and captured floats as exact f64
+input bits instead of emitting their values as `constant64` source. Graph DATA
+literals remain constants; integer attributes and static branch conditions still
+specialize. Typed input validation, pinned upload, identity download and retained
+device outputs handle the same owned payload. A cast to f32 can fuse into its
+pointwise consumer without an extra conversion kernel.
+
+The runtime scalar case checks unchanged CUDA source across changed arguments,
+tensor scales and captured values; checks different results after cache reuse;
+preserves 1+2^-52 through host/device identity paths; and verifies a one-kernel
+tensor scale and a warm code-cache hit after changing scalar values. It runs on
+nvm/fvm/jit. Native mutations reject missing/mixed scalar payloads, incorrect
+dtype and non-scalar f64 shapes. No GC pointers enter the stored payload.
+
+Local relevant tests passed 87/87. After commit formatting, the standard build,
+native tests and all three VM scalar cases passed again. The isolated RTX 3090
+device 7 checkout rebuilt the committed tree and passed 87/87, recorded in
+`docs/performance/tiles/2026-10-16-rtx3090-runtime-scalars-tests.txt`.
+Semantic-fingerprint caching, symbolic-shape kernels and allocation/transfer
+amortization remain separate unfinished work.
+

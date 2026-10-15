@@ -26,6 +26,7 @@
  */
 
 #include "elementwise.h"
+#include "minmax.h"
 #include "vmath.h"
 
 #include <cmath>
@@ -53,7 +54,7 @@ template <UnaryOp Op> inline float unaryF32(float x) {
     } else if constexpr (Op == UnaryOp::Tanh) {
         return vmath::tanh(x);
     } else if constexpr (Op == UnaryOp::Relu) {
-        return x > 0.0f ? x : 0.0f;
+        return kernels::relu(x); // maximum(x, +0): NaN stays NaN, -0 becomes +0
     } else if constexpr (Op == UnaryOp::Gelu) {
         return vmath::gelu(x);
     } else {

@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -12,12 +12,19 @@
 #include "tiles/device.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 namespace camel::tiles {
+const void *hostData(const Node &node) {
+    if (node.scalarBits)
+        return &*node.scalarBits;
+    return node.data.empty() ? nullptr : node.data.data();
+}
 size_t bytes(const Node &node) {
     const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
     const size_t count = elements(node.shape);
@@ -48,12 +55,13 @@ bool binary(const std::string &op) {
            std::string::npos;
 }
 bool indexedScalar(const std::string &op) {
-    return unary(op) || binary(op) || op == "reshape" || op == "reindex";
+    return unary(op) || binary(op) || op == "reshape" || op == "reindex" || op == "cast_f32";
 }
 bool scalar64(const std::string &op) {
     return op == "constant64" || op == "scalar_add" || op == "scalar_sub" || op == "scalar_mul" ||
            op == "scalar_div" || op == "scalar_neg";
 }
+bool orderedAxis(const std::string &op) { return op == "sum_axis" || op == "mean_axis"; }
 void require(bool valid, const std::string &message) {
     if (!valid)
         throw std::runtime_error("invalid tiles plan: " + message);
@@ -111,20 +119,22 @@ void validate(const Program &p) {
             require(in < id, "dependency is not topologically earlier");
         if (n.op == "input") {
             require(
-                n.dtype == DType::F32 || (n.resident && n.shape.empty()),
+                n.dtype == DType::F32 || (n.dtype == DType::F64 && n.shape.empty()),
                 "input payload dtype");
             require(n.inputs.empty(), "input has dependencies");
             if (n.resident)
                 require(
-                    n.data.empty() && n.resident->shape == n.shape &&
+                    n.data.empty() && !n.scalarBits && n.resident->shape == n.shape &&
                         n.resident->dtype == n.dtype && n.resident->owner && n.resident->address,
                     "invalid resident input");
+            else if (n.dtype == DType::F64)
+                require(n.scalarBits.has_value() && n.data.empty(), "invalid scalar input payload");
             else
-                require(n.data.size() == count, "invalid input payload");
+                require(!n.scalarBits && n.data.size() == count, "invalid input payload");
             continue;
         }
         require(!n.resident, "computed value borrows input storage");
-        require(n.data.empty(), "computed value has host payload");
+        require(n.data.empty() && !n.scalarBits, "computed value has host payload");
         if (n.op == "scalar_add" || n.op == "scalar_sub" || n.op == "scalar_mul" ||
             n.op == "scalar_div" || n.op == "scalar_neg") {
             require(
@@ -234,14 +244,45 @@ void schedule(Program &p, ScheduleOptions options) {
         if (!options.fuseElementwise ||
             std::find(p.outputs.begin(), p.outputs.end(), id) != p.outputs.end() ||
             users[id] != 1 ||
-            !((indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[target].op)) ||
+            !((indexedScalar(p.nodes[id].op) &&
+               (indexedScalar(p.nodes[target].op) || orderedAxis(p.nodes[target].op))) ||
               (scalar64(p.nodes[id].op) && scalar64(p.nodes[target].op))))
             continue;
         size_t root = owner[target];
+        // Ordered reductions expose only output-row parallelism. Keep expensive
+        // math in its pointwise stage unless at least 64 warps of rows exist.
+        // A few output warps leave most SMs idle while serializing math over
+        // the reduction axis (observed on both RTX 4060 Ti and RTX 3090).
+        // Cheap producer chains can still fuse on either side of this boundary.
+        const auto &op = p.nodes[id].op;
+        if (orderedAxis(p.nodes[root].op) && elements(p.nodes[root].shape) < 2048 &&
+            (op == "exp" || op == "log" || op == "sqrt" || op == "rsqrt"))
+            continue;
         if (groupSize[root] == 64)
             continue;
         owner[id] = root;
         ++groupSize[root];
+    }
+    // Attach one ordered reduction to a same-domain pointwise epilogue. Domain
+    // changes and multiple reductions stay separate, avoiding recomputation.
+    for (size_t id = count; id-- > 0;) {
+        if (!options.fuseElementwise || !orderedAxis(p.nodes[id].op) || users[id] != 1 ||
+            std::find(p.outputs.begin(), p.outputs.end(), id) != p.outputs.end())
+            continue;
+        const size_t root = owner[consumer[id]];
+        if (root == id || groupSize[root] + groupSize[id] > 64)
+            continue;
+        bool compatible = true;
+        for (size_t member = 0; member < count; ++member)
+            if (owner[member] == root &&
+                (!elementwise(p.nodes[member].op) || p.nodes[member].shape != p.nodes[id].shape))
+                compatible = false;
+        if (!compatible)
+            continue;
+        for (auto &group : owner)
+            if (group == id)
+                group = root;
+        groupSize[root] += groupSize[id];
     }
     p.launches.clear();
     for (size_t id = 0; id < count; ++id) {
@@ -256,6 +297,13 @@ void schedule(Program &p, ScheduleOptions options) {
                 launch.members.push_back(member);
         launch.implementation = "standard";
         const auto &n         = p.nodes[id];
+        if (launch.members.size() > 1 &&
+            std::any_of(launch.members.begin(), launch.members.end(), [&](size_t member) {
+                return orderedAxis(p.nodes[member].op);
+            })) {
+            launch.implementation = "ordered_reduce";
+            launch.blockX         = 32;
+        }
         if (options.parallelMax && n.op == "max_axis") {
             const auto &shape = p.nodes[n.inputs[0]].shape;
             if (size_t(n.attributes[0]) + 1 == shape.size() && shape.back() >= 128)
@@ -307,8 +355,27 @@ void validatePlan(const Program &p) {
             "invalid stage root");
         require(launch.elements == elements(p.nodes[launch.node].shape), "launch extent");
         require(
-            launch.implementation == "standard" || launch.implementation == "parallel_max",
+            launch.implementation == "standard" || launch.implementation == "parallel_max" ||
+                launch.implementation == "ordered_reduce",
             "unknown implementation");
+        size_t reduction = SIZE_MAX, reductions = 0;
+        for (auto member : launch.members)
+            if (member < p.nodes.size() && orderedAxis(p.nodes[member].op)) {
+                reduction = member;
+                ++reductions;
+            }
+        if (launch.implementation == "ordered_reduce") {
+            require(
+                reductions == 1 && launch.blockX == 32 && launch.blockY == 1 &&
+                    launch.members.size() > 1,
+                "ordered reduction operation or block");
+            for (auto member : launch.members)
+                if (member > reduction)
+                    require(
+                        member < p.nodes.size() && elementwise(p.nodes[member].op) &&
+                            p.nodes[member].shape == p.nodes[reduction].shape,
+                        "ordered reduction epilogue domain");
+        }
         if (launch.implementation == "parallel_max") {
             const auto &root = p.nodes[launch.node];
             require(
@@ -333,6 +400,8 @@ void validatePlan(const Program &p) {
             require(
                 launch.members.size() == 1 ||
                     (indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[launch.node].op)) ||
+                    (launch.implementation == "ordered_reduce" &&
+                     (id == reduction || indexedScalar(p.nodes[id].op))) ||
                     (scalar64(p.nodes[id].op) && scalar64(p.nodes[launch.node].op)),
                 "invalid fused domain");
             for (auto in : p.nodes[id].inputs) {

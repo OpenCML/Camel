@@ -29,5 +29,10 @@ class BasicBuiltinExecutor : public Executor {
     static executor_ptr_t create(camel::core::context::context_ptr_t ctx);
 };
 
-/// Registers the builtin operators' traits (purity) with the core OperatorTable.
+/// Registers the builtin operators' traits (purity) with the core OperatorTable, then their
+/// semantics (declareBuiltinOperatorSemantics).
 void registerBuiltinOperatorTraits();
+
+/// Declares the semantics of the built-in scalar arithmetic (builtin_semantics.cpp): stable
+/// keys, numeric semantics and faults. Called after the traits, which it is checked against.
+void declareBuiltinOperatorSemantics();

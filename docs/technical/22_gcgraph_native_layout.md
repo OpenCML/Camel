@@ -410,7 +410,14 @@ Representative examples include:
 - stable graph identifiers
 - mangled names
 - node debug entity identifiers
-- origin/source mapping information
+- the names a function captures
+
+The source position of each node is not in this store: since graph model step 3
+it is a column of the frozen block parallel to the node records
+(`GCGraphNativePayload::origins`, one 32-bit origin id per node, 0 for none;
+`GCGraph::nodeOrigin(ref)`), written with the records by the encoder. It was a
+hash map per graph (node ref to origin), filled by a second payload plan at
+every encoding.
 
 This centralized store may freely use:
 

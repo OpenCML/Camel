@@ -35,7 +35,9 @@
  *    offset the record names.
  * 4. Users (the reverse direction) are not stored: GCGraph::uses() builds the index the first
  *    time anything asks for it and keeps it for the graph's lifetime.
- * 6. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
+ * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
+ *    32-bit origin id per node, 0 when the node has none.
+ * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
  *    FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
  *    constants of the static area point to, the graphs written inside this one and the graphs
  *    it calls directly are entries of it, each marked with the roles it has (GCGraphRefRole).
@@ -293,6 +295,7 @@ struct GCGraphNativePayload {
     // Arrays of the graph's own block, in the graph space (see GCGraphBuildAccess). Released
     // with the graph.
     GCNode *nodes              = nullptr; // nodeCount + 1 records (the last is a sentinel)
+    uint32_t *origins          = nullptr; // nodeCount source origins (0: none)
     gc_node_ref_t *inputs      = nullptr; // edgeCount entries
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
     gc_node_ref_t *normPorts   = nullptr;

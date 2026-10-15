@@ -25,7 +25,10 @@
 
 #include "camel/utils/assert.h"
 
+#include <format>
 #include <mutex>
+#include <stdexcept>
+#include <tuple>
 
 namespace camel::core {
 
@@ -195,6 +198,115 @@ const TypeFolder *OperatorTable::typeFolder(OperId id) const {
 const TypeFolder *OperatorTable::typeFolder(std::string_view uri) const {
     const auto id = lookup(uri);
     return id ? typeFolder(*id) : nullptr;
+}
+
+// ---- Semantics -----------------------------------------------------------------------------
+
+namespace {
+
+/// Why `record`, declared for `uri` with the declared traits `traits` (nullopt when the traits
+/// are not declared), cannot be published; empty when it can. The checks of design section 4.4
+/// that apply to the parts phase 1 has (operator_table.h, declareSemantics).
+std::string checkSemantics(
+    std::string_view uri, const sem::OperatorSemantics &record,
+    const std::optional<OperatorTraits> &traits) {
+    using sem::NumericClass;
+    // 1. The key names this operator.
+    if (record.key.uri() != uri) {
+        return std::format("its key {} names another operator", record.key.toString());
+    }
+    // 2. Not contradicting the traits.
+    if (traits && !traits->mayFault && record.faults && !record.faults->empty()) {
+        return "it declares faults, but its traits say it never faults";
+    }
+    // 3. The numeric part.
+    const sem::NumericSemantics &n = record.numeric;
+    const bool floatCompute =
+        n.compute == type::TypeCode::Float32 || n.compute == type::TypeCode::Float64;
+    switch (n.cls) {
+    case NumericClass::Opaque:
+        if (n.sensitiveTo != sem::kAllPermissions) {
+            return "an opaque operator is sensitive to every permission";
+        }
+        break;
+    case NumericClass::Exact:
+        if (n.ulpBound != 0) {
+            return "an exact operator has no ulp bound";
+        }
+        if ((n.sensitiveTo & ~sem::kFiniteMath) != 0) {
+            return std::format(
+                "an exact operator has no rounding for {} to change",
+                sem::permissionsText(n.sensitiveTo & ~sem::kFiniteMath));
+        }
+        break;
+    case NumericClass::CorrectlyRounded:
+        if (n.ulpBound != 0) {
+            return "a correctly rounded operator has no ulp bound";
+        }
+        if (!floatCompute) {
+            return "a correctly rounded operator names the type its steps are rounded in";
+        }
+        break;
+    case NumericClass::Bounded:
+        if (!(n.ulpBound > 0)) {
+            return "a bounded operator declares a positive ulp bound";
+        }
+        if ((n.sensitiveTo & sem::kApproxMath) == 0) {
+            return "a bounded operator is sensitive to approx_math";
+        }
+        if (!floatCompute) {
+            return "a bounded operator names the type it computes in";
+        }
+        break;
+    }
+    return {};
+}
+
+} // namespace
+
+void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantics semantics) {
+    std::unique_lock lock(mutex_);
+    const OperId id = internLocked(uri);
+    Entry &entry    = entries_[id];
+    const uint8_t bits = entry.traits.load(std::memory_order_relaxed);
+    const std::optional<OperatorTraits> traits =
+        (bits & kDeclared) != 0 ? std::optional(decode(bits)) : std::nullopt;
+    std::string problem = checkSemantics(uri, semantics, traits);
+    if (problem.empty()) {
+        if (const sem::OperatorSemantics *old = entry.semantics.load(std::memory_order_relaxed);
+            old != nullptr && std::tie(semantics.key.major, semantics.key.minor) <
+                                  std::tie(old->key.major, old->key.minor)) {
+            problem = std::format(
+                "it would replace {} by the lower version {}",
+                old->key.toString(),
+                semantics.key.toString());
+        }
+    }
+    if (!problem.empty()) {
+        throw std::invalid_argument(
+            std::format("The semantics declared for the operator '{}' are rejected: {}.", uri, problem));
+    }
+    declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(semantics)));
+    entry.semantics.store(declarations_.back().get(), std::memory_order_release);
+    epoch_.fetch_add(1, std::memory_order_acq_rel);
+}
+
+std::optional<sem::OperatorKey> OperatorTable::key(OperId id) const {
+    const sem::OperatorSemantics *declared = semantics(id);
+    return declared ? std::optional(declared->key) : std::nullopt;
+}
+
+std::optional<OperId> OperatorTable::bind(const sem::OperatorKey &key) const {
+    const auto id = lookup(key.uri());
+    if (!id) {
+        return std::nullopt;
+    }
+    const sem::OperatorSemantics *declared = semantics(*id);
+    // A result recorded against key.minor may use facts added in that minor version.
+    if (declared == nullptr || declared->key.major != key.major || declared->key.minor < key.minor) {
+        return std::nullopt;
+    }
+    return id;
 }
 
 } // namespace camel::core

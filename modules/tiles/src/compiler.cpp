@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -66,7 +66,7 @@ class Compiler {
         return program.nodes.size() - 1;
     }
 
-    Value host(slot_t slot, ty::Type *type) {
+    Value host(slot_t slot, ty::Type *type, bool runtimeInput = false) {
         if (asDeviceType(type)) {
             auto *wrapper = td::fromSlot<td::ForeignResourceObject *>(slot);
             auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
@@ -94,7 +94,7 @@ class Compiler {
                 value.fields.push_back(
                     field == NullSlot && ty::isGCTraced(fieldType->code())
                         ? Value{.type = fieldType}
-                        : host(field, fieldType));
+                        : host(field, fieldType, runtimeInput));
             }
             return value;
         }
@@ -112,6 +112,12 @@ class Compiler {
         auto constant = tensor::ops::constArgOf(slot, type);
         if (!constant)
             throw std::runtime_error("unsupported captured/static value: " + type->toString());
+        if (runtimeInput && type->code() == ty::TypeCode::Float64) {
+            Node node{.op = "input", .shape = {}};
+            node.dtype      = DType::F64;
+            node.scalarBits = std::bit_cast<uint64_t>(std::get<double>(*constant));
+            return {.type = type, .tensor = append(std::move(node))};
+        }
         return {.type = type, .constant = std::move(constant)};
     }
 
@@ -512,10 +518,10 @@ Program compile(Function *function, const std::vector<Argument> &arguments) {
         if (!types)
             throw std::runtime_error("closure type is missing");
         for (size_t i = 0; i < closure->size(); ++i)
-            with.push_back(c.host(closure->get<slot_t>(i), types->typeAt(i)));
+            with.push_back(c.host(closure->get<slot_t>(i), types->typeAt(i), true));
     }
     for (const auto &a : arguments)
-        norm.push_back(c.host(a.value, a.type));
+        norm.push_back(c.host(a.value, a.type, true));
     auto out = c.call(function->graph(), {}, norm, with);
     c.program.outputs.clear();
     auto collect = [&](auto &&self, const Value &value) -> void {

@@ -18,8 +18,8 @@
  */
 
 /*
- * What a module's operators are, as data: name, URI, parameter counts, signature and the
- * declared purity. Used by `camel inspect --ops` (and through it by the tests that hold the
+ * What a module's operators are, as data: name, URI, parameter counts, signature, the
+ * declared purity and the declared semantics (camel/core/operator_semantics.h). Used by `camel inspect --ops` (and through it by the tests that hold the
  * signature files and the purity declarations to the operators actually registered) and by
  * the notice a module gets when it leaves the purity of an operator undeclared.
  */
@@ -27,6 +27,7 @@
 #pragma once
 
 #include "camel/core/module/module.h"
+#include "camel/core/operator_semantics.h"
 
 #include <iosfwd>
 #include <string>
@@ -52,13 +53,18 @@ struct OperatorDescription {
     int withCount = -2;
     int normCount = -2;
     OperatorPurity purity = OperatorPurity::Undeclared;
+    /// The declared semantics (owned by the operator table), nullptr when none is declared.
+    const sem::OperatorSemantics *semantics = nullptr;
 };
 
 /// Every overload of every operator group `module` exports, sorted by name and URI. The module
 /// must be loaded: a module declares the purity of its operators when it is loaded at the latest.
 std::vector<OperatorDescription> describeOperators(const Module &module);
 
-/// One line `OPERATOR {json}` per overload.
+/// One line `OPERATOR {json}` per overload. An operator with declared semantics has a member
+/// "semantics": {"key", "numeric", "compute", "ulp" (bounded only), "sensitive_to" (a
+/// list of permission names, finite_math for its four together), "not_ieee" (the special
+/// values it does not treat as IEEE does, when there are any), "faults" (when declared), "algorithm"}.
 void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os);
 
 /// Logs a warning naming the operators of `module` whose purity is not declared; returns how

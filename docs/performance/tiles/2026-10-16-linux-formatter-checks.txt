@@ -1,0 +1,3 @@
+FMTCHECK files=1 checked=1 skipped(not accepted)=0 changed=0 unstable=0
+FMTCHECK files=1598 checked=1550 skipped(not accepted)=48 changed=0 unstable=0
+FUZZ iterations=3000 seed=1 seeds=1590 parsed=537 rejected=2463 failures=0

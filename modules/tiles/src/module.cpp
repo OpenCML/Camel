@@ -77,12 +77,15 @@ slot_t inspectKernel(ArgsView &with, ArgsView &norm, Context &) {
 }
 slot_t benchmarkKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
-        return td::toSlot(::String::from(benchmark(prepare(with, norm)), core::mm::autoSpace()));
+        return td::toSlot(
+            ::String::from(
+                benchmark(std::make_shared<const Program>(prepare(with, norm))),
+                core::mm::autoSpace()));
     });
 }
 slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
-        auto program = prepare(with, norm);
+        auto program = std::make_shared<const Program>(prepare(with, norm));
         auto data    = execute(program);
         // Prevent collection of partially assembled aggregates while allocating leaves.
         core::mm::NoCollectionScope noCollection;
@@ -96,7 +99,7 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
                 return td::toSlot(value);
             }
             if (tensor::asTensorType(type)) {
-                const auto &shape  = program.nodes[program.outputs.at(leaf++)].shape;
+                const auto &shape  = program->nodes[program->outputs.at(leaf++)].shape;
                 const size_t count = elements(shape);
                 auto *out =
                     tensor::TensorObject::create(TypeCode::Float32, shape, core::mm::autoSpace());
@@ -169,7 +172,7 @@ Type *residentType(Type *type) {
 }
 slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
-        auto values = executeResident(prepare(with, norm));
+        auto values = executeResident(std::make_shared<const Program>(prepare(with, norm)));
         core::mm::NoCollectionScope noCollection;
         auto *resultType = residentType(static_cast<FunctionType *>(with.type(0))->exitType());
         size_t leaf      = 0;
