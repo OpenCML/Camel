@@ -18,6 +18,43 @@
 using namespace camel::tiles::cuda_detail;
 
 namespace {
+void testPrecision() {
+    auto backend = std::make_shared<Backend>();
+    auto &api = backend->api;
+    Current current(api, backend->context);
+    auto lease = backend->module(R"cuda(
+extern "C" __global__ void precision(const float* x, unsigned* y) {
+    y[0] = __float_as_uint(x[0] * x[1]);
+    y[1] = __float_as_uint(x[0] + x[0]);
+    y[2] = __float_as_uint(x[1] / x[2]);
+    y[3] = __float_as_uint(sqrtf(x[3]));
+    float product = x[4] * x[5];
+    y[4] = __float_as_uint(product + x[6]);
+    y[5] = __float_as_uint(fmaf(x[4], x[5], x[6]));
+}
+)cuda");
+    Resources resources(backend);
+    // Raw input bits prevent host rounding and device constant folding from
+    // hiding FTZ or contraction. Expected results follow binary32 arithmetic.
+    const unsigned input[] = {1U, 0x3f800000U, 0x41200000U, 0x40000000U,
+                              0x3f800001U, 0x3f7ffffeU, 0xbf800000U};
+    const unsigned expected[] = {1U, 2U, 0x3dcccccdU, 0x3fb504f3U, 0U, 0xa8800000U};
+    unsigned result[6] = {};
+    auto source = resources.allocate(sizeof(input));
+    auto output = resources.allocate(sizeof(result));
+    api.check(api.cuMemcpyHtoD(source, input, sizeof(input)), "upload precision probe");
+    CUfunction kernel;
+    api.check(api.cuModuleGetFunction(&kernel, lease.compiled->module, "precision"), "resolve precision probe");
+    void *args[] = {&source, &output};
+    api.check(api.cuLaunchKernel(kernel, 1, 1, 1, 1, 1, 1, 0, resources.stream, args, nullptr), "launch precision probe");
+    api.check(api.cuStreamSynchronize(resources.stream), "complete precision probe");
+    api.check(api.cuMemcpyDtoH(result, output, sizeof(result)), "read precision probe");
+    for (size_t i = 0; i < 6; ++i)
+        if (result[i] != expected[i])
+            throw std::runtime_error("precision probe mismatch at index " + std::to_string(i));
+    std::cout << "tiles precision: subnormals, rounding and explicit FMA bits passed\n";
+}
+
 decltype(&::cuMemFree) releaseDevice;
 decltype(&::cuMemFreeHost) releaseHost;
 decltype(&::cuStreamDestroy) releaseStream;
@@ -138,6 +175,7 @@ int main() {
             throw std::runtime_error("module/backend ownership cycle");
         std::cout << "tiles module lease: eviction, launch and teardown passed\n";
         testResourceThread();
+        testPrecision();
         return 0;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

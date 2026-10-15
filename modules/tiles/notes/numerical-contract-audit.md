@@ -80,6 +80,17 @@ nodes; their NVRTC policy remains `--fmad=false`.
 
 ## Remaining contract work
 
+The native module-lease test includes a runtime-input GPU bit probe for the
+explicit NVRTC policy: smallest-subnormal multiplication and addition, division
+of 1 by 10, square root of 2, and the distinction between ordinary multiply/add
+and explicit FMA. It compares raw binary32 output words to exact expected values;
+these targeted cases do not establish exhaustive correct-rounding or ULP bounds.
+
+Q5 defines NaN propagation and signed-zero ordering for extrema, but does not yet
+specify how different NaN payloads/signs map to result bits. That detail is being
+referred to the author before claiming bitwise commutativity or implementing a
+canonical-NaN policy. Classification-only NaN tests cannot settle that question.
+
 Complete the reference contract for each composite operation, including input and accumulator
 types, rounding boundaries, subnormal handling, exceptional values, and permitted
 approximation. Keep caller-granted permissions for reassociation, FMA contraction,
