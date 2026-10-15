@@ -970,7 +970,7 @@ e1e169ed073c55e5 ok test/cases/consistency/values/tail_deep.cml
 af3630ffac4ff23b ok test/cases/definitions/broken_definitions.cml
 e74173f109a285b1 ok test/cases/definitions/check.cml
 32b6bc7cea6b5506 ok test/cases/definitions/grad.cml
-065cd079cd39242d ok test/cases/definitions/kernels.cml
+ece491c607145dbc ok test/cases/definitions/kernels.cml
 38fb8cae2a40a044 ok test/cases/facts/tensors_and_loops.cml
 61acf4b4dcd0d842 ok test/cases/facts/two_functions.cml
 fe52bbb4e8af47be ok test/cases/feat/mm/capacity/perm_query_types.cml
