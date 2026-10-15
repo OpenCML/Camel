@@ -84,6 +84,13 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
         core::mm::NoCollectionScope noCollection;
         size_t leaf = 0, offset = 0;
         auto rebuild = [&](auto &&self, Type *type) -> slot_t {
+            if (type->code() == TypeCode::Float64) {
+                ++leaf;
+                double value;
+                std::memcpy(&value, data.data() + offset, sizeof(value));
+                offset += sizeof(value);
+                return td::toSlot(value);
+            }
             if (tensor::asTensorType(type)) {
                 const auto &shape  = program.nodes[program.outputs.at(leaf++)].shape;
                 const size_t count = elements(shape);
@@ -91,7 +98,7 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
                     tensor::TensorObject::create(TypeCode::Float32, shape, core::mm::autoSpace());
                 if (count)
                     std::memcpy(out->rawData(), data.data() + offset, count * sizeof(float));
-                offset += count;
+                offset += count * sizeof(float);
                 return td::toSlot(static_cast<td::Object *>(out));
             }
             if (type->code() == TypeCode::Tuple) {
@@ -115,7 +122,9 @@ slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
     return checked([] { return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())); });
 }
 
-bool tensorLeaves(Type *type) {
+bool supportedLeaves(Type *type) {
+    if (type->code() == TypeCode::Float64)
+        return true;
     if (tensor::asTensorType(type))
         return true;
     if (type->code() == TypeCode::Tuple) {
@@ -123,7 +132,7 @@ bool tensorLeaves(Type *type) {
         if (!tuple->size())
             return false;
         for (size_t i = 0; i < tuple->size(); ++i)
-            if (!tensorLeaves(tuple->typeAt(i)))
+            if (!supportedLeaves(tuple->typeAt(i)))
                 return false;
         return true;
     }
@@ -132,7 +141,7 @@ bool tensorLeaves(Type *type) {
         if (!object->size())
             return false;
         for (size_t i = 0; i < object->size(); ++i)
-            if (!tensorLeaves(object->typeAt(i)))
+            if (!supportedLeaves(object->typeAt(i)))
                 return false;
         return true;
     }
@@ -142,7 +151,7 @@ std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bo
     if (with.size() != 1 || norm.size() != 1 || with[0]->code() != TypeCode::Function)
         return std::nullopt;
     const auto *fn = static_cast<FunctionType *>(with[0]);
-    if (!tensorLeaves(fn->exitType()) || fn->normTypesCount() == 0)
+    if (!supportedLeaves(fn->exitType()) || fn->normTypesCount() == 0)
         return std::nullopt;
     type_vec_t args;
     if (fn->normTypesCount() == 1)
@@ -155,7 +164,7 @@ std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bo
     if (args.size() != fn->normTypesCount())
         return std::nullopt;
     for (size_t i = 0; i < args.size(); ++i) {
-        if (!tensorLeaves(args[i]) || fn->normIsVarAt(i) ||
+        if (!supportedLeaves(args[i]) || fn->normIsVarAt(i) ||
             !fn->normTypeAt(i)->assignableFrom(args[i]))
             return std::nullopt;
     }
@@ -174,8 +183,8 @@ class TilesModule final : public BuiltinModule {
                     {{"tiles:" + name,
                       DynamicFuncTypeResolver::create(
                           {{1, {false}}, {1, {false}}},
-                          "<fn: (...) => TensorAggregate>(inputs: TensorAggregate) => " +
-                              std::string(name != "run" ? "string" : "TensorAggregate"),
+                          "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => " +
+                              std::string(name != "run" ? "string" : "NumericAggregate"),
                           [source = name != "run"](
                               const type_vec_t &with,
                               const type_vec_t &norm,

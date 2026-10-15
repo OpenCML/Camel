@@ -1,0 +1,5 @@
+module tiles_empty_mean
+import { Tensor, mean, zeros } from tensor
+import { source } from tiles
+func average(x: Tensor<f32>): float { return mean(x) }
+func main(): string { return source<average>(zeros([0])) }

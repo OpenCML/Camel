@@ -27,7 +27,7 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles plan validation: 21 rejected mutations"]
+expect_stdout_contains = ["tiles plan validation: 24 rejected mutations"]
 timeout_ms = 10000
 
 [[tests]]
@@ -67,4 +67,14 @@ verify_script = """
 assert(!input.stdout.includes('effect must not run'), 'specialization executed a selected effect')
 }
 """
+timeout_ms = 10000
+
+[[tests]]
+name = "empty_mean"
+kind = "negative"
+case = "../../../cases/modules/tiles/empty_mean.cml"
+args = ["${case}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["mean of empty tensor"]
 timeout_ms = 10000

@@ -22,9 +22,10 @@ func main(): int sync {
 ## API
 
 - `run<fn>(inputs)` specializes a function graph for actual input shapes, compiles
-  CUDA with NVRTC, executes on the GPU, and returns host `Tensor<f32>` leaves
+  CUDA with NVRTC, executes on the GPU, and returns host `Tensor<f32>` or `float` leaves
   in the function's original tuple/struct structure. Nested nonempty tuples and
-  structs of tensors are supported as parameters and results. Pass the single
+  structs of these values are supported as parameters and results. Scalar input
+  values are specialized constants at this stage. Pass the single
   parameter directly for a unary function, or a tuple for multiple parameters.
 - `source<fn>(inputs)` returns generated CUDA without initializing CUDA or
   executing the function body. It performs the same graph validation as `run`.
@@ -38,6 +39,9 @@ func main(): int sync {
   correctness comparisons over every output leaf. It requires at least one
   nonempty computed output. `output_shapes` lists all leaves in aggregate order;
   the existing `output_shape` field is also present for a single leaf.
+  `output_dtypes` distinguishes f32 tensor storage from f64 scalar storage.
+  Scalar f64 outputs must match the reference exactly; f32 outputs retain the
+  reported tolerance policy.
 - `available()` reports whether driver/NVRTC initialization succeeds. A successful
   result does not guarantee a subsequent compilation or memory allocation succeeds.
 - `device()` reports the selected GPU, or raises a diagnostic explaining failure.
@@ -145,7 +149,7 @@ maps; matmul gradients use transpose maps and matmul. `sum_to` preserves the
 tensor implementation's row-major f32 accumulation order, distinct from the f64
 accumulation of `sum_axis`. This supports tested polynomial, row-reduction,
 broadcast and dense-layer gradients, not all derivative rules. Scalar loss
-outputs from `value_and_grad`, arbitrary pullback closures, control flow and
+arithmetic beyond full sum/mean, arbitrary pullback closures, control flow and
 unsupported derivative operators still require further lowering work.
 
 Static `transpose`, `permute` (including negative axes) and positive-step `slice`

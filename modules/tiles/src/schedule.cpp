@@ -17,6 +17,13 @@
 #include <stdexcept>
 
 namespace camel::tiles {
+size_t bytes(const Node &node) {
+    const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
+    const size_t count = elements(node.shape);
+    if (count > SIZE_MAX / width)
+        throw std::runtime_error("typed tensor byte size overflows");
+    return count * width;
+}
 size_t elements(const Shape &shape) {
     size_t count = 1;
     for (int64_t d : shape) {
@@ -84,25 +91,52 @@ bool elementwise(const std::string &op) { return unary(op) || binary(op); }
 
 void validate(const Program &p) {
     require(!p.nodes.empty() && !p.outputs.empty(), "missing output");
-    size_t outputElements = 0;
+    size_t outputBytes = 0;
     for (auto output : p.outputs) {
         require(output < p.nodes.size(), "missing output");
-        const size_t count = elements(p.nodes[output].shape);
-        require(
-            count <= SIZE_MAX / sizeof(float) - outputElements,
-            "combined output size overflow");
-        outputElements += count;
+        const size_t count = bytes(p.nodes[output]);
+        require(count <= SIZE_MAX - outputBytes, "combined output size overflow");
+        outputBytes += count;
     }
     for (size_t id = 0; id < p.nodes.size(); ++id) {
         const auto &n      = p.nodes[id];
         const size_t count = elements(n.shape);
+        bytes(n);
         for (auto in : n.inputs)
             require(in < id, "dependency is not topologically earlier");
         if (n.op == "input") {
+            require(n.dtype == DType::F32, "input payload dtype");
             require(n.inputs.empty() && n.data.size() == count, "invalid input payload");
             continue;
         }
         require(n.data.empty(), "computed value has host payload");
+        if (n.op == "sum_all" || n.op == "mean_all") {
+            require(
+                n.dtype == DType::F64 && n.shape.empty() && n.inputs.size() == 1 &&
+                    p.nodes[n.inputs[0]].dtype == DType::F32,
+                "scalar reduction type");
+            require(
+                n.op != "mean_all" || elements(p.nodes[n.inputs[0]].shape),
+                "mean of empty tensor");
+            continue;
+        }
+        if (n.op == "constant64") {
+            require(
+                n.dtype == DType::F64 && n.shape.empty() && n.inputs.empty() &&
+                    n.attributes.size() == 1,
+                "scalar constant type");
+            continue;
+        }
+        if (n.op == "cast_f32") {
+            require(
+                n.dtype == DType::F32 && n.shape.empty() && n.inputs.size() == 1 &&
+                    p.nodes[n.inputs[0]].dtype == DType::F64,
+                "scalar conversion type");
+            continue;
+        }
+        require(n.dtype == DType::F32, "unsupported operation dtype");
+        for (auto in : n.inputs)
+            require(p.nodes[in].dtype == DType::F32, "operand dtype mismatch");
         const bool reduction = n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis";
         require(
             elementwise(n.op) || reduction || n.op == "sum_to" || n.op == "reshape" ||
@@ -212,7 +246,7 @@ void schedule(Program &p, ScheduleOptions options) {
     });
     std::vector<size_t> until;
     for (auto id : order) {
-        size_t bytes    = std::max(size_t(1), elements(p.nodes[id].shape) * sizeof(float));
+        size_t bytes    = std::max(size_t(1), camel::tiles::bytes(p.nodes[id]));
         size_t selected = SIZE_MAX;
         for (size_t slot = 0; slot < until.size(); ++slot)
             if (until[slot] < life[id].begin && p.storage.bytes[slot] >= bytes &&
@@ -298,8 +332,7 @@ void validatePlan(const Program &p) {
             continue;
         }
         require(
-            slot < p.storage.bytes.size() &&
-                p.storage.bytes[slot] >= elements(p.nodes[id].shape) * sizeof(float),
+            slot < p.storage.bytes.size() && p.storage.bytes[slot] >= bytes(p.nodes[id]),
             "undersized/missing allocation");
         for (auto other : occupants[slot])
             require(
@@ -313,7 +346,7 @@ std::string inspect(const Program &p) {
     validatePlan(p);
     size_t logicalBytes = 0, allocatedBytes = 0, materialized = 0;
     for (const auto &n : p.nodes)
-        logicalBytes += elements(n.shape) * sizeof(float);
+        logicalBytes += bytes(n);
     for (auto bytes : p.storage.bytes)
         allocatedBytes += bytes;
     for (auto slot : p.storage.slots)

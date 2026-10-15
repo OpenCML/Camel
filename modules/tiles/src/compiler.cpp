@@ -24,6 +24,7 @@
 #include "modules/tensor/type.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <limits>
 #include <numeric>
@@ -108,8 +109,11 @@ class Compiler {
         return std::get<int64_t>(*v.constant);
     }
     size_t tensorValue(const Value &v) {
-        if (v.tensor != SIZE_MAX)
+        if (v.tensor != SIZE_MAX) {
+            if (program.nodes[v.tensor].dtype == DType::F64)
+                return append(Node{.op = "cast_f32", .shape = {}, .inputs = {v.tensor}});
             return v.tensor;
+        }
         if (!v.constant)
             throw std::runtime_error("expected a tensor or numeric constant");
         double x;
@@ -280,7 +284,19 @@ class Compiler {
             types.push_back(v.type);
             constants.push_back(v.constant);
         }
-        auto inferred      = def->infer(tensor::ops::InferContext(types, constants));
+        auto inferred = def->infer(tensor::ops::InferContext(types, constants));
+        if (inferred && (*inferred)->code() == ty::TypeCode::Float64 &&
+            (def->name == "sum" || def->name == "mean")) {
+            size_t input = tensorValue(args.at(0));
+            return {
+                .type   = *inferred,
+                .tensor = append(
+                    Node{
+                        .op     = def->name == "sum" ? "sum_all" : "mean_all",
+                        .shape  = {},
+                        .inputs = {input},
+                        .dtype  = DType::F64})};
+        }
         const auto *result = inferred ? tensor::asTensorType(*inferred) : nullptr;
         if (!result || result->dtype() != ty::TypeCode::Float32 || !result->isStaticShape())
             throw std::runtime_error(
@@ -457,6 +473,13 @@ Program compile(Function *function, const std::vector<Argument> &arguments) {
     auto collect = [&](auto &&self, const Value &value) -> void {
         if (value.tensor != SIZE_MAX) {
             c.program.outputs.push_back(value.tensor);
+        } else if (value.constant && std::holds_alternative<double>(*value.constant)) {
+            c.program.outputs.push_back(c.append(
+                Node{
+                    .op         = "constant64",
+                    .shape      = {},
+                    .attributes = {std::bit_cast<int64_t>(std::get<double>(*value.constant))},
+                    .dtype      = DType::F64}));
         } else if (
             value.type &&
             (value.type->code() == ty::TypeCode::Tuple ||
@@ -465,7 +488,8 @@ Program compile(Function *function, const std::vector<Argument> &arguments) {
             for (const auto &field : value.fields)
                 self(self, field);
         } else {
-            throw std::runtime_error("tiles result must contain nonempty aggregates of tensors");
+            throw std::runtime_error(
+                "tiles result must contain tensors or f64 scalars in nonempty aggregates");
         }
     };
     collect(collect, out);

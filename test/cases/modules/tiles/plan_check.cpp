@@ -75,7 +75,14 @@ int main() {
         schedule(reduced);
         validatePlan(reduced);
         rejects(reduced, [](auto &x) { x.nodes[1].shape = {1,2,3}; }, "sum_to broadcast domain");
-        std::cout << "tiles plan validation: 21 rejected mutations\n";
+        auto scalar = indexed;
+        scalar.nodes[1] = Node{.op="sum_all", .shape={}, .inputs={0}, .dtype=DType::F64};
+        schedule(scalar);
+        validatePlan(scalar);
+        rejects(scalar, [](auto &x) { x.storage.bytes[x.storage.slots[1]] = 4; }, "undersized/missing allocation");
+        rejects(scalar, [](auto &x) { x.nodes[1].dtype = DType::F32; }, "scalar reduction type");
+        rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "unsupported operation dtype");
+        std::cout << "tiles plan validation: 24 rejected mutations\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }

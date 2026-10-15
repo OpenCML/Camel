@@ -262,3 +262,21 @@ into an eager elementwise select.
 The committed ea217b7d rebuild passes 55/55 host/GPU/tensor checks locally and
 on remote RTX 3090 device 7. Remote evidence is retained in
 `docs/performance/tiles/2026-10-15-rtx3090-branches-tests.txt`.
+
+## Typed scalar loss buffers
+
+The private IR now carries f32/f64 element types and computes physical byte
+requirements from them. Host result transport preserves bytes per output instead
+of flattening everything into float. Full tensor sum and mean produce native
+Camel f64 scalar values with ordered double accumulation; mean of an empty
+tensor is rejected. Scalar constants retain their exact bit representation.
+Scalar-to-tensor arithmetic inserts an explicit f32 conversion as required by
+the existing tensor scalar-operand contract. Other f64 operand uses are rejected
+until their typed lowering is implemented.
+
+This enables the tested `value_and_grad` graph to return loss and tensor gradient
+in one execution. Tests use 16,777,217 and 8,388,608.5 to detect accidental f32
+loss truncation, combine scalar/tensor/constant outputs, and cover empty sums.
+Mixed-result benchmarks expose output dtypes and require exact scalar f64
+agreement with the reference. Reductions remain serial to preserve their current
+ordered numerical contract; no new parallel arithmetic policy is implied.

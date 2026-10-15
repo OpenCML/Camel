@@ -443,21 +443,18 @@ class DeviceRun {
     void synchronize() {
         api.check(api.cuStreamSynchronize(resources.stream), "complete GPU computation");
     }
-    std::vector<float> download() {
+    std::vector<std::byte> download() {
         synchronize();
         size_t total = 0;
         for (auto output : program.outputs)
-            total += elements(program.nodes[output].shape);
-        std::vector<float> result(total);
+            total += bytes(program.nodes[output]);
+        std::vector<std::byte> result(total);
         size_t offset = 0;
         for (auto output : program.outputs) {
-            const size_t count = elements(program.nodes[output].shape);
+            const size_t count = bytes(program.nodes[output]);
             if (count)
                 api.check(
-                    api.cuMemcpyDtoH(
-                        result.data() + offset,
-                        pointers[output],
-                        count * sizeof(float)),
+                    api.cuMemcpyDtoH(result.data() + offset, pointers[output], count),
                     "download result");
             offset += count;
         }
@@ -491,7 +488,7 @@ bool available() {
     }
 }
 
-std::vector<float> execute(const Program &p) {
+std::vector<std::byte> execute(const Program &p) {
     validatePlan(p);
     Backend &b = backend();
     std::lock_guard lock(b.mutex);
@@ -499,9 +496,14 @@ std::vector<float> execute(const Program &p) {
     if (std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
             return !elements(p.nodes[id].shape) || p.nodes[id].op == "input";
         })) {
-        std::vector<float> result;
-        for (auto output : p.outputs)
-            result.insert(result.end(), p.nodes[output].data.begin(), p.nodes[output].data.end());
+        std::vector<std::byte> result;
+        for (auto output : p.outputs) {
+            const auto &data = p.nodes[output].data;
+            if (!data.empty()) {
+                auto *begin = reinterpret_cast<const std::byte *>(data.data());
+                result.insert(result.end(), begin, begin + data.size() * sizeof(float));
+            }
+        }
         return result;
     }
     CUmodule module = b.module(p.source);
@@ -544,6 +546,14 @@ std::string benchmark(const Program &program) {
         {"reference_policy", {{"fuse_elementwise", false}, {"parallel_max", false}}},
         {"identical_device_code", program.source == reference.source}};
     report["output_shapes"] = json::array();
+    report["output_dtypes"] = json::array();
+    for (auto output : program.outputs)
+        report["output_dtypes"].push_back(
+            program.nodes[output].dtype == DType::F64 ? "f64" : "f32");
+    if (std::any_of(program.nodes.begin(), program.nodes.end(), [](const auto &n) {
+            return n.dtype == DType::F64;
+        }))
+        report["dtype"] = "mixed";
     for (auto output : program.outputs)
         report["output_shapes"].push_back(program.nodes[output].shape);
     if (program.outputs.size() == 1)
@@ -573,7 +583,7 @@ std::string benchmark(const Program &program) {
         r["upload_host_ms"]           = json::array();
     }
     Event begin(b.api), end(b.api);
-    std::vector<float> results[2];
+    std::vector<std::byte> results[2];
     for (size_t i = 0; i < 2; ++i) {
         start = Clock::now();
         runs[i]->upload();
@@ -582,10 +592,38 @@ std::string benchmark(const Program &program) {
         report[names[i]]["first_upload_execute_download_host_ms"] = elapsed(start);
     }
     auto compare = [&] {
+        auto decode = [&](const std::vector<std::byte> &raw) {
+            std::vector<double> values;
+            size_t offset = 0;
+            for (auto output : program.outputs) {
+                const auto &node = program.nodes[output];
+                for (size_t i = 0; i < elements(node.shape); ++i) {
+                    if (node.dtype == DType::F64) {
+                        double value;
+                        std::memcpy(&value, raw.data() + offset, sizeof(value));
+                        values.push_back(value);
+                        offset += sizeof(value);
+                    } else {
+                        float value;
+                        std::memcpy(&value, raw.data() + offset, sizeof(value));
+                        values.push_back(value);
+                        offset += sizeof(value);
+                    }
+                }
+            }
+            return values;
+        };
+        const auto actual = decode(results[0]), expected = decode(results[1]);
+        std::vector<bool> exact;
+        for (auto output : program.outputs)
+            exact.insert(
+                exact.end(),
+                elements(program.nodes[output].shape),
+                program.nodes[output].dtype == DType::F64);
         double maxAbs = 0, maxRel = 0;
         size_t mismatches = 0;
-        for (size_t i = 0; i < results[0].size(); ++i) {
-            double a = results[0][i], r = results[1][i];
+        for (size_t i = 0; i < actual.size(); ++i) {
+            double a = actual[i], r = expected[i];
             if (!std::isfinite(a) || !std::isfinite(r)) {
                 if (!(a == r || (std::isnan(a) && std::isnan(r))))
                     ++mismatches;
@@ -594,7 +632,7 @@ std::string benchmark(const Program &program) {
             double diff = std::abs(a - r);
             maxAbs      = std::max(maxAbs, diff);
             maxRel      = std::max(maxRel, diff / std::max(1e-30, std::abs(r)));
-            if (diff > 1e-6 + 1e-5 * std::abs(r))
+            if (diff > (exact[i] ? 0.0 : 1e-6 + 1e-5 * std::abs(r)))
                 ++mismatches;
         }
         if (mismatches)
@@ -655,7 +693,7 @@ std::string deviceInfo() {
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
-std::vector<float> execute(const Program &) {
+std::vector<std::byte> execute(const Program &) {
     (void)deviceInfo();
     return {};
 }

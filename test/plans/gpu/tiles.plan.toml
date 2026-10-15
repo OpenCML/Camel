@@ -486,3 +486,60 @@ assert(values.length === 6 && values.every(x => x === 0), 'specialized branch, a
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "value_gradient.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/value_gradient.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
+const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
+assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "value_gradient.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/value_gradient.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
+const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
+assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "value_gradient.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/value_gradient.cml"
+args = ["${case}", "std::macro", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
+const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
+assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
+}
+"""
+timeout_ms = 60000

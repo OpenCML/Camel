@@ -12,6 +12,7 @@
 #pragma once
 
 #include "camel/core/rtdata/base.h"
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -24,6 +25,7 @@ class Type;
 namespace camel::tiles {
 
 using Shape = std::vector<int64_t>;
+enum class DType { F32, F64 };
 struct Argument {
     slot_t value;
     core::type::Type *type;
@@ -39,6 +41,7 @@ struct Node {
     // Units are elements, independent of CUDA thread/block placement.
     size_t offset = 0;
     std::vector<size_t> strides;
+    DType dtype = DType::F32;
 };
 
 struct Launch {
@@ -67,6 +70,7 @@ struct Program {
 };
 
 size_t elements(const Shape &shape);
+size_t bytes(const Node &node);
 Program compile(Function *function, const std::vector<Argument> &arguments);
 void generate(Program &program, ScheduleOptions options = {});
 bool elementwise(const std::string &op);
@@ -74,7 +78,7 @@ void validate(const Program &program);
 void schedule(Program &program, ScheduleOptions options = {});
 void validatePlan(const Program &program);
 std::string inspect(const Program &program);
-std::vector<float> execute(const Program &program);
+std::vector<std::byte> execute(const Program &program);
 std::string benchmark(const Program &program);
 std::string deviceInfo();
 bool available();
