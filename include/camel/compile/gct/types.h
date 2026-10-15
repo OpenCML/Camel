@@ -53,6 +53,7 @@ enum class NodeKind : uint8_t {
     EXIT, // `return` / `throw`; child: the value
     EXEC, // a block
     EXPT, // the names a module exports
+    LOOP, // a loop (design principles 2.10, 2.13); children: see Node::loopKind
 };
 
 std::string to_string(NodeKind kind);

@@ -940,6 +940,11 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return nullptr;
     case GCT::NodeKind::CAST:
         return visitCastNode(node);
+    case GCT::NodeKind::LOOP:
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .atOrigin(node->origin())
+            .commit("loop", "the LOOP node of the graph is not built yet");
+        throw BuildAbortException();
     default:
         ASSERT(false, "Unknown GCT NodeType");
     }

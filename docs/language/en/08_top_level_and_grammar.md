@@ -178,8 +178,8 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef identDef? | literal | '(' (dataList | identList)? ','? ')'
                      | '{' (pairedValues | identList)? ','? '}' | '_'
-loopExpr           : 'loop' loopState '=' logicalOrExpr (loopFor loopWhile? | loopWhile) stmtBlock
-loopState          : identDef | parentIdents
+loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' blockExpr
+loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
 catchClause        : 'catch' identDef ':' typeExpr stmtBlock
@@ -253,7 +253,7 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
 | `typeof e`, `T ? U`, `name of T` | `FeatureNotSupported` | None |
 | `keyof`, `enum` | Syntax error | None |
-| `loop state = init (for x in xs)? (while cond)? { body }` | `ConstructNotSupported` (the syntax and the AST are in place, the `LOOP` node of the graph is not; the notation is provisional) | Recursion; `map`/`filter`/`reduce`/`foreach` |
+| `loop s = init, t = init (for x in xs)? (while cond)? do body` | `ConstructNotSupported` (the syntax, the AST and the tree are in place, the `LOOP` node of the graph is not yet) | Recursion; `map`/`filter`/`reduce`/`foreach` |
 | Modifiers `atomic`, `shared`, `inner`, `outer` | No diagnostic; no semantics | Do not write them |
 
 In addition there are a few things that "can be written but cannot be used at present": the union type `A | B` (values of the member types cannot enter it), and a declaration with a function type `let f: (x: int) => int = g`.

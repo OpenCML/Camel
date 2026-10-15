@@ -95,7 +95,7 @@ dbe0c58a66aaff2c ok docs/design/cpp-memory/examples/defects/d03_div_zero.cml
 da99e425300ddf77 ok docs/design/cpp-memory/examples/defects/d07_branch_twice.cml
 1c839b5a64c322f8 ok docs/design/cpp-memory/examples/defects/d08_string_local.cml
 2bdaeaab613801ee ok docs/design/cpp-memory/examples/defects/d09_sync_order.cml
-04360d7f62ca46c6 no docs/design/cpp-memory/examples/defects/d10_tail_loop.cml
+a2fc3233054d30ed no docs/design/cpp-memory/examples/defects/d10_tail_loop.cml
 90e11cda6567ec8c ok docs/design/cpp-memory/examples/defects/d11_inline_join.cml
 8b395eda05d0880e ok docs/design/cpp-memory/examples/defects/o01_append_needs_var.cml
 03e43dc83060e416 ok docs/design/cpp-memory/examples/refused/r01_array.cml
@@ -133,7 +133,7 @@ a883d7735575f52a ok docs/design/graph-model/examples/nodes/attempt.cml
 8cd03a03f3ccadd5 ok docs/design/graph-model/examples/nodes/fill_accs.cml
 00e89d8aaa39d818 ok docs/design/graph-model/examples/nodes/func_call.cml
 2d69acc550a04d90 ok docs/design/graph-model/examples/nodes/generic.cml
-fc2ab02e8e1d0199 ok docs/design/graph-model/examples/nodes/loop.cml
+5f8a0d3747cd0a69 ok docs/design/graph-model/examples/nodes/loop.cml
 8b5bc4b68a8eaf5f ok docs/design/graph-model/examples/nodes/loop_tail.cml
 3735277cabfffee7 ok docs/design/graph-model/examples/nodes/macro.cml
 4c8208d99b8442e1 ok docs/design/graph-model/examples/nodes/map_hof.cml
@@ -1506,9 +1506,9 @@ c005562ecb6383e6 ok test/cases/parse/rulings/doc_comment.cml
 5afe30e238d501a3 ok test/cases/parse/rulings/import_rename.cml
 604431bb4d48e0a6 ok test/cases/parse/rulings/import_rename_hides.cml
 422337aa320412a2 ok test/cases/parse/rulings/imports_with_comments.cml
-21c97b187548e0e4 ok test/cases/parse/rulings/loop_forms.cml
+9407f3356546e6a0 ok test/cases/parse/rulings/loop_forms.cml
 5b42c3659c414888 no test/cases/parse/rulings/loop_is_keyword.cml
-97f5397ca6704912 no test/cases/parse/rulings/loop_needs_clause.cml
+4938a7b01ba9b1e9 no test/cases/parse/rulings/loop_needs_clause.cml
 7a42a52d60985621 ok test/cases/parse/rulings/minus.cml
 aef4b8dc34c343d0 ok test/cases/parse/rulings/not_by_precedence.cml
 2208963e01d4a29e ok test/cases/parse/rulings/null_compare.cml

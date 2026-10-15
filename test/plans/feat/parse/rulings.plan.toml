@@ -90,26 +90,36 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.loop_ast"
-desc = "`loop state = init (for x in xs)? (while c)? { body }` parses to a LoopExpr node with its four children: the first value, the optional sequence, the optional condition, the body block."
+desc = "The `do` form of a loop (design principles 2.13): `loop s = a, t = b (for x in xs)? (while c)? do e` parses to a LoopExpr node with the names of the state and of the element, and four children: the first values, the optional sequence, the optional condition, the body (an expression after `do`, a block on the AST as the arm of an `if` is). The four shapes of the ruling: one state over an array, two states under a condition, a struct literal as the state and as the body, `for ... while` with an `if` as the body."
 kind = "behavior"
 case = "../../../cases/parse/rulings/loop_forms.cml"
 args = ["${inspect_ast}", "${case}"]
 expect_exit = 0
-expect_stdout_contains = ["LoopExpr: (i, acc)", "LoopExpr: acc for x", "LoopExpr: found for x"]
+expect_stdout_contains = ["LoopExpr: acc for x", "LoopExpr: i, acc", "LoopExpr: p for d", "LoopExpr: hit for x", "StructData"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.loop_gct"
+desc = "The tree of the compiler (GCT) has one LOOP node per loop, with its kind and names: the first values and the sequence as children, the condition and the body each an EXEC of its own."
+kind = "behavior"
+case = "../../../cases/parse/rulings/loop_forms.cml"
+args = ["inspect", "--gct", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["LOOP: for (acc) in x", "LOOP: while (i, acc)", "LOOP: for (p) in d", "LOOP: for-while (hit) in x"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
 name = "rulings.loop_not_implemented"
-desc = "A loop is reported where it stands as not implemented yet (the LOOP node of the graph is the next step), not compiled into something else."
+desc = "A loop is reported where it stands as not built yet (the LOOP node of the graph is the next step), not compiled into something else."
 kind = "negative"
 case = "../../../cases/parse/rulings/loop_forms.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 20
-expect_output_contains = ["'loop' is not supported: loops are not implemented yet"]
+expect_diagnostic_line = 8
+expect_output_contains = ["'loop' is not supported: the LOOP node of the graph is not built yet"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
