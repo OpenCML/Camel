@@ -243,3 +243,45 @@ assert(values.slice(2).every(x => x === 0), 'broadcast, cache refresh, or reshap
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "index_maps.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/index_maps.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'index mapping differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "index_maps.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/index_maps.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'index mapping differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "index_maps.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/index_maps.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'index mapping differs from CPU')
+}
+"""
+timeout_ms = 60000

@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -230,6 +231,61 @@ class Compiler {
             if (n.op == "max_axis" && shape[axis] == 0)
                 throw std::runtime_error("max over an empty axis");
             n.attributes = {axis};
+        } else if (n.op == "transpose" || n.op == "permute" || n.op == "slice") {
+            n.inputs          = {tensorValue(args.at(0))};
+            const auto &shape = program.nodes[n.inputs[0]].shape;
+            std::vector<size_t> strides(shape.size());
+            for (size_t d = 0; d < shape.size(); ++d)
+                strides[d] = elements(Shape(shape.begin() + d + 1, shape.end()));
+            if (n.op == "slice") {
+                int64_t axis = integer(args.at(1));
+                if (axis < 0)
+                    axis += static_cast<int64_t>(shape.size());
+                if (axis < 0 || size_t(axis) >= shape.size())
+                    throw std::runtime_error("slice axis out of bounds");
+                int64_t start = integer(args.at(2));
+                if (start < 0)
+                    start += shape[axis];
+                const int64_t step = args.size() > 4 ? integer(args.at(4)) : 1;
+                if (start < 0 || start > shape[axis] || step <= 0)
+                    throw std::runtime_error("invalid static slice interval");
+                // Empty domains never dereference an address. Canonicalize their map
+                // to avoid overflowing unused endpoint/stride products.
+                if (elements(n.shape)) {
+                    n.offset = size_t(start) * strides[axis];
+                    if (size_t(step) > SIZE_MAX / std::max(strides[axis], size_t(1)))
+                        throw std::runtime_error("slice stride overflows");
+                    strides[axis] *= size_t(step);
+                } else {
+                    std::fill(strides.begin(), strides.end(), 0);
+                }
+                n.strides = std::move(strides);
+            } else {
+                std::vector<int64_t> permutation(shape.size());
+                std::iota(permutation.begin(), permutation.end(), 0);
+                if (n.op == "transpose") {
+                    if (shape.size() < 2)
+                        throw std::runtime_error("transpose needs rank >= 2");
+                    std::swap(permutation[shape.size() - 1], permutation[shape.size() - 2]);
+                } else {
+                    if (!args.at(1).constant ||
+                        !std::holds_alternative<std::vector<int64_t>>(*args.at(1).constant))
+                        throw std::runtime_error("permutation must be known when specializing");
+                    permutation = std::get<std::vector<int64_t>>(*args.at(1).constant);
+                }
+                if (permutation.size() != shape.size())
+                    throw std::runtime_error("permutation rank mismatch");
+                std::vector<bool> seen(shape.size());
+                for (auto axis : permutation) {
+                    if (axis < 0)
+                        axis += static_cast<int64_t>(shape.size());
+                    if (axis < 0 || size_t(axis) >= shape.size() || seen[axis])
+                        throw std::runtime_error("invalid permutation");
+                    seen[axis] = true;
+                    n.strides.push_back(strides[axis]);
+                }
+            }
+            n.op = "reindex";
         } else if (n.op == "reshape") {
             n.inputs = {tensorValue(args.at(0))};
             if (elements(program.nodes[n.inputs[0]].shape) != elements(n.shape))

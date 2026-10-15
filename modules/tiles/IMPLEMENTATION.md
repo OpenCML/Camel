@@ -146,3 +146,22 @@ These validate the present internal schedules on a second architecture, not the
 full target design or a performance advantage over Triton. Indexed domains,
 structured control, multiple outputs, device-resident values, general schedule
 and resource graphs, Tensor Core lowering and external baselines remain open.
+
+## Checked static index maps
+
+Transpose, axis permutation and positive-step slicing now lower to one `reindex`
+operation carrying an offset and output-coordinate strides in element units.
+The compiler reuses tensor shape inference and normalizes negative axes/bounds.
+The plan verifier proves the maximum mapped address is in the source allocation
+and rejects overflow or a rank mismatch before GPU execution. Empty domains
+require no accessible source element. CUDA emits one coordinate-based gather;
+results remain materialized, with the existing lifetime planner managing them.
+
+Manual NodeVM, FastVM and JIT runs match the CPU for rank-three transpose,
+negative-axis permutation, stepped slicing, a composed permutation/slice/reshape
+pipeline, and empty inputs/outputs. Native verification rejects four additional
+malformed maps. Map fusion, arbitrary masks and runtime-dependent gathers remain
+open; this stage does not claim a full layout or domain API.
+
+The local host/GPU/tensor plans pass 41/41 checks after adding the three engine
+variants. Remote validation of this new index-map stage remains pending.

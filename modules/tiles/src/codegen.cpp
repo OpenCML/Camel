@@ -155,6 +155,16 @@ void generate(Program &p, ScheduleOptions options) {
                     code << "t" << member << "=" << expr << "; }\n";
                 }
                 code << load(id, "i") << "=t" << id << ";\n";
+            } else if (n.op == "reindex") {
+                size_t stride       = 1;
+                std::string address = literal(n.offset);
+                for (size_t d = n.shape.size(); count && d-- > 0;) {
+                    const size_t extent = std::max<size_t>(n.shape[d], 1);
+                    address += "+((i/" + literal(stride) + ")%" + literal(extent) + ")*" +
+                               literal(n.strides[d]);
+                    stride *= extent;
+                }
+                code << load(id, "i") << "=" << load(n.inputs[0], address) << ";\n";
             } else if (n.op == "sum_axis" || n.op == "mean_axis" || n.op == "max_axis") {
                 const auto &shape = p.nodes[n.inputs[0]].shape;
                 size_t axis = n.attributes[0], width = shape[axis], inner = 1;

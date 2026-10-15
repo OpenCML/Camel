@@ -50,7 +50,17 @@ int main() {
         rejects(p, [](auto &x) { x.launches[0].blockX = 0; }, "launch dimensions");
         rejects(p, [](auto &x) { x.launches[0].implementation = "parallel_max"; }, "parallel maximum operation");
         rejects(p, [](auto &x) { x.launches[0].implementation = "unknown"; }, "unknown implementation");
-        std::cout << "tiles plan validation: 12 rejected mutations\n";
+        Program indexed;
+        indexed.nodes = {{.op="input", .shape={2,3}, .data={1,2,3,4,5,6}},
+                         {.op="reindex", .shape={3,2}, .inputs={0}, .strides={1,3}}};
+        indexed.output = 1;
+        schedule(indexed);
+        validatePlan(indexed);
+        rejects(indexed, [](auto &x) { x.nodes[1].strides = {1}; }, "index map rank");
+        rejects(indexed, [](auto &x) { x.nodes[1].offset = 1; }, "index map outside source domain");
+        rejects(indexed, [](auto &x) { x.nodes[1].strides[0] = SIZE_MAX; }, "index map address overflow");
+        rejects(p, [](auto &x) { x.nodes[1].strides = {1}; }, "unexpected index map");
+        std::cout << "tiles plan validation: 16 rejected mutations\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }

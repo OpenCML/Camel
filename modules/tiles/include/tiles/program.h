@@ -35,6 +35,10 @@ struct Node {
     std::vector<size_t> inputs;
     std::vector<int64_t> attributes;
     std::vector<float> data; // Owned host input or scalar constant; never part of a code-cache key.
+    // reindex: source linear address = offset + sum(output_coordinate[d] * strides[d]).
+    // Units are elements, independent of CUDA thread/block placement.
+    size_t offset = 0;
+    std::vector<size_t> strides;
 };
 
 struct Launch {

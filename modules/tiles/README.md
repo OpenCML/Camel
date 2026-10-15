@@ -120,6 +120,15 @@ test executable stays in the build tree and is not a distributed runtime tool.
 
 ## Remaining architecture
 
+Static `transpose`, `permute` (including negative axes) and positive-step `slice`
+lower to a checked index map: source address equals an element offset plus the
+dot product of output coordinates and element strides. Bounds are checked before
+CUDA execution, including arithmetic overflow. Empty domains do not dereference
+addresses. These operations currently materialize contiguous outputs; they do
+not yet introduce aliasing or fuse through layout changes. This representation
+separates logical indexing from thread placement and is a foundation for later
+map composition and view elimination, not the complete indexed-domain design.
+
 First-class index domains, masks, layouts, schedule/resource graphs, loop and
 branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning, persistent device
 tensors, asynchronous transfers, Tensor Core lowering, autotuning, autodiff

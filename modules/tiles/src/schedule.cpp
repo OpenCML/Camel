@@ -92,10 +92,27 @@ void validate(const Program &p) {
         require(n.data.empty(), "computed value has host payload");
         const bool reduction = n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis";
         require(
-            elementwise(n.op) || reduction || n.op == "reshape" || n.op == "matmul",
+            elementwise(n.op) || reduction || n.op == "reshape" || n.op == "matmul" ||
+                n.op == "reindex",
             "unknown operation");
         require(n.inputs.size() == (binary(n.op) || n.op == "matmul" ? 2 : 1), "operation arity");
         const auto &a = p.nodes[n.inputs[0]].shape;
+        if (n.op == "reindex") {
+            require(n.strides.size() == n.shape.size(), "index map rank");
+            if (count) {
+                size_t last = n.offset;
+                for (size_t d = 0; d < n.shape.size(); ++d) {
+                    const size_t extent = size_t(n.shape[d] - 1);
+                    require(
+                        !extent || n.strides[d] <= (SIZE_MAX - last) / extent,
+                        "index map address overflow");
+                    last += extent * n.strides[d];
+                }
+                require(last < elements(a), "index map outside source domain");
+            }
+        } else {
+            require(n.offset == 0 && n.strides.empty(), "unexpected index map");
+        }
         if (unary(n.op))
             require(a == n.shape, "unary result shape");
         if (binary(n.op))
