@@ -7,7 +7,7 @@ digraph GraphIR {
                 label="__g_4__";
                 F03 [label="ARGS", type="ARGS"];
                 O03 [label="EXIT", type="EXIT"];
-                N00 [label="PORT", type="PORT"];
+                N00 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor"];
                 N01 [label="tensor:relu", type="OPER", origin=206, span="11:30-11:34", srcfile="exemplars/01_scalar_boundary/program.cml"];
                 F03 -> N00 [label="0", type="WITH_PORT"];
                 N01 -> O03 [label="0", type="EXIT"];
@@ -17,7 +17,7 @@ digraph GraphIR {
                 label="__g_6__";
                 F04 [label="ARGS", type="ARGS"];
                 O04 [label="EXIT", type="EXIT"];
-                N02 [label="PORT", type="PORT"];
+                N02 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor"];
                 N03 [label="1", type="DATA", origin=211, span="11:50-11:51", srcfile="exemplars/01_scalar_boundary/program.cml"];
                 N04 [label="tensor:idx", type="OPER", role="scalar-boundary", origin=212, span="11:49-11:50", srcfile="exemplars/01_scalar_boundary/program.cml"];
                 N05 [label="2.0", type="DATA", origin=213, span="11:55-11:58", srcfile="exemplars/01_scalar_boundary/program.cml"];
@@ -34,7 +34,7 @@ digraph GraphIR {
             }
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N08 [label="t", type="PORT"];
+            N08 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="Tensor"];
             N09 [label="0", type="DATA", origin=198, span="11:16-11:17", srcfile="exemplars/01_scalar_boundary/program.cml"];
             N0A [label="tensor:idx", type="OPER", role="scalar-boundary", origin=199, span="11:15-11:16", srcfile="exemplars/01_scalar_boundary/program.cml"];
             N0B [label="0.5", type="DATA", origin=200, span="11:21-11:24", srcfile="exemplars/01_scalar_boundary/program.cml"];
