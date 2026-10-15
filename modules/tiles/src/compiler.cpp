@@ -19,6 +19,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
+#include "modules/tensor/ops/indexing.h"
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/ops/support.h"
 #include "modules/tensor/tensor.h"
@@ -308,6 +309,21 @@ class Compiler {
                 for (size_t i = first; i < program.nodes.size(); ++i) {
                     program.nodes[i].permissions = g->nodePermissions(id);
                     program.nodes[i].semantic    = semantic;
+                }
+                // An operator's instance describes its result, never synthetic
+                // casts or constants introduced while lowering its arguments.
+                if (out.tensor != SIZE_MAX && out.tensor >= first) {
+                    if (const auto *def = tensor::ops::OpRegistry::instance().find(oper)) {
+                        std::vector<ty::Type *> types;
+                        std::vector<std::optional<ConstArg>> constants;
+                        for (const auto &arg : args) {
+                            types.push_back(arg.type);
+                            constants.push_back(arg.constant);
+                        }
+                        program.nodes[out.tensor].indexing = tensor::ops::instantiate(
+                            *def,
+                            tensor::ops::InferContext(types, constants));
+                    }
                 }
                 break;
             }

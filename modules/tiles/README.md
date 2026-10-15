@@ -53,6 +53,16 @@ Validation before generation/execution rebinds keys and rejects replaced records
 including same-version replacements and declarations newly added to opaque
 operators. The source cache includes both stable keys and these process-local
 revision tokens. Tokens are never persisted or presented as portable cache keys.
+
+Tensor lowering now retains the core's owned index instances specialized from the
+same operand types and constants used for shape inference. `inspect` lists their
+result nodes in `indexed_nodes`. Instances are structurally validated against the
+captured declaration before scheduling. The parallel maximum implementation also
+requires a compatible f32 maximum law and the core's regroup, permute and block
+identity freedoms. Missing declarations choose the ordered implementation.
+CUDA address generation still uses the existing physical maps; retaining these
+instances does not yet constitute generic domain-driven lowering or graph facts.
+
 FMA selection additionally requires the core declaration of correctly rounded
 f32 arithmetic sensitive to contraction; an opaque declaration grants no such
 optimization capability.

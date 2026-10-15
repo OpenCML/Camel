@@ -64,6 +64,20 @@ bool scalar64(const std::string &op) {
            op == "scalar_div" || op == "scalar_neg";
 }
 bool orderedAxis(const std::string &op) { return op == "sum_axis" || op == "mean_axis"; }
+bool parallelMaximum(const Program &p, const Node &n) {
+    if (!n.indexing || n.semantic >= p.contracts.size())
+        return false;
+    const auto *declaration = p.contracts[n.semantic].declaration;
+    if (!declaration || n.indexing->law >= declaration->laws.size())
+        return false;
+    const auto &law    = declaration->laws[n.indexing->law];
+    const auto freedom = core::sem::reorderFreedom(law, n.permissions);
+    return law.kind == core::sem::LawKind::Max && law.input == core::type::TypeCode::Float32 &&
+           law.accumulator == core::type::TypeCode::Float32 &&
+           law.result == core::type::TypeCode::Float32 &&
+           law.finalize == core::sem::LawFinalize::None && law.initBits == 0xff800000U &&
+           freedom.regroup && freedom.permute && freedom.blockIdentity;
+}
 void require(bool valid, const std::string &message) {
     if (!valid)
         throw std::runtime_error("invalid tiles plan: " + message);
@@ -138,6 +152,14 @@ void validate(const Program &p) {
         require(
             n.semantic == SIZE_MAX || n.semantic < p.contracts.size(),
             "missing operator contract");
+        if (n.indexing) {
+            require(
+                n.semantic < p.contracts.size() && p.contracts[n.semantic].declaration,
+                "index instance has no operator declaration");
+            const auto problem =
+                core::sem::validate(*n.indexing, p.contracts[n.semantic].declaration);
+            require(!problem, "invalid core index instance: " + problem.value_or(""));
+        }
         const size_t count = elements(n.shape);
         bytes(n);
         for (auto in : n.inputs)
@@ -329,7 +351,7 @@ void schedule(Program &p, ScheduleOptions options) {
             launch.implementation = "ordered_reduce";
             launch.blockX         = 32;
         }
-        if (options.parallelMax && n.op == "max_axis") {
+        if (options.parallelMax && n.op == "max_axis" && parallelMaximum(p, n)) {
             const auto &shape = p.nodes[n.inputs[0]].shape;
             if (size_t(n.attributes[0]) + 1 == shape.size() && shape.back() >= 128)
                 launch.implementation = "parallel_max";
@@ -406,6 +428,7 @@ void validatePlan(const Program &p) {
             require(
                 root.op == "max_axis" && launch.members.size() == 1,
                 "parallel maximum operation");
+            require(parallelMaximum(p, root), "parallel maximum lacks a compatible reduction law");
             const auto &shape = p.nodes[root.inputs[0]].shape;
             require(
                 size_t(root.attributes[0]) + 1 == shape.size() && shape.back() >= 128 &&
@@ -518,6 +541,16 @@ std::string inspect(const Program &p) {
         if (i)
             out << ',';
         out << static_cast<unsigned>(p.nodes[i].permissions);
+    }
+    out << "],\"indexed_nodes\":[";
+    bool firstIndexed = true;
+    for (size_t i = 0; i < p.nodes.size(); ++i) {
+        if (!p.nodes[i].indexing)
+            continue;
+        if (!firstIndexed)
+            out << ',';
+        firstIndexed = false;
+        out << i;
     }
     out << "],\"operator_contracts\":[";
     for (size_t i = 0; i < p.contracts.size(); ++i) {
