@@ -19,6 +19,7 @@
 
 #include "function_emitter.h"
 
+#include "camel/core/symbol.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
@@ -163,6 +164,10 @@ std::string operatorUri(const GCGraph *graph, gc_node_ref_t ref) {
     return std::string(graph->nodeBodyAs<GCOperBody>(ref)->uri());
 }
 
+camel::core::OperId operatorId(const GCGraph *graph, gc_node_ref_t ref) {
+    return graph->nodeBodyAs<GCOperBody>(ref)->oper;
+}
+
 // ---- Construction and the signature ----
 
 FunctionEmitter::FunctionEmitter(
@@ -247,7 +252,7 @@ std::string FunctionEmitter::parameterName(const GCGraph *graph, gc_node_ref_t p
     if (type == nullptr) {
         return "arg";
     }
-    const auto captured    = type->closureRefs();
+    const auto captured    = graph->captureNames();
     const size_t withPorts = graph->withPorts().size();
     const size_t withCount = graph->closureNodes().empty() && captured.size() <= withPorts
                                  ? withPorts - captured.size()
@@ -256,7 +261,7 @@ std::string FunctionEmitter::parameterName(const GCGraph *graph, gc_node_ref_t p
     for (size_t i = 0; i < withPorts; ++i) {
         if (graph->withPorts()[i] == port) {
             if (i >= withCount) {
-                return cppIdentifier(captured[i - withCount]);
+                return cppIdentifier(camel::core::symbolText(captured[i - withCount]));
             }
             argIndex = i;
         }
@@ -272,7 +277,7 @@ std::string FunctionEmitter::parameterName(const GCGraph *graph, gc_node_ref_t p
     // A captured value of a function value: named by what it captures.
     for (size_t i = 0; i < graph->closureNodes().size(); ++i) {
         if (graph->closureNodes()[i] == port && i < captured.size()) {
-            return cppIdentifier(captured[i]);
+            return cppIdentifier(camel::core::symbolText(captured[i]));
         }
     }
     return "arg";
@@ -803,6 +808,18 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     const GCGraph *g      = frame.graph;
     const auto *node      = g->node(ref);
     const std::string uri = operatorUri(g, ref);
+    if (uri == ":op/assn_append") {
+        // `acc = acc->append<v>` as one internal operator: a pass lowers it to the variable
+        // operators and the append before exporters see the graph; met here, that pass did
+        // not run, and translating it would guess at what it means.
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} uses the internal operator ':op/assn_append' (`acc = acc->append<v>`), which "
+                "std::cpp translates only once it is lowered",
+                describeFunction(g)));
+    }
     if (!program_.values.type(node->dataType)) {
         refuse(
             g,
@@ -1367,9 +1384,10 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
 
 namespace {
 
-/// Whether `uri` reads or writes a variable it is given first: :var/get and the assignments.
-bool isVariableAccess(std::string_view uri) {
-    return uri == ":var/get" || uri.starts_with(":op/assn");
+/// Whether the operator `id` reads or writes a variable it is given first: :var/get and the
+/// assignments.
+bool isVariableAccess(camel::core::OperId id) {
+    return id == camel::core::oper::VarGet || camel::core::OperatorTable::instance().isAssignment(id);
 }
 
 /// The operator an assignment `x op= v` computes `x op v` with (":op/assn_add_l" gives
@@ -1400,7 +1418,7 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
             if (node == nullptr) {
                 continue;
             }
-            if (node->kind == GCNodeKind::Oper && isVariableAccess(operatorUri(graph, user)) &&
+            if (node->kind == GCNodeKind::Oper && isVariableAccess(operatorId(graph, user)) &&
                 graph->normInputsOf(user).front() == cell) {
                 continue;
             }
@@ -1444,8 +1462,9 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
 
 bool FunctionEmitter::lowerVariable(
     Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
-    const GCGraph *g = frame.graph;
-    if (uri == ":var/new") {
+    const GCGraph *g              = frame.graph;
+    const camel::core::OperId id = operatorId(g, ref);
+    if (id == camel::core::oper::VarNew) {
         const gc_node_ref_t init = g->normInputsOf(ref).front();
         const Type *valueType    = g->node(init)->dataType;
         const std::string type   = cppType(g, init, valueType);
@@ -1464,7 +1483,7 @@ bool FunctionEmitter::lowerVariable(
         }
         return true;
     }
-    if (!isVariableAccess(uri)) {
+    if (!isVariableAccess(id)) {
         return false;
     }
     const auto norm        = g->normInputsOf(ref);
@@ -1472,7 +1491,7 @@ bool FunctionEmitter::lowerVariable(
     const bool local       = cell.cell == CppValue::Cell::Local;
     const std::string read = local ? cell.text : cell.text + ".get()";
     const Type *type       = g->node(ref)->dataType;
-    if (uri == ":var/get") {
+    if (id == camel::core::oper::VarGet) {
         // Read now: a later assignment must not change what this read gave.
         bind(frame, ref, read, false, out, "read");
         return true;
@@ -1517,21 +1536,22 @@ bool FunctionEmitter::lowerVariable(
 
 bool FunctionEmitter::lowerHigherOrder(
     Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out) {
-    static const std::unordered_map<std::string, std::string> kOperators = {
-        {":mark/map_arr", "map"},
-        {":mark/apply_arr", "map"},
-        {":mark/filter_arr", "filter"},
-        {":mark/reduce_arr", "reduce"},
-        {":mark/foreach_arr", "foreach"},
-        {":mark/unordered_reduce_arr", "reduce"},
-        {":mark/unordered_foreach_arr", "foreach"},
-        {":mark/isolate", "attempt"},
+    namespace oper = camel::core::oper;
+    static const std::unordered_map<camel::core::OperId, std::string> kOperators = {
+        {oper::MapArr, "map"},
+        {oper::ApplyArr, "map"},
+        {oper::FilterArr, "filter"},
+        {oper::ReduceArr, "reduce"},
+        {oper::ForeachArr, "foreach"},
+        {oper::UnorderedReduceArr, "reduce"},
+        {oper::UnorderedForeachArr, "foreach"},
+        {oper::Isolate, "attempt"},
     };
-    auto it = kOperators.find(uri);
+    const GCGraph *g = frame.graph;
+    auto it          = kOperators.find(operatorId(g, ref));
     if (it == kOperators.end()) {
         return false;
     }
-    const GCGraph *g = frame.graph;
     // Each call of the element function counts as an open call made here.
     const std::string site = program_.sites.siteFor(
         g,

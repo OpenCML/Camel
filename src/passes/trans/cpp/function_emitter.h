@@ -37,6 +37,7 @@
 
 #pragma once
 
+#include "camel/core/operator_table.h"
 #include "camel/runtime/graph.h"
 
 #include "code.h"
@@ -98,9 +99,13 @@ std::string describeFunction(const GCGraph *graph);
 /// a call of an anonymous graph that the BRCH starts. Such a call is lowered in place.
 bool isArmCall(const GCGraph *graph, gc_node_ref_t ref);
 
-/// The URI of the operator of the OPER node `ref`. The one place the translation reads it:
-/// when OPER nodes carry an operator-table id instead, only this changes.
+/// The URI of the operator of the OPER node `ref`: what the rule table (operator_rules.h) and
+/// the messages name it by.
 std::string operatorUri(const GCGraph *graph, gc_node_ref_t ref);
+
+/// The operator-table id of the OPER node `ref`: what the operators the translation treats
+/// itself (variables, the `:mark/` operators) are recognised by.
+camel::core::OperId operatorId(const GCGraph *graph, gc_node_ref_t ref);
 
 class FunctionEmitter {
   public:
