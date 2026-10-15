@@ -62,7 +62,7 @@ func main(): int sync {
 | `re` | `test` |
 | `crypto` | `sha256`、`sha256_rounds` |
 | `this` | `zen` |
-| `algo` | `sort`、`sorted`、`merge_sorted_arrays` 等排序函数 |
+| `algo` | `sort`、`merge_sort`、`merge_sorted_arrays` 等排序函数（都返回新数组，每种只有一个名字） |
 | `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
 | `para` | `unordered_foreach`、`unordered_reduce` |
 | `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出 |

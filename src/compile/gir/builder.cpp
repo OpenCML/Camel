@@ -4346,16 +4346,9 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
     }
     // `append` is the built-in one: no declaration of the program, and no other module,
     // gives the name another meaning here (the lookup order of visitDRefNode).
-    if (nodeAt("append").has_value() || templateScope_->get("append").has_value() ||
-        decoratedGraphAt("append").has_value()) {
-        return nullptr;
-    }
-    if (auto graphs = graphsAt("append"); graphs.has_value() && !graphs.value()->empty()) {
-        return nullptr;
-    }
-    const auto appendEntity = module_->getImportedEntity("append");
-    if (!appendEntity.has_value() || !appendEntity->isOperGroup() ||
-        std::ranges::none_of(appendEntity->operGroup()->resolvers(), [](const auto &overload) {
+    const oper_group_ptr_t appendGroup = importedOperatorGroupNamed("append");
+    if (appendGroup == nullptr ||
+        std::ranges::none_of(appendGroup->resolvers(), [](const auto &overload) {
             return overload.first == ":struct/append_arr";
         })) {
         return nullptr;
@@ -4381,7 +4374,7 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
     };
     if (recorder_) {
         std::vector<std::string> signatures;
-        for (const auto &[uri, resolver] : appendEntity->operGroup()->resolvers()) {
+        for (const auto &[uri, resolver] : appendGroup->resolvers()) {
             signatures.push_back(resolver->signature());
         }
         recorder_->operatorReferenced(binding->at(0)->origin(), "append", std::move(signatures));
@@ -4412,6 +4405,121 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
         *appended << with << tree_->clone(call->at(1));
         *rebinding << tree_->clone(gct->at(0)) << tree_->clone(target) << appended;
     }
+    return visitLinkNode(rebinding);
+}
+
+oper_group_ptr_t Builder::importedOperatorGroupNamed(const std::string &name) {
+    if (nodeAt(name).has_value() || templateScope_->get(name).has_value() ||
+        decoratedGraphAt(name).has_value()) {
+        return nullptr;
+    }
+    if (auto graphs = graphsAt(name); graphs.has_value() && !graphs.value()->empty()) {
+        return nullptr;
+    }
+    const auto entity = module_->getImportedEntity(name);
+    return entity.has_value() && entity->isOperGroup() ? entity->operGroup() : nullptr;
+}
+
+node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
+    // The lowered form of `xs = xs->op<w...>` (and of `xs = op<w...>(xs)`, `xs = xs->op`):
+    //   LINK(DREF __assn__, DREF xs, LINK(WITH(DREF op, w...) | DREF op, DREF xs))
+    // In a sync block only: the rewritten statement is three operations on the variable,
+    // which must run together and in this order.
+    const auto isDref = [](const GCT::node_ptr_t &node, std::string_view name = {}) {
+        return node != nullptr && node->type() == GCT::NodeKind::DREF &&
+               (name.empty() || node->name() == name);
+    };
+    if (!synced_ || gct->size() != 3 || !isDref(gct->at(0), "__assn__") || !isDref(gct->at(1))) {
+        return nullptr;
+    }
+    const GCT::node_ptr_t target = gct->at(1);
+    const GCT::node_ptr_t call   = gct->at(2);
+    if (call->type() != GCT::NodeKind::LINK || call->size() != 2 ||
+        !isDref(call->at(1), target->name())) {
+        return nullptr;
+    }
+    const GCT::node_ptr_t callee = call->at(0);
+    const bool withArgs          = callee->type() == GCT::NodeKind::WITH;
+    const GCT::node_ptr_t opName = withArgs ? callee->at(0) : callee;
+    if (!isDref(opName)) {
+        return nullptr;
+    }
+    // `xs` is a variable (of this function or a captured one) holding an array.
+    const std::string name = target->name();
+    if (!nodeAt(name).has_value()) {
+        return nullptr;
+    }
+    const node_handle_t variable = resolveNodeByRef(name);
+    Type *arrayType              = valueTypeOf(nodeTypeOf(variable));
+    if (!isVariable(variable) || arrayType == nullptr || arrayType->code() != TypeCode::Array) {
+        return nullptr;
+    }
+    // `op` is an operator of a module (nothing of the program is named so), and one of its
+    // overloads declares an in-place form: anything else is an ordinary call.
+    const oper_group_ptr_t group = importedOperatorGroupNamed(opName->name());
+    auto &table                  = camel::core::OperatorTable::instance();
+    if (group == nullptr || std::ranges::none_of(group->resolvers(), [&](const auto &overload) {
+            return table.inPlaceForm(overload.first).has_value();
+        })) {
+        return nullptr;
+    }
+    // The with-arguments are plain values, built first as in the call as written and named
+    // so that the call below refers to them; a name of a function, a binding or a lambda is
+    // settled by the call it is passed to, and such a call is built as written.
+    for (size_t i = 1; withArgs && i < callee->size(); ++i) {
+        const GCT::node_ptr_t arg = callee->at(i);
+        if ((isDref(arg) && !nodeAt(arg->name()).has_value()) ||
+            arg->type() == GCT::NodeKind::WITH || arg->type() == GCT::NodeKind::FUNC) {
+            return nullptr;
+        }
+    }
+    std::vector<std::string> temporaries;
+    type_vec_t withTypes;
+    for (size_t i = 1; withArgs && i < callee->size(); ++i) {
+        node_handle_t value = valueOf(visitOperand(callee->at(i), callee));
+        if (nodeIsKind(value, runtime::GCNodeKind::Dref) || boundWithArgs_.contains(value)) {
+            rejectNameWithoutValue(value, "the argument", callee->at(i));
+        }
+        withTypes.push_back(valueTypeOf(nodeTypeOf(value)));
+        temporaries.push_back(bindTemporary(value));
+    }
+    const auto make = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {
+        node->setOrigin(at->origin());
+        return node;
+    };
+    // The callee as written, with the with-arguments replaced by their names.
+    GCT::node_ptr_t calleeCopy = tree_->clone(opName);
+    if (withArgs) {
+        GCT::node_ptr_t with = make(tree_->makeWith(temporaries.size()), callee);
+        *with << calleeCopy;
+        for (size_t i = 0; i < temporaries.size(); ++i) {
+            *with << make(tree_->makeDRef(temporaries[i]), callee->at(i + 1));
+        }
+        calleeCopy = with;
+    }
+    // The overload the call resolves to, as visitLinkNode will resolve it: rewritten only when
+    // it has an in-place form and gives an array of the variable's own type.
+    const std::vector<StaticArg> statics(1);
+    const auto resolved = group->resolve(withTypes, {arrayType}, statics, Modifier::None);
+    const bool inPlace  = resolved.has_value() &&
+                         table.inPlaceForm((*resolved)->uri()).has_value() &&
+                         (*resolved)->funcType()->exitType() != nullptr &&
+                         (*resolved)->funcType()->exitType()->equals(arrayType);
+    GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
+    GCT::node_ptr_t applied   = make(tree_->makeLink(1), call);
+    if (!inPlace) {
+        // As written (with the arguments already built): `op` reports what does not fit.
+        *applied << calleeCopy << tree_->clone(call->at(1));
+        *rebinding << tree_->clone(gct->at(0)) << tree_->clone(target) << applied;
+        return visitLinkNode(rebinding);
+    }
+    GCT::node_ptr_t take = make(tree_->makeLink(1), call->at(1));
+    *take << make(tree_->makeDRef(std::string(kBuiltinPrefix) + "__var_take__"), call->at(1))
+          << tree_->clone(target);
+    *applied << calleeCopy << take;
+    inPlaceCalls_.insert(applied);
+    *rebinding << make(tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn_owned__"), gct->at(0))
+               << tree_->clone(target) << applied;
     return visitLinkNode(rebinding);
 }
 
@@ -5072,6 +5180,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             LEAVE("LINK");
             return rebound;
         }
+        if (node_handle_t rebound = inPlaceRebindingOf(gct)) {
+            LEAVE("LINK");
+            return rebound;
+        }
     }
     genericCalleeAllowed_ =
         gct->at(0)->type() == GCT::NodeKind::DREF || gct->at(0)->type() == GCT::NodeKind::WITH;
@@ -5610,6 +5722,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
+            if (inPlaceCalls_.contains(gct)) {
+                // Written by inPlaceRebindingOf, which checked that this overload has an
+                // in-place form: the call works on the array :var/take hands it.
+                const auto form =
+                    camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
+                ASSERT(form.has_value(), "An in-place rebinding lost its in-place form.");
+                targetOperator = std::make_shared<OperatorIndex>(
+                    targetOperator->name(),
+                    targetOperator->funcType(),
+                    *form);
+            }
             rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
             // `foreach` drops what its element function gives: the value of the body of a
             // function written in place here is a value nothing takes (design principles
@@ -5766,8 +5889,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // a `var` argument as the variable itself. Any other operator with a `var` parameter mutates
     // an object in place and takes the object; the call still counts as a write of the variable
     // the object was read from. Every other parameter takes the value.
-    const bool takesVariables =
-        targetOperator == nullptr || targetOperator->name().starts_with("__assn");
+    // A function, an assignment and a variable operator (`:var/take`, inPlaceRebindingOf) are
+    // given the variable itself at a `var` position; any other operator its value.
+    const bool takesVariables = targetOperator == nullptr ||
+                                targetOperator->name().starts_with("__assn") ||
+                                targetOperator->name().starts_with("__var_");
     // The node to link and, at a `var` position, the variable the callee writes (if any).
     const auto passArgument = [&](const Argument &arg, bool isVar) {
         if (!isVar) {

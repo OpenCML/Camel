@@ -292,6 +292,42 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
 
+        // `xs = xs->sort` as a statement: the compiler writes these two groups around the
+        // in-place form of the operator (Builder::inPlaceRebindingOf, __builtin__var_take__);
+        // no program can name them. Arrays only: the mark they rely on is one of arrays.
+        OperatorGroup::create(
+            "__var_take__",
+            {
+                {
+                    ":var/take",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {true}}},
+                        "(var variable: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            return norm[0];
+                        }),
+                },
+            }),
+        OperatorGroup::create(
+            "__assn_owned__",
+            {
+                {
+                    ":op/assn_owned",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {true, false}}},
+                        "(var self: T[], value: T[]) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array || !norm[0]->equals(norm[1]))
+                                return nullopt;
+                            return norm[0];
+                        }),
+                },
+            }),
+
         // ======= Assignment operators =======
         // `=` takes any type. A compound assignment takes exactly the types listed for it: a
         // combination without an implementation is rejected when the program is compiled.

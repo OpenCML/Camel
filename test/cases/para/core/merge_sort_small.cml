@@ -2,18 +2,18 @@
  * merge_sort.cml at a small size, with the evidence that the two recursive calls of a split
  * run concurrently: each of the 8 leaf sorts waits at a rendezvous for one peer (see
  * concurrent_calls) and reports whether it met one. The sort carries that count next to the
- * sorted array, so no shared state orders the calls. (The leaves use `merge_sorted`: `sorted`,
+ * sorted array, so no shared state orders the calls. (The leaves use `merge_sort`; `sort`,
  * which merge_sort.cml uses, does not sort at the time of writing.)
  */
 module merge_sort_small
 
 import { seed, shuffle } from random
-import { merge_sorted, merge_sorted_arrays } from algo
+import { merge_sort, merge_sorted_arrays } from algo
 import { rendezvous } from para
 
 func sort_leaf(arr: int[]): (int[], int) sync {
     let met = rendezvous(2, 5000) - 1
-    return (merge_sorted(arr), met)
+    return (merge_sort(arr), met)
 }
 
 func mergesort(arr: int[]): (int[], int) {

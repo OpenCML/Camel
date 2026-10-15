@@ -958,6 +958,22 @@ class Builder {
     /// grows the array in place while only the variable refers to it. Returns nullptr when
     /// `gct` is not that form; the call is then built as written.
     node_handle_t rebindingAppendOf(const GCT::node_ptr_t &gct);
+    /// `xs = xs->op<w...>` (or `xs = op<w...>(xs)`) as the statement `gct` of a sync block,
+    /// `xs` a variable holding an array and `op` an operator of a module that declares an
+    /// in-place form for the overload the call resolves to (OperatorTable::setInPlaceForm;
+    /// design principles 2.13: `xs = xs->sort`). The same rebinding, written
+    /// `:op/assn_owned(xs, <in-place form><w...>(:var/take(xs)))`, which works on the
+    /// variable's own array when nothing else refers to it and on a copy otherwise
+    /// (__builtin__var_take__). Returns nullptr when `gct` is not that form; the statement
+    /// is then built as written.
+    node_handle_t inPlaceRebindingOf(const GCT::node_ptr_t &gct);
+    /// The calls inPlaceRebindingOf wrote: visitLinkNode calls the in-place form of the
+    /// operator they resolve to.
+    std::unordered_set<const GCT::Node *> inPlaceCalls_;
+    /// The operator group the name `name` stands for here when it is an operator a module
+    /// brings (the built-in module or an imported one) that nothing of the program shadows (the
+    /// lookup order of visitDRefNode); nullptr otherwise.
+    oper_group_ptr_t importedOperatorGroupNamed(const std::string &name);
     /// UnusedPureResult at the statement `stmt` when it is a call of an operator declared
     /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
     /// nothing, so the statement does nothing. `node` is what the statement built.

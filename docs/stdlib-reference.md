@@ -36,7 +36,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 45 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
-| [algo](#algo) | `import { ... } from algo` | C++ | 12 |
+| [algo](#algo) | `import { ... } from algo` | C++ | 8 |
 | [random](#random) | `import { ... } from random` | C++ | 7 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 10 |
@@ -1754,58 +1754,10 @@ element is NaN.
 ## `algo`: sorting and array primitives
 
 Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
-returns a new array and leaves its argument unchanged (design principles 2.12): `xxx_sort` and
-`xxx_sorted` are the same operation (`xxx_sort` sorted a `var` array in place before; to sort
-a variable, bind it to the result: `xs = sort(xs)`). To sort anything else, or by a key, use
-`sort_by` of the `array` module.
-
-#### `sorted`
-
-```camel
-sorted: (xs: T[]) => T[]
-```
-
-A sorted copy of xs (quicksort).
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `sorted([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sorted`
-
-```camel
-insert_sorted: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `insert_sorted([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sorted`
-
-```camel
-quick_sorted: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `quick_sorted([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted`
-
-```camel
-merge_sorted: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sorted([3, 1, 2])` gives `[1, 2, 3]`
+returns a new array and leaves its argument unchanged (design principles 2.12, 2.13); to sort a
+variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the variable's own
+array in place when nothing else refers to it, an optimisation that does not change what the
+program means (2.13). To sort anything else, or by a key, use `sort_by` of the `array` module.
 
 #### `sort`
 
@@ -1813,7 +1765,7 @@ A sorted copy of xs, by merge sort.
 sort: (xs: T[]) => T[]
 ```
 
-A sorted copy of xs (quicksort); the same as sorted.
+A sorted copy of xs (quicksort).
 
 - Pure.
 - Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
@@ -1825,7 +1777,7 @@ A sorted copy of xs (quicksort); the same as sorted.
 insert_sort: (xs: T[]) => T[]
 ```
 
-A sorted copy of xs, by insertion sort; the same as insert_sorted.
+A sorted copy of xs, by insertion sort.
 
 - Pure.
 - Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
@@ -1837,7 +1789,7 @@ A sorted copy of xs, by insertion sort; the same as insert_sorted.
 quick_sort: (xs: T[]) => T[]
 ```
 
-A sorted copy of xs, by quicksort; the same as quick_sorted.
+A sorted copy of xs, by quicksort.
 
 - Pure.
 - Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
@@ -1849,7 +1801,7 @@ A sorted copy of xs, by quicksort; the same as quick_sorted.
 merge_sort: (xs: T[]) => T[]
 ```
 
-A sorted copy of xs, by merge sort; the same as merge_sorted.
+A sorted copy of xs, by merge sort.
 
 - Pure.
 - Failure: fault `OperandTypeUnsupported` when the elements are not numbers.

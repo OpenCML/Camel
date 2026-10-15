@@ -110,12 +110,16 @@ static void mergeSortSlots(slot_t *vals, size_t n, Compare comp, slot_t *tmp) {
         vals[i] = tmp[i];
 }
 
-// Sorts a copy of `arr` and returns it: the array a program passes is never changed (design
-// principles 2.12), so every sorting operator of the module returns a new array.
+// Sorts `arr` and returns it: a copy of it, as the array a program passes is never changed
+// (design principles 2.12), or, for the in-place forms (`inPlace`), the array itself, which
+// the compiler hands over only when no one else refers to it (design principles 2.13;
+// Builder::inPlaceRebindingOf). The elements are numbers: the slots hold no references, so
+// reordering them needs no write barrier.
 template <typename T>
-static Array *__doSortSlots__(Array *arr, SortAlgo algo, const ArrayType *arrType, Context &ctx) {
+static Array *
+__doSortSlots__(Array *arr, SortAlgo algo, const ArrayType *arrType, bool inPlace, Context &ctx) {
     size_t n      = arr->size();
-    Array *target = static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
+    Array *target = inPlace ? arr : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     if (n <= 1) {
         return target;
     }
@@ -141,21 +145,23 @@ static Array *__doSortSlots__(Array *arr, SortAlgo algo, const ArrayType *arrTyp
 
 template <SortAlgo Algo>
 static Array *__doSortWithTypeCode__(
-    Array *arr, const ArrayType *arrType, Context &ctx, std::string_view fname) {
+    Array *arr, const ArrayType *arrType, bool inPlace, Context &ctx, std::string_view fname) {
     TypeCode code = arrType->elemTypeCode();
     Array *result = nullptr;
+    // The element type is checked before anything is sorted: an in-place form that faults
+    // leaves the array as it was.
     switch (code) {
     case TypeCode::Int32:
-        result = __doSortSlots__<Int32>(arr, Algo, arrType, ctx);
+        result = __doSortSlots__<Int32>(arr, Algo, arrType, inPlace, ctx);
         break;
     case TypeCode::Int64:
-        result = __doSortSlots__<Int64>(arr, Algo, arrType, ctx);
+        result = __doSortSlots__<Int64>(arr, Algo, arrType, inPlace, ctx);
         break;
     case TypeCode::Float32:
-        result = __doSortSlots__<Float32>(arr, Algo, arrType, ctx);
+        result = __doSortSlots__<Float32>(arr, Algo, arrType, inPlace, ctx);
         break;
     case TypeCode::Float64:
-        result = __doSortSlots__<Float64>(arr, Algo, arrType, ctx);
+        result = __doSortSlots__<Float64>(arr, Algo, arrType, inPlace, ctx);
         break;
     default:
         throwRuntimeFault(
@@ -185,11 +191,18 @@ template <typename T> static Array *__merge_sorted_arrays_slots__(Array *lhs, Ar
     return result;
 }
 
+// `name` returns a sorted copy; `name_in_place` is its in-place form (see __doSortSlots__).
 #define ALGO_SORT_IMPL(name, algo)                                                                 \
     slot_t __algo_##name##__(ArgsView &with, ArgsView &norm, Context &ctx) {                       \
         Array *arr               = norm.get<Array *>(0);                                           \
         const ArrayType *arrType = tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));         \
-        Array *result = __doSortWithTypeCode__<algo>(arr, arrType, ctx, "<" #name ">");            \
+        Array *result = __doSortWithTypeCode__<algo>(arr, arrType, false, ctx, "<" #name ">");     \
+        return result ? toSlot(result) : NullSlot;                                                 \
+    }                                                                                              \
+    slot_t __algo_##name##_in_place__(ArgsView &with, ArgsView &norm, Context &ctx) {              \
+        Array *arr               = norm.get<Array *>(0);                                           \
+        const ArrayType *arrType = tt::as_ptr<camel::core::type::ArrayType>(norm.type(0));         \
+        Array *result = __doSortWithTypeCode__<algo>(arr, arrType, true, ctx, "<" #name ">");      \
         return result ? toSlot(result) : NullSlot;                                                 \
     }
 
@@ -231,17 +244,17 @@ slot_t __algo_merge_sorted_arrays__(ArgsView &with, ArgsView &norm, Context &ctx
 std::unordered_map<std::string, operator_t> getAlgoOpsMap() {
     std::unordered_map<std::string, operator_t> ops = getAlgoSequenceOpsMap();
     ops.merge(std::unordered_map<std::string, operator_t>{
-        // `sort` and `sorted` (and the other pairs) are one operation now that no operator
-        // changes the array it is given (design principles 2.12). Both names are kept until
-        // the language author decides whether the pairs stay.
+        // One name per operation: `sort` returns a new array (design principles 2.12, 2.13;
+        // the `sorted` twins are gone). `*_in_place` are the in-place forms the compiler
+        // calls for `xs = xs->sort` (OperatorTable::setInPlaceForm); no program names them.
         {"sort", __algo_quick_sort__},
-        {"sorted", __algo_quick_sort__},
+        {"sort_in_place", __algo_quick_sort_in_place__},
         {"insert_sort", __algo_insert_sort__},
-        {"insert_sorted", __algo_insert_sort__},
+        {"insert_sort_in_place", __algo_insert_sort_in_place__},
         {"quick_sort", __algo_quick_sort__},
-        {"quick_sorted", __algo_quick_sort__},
+        {"quick_sort_in_place", __algo_quick_sort_in_place__},
         {"merge_sort", __algo_merge_sort__},
-        {"merge_sorted", __algo_merge_sort__},
+        {"merge_sort_in_place", __algo_merge_sort_in_place__},
         {"merge_sorted_arrays", __algo_merge_sorted_arrays__},
     });
     return ops;

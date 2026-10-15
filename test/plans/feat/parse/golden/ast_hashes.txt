@@ -34,7 +34,7 @@ d249f66638c5a342 ok benchmarks/parallel/cases/fib.cml
 9717e6df0477c8d3 ok benchmarks/parallel/cases/map_light.cml
 05c78d6427e94dd8 ok benchmarks/parallel/cases/map_medium.cml
 bd16a3eb11d1cc31 ok benchmarks/parallel/cases/mc_pi.cml
-23f630b3df84c585 ok benchmarks/parallel/cases/merge_sort.cml
+288e0340c23b3d42 ok benchmarks/parallel/cases/merge_sort.cml
 2308c7bda7867fab ok benchmarks/parallel/cases/serial_math.cml
 91bb0515d7b1dbb1 ok benchmarks/parallel/cases/small_calls.cml
 39994af5febb5538 ok benchmarks/parallel/cases/tensor_train.cml
@@ -274,8 +274,8 @@ ed025682de3cc038 ok docs/tutorial/examples/11_collections.cml
 a1428196c3da6b65 ok docs/tutorial/examples/15_tensor.cml
 7338399f9c6f3c64 ok docs/tutorial/examples/16_grad.cml
 519ead496cc83cc5 ok docs/tutorial/examples/shapes.cml
-737a25373d77dbf1 ok examples/algorithms/binary_search.cml
-f98b8c6601cccfe5 ok examples/algorithms/merge_sort.cml
+78698a9ac529d4ae ok examples/algorithms/binary_search.cml
+905a6bd97bb75c6d ok examples/algorithms/merge_sort.cml
 770392c2059ab74b ok examples/cli/exit_status.cml
 d8ce965b12208634 ok examples/cli/temperature.cml
 795990b452c31ae1 ok examples/data/dedup_sets.cml
@@ -309,7 +309,7 @@ f0bc865a95342d5b ok exemplars/05_effect_order/program.cml
 18da615b13dfd8aa ok exemplars/08_structured_control_flow/program.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
 173076cd43673a6b ok stdlib/perf.cml
-80f7fa893c2771be ok stdlib/signatures/algo.cml
+191bfdbcd7a88967 ok stdlib/signatures/algo.cml
 3f20be7d0332af35 ok stdlib/signatures/crypto.cml
 7b5ff78ccfa0d052 ok stdlib/signatures/fs.cml
 8db3ce3042e9b317 no stdlib/signatures/globals.cml
@@ -868,7 +868,7 @@ d0cf6dd2a3832ca7 ok test/cases/consistency/narrowing/narrow.cml
 865ed91dbd0860cb ok test/cases/consistency/narrowing/outside_arm.cml
 ce9f252eae863889 ok test/cases/consistency/narrowing/shadowed_not_narrowed.cml
 b53dba50128e5966 ok test/cases/consistency/narrowing/var_not_narrowed.cml
-f6ddcf3cdcc7fdad ok test/cases/consistency/new_values/append_new.cml
+f39ebc71519210bf ok test/cases/consistency/new_values/append_new.cml
 d52429882ec44afb ok test/cases/consistency/new_values/dropped_foreach_lambda.cml
 004594c1e50470be ok test/cases/consistency/new_values/dropped_if_arm.cml
 7290742a94b3e48d ok test/cases/consistency/new_values/dropped_nested_block.cml
@@ -877,6 +877,7 @@ d76ad37191e123fe ok test/cases/consistency/new_values/dropped_void_body.cml
 f4869465f1fd7c23 ok test/cases/consistency/new_values/peek.cml
 2a589f47a1ddf2d7 ok test/cases/consistency/new_values/peek_loop.cml
 04650d587fce8609 ok test/cases/consistency/new_values/rebinding_loop.cml
+ef6016b3326c31ce ok test/cases/consistency/new_values/sort_rebinding.cml
 b323341d5c7b5c61 ok test/cases/consistency/new_values/unused_in_lambda.cml
 6e4dae588384e504 ok test/cases/consistency/new_values/unused_operator.cml
 60f40ed68a690d09 ok test/cases/consistency/new_values/unused_var.cml
@@ -1433,7 +1434,7 @@ c03fc5f818bb04d6 ok test/cases/opt/progen/judgement/short_circuit_fault.cml
 736c885d0a2bcc1c ok test/cases/para/core/asian_option_mc.cml
 2a71e4d7703cda4b ok test/cases/para/core/block_sort_merge.cml
 3be6a2a478ea870e ok test/cases/para/core/bootstrap_medians.cml
-f7ed12d05a9e9c2f ok test/cases/para/core/concurrent_alloc.cml
+b91962760102bb56 ok test/cases/para/core/concurrent_alloc.cml
 21f01aa0576fa482 ok test/cases/para/core/concurrent_calls.cml
 124aad4df4fbd4d8 ok test/cases/para/core/concurrent_recursion.cml
 1df1831c7c81f0cf ok test/cases/para/core/file_chunk_hash.cml
@@ -1441,8 +1442,8 @@ f7ed12d05a9e9c2f ok test/cases/para/core/concurrent_alloc.cml
 b5681dd0c4839381 ok test/cases/para/core/map_chunks.cml
 fbe8b81927ee5879 ok test/cases/para/core/map_ordered_effects.cml
 49c745cbe848fae2 ok test/cases/para/core/map_result_order.cml
-021c23890549d680 ok test/cases/para/core/merge_sort.cml
-b18aff186c29a183 ok test/cases/para/core/merge_sort_small.cml
+45c88bd58ac398d4 ok test/cases/para/core/merge_sort.cml
+ba02662a7c741849 ok test/cases/para/core/merge_sort_small.cml
 65ac2e79085589c7 ok test/cases/para/core/monte_carlo_pi.cml
 341f9b9575d42415 ok test/cases/para/core/monte_carlo_pi_small.cml
 e8964d2bbb832c94 ok test/cases/para/core/ordered_operators_inline.cml

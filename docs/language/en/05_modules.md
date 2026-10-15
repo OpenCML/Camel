@@ -62,7 +62,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `re` | `test` |
 | `crypto` | `sha256`, `sha256_rounds` |
 | `this` | `zen` |
-| `algo` | `sort`, `sorted`, `merge_sorted_arrays` and other sorting functions |
+| `algo` | `sort`, `merge_sort`, `merge_sorted_arrays` and other sorting functions (each returns a new array, under one name) |
 | `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
 | `para` | `unordered_foreach`, `unordered_reduce` |
 | `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export |

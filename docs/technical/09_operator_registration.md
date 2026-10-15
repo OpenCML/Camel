@@ -27,17 +27,17 @@ libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/bu
 
 `OperatorGroup`（`include/camel/core/operator.h`）包含：
 
-- **name**：算子组名，如 `"sorted"`、`"__add__"`，即模块导出的名字。
+- **name**：算子组名，如 `"sort"`、`"__add__"`，即模块导出的名字。
 - **resolvers**：`vector<pair<uri, resolver_ptr_t>>`，每个重载对应一个 URI 和一个类型解析器。
 
 `OperatorGroup::resolve()` 按声明顺序依次尝试各重载，返回第一个接受实参的重载的 `OperatorIndex`（组名、函数类型、URI）。因此重载的先后顺序有意义。
 
 ```cpp
 OperatorGroup::create(
-    "sorted",
+    "sort",
     {
         {
-            "algo:sorted",
+            "algo:sort",
             DynamicFuncTypeResolver::create(
                 {{0, {}}, {1, {false}}},
                 "<> (array: T[]) => T[]",
@@ -98,7 +98,7 @@ OperatorGroup::create(
 示例：
 
 - `:op/add_i` → protocol 为空，suffix=`op/add_i`
-- `algo:sorted` → protocol=`algo`，suffix=`sorted`
+- `algo:sort` → protocol=`algo`，suffix=`sort`
 - `python:py_call` → protocol=`python`，suffix=`py_call`
 
 ### 3.2 Executor 与 opsMap
@@ -133,8 +133,8 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 以 `algo` 为例（`modules/algo/`）：
 
-- `module.cpp`：`getOperatorGroups()` 声明算子组，URI 为 `algo:sorted`、`algo:sort` 等；模块构造函数逐个 `exportEntity(group->name(), group)`；`load()` 调用 `context_->registerExecutorFactory("algo", factory)`。
-- `operators.cpp`：`getAlgoOpsMap()` 返回 suffix → `operator_t` 的映射，key 为 `sorted`、`sort` 等。
+- `module.cpp`：`getOperatorGroups()` 声明算子组，URI 为 `algo:sort`、`algo:merge_sort` 等；模块构造函数逐个 `exportEntity(group->name(), group)`；`load()` 调用 `context_->registerExecutorFactory("algo", factory)`。
+- `operators.cpp`：`getAlgoOpsMap()` 返回 suffix → `operator_t` 的映射，key 为 `sort`、`sort_in_place` 等（`*_in_place` 是 `xs = xs->sort` 用的就地形式，见 `OperatorTable::setInPlaceForm`）。
 - `executor.cpp`：`createAlgoExecutor()` 用上述映射构造 `Executor` 的子类。
 
 `.cmo` 模块的类继承 `camel::core::module::BuiltinModule`，以模块名作为名字。
