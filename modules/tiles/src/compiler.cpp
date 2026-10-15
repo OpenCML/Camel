@@ -187,7 +187,8 @@ class Compiler {
             case rt::GCNodeKind::Data:
                 if (node->dataIndex >= 0)
                     throw std::runtime_error("nonconstant DATA node");
-                out = host(g->staticArea()->get<slot_t>(size_t(-node->dataIndex)), node->dataType);
+                out =
+                    host(g->staticArea()->get<slot_t>(size_t(-node->dataIndex)), node->dataType());
                 break;
             case rt::GCNodeKind::Copy:
             case rt::GCNodeKind::Gate:
@@ -221,7 +222,7 @@ class Compiler {
             }
             case rt::GCNodeKind::Cast: {
                 out                = eval(f, ins.front());
-                const auto *target = tensor::asTensorType(node->dataType);
+                const auto *target = tensor::asTensorType(node->dataType());
                 if (!target || out.tensor == SIZE_MAX || !target->assignableFrom(out.type))
                     throw std::runtime_error("unsupported cast or tensor shape assertion failed");
                 break;
@@ -236,8 +237,8 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Fill: {
-                if (node->dataType->code() != ty::TypeCode::Tuple &&
-                    node->dataType->code() != ty::TypeCode::Struct)
+                if (node->dataType()->code() != ty::TypeCode::Tuple &&
+                    node->dataType()->code() != ty::TypeCode::Struct)
                     throw std::runtime_error(
                         "tiles supports only tuple/struct aggregate construction");
                 out               = eval(f, ins.front());
@@ -247,7 +248,7 @@ class Compiler {
                     throw std::runtime_error("aggregate fill arity mismatch");
                 for (size_t i = 0; i < slots.size(); ++i)
                     out.fields.at(slots[i]) = eval(f, values[i]);
-                out.type = node->dataType;
+                out.type = node->dataType();
                 break;
             }
             case rt::GCNodeKind::Accs: {
