@@ -121,3 +121,58 @@ assert(JSON.stringify(ur.freedom) === '["regroup"]', `unordered_reduce freedom $
 has(one('pooled', 'nn:max_pool2d'), 'norm 0   (d0, d1, stride*d2 + d4 - pad, stride*d3 + d5 - pad) valid [0 <= stride*d2 + d4 - pad, stride*d2 + d4 - pad < s0_2, 0 <= stride*d3 + d5 - pad, stride*d3 + d5 - pad < s0_3] else excluded')
 }
 """
+
+[[tests]]
+name = "declaration_evaluator"
+desc = "tensor::test_index_eval (CAMEL_ENABLE_TEST_PASSES), the declaration evaluator of design section 12: for every declared tensor operator and nn's pooling, deterministic pseudo-random calls (empty, size-1 and broadcast axes, negative axes, absent optional arguments, NaN, infinities, signed zeros, subnormals, int64 and bool elements) are executed from the declaration alone (domain, access maps with their validity policies, write map, reduction law) and compared with the CPU kernel: the same bits (exp and log within their declared 2 ulp), or both faulting. Every map is checked for soundness on the way (reads in range, writes inside the result, a unique write written exactly once). The facts that give no instance are queried too: unknown rank, Q9 broadcasts, constants that are not constant, a slice step of 0, mixed matmul dtypes."
+kind = "behavior"
+case = "../../../cases/modules/tensor/index_semantics.cml"
+args = ["${case}", "tensor::test_index_eval"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+timeout_ms = 60000
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n')
+assert(!out.includes('EVAL_MISMATCH'), lines.filter((l) => l.startsWith('EVAL_MISMATCH')).join(' | '))
+const ops = lines.filter((l) => l.startsWith('EVAL op='))
+assert(ops.length === 31, `${ops.length} operators evaluated`)
+for (const l of ops) {
+  const f = Object.fromEntries(l.slice(5).split(' ').map((kv) => kv.split('=')))
+  assert(f.cases === f.agree && f.unsound === '0' && Number(f.cases) >= 40, `${f.op}: ${l}`)
+}
+const total = lines.find((l) => l.startsWith('EVAL total '))
+assert(total, 'no total line')
+const t = Object.fromEntries(total.slice(11).split(' ').map((kv) => kv.split('=')))
+assert(t.operators === '31' && t.cases === t.agree && Number(t.cases) >= 2500 && Number(t.points) >= 30000, total)
+assert(t.unsound === '0' && t.mismatches === '0' && t.undeclared === '0', total)
+for (const [check, result] of [
+  ['broadcast_unknown_both', 'none'], ['broadcast_unknown_vs_known', 'none'], ['show_broadcast_unknown_alone', 'instance'],
+  ['show_broadcast_unknown_vs_one', 'instance'], ['unknown_rank', 'none'], ['show_relu_unknown_extents', 'instance'],
+  ['sum_axis_axis_not_constant', 'none'], ['show_sum_axis_unknown_extents', 'instance'], ['permute_not_constant', 'none'],
+  ['slice_unknown_extent', 'none'], ['show_slice', 'instance'], ['slice_step_zero', 'none'], ['reshape_unknown_input', 'none'],
+  ['show_reshape', 'instance'], ['show_reshape_unit_axes', 'instance'], ['show_matmul_batched', 'instance'],
+  ['matmul_batch_q9', 'none'], ['matmul_mixed_dtypes', 'none'], ['show_transpose', 'instance'], ['show_sum_to', 'instance'],
+  ['show_max_pool2d', 'instance'], ['show_avg_pool2d_unknown_extents', 'instance'],
+]) {
+  assert(lines.includes(`QUERY ${check} ${result}`), `QUERY ${check} ${result}`)
+}
+for (const l of [
+  'norm 1   (0, d1)',
+  'norm 0   (d0, start + step*d1)',
+  'norm 0   (d1, 0, d2)',
+  'write    (d1, 0) combine law sum_to_f32',
+  'oh = derived((s0_2 - kernel) floordiv kernel + 1)',
+]) assert(out.includes(l), `missing: ${l}`)
+}
+"""
+
+[[tests]]
+name = "evaluator_needs_the_environment"
+desc = "tensor::test_index_eval is a test-only pass: without CAMEL_ENABLE_TEST_PASSES the tensor module does not contribute it."
+kind = "negative"
+case = "../../../cases/modules/tensor/index_semantics.cml"
+args = ["${case}", "tensor::test_index_eval"]
+expect_exit = 1
+expect_output_not_contains = ["EVAL "]

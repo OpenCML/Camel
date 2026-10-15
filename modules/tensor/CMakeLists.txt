@@ -35,6 +35,7 @@ add_camel_module(
     ops/utility_ops.cpp
     ops/vjp.cpp
     passes/fuse.cpp
+    passes/index_eval.cpp
 )
 
 # Contraction (a * b + c into one fused multiply-add) is off in the whole project (top-level
