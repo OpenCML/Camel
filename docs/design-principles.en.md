@@ -405,6 +405,16 @@ At present all complicated type computation is implemented directly by operators
 - **Generational collection is on by default once it is usable.**
 - **When the parallel scheduler hands serial subgraphs to the bytecode interpreter, the recursion limit is counted by the same rule**: with a raised `--max-recursion-depth`, a deep non-tail recursion completes on `std::prl` as it does on `std::fvm`.
 
+### 2.13 Supplementary rulings (2026-10-15)
+
+- **After narrowing**, operations meant for a `T?` (`??`, `match`) may still be written on a name known to be non-null, with a warning that it is non-null; a null test on a non-nullable value is likewise allowed with a warning (its result is fixed). In an `if` without `else`, an unused `T!` in the arm is warned about.
+- **JSON**: on malformed text `decode` returns an error value of `Json!`, not a fault. The accessors of `Json` accept `Json?` so that they chain, `as_float` accepts integers, and `get<index>` out of range gives `null`. `decode_as` takes the target type as a "shape value" for now; it changes once a notation for explicit type arguments at a call is decided.
+- **The cases of a `match`**: the value of every case must be accepted by the type of the matched value.
+- **Modules**: a module may import itself, to no effect; a cycle of types across modules gets a cycle diagnostic that lists the cycle; reopening a namespace block does not carry the `using`s of the earlier block; an ambiguous name lists the qualified candidates; the language server shows namespace members by their full names; C++ modules can export values (`math::pi`).
+- **Collections**: returning a new value versus changing in place is no longer told apart by two names (`sort` and `sorted`): only `sort` remains, and it returns a new array; `xs = xs->sort` sorts in place when the old value is no longer used, the same optimization of the implementation as `acc = acc->append<v>`. Tensors keep an explicit in-place operator (2.10); arrays have none.
+- **Operator overloading**: a user overload more specific than a built-in one wins; overloading `==` gives `!=`; an operator declared in a namespace block belongs to the module.
+- **`std::cpp`**: the fault reports of generated programs are byte-identical to the interpreter's; recursion is counted exactly (as on every back end); the extra blank line of `println<fmt>` and the extra line feed of `print<fmt>` are defects of the interpreter and are fixed there; `std::cpp::bench` is removed; `map`/`filter` run sequentially in generated programs for now; `main` takes its parameters as `--arg name=value`, as the command line does.
+
 ---
 
 ## 3. `macro`
