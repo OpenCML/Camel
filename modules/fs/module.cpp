@@ -106,6 +106,25 @@ bool FsModule::load() {
             {"mkdir", false},
             {"mkdirs", false},
         });
+    // What each touches (docs/design/op-semantics 8): the file system, outside the program.
+    {
+        using camel::core::sem::AccessMode;
+        using camel::core::sem::externalAmbient;
+        camel::core::OperatorTable::instance().declareResources(
+            "fs",
+            {
+                {"read_text", externalAmbient("fs", AccessMode::Read)},
+                {"try_read_text", externalAmbient("fs", AccessMode::Read)},
+                {"read_chunk", externalAmbient("fs", AccessMode::Read)},
+                {"exists", externalAmbient("fs", AccessMode::Read)},
+                {"is_file", externalAmbient("fs", AccessMode::Read)},
+                {"is_dir", externalAmbient("fs", AccessMode::Read)},
+                {"file_size", externalAmbient("fs", AccessMode::Read)},
+                {"write_text", externalAmbient("fs", AccessMode::ReadModifyWrite)},
+                {"mkdir", externalAmbient("fs", AccessMode::ReadModifyWrite)},
+                {"mkdirs", externalAmbient("fs", AccessMode::ReadModifyWrite)},
+            });
+    }
     loaded_ = true;
     return true;
 }

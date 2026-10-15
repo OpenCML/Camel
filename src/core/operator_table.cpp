@@ -270,6 +270,31 @@ std::string checkSemantics(
             return *problem;
         }
     }
+    // 5. The resources: consistent in themselves, and with the traits (design 4.4, check 2): a
+    //    pure operator touches no resource; any other touches one, allocates one or has an
+    //    external effect; an external effect only where the traits allow one (not pure, not
+    //    state-only). The converse is a refinement (design 8.3): the traits of an assignment
+    //    count it as external (no trait says "writes a variable"), its resources say it writes
+    //    the program's own cell and nothing outside. The effect summaries stay computed from
+    //    the traits.
+    if (record.resources) {
+        const sem::ResourceSpec &r = *record.resources;
+        if (auto problem = sem::checkResources(r)) {
+            return "resources: " + *problem;
+        }
+        if (traits) {
+            if (traits->pure && (!r.accesses.empty() || r.allocates || r.externalEffect)) {
+                return "resources: a pure operator touches no resource";
+            }
+            if (!traits->pure && r.accesses.empty() && !r.allocates && !r.externalEffect) {
+                return "resources: an operator that is not pure touches, allocates or affects "
+                       "something (declare it pure instead)";
+            }
+            if (r.externalEffect && (traits->pure || traits->stateOnly)) {
+                return "resources: its traits give it no external effect";
+            }
+        }
+    }
     return {};
 }
 
@@ -300,6 +325,31 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
     declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(semantics)));
     entry.semantics.store(declarations_.back().get(), std::memory_order_release);
     epoch_.fetch_add(1, std::memory_order_acq_rel);
+}
+
+void OperatorTable::declareResources(std::string_view uri, sem::ResourceSpec resources) {
+    // A record of its own when the operator has none; otherwise the same record with the
+    // resources added, one minor version up (facts added, design 4.1). Load time only: the read
+    // of the old record and the declaration are not one step, as for every declaration.
+    sem::OperatorSemantics record;
+    if (const auto id = lookup(uri); id && semantics(*id) != nullptr) {
+        record = *semantics(*id);
+        if (record.resources != resources) {
+            ++record.key.minor;
+        }
+    } else {
+        record.key = sem::OperatorKey::of(uri);
+    }
+    record.resources = std::move(resources);
+    declareSemantics(uri, std::move(record));
+}
+
+void OperatorTable::declareResources(
+    std::string_view protocol,
+    std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators) {
+    for (const auto &[name, resources] : operators) {
+        declareResources(std::string(protocol) + ":" + std::string(name), resources);
+    }
 }
 
 std::optional<sem::OperatorKey> OperatorTable::key(OperId id) const {

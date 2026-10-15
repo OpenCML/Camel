@@ -354,6 +354,25 @@ CoreKinds registerCoreKinds() {
             return value && *value > 0 && *value < 256 ? std::optional<int>(int(*value)) : std::nullopt;
         },
     });
+    k.resources = registerKind(KindSpec<NodeResources>{
+        .key   = "core.resources",
+        .owner = "core",
+        .compute = [](std::span<const Anchor> anchors) -> std::optional<NodeResources> {
+            NodeResources r = resourcesOf(*anchors[0].graph, anchors[0].node);
+            return r.none() ? std::nullopt : std::optional<NodeResources>(std::move(r));
+        },
+        .print = [](const NodeResources &r) { return toString(r); },
+        .anchorsIn =
+            [](const GCGraph &graph) {
+                std::vector<std::vector<Anchor>> all;
+                for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+                    if (!resourcesOf(graph, ref).none()) {
+                        all.push_back({Anchor{&graph, ref}});
+                    }
+                }
+                return all;
+            },
+    });
     return k;
 }
 

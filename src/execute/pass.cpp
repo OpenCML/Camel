@@ -44,6 +44,7 @@
 #include "passes/test/facts.h"
 #include "passes/test/fault.h"
 #include "passes/test/index_semantics.h"
+#include "passes/test/resources.h"
 #include "passes/test/semantics.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
@@ -684,6 +685,11 @@ PassFactory lookupPassFactory(const std::string &name) {
     if (resolved == kIndexSemanticsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
         return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
             return std::make_unique<IndexSemanticsTestPass>(ctx);
+        };
+    }
+    if (resolved == kResourcesTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<ResourcesTestPass>(ctx);
         };
     }
     if (resolved == kFactStoreTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {

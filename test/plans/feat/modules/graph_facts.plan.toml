@@ -64,7 +64,7 @@ expect_output_not_contains = ["FACTS"]
 
 [[tests]]
 name = "inspect_facts"
-desc = "camel inspect --facts computes every core kind for the program and prints each fact with its stamp: shapes from types (matmul's [2, 4]; an open shape as rank ?), the index instance of matmul with its fma_f32 law and of a full sum, 'none' where the facts give no instance, reorder freedom (in-order contract for matmul, regroup and permute for the sum under @numeric(reassociate)), effect summaries through loops, a For loop over a constant array of 2 and a While loop, and the granted permission (class i, no stamp)."
+desc = "camel inspect --facts computes every core kind for the program and prints each fact with its stamp: shapes from types (matmul's [2, 4]; an open shape as rank ?), the index instance of matmul with its fma_f32 law and of a full sum, 'none' where the facts give no instance, reorder freedom (in-order contract for matmul, regroup and permute for the sum under @numeric(reassociate)), effect summaries through loops, a For loop over a constant array of 2 and a While loop, the resources of the nodes that touch any (println writes the console; pure tensor code touches none), and the granted permission (class i, no stamp)."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["inspect", "--facts", "${case}"]
@@ -91,6 +91,8 @@ assert(p && p.value === 'reassociate' && p.class === 'content' && p.stamp === nu
 const s = find('core.shape', 'layer', 2).stamp
 assert(s.revisions[0].graph === 'layer' && s.epoch === 0 && /^[0-9a-f]{16}$/.test(s.cone), 'shape stamp')
 assert(find('core.instance', 'layer', 2).stamp.epoch > 0, 'instance stamp has the epoch')
+assert(facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'main' && f.value === 'write ambient io:stdout; external'), 'println writes the console')
+assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'layer'), 'pure tensor code touches no resource')
 }
 """
 
@@ -108,10 +110,10 @@ const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
   'FACTS seeded core.shape 14', 'FACTS seeded core.instance 5', 'FACTS seeded core.reorder 2',
-  'FACTS seeded core.effects 9', 'FACTS seeded core.loopDomain 2',
+  'FACTS seeded core.effects 9', 'FACTS seeded core.loopDomain 2', 'FACTS seeded core.resources 4',
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice.loop1.body valid=5 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=2 stale=6', 'FACTS graph __root__ valid=0 revalidated=0 stale=1',
+  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
   'FACTS gone 0',
   'FACTS lowered count valid=0 revalidated=0 stale=2', 'FACTS lowered count.loop1.body valid=1 revalidated=0 stale=0',
   'FACTS lowered layer valid=6 revalidated=0 stale=0', 'FACTS lowered twice.loop1.body valid=5 revalidated=0 stale=0',
@@ -137,7 +139,7 @@ const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count.loop1.cond valid=1 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=2 stale=6', 'FACTS gone 0', '60.0',
+  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS gone 0', '60.0',
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 }

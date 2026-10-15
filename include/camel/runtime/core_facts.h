@@ -47,6 +47,13 @@
  *   core.permissions  Node, (i)   the numeric permissions the program granted the node: graph
  *                                 content (GCGraph::nodePermissions), read, never stored.
  *                                 Encodable.
+ *   core.resources    Node, (ii)  what the node does to resources besides computing its value
+ *                                 (camel/runtime/resources.h, resourcesOf): its accesses, each
+ *                                 with the node whose value names the resource, how its result
+ *                                 relates to them, what it allocates, whether it has an external
+ *                                 effect. Only at the nodes that touch something. Reads
+ *                                 declarations; reads the graphs a FUNC, CALL or LOOP runs (the
+ *                                 anchor's serial covers them).
  *
  * The prefix `tiles.` is reserved to the module tiles (facts.h, registerKind): its analyses
  * register their own kinds and store them with their target's hash (class iii).
@@ -59,6 +66,7 @@
 #include "camel/core/type/base.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/resources.h"
 
 #include <functional>
 #include <optional>
@@ -110,7 +118,7 @@ struct LoopDomain {
 
 /// The ids of the core's kinds (registered on the first call).
 struct CoreKinds {
-    KindId shape, instance, reorder, effects, loopDomain, permissions;
+    KindId shape, instance, reorder, effects, loopDomain, permissions, resources;
 };
 const CoreKinds &coreKinds();
 

@@ -92,6 +92,24 @@ bool OSModule::load() {
             {"get_chars", false},
             {"clear_input_buffer", false},
         });
+    // What each touches (docs/design/op-semantics 8): the process, the terminal, the machine.
+    {
+        using camel::core::sem::AccessMode;
+        using camel::core::sem::externalAmbient;
+        camel::core::OperatorTable::instance().declareResources(
+            "os",
+            {
+                {"exit", externalAmbient("process", AccessMode::ReadModifyWrite)},
+                {"sleep", externalAmbient("time:clock", AccessMode::Read)},
+                {"whoami", externalAmbient("process:environment", AccessMode::Read)},
+                {"cpu_count", externalAmbient("process:environment", AccessMode::Read)},
+                {"set_terminal_raw_mode", externalAmbient("io:terminal", AccessMode::Write)},
+                {"has_input", externalAmbient("io:stdin", AccessMode::Read)},
+                {"get_char", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
+                {"get_chars", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
+                {"clear_input_buffer", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
+            });
+    }
     loaded_ = true;
     return true;
 }

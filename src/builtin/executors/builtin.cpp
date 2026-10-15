@@ -372,6 +372,11 @@ void registerBuiltinOperatorTraits() {
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
     declareBuiltinOperatorSemantics();
+    std::vector<std::string_view> names;
+    for (const auto &[name, op] : getOpsImplMap()) {
+        names.push_back(name);
+    }
+    declareBuiltinOperatorResources(names);
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}

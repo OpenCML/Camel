@@ -112,6 +112,9 @@ std::string semanticsJson(const sem::OperatorSemantics &s) {
         }
         out += ",\"laws\":" + jsonList(laws);
     }
+    if (s.resources) {
+        out += ",\"resources\":" + jsonString(sem::toString(*s.resources));
+    }
     return out + ",\"algorithm\":" + jsonString(n.algorithm) + "}";
 }
 

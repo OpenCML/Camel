@@ -44,8 +44,12 @@
  *                      iteration domain, the access map of every operand and the write map
  *   laws               the reduction laws (section 7) its instances combine contributions by
  *
- * The resources and the definition graph (sections 8 and 9) come in phase 4, each a new
- * optional member of OperatorSemantics, absent until then.
+ * Phase 4 adds the resources (design section 8, camel/core/resource_semantics.h):
+ *
+ *   resources          what the operator reads and writes besides its operands' values: which
+ *                      operand names which resource, which part of it, how it is accessed, how
+ *                      the result relates to it, and whether running it is visible outside
+ *                      the program
  *
  * An operator's declaration says only what the operator does. Permissions are never part of
  * it: they are written by the program on its own code and stored on the graph, one byte per
@@ -55,6 +59,7 @@
 #pragma once
 
 #include "camel/core/index_semantics.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
 
@@ -217,6 +222,10 @@ struct OperatorSemantics {
     /// The faults the operator can raise. nullopt: not declared, the operator's mayFault trait
     /// decides ("may fault, anyhow"). An empty list: it never faults.
     std::optional<std::vector<FaultSpec>> faults;
+    /// The resources (camel/core/resource_semantics.h). nullopt: not declared, read
+    /// conservatively from the traits (conservativeResources): a pure operator touches none;
+    /// any other reads and writes every operand and may return any of them.
+    std::optional<ResourceSpec> resources;
 };
 
 } // namespace camel::core::sem

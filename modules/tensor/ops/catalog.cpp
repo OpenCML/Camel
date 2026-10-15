@@ -24,12 +24,39 @@
 #include "catalog.h"
 #include "registry.h"
 
+#include "camel/core/operator_table.h"
 #include "camel/runtime/core_facts.h"
 #include "../type.h"
 
 #include <mutex>
 
 namespace camel::tensor::ops {
+
+namespace {
+
+/**
+ * What the operators that are not pure touch (docs/design/op-semantics 8): the module's
+ * generator, the console, the file system, the size of its thread pool. After the operators'
+ * traits, which a declaration is checked against.
+ */
+void declareTensorResources() {
+    using namespace camel::core::sem;
+    auto &table = camel::core::OperatorTable::instance();
+    table.declareResources(
+        "tensor",
+        {
+            {"seed", externalAmbient("tensor:generator", AccessMode::Write)},
+            {"random", externalAmbient("tensor:generator", AccessMode::ReadModifyWrite)},
+            {"randn", externalAmbient("tensor:generator", AccessMode::ReadModifyWrite)},
+            {"show", externalAmbient("io:stdout", AccessMode::Write)},
+            {"load_npy", externalAmbient("fs", AccessMode::Read)},
+            {"save_npy", externalAmbient("fs", AccessMode::ReadModifyWrite)},
+            {"set_num_threads", externalAmbient("tensor:threads", AccessMode::Write)},
+            {"num_threads", externalAmbient("tensor:threads", AccessMode::Read)},
+        });
+}
+
+} // namespace
 
 void registerTensorOps() {
     static std::once_flag once;
@@ -49,6 +76,7 @@ void registerTensorOps() {
         }
         attachSemantics(defs);
         OpRegistry::instance().add("tensor", std::move(defs));
+        declareTensorResources();
         registerTensorTangentSpace();
         // The core's shape facts (core.shape, camel/runtime/core_facts.h) read a tensor's
         // element type and extents from its type, which this module defines.

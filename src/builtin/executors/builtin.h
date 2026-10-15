@@ -19,6 +19,9 @@
 
 #pragma once
 
+#include <span>
+#include <string_view>
+
 #include "camel/execute/executor.h"
 
 class BasicBuiltinExecutor : public Executor {
@@ -36,3 +39,9 @@ void registerBuiltinOperatorTraits();
 /// Declares the semantics of the built-in scalar arithmetic (builtin_semantics.cpp): stable
 /// keys, numeric semantics and faults. Called after the traits, which it is checked against.
 void declareBuiltinOperatorSemantics();
+
+/// Declares the resources of the built-in operators that touch any (builtin_semantics.cpp;
+/// docs/design/op-semantics section 8): `:var/*` and the assignments (`names`: the built-in
+/// operator names, `op/assn...` among them) their variable cell, the console and the profiler
+/// their ambient state. Called after the traits.
+void declareBuiltinOperatorResources(std::span<const std::string_view> names);
