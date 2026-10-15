@@ -60,8 +60,12 @@ result nodes in `indexed_nodes`. Instances are structurally validated against th
 captured declaration before scheduling. The parallel maximum implementation also
 requires a compatible f32 maximum law and the core's regroup, permute and block
 identity freedoms. Missing declarations choose the ordered implementation.
-CUDA address generation still uses the existing physical maps; retaining these
-instances does not yet constitute generic domain-driven lowering or graph facts.
+Transpose, permutation and slice now derive their physical offset and strides
+from the core access map via `rowMajorView`; their duplicate index inference has
+been removed. The domain must write output coordinates directly and read an
+unconditional affine source. Empty domains retain zero physical strides without
+evaluating unused addresses. CUDA still prints these physical maps; other
+operators and graph facts have not yet migrated to generic domain-driven lowering.
 
 FMA selection additionally requires the core declaration of correctly rounded
 f32 arithmetic sensitive to contraction; an opaque declaration grants no such
