@@ -154,6 +154,12 @@ struct GCBranchArm {
     gc_node_ref_t tail = kInvalidNodeRef;
 };
 
+/// The operator a back end's private copy of the program applies to a function value before an
+/// operator that reads graphs gets it (GCGraph::originalGraph, OperatorTraits::inspectsGraphs):
+/// the same function over the program's own graph. Implemented by the built-in executor
+/// (src/builtin/operators/graph.h); a program cannot name it.
+inline constexpr std::string_view kGraphOriginalUri = ":graph/original";
+
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
 inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
 
@@ -412,6 +418,14 @@ class GCGraph : public camel::core::rtdata::Object {
     size_t frameSize() const;
     bool isMacro() const;
     GCGraph *outerGraph() const;
+    /// The graph of the program this graph is a private copy of, nullptr when it is not one.
+    /// A back end that runs a rewritten copy of the program (lowerLoopsToTailRecursion, which
+    /// commits its session detached) gets a copy of every graph; each copy names the graph it
+    /// was made from, followed back to the first graph that is not a copy. Operators that read
+    /// the graphs of function values (OperatorTraits::inspectsGraphs) are handed these, so that
+    /// they see the program as it was written (op-semantics 11.4). Traced: the copy keeps it
+    /// alive.
+    GCGraph *originalGraph() const { return originalGraph_; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
     uintptr_t extraSlot(size_t index) const;
@@ -579,6 +593,7 @@ class GCGraph : public camel::core::rtdata::Object {
     camel::core::type::TupleType *staticDataType_  = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
     GCGraph *outerGraph_                           = nullptr;
+    GCGraph *originalGraph_                        = nullptr; // see originalGraph()
     GCGraph **refs_                                = nullptr;
     uint8_t *refRoles_                             = nullptr;
     gc_cnt_t refCount_                             = 0;

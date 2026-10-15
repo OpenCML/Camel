@@ -155,6 +155,14 @@ struct OperatorTraits {
     /// While it runs, the operator calls function values it received as arguments (the
     /// higher-order operators and `attempt`), so what it does depends on those functions.
     bool callsGraphs = false;
+    /// The operator reads the graphs of the function values it receives as arguments (it
+    /// compiles, exports or differentiates them) instead of only calling them. Such an operator
+    /// is given the program's own graphs, with their structure (a LOOP node: docs/design/
+    /// op-semantics 11.4), also on a back end that runs a private, lowered copy of the program:
+    /// lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) passes each of its operands of
+    /// function type through `:graph/original`, which takes a function value of the copy back
+    /// to the program's graph it was copied from (GCGraph::originalGraph).
+    bool inspectsGraphs = false;
 };
 
 /**
@@ -223,6 +231,10 @@ class OperatorTable {
     /// True when the operator is declared pure.
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
+
+    /// True when the operator reads the graphs of the function values it receives
+    /// (OperatorTraits::inspectsGraphs). Lock-free.
+    bool inspectsGraphs(OperId id) const { return (traitBits(id) & kInspectsGraphs) != 0; }
 
     /// True when running the operator is an effect visible outside the program's variables:
     /// it is neither pure nor state-only. True for an undeclared operator.
@@ -321,12 +333,13 @@ class OperatorTable {
     // declared it". kNoFault is stored inverted so that an all-zero byte is the conservative
     // reading of every trait.
     enum : uint8_t {
-        kDeclared    = 1 << 0,
-        kPure        = 1 << 1,
-        kElementwise = 1 << 2,
-        kStateOnly   = 1 << 3,
-        kNoFault     = 1 << 4,
-        kCallsGraphs = 1 << 5,
+        kDeclared       = 1 << 0,
+        kPure           = 1 << 1,
+        kElementwise    = 1 << 2,
+        kStateOnly      = 1 << 3,
+        kNoFault        = 1 << 4,
+        kCallsGraphs    = 1 << 5,
+        kInspectsGraphs = 1 << 6,
     };
 
     // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isMarked).

@@ -126,6 +126,13 @@ struct GCGraphBuildAccess {
         std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
+
+    /// Records that `copy` is a private copy of `source` (GCGraph::originalGraph): the original
+    /// of `source` when it is a copy itself, else `source`. Set by a detached commit before
+    /// anything can see `copy`.
+    static void setOriginal(GCGraph *copy, GCGraph *source) {
+        copy->originalGraph_ = source->originalGraph_ ? source->originalGraph_ : source;
+    }
 };
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft);
 void emitDraftNativePayload(

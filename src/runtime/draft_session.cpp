@@ -29,6 +29,7 @@
 
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/capacity.h"
+#include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/mm.h"
@@ -801,9 +802,17 @@ GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
         runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
     } else {
         runtimeRoot_ = rewritten.at(oldRuntimeRoot);
+        // A private copy of a program: each copy of a graph the program had (not of one the
+        // rewrite made) remembers that graph, for the operators that read graphs
+        // (GCGraph::originalGraph).
+        const std::vector<GCGraph *> programGraphs = collectReachableGraphs(oldRuntimeRoot);
+        const std::unordered_set<GCGraph *> fromProgram(programGraphs.begin(), programGraphs.end());
         std::vector<GCGraph *> graphs;
         graphs.reserve(rewritten.size());
-        for (const auto &[_, graph] : rewritten) {
+        for (const auto &[source, graph] : rewritten) {
+            if (fromProgram.contains(source)) {
+                GCGraphBuildAccess::setOriginal(graph, source);
+            }
             graphs.push_back(graph);
         }
         context_->trackDetachedRuntimeGraphs(graphs);

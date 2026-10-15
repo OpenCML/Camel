@@ -33,6 +33,7 @@
 #include "camel/runtime/loop_lowering.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
@@ -399,6 +400,71 @@ void replaceLoop(GraphDraft &draft, const LoopShape &loop, GCGraph *rec) {
     draft.addSubGraph(rec);
 }
 
+/// In `draft`, the inputs `inputs` with every one of function type passed through
+/// `:graph/original` (one new node per input, at `origin`).
+std::vector<gc_node_ref_t> throughOriginals(
+    GraphDraft &draft, std::span<const gc_node_ref_t> inputs, uint64_t origin, bool &changed) {
+    std::vector<gc_node_ref_t> result(inputs.begin(), inputs.end());
+    for (gc_node_ref_t &input : result) {
+        Type *type = draft.header(input)->dataType;
+        if (type != nullptr && type->code() == TypeCode::Function) {
+            const gc_node_ref_t value = input;
+            input = addOper(draft, type, kGraphOriginalUri, std::span<const gc_node_ref_t>(&value, 1));
+            draft.setNodeOrigin(input, origin);
+            changed = true;
+        }
+    }
+    return result;
+}
+
+/**
+ * The operators of the copy that read the graphs of the function values they receive
+ * (OperatorTraits::inspectsGraphs: Tiles compiling a function, an export) must see the program
+ * as it was written, not this private lowering (op-semantics 11.4). Every operand of function
+ * type of such an operator is passed through `:graph/original`, which takes a function value
+ * of the copy back to the program's graph it was copied from (GCGraph::originalGraph; the
+ * commit records it). The new node takes the operator's origin.
+ */
+void handOriginalsToGraphReaders(RuntimeGraphDraftSession &session) {
+    const auto &table = camel::core::OperatorTable::instance();
+    for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+        std::vector<gc_node_ref_t> readers;
+        if (const GraphDraft *draft = session.tryDraft(graph)) {
+            for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
+                const DraftNodeHeader *header = draft->alive(id) ? draft->header(id) : nullptr;
+                if (header && header->kind == GCNodeKind::Oper &&
+                    table.inspectsGraphs(
+                        reinterpret_cast<const GCOperBody *>(draft->payloadOf(id).data())->oper)) {
+                    readers.push_back(id);
+                }
+            }
+        } else {
+            for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+                if (graph->node(ref)->kind == GCNodeKind::Oper &&
+                    table.inspectsGraphs(graph->nodeBodyAs<GCOperBody>(ref)->oper)) {
+                    readers.push_back(ref); // a draft decoded from it numbers its nodes alike
+                }
+            }
+        }
+        if (readers.empty()) {
+            continue;
+        }
+        GraphDraft &draft = session.edit(graph);
+        for (gc_node_ref_t id : readers) {
+            const std::vector<gc_node_ref_t> norm(draft.normInputsOf(id).begin(), draft.normInputsOf(id).end());
+            const std::vector<gc_node_ref_t> with(draft.withInputsOf(id).begin(), draft.withInputsOf(id).end());
+            const uint64_t origin = draft.nodeOrigin(id);
+            bool changed          = false;
+            const std::vector<gc_node_ref_t> newNorm = throughOriginals(draft, norm, origin, changed);
+            const std::vector<gc_node_ref_t> newWith = throughOriginals(draft, with, origin, changed);
+            if (changed) {
+                draft.setNormInputs(id, newNorm);
+                draft.setWithInputs(id, newWith);
+            }
+        }
+    }
+}
+
 } // namespace
 
 bool programHasLoops(GCGraph *root) {
@@ -453,6 +519,7 @@ GCGraph *lowerLoopsToTailRecursion(const camel::core::context::context_ptr_t &co
     for (size_t i = 0; i < loops.size(); ++i) {
         replaceLoop(session.edit(loops[i].owner), loops[i], group.encoded(members[i].rec));
     }
+    handOriginalsToGraphReaders(session);
     return session.commit(/*detached=*/true);
 }
 

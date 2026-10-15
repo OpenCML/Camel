@@ -108,6 +108,17 @@ is in tail position on every back end, and the lowered loop is not counted again
 limit. The program is committed **detached** (`RuntimeGraphDraftSession::commit(true)`): the
 context's program keeps its LOOP nodes.
 
+**Operators that read graphs see the program's own.** An operator that reads the graph of a
+function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
+`inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `value_and_grad`) declares
+`OperatorTraits::inspectsGraphs`. The lowering passes every operand of function type of such an
+operator through `:graph/original` (`src/builtin/operators/graph.h`), which turns a function
+value of the private copy into the same function over the program's graph it was copied from
+(`GCGraph::originalGraph()`, recorded by the detached commit; the closure is kept, a copy has its
+original's ports). So Tiles sees a function's LOOP, and grad and the ONNX export refuse it where
+it is written, on every back end (`modules.tiles` `loop_structure_*`, `linear.loops`
+`loops.grad_refused_lowered`, `loops.onnx_refused_lowered`).
+
 **Recursion limit.** A round calls the condition and the body one level deep and returns before
 the next round; no number of rounds takes depth (`--max-recursion-depth 3` runs a million rounds
 on every back end: `linear.loops` `loops.not_recursion`).

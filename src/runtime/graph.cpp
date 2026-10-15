@@ -1662,6 +1662,7 @@ camel::core::rtdata::Object *GCGraph::clone(
         refCount_,
         nativePayload_,
         staticArea_);
+    graph->originalGraph_ = originalGraph_;
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
         graph->extraSlots_[i] = extraSlots_[i];
     }
@@ -1703,12 +1704,26 @@ void GCGraph::updateRefs(
     for (gc_cnt_t i = 0; i < refCount_; ++i) {
         traceEdge(refs_[i]);
     }
+    traceEdge(originalGraph_);
 }
 
 void GCGraphManager::replaceRoot(GCGraph *rootGraph) {
     std::vector<GCGraph *> newGraphs =
         rootGraph ? collectReachableGraphs(rootGraph) : std::vector<GCGraph *>{};
     std::unordered_set<GCGraph *> keep(newGraphs.begin(), newGraphs.end());
+    // A private copy still tracked (a back end's lowered program) names the program graph it was
+    // copied from (GCGraph::originalGraph): that graph and what it refers to stay, owned as part
+    // of the program, until a later replacement finds no copy pointing at them.
+    for (GCGraph *copy : detached_) {
+        GCGraph *original = copy ? copy->originalGraph_ : nullptr;
+        if (original && !keep.contains(original)) {
+            for (GCGraph *graph : collectReachableGraphs(original)) {
+                if (keep.insert(graph).second) {
+                    newGraphs.push_back(graph);
+                }
+            }
+        }
+    }
 
     for (GCGraph *graph : graphs_) {
         if (!graph || keep.contains(graph)) {

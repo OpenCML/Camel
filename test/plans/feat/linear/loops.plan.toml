@@ -266,6 +266,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
+name = "loops.grad_refused_lowered"
+desc = "grad run by std::fvm without std::macro: the back end lowered the loop in its private copy, but grad reads the program's own graph (OperatorTraits::inspectsGraphs) and refuses the loop at line 7 as std::nvm does."
+kind = "negative"
+case = "../../../cases/loops/grad_refused.cml"
+args = ["-E", "short", "${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_line = 7
+expect_output_contains = ["cannot differentiate through a 'loop' expression yet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.onnx_refused_lowered"
+desc = "export_model run by std::prl, which lowers loops in a private copy: the export reads the program's own graph and refuses the loop at line 8."
+kind = "negative"
+case = "../../../cases/loops/onnx_refused.cml"
+args = ["-E", "short", "${case}", "std::prl"]
+expect_exit = 1
+expect_output_contains = ["a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
 name = "loops.native_fvm"
 desc = "The native loop instruction of std::fvm and std::jit (CAMEL_FVM_NATIVE_LOOP=1; it is also what a debugger runs): the four shapes, captures and nesting, the edges, give what the lowering gives."
 kind = "behavior"

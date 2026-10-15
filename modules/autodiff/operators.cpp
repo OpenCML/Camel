@@ -220,6 +220,13 @@ void registerOperatorMetadata() {
     camel::core::OperatorTable::instance().declare(
         "autodiff",
         {{"grad", false}, {"value_and_grad", false}, {"vjp", false}});
+    // grad and value_and_grad differentiate the graph of the function value they receive: on a
+    // back end that lowered loops in a private copy they are handed the program's own graph, so
+    // they refuse a loop there as everywhere else (OperatorTraits::inspectsGraphs; op-semantics
+    // 11.4). vjp only attaches a rule to the function it is given and returns it to be called.
+    for (const char *name : {"autodiff:grad", "autodiff:value_and_grad"}) {
+        camel::core::OperatorTable::instance().set(name, {.pure = false, .inspectsGraphs = true});
+    }
     camel::core::OperatorTable::instance().set(
         "autodiff:stop_gradient",
         {.pure = true, .elementwise = false});

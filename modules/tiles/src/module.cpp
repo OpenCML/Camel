@@ -409,6 +409,14 @@ class TilesModule final : public BuiltinModule {
              {"benchmark", false},
              {"available", false},
              {"device", false}});
+        // These compile the graph of the function value they receive: a back end that runs a
+        // private copy of the program with its loops lowered hands them the program's own
+        // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
+        for (const char *name : {"run", "run_device", "source", "inspect", "benchmark"}) {
+            core::OperatorTable::instance().set(
+                std::string("tiles:") + name,
+                {.pure = false, .inspectsGraphs = true});
+        }
         loaded_ = true;
         return true;
     }

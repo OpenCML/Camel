@@ -53,16 +53,17 @@ uint8_t OperatorTable::encode(OperatorTraits traits) {
     return static_cast<uint8_t>(
         kDeclared | (traits.pure ? kPure : 0) | (traits.elementwise ? kElementwise : 0) |
         (traits.stateOnly ? kStateOnly : 0) | (traits.mayFault ? 0 : kNoFault) |
-        (traits.callsGraphs ? kCallsGraphs : 0));
+        (traits.callsGraphs ? kCallsGraphs : 0) | (traits.inspectsGraphs ? kInspectsGraphs : 0));
 }
 
 OperatorTraits OperatorTable::decode(uint8_t bits) {
     return OperatorTraits{
-        .pure        = (bits & kPure) != 0,
-        .elementwise = (bits & kElementwise) != 0,
-        .stateOnly   = (bits & kStateOnly) != 0,
-        .mayFault    = (bits & kNoFault) == 0,
-        .callsGraphs = (bits & kCallsGraphs) != 0,
+        .pure           = (bits & kPure) != 0,
+        .elementwise    = (bits & kElementwise) != 0,
+        .stateOnly      = (bits & kStateOnly) != 0,
+        .mayFault       = (bits & kNoFault) == 0,
+        .callsGraphs    = (bits & kCallsGraphs) != 0,
+        .inspectsGraphs = (bits & kInspectsGraphs) != 0,
     };
 }
 
