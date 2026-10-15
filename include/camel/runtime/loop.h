@@ -83,6 +83,7 @@ struct EffectSummary {
         return *this;
     }
     bool pure() const { return !external && !writesVariables; }
+    bool operator==(const EffectSummary &) const = default;
 };
 
 /// The effects of running `graph` once (nullptr: none).

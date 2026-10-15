@@ -24,6 +24,9 @@
 #include "catalog.h"
 #include "registry.h"
 
+#include "camel/runtime/core_facts.h"
+#include "../type.h"
+
 #include <mutex>
 
 namespace camel::tensor::ops {
@@ -47,6 +50,16 @@ void registerTensorOps() {
         attachSemantics(defs);
         OpRegistry::instance().add("tensor", std::move(defs));
         registerTensorTangentSpace();
+        // The core's shape facts (core.shape, camel/runtime/core_facts.h) read a tensor's
+        // element type and extents from its type, which this module defines.
+        camel::runtime::fact::registerShapeReader(
+            [](const camel::core::type::Type *type) -> std::optional<camel::runtime::fact::TensorShape> {
+                const TensorType *tensor = asTensorType(type);
+                if (tensor == nullptr) {
+                    return std::nullopt;
+                }
+                return camel::runtime::fact::TensorShape{.dtype = tensor->dtype(), .dims = tensor->shape()};
+            });
     });
 }
 

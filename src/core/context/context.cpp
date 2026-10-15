@@ -32,6 +32,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/core_facts.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
@@ -110,6 +111,7 @@ camel::runtime::fact::FactStore &Context::facts() {
     static std::mutex creation;
     std::lock_guard lock(creation);
     if (!facts_) {
+        (void)camel::runtime::fact::coreKinds(); // the core's kinds exist before any fact
         facts_ = std::make_unique<camel::runtime::fact::FactStore>();
     }
     return *facts_;

@@ -61,3 +61,35 @@ case = "../../../cases/facts/two_functions.cml"
 args = ["${case}", "test::facts"]
 expect_exit = 1
 expect_output_not_contains = ["FACTS"]
+
+[[tests]]
+name = "inspect_facts"
+desc = "camel inspect --facts computes every core kind for the program and prints each fact with its stamp: shapes from types (matmul's [2, 4]; an open shape as rank ?), the index instance of matmul with its fma_f32 law and of a full sum, 'none' where the facts give no instance, reorder freedom (in-order contract for matmul, regroup and permute for the sum under @numeric(reassociate)), effect summaries through loops, a For loop over a constant array of 2 and a While loop, and the granted permission (class i, no stamp)."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["inspect", "--facts", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const facts = input.normalized.stdout.split('\n').filter(l => l.startsWith('FACT ')).map(l => JSON.parse(l.slice(5)))
+const find = (kind, graph, node) => facts.find(f => f.kind === kind && f.anchors[0].graph === graph && (node === undefined || f.anchors[0].node === node))
+const value = (kind, graph, node) => { const f = find(kind, graph, node); assert(f, `no ${kind} at ${graph} ${node}`); return f.value }
+assert(value('core.shape', 'layer', 2) === 'f32 [2, 4]', 'matmul shape')
+assert(value('core.shape', 'twice', 0) === 'f32 [rank ?]', 'open shape')
+assert(value('core.instance', 'layer', 2).includes('law      fma_f32: fma_chain f32 -> f32 -> f32'), 'matmul instance')
+assert(value('core.instance', 'total', 1).includes('d0 < s0_0 reduction; d1 < s0_1 reduction'), 'sum instance')
+assert(facts.some(f => f.kind === 'core.instance' && f.value === 'none'), 'an instance-less node')
+assert(value('core.reorder', 'layer', 2) === 'contract', 'matmul freedom')
+assert(value('core.reorder', 'total', 1) === 'regroup, permute', 'sum freedom under reassociate')
+assert(value('core.effects', 'count') === 'may fault, may not terminate', 'loop effects')
+assert(value('core.effects', 'count.loop1.cond') === 'none', 'pure condition')
+const loopFor = find('core.loopDomain', 'twice')
+assert(loopFor && loopFor.anchors[1].graph === 'twice.loop1.body' && loopFor.value.includes('= 2; element port 0 reads xs(t)'), 'for domain')
+assert(value('core.loopDomain', 'count') === 'while: rounds unbounded (no sequence)', 'while domain')
+const p = find('core.permissions', 'total', 1)
+assert(p && p.value === 'reassociate' && p.class === 'content' && p.stamp === null, 'permissions')
+const s = find('core.shape', 'layer', 2).stamp
+assert(s.revisions[0].graph === 'layer' && s.epoch === 0 && /^[0-9a-f]{16}$/.test(s.cone), 'shape stamp')
+assert(find('core.instance', 'layer', 2).stamp.epoch > 0, 'instance stamp has the epoch')
+}
+"""
