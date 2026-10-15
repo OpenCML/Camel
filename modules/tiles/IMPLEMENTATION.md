@@ -349,3 +349,8 @@ domains. CUDA runtime code has now exceeded 800 lines; decomposition was evaluat
 The driver, cache, scoped resources and ownership transfer currently share private
 types. Extracting an internal runtime interface alongside asynchronous resource
 planning is preferable to leaking those types through the public program API.
+
+Committed ccdc7a76 rebuilds and passes 68/68 relevant checks on both local
+RTX 4060 Ti and remote RTX 3090 device 7, including all three VMs under GC stress.
+The remote log is retained in
+`docs/performance/tiles/2026-10-15-rtx3090-resident-output-tests.txt`.
