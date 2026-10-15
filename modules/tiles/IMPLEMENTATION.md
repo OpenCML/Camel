@@ -304,3 +304,8 @@ outputs and cross-call completion dependencies must be integrated next. Async
 submission and multi-stream resource graphs remain later work. The GC-stress
 test keeps old device values across forty new round trips and checks independent
 uploads, repeated downloads, type annotations and empty tensors.
+
+Committed 6fecb708 rebuilds successfully on Windows and Linux. Both the local
+RTX 4060 Ti and remote RTX 3090 device 7 pass 62/62 relevant checks, including
+the three resident-transfer cases under moving-GC stress. Remote output is
+retained in `docs/performance/tiles/2026-10-15-rtx3090-resident-tests.txt`.
