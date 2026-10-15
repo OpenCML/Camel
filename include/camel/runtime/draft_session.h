@@ -132,7 +132,11 @@ class RuntimeGraphDraftSession {
     void noteTypeSpecialization(const std::string &rootStableId);
 
     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
-    GCGraph *commit();
+    /// Encodes the edited closure and returns its root. A session over the program's root
+    /// replaces the program with it; with `detached` (a back end's private rewrite, such as
+    /// lowering loops before it runs) the program is left as it is and the new graphs are kept
+    /// alive as detached graphs (Context::trackDetachedRuntimeGraphs).
+    GCGraph *commit(bool detached = false);
 
   private:
     struct DraftEntry {

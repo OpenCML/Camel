@@ -48,6 +48,7 @@
 
 #pragma once
 
+#include "camel/core/loop_kind.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
@@ -110,6 +111,14 @@ enum class GCNodeKind : uint8_t {
     Sync = 12,
     Gate = 13,
     Dref = 14, // build-time only, see above
+    // A loop (design principles 2.10, 2.12, 2.13; docs/design/graph-model 3.5, the LOOP card):
+    // Norm inputs the array (For, ForWhile) then the k first values of the state; With inputs
+    // the m captured values, shared by the condition graph and the body graph; Ctrl inputs
+    // ordering. Its payload names the two graphs (GCLoopRef / GCLoopBody). Its value is the
+    // last state: the value when k = 1, the k-tuple when k > 1. Consumers read it through
+    // camel/runtime/loop.h (LoopView); those that do not run it natively lower it to a tail
+    // recursion first (lowerLoopsToTailRecursion), never in the shared program.
+    Loop = 15,
 };
 
 enum class GCReturnKind : uint8_t {
@@ -199,6 +208,35 @@ struct GCFuncRef {
     uint32_t reserved = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCFuncRef>);
+
+/// "No graph" in a GCLoopRef: the condition of a For loop.
+inline constexpr uint32_t kNoLoopGraph = UINT32_MAX;
+
+/// Payload of a LOOP node in a frozen graph: its form and the indexes of its condition graph
+/// (kNoLoopGraph for For) and of its body graph in the graph's reference table, where both are
+/// marked callee and nested (the LOOP node calls them each round; they are written inside the
+/// graph). (A draft's LOOP payload is a GCLoopBody, holding the graphs themselves.)
+struct GCLoopRef {
+    camel::core::LoopKind kind = camel::core::LoopKind::While;
+    uint8_t reserved0          = 0;
+    uint16_t reserved1         = 0;
+    uint32_t condRef           = kNoLoopGraph;
+    uint32_t bodyRef           = kNoLoopGraph;
+    uint32_t reserved2         = 0;
+};
+static_assert(std::is_trivially_copyable_v<GCLoopRef>);
+static_assert(sizeof(GCLoopRef) == 16, "A LOOP payload is two words.");
+
+/// Payload of a LOOP node in a draft (see GCLoopRef for frozen graphs).
+struct GCLoopBody {
+    class GCGraph *condGraph   = nullptr; // nullptr for a For loop
+    class GCGraph *bodyGraph   = nullptr;
+    camel::core::LoopKind kind = camel::core::LoopKind::While;
+    uint8_t reserved0          = 0;
+    uint16_t reserved1         = 0;
+    uint32_t reserved2         = 0;
+};
+static_assert(std::is_trivially_copyable_v<GCLoopBody>);
 
 /// Payload of a FUNC node in a draft (see GCFuncRef for frozen graphs).
 struct GCFuncBody {
@@ -419,10 +457,18 @@ class GCGraph : public camel::core::rtdata::Object {
     /// The NodeId of a record of this graph, kInvalidNodeRef for any other pointer.
     gc_node_ref_t nodeRef(const GCNode *node) const;
     GCGraph *directCalleeGraphOf(gc_node_ref_t ref) const;
+    /// LOOP node `ref`: its condition graph (nullptr for a For loop, or when `ref` is not a
+    /// LOOP node) and its body graph (nullptr when `ref` is not a LOOP node).
+    GCGraph *loopCondGraphOf(gc_node_ref_t ref) const;
+    GCGraph *loopBodyGraphOf(gc_node_ref_t ref) const;
+    /// LOOP node `ref`: its form. The node must be a LOOP node.
+    camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
+        return nodeBodyAs<GCLoopRef>(ref)->kind;
+    }
     gc_node_ref_t matchedJoinOutputOf(gc_node_ref_t ref) const;
 
     /// The payload of node `ref` as a `Body` (see the payload structs above). The node must
-    /// have one: every node of the kinds FUNC, CALL, ACCS, FILL, BRCH, JOIN and OPER does.
+    /// have one: every node of the kinds FUNC, CALL, ACCS, FILL, BRCH, JOIN, OPER and LOOP does.
     template <typename Body> const Body *nodeBodyAs(gc_node_ref_t ref) const {
         static_assert(
             std::is_trivially_copyable_v<Body>,
@@ -546,6 +592,15 @@ class GCGraph : public camel::core::rtdata::Object {
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
     uintptr_t extraSlots_[kExtraSlotCount]{};
 };
+
+/// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
+inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
+    return GCLoopBody{
+        .condGraph = graph.loopCondGraphOf(ref),
+        .bodyGraph = graph.loopBodyGraphOf(ref),
+        .kind      = graph.loopKindOf(ref),
+    };
+}
 
 class GCGraphManager {
   public:

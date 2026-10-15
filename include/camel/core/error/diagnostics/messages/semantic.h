@@ -130,6 +130,12 @@ enum class SemanticDiag : uint32_t {
     DeclaredTypeMismatch         = 0x000110,
     ModuleTypeCycle              = 0x000111,
     InvalidAnnotation            = 0x000112,
+    // The structured loop (design principles 2.10, 2.13): 0x120 and up.
+    LoopSequenceNotArray         = 0x000120,
+    LoopBodyTypeMismatch         = 0x000121,
+    LoopStateWithoutType         = 0x000122,
+    LoopConditionNotBool         = 0x000123,
+    LoopNameRepeated             = 0x000124,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

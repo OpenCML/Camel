@@ -837,6 +837,19 @@ class Builder {
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
+    /// A loop (design principles 2.10, 2.12, 2.13; camel/runtime/loop.h): the first values and
+    /// the array where the loop is, a graph for the condition and one for the body, and one
+    /// LOOP node calling them. The two graphs share one capture table (captureTwins_).
+    node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
+    /// Builds `graph`, a loop's condition or body graph made with its ports, from `exec`: the
+    /// names of its Norm ports are declared in it, and its result is the value of the block.
+    void buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec);
+    /// The condition and the body graph of a loop capture the same values in the same order
+    /// (design principles 2.12: one capture table): a capture made into one is made into the
+    /// other (captureInto).
+    std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> captureTwins_;
+    /// How many loops each graph has, for the names of their graphs (`f.loop2.body`).
+    std::unordered_map<DraftGraphBuilder *, size_t> loopCounts_;
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
     /// No arm is added to those the program wrote (design principles 2.10).

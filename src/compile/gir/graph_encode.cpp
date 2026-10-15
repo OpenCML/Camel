@@ -455,6 +455,12 @@ class EncodeSession {
                 };
                 payloadStorage = toPayloadBytes(body);
             } break;
+            case GCNodeKind::Loop: {
+                // The graphs are patched in once every runtime graph has its place
+                // (patchPreparedFuncPayloads), as for a FUNC node.
+                payloadStorage = toPayloadBytes(*reinterpret_cast<const camel::runtime::GCLoopBody *>(
+                    graph->draft().payloadOf(sourceId).data()));
+            } break;
             case GCNodeKind::Oper:
                 payloadStorage = toOperPayloadBytes(graph->operTarget(sourceId));
                 break;
@@ -656,6 +662,14 @@ class EncodeSession {
                 ASSERT(body != nullptr, "Prepared FUNC payload cannot be null.");
                 body->calleeGraph =
                     resolvePreparedGraph(prepared.source->funcTarget(sourceId))->runtime;
+            }
+            if (header->kind == GCNodeKind::Loop) {
+                auto *body = reinterpret_cast<camel::runtime::GCLoopBody *>(
+                    prepared.draft->mutablePayloadOf(preparedId).data());
+                const auto &target = prepared.source->loopTarget(sourceId);
+                body->condGraph =
+                    target.cond ? resolvePreparedGraph(target.cond)->runtime : nullptr;
+                body->bodyGraph = resolvePreparedGraph(target.body)->runtime;
             }
             ++preparedId;
         }

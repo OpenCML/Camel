@@ -368,6 +368,14 @@ void visitDraftGraphs(
             continue;
         }
         const DraftNodeHeader *header = draft.header(id);
+        if (header && header->kind == GCNodeKind::Loop) {
+            const auto *loop = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(id).data());
+            if (loop->condGraph) {
+                visitor(loop->condGraph);
+            }
+            visitor(loop->bodyGraph);
+            continue;
+        }
         if (!header || header->kind != GCNodeKind::Func) {
             continue;
         }
@@ -403,6 +411,13 @@ std::vector<GCGraph *> collectDraftDependencyGraphs(const GraphDraft &draft) {
             continue;
         }
         const DraftNodeHeader *header = draft.header(id);
+        if (header && header->kind == GCNodeKind::Loop) {
+            // A LOOP node calls its two graphs each round: they are callees too.
+            const auto *loop = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(id).data());
+            pushUniqueGraph(dependencies, loop->condGraph);
+            pushUniqueGraph(dependencies, loop->bodyGraph);
+            continue;
+        }
         if (!header || header->kind != GCNodeKind::Func) {
             continue;
         }
@@ -740,7 +755,7 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs()
     return collectCommitClosure();
 }
 
-GCGraph *RuntimeGraphDraftSession::commit() {
+GCGraph *RuntimeGraphDraftSession::commit(bool detached) {
     if (!runtimeRoot_) {
         return nullptr;
     }
@@ -782,7 +797,7 @@ GCGraph *RuntimeGraphDraftSession::commit() {
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
     // program is left as it is.
-    if (context_->currentRuntimeRoot() == oldRuntimeRoot) {
+    if (!detached && context_->currentRuntimeRoot() == oldRuntimeRoot) {
         runtimeRoot_ = context_->installRuntimeRoot(rewritten.at(oldRuntimeRoot));
     } else {
         runtimeRoot_ = rewritten.at(oldRuntimeRoot);

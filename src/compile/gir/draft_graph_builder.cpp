@@ -234,6 +234,26 @@ DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t 
     return node;
 }
 
+runtime::DraftNode *DraftGraphBuilder::addLoopNode(
+    camel::core::LoopKind kind, const LoopTarget &target, camel::core::type::Type *type) {
+    ASSERT(target.body != nullptr, "A LOOP node needs a body graph.");
+    // The draft holds no graph yet: the encoder writes the runtime graphs of the targets
+    // (graph_encode.cpp), as it does for the callee of a FUNC node.
+    const runtime::gc_node_ref_t id = draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type);
+    auto *node                      = draft_->node(id);
+    loopTargets_[node]              = target;
+    addDependencyGraph(target.cond);
+    addDependencyGraph(target.body);
+    return node;
+}
+
+const DraftGraphBuilder::LoopTarget &
+DraftGraphBuilder::loopTarget(const runtime::DraftNode *node) const {
+    auto it = loopTargets_.find(node);
+    ASSERT(it != loopTargets_.end(), "DraftGraphBuilder loop target not found.");
+    return it->second;
+}
+
 runtime::DraftNode *
 DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
@@ -413,6 +433,7 @@ void DraftGraphBuilder::eraseNodeColdData(const runtime::DraftNode *node) {
     nodeAccsKeys_.erase(node);
     nodePortVars_.erase(node);
     funcTargets_.erase(node);
+    loopTargets_.erase(node);
     drefTargets_.erase(node);
     operTargets_.erase(node);
 }

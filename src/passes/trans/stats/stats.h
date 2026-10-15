@@ -43,6 +43,7 @@ struct GraphStats {
     size_t indirectCalls = 0;
     size_t closures      = 0;
     size_t branches      = 0;
+    size_t loops         = 0; // LOOP nodes
 
     std::string toJson() const;
 };

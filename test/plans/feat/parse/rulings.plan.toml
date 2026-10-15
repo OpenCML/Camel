@@ -111,16 +111,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "rulings.loop_not_implemented"
-desc = "A loop is reported where it stands as not built yet (the LOOP node of the graph is the next step), not compiled into something else."
-kind = "negative"
+name = "rulings.loop_graph"
+desc = "Each loop is one LOOP node of the graph, of its form, with its condition and body graphs (`LOOP for-while cond=main.loop4.cond body=main.loop4.body`)."
+kind = "behavior"
 case = "../../../cases/parse/rulings/loop_forms.cml"
-args = ["-E", "short", "${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_line = 8
-expect_output_contains = ["'loop' is not supported: the LOOP node of the graph is not built yet"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+expect_stdout_contains = ["LOOP for body=main.loop1.body", "LOOP while cond=main.loop2.cond", "LOOP for-while cond=main.loop4.cond body=main.loop4.body"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
