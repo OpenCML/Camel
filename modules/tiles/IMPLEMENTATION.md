@@ -631,3 +631,26 @@ compare the complete optimized schedule against unfused CUDA, not the isolated
 incremental contribution of epilogue fusion or any external compiler. Shared
 row intermediates and full normalization fusion remain unfinished.
 
+# Runtime host scalar inputs (2026-10-16)
+
+Commit `23ede28d` snapshots host float arguments and captured floats as exact f64
+input bits instead of emitting their values as `constant64` source. Graph DATA
+literals remain constants; integer attributes and static branch conditions still
+specialize. Typed input validation, pinned upload, identity download and retained
+device outputs handle the same owned payload. A cast to f32 can fuse into its
+pointwise consumer without an extra conversion kernel.
+
+The runtime scalar case checks unchanged CUDA source across changed arguments,
+tensor scales and captured values; checks different results after cache reuse;
+preserves 1+2^-52 through host/device identity paths; and verifies a one-kernel
+tensor scale and a warm code-cache hit after changing scalar values. It runs on
+nvm/fvm/jit. Native mutations reject missing/mixed scalar payloads, incorrect
+dtype and non-scalar f64 shapes. No GC pointers enter the stored payload.
+
+Local relevant tests passed 87/87. After commit formatting, the standard build,
+native tests and all three VM scalar cases passed again. The isolated RTX 3090
+device 7 checkout rebuilt the committed tree and passed 87/87, recorded in
+`docs/performance/tiles/2026-10-16-rtx3090-runtime-scalars-tests.txt`.
+Semantic-fingerprint caching, symbolic-shape kernels and allocation/transfer
+amortization remain separate unfinished work.
+
