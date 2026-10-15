@@ -12,10 +12,12 @@
 #include "tiles/device.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <cstdint>
 #include <limits>
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
+#include <vector>
 
 namespace camel::tiles {
 size_t bytes(const Node &node) {

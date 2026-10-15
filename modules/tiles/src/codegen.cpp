@@ -11,6 +11,7 @@
 // Shape-specialized CUDA lowering; all intermediate arrays remain on the device.
 #include "tiles/program.h"
 #include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <sstream>
 #include <stdexcept>

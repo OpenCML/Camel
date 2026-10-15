@@ -15,13 +15,17 @@
 #include <chrono>
 #include <climits>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <nlohmann/json.hpp>
+#include <span>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #ifdef CAMEL_TILES_CUDA
 #include "tiles/internal/cuda_backend.h"
