@@ -5,7 +5,8 @@ operator touches (design section 8) and the definition graphs of operators (desi
 The headers are `include/camel/core/resource_semantics.h` (the declarations),
 `include/camel/runtime/resources.h` (their resolution in a graph and the scheduler's queries) and
 `include/camel/runtime/definitions.h` (building and expanding definitions). Nothing here changes
-what a program computes or how any graph is printed: the declarations are read only by those who
+how any graph is printed, and what a program computes only where a kernel was made to agree with
+its definition (`log_softmax`, section 2.4): the declarations are read only by those who
 ask, and no pass or back end expands a definition by default.
 
 ## 1. Resources
@@ -158,16 +159,17 @@ node it can, to compare kernels with their definitions.
 
 ### 2.4 Kernels against definitions
 
-On `std::nvm`, `std::fvm`, `std::jit` and `std::prl`, the kernels of `softmax`, `mean`, `relu`
-and `sigmoid` give the same output as their expanded definitions, element for element, on special
-values (NaN, infinities, signed zeros, subnormals), several shapes and axes, an empty tensor and
-pseudo-random inputs (a NaN is compared as NaN: the printed text carries no sign or payload).
+On `std::nvm`, `std::fvm`, `std::jit` and `std::prl`, the kernels of `softmax`, `log_softmax`,
+`mean`, `relu` and `sigmoid` give the same output as their expanded definitions, element for
+element, on special values (NaN, infinities, signed zeros, subnormals), several shapes and axes,
+an empty tensor and pseudo-random inputs (a NaN is compared as NaN: the printed text carries no
+sign or payload).
 
-`log_softmax` does not agree: its kernel computes `(x - m) - f32(log(f64 sum))`, the logarithm
-taken in f64, and tensors have no f64 elements, so the definition can only round the sum to f32
-and take the f32 `log`; the last bits differ. Under design Q10 (the definition is normative) the
-kernel is the defect, but changing it changes the results of existing programs, which this phase
-does not do: the disagreement is recorded (a test locks it) until the language author rules.
+The `log_softmax` kernel was changed to follow its definition (design Q10: the definition is
+normative). It used to compute `(x - m) - f32(log(f64 sum))`, the logarithm taken in f64, which no
+definition can say (tensors have no f64 elements); it now rounds the sum to f32, takes the
+logarithm by the loop of the `log` operator and subtracts in f32. Its results may change in the
+last bits; no expected output of the repository's tests changed.
 
 Gradients: autodiff through a definition and the operator's own derivative rule are different
 algorithms; they agree within a relative 1e-5 (measured: below 1.4e-7; `mean` and `relu`
@@ -182,6 +184,5 @@ exactly). Expanding before `std::macro` makes both sides go through the definiti
 - `test/plans/feat/modules/definitions.plan.toml`: the definitions the tensor module declares and
   each refusal (`test::definitions`); the kernels against their expanded definitions on
   `std::nvm` and `std::fvm` (`test/cases/definitions/kernels.cml`, run with and without
-  `test::expand_definitions`, the same golden output on four back ends); log_softmax against its
-  definition (the known disagreement); gradients through the definitions against the operators'
+  `test::expand_definitions`, the same golden output on four back ends); gradients through the definitions against the operators'
   own derivative rules; `inspect --ops` shows each definition.

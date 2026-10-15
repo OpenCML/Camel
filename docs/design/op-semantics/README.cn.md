@@ -6,7 +6,7 @@
 > **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）已实现，见下面的第四阶段一段与第 8、9 节开头的实施状态。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
 >
 > **第二阶段已实现（`lane/opsem-p2`）**：下标语义的数据结构与查询（`camel/core/index_semantics.h`：准仿射表达式、迭代域、访问与写映射、四种越界策略、间接访问的形式、归约律与 `reorderFreedom`、`splitDims`、`rowMajorView`；`camel/runtime/operator_instance.h`：冻结图节点上的实例）；第一批声明（逐元素族连同广播、`transpose`/`permute`/`slice`/`reshape`/`flatten`/`unsqueeze`/`broadcast_like`/`expand_axis`、`sum`/`mean` 全量与按轴、`max`/`min` 按轴（张量模块没有全量的 `max`/`min`）、`sum_to`、`matmul`、`nn` 的两种池化作为窗口的例子、`unordered_reduce` 的律）；`camel inspect --instances`；声明求值器 `tensor::test_index_eval`（与 CPU 内核逐位比较，见第 12 节）。给 Tiles 的说明见 14.2 节。与本稿字面不同的几处（均为窄读，见 14.2 与各处注释）：实例只有一个 `law` 下标（`Write` 不另存）；`Domain::guard` 表示分块尾部不存在的点；`LawInit::Operand`（`unordered_reduce` 的 `initial`）；`LawEmpty::Fault` 指归约维为空即故障（`max_axis` 的内核在结果为空时也拒绝空轴）；声明附在张量算子的 `OpDef::index` 上，与 `infer` 并列。
-> **第四阶段已实现（`lane/opsem-p4`）**：资源的声明与查询（`camel/core/resource_semantics.h`、`camel/runtime/resources.h`；事实种类 `core.resources`），见第 8 节开头；定义图的登记、构建与检查、展开（`OperatorTable::declareDefinition`、`camel/runtime/definitions.h`；`stdlib/tensor_definitions.cml`），见第 9 节开头。给 Tiles 的说明见 14.4 节。没有改变任何程序的结果与图的转储；没有遍或后端默认展开定义图。`Indirect` 访问的 gather/scatter 算子仍不存在（数据结构自第二阶段就有），本阶段没有声明。
+> **第四阶段已实现（`lane/opsem-p4`）**：资源的声明与查询（`camel/core/resource_semantics.h`、`camel/runtime/resources.h`；事实种类 `core.resources`），见第 8 节开头；定义图的登记、构建与检查、展开（`OperatorTable::declareDefinition`、`camel/runtime/definitions.h`；`stdlib/tensor_definitions.cml`），见第 9 节开头。给 Tiles 的说明见 14.4 节。没有改变图的转储；程序的结果只有 `log_softmax` 的变了（内核改为照它的定义，Q10）；没有遍或后端默认展开定义图。`Indirect` 访问的 gather/scatter 算子仍不存在（数据结构自第二阶段就有），本阶段没有声明。
 
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
 依据：`docs/design-principles.cn.md`（2.9–2.13，尤其 2.13 的"浮点的数值契约"与 `do` 式循环头；第 6 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
@@ -773,7 +773,7 @@ struct ResourceSpec {
 > - **版本**：定义随算子的键（次版本）；建好的定义记下图的可移植内容散列（`portableGraphHash`），缓存展开结果或"已对照定义检查过的内核"时以它为键。
 > - **展开**（`expandDefinition(session, draft, node, {inlineBody})`）：把一个 OPER 节点换成对定义图的直接调用（值、控制边、源码位置照旧），省略的操作数换成常量；默认再内联。定义自己的运算节点加上被展开节点的许可（6.4）。操作数的类型须是定义接受的（`Tensor<f32>`；元素类型未知的 `Tensor` 不展开）。**没有任何遍或后端默认调用它**（9.3）；测试遍 `test::expand_definitions` 用它对照内核。
 > - **第一批定义**：`softmax`（带稳定化与轴；f64 累加的 `sum`；没有元素的张量就是自己的结果）、`log_softmax`、`mean`（全量：f64 的和除以个数）、`relu`（`maximum(x, +0)`）、组合激活 `sigmoid`（`1 / (1 + exp(-x))`）。
-> - **与内核的对照**：`softmax`、`mean`、`relu`、`sigmoid` 的内核与展开后的定义在 nvm/fvm/jit/prl 上逐位一致（含 NaN、无穷、±0、次正规数、空张量；NaN 只按"是 NaN"比较）。**`log_softmax` 不一致**：内核是 `(x - m) - f32(log_f64(sum_f64))`，在 f64 里取对数；张量没有 f64 的元素类型，定义只能写成先把和舍入为 f32 再取 f32 的对数，最后几位不同。按 Q10（定义是规范）应改内核，但那会改变现有程序的结果（本阶段不许），所以登记为已知分歧，留待裁定（14.4）。经定义求导与算子自己的导数规则相对差小于 1e-7（契约：1e-5，不是逐位，因为是不同的算法）；先展开再求导两边完全相同。
+> - **与内核的对照**：`softmax`、`log_softmax`、`mean`、`relu`、`sigmoid` 的内核与展开后的定义在 nvm/fvm/jit/prl 上逐位一致（含 NaN、无穷、±0、次正规数、空张量；NaN 只按"是 NaN"比较）。为此 **`log_softmax` 的内核改了**（Q10：定义是规范）：以前是 `(x - m) - f32(log_f64(sum_f64))`，在 f64 里取对数；张量没有 f64 的元素类型，定义写不出这一步，所以内核改为照定义：和舍入为 f32，用 `log` 算子的循环取对数，再做一次 f32 减法。`log_softmax` 的结果可能在最后几位变化；仓库里没有测试的期望值因此改变（张量、自动微分、ONNX 的计划照旧通过）。经定义求导与算子自己的导数规则相对差小于 1e-7（契约：1e-5，不是逐位，因为是不同的算法）；先展开再求导两边完全相同。
 >
 > 细节见 `docs/technical/41_resources_and_definitions.md` 第 2 节。
 
@@ -1240,7 +1240,7 @@ auto cached = facts.get<MyLayout>(kLayout, fact::Anchor{graph, ref}, target); //
 
 ### 14.4 第四阶段给 Tiles 的（`lane/opsem-p4`）
 
-**CPU 的结果、图的转储、程序的输出都没有变**；没有遍或后端默认展开定义图。因为加了定义，`tensor:relu`、`tensor:mean` 的键升为 `@1.2`，`tensor:softmax`、`tensor:log_softmax`、`tensor:sigmoid` 第一次有语义记录（`@1.0`，只有定义）；编译缓存若记了这些键，次版本变化按 4.1 处理。
+**图的转储不变；CPU 的结果只有 `log_softmax` 变了**（它的内核改为照定义，第 9 节开头：对数在 f32 里取，最后几位可能不同；Tiles 以定义为准对照）；没有遍或后端默认展开定义图。因为加了定义，`tensor:relu`、`tensor:mean` 的键升为 `@1.2`，`tensor:softmax`、`tensor:log_softmax`、`tensor:sigmoid` 第一次有语义记录（`@1.0`，只有定义）；编译缓存若记了这些键，次版本变化按 4.1 处理。
 
 **Tiles 自己的算子已声明资源**（`modules/tiles/src/module.cpp` 的 `load()`，核心为此对 Tiles 做的第二处改动；若 Tiles 想自己维护，直接改那一段即可）：设备内存是外部对象 `tiles:device`，驱动与设备是环境状态 `tiles:driver`；`upload` 新建 `tiles:device`；`download`、`run`、`benchmark` 读第 0 个操作数里的设备值；`run_device` 同样读，并新建 `tiles:device`，结果可能与输入别名（"returned inputs share native ownership"）；`source`、`inspect` 读 `tiles:driver`；全部有外部效应（与 traits 一致）。
 
@@ -1291,10 +1291,9 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 保留高层算子（映射到自己的内核）与展开后融合都可以，二者都必须与定义一致：`softmax`、`mean`、`relu`、`sigmoid` 在 CPU 上已逐位一致，Tiles 的实现按同一标准对照（`exp`/`log` 按声明的上界）。Tiles 今天把 softmax 写成组合，正与定义同形；注意定义里"没有元素的张量就是自己的结果"这一分支，以及 `max_axis` 用 IEEE `maximum`（14.1）。
 
 **待问（给负责人）**：
-1. `log_softmax` 的内核与定义不一致（第 9 节开头）：改内核为 f32 的和与 f32 的 `log`（结果的最后几位会变），还是给张量加能在 f64 里取对数的写法、让定义照内核写？在裁定之前定义按"能写出来的"登记，内核不动。
-2. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rand:generator`）。
-3. `mean` 对空张量：内核的故障是"mean of an empty tensor"，定义是标量除以零（`DivisionByZero`）；都是故障，诊断不同。是否要求故障的种类也一致？
-4. 定义库在第一次被问到时编译，而不是模块装载时（第 9 节开头的理由）；若要"装载时建出"，每个导入 `tensor` 的程序都要多编一个库。
+1. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rand:generator`）。
+2. `mean` 对空张量：内核的故障是"mean of an empty tensor"，定义是标量除以零（`DivisionByZero`）；都是故障，诊断不同。是否要求故障的种类也一致？
+3. 定义库在第一次被问到时编译，而不是模块装载时（第 9 节开头的理由）；若要"装载时建出"，每个导入 `tensor` 的程序都要多编一个库。
 
 ---
 
