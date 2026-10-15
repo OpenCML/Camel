@@ -93,13 +93,6 @@ void bindMarkedFunctionFrame(
     }
 }
 
-void validateVariableBodyBytes(const GCNode *node, size_t headerBytes, const char *what) {
-    ASSERT(node != nullptr, "NodeVM variable-body validation received a null node.");
-    ASSERT(
-        node->bodyBytes() >= headerBytes,
-        std::format("NodeVM {} payload is smaller than its fixed header.", what));
-}
-
 inline NodeVMGraphCache *nodeVmCacheOf(camel::runtime::GCGraph *graph) {
     return graph ? reinterpret_cast<NodeVMGraphCache *>(graph->extraSlot(kNodeVmCacheSlot))
                  : nullptr;
@@ -228,7 +221,7 @@ NodeVMSchedPass::buildTopoNodes(camel::runtime::GCGraph *runtimeGraph) {
     cache->directCallFeedsTailJoin.resize(cache->topoNodeRefs.size(), 0);
     cache->directCallArgOffsets.resize(cache->topoNodeRefs.size() + 1, 0);
     cache->branchArmEntryOffsets.resize(cache->topoNodeRefs.size() + 1, 0);
-    cache->dataIndexByRef.resize(runtimeGraph->nodeBlockCount(), 0);
+    cache->dataIndexByRef.resize(runtimeGraph->nodeCount(), 0);
     cache->tailValueRef =
         hasValueReturn ? camel::execute::resolveRuntimeTailValueRef(runtimeGraph) : kInvalidNodeRef;
     const auto *tailValueNode =
@@ -544,7 +537,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 ASSERT(!normInputs.empty(), "CAST node must have one norm input.");
                 const auto srcIdx = dataIndexOf(currCache, normInputs.front());
                 Type *srcType     = currFrame->typeAt<Type>(srcIdx);
-                Type *tgtType     = n->dataType;
+                Type *tgtType     = n->dataType();
                 slot_t value      = currFrame->get<slot_t>(srcIdx);
                 slot_t result     = tgtType->castSlotFrom(value, srcType);
                 currFrame->set(n->dataIndex, result);
@@ -571,7 +564,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 const auto dataInputs = currRuntimeGraph->withInputsOf(nodeRef);
                 ASSERT(!normInputs.empty(), "FILL node must have one source input.");
                 const auto srcIdx = dataIndexOf(currCache, normInputs.front());
-                Type *srcType     = n->dataType;
+                Type *srcType     = n->dataType();
                 ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced in NodeVM.");
                 Object *sourceObj = currFrame->get<Object *>(srcIdx);
                 ASSERT(sourceObj != nullptr, "FILL source object is null in NodeVM.");
@@ -595,7 +588,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 ASSERT(!normInputs.empty(), "ACCS node must have one source input.");
                 gc_data_idx_t srcIdx = dataIndexOf(currCache, normInputs.front());
                 const auto *body     = currRuntimeGraph->nodeBodyAs<GCAccsBody>(nodeRef);
-                validateVariableBodyBytes(n, sizeof(GCAccsBody), "ACCS");
                 if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
                     size_t idx = body->value;
                     Tuple *t   = currFrame->get<Tuple *>(srcIdx);
@@ -649,7 +641,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 if (n->dataIndex == 0) {
                     break;
                 }
-                if (n->dataType == Type::Void()) {
+                if (n->dataType() == Type::Void()) {
                     currFrame->set(n->dataIndex, NullSlot);
                     break;
                 }
@@ -750,7 +742,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
             case GCNodeKind::Oper: {
                 auto *body =
                     const_cast<GCOperBody *>(currRuntimeGraph->nodeBodyAs<GCOperBody>(nodeRef));
-                validateVariableBodyBytes(n, sizeof(GCOperBody), "OPER");
                 operator_t opFunc = body->op;
                 if (!opFunc) {
                     const std::string uri(body->uri());

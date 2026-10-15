@@ -125,8 +125,8 @@ TaskflowExecSchedPass::buildRuntimeBuildInfo(GCGraph *graph) {
     ASSERT(graph != nullptr, "Taskflow build info requires a runtime graph.");
 
     RuntimeBuildInfo info;
-    info.skipNodes.resize(graph->nodeBlockCount(), 0);
-    info.branchArms.resize(graph->nodeBlockCount());
+    info.skipNodes.resize(graph->nodeCount(), 0);
+    info.branchArms.resize(graph->nodeCount());
 
     for (gc_node_ref_t nodeRef : camel::execute::buildReachableExecutionTopoIndices(graph)) {
         const auto *node = requireNode(graph, nodeRef);
@@ -624,9 +624,8 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
 
     // Where each operator of the graph reads its arguments, and room for the operator itself
     // once it has been resolved (executePreparedOperator).
-    plan->opers.resize(graph->nodeBlockCount());
-    plan->resolvedOpers =
-        std::make_unique<std::atomic<operator_t>[]>(graph->nodeBlockCount());
+    plan->opers.resize(graph->nodeCount());
+    plan->resolvedOpers = std::make_unique<std::atomic<operator_t>[]>(graph->nodeCount());
     for (gc_node_ref_t ref : plan->topo) {
         if (ref >= plan->opers.size() || requireNode(graph, ref)->kind != GCNodeKind::Oper) {
             continue;
@@ -682,7 +681,7 @@ TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
 void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
     GCGraph *graph         = plan.graph;
     const auto &topo       = plan.topo;
-    const size_t blocks    = graph->nodeBlockCount();
+    const size_t blocks    = graph->nodeCount();
     constexpr uint32_t kNo = std::numeric_limits<uint32_t>::max();
 
     std::vector<uint32_t> pos(blocks, kNo);
@@ -1673,7 +1672,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
         if (node->dataIndex == 0) {
             return NullSlot;
         }
-        if (node->dataType == Type::Void()) {
+        if (node->dataType() == Type::Void()) {
             frame->set(node->dataIndex, NullSlot);
             return NullSlot;
         }
@@ -1713,7 +1712,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
         ASSERT(!normInputs.empty(), "Taskflow linear CAST node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         Type *srcType                   = frame->typeAt<Type>(srcIdx);
-        Type *tgtType                   = node->dataType;
+        Type *tgtType                   = node->dataType();
         slot_t value                    = frame->get<slot_t>(srcIdx);
         slot_t result                   = NullSlot;
         try {
@@ -1732,7 +1731,7 @@ slot_t TaskflowExecSchedPass::executeLinearNode(
         const auto withInputs = graph->withInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow linear FILL node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        Type *srcType                   = node->dataType;
+        Type *srcType                   = node->dataType();
         ASSERT(
             camel::core::type::isGCTraced(srcType->code()),
             "Taskflow linear FILL target must be GC-traced.");
@@ -1978,7 +1977,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         if (node->dataIndex == 0) {
             return NullSlot;
         }
-        if (node->dataType == Type::Void()) {
+        if (node->dataType() == Type::Void()) {
             frame->set(node->dataIndex, NullSlot);
             return NullSlot;
         }
@@ -2018,7 +2017,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         ASSERT(!normInputs.empty(), "Taskflow CAST node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
         Type *srcType                   = frame->typeAt<Type>(srcIdx);
-        Type *tgtType                   = node->dataType;
+        Type *tgtType                   = node->dataType();
         slot_t value                    = frame->get<slot_t>(srcIdx);
         slot_t result                   = NullSlot;
         try {
@@ -2037,7 +2036,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         const auto withInputs = graph->withInputsOf(nodeRef);
         ASSERT(!normInputs.empty(), "Taskflow FILL node must have one norm input.");
         const runtime_data_idx_t srcIdx = dataIndexOf(graph, normInputs.front());
-        Type *srcType                   = node->dataType;
+        Type *srcType                   = node->dataType();
         ASSERT(
             camel::core::type::isGCTraced(srcType->code()),
             "Taskflow FILL target must be GC-traced.");
@@ -2154,8 +2153,8 @@ void TaskflowExecSchedPass::instantiate_graph_instance_generic(
     FlowT &flowLike, GCGraph *runtimeGraph, Frame *frame) {
     ASSERT(runtimeGraph != nullptr, "Taskflow graph instantiation requires a runtime graph.");
     auto buildInfo = std::make_shared<RuntimeBuildInfo>(buildRuntimeBuildInfo(runtimeGraph));
-    std::vector<tf::Task> taskMap(runtimeGraph->nodeBlockCount());
-    std::vector<uint8_t> taskBuilt(runtimeGraph->nodeBlockCount(), 0);
+    std::vector<tf::Task> taskMap(runtimeGraph->nodeCount());
+    std::vector<uint8_t> taskBuilt(runtimeGraph->nodeCount(), 0);
     buildRuntimeNodeTasks(flowLike, runtimeGraph, frame, buildInfo, taskMap, taskBuilt);
     connectRuntimeDependencies(flowLike, runtimeGraph, frame, buildInfo, taskMap, taskBuilt);
 }

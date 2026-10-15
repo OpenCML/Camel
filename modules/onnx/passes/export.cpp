@@ -108,7 +108,7 @@ std::optional<Example> constantOf(const GCGraph *g, gc_node_ref_t ref) {
     }
     const auto index      = static_cast<size_t>(-n->dataIndex);
     core::type::Type *ty  = g->staticDataType()->typeAt(index);
-    return Example{g->staticArea()->get<slot_t>(index), ty ? ty : n->dataType};
+    return Example{g->staticArea()->get<slot_t>(index), ty ? ty : n->dataType()};
 }
 
 std::string describeNode(const GCGraph *g, gc_node_ref_t ref) {
@@ -154,7 +154,8 @@ constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view
 void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
     const gc_node_ref_t arg = g->normInputsOf(node)[0];
     const auto *n           = g->node(arg);
-    if (n->kind == GCNodeKind::Fill && n->dataType && n->dataType->code() == TypeCode::Function) {
+    if (n->kind == GCNodeKind::Fill && n->dataType() &&
+        n->dataType()->code() == TypeCode::Function) {
         const auto templ = constantOf(g, g->normInputsOf(arg).front());
         if (!templ) {
             throw Refusal{

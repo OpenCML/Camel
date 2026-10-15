@@ -525,8 +525,8 @@ void Evaluator::refuseEffects(GCGraph *root) {
             } else if (n->kind == GCNodeKind::Func) {
                 referenced = g->directCalleeGraphOf(ref);
             } else if (
-                n->kind == GCNodeKind::Data && n->dataIndex < 0 && n->dataType &&
-                n->dataType->code() == TypeCode::Function) {
+                n->kind == GCNodeKind::Data && n->dataIndex < 0 && n->dataType() &&
+                n->dataType()->code() == TypeCode::Function) {
                 // A function constant: the callee of an indirect call, or a closure template.
                 const auto *fn = rtdata::fromSlot<::Function *>(
                     g->staticArea()->get<slot_t>(static_cast<size_t>(-n->dataIndex)));
@@ -623,7 +623,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         }
         const slot_t slot = g->staticArea()->get<slot_t>(static_cast<size_t>(-index));
         type::Type *ty    = g->staticDataType()->typeAt(static_cast<size_t>(-index));
-        Value v           = Value::constant(slot, ty ? ty : n->dataType);
+        Value v           = Value::constant(slot, ty ? ty : n->dataType());
         if (auto it = names_.find(slot); it != names_.end()) {
             v.label = it->second;
         }
@@ -645,7 +645,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         Value src                  = eval(act, source);
         if (src.isConstant()) {
             try {
-                return keep(n->dataType->castSlotFrom(src.slot, src.ty), n->dataType);
+                return keep(n->dataType()->castSlotFrom(src.slot, src.ty), n->dataType());
             } catch (const core::error::RuntimeFault &fault) {
                 // What the conversion says itself ("conversion to 'T' failed: ...").
                 unsupported(
@@ -656,15 +656,15 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
                                                    : fault.formatArgs().front()));
             }
         }
-        if (tensor::asTensorType(n->dataType)) {
+        if (tensor::asTensorType(n->dataType())) {
             const TensorFacts facts = factsOf(src);
             type::Type *known       = src.form == Value::Form::Tensor
                                           ? tensor::TensorType::get(facts.dtype, facts.shape)
                                           : inferenceTypeOf(src);
-            type::Type *declared    = g->node(source)->dataType;
-            const auto safety       = n->dataType->castSafetyFrom(known);
+            type::Type *declared    = g->node(source)->dataType();
+            const auto safety       = n->dataType()->castSafetyFrom(known);
             if (safety == type::CastSafety::Safe ||
-                (declared && n->dataType->castSafetyFrom(declared) == type::CastSafety::Safe)) {
+                (declared && n->dataType()->castSafetyFrom(declared) == type::CastSafety::Safe)) {
                 return src;
             }
             const std::string have = known ? known->toString() : std::string("a value of unknown type");
@@ -674,7 +674,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
                     std::format(
                         "this conversion to '{}' always fails: for the exported inputs the "
                         "value is a '{}'",
-                        n->dataType->toString(),
+                        n->dataType()->toString(),
                         have));
             }
             unsupported(
@@ -685,22 +685,22 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
                     "'{}', and an ONNX model does not check a shape or an element type when it "
                     "runs. Convert to a type that leaves open what the inputs leave open (a "
                     "negative extent for a dynamic axis), or export with inputs that fix it",
-                    n->dataType->toString(),
+                    n->dataType()->toString(),
                     have));
         }
         if (src.form == Value::Form::Scalar &&
-            tensor::isSupportedTensorScalar(n->dataType->code())) {
-            const TypeCode target = tensor::normalizeTensorDType(n->dataType->code());
+            tensor::isSupportedTensorScalar(n->dataType()->code())) {
+            const TypeCode target = tensor::normalizeTensorDType(n->dataType()->code());
             return Value::symbolicScalar(
                 emitter_.node(
                     "Cast",
                     {src.name},
                     {Attribute::makeInt("to", static_cast<int64_t>(elemTypeOf(target)))}),
-                n->dataType);
+                n->dataType());
         }
         unsupported(
             act,
-            std::format("cast of a model-dependent value to '{}'", n->dataType->toString()));
+            std::format("cast of a model-dependent value to '{}'", n->dataType()->toString()));
     }
     case GCNodeKind::Copy:
         // Exported values are never mutated in place, so a copy can share its source.
@@ -2541,7 +2541,7 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
             return operand;
         }
         const Value old = variableValueAt(act, cell, last);
-        return applyOper(act, kind.binary, {old, operand}, g->node(last)->dataType);
+        return applyOper(act, kind.binary, {old, operand}, g->node(last)->dataType());
     }
     unsupported(
         act,
@@ -2558,7 +2558,7 @@ Value Evaluator::evalOper(Activation &act, gc_node_ref_t ref) {
     const std::string uri(body->uri());
     std::vector<Value> norm = evalAll(act, g->normInputsOf(ref));
     std::vector<Value> with = evalAll(act, g->withInputsOf(ref));
-    return applyOper(act, uri, std::move(norm), g->node(ref)->dataType, std::move(with));
+    return applyOper(act, uri, std::move(norm), g->node(ref)->dataType(), std::move(with));
 }
 
 /// The value of operator `uri` applied to `norm` (and `with`): folded when the arguments are
@@ -2645,7 +2645,7 @@ Value Evaluator::evalJoin(Activation &act, gc_node_ref_t join) {
                 act,
                 "a match on a value that depends on the model input cannot be exported");
         }
-        type::Type *joinType = g->node(join)->dataType;
+        type::Type *joinType = g->node(join)->dataType();
         if (joinType && joinType->code() == TypeCode::Function) {
             refuseFunctionBranch(act, joinType);
         }
@@ -2936,7 +2936,7 @@ Value Evaluator::evalSymbolicAggregateBranch(
 Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
     GCGraph *g             = act.graph;
     const Value source     = eval(act, g->normInputsOf(ref).front());
-    type::Type *targetType = g->node(ref)->dataType;
+    type::Type *targetType = g->node(ref)->dataType();
     const auto slots       = g->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
     const auto refs        = g->withInputsOf(ref);
     const auto elemTypeAt  = [&](size_t k) -> type::Type  *{
@@ -3017,7 +3017,7 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
             for (size_t i = 0; i < closureNodes.size() && i < captured->size(); ++i) {
                 closure.fields[i] = Value::constant(
                     captured->get<slot_t>(i),
-                    fn->graph()->node(closureNodes[i])->dataType);
+                    fn->graph()->node(closureNodes[i])->dataType());
             }
         }
         for (size_t k = 0; k < slots.size(); ++k) {
@@ -3047,7 +3047,8 @@ Value Evaluator::evalFill(Activation &act, gc_node_ref_t ref) {
 Value Evaluator::symbolicFloatArray(
     Activation &act, gc_node_ref_t ref, const Value &source, std::span<const Value> values) {
     auto *templ          = rtdata::fromSlot<::Array *>(source.slot);
-    type::Type *elemType = static_cast<type::ArrayType *>(act.graph->node(ref)->dataType)->elemType();
+    type::Type *elemType =
+        static_cast<type::ArrayType *>(act.graph->node(ref)->dataType())->elemType();
     const TypeCode dtype = tensor::normalizeTensorDType(elemType->code());
     const auto fillSlots = act.graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
     std::vector<std::optional<Value>> elems(templ->size());
@@ -3112,7 +3113,7 @@ Value Evaluator::evalAccs(Activation &act, gc_node_ref_t ref) {
     GCGraph *g         = act.graph;
     const Value source = eval(act, g->normInputsOf(ref).front());
     const auto *body   = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
-    type::Type *result = g->node(ref)->dataType;
+    type::Type *result = g->node(ref)->dataType();
     if (source.isAggregate()) {
         if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
             return source.fields.at(body->value);
@@ -4020,7 +4021,7 @@ Model translateEntryGraph(
                     name));
         }
         type::Type *declared = known ? (isWith ? funcType->withTypeAt(k) : funcType->normTypeAt(k))
-                                     : root->node(port)->dataType;
+                                     : root->node(port)->dataType();
         inputs.push_back(binder.bind(declared, name, name));
     }
 

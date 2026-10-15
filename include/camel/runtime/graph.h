@@ -24,11 +24,18 @@
  * the reachable compile graph closure is materialized into immutable runtime
  * graph objects. Runtime execution then consumes GCGraph directly.
  *
- * The native runtime payload follows four rules:
- * 1. Nodes live in one variable-length node blob.
- * 2. Every node begins with a fixed GCNode header.
- * 3. All adjacency references use node-blob offsets, not dense ordinals.
- * 4. Hot-path payload stays plain; cold debug metadata lives elsewhere.
+ * The frozen layout (docs/design/graph-model, section 4.1; migration step 3):
+ * 1. A node is a fixed 16-byte record (GCNode) in one array; its NodeId (gc_node_ref_t) is its
+ *    index in that array, from 0 to nodeCount() - 1. A sentinel record follows the last node.
+ * 2. Each edge is stored once, as an entry of the input table: a node's inputs are one run of
+ *    it, its Norm inputs, then its With inputs, then its Ctrl inputs; the record keeps the
+ *    three starts and the next record's start ends the run.
+ * 3. What a node of a kind carries beyond the record (the callee of a FUNC, the operator of an
+ *    OPER, the positions of a FILL, ...) is in the payload area, in 8-byte words, at the word
+ *    offset the record names.
+ * 4. Users (the reverse direction) are not stored: GCGraph::uses() builds the index the first
+ *    time anything asks for it and keeps it for the graph's lifetime.
+ * 5. Hot-path data stays plain; cold debug metadata lives elsewhere (GCGraphDebugRecord).
  */
 
 #pragma once
@@ -37,7 +44,9 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/symbol.h"
+#include "camel/core/type/intern.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -63,16 +72,10 @@ using gc_slot_idx_t = int16_t;
 using gc_data_idx_t = gc_slot_idx_t;
 using gc_off_t      = uint16_t;
 using gc_cnt_t      = uint16_t;
-using gc_block_t    = uint64_t;
 
 constexpr gc_node_ref_t kInvalidNodeRef = static_cast<gc_node_ref_t>(-1);
 constexpr gc_off_t kInvalidOffset       = static_cast<gc_off_t>(-1);
 
-inline constexpr size_t kGCBlockBytes = sizeof(gc_block_t);
-
-inline constexpr gc_cnt_t blocksForBytes(size_t bytes) {
-    return static_cast<gc_cnt_t>((bytes + kGCBlockBytes - 1) / kGCBlockBytes);
-}
 
 // The kinds of node. The numeric values are part of the graph model (docs/design/graph-model,
 // section 3.5) and must not be renumbered.
@@ -129,71 +132,49 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagConstant = 1 << 1,
 };
 
-struct Slice {
-    gc_off_t offset = 0;
-    gc_cnt_t count  = 0;
-
-    constexpr bool empty() const { return count == 0; }
-};
-
 struct GCBranchArm {
     gc_node_ref_t head = kInvalidNodeRef;
     gc_node_ref_t tail = kInvalidNodeRef;
 };
 
+/// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
+inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
+
+/// One node of a frozen graph: a fixed 16-byte record (docs/design/graph-model, 4.1). Its inputs
+/// and its payload are found through the graph (GCGraph::normInputsOf, nodeBodyAs).
 struct GCNode {
+    GCNodeKind kind         = GCNodeKind::Data;
+    uint8_t flags           = 0;
     gc_slot_idx_t dataIndex = 0;
-    gc_cnt_t blockCount     = 0;
+    /// The type of the node's value (camel/core/type/intern.h); kNoTypeId when it has none.
+    camel::core::type::TypeId typeId = camel::core::type::kNoTypeId;
+    /// Index in the input table of the first Norm, With and Ctrl input. The Ctrl inputs end
+    /// where the next record's Norm inputs begin.
+    gc_off_t inBegin   = 0;
+    gc_off_t withBegin = 0;
+    gc_off_t ctrlBegin = 0;
+    /// Offset of the payload in the payload area, in 8-byte words; kNoPayload when none.
+    gc_off_t payload = kNoPayload;
 
-    Slice normInputs;
-    Slice withInputs;
-    Slice ctrlInputs;
-    Slice normOutputs;
-    Slice withOutputs;
-    Slice ctrlOutputs;
-
-    camel::core::type::Type *dataType = nullptr;
-
-    GCNodeKind kind = GCNodeKind::Data;
-    uint8_t flags   = 0;
-
-    static constexpr gc_cnt_t headerBlocks() { return blocksForBytes(sizeof(GCNode)); }
+    /// The type of the node's value, nullptr when it has none.
+    camel::core::type::Type *dataType() const {
+        return typeId == camel::core::type::kNoTypeId
+                   ? nullptr
+                   : camel::core::type::TypeTable::instance().get(typeId);
+    }
 
     constexpr bool hasFlag(uint8_t mask) const { return (flags & mask) != 0; }
     constexpr bool isMacro() const { return hasFlag(kGCNodeFlagMacro); }
     constexpr bool isConstant() const { return hasFlag(kGCNodeFlagConstant); }
-    constexpr bool hasBody() const { return blockCount > headerBlocks(); }
-
-    constexpr gc_cnt_t bodyBlocks() const {
-        return blockCount >= headerBlocks() ? static_cast<gc_cnt_t>(blockCount - headerBlocks())
-                                            : 0;
-    }
-
-    constexpr size_t bodyBytes() const { return static_cast<size_t>(bodyBlocks()) * kGCBlockBytes; }
-
-    template <typename Body> const Body *bodyAs() const {
-        static_assert(
-            std::is_trivially_copyable_v<Body>,
-            "GC node bodies must be trivially copyable.");
-        ASSERT(
-            bodyBytes() >= sizeof(Body),
-            "GC node body is smaller than the requested body layout.");
-        return reinterpret_cast<const Body *>(
-            reinterpret_cast<const std::byte *>(this) + sizeof(GCNode));
-    }
-
-    template <typename Body> Body *bodyAs() {
-        static_assert(
-            std::is_trivially_copyable_v<Body>,
-            "GC node bodies must be trivially copyable.");
-        ASSERT(
-            bodyBytes() >= sizeof(Body),
-            "GC node body is smaller than the requested body layout.");
-        return reinterpret_cast<Body *>(reinterpret_cast<std::byte *>(this) + sizeof(GCNode));
-    }
+    constexpr bool hasPayload() const { return payload != kNoPayload; }
 };
-static_assert(
-    sizeof(GCNode) % kGCBlockBytes == 0, "GCNode must align to the node-blob block size.");
+static_assert(sizeof(GCNode) == 16, "A frozen node record is 16 bytes (graph model, 4.1).");
+static_assert(std::is_trivially_copyable_v<GCNode>);
+
+/// The unit the payload area is addressed in. Payload bodies hold pointers (the callee of a
+/// FUNC, the implementation an OPER caches), so the unit is their alignment.
+using gc_payload_word_t                   = uint64_t;
+inline constexpr size_t kPayloadWordBytes = sizeof(gc_payload_word_t);
 
 struct GCFuncBody {
     class GCGraph *calleeGraph = nullptr;
@@ -288,29 +269,49 @@ struct GCOperBody {
 static_assert(std::is_trivially_copyable_v<GCOperBody>);
 
 struct GCGraphNativePayload {
-    // The payload itself stays plain and pointer-based. The backing arenas live
-    // in the dedicated non-moving graph heap and are reclaimed when the graph
-    // closure is dropped as a unit.
-    gc_block_t *nodeBlocks   = nullptr;
-    gc_node_ref_t *edges     = nullptr;
-    gc_node_ref_t *normPorts = nullptr;
-    gc_node_ref_t *withPorts = nullptr;
-    gc_node_ref_t *closure   = nullptr;
-    GCBranchArm *branchArms  = nullptr;
-    gc_cnt_t nodeCount       = 0;
-    gc_cnt_t nodeBlockCount  = 0;
-    gc_cnt_t edgeCount       = 0;
-    gc_cnt_t normPortCount   = 0;
-    gc_cnt_t withPortCount   = 0;
-    gc_cnt_t closureCount    = 0;
-    gc_cnt_t branchArmCount  = 0;
-    gc_node_ref_t entryNode  = kInvalidNodeRef;
-    gc_node_ref_t exitNode   = kInvalidNodeRef;
-    gc_node_ref_t outputNode = kInvalidNodeRef;
-    gc_node_ref_t returnNode = kInvalidNodeRef;
-    GCReturnKind returnKind  = GCReturnKind::None;
+    // Arrays of the graph's own block, in the graph space (see GCGraphBuildAccess). Released
+    // with the graph.
+    GCNode *nodes              = nullptr; // nodeCount + 1 records (the last is a sentinel)
+    gc_node_ref_t *inputs      = nullptr; // edgeCount entries
+    gc_payload_word_t *payload = nullptr; // payloadWordCount words
+    gc_node_ref_t *normPorts   = nullptr;
+    gc_node_ref_t *withPorts   = nullptr;
+    gc_node_ref_t *closure     = nullptr;
+    GCBranchArm *branchArms    = nullptr;
+    gc_cnt_t nodeCount         = 0;
+    gc_cnt_t edgeCount         = 0;
+    gc_cnt_t payloadWordCount  = 0;
+    gc_cnt_t normPortCount     = 0;
+    gc_cnt_t withPortCount     = 0;
+    gc_cnt_t closureCount      = 0;
+    gc_cnt_t branchArmCount    = 0;
+    gc_node_ref_t entryNode    = kInvalidNodeRef;
+    gc_node_ref_t exitNode     = kInvalidNodeRef;
+    gc_node_ref_t outputNode   = kInvalidNodeRef;
+    gc_node_ref_t returnNode   = kInvalidNodeRef;
+    GCReturnKind returnKind    = GCReturnKind::None;
 
-    constexpr bool empty() const { return nodeBlocks == nullptr || nodeBlockCount == 0; }
+    constexpr bool empty() const { return nodes == nullptr; }
+};
+
+/// The users of every node of one graph, by edge group, in node order (the reverse of the
+/// input table). Built on demand by GCGraph::uses().
+class GCUseIndex {
+  public:
+    explicit GCUseIndex(const class GCGraph &graph);
+
+    std::span<const gc_node_ref_t> norm(gc_node_ref_t ref) const { return group(ref, 0); }
+    std::span<const gc_node_ref_t> with(gc_node_ref_t ref) const { return group(ref, 1); }
+    std::span<const gc_node_ref_t> ctrl(gc_node_ref_t ref) const { return group(ref, 2); }
+
+  private:
+    std::span<const gc_node_ref_t> group(gc_node_ref_t ref, size_t kind) const {
+        const size_t at = static_cast<size_t>(ref) * 3 + kind;
+        return {users_.data() + begins_[at], begins_[at + 1] - begins_[at]};
+    }
+
+    std::vector<gc_node_ref_t> users_;
+    std::vector<uint32_t> begins_; // 3 per node, then the end
 };
 
 struct GCGraphDebugRecord;
@@ -354,9 +355,10 @@ class GCGraph : public camel::core::rtdata::Object {
 
     bool hasNodePayload() const;
     const GCGraphNativePayload *nodePayload() const;
-    gc_cnt_t nodeCount() const;
-    gc_cnt_t nodeBlockCount() const;
-    gc_cnt_t edgeCount() const;
+    /// Number of nodes; NodeIds are 0 .. nodeCount() - 1.
+    gc_cnt_t nodeCount() const { return nativePayload_.nodeCount; }
+    /// Number of edges (input table entries).
+    gc_cnt_t edgeCount() const { return nativePayload_.edgeCount; }
     gc_cnt_t branchArmCount() const;
 
     const GCNode *entryNode() const;
@@ -369,24 +371,46 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t returnNodeRef() const;
     GCReturnKind returnKind() const;
 
-    const GCNode *node(gc_node_ref_t ref) const;
-    bool containsNodeRef(gc_node_ref_t ref) const;
+    /// The record of node `ref`, nullptr when `ref` is not a node of this graph.
+    const GCNode *node(gc_node_ref_t ref) const {
+        return ref < nativePayload_.nodeCount ? nativePayload_.nodes + ref : nullptr;
+    }
+    bool containsNodeRef(gc_node_ref_t ref) const { return ref < nativePayload_.nodeCount; }
+    /// The NodeId of a record of this graph, kInvalidNodeRef for any other pointer.
     gc_node_ref_t nodeRef(const GCNode *node) const;
     GCGraph *directCalleeGraphOf(gc_node_ref_t ref) const;
     gc_node_ref_t matchedJoinOutputOf(gc_node_ref_t ref) const;
-    gc_node_ref_t nextNodeRef(gc_node_ref_t ref) const;
-    const GCNode *nextNode(gc_node_ref_t ref) const;
 
+    /// The payload of node `ref` as a `Body` (see the payload structs above). The node must
+    /// have one: every node of the kinds FUNC, CALL, ACCS, FILL, BRCH, JOIN and OPER does.
     template <typename Body> const Body *nodeBodyAs(gc_node_ref_t ref) const {
+        static_assert(
+            std::is_trivially_copyable_v<Body>,
+            "GC node bodies must be trivially copyable.");
         const GCNode *n = node(ref);
-        ASSERT(n != nullptr, "GCGraph node-body lookup resolved to a null node.");
-        return n->bodyAs<Body>();
+        ASSERT(n != nullptr && n->hasPayload(), "GCGraph node-body lookup of a node without one.");
+        return reinterpret_cast<const Body *>(nativePayload_.payload + n->payload);
+    }
+    /// The payload bytes of node `ref` (rounded up to whole words); empty when it has none.
+    std::span<const std::byte> nodePayloadBytes(gc_node_ref_t ref) const;
+
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        const GCNode *n = node(ref);
+        return n ? inputRun(n->inBegin, n->withBegin) : std::span<const gc_node_ref_t>();
+    }
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        const GCNode *n = node(ref);
+        return n ? inputRun(n->withBegin, n->ctrlBegin) : std::span<const gc_node_ref_t>();
+    }
+    std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const {
+        const GCNode *n = node(ref);
+        // The sentinel record after the last node ends the last node's run.
+        return n ? inputRun(n->ctrlBegin, (n + 1)->inBegin) : std::span<const gc_node_ref_t>();
     }
 
-    std::span<const gc_node_ref_t> edgeSlice(Slice slice) const;
-    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const;
-    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const;
-    std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const;
+    /// The users of every node, built the first time it is asked for and kept with the graph
+    /// (the frozen block stores each edge once, as an input). Thread-safe.
+    const GCUseIndex &uses() const;
     std::span<const gc_node_ref_t> normOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> withOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> ctrlOutputsOf(gc_node_ref_t ref) const;
@@ -402,7 +426,7 @@ class GCGraph : public camel::core::rtdata::Object {
 
         const GCNode *operator*() const { return graph_->node(ref_); }
         NodeIterator &operator++() {
-            ref_ = graph_->nextNodeRef(ref_);
+            ++ref_;
             return *this;
         }
         bool operator==(const NodeIterator &other) const {
@@ -420,14 +444,13 @@ class GCGraph : public camel::core::rtdata::Object {
       public:
         explicit NodeRange(const GCGraph *graph) : graph_(graph) {}
         NodeIterator begin() const { return NodeIterator(graph_, 0); }
-        NodeIterator end() const {
-            return NodeIterator(graph_, graph_ ? graph_->nodeBlockCount() : 0);
-        }
+        NodeIterator end() const { return NodeIterator(graph_, graph_ ? graph_->nodeCount() : 0); }
 
       private:
         const GCGraph *graph_ = nullptr;
     };
 
+    /// Every node, in NodeId order.
     NodeRange nodes() const { return NodeRange(this); }
 
     template <typename Visitor> void traceGraphs(Visitor &&visitor) const {
@@ -456,6 +479,7 @@ class GCGraph : public camel::core::rtdata::Object {
         bool deep = false) const override;
     void print(std::ostream &os, const camel::core::type::Type *type) const override;
     void onMoved() override {}
+    ~GCGraph() override;
     void updateRefs(
         const camel::core::rtdata::Object::RefRelocator &relocate,
         const camel::core::type::Type *type) override;
@@ -485,8 +509,14 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_cnt_t dependencyCount_                      = 0;
     gc_cnt_t subGraphCount_                        = 0;
     gc_cnt_t staticGraphRefCount_                  = 0;
+    std::span<const gc_node_ref_t> inputRun(gc_off_t begin, gc_off_t end) const {
+        return {nativePayload_.inputs + begin, static_cast<size_t>(end - begin)};
+    }
+
     GCGraphNativePayload nativePayload_{};
     ::Tuple *staticArea_ = nullptr;
+    // Built by uses() on first demand, owned by the graph.
+    mutable std::atomic<GCUseIndex *> uses_{nullptr};
     uintptr_t extraSlots_[kExtraSlotCount]{};
 };
 

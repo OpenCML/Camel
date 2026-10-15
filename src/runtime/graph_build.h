@@ -49,9 +49,9 @@ struct GCGraphDebugRecord {
 };
 
 struct GCGraphPayloadShape {
-    gc_cnt_t nodeCount      = 0;
-    gc_cnt_t nodeBlockCount = 0;
-    gc_cnt_t edgeCount      = 0;
+    gc_cnt_t nodeCount        = 0;
+    gc_cnt_t edgeCount        = 0;
+    gc_cnt_t payloadWordCount = 0;
     gc_cnt_t normPortCount  = 0;
     gc_cnt_t withPortCount  = 0;
     gc_cnt_t closureCount   = 0;
@@ -59,17 +59,18 @@ struct GCGraphPayloadShape {
 };
 
 struct GCGraphPayloadArena {
-    gc_block_t *nodeBlocks   = nullptr;
-    gc_node_ref_t *edges     = nullptr;
+    GCNode *nodes              = nullptr; // nodeCount + 1 records
+    gc_node_ref_t *inputs      = nullptr;
+    gc_payload_word_t *payload = nullptr;
     gc_node_ref_t *normPorts = nullptr;
     gc_node_ref_t *withPorts = nullptr;
     gc_node_ref_t *closure   = nullptr;
     GCBranchArm *branchArms  = nullptr;
 
-    gc_cnt_t nodeCount      = 0;
-    gc_cnt_t nodeBlockCount = 0;
-    gc_cnt_t edgeCount      = 0;
-    gc_cnt_t normPortCount  = 0;
+    gc_cnt_t nodeCount        = 0;
+    gc_cnt_t edgeCount        = 0;
+    gc_cnt_t payloadWordCount = 0;
+    gc_cnt_t normPortCount    = 0;
     gc_cnt_t withPortCount  = 0;
     gc_cnt_t closureCount   = 0;
     gc_cnt_t branchArmCount = 0;

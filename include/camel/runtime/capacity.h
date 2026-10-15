@@ -20,7 +20,7 @@
 /*
  * The capacity of one runtime graph.
  *
- * A GCGraph addresses its nodes, its node blocks and the entries of its edge table with 16
+ * A GCGraph addresses its nodes, its edges (input table entries) and its payload words with 16
  * bits (gc_node_ref_t, gc_off_t, gc_cnt_t in graph.h). A graph that does not fit is not a
  * malformed graph and not a defect of the pass that built it: the function, after what a pass
  * inlined or unrolled into it, is larger than one graph can be. It is reported as such, with
@@ -40,7 +40,7 @@ namespace camel::runtime {
 
 class GraphCapacityError : public std::runtime_error {
   public:
-    /// `quantity` is a plural noun phrase ("edge table entries"); `size` is what the graph
+    /// `quantity` is a plural noun phrase ("nodes"); `size` is what the graph
     /// needs, `limit` the most a graph holds.
     GraphCapacityError(
         std::string quantity, size_t size, size_t limit, std::string graph = {},

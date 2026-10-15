@@ -3479,7 +3479,7 @@ Pass '{0}' cannot build graph '{1}': it needs {2} {3}, and one graph holds at mo
 **Help**
 
 ```text
-A graph addresses its nodes, its node blocks and its edge table with 16 bits. The function is not too large as written: the pass inlined or unrolled more code into this one graph than fits (a recursion unrolled over many steps, a function inlined at many call sites). Keep part of the computation out of the graph (a smaller constant depth, fewer unrolled steps), or run the pipeline without this pass.
+A graph addresses its nodes and its edges with 16 bits. The function is not too large as written: the pass inlined or unrolled more code into this one graph than fits (a recursion unrolled over many steps, a function inlined at many call sites). Keep part of the computation out of the graph (a smaller constant depth, fewer unrolled steps), or run the pipeline without this pass.
 ```
 
 **Example** (`test/cases/opt/generic/broken_graph.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/opt/generic/broken_graph.cml test::overgrow_graph std::fvm`)

@@ -91,8 +91,8 @@ size_t growthSlackBytes(GCNodeKind kind) {
 camel::core::type::Type *resolveDraftNodeDataType(const GCGraph *graph, const GCNode *sourceNode) {
     ASSERT(graph != nullptr, "Draft node type resolution requires a non-null graph.");
     ASSERT(sourceNode != nullptr, "Draft node type resolution requires a non-null source node.");
-    if (sourceNode->dataType != nullptr) {
-        return sourceNode->dataType;
+    if (sourceNode->dataType() != nullptr) {
+        return sourceNode->dataType();
     }
 
     if (sourceNode->dataIndex > 0) {
@@ -629,7 +629,7 @@ size_t GraphDraft::payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t
     if (sourceNode->kind == GCNodeKind::Brch) {
         return sizeof(DraftBrchPayload) + graph->branchArmsOf(sourceRef).size_bytes();
     }
-    return sourceNode->bodyBytes();
+    return graph->nodePayloadBytes(sourceRef).size();
 }
 
 DraftNode *GraphDraft::createDecodedNode(
@@ -679,7 +679,7 @@ DraftNode *GraphDraft::createDecodedNode(
     if (sourceNode->kind == GCNodeKind::Brch) {
         const auto sourceArms         = graph->branchArmsOf(sourceRef);
         auto *payload                 = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
-        const auto *sourceBrchPayload = sourceNode->bodyAs<GCBrchBody>();
+        const auto *sourceBrchPayload = graph->nodeBodyAs<GCBrchBody>(sourceRef);
         payload->join                 = translateNodeRef(sourceBrchPayload->join, sourceToDraft);
         payload->armCount             = sourceBrchPayload->armCount;
         payload->defaultArm = translateNodeRef(sourceBrchPayload->defaultArm, sourceToDraft);
@@ -689,11 +689,8 @@ DraftNode *GraphDraft::createDecodedNode(
             armBytes[i].head = translateNodeRef(sourceArms[i].head, sourceToDraft);
             armBytes[i].tail = translateNodeRef(sourceArms[i].tail, sourceToDraft);
         }
-    } else if (sourceNode->bodyBytes() != 0) {
-        std::memcpy(
-            DraftNodeView::payload(draftNode).data(),
-            reinterpret_cast<const std::byte *>(sourceNode) + sizeof(GCNode),
-            sourceNode->bodyBytes());
+    } else if (const auto body = graph->nodePayloadBytes(sourceRef); !body.empty()) {
+        std::memcpy(DraftNodeView::payload(draftNode).data(), body.data(), body.size());
         if (sourceNode->kind == GCNodeKind::Join) {
             auto *payload = DraftNodeView::payloadAs<GCJoinBody>(draftNode);
             payload->brch = translateNodeRef(payload->brch, sourceToDraft);
@@ -741,9 +738,9 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const GCGraph *graph) {
     draft->staticGraphRefs_.assign(
         graph->staticGraphRefs().begin(),
         graph->staticGraphRefs().end());
-    draft->draftIdsBySourceRef_.assign(graph->nodeBlockCount(), kInvalidNodeRef);
+    draft->draftIdsBySourceRef_.assign(graph->nodeCount(), kInvalidNodeRef);
 
-    std::vector<gc_node_ref_t> sourceToDraft(graph->nodeBlockCount(), kInvalidNodeRef);
+    std::vector<gc_node_ref_t> sourceToDraft(graph->nodeCount(), kInvalidNodeRef);
     draft->nodesById_.reserve(graph->nodeCount());
     draft->sourceRefsById_.reserve(graph->nodeCount());
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {

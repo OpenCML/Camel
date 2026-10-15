@@ -510,7 +510,7 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
             const auto *actualHeader = draft.header(actualInputs[i]);
             const auto *formalNode   = calleeGraph->node(formals[i].second);
             if (actualHeader && formalNode &&
-                refinesType(actualHeader->dataType, formalNode->dataType)) {
+                refinesType(actualHeader->dataType, formalNode->dataType())) {
                 bindings.push_back(
                     DraftFormalBinding{
                         .kind         = formals[i].first,

@@ -209,7 +209,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "GraphTooLarge",
                 "Pass '{0}' cannot build graph '{1}': it needs {2} {3}, and one graph holds at "
                 "most {4}.",
-                "A graph addresses its nodes, its node blocks and its edge table with 16 bits. "
+                "A graph addresses its nodes and its edges with 16 bits. "
                 "The function is not too large as written: the pass inlined or unrolled more "
                 "code into this one graph than fits (a recursion unrolled over many steps, a "
                 "function inlined at many call sites). Keep part of the computation out of "

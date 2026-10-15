@@ -47,14 +47,14 @@ lookupRecord(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t index
 camel::core::type::Type *
 nodeStaticSlotType(camel::runtime::GCGraph *graph, const camel::runtime::GCNode &record) {
     if (graph == nullptr || record.dataIndex >= 0) {
-        return record.dataType;
+        return record.dataType();
     }
     const auto staticTypes = graph->staticDataType();
     const size_t staticIdx = static_cast<size_t>(-record.dataIndex);
     if (staticTypes != nullptr && staticIdx < staticTypes->size()) {
         return staticTypes->typeAt(staticIdx);
     }
-    return record.dataType;
+    return record.dataType();
 }
 
 string formatStaticDataValue(camel::runtime::GCGraph *graph, const camel::runtime::GCNode &record) {
@@ -157,7 +157,7 @@ string recordLabel(
     case camel::runtime::GCNodeKind::Accs: {
         const auto *body = graph->nodeBodyAs<camel::runtime::GCAccsBody>(nodeRef);
         ASSERT(
-            record.bodyBytes() >= sizeof(camel::runtime::GCAccsBody),
+            graph->nodePayloadBytes(nodeRef).size() >= sizeof(camel::runtime::GCAccsBody),
             "GraphViz ACCS payload is smaller than its fixed header.");
         if (body->accsKind == camel::runtime::GCAccsKind::StructKey) {
             const std::string_view key = body->key();
@@ -177,7 +177,7 @@ string recordLabel(
     }
     case camel::runtime::GCNodeKind::Oper:
         ASSERT(
-            record.bodyBytes() >= sizeof(camel::runtime::GCOperBody),
+            graph->nodePayloadBytes(nodeRef).size() >= sizeof(camel::runtime::GCOperBody),
             "GraphViz OPER payload is smaller than its fixed header.");
         return std::string(graph->nodeBodyAs<camel::runtime::GCOperBody>(nodeRef)->uri());
     case camel::runtime::GCNodeKind::Sync:

@@ -34,7 +34,8 @@
  * was checked at commit, the back ends ran them and computed something else.
  *
  * `test::overgrow_graph` commits a graph too large for the runtime representation on purpose:
- * it adds unconnected COPY nodes to `main` until its node blocks exceed what 16 bits address.
+ * it adds COPY nodes to `main`, each reading one node, until its edges exceed what 16 bits
+ * address.
  * The passes of the standard pipeline stay below that size (the inliner's owner cap), so this
  * is how the regression tests reach RuntimeDiag::GraphTooLarge of the pass driver.
  */

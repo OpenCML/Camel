@@ -50,8 +50,8 @@ bool isAnonymous(const std::string &name) {
 /// The graph of a function constant (`Function(graph=main, ...)`) in a DATA node of `graph`.
 GCGraph *functionConstant(const GCGraph *graph, gc_node_ref_t ref) {
     const auto *node = graph->node(ref);
-    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType == nullptr ||
-        node->dataType->code() != TypeCode::Function) {
+    if (node == nullptr || node->kind != GCNodeKind::Data || node->dataType() == nullptr ||
+        node->dataType()->code() != TypeCode::Function) {
         return nullptr;
     }
     auto *function = camel::core::rtdata::fromSlot<::Function *>(
@@ -287,7 +287,7 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
         if (node->kind == GCNodeKind::Data) {
             value = parts_.values.constant(
                 root->staticArea()->get<slot_t>(-node->dataIndex),
-                node->dataType);
+                node->dataType());
         }
         if (!value) {
             throw Refusal{
@@ -343,7 +343,7 @@ std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
             "//   [{}] {} : {}\n",
             ref,
             kindName(node->kind),
-            node->dataType ? node->dataType->toString() : "-");
+            node->dataType() ? node->dataType()->toString() : "-");
     }
     return out;
 }
