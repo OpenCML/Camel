@@ -3,7 +3,7 @@
 
 > **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 2.13。
 >
-> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。事实库与 `LOOP`（第三阶段）、资源与定义图（第四阶段）尚未实现。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
+> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）、资源与定义图（第四阶段）尚未实现。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
 >
 > **第二阶段已实现（`lane/opsem-p2`）**：下标语义的数据结构与查询（`camel/core/index_semantics.h`：准仿射表达式、迭代域、访问与写映射、四种越界策略、间接访问的形式、归约律与 `reorderFreedom`、`splitDims`、`rowMajorView`；`camel/runtime/operator_instance.h`：冻结图节点上的实例）；第一批声明（逐元素族连同广播、`transpose`/`permute`/`slice`/`reshape`/`flatten`/`unsqueeze`/`broadcast_like`/`expand_axis`、`sum`/`mean` 全量与按轴、`max`/`min` 按轴（张量模块没有全量的 `max`/`min`）、`sum_to`、`matmul`、`nn` 的两种池化作为窗口的例子、`unordered_reduce` 的律）；`camel inspect --instances`；声明求值器 `tensor::test_index_eval`（与 CPU 内核逐位比较，见第 12 节）。给 Tiles 的说明见 14.2 节。与本稿字面不同的几处（均为窄读，见 14.2 与各处注释）：实例只有一个 `law` 下标（`Write` 不另存）；`Domain::guard` 表示分块尾部不存在的点；`LawInit::Operand`（`unordered_reduce` 的 `initial`）；`LawEmpty::Fault` 指归约维为空即故障（`max_axis` 的内核在结果为空时也拒绝空轴）；声明附在张量算子的 `OpDef::index` 上，与 `infer` 并列。
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
@@ -886,7 +886,9 @@ struct Stamp {
 
 ## 11. `LOOP` 的消费接口
 
-`LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作，在本基线上还不存在（2.1）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 2.12、2.13 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
+> **实施状态（2026-10-15，`lane/loop`）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`loopOf`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）、11.4 的私有降级（`include/camel/runtime/loop_lowering.h`，`lowerLoopsToTailRecursion`，结果是脱离主程序的副本）都已实现。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condGraph()` 在 `For` 时返回 `nullptr` 而不是空的 `optional`；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由节点算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实随事实库（3b）再做。给 Tiles 的读法见 11.5。
+
+`LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作（实施情况见图模型第 7 节）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 2.12、2.13 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
 
 ### 11.1 访问器
 
@@ -958,6 +960,39 @@ func row_sums(rows: Tensor<f32>[]): (Tensor<f32>, int) {
 - 核心提供 `lowerLoopToTailRecursion(Rewrite &tx, GraphId graph, NodeId loop)`（图模型 3.5 卡片末尾的固定改写）。
 - **它只在各后端自己的入口、在后端私有的事务里调用**：后端从程序的快照开一个事务、降级、在自己的副本上工作，从不把降级提交回共享的程序。标准流水线里的遍（`std::opt`、`std::inline` 等）**不得降级 `LOOP`**；需要它的遍把它当不透明节点（循环设计稿第 7 节第 1 步）。这样 Tiles 在流水线的任何位置看到的都是结构化的 `LOOP`。
 - 展开、分块、流水化一个循环是否合法，由 Tiles 判断；核心提供的是上面的访问器、11.3 的迭代域、循环体节点"只依赖捕获端口"（循环不变量）这类可推导事实。
+
+### 11.5 给 Tiles 的说明：怎样读一个 `LOOP`
+
+```cpp
+#include "camel/runtime/loop.h"
+namespace rt = camel::runtime;
+
+for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
+    if (g->node(ref)->kind != rt::GCNodeKind::Loop) continue;
+    const rt::LoopView loop(*g, ref);
+    // 形式与状态
+    loop.kind();                 // While / For / ForWhile
+    loop.stateCount();           // k；loop.stateType(j)；loop.valueType() 是状态或 k 元组
+    // 外层图里的输入
+    loop.iterable();             // For/ForWhile：被遍历的数组（Norm 0）
+    loop.initialState(j);        // 第 j 个状态的初值
+    loop.captures();             // With 输入，两张子图共用
+    // 两张子图与端口的对应
+    loop.condGraph();            // While/ForWhile；For 时为 nullptr
+    loop.bodyGraph();
+    loop.condStateParam(j);  loop.bodyStateParam(j);  loop.bodyElementParam();
+    loop.condCapturePort(c); loop.bodyCapturePort(c);  // 对应 captures()[c]
+    // 下一轮的状态
+    loop.nextState();            // 循环体图的结果节点（k > 1 时是元组）
+    loop.nextStateComponent(j);  // k > 1 且结果是元组 FILL 时，填第 j 个位置的节点
+    loop.effects();              // 两张子图之并，加"可能故障""可能不终止"
+}
+```
+
+- 语义：每一轮先求条件（`While`、`ForWhile`；条件看得到状态，看不到元素），再取下一个元素（`For`、`ForWhile`），再求循环体；条件为假或元素取完即结束；循环的值是最后的状态。`camel/core/loop_kind.h` 写明了这一点。
+- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它；`std::nvm`、`std::fvm`、`std::jit` 原生执行它，所以 `tiles.run<f>` 在这三个后端上收到的 `f` 的图里也是 `LOOP`。`std::prl` 与 `std::cpp` 在私有副本上降级，`tiles.run` 在 `std::prl` 下看到的是降级后的递归（`f.loopN.rec` 等图）。
+- Tiles 自己决定原生处理还是在自己的入口降级：降级用 `lowerLoopsToTailRecursion(context, root)`，它返回一个脱离主程序的副本，不改共享的程序。
+- 校验已保证：初值能赋给状态类型、循环体返回状态类型、条件返回 `bool`、元素端口类型是数组的元素类型、两张子图的捕获端口个数、次序、类型相同并与 `captures()` 一一对应（I18、I19）。
 
 ---
 

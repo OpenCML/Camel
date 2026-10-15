@@ -51,6 +51,7 @@ FEATURES = {
                "(values and types; functions that call only each other; the rest), imported by "
                "name; not in the default set",
     "append": "xs->append<v> (a new array, xs unchanged) and acc = acc->append<v> (rebinding a variable, also in foreach element functions)",
+    "loop": "loops (design principles 2.13): `while` with a counter, `for` over an array, `for ... while`, one or several values of state, struct and tuple states, and loops whose body is a sync block with effects",
     "opover": "operator overloads of the program (func operator +, unary -, *, <, []) on the struct P, next to the built-in operators",
 }
 # `modules` is left out of the default set: the feature set is part of every program's random
@@ -59,7 +60,7 @@ DEFAULT_FEATURES = frozenset(FEATURES) - {"modules"}
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
-VERSION = 5
+VERSION = 6
 
 
 def parse_features(text: Optional[str]) -> frozenset:
@@ -257,6 +258,8 @@ class Gen:
             o.append((1.4, lambda: self.applied_call(self.r.choice(applied), d)))
         if self.operators:
             o += self.operator_options(t, d)
+        if self.on("loop") and d > 0 and k not in ("opt",):
+            o.append((0.9, lambda: self.loop_expr(t, d)))
         if t == INT:
             o.append((4.0, lambda: self.int_arith(d)))
             if self.on("array") or self.on("string"):
@@ -1101,6 +1104,8 @@ class Gen:
             o.append((1.0, lambda: self.partial_let(2)))
         if self.on("ifnoelse") and self.on("effects"):
             o.append((1.3, lambda: self.if_without_else(d)))
+        if self.on("loop") and self.on("effects") and d > 0 and not simple:
+            o.append((1.0, lambda: self.loop_value(d)))
         if self.on("logic") and self.on("effects"):
             o.append((1.3, lambda: self.logic_stmt(d)))
         if d > 0 and not simple:
@@ -1117,6 +1122,87 @@ class Gen:
             if self.on("capture") and self.on("func"):
                 o.append((0.7, lambda: self.nested_function(d)))
         return self.pick(o)
+
+    # -- loops ------------------------------------------------------------------------------
+    def loop_node(self, t, d, make_body, bare=False):
+        """A loop whose value is a `t` (design principles 2.10, 2.13). The form is chosen at
+        random; every loop ends: a `while` counts rounds against a small bound, a `for` visits
+        an array. `make_body(state_t, d)` gives the body, with the names of the head in scope;
+        the loop's value is the state, or (unless `bare`) one value of it."""
+        form = self.r.choice(["while", "for", "for", "forwhile"])
+        mark = len(self.scope)
+        names, types, inits = [], [], []
+        seq, var, cond = None, None, None
+
+        def state(prefix, ty, init):
+            s = Sym(self.fresh(prefix), ty, "let")
+            names.append(s.name)
+            types.append(ty)
+            inits.append(init)
+            return s
+
+        # The first values and the array do not see the names of the head.
+        first = self.expr(t, d - 1)
+        if form != "for" or self.chance(0.3):
+            counted = form == "while"
+            extra_t = INT if counted else self.scalar()
+            extra_init = lit(INT, 0) if counted else self.expr(extra_t, 1)
+        else:
+            counted, extra_t, extra_init = False, None, None
+        elem_t = None
+        if form != "while":
+            elem_t = self.scalar() if self.chance(0.7) else t
+            seq = self.expr(ARR(elem_t), d - 1)
+        value = state("s", t, first)
+        extra = state("c", extra_t, extra_init) if extra_t is not None else None
+        self.scope.extend([value] + ([extra] if extra else []))
+        if form == "while":
+            # `c < K`, alone or with a test of the state (the counter keeps it finite).
+            bound = bin_("<", ref(extra), lit(INT, self.r.choice([0, 1, 2, 3, 4, 5])), BOOL)
+            cond = bound if self.chance(0.5) else self.logical("&&", bound, lambda: self.expr(BOOL, 1))
+        elif form == "forwhile":
+            cond = self.expr(BOOL, 1)
+        if seq is not None:
+            x = Sym(self.fresh("q"), elem_t, "let")
+            var = x.name
+            self.scope.append(x)
+        state_t = t if extra is None else TUP(t, extra_t)
+        if extra is None:
+            body = make_body(t, d - 1)
+        else:
+            step = bin_("+", ref(extra), lit(INT, 1), INT) if counted else None
+            body = make_body(state_t, d - 1, step)
+        del self.scope[mark:]
+        node = N("loop", [inits, seq, cond, body], t=state_t, names=names, var=var)
+        return node if extra is None or bare else N("tix", [node], t=t, i=0)
+
+    def loop_expr(self, t, d):
+        def body(st, d2, step=None):
+            if st == t:
+                return self.pure_arm(t, d2)
+            nxt = step if step is not None else self.expr(st[1][1], d2)
+            return N("tup", [self.expr(t, d2), nxt], t=st)
+        return self.loop_node(t, d, body)
+
+    def loop_value(self, d):
+        """`let n = loop ... do sync { effects; next }`: a loop in a sync block whose body is a
+        sync block, so its effects run every round, in order."""
+        t = self.rand_type(0.2)
+
+        def body(st, d2, step=None):
+            if st == t:
+                return self.effect_block(t, d2)
+            blk = self.effect_block(st[1][0], d2)
+            nxt = step if step is not None else self.expr(st[1][1], 1)
+            blk.c[1] = N("tup", [blk.c[1], nxt], t=st)
+            blk.t = st
+            return blk
+        # The loop is the whole value of the statement (its tuple when it has two values of
+        # state): the statement is an effect position, and so is the body (model.effect_violations).
+        node = self.loop_node(t, d, body, bare=True)
+        s = Sym(self.fresh("n"), node.t, "let")
+        self.scope.append(s)
+        return N("let", [node], name=s.name)
 
     def var_decl(self):
         t = self.r.choice(self.var_types())

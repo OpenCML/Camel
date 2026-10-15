@@ -347,27 +347,32 @@ func main(): int sync {
 
 `try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射）：写了得到 `SemanticDiag::TryCatchNotInLanguage`。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
-### 6.8.3 `loop`（写法暂定，尚未实现）
+### 6.8.3 `loop`
 
-循环是一个带状态的表达式（设计原则 2.10）。状态写在循环头上，循环体的值是下一轮的状态，整个循环的值是最后的状态。
+循环是一个带状态的表达式（设计原则 2.10、2.13）。状态写在循环头上，每个名字只声明一次并给出初值；`do` 后面的表达式是循环体，它的值是下一轮的状态；整个循环的值是最后的状态。
 
 ```
-loop 状态 = 初值 (for 名字 in 序列)? (while 条件)? { 循环体 }
+loop 名字 = 初值 (, 名字 = 初值)* (for 名字 in 数组)? (while 条件)? do 表达式
 ```
 
 ```cml
-let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
-let total    = loop acc = 0 for x in xs { acc + x * x }
-let found    = loop found = -1 for x in xs while found < 0 { if x > 9 then x else found }
+let total    = loop acc = 0 for x in xs do acc + x * x
+let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
+let p        = loop p = { x: 0 } for d in ds do { x: p.x + d }
+let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else hit
 ```
 
-- 状态是一个名字，或圆括号里的几个名字（此时状态是元组）。
-- `for` 每轮取序列的一个元素，`while` 在条件成立时继续；两者都写时，元素取完或条件不成立即结束。至少写其中一个。没有 `break` 与 `continue`：提前结束写成 `while` 条件。
-- 初值与序列只求值一次，其中看不到状态的名字；条件与循环体里看得到状态的名字与 `for` 绑定的名字。
-- 初值、序列、条件是运算符表达式；要写 `if`、`match` 或赋值时加圆括号。循环体必须是块；块里要以结构体字面量作值时再套一层花括号：`{ { x: 1 } }`。
-- `loop` 与 `while` 是关键字。
+- **状态**：一个名字时，循环体的值与循环的值就是这个值；几个名字（逗号分开）时，循环体给出它们按书写顺序组成的元组，循环的值也是这个元组，用 `let (a, b) = loop ...` 或 `.0`、`.1` 取出。状态的类型是初值的类型；循环体的值必须是这个类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。`null` 与空数组 `[]` 作初值时没有自己的类型，写 `null as T?`，或先把空数组带类型绑定到一个名字（`let none: int[] = []`）再用这个名字（`SemanticDiag::LoopStateWithoutType`）。
+- **`for x in xs`** 每轮按顺序取数组 `xs` 的一个元素；`xs` 必须是数组（`SemanticDiag::LoopSequenceNotArray`），`range(a, b)` 就是一个数组。**`while c`** 在条件成立时继续；条件是 `bool`（`SemanticDiag::LoopConditionNotBool`）。两者都写时，每一轮先看条件，再取下一个元素：条件不成立或元素取完即结束。至少写其中一个。
+- **没有 `break` 与 `continue`**：提前结束写成 `while` 条件，跳过一轮的其余部分写成 `if`。
+- **作用域**：初值与数组在循环所在处求值一次，其中看不到循环头的名字；条件看得到状态的名字，循环体看得到状态的名字与 `for` 的名字。循环头的名字不能重复（`SemanticDiag::LoopNameRepeated`）。条件与循环体看得到外面的名字，读到的是循环开始时的值（`var` 每轮读其当前值）。
+- **`do` 之后**是一个表达式，读法与 `then` 之后相同：`{ x: 1 }` 是结构体，`{ 5 }` 与 `sync { ... }` 是块。块里 `return` 结束这个块并给出下一轮的状态，不离开函数。
+- **效应**：循环体是不是同步块由它自己决定（2.4）。写成 `do sync { println(x); acc + x }` 时每轮按顺序执行其中的效应。循环所在的块不是同步块、而循环的值又没有被用到时，整个循环不执行，并给出 `EffectNotExecuted`（与没有被用到的调用相同）。
+- **顺序与深度**：各轮严格按顺序。循环不是递归：任意多轮都不占调用深度，`--max-recursion-depth` 不计循环的轮数；不终止的循环一直运行。
+- **数值许可**：写在函数或块上的 `@numeric(...)` 对词法上嵌在其中的循环体与条件同样有效（2.13）。
+- `loop`、`while`、`do`、`for`、`in` 是关键字。
 
-目前语法与抽象语法树已经就位，编译到图的部分尚未实现：使用它得到 `SemanticDiag::ConstructNotSupported`。
+在图上，一个循环是外层图里的一个 `LOOP` 节点，条件与循环体各是一张子图，两者共用一份捕获表（设计原则 2.12；`docs/design/graph-model` 3.5）。
 
 ## 6.9 lambda 与函数类型
 

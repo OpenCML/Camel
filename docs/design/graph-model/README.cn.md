@@ -583,7 +583,7 @@ subgraph "abs" {
 
 | | |
 |---|---|
-| 语法元素 | `loop (状态) = (初值) while 条件 { 循环体 }`、`loop 状态 = 初值 for x in xs { 循环体 }`、`loop … for x in xs while 条件 { … }`（设计原则 2.10；循环头的写法暂定） |
+| 语法元素 | `loop s = 初值, t = 初值 while 条件 do 循环体`、`loop s = 初值 for x in xs do 循环体`、`loop … for x in xs while 条件 do …`（设计原则 2.10、2.13 的 `do` 式） |
 | 输入 | `Norm`：`for` 形式第 0 条是被遍历的数组，然后是 k 个状态的初值；`With`：m 个捕获的值，条件图与循环体图共用这一份；`Ctrl`：顺序 |
 | 负载 | `kind`：`While`、`For`、`ForWhile`；条件图与循环体图在图引用表里的下标（`For` 没有条件图） |
 | 条件图 | `role = LoopCond`；端口：k 个普通形参（状态）+ m 个捕获；返回 `bool` |
@@ -596,16 +596,16 @@ subgraph "abs" {
 
 状态写在循环头上，所以 k、各状态的类型、初值都在 `LOOP` 节点的入边上，与循环体里写了什么无关（R1）。循环体是独立的子图，不并入外层图：外层图保持无环，容量也不被循环体占用。
 
-`examples/nodes/loop.cml`（本基线的 `camel` 还不认识 `loop`【实测：`UnresolvedReference: 'loop'`】）：
+`examples/nodes/loop.cml`：
 
 ```camel
 func sum_to(n: int): int {
-    let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
+    let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
     return acc
 }
 ```
 
-拟议的图：
+图（`std::rgir`【实测，2026-10-15，`lane/loop`】；节点序号与下面一致。图上没有 `role` 字段：两张子图由 `LOOP` 节点的负载指认，名字是 `函数.loopN.cond`、`函数.loopN.body`）：
 
 ```
 subgraph "sum_to" {
@@ -630,7 +630,7 @@ subgraph "sum_to" {
 }
 ```
 
-降级为尾递归（循环设计稿的方案 (c)）是一条固定的改写：`LOOP(cond, body, s, c)` 换成一张新图 `L(with c)(s) = if cond(s) then L(body(s)) else s` 与一个 `FUNC L` 节点。降级后的图就是今天手写尾递归的图（`examples/nodes/loop_tail.cml`【实测】）。不认识 `LOOP` 的消费者在入口处调用它。
+降级为尾递归（循环设计稿的方案 (c)）是一条固定的改写：`LOOP(cond, body, s, c)` 换成一张新图 `L(with c)(s) = if cond(s) then L(body(s)) else s` 与一个 `FUNC L` 节点。降级后的图就是手写尾递归的图（`examples/nodes/loop_tail.cml`【实测】）。实现在 `camel/runtime/loop_lowering.h`（`lowerLoopsToTailRecursion`）：每个循环三张图（`rec`、两条臂 `next`、`done`），`for` 多一个下标，`for … while` 每轮先看条件再取元素；只在后端入口、在后端私有的、不提交回共享程序的副本上做（op-semantics 11.4）。今天用它的是 `std::prl` 与 `std::cpp`；`std::nvm`、`std::fvm`/`std::jit` 与 `std::macro` 求值器原生执行（`docs/technical/39_loops.md`）。
 
 #### `GATE` 门
 
@@ -1515,6 +1515,8 @@ export func simplify(p: Program): Program! {
 | 3b | **已完成** | 节点是 16 字节的定长记录（`GCNode`：种类、标志、槽位、`TypeId`、三组输入的起点、负载偏移），序号就是数组下标；每条边只在输入表里存一次，三组输入是一段连续的表项，下一个记录的起点结束它，末尾有一个哨兵记录；各种类的附加数据在负载区（8 字节一字，`nodeBodyAs`）；使用者方向不存，`GCGraph::uses()` 第一次被问到时建反向索引、随图释放，`normOutputsOf` 等读它，次序与唯一性与原先编码器存的相同。四个后端、宏求值器、导出器、`std::cpp`、调试器只是把 `n->dataType` 换成 `n->dataType()`、`nodeBlockCount()` 换成 `nodeCount()` | 负载按 8 字节一字而不是设计的 4 字节：`FUNC` 的被调图与 `OPER` 缓存的实现还是指针，要等图引用表与 `ExecPlan`；容量从"节点块"变成"节点、边、负载字"，`GraphTooLarge` 的数量名随之改变（见下） |
 | 3c | **已完成（稳定的图编号移到第 5 步）** | 每张冻结的图有一张图引用表（`GCGraph::refs()`）：每张被引用的图一项，记着它的角色（被 `FUNC` 直接调用、写在这张图里、静态区里函数常量的图）；`FUNC` 的负载是引用表下标（`GCFuncRef`），`dependencies()`、`subGraphs()`、`staticGraphRefs()` 是按角色取的视图；编码器把被调图写成下标、遇到不在表里的被调图就拒绝，校验查每个 `FUNC` 下标指向被调图一项、静态区每个函数常量的图都在表里 | **表项仍是这张冻结图里的图指针，不是全程序的 `GraphId`。** 改写前后不变的编号要求改写时把全程序表里的那一项换成新版本；但脱离主程序的会话（导出一个函数）也改写图，按进程换表项会改掉正在运行的程序调用的图，改写前造出、仍然活着的旧版本（提交前的函数常量）也会转去调用端口可能已经变了的新版本。没有快照（4.3）这两件事都不对，所以稳定编号与全程序图表随第 5 步的快照与局部提交一起做 |
 | 3d | **已完成** | 每个节点的源码位置是冻结块里与节点记录平行的一列（`GCGraphNativePayload::origins`，每节点一个 32 位位置编号，0 表示没有），编码器写记录时一起写；`GCGraph::nodeOrigin` 直接取下标。原来是每张图调试记录里的一张哈希表（节点序号 → 位置），每次编码都要为它再做一遍负载规划 | 位置编号仍是源码管理器的全进程编号（64 位类型、32 位存放：它是位置记录数组的下标）；设计说的"按模块连续分配、写缓存时整段搬"是第 9 步缓存的事 |
+
+**实施状态（2026-10-15，分支 `lane/loop`）。** 第 10 步的 `LOOP` 部分已完成：`do` 式的语法、AST、GCT；`LOOP` 节点（种类 15，冻结负载 `GCLoopRef`：形式与两张子图在图引用表里的下标，两者都标为被调；草稿负载 `GCLoopBody`）、建图（条件图与循环体图先于建体建出并登记为"捕获孪生"，任何一边的捕获同时进另一边、位置相同，所以共用一份捕获表，链接步后加的捕获也一样）、编码与解码、克隆、每次提交的检查（I12/I13 与 op-semantics 的 I18、I19，I20 由按节点计算的效应摘要保证）、`std::gir`/`std::rgir`/`std::stats` 的转储、消费接口 `LoopView`（`include/camel/runtime/loop.h`）、各遍把它当不透明节点、后端在入口私下降级或原生执行（见 3.5 卡片末尾）。`&&`/`||` 与收窄另有分支。与设计不同之处：图上没有 `role = LoopCond/LoopBody` 字段（子图的角色由引用它的 `LOOP` 节点决定）；`GraphId`、`TypeId` 在接口里仍是 `GCGraph *`、`Type *`（第 5 步之后换）。
 
 **实施状态（2026-10-14，分支 `lane/modules`）。** 第 6–8 步与第 12 步在这条线上做。
 
