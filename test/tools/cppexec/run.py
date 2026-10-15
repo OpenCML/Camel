@@ -71,7 +71,7 @@ def build_command(compiler, msvc, source, target, bridged, camel_home, pch=None)
         cmd = [compiler, "/nologo", "/std:c++20", "/O2", "/EHsc", "/I", include, source,
                "/Fe" + target]
         return cmd + ([os.path.join(lib, "libcamel.lib")] if bridged else [])
-    cmd = [compiler, "-std=c++20", "-O2", "-w", "-I", include] +         (["-include-pch", pch] if pch else []) + [source, "-o", target]
+    cmd = [compiler, "-std=c++20", "-O2", "-ffp-contract=off", "-w", "-I", include] +         (["-include-pch", pch] if pch else []) + [source, "-o", target]
     return cmd + (["-L" + lib, "-lcamel", "-Wl,-rpath," + lib] if bridged else [])
 
 
@@ -222,7 +222,7 @@ def main():
     if not args.no_pch and "clang" in os.path.basename(compiler).lower():
         pch = os.path.join(workdir, "runtime.pch")
         header = os.path.join(ROOT, "include", "camel", "standalone", "runtime.h")
-        code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-I", os.path.join(ROOT, "include"),
+        code, _, _, _ = run([compiler, "-std=c++20", "-O2", "-ffp-contract=off", "-I", os.path.join(ROOT, "include"),
                              "-x", "c++-header", header, "-o", pch], 600)
         args.pch = pch if code == 0 else None
     try:

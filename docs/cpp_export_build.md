@@ -22,14 +22,14 @@ camel-cpp prog.cml -o prog std::inline             # std::cpp 之前先跑别的
 
 ```bash
 camel prog.cml std::cpp > prog.cpp
-c++ -std=c++20 -O2 -I"$CAMEL_HOME/include" prog.cpp -o prog
+c++ -std=c++20 -O2 -ffp-contract=off -I"$CAMEL_HOME/include" prog.cpp -o prog
 ./prog
 ```
 
 要链接运行时的程序（文件开头的注释会说明）：
 
 ```bash
-c++ -std=c++20 -O2 -I"$CAMEL_HOME/include" prog.cpp -o prog \
+c++ -std=c++20 -O2 -ffp-contract=off -I"$CAMEL_HOME/include" prog.cpp -o prog \
     -L"$CAMEL_HOME/libs" -lcamel -Wl,-rpath,"$CAMEL_HOME/libs"
 ```
 

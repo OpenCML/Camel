@@ -120,7 +120,7 @@ int main(int argc, char *argv[]) {
     text << in.rdbuf();
     const bool bridged = text.str().find("camel/standalone/bridge.h") != std::string::npos;
 
-    std::string build = compiler() + " -std=c++20 -O2 -I" + quoted(home / "include") + " " +
+    std::string build = compiler() + " -std=c++20 -O2 -ffp-contract=off -I" + quoted(home / "include") + " " +
                         quoted(cpp) + " -o " + quoted(executable);
     if (bridged) {
         // The program uses operators of runtime modules: it links the runtime, and finds it

@@ -404,7 +404,7 @@ const double v5 = rt::bridge::call<double>(op_4, site_4, {rt::bridge::arg(x)}, {
 
 ## 10. 构建与工具
 
-- **一条命令**：`c++ -std=c++20 -O2 -I"$CAMEL_HOME/include" x.cpp -o x`。要链接运行时的程序另加 `-L"$CAMEL_HOME/bin" -lcamel` 与运行时自己的依赖，文件头注释写全。
+- **一条命令**：`c++ -std=c++20 -O2 -ffp-contract=off -I"$CAMEL_HOME/include" x.cpp -o x`。`-ffp-contract=off` 与运行时自己的构建相同（`docs/build-options.cn.md`）：`a * b + c` 不合并为一次乘加，生成的程序与解释器在有 FMA 的平台上也打印相同的数。要链接运行时的程序另加 `-L"$CAMEL_HOME/bin" -lcamel` 与运行时自己的依赖，文件头注释写全。
 - **`camel-cpp`**：今天它自己重做了一遍命令行工具的解析与编译，只在 Windows 上能找到 `libcamel.lib`（D12）。改为一个小的驱动：调用同目录下的 `camel <文件> std::cpp` 得到 `.cpp`，再用 `$CXX`（否则依次找 `clang++`、`g++`、`cl`）按上一条编译；需要运行时时加上链接参数。不再链接 `libcamel`。
 - **CMake**：不提供。`docs/cpp_export_build.md` 里的“方式 A”（`CPP_GEN_SOURCE`、`cpp_gen` 目标）在 CMake 里不存在（D12），文档改写为上面两种。生成的是一个文件、一条命令，使用者把它放进自己的 CMake 工程只需要一个 `add_executable` 与一个包含目录，文档给出这三行。
 - **编译时间**：旧的产物包含运行时的大半头文件，`a01_fib.cpp` 编译 6.9 秒【实测，负载下】。新的产物每个约 1–2.5 秒（全语料的中位数 2.1 秒，负载 13–24）【实测】，几乎全花在 libstdc++ 的 C++20 头文件上（单独包含 `<string>` 0.6 秒、`<ostream>` 0.95 秒【实测】），不是 `camel/standalone/` 自己。`cppexec` 用 clang 时先把 `runtime.h` 预编译一次，单个程序的编译约快一半【实测：1.6–1.9 秒对 4.2–5.2 秒，同一负载】。
