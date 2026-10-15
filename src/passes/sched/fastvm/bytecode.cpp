@@ -156,6 +156,12 @@ std::string to_string(const MarkOpCode &op) {
         return "ForeachArr";
     case MarkOpCode::Isolate:
         return "Isolate";
+    case MarkOpCode::LoopWhile:
+        return "LoopWhile";
+    case MarkOpCode::LoopFor:
+        return "LoopFor";
+    case MarkOpCode::LoopForWhile:
+        return "LoopForWhile";
     default:
         ASSERT(false, "Unknown MarkOpCode encountered.");
         return "UNKNOWN";

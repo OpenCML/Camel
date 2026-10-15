@@ -1,0 +1,17 @@
+module main
+
+// The condition and the body of a loop are subgraphs; the debugger folds them into the frame of
+// the function the loop is written in, as it folds the arms of a branch (design principles 2.11).
+
+func squares(xs: int[]): int {
+    let total = loop acc = 0 for x in xs do {
+        let sq = x * x                        // mark:body
+        acc + sq
+    }
+    return total                              // mark:ret
+}
+
+func main(): int sync {
+    println(squares([1, 2, 3]))               // mark:call
+    return 0
+}

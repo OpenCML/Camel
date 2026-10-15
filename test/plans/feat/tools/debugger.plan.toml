@@ -53,3 +53,9 @@ name = "debugger.dap_protocol"
 desc = "DAP at its edges: error responses for unknown, malformed, mistimed and ill-formed requests; a program that does not compile; an unknown pass; pause, queries while running, terminate, disconnect and a closed input on a program that never ends; std::jit and std::prl running as std::fvm with a notice; breakpoints and names after optimisation passes; stopOnEntry; zero-based lines."
 case = "../../../cases/tools/debugger/dap_protocol.test.mjs"
 timeout_ms = 300000
+
+[[tests]]
+name = "debugger.loop_frames"
+desc = "A loop in the REPL on both back ends: its body is part of the frame of the function it is written in (design principles 2.11), a breakpoint in the body stops once per round with that round's element and state, and frames subgraphs shows the body as `squares [loop body at line N]`."
+case = "../../../cases/tools/debugger/loop_frames.test.mjs"
+timeout_ms = 300000

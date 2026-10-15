@@ -231,6 +231,11 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     void evalMarkedOperator(
         const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs,
         ctx::Frame &currFrame);
+    /// Runs the SCHD instruction of a LOOP node (camel/runtime/loop.h) natively: one call of
+    /// the condition graph and one of the body graph per round, as a higher-order operator
+    /// calls its function, the state kept in the instruction's result slot. A round is not a
+    /// recursion: each call returns before the next, so no number of rounds reaches the limit.
+    void evalLoop(const Bytecode &bc, ctx::Frame &currFrame);
 
     void evalMarkedOperator_map_arr(
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
