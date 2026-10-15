@@ -9,5 +9,7 @@ name = 'tiles-plan-check.exe' if os.name == 'nt' else 'tiles-plan-check'
 candidates = [build / 'Release' / name, build / name]
 binary = next((p for p in candidates if p.is_file()), candidates[0])
 env = os.environ.copy()
-env['PATH'] = str(root / 'out/latest/bin') + os.pathsep + env.get('PATH', '')
+env['PATH'] = os.pathsep.join([str(root / 'out/latest/bin'), str(root / 'out/latest/libs'), env.get('PATH', '')])
+if os.name != 'nt':
+    env['LD_LIBRARY_PATH'] = str(root / 'out/latest/libs') + os.pathsep + env.get('LD_LIBRARY_PATH', '')
 subprocess.run([str(binary)], env=env, check=True)

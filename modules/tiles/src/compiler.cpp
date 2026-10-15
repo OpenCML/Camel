@@ -57,6 +57,25 @@ class Compiler {
   public:
     Program program;
     std::unordered_set<rt::GCGraph *> active;
+    std::unordered_map<core::OperId, size_t> contracts;
+
+    size_t contract(core::OperId id) {
+        if (const auto found = contracts.find(id); found != contracts.end())
+            return found->second;
+        auto &table = core::OperatorTable::instance();
+        Program::OperatorContract snapshot{.uri = std::string(table.uri(id))};
+        if (const auto *semantics = table.semantics(id)) {
+            if (semantics->key.major != 1)
+                throw std::runtime_error(
+                    "unsupported operator semantic version " + semantics->key.toString());
+            snapshot.key         = semantics->key;
+            snapshot.declaration = semantics;
+        }
+        const auto index = program.contracts.size();
+        program.contracts.push_back(std::move(snapshot));
+        contracts.emplace(id, index);
+        return index;
+    }
 
     size_t append(Node node) {
         if (program.nodes.size() >= 4096)
@@ -279,13 +298,17 @@ class Compiler {
                     throw std::runtime_error("operator context arguments are not supported yet");
                 for (auto in : ins)
                     args.push_back(eval(f, in));
-                const auto first = program.nodes.size();
-                out              = operation(g->nodeBodyAs<rt::GCOperBody>(id)->oper, args);
+                const auto first    = program.nodes.size();
+                const auto oper     = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
+                const auto semantic = contract(oper);
+                out                 = operation(oper, args);
                 // Only this operator's lowering inherits its lexical grant.
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
-                for (size_t i = first; i < program.nodes.size(); ++i)
+                for (size_t i = first; i < program.nodes.size(); ++i) {
                     program.nodes[i].permissions = g->nodePermissions(id);
+                    program.nodes[i].semantic    = semantic;
+                }
                 break;
             }
             default:

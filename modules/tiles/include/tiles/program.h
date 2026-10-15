@@ -49,6 +49,8 @@ struct Node {
     std::vector<size_t> strides;
     DType dtype                           = DType::F32;
     core::sem::PermissionMask permissions = core::sem::kNoPermissions;
+    size_t semantic =
+        SIZE_MAX; // Originating operator contract; absent for native/synthetic inputs.
     std::shared_ptr<const DeviceValue>
         resident; // Borrowed immutable input, retained through execution.
 };
@@ -71,6 +73,14 @@ struct StoragePlan {
     std::vector<size_t> bytes;
 };
 struct Program {
+    struct OperatorContract {
+        std::string uri;
+        std::optional<core::sem::OperatorKey> key;
+        // Core declaration records are immutable and live until process exit.
+        // This non-GC pointer is only a process-local revision token, never persisted.
+        const core::sem::OperatorSemantics *declaration = nullptr;
+    };
+    std::vector<OperatorContract> contracts; // No graph or collector pointers.
     std::vector<Node> nodes;
     std::vector<size_t> outputs = {0}; // Ordered tensor leaves of the Camel result.
     std::string source;

@@ -44,6 +44,19 @@ cases; such a benchmark still refuses to report a speedup. A reference for each
 selected relaxed algorithm is needed before relaxing this gate. `run` and
 `run_device` execute the granted contraction independently of that benchmark gate.
 
+`inspect` also lists `operator_contracts`: stable operator keys and their numeric
+classification, or an explicit undeclared/opaque dependency for a known lowering
+whose core declaration is not available yet. Compilation supports semantic major
+version 1; incompatible versions are refused. Plans retain the core's immutable,
+process-lifetime declaration record as a revision token (not a GC pointer).
+Validation before generation/execution rebinds keys and rejects replaced records,
+including same-version replacements and declarations newly added to opaque
+operators. The source cache includes both stable keys and these process-local
+revision tokens. Tokens are never persisted or presented as portable cache keys.
+FMA selection additionally requires the core declaration of correctly rounded
+f32 arithmetic sensitive to contraction; an opaque declaration grants no such
+optimization capability.
+
 A separate process-local source-template LRU looks up the exact lowered plan
 before printing CUDA. Runtime scalar/tensor contents and device owners are excluded;
 graph literals, shapes, indexing and launch choices are included. Storage planning

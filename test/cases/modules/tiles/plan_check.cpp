@@ -10,6 +10,7 @@
 
 // Mutation tests for plan validation: failures must precede device execution.
 #include "tiles/program.h"
+#include "camel/core/operator_table.h"
 #include "tiles/device.h"
 #include "tiles/internal/index_expr.h"
 #include "tiles/internal/access.h"
@@ -145,6 +146,79 @@ int main() {
         generate(scalarCode);
         if (kernel::generationCacheStats().misses != beforePermission.misses + 1)
             throw std::runtime_error("numeric permissions missing from source-template key");
+        auto &operators = camel::core::OperatorTable::instance();
+        namespace sem = camel::core::sem;
+        const std::string contractUri = "tilestest:versioned";
+        const auto contractId = operators.intern(contractUri);
+        auto declaration = sem::OperatorSemantics{
+            .key=sem::OperatorKey::of(contractUri),
+            .numeric={.cls=sem::NumericClass::Exact, .sensitiveTo=sem::kNoPermissions}};
+        auto versioned = scalarInput;
+        versioned.contracts.push_back({.uri=contractUri});
+        generate(versioned); // Absence is itself a dependency.
+        auto stale = [&](const Program &old) {
+            try { validatePlan(old); }
+            catch (const std::runtime_error &e) {
+                if (std::string(e.what()).find("recompile the graph") != std::string::npos) return;
+                throw;
+            }
+            throw std::runtime_error("stale operator declaration was accepted");
+        };
+        auto capture = [&] {
+            versioned.contracts[0].key = operators.key(contractId);
+            versioned.contracts[0].declaration = operators.semantics(contractId);
+        };
+        operators.declareSemantics(contractUri, declaration);
+        stale(versioned);
+        capture();
+        generate(versioned);
+        const auto beforeReplacement = kernel::generationCacheStats();
+        operators.declareSemantics(contractUri, declaration); // Same version, new revision.
+        stale(versioned);
+        capture();
+        generate(versioned);
+        if (kernel::generationCacheStats().misses != beforeReplacement.misses + 1)
+            throw std::runtime_error("declaration revision missing from source cache identity");
+        declaration.key.minor = 1;
+        operators.declareSemantics(contractUri, declaration);
+        stale(versioned);
+        capture();
+        generate(versioned);
+        declaration.key.major = 2;
+        declaration.key.minor = 0;
+        operators.declareSemantics(contractUri, declaration);
+        stale(versioned);
+        // A newer record with an old incompatible key still fails core rebinding.
+        versioned.contracts[0].declaration = operators.semantics(contractId);
+        stale(versioned);
+        Program guarded;
+        guarded.nodes = {{.op="input", .data={1}}, {.op="input", .data={2}},
+                         {.op="multiply", .inputs={0,1}, .permissions=sem::kContract},
+                         {.op="add", .inputs={2,0}, .permissions=sem::kContract}};
+        guarded.outputs = {3};
+        generate(guarded);
+        if (guarded.source.find("=fmaf(") != std::string::npos)
+            throw std::runtime_error("contracted arithmetic without a core declaration");
+        const std::string opaqueUri = "tilestest:opaque";
+        const auto opaqueId = operators.intern(opaqueUri);
+        auto opaque = sem::OperatorSemantics{.key=sem::OperatorKey::of(opaqueUri)};
+        operators.declareSemantics(opaqueUri, opaque);
+        guarded.contracts.push_back({.uri=opaqueUri, .key=opaque.key, .declaration=operators.semantics(opaqueId)});
+        guarded.nodes[2].semantic = guarded.nodes[3].semantic = 0;
+        generate(guarded);
+        if (guarded.source.find("=fmaf(") != std::string::npos)
+            throw std::runtime_error("contracted an opaque operator");
+        opaque.key.minor = 1;
+        opaque.numeric.cls = sem::NumericClass::CorrectlyRounded;
+        opaque.numeric.compute = camel::core::type::TypeCode::Float32;
+        opaque.numeric.sensitiveTo = sem::kContract;
+        operators.declareSemantics(opaqueUri, opaque);
+        guarded.contracts[0].key = opaque.key;
+        guarded.contracts[0].declaration = operators.semantics(opaqueId);
+        generate(guarded);
+        if (guarded.source.find("=fmaf(") == std::string::npos)
+            throw std::runtime_error("ignored the supported arithmetic declaration");
+        std::cout << "tiles operator contracts: absent, replaced and incompatible declarations rejected\n";
         std::weak_ptr<int> cacheOwner;
         {
             Program borrowed;
