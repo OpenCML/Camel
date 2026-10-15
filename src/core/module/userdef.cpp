@@ -13,9 +13,11 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 01, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
+
+#include <sstream>
 
 #include "camel/utils/windows_parser_guard.h"
 
@@ -115,12 +117,18 @@ bool UserDefinedModule::compile(CompileStage till) {
     if (stage_ < CompileStage::AST) {
         if (!parser_->ast()) {
             camel::utils::phase::Scope phaseScope("parse", name_);
-            std::ifstream ifs(path_);
-            if (!ifs.good()) {
+            const auto override = context_->sourceOverride(path_);
+            std::istringstream buffer(override.value_or(""));
+            std::ifstream ifs;
+            if (!override)
+                ifs.open(path_);
+            if (!override && !ifs.good()) {
                 throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
                     .commit(name_, "module file not found or unreadable: " + path_);
             }
-            if (!parser_->parse(ifs)) {
+            if (!parser_->parse(
+                    override ? static_cast<std::istream &>(buffer)
+                             : static_cast<std::istream &>(ifs))) {
                 throw DiagnosticBuilder::of(SemanticDiag::ModuleParseFailed).commit(path_);
             }
         }

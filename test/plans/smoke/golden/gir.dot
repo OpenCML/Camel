@@ -4,25 +4,25 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => i64";
+        tooltip="() => int";
         subgraph cluster_F02 {
             label="fib";
-            tooltip="(n: i64) => i64";
+            tooltip="(n: int) => int";
             subgraph cluster_F03 {
                 label="__g_4__";
-                tooltip="() => i64";
+                tooltip="() => int";
                 F03 [label="ARGS", type="ARGS", style=dashed, shape=circle];
                 O03 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-                N00 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_4__::node#1"];
+                N00 [label="n", type="PORT", param_name="n", param_kind="capture", param_index="0", value_type="int", shape=circle, style=solid, tooltip="n\n__g_4__::node#1"];
                 F03 -> N00 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
                 N00 -> O03 [label="0", type="EXIT", style=solid];
             }
             subgraph cluster_F04 {
                 label="__g_6__";
-                tooltip="() => i64";
+                tooltip="() => int";
                 F04 [label="ARGS", type="ARGS", style=dashed, shape=circle];
                 O04 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-                N01 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_6__::node#1"];
+                N01 [label="n", type="PORT", param_name="n", param_kind="capture", param_index="0", value_type="int", shape=circle, style=solid, tooltip="n\n__g_6__::node#1"];
                 N02 [label="1", type="DATA", shape=circle, style=solid, tooltip="1\n__g_6__::node#-1"];
                 N03 [label=":op/\nsub_l", type="OPER", shape=diamond, style=solid, tooltip=":op/sub_l\n__g_6__::node#2"];
                 N04 [label="fib", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="fib\n__g_6__::node#3"];
@@ -43,7 +43,7 @@ digraph GraphIR {
             }
             F02 [label="ARGS", type="ARGS", style=dashed, shape=circle];
             O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-            N09 [label="n", type="PORT", shape=circle, style=solid, tooltip="n\nfib::node#1"];
+            N09 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int", shape=circle, style=solid, tooltip="n\nfib::node#1"];
             N0A [label="1", type="DATA", shape=circle, style=solid, tooltip="1\nfib::node#-1"];
             N0B [label=":op/\nle_l", type="OPER", shape=diamond, style=solid, tooltip=":op/le_l\nfib::node#2"];
             N0C [label="JOIN", type="JOIN", shape=diamond, style=solid, tooltip="JOIN\nfib::node#6"];

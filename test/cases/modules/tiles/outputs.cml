@@ -1,0 +1,31 @@
+module tiles_outputs
+import { Tensor, reshape, sum, abs, transpose, slice } from tensor
+import { run, inspect, benchmark } from tiles
+
+type Results = { first: Tensor<f32>, rest: (Tensor<f32>, Tensor<f32>) }
+func compute(x: Tensor<f32>): Results {
+    let y = x + 1.0
+    return { first: y, rest: (transpose(y * 2.0), y) }
+}
+func consume(x: Results): Tensor<f32> { return x.first + x.rest.1 }
+func through(x: Tensor<f32>): Tensor<f32> { return consume(compute(x)) }
+func identity(x: Tensor<f32>): (Tensor<f32>, Tensor<f32>) { return (x, x) }
+func with_empty(x: Tensor<f32>): (Tensor<f32>, Tensor<f32>) { return (slice(x, 0, 0, 0), x + 2.0) }
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let gpu = run<compute>(x)
+    let cpu = compute(x)
+    println(sum(abs(gpu.first - cpu.first)))
+    println(sum(abs(gpu.rest.0 - cpu.rest.0)))
+    println(sum(abs(gpu.rest.1 - cpu.rest.1)))
+    println(sum(abs(run<consume>(gpu) - consume(cpu))))
+    println(sum(abs(run<through>(x) - through(x))))
+    let same = run<identity>(x)
+    println(sum(abs(same.0 - same.1)))
+    let mixed = run<with_empty>(x)
+    println(sum(mixed.0))
+    println(sum(abs(mixed.1 - (x + 2.0))))
+    println(inspect<compute>(x))
+    println(benchmark<compute>(x))
+    return 0
+}

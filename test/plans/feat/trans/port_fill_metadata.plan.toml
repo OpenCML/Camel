@@ -1,0 +1,15 @@
+id = "trans.port_fill_metadata"
+order = 337
+tier = "feat"
+tags = ["feat", "trans", "dump"]
+
+[[tests]]
+name = "port_names_and_fill_types"
+desc = "DOT exports preserve normal, with and captured parameter names and concrete aggregate FILL types."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/port_fill_metadata.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["port/fill metadata: PASS"]
+timeout_ms = 20000

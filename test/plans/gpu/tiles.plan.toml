@@ -1,0 +1,864 @@
+id = "gpu.tiles"
+order = 900
+tier = "gpu"
+tags = ["gpu", "modules", "tiles"]
+
+[[tests]]
+name = "max_special_values"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/max_special.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["max width=127:", "max width=128:", "max width=257:", "max width=513:"]
+timeout_ms = 60000
+
+[[tests]]
+name = "max_grid_stride"
+kind = "behavior"
+case = "../../cases/modules/tiles/max_grid.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.normalized.stdout.trim() === '0.0', 'grid-stride maximum differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "benchmark_protocol"
+kind = "behavior"
+case = "../../cases/modules/tiles/benchmark.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const records = input.normalized.stdout.trim().split(String.fromCharCode(10)).map(JSON.parse)
+assert(records.length === 4, 'expected four benchmark workloads')
+for (const r of records) {
+  assert(r.schema === 1 && r.repetitions === 21 && r.warmups === 5, 'unexpected measurement protocol')
+  assert(r.device && r.driver_version > 0 && r.nvrtc_version, 'missing hardware/compiler provenance')
+  assert(r.correctness_before.mismatches === 0 && r.correctness_after.mismatches === 0, 'correctness gate failed')
+  for (const name of ['optimized', 'unfused']) {
+    const v = r[name]
+    assert(v.device_ms.length === 21 && v.upload_host_ms.length === 21, 'missing raw samples')
+    assert(v.device_ms.every(t => Number.isFinite(t) && t >= 0), 'invalid device timing')
+    assert(v.upload_host_ms.every(t => Number.isFinite(t) && t >= 0), 'invalid upload timing')
+    assert(v.device_min_ms <= v.device_median_ms && v.device_median_ms <= v.device_p90_ms, 'invalid quantiles')
+  }
+}
+assert(records[0].optimized.plan.kernels === 1 && records[0].unfused.plan.kernels === 5, 'missing unfused control')
+assert(records[2].identical_device_code === true, 'matmul must be the same-code noise control')
+assert(records[3].optimized.plan.stages[0].implementation === 'parallel_max', 'missing parallel reduction')
+assert(records[3].unfused.plan.stages[0].implementation === 'standard', 'missing serial reduction control')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "fusion.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/fusion.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 4, 'expected two plans and two errors')
+const chain = JSON.parse(lines[0]), fork = JSON.parse(lines[2])
+assert(chain.kernels === 1 && chain.stages[0].members.length === 5, 'chain was not fused')
+assert(fork.kernels === 2 && fork.allocations < fork.materialized_values, 'shared result or storage reuse incorrect')
+assert(chain.allocated_bytes < chain.logical_bytes / 2, 'fusion did not remove intermediate storage')
+assert(Number(lines[1]) < 0.0002 && Number(lines[3]) < 0.0002, 'GPU fusion differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "fusion.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/fusion.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 4, 'expected two plans and two errors')
+const chain = JSON.parse(lines[0]), fork = JSON.parse(lines[2])
+assert(chain.kernels === 1 && chain.stages[0].members.length === 5, 'chain was not fused')
+assert(fork.kernels === 2 && fork.allocations < fork.materialized_values, 'shared result or storage reuse incorrect')
+assert(chain.allocated_bytes < chain.logical_bytes / 2, 'fusion did not remove intermediate storage')
+assert(Number(lines[1]) < 0.0002 && Number(lines[3]) < 0.0002, 'GPU fusion differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "fusion.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/fusion.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 4, 'expected two plans and two errors')
+const chain = JSON.parse(lines[0]), fork = JSON.parse(lines[2])
+assert(chain.kernels === 1 && chain.stages[0].members.length === 5, 'chain was not fused')
+assert(fork.kernels === 2 && fork.allocations < fork.materialized_values, 'shared result or storage reuse incorrect')
+assert(chain.allocated_bytes < chain.logical_bytes / 2, 'fusion did not remove intermediate storage')
+assert(Number(lines[1]) < 0.0002 && Number(lines[3]) < 0.0002, 'GPU fusion differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "boundaries.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/boundaries.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'capture, call, reduction, or empty dimension mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "boundaries.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/boundaries.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'capture, call, reduction, or empty dimension mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "boundaries.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/boundaries.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'capture, call, reduction, or empty dimension mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "vector_add"
+kind = "behavior"
+case = "../../cases/modules/tiles/vector_add.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["165.0"]
+timeout_ms = 60000
+
+[[tests]]
+name = "softmax"
+kind = "behavior"
+case = "../../cases/modules/tiles/softmax.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["0.09003","0.2447","0.6652"]
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["22.","28.","49.","64."]
+timeout_ms = 60000
+
+[[tests]]
+name = "consistency.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/consistency.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(Number.isFinite), 'expected five finite error measurements')
+assert(values[0] < 0.005, 'odd-size tiled matmul differs from CPU')
+assert(values[1] < 0.0001, 'softmax differs from CPU')
+assert(values.slice(2).every(x => x === 0), 'broadcast, cache refresh, or reshape mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "consistency.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/consistency.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(Number.isFinite), 'expected five finite error measurements')
+assert(values[0] < 0.005, 'odd-size tiled matmul differs from CPU')
+assert(values[1] < 0.0001, 'softmax differs from CPU')
+assert(values.slice(2).every(x => x === 0), 'broadcast, cache refresh, or reshape mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "consistency.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/consistency.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const values = input.normalized.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(Number.isFinite), 'expected five finite error measurements')
+assert(values[0] < 0.005, 'odd-size tiled matmul differs from CPU')
+assert(values[1] < 0.0001, 'softmax differs from CPU')
+assert(values.slice(2).every(x => x === 0), 'broadcast, cache refresh, or reshape mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "index_maps.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/index_maps.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'index mapping differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "index_maps.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/index_maps.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'index mapping differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "index_maps.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/index_maps.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'index mapping differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "mapped_fusion.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/mapped_fusion.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 5, 'expected plans, errors and benchmark')
+const p = JSON.parse(lines[0]), fork = JSON.parse(lines[1]), b = JSON.parse(lines[4])
+assert(p.kernels === 1 && p.materialized_values === 5 && p.allocated_bytes === 500, 'mapped intermediates were not eliminated')
+assert(fork.kernels === 2, 'shared mapped result must remain materialized')
+assert(Number(lines[2]) === 0 && Number(lines[3]) === 0, 'mapped fusion differs from CPU')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'fused/unfused mapped result differs')
+assert(!b.identical_device_code, 'expected different fusion schedules')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "mapped_fusion.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/mapped_fusion.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 5, 'expected plans, errors and benchmark')
+const p = JSON.parse(lines[0]), fork = JSON.parse(lines[1]), b = JSON.parse(lines[4])
+assert(p.kernels === 1 && p.materialized_values === 5 && p.allocated_bytes === 500, 'mapped intermediates were not eliminated')
+assert(fork.kernels === 2, 'shared mapped result must remain materialized')
+assert(Number(lines[2]) === 0 && Number(lines[3]) === 0, 'mapped fusion differs from CPU')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'fused/unfused mapped result differs')
+assert(!b.identical_device_code, 'expected different fusion schedules')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "mapped_fusion.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/mapped_fusion.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 5, 'expected plans, errors and benchmark')
+const p = JSON.parse(lines[0]), fork = JSON.parse(lines[1]), b = JSON.parse(lines[4])
+assert(p.kernels === 1 && p.materialized_values === 5 && p.allocated_bytes === 500, 'mapped intermediates were not eliminated')
+assert(fork.kernels === 2, 'shared mapped result must remain materialized')
+assert(Number(lines[2]) === 0 && Number(lines[3]) === 0, 'mapped fusion differs from CPU')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'fused/unfused mapped result differs')
+assert(!b.identical_device_code, 'expected different fusion schedules')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "aggregate_outputs.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/outputs.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 10 && lines.slice(0,8).every(x => Number(x) === 0), 'aggregate results differ from CPU')
+const p = JSON.parse(lines[8]), b = JSON.parse(lines[9])
+assert(p.kernels === 2 && JSON.stringify(p.outputs) === '[2,5,2]', 'shared outputs must be computed once and preserved')
+assert(JSON.stringify(b.output_shapes) === '[[2,3],[3,2],[2,3]]', 'output leaf order or shapes changed')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'multioutput benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "aggregate_outputs.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/outputs.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 10 && lines.slice(0,8).every(x => Number(x) === 0), 'aggregate results differ from CPU')
+const p = JSON.parse(lines[8]), b = JSON.parse(lines[9])
+assert(p.kernels === 2 && JSON.stringify(p.outputs) === '[2,5,2]', 'shared outputs must be computed once and preserved')
+assert(JSON.stringify(b.output_shapes) === '[[2,3],[3,2],[2,3]]', 'output leaf order or shapes changed')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'multioutput benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "aggregate_outputs.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/outputs.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 10 && lines.slice(0,8).every(x => Number(x) === 0), 'aggregate results differ from CPU')
+const p = JSON.parse(lines[8]), b = JSON.parse(lines[9])
+assert(p.kernels === 2 && JSON.stringify(p.outputs) === '[2,5,2]', 'shared outputs must be computed once and preserved')
+assert(JSON.stringify(b.output_shapes) === '[[2,3],[3,2],[2,3]]', 'output leaf order or shapes changed')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'multioutput benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gradients.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/gradients.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 8 && values.every(x => x === 0), 'GPU gradients differ from CPU, analytic derivative or ordered f32 contract')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gradients.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/gradients.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 8 && values.every(x => x === 0), 'GPU gradients differ from CPU, analytic derivative or ordered f32 contract')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gradients.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/gradients.cml"
+args = ["${case}", "std::macro", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 8 && values.every(x => x === 0), 'GPU gradients differ from CPU, analytic derivative or ordered f32 contract')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "specialized_branches.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/branches.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'specialized branch, aggregate result or cache isolation failed')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "specialized_branches.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/branches.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'specialized branch, aggregate result or cache isolation failed')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "specialized_branches.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/branches.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'specialized branch, aggregate result or cache isolation failed')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "value_gradient.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/value_gradient.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
+const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
+assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "value_gradient.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/value_gradient.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
+const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
+assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "value_gradient.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/value_gradient.cml"
+args = ["${case}", "std::macro", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
+const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
+assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_transfers.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'resident transfer, type or lifetime mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_transfers.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'resident transfer, type or lifetime mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_transfers.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 5 && values.every(x => x === 0), 'resident transfer, type or lifetime mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_compute.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_compute.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 9 && lines.slice(0,8).every(x => Number(x) === 0), 'borrowed input computation or immutability mismatch')
+const p = JSON.parse(lines[8])
+assert(p.borrowed_inputs === 1 && p.borrowed_bytes === 24, 'resident input missing from plan')
+assert(p.allocated_bytes === 28 && p.allocations === 2 && p.kernels === 1, 'borrowed input must not allocate a temporary copy')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_compute.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_compute.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 9 && lines.slice(0,8).every(x => Number(x) === 0), 'borrowed input computation or immutability mismatch')
+const p = JSON.parse(lines[8])
+assert(p.borrowed_inputs === 1 && p.borrowed_bytes === 24, 'resident input missing from plan')
+assert(p.allocated_bytes === 28 && p.allocations === 2 && p.kernels === 1, 'borrowed input must not allocate a temporary copy')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_compute.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_compute.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 9 && lines.slice(0,8).every(x => Number(x) === 0), 'borrowed input computation or immutability mismatch')
+const p = JSON.parse(lines[8])
+assert(p.borrowed_inputs === 1 && p.borrowed_bytes === 24, 'resident input missing from plan')
+assert(p.allocated_bytes === 28 && p.allocations === 2 && p.kernels === 1, 'borrowed input must not allocate a temporary copy')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_outputs.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_outputs.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident result ownership, chaining, alias or empty-domain mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_outputs.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_outputs.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident result ownership, chaining, alias or empty-domain mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_outputs.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_outputs.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident result ownership, chaining, alias or empty-domain mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_scalars.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_scalars.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident scalar precision, gradient structure or cross-graph input mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_scalars.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_scalars.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident scalar precision, gradient structure or cross-graph input mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_scalars.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_scalars.cml"
+args = ["${case}", "std::macro", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 9 && values.every(x => x === 0), 'resident scalar precision, gradient structure or cross-graph input mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_arithmetic.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_arithmetic.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 7 && lines.slice(0,5).every(x => Number(x) === 0), 'scalar arithmetic or gradient mismatch')
+const p = JSON.parse(lines[5]), b = JSON.parse(lines[6])
+assert(p.kernels === 1 && p.allocated_bytes === 8 && p.borrowed_bytes === 16, 'scalar chain did not fuse')
+assert(b.optimized.plan.kernels === 1 && b.unfused.plan.kernels === 5, 'missing scalar fusion control')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'f64 fusion changed numerical results')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero.nvm"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_arithmetic.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_arithmetic.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 7 && lines.slice(0,5).every(x => Number(x) === 0), 'scalar arithmetic or gradient mismatch')
+const p = JSON.parse(lines[5]), b = JSON.parse(lines[6])
+assert(p.kernels === 1 && p.allocated_bytes === 8 && p.borrowed_bytes === 16, 'scalar chain did not fuse')
+assert(b.optimized.plan.kernels === 1 && b.unfused.plan.kernels === 5, 'missing scalar fusion control')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'f64 fusion changed numerical results')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero.fvm"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_arithmetic.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_arithmetic.cml"
+args = ["${case}", "std::macro", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 7 && lines.slice(0,5).every(x => Number(x) === 0), 'scalar arithmetic or gradient mismatch')
+const p = JSON.parse(lines[5]), b = JSON.parse(lines[6])
+assert(p.kernels === 1 && p.allocated_bytes === 8 && p.borrowed_bytes === 16, 'scalar chain did not fuse')
+assert(b.optimized.plan.kernels === 1 && b.unfused.plan.kernels === 5, 'missing scalar fusion control')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'f64 fusion changed numerical results')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero.jit"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero_positive"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero_positive.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero_control.nvm"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero_control.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero_control.fvm"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero_control.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero_control.jit"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero_control.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "module_lease"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/module_lease.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed"]
+timeout_ms = 60000

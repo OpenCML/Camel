@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -81,10 +81,10 @@ struct RawFact {
         FunctionBuilt,
     };
     Kind kind;
-    origin_id_t at     = 0;
-    origin_id_t other  = 0;
-    Type *type         = nullptr;
-    bool flag          = false;
+    origin_id_t at    = 0;
+    origin_id_t other = 0;
+    Type *type        = nullptr;
+    bool flag         = false;
     std::string name;
     std::string graph;
     std::string uri;
@@ -100,8 +100,8 @@ class Recorder : public camel::compile::SemanticRecorder {
     void typeExpression(origin_id_t expr, Type *type) override {
         facts.push_back({.kind = RawFact::Kind::TypeExpression, .at = expr, .type = type});
     }
-    void valueDeclared(
-        origin_id_t decl, const std::string &name, Type *type, bool variable) override {
+    void
+    valueDeclared(origin_id_t decl, const std::string &name, Type *type, bool variable) override {
         facts.push_back(
             {.kind = RawFact::Kind::ValueDeclared,
              .at   = decl,
@@ -225,8 +225,8 @@ class ModelBuilder {
     }
 
     uint32_t addFile(
-        const std::string &path, const std::string &text,
-        const camel::parse::syntax::Tree *tree, bool parsed, uint32_t sourceFileId) {
+        const std::string &path, const std::string &text, const camel::parse::syntax::Tree *tree,
+        bool parsed, uint32_t sourceFileId) {
         const uint32_t index = static_cast<uint32_t>(model_->files_.size());
         model_->files_.emplace_back();
         FileModel &file = model_->files_.back();
@@ -335,7 +335,9 @@ class ModelBuilder {
         }
         return Location{
             it->second,
-            Range{static_cast<uint32_t>(span->startOffset), static_cast<uint32_t>(span->endOffset)}};
+            Range{
+                static_cast<uint32_t>(span->startOffset),
+                static_cast<uint32_t>(span->endOffset)}};
     }
 
     // The declarations of each file by the range of the construct that declares them: the
@@ -389,7 +391,7 @@ class ModelBuilder {
     // The reference whose path has the range `where`.
     std::optional<size_t> findRef(const Location &where) const {
         const auto &refs = model_->files_[where.file].syntax.refs;
-        auto it = std::lower_bound(
+        auto it          = std::lower_bound(
             refs.begin(),
             refs.end(),
             where.range.start,
@@ -438,9 +440,16 @@ class ModelBuilder {
             camel::utils::ModuleSearchPathOptions{.stdlibOverride = ""});
         auto ctx = Context::create(
             EntryConfig{
-                .entryDir    = entryDir,
-                .entryFile   = path,
-                .searchPaths = std::move(searchPaths),
+                .entryDir       = entryDir,
+                .entryFile      = path,
+                .searchPaths    = std::move(searchPaths),
+                .requireEntry   = options_.requireEntry,
+                .sourceOverride = [this](const std::string &file) -> std::optional<std::string> {
+                    const auto it = options_.sourceOverrides.find(normalPath(file));
+                    return it == options_.sourceOverrides.end()
+                               ? std::nullopt
+                               : std::optional<std::string>(it->second);
+                },
             },
             DiagsConfig{.total_limit = -1});
         ctx->runtimeDiagSink()->setConfig(
@@ -486,12 +495,7 @@ class ModelBuilder {
         ctx->setSemanticRecorder(nullptr);
 
         // Files: the entry first, then every module compiled from source.
-        addFile(
-            path,
-            options_.text,
-            parser->tree(),
-            parser->parsed(),
-            parser->sourceFileId());
+        addFile(path, options_.text, parser->tree(), parser->parsed(), parser->sourceFileId());
         std::vector<std::shared_ptr<UserDefinedModule>> modules;
         for (const auto &mod : ctx->allUserModules()) {
             auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
@@ -547,12 +551,7 @@ class ModelBuilder {
             parser->parseCST(input);
         } catch (...) {
         }
-        addFile(
-            path,
-            options_.text,
-            parser->tree(),
-            parser->parsed(),
-            0);
+        addFile(path, options_.text, parser->tree(), parser->parsed(), 0);
     }
 
     // ---- diagnostics ----
@@ -619,10 +618,9 @@ class ModelBuilder {
                 info.related.push_back(std::move(related));
             }
             // The parser's diagnostics and the module's may be the same objects twice.
-            const std::string key = std::to_string(info.file) + ":" +
-                                    std::to_string(info.range.start) + "-" +
-                                    std::to_string(info.range.end) + "|" + info.code + "|" +
-                                    info.message;
+            const std::string key =
+                std::to_string(info.file) + ":" + std::to_string(info.range.start) + "-" +
+                std::to_string(info.range.end) + "|" + info.code + "|" + info.message;
             if (seen.insert(key).second) {
                 model_->diagnostics_.push_back(std::move(info));
             }
@@ -815,9 +813,10 @@ class ModelBuilder {
         } else if (EntityAccess::isNode(entity)) {
             // An exported value (design principles 2.11): a node of the program's root graph,
             // there once a module has used the value.
-            ext.kind    = ExternalName::Kind::Value;
-            auto *value = static_cast<camel::compile::gir::ExportedValue *>(EntityAccess::node(entity));
-            auto *node  = value != nullptr ? value->node : nullptr;
+            ext.kind = ExternalName::Kind::Value;
+            auto *value =
+                static_cast<camel::compile::gir::ExportedValue *>(EntityAccess::node(entity));
+            auto *node = value != nullptr ? value->node : nullptr;
             if (node != nullptr && node->header.dataType != nullptr) {
                 ext.signatures.push_back(sourceSpelling(node->header.dataType->toString()));
             }
@@ -898,7 +897,8 @@ class ModelBuilder {
             }
             model_->namespaces_[prefix];
             if (auto ns = mod->exportedEntityNS()) {
-                std::as_const(*ns).forEach([&](const Reference &ref, const camel::core::module::entity &entity) {
+                std::as_const(*ns).forEach([&](const Reference &ref,
+                                               const camel::core::module::entity &entity) {
                     std::string space = prefix;
                     for (const std::string &part : ref.paths()) {
                         // A nested namespace is a member of the one around it.
@@ -968,9 +968,9 @@ class ModelBuilder {
         if (previous.files_.empty() || model_->files_.empty()) {
             return;
         }
-        FileModel &file            = model_->files_[0];
-        const FileModel &old       = previous.files_[0];
-        const bool lacksFacts      = !file.compiled;
+        FileModel &file       = model_->files_[0];
+        const FileModel &old  = previous.files_[0];
+        const bool lacksFacts = !file.compiled;
         if (lacksFacts) {
             const auto keys    = placeKeys(file.syntax);
             const auto oldKeys = placeKeys(old.syntax);
@@ -986,7 +986,7 @@ class ModelBuilder {
                 }
                 const DeclFacts &oldFacts = old.declFacts[it->second];
                 const auto copyTypes      = [&](const std::vector<uint32_t> &from,
-                                           std::vector<uint32_t> &to) {
+                                                std::vector<uint32_t> &to) {
                     if (!to.empty()) {
                         return;
                     }
@@ -1017,7 +1017,7 @@ class ModelBuilder {
     }
 
     uint32_t copyType(const SemanticModel &from, uint32_t id) {
-        const TypeInfo &info = from.types_[id];
+        const TypeInfo &info  = from.types_[id];
         const std::string key = "@" + info.text;
         if (auto it = typeByText_.find(key); it != typeByText_.end()) {
             return it->second;

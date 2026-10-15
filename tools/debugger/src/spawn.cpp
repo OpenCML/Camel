@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -30,7 +30,6 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 
 namespace fs = std::filesystem;
 
@@ -90,15 +89,13 @@ std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desi
     if (desiredPort > 0) {
         workerPort = desiredPort; // restart: the task keeps its port and id
     } else {
-        int basePort = getServer().port();
-        workerPort   = basePort + 1;
-        auto tasks   = getTasks();
-        std::unordered_set<int> usedPorts;
-        for (const auto &t : tasks)
-            if (t.taskState != "exited")
-                usedPorts.insert(t.port);
-        while (usedPorts.count(workerPort))
-            ++workerPort;
+        // Let the OS choose a bindable port, including on Windows where adjacent
+        // ports can belong to an excluded range even when no process listens.
+        workerPort = pickFreeLocalPort();
+        if (workerPort <= 0) {
+            std::cerr << "[debugger] no available local worker port" << std::endl;
+            return {false, 0};
+        }
     }
 
     ProcessSpec spec;
@@ -161,6 +158,8 @@ std::pair<bool, int> spawnWorker(const std::string &path, bool sendRun, int desi
         if (!ready) {
             std::cerr << "[debugger] worker on port " << workerPort
                       << " did not become ready within 10s" << std::endl;
+            terminateWorker(workerPort);
+            return {false, 0};
         }
     }
     return {true, workerPort};

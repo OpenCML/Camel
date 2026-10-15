@@ -1,0 +1,17 @@
+module tiles_softmax
+import { Tensor, reshape, max, sum, exp } from tensor
+import { run } from tiles
+
+func normalize(x: Tensor<f32>): Tensor<f32> {
+    let shifted = x - max(x, 1, true)
+    let e = exp(shifted)
+    return e / sum(e, 1, true)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, -1.0, 0.0, 1.0], [2, 3])
+    let y = run<normalize>(x)
+    println(y)
+    println(sum(y, 1, true))
+    return 0
+}

@@ -149,7 +149,7 @@ await withServer(async (ls) => {
     await refused({ ...pos('let sum', 1, 4), newName: 'd' }, "'d' is already", 'a name already in use is refused')
     await refused({ ...pos('let sum', 1, 4), newName: 'let' }, 'keyword', 'a keyword is refused')
     await refused({ ...pos('let sum', 1, 4), newName: '2x' }, 'not an identifier', 'a non-identifier is refused')
-    await refused({ ...pos('norm2(p)'), newName: 'len2' }, 'another file', 'a function of another file is refused')
+    await refused({ ...pos('norm2(p)'), newName: 'len2' }, 'outside the workspace', 'a function outside the workspace is refused')
     await refused({ ...pos('println'), newName: 'say' }, 'not declared in a source file', 'a library function is refused')
     await refused({ ...pos('q.x', 1, 2), newName: 'xx' }, 'field', 'a field is refused')
     await refused({ ...pos('func main', 1, 5), newName: 'start' }, 'entry', 'main is refused')
@@ -170,10 +170,14 @@ func main() sync {
 `)
     await refused({ textDocument: { uri }, position: m.at('y'), newName: 'z' },
         'cannot be confirmed', 'a name used only in code the compiler did not build is refused')
-    // An exported name: its importers are unknown.
+    // Exported functions are now renamed across the workspace after validation.
     m = edit('module lib\n\nexport func /*f*/twice(x: int): int {\n    return x * 2\n}\n\nfunc main() sync {\n    return twice(1)\n}\n')
-    await refused({ textDocument: { uri }, position: m.at('f'), newName: 'double' },
-        'exported', 'an exported function is refused')
+    we = await ls.request('textDocument/rename', {
+        textDocument: { uri }, position: m.at('f'), newName: 'double',
+    })
+    checkEq(we.changes[uri].map((e) => `${fmtRange(e.range)} ${e.newText}`),
+        ['7:11-7:16 double', '2:12-2:17 double'],
+        'an exported function: its declaration and call are renamed together')
     // A text with an error.
     m = edit('module main\n\nfunc main() sync {\n    let /*a*/a = 1\n    println(nope)\n    return a\n}\n')
     await refused({ textDocument: { uri }, position: m.at('a'), newName: 'b' },

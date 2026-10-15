@@ -1,0 +1,71 @@
+[INFO] camel executable: /home/zjwei/camel-eval/tiles-75776da8/out/latest/bin/camel
+[INFO] discovered plans: 4
+
+[PLAN] feat.modules.tensor: modules.tensor
+[PASS] broadcast_ops                                         14.41 ms
+[PASS] reductions                                            13.91 ms
+[PASS] linalg_layout                                         12.94 ms
+[PASS] shape_error                                            7.53 ms
+[PASS] static_types                                          14.07 ms
+[PASS] gemm_consistency                                      16.98 ms
+[PASS] gc_tail_chain                                         13.88 ms
+[PASS] struct_covariance                                     12.41 ms
+[PASS] transcendentals                                       11.14 ms
+[PASS] fuse_linear_reference                                 15.31 ms
+[PASS] fuse_linear_pass                                      13.11 ms
+[PASS] fuse_linear_graph                                      8.66 ms
+[PASS] static_shape_error                                     9.11 ms
+[PASS] runtime_shape_column.nvm                              11.97 ms
+[PASS] runtime_shape_column.fvm                               9.12 ms
+[PASS] reshape_view_gc.nvm                                   14.24 ms
+[PASS] reshape_view_gc.fvm                                   13.63 ms
+[PASS] reshape_view_gc.jit                                   16.36 ms
+[PASS] gradient_broadcast_axes                               10.82 ms
+
+[PLAN] feat.modules.tiles: modules.tiles
+[PASS] plan                                                   7.94 ms
+[PASS] plan_validation                                       25.18 ms
+[PASS] source                                                 7.13 ms
+[PASS] reject_effect                                          6.08 ms
+[PASS] selected_branch_effect                                 6.80 ms
+[PASS] empty_mean                                             7.31 ms
+
+[PLAN] gpu.tiles: gpu.tiles
+[PASS] max_special_values                                      2.90 s
+[PASS] max_grid_stride                                      790.77 ms
+[PASS] benchmark_protocol                                      1.63 s
+[PASS] fusion.nvm                                           664.10 ms
+[PASS] fusion.fvm                                           625.33 ms
+[PASS] fusion.jit                                           682.48 ms
+[PASS] boundaries.nvm                                       720.22 ms
+[PASS] boundaries.fvm                                       716.80 ms
+[PASS] boundaries.jit                                       714.77 ms
+[PASS] vector_add                                           566.29 ms
+[PASS] softmax                                              605.70 ms
+[PASS] matmul                                               587.18 ms
+[PASS] consistency.nvm                                      731.17 ms
+[PASS] consistency.fvm                                      732.26 ms
+[PASS] consistency.jit                                      752.58 ms
+[PASS] index_maps.nvm                                       720.97 ms
+[PASS] index_maps.fvm                                       649.77 ms
+[PASS] index_maps.jit                                       707.24 ms
+[PASS] mapped_fusion.nvm                                    734.90 ms
+[PASS] mapped_fusion.fvm                                    810.60 ms
+[PASS] mapped_fusion.jit                                    821.50 ms
+[PASS] aggregate_outputs.nvm                                826.95 ms
+[PASS] aggregate_outputs.fvm                                830.79 ms
+[PASS] aggregate_outputs.jit                                838.58 ms
+[PASS] gradients.nvm                                        781.74 ms
+[PASS] gradients.fvm                                        782.77 ms
+[PASS] gradients.jit                                        781.63 ms
+[PASS] specialized_branches.nvm                             679.68 ms
+[PASS] specialized_branches.fvm                             684.19 ms
+[PASS] specialized_branches.jit                             687.01 ms
+[PASS] value_gradient.nvm                                      1.01 s
+[PASS] value_gradient.fvm                                   812.27 ms
+[PASS] value_gradient.jit                                   762.19 ms
+
+[PLAN] gpu.tiles_transfer: gpu.tiles_transfer
+[PASS] large_upload_completion                                 1.49 s
+
+[SUMMARY] total: 59, pass: 59, fail: 0

@@ -1,0 +1,94 @@
+[INFO] camel executable: /home/zjwei/camel-eval/tiles-75776da8/out/latest/bin/camel
+[INFO] discovered plans: 4
+
+[PLAN] feat.modules.tensor: modules.tensor
+[PASS] broadcast_ops                                         15.10 ms
+[PASS] reductions                                            11.46 ms
+[PASS] linalg_layout                                         11.39 ms
+[PASS] shape_error                                            7.72 ms
+[PASS] static_types                                          11.63 ms
+[PASS] gemm_consistency                                      15.14 ms
+[PASS] gc_tail_chain                                         12.57 ms
+[PASS] struct_covariance                                     10.87 ms
+[PASS] transcendentals                                        9.60 ms
+[PASS] fuse_linear_reference                                 10.47 ms
+[PASS] fuse_linear_pass                                       9.98 ms
+[PASS] fuse_linear_graph                                      8.99 ms
+[PASS] static_shape_error                                     8.43 ms
+[PASS] runtime_shape_column.nvm                              11.72 ms
+[PASS] runtime_shape_column.fvm                              10.58 ms
+[PASS] reshape_view_gc.nvm                                   16.43 ms
+[PASS] reshape_view_gc.fvm                                   18.69 ms
+[PASS] reshape_view_gc.jit                                   16.36 ms
+[PASS] gradient_broadcast_axes                               10.79 ms
+
+[PLAN] feat.modules.tiles: modules.tiles
+[PASS] plan                                                   8.21 ms
+[PASS] plan_validation                                       25.98 ms
+[PASS] source                                                 8.70 ms
+[PASS] reject_effect                                          8.42 ms
+[PASS] selected_branch_effect                                12.73 ms
+[PASS] empty_mean                                             9.53 ms
+
+[PLAN] gpu.tiles: gpu.tiles
+[PASS] max_special_values                                      2.48 s
+[PASS] max_grid_stride                                      725.58 ms
+[PASS] benchmark_protocol                                      1.54 s
+[PASS] fusion.nvm                                           647.03 ms
+[PASS] fusion.fvm                                           628.93 ms
+[PASS] fusion.jit                                           626.93 ms
+[PASS] boundaries.nvm                                       687.17 ms
+[PASS] boundaries.fvm                                       675.88 ms
+[PASS] boundaries.jit                                       684.09 ms
+[PASS] vector_add                                           575.02 ms
+[PASS] softmax                                              599.91 ms
+[PASS] matmul                                               571.28 ms
+[PASS] consistency.nvm                                      716.32 ms
+[PASS] consistency.fvm                                      648.15 ms
+[PASS] consistency.jit                                      736.22 ms
+[PASS] index_maps.nvm                                       633.61 ms
+[PASS] index_maps.fvm                                       660.73 ms
+[PASS] index_maps.jit                                       654.90 ms
+[PASS] mapped_fusion.nvm                                    726.38 ms
+[PASS] mapped_fusion.fvm                                    699.51 ms
+[PASS] mapped_fusion.jit                                    857.14 ms
+[PASS] aggregate_outputs.nvm                                861.80 ms
+[PASS] aggregate_outputs.fvm                                702.52 ms
+[PASS] aggregate_outputs.jit                                706.67 ms
+[PASS] gradients.nvm                                        712.01 ms
+[PASS] gradients.fvm                                        707.39 ms
+[PASS] gradients.jit                                        704.09 ms
+[PASS] specialized_branches.nvm                             608.65 ms
+[PASS] specialized_branches.fvm                             603.34 ms
+[PASS] specialized_branches.jit                             609.02 ms
+[PASS] value_gradient.nvm                                   672.33 ms
+[PASS] value_gradient.fvm                                   676.86 ms
+[PASS] value_gradient.jit                                   671.19 ms
+[PASS] resident_transfers.nvm                               598.09 ms
+[PASS] resident_transfers.fvm                               590.84 ms
+[PASS] resident_transfers.jit                               578.08 ms
+[PASS] resident_compute.nvm                                 598.77 ms
+[PASS] resident_compute.fvm                                 601.32 ms
+[PASS] resident_compute.jit                                 586.74 ms
+[PASS] resident_outputs.nvm                                 673.10 ms
+[PASS] resident_outputs.fvm                                 669.81 ms
+[PASS] resident_outputs.jit                                 665.47 ms
+[PASS] resident_scalars.nvm                                 633.09 ms
+[PASS] resident_scalars.fvm                                 620.49 ms
+[PASS] resident_scalars.jit                                 623.33 ms
+[PASS] scalar_arithmetic.nvm                                693.80 ms
+[PASS] scalar_zero.nvm                                      501.94 ms
+[PASS] scalar_arithmetic.fvm                                618.44 ms
+[PASS] scalar_zero.fvm                                      526.32 ms
+[PASS] scalar_arithmetic.jit                                647.81 ms
+[PASS] scalar_zero.jit                                      501.19 ms
+[PASS] scalar_zero_positive                                 506.10 ms
+[PASS] scalar_zero_control.nvm                              503.21 ms
+[PASS] scalar_zero_control.fvm                              500.53 ms
+[PASS] scalar_zero_control.jit                              505.99 ms
+[PASS] module_lease                                            1.18 s
+
+[PLAN] gpu.tiles_transfer: gpu.tiles_transfer
+[PASS] large_upload_completion                                 1.08 s
+
+[SUMMARY] total: 82, pass: 82, fail: 0

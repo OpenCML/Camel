@@ -1,0 +1,7 @@
+module tiles_scalar_zero_positive
+import { run, upload } from tiles
+func divide(a: float, b: float): float { return a / b }
+func main(): int sync {
+    println(run<divide>((upload(1.0), upload(0.0))))
+    return 0
+}

@@ -1,0 +1,19 @@
+module tiles_boundaries
+import { Tensor, zeros, reshape, sum, max, abs, mean } from tensor
+import { run } from tiles
+func add(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a + b }
+func helper(x: Tensor<f32>): Tensor<f32> { return x * 2.0 }
+func nested(x: Tensor<f32>): Tensor<f32> { return helper(x) + 1.0 }
+func reduce(x: Tensor<f32>): Tensor<f32> { return mean(x, -1, true) + max(x, 0, true) }
+func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let bias = reshape([2.0, 3.0, 4.0], [1, 3])
+    let captured = (a: Tensor<f32>): Tensor<f32> => a + bias
+    println(sum(abs(run<captured>(x) - captured(x))))
+    println(sum(abs(run<nested>(x) - nested(x))))
+    println(sum(abs(run<reduce>(x) - reduce(x))))
+    println(sum(run<add>((zeros([0, 3]), zeros([1, 3])))))
+    println(sum(run<product>((zeros([2, 0]), zeros([0, 3])))))
+    return 0
+}

@@ -7,7 +7,7 @@ digraph GraphIR {
                 label="__g_4__";
                 F03 [label="ARGS", type="ARGS"];
                 O03 [label="EXIT", type="EXIT"];
-                N00 [label="PORT", type="PORT"];
+                N00 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor"];
                 N01 [label="tensor:relu", type="OPER", origin=196, span="12:30-12:34", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
                 F03 -> N00 [label="0", type="WITH_PORT"];
                 N01 -> O03 [label="0", type="EXIT"];
@@ -17,7 +17,7 @@ digraph GraphIR {
                 label="__g_6__";
                 F04 [label="ARGS", type="ARGS"];
                 O04 [label="EXIT", type="EXIT"];
-                N02 [label="PORT", type="PORT"];
+                N02 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor"];
                 N03 [label="1", type="DATA", origin=201, span="12:50-12:51", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
                 N04 [label="tensor:idx", type="OPER", role="scalar-boundary", origin=202, span="12:49-12:50", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
                 N05 [label="2.0", type="DATA", origin=203, span="12:55-12:58", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
@@ -34,7 +34,7 @@ digraph GraphIR {
             }
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N08 [label="t", type="PORT"];
+            N08 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="Tensor"];
             N09 [label="0", type="DATA", origin=188, span="12:16-12:17", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
             N0A [label="tensor:idx", type="OPER", role="scalar-boundary", origin=189, span="12:15-12:16", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
             N0B [label="0.5", type="DATA", origin=190, span="12:21-12:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml"];
