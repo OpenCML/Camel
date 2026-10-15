@@ -524,3 +524,15 @@ Commit 3b377edf rebuilds and passes 85/85 relevant cases on local RTX 4060 Ti an
 remote RTX 3090 device 7, including the added native expression checks and existing
 GPU mapping/fusion cases. Remote output is retained in
 `docs/performance/tiles/2026-10-15-rtx3090-index-expr-tests.txt`.
+# Explicit NVRTC precision policy (2026-10-16)
+
+Commit `de33ecd5` fixes division, square-root and subnormal options explicitly,
+includes all compile arguments in the in-process module cache identity and
+reports those arguments in benchmarks. The native lease test checks cache hits
+and rejects an entry with an incompatible precision policy. The committed code
+passed the 85-case Tiles/GPU/tensor suite on local RTX 4060 Ti and RTX 3090 device
+7 on `88zjwei`; remote output is recorded in
+`docs/performance/tiles/2026-10-16-rtx3090-precision-tests.txt`.
+This validates the compiler-policy change, not the still-pending full numerical
+contract audit or cross-device ULP guarantees.
+

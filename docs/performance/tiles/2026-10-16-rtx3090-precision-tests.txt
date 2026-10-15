@@ -1,0 +1,97 @@
+[INFO] camel executable: /home/zjwei/camel-eval/tiles-75776da8/out/latest/bin/camel
+[INFO] discovered plans: 4
+
+[PLAN] feat.modules.tensor: modules.tensor
+[PASS] broadcast_ops                                         11.08 ms
+[PASS] reductions                                             9.64 ms
+[PASS] linalg_layout                                          9.74 ms
+[PASS] shape_error                                            6.35 ms
+[PASS] static_types                                          12.31 ms
+[PASS] gemm_consistency                                      19.48 ms
+[PASS] gc_tail_chain                                         14.77 ms
+[PASS] struct_covariance                                     11.57 ms
+[PASS] transcendentals                                       11.39 ms
+[PASS] fuse_linear_reference                                 11.34 ms
+[PASS] fuse_linear_pass                                      12.09 ms
+[PASS] fuse_linear_graph                                      7.52 ms
+[PASS] static_shape_error                                     7.83 ms
+[PASS] runtime_shape_column.nvm                              17.68 ms
+[PASS] runtime_shape_column.fvm                              19.76 ms
+[PASS] reshape_view_gc.nvm                                   16.43 ms
+[PASS] reshape_view_gc.fvm                                   14.37 ms
+[PASS] reshape_view_gc.jit                                   13.78 ms
+[PASS] gradient_broadcast_axes                                9.57 ms
+
+[PLAN] feat.modules.tiles: modules.tiles
+[PASS] plan                                                   9.56 ms
+[PASS] plan_validation                                       29.23 ms
+[PASS] source                                                 9.62 ms
+[PASS] reject_effect                                          7.09 ms
+[PASS] selected_branch_effect                                 7.67 ms
+[PASS] empty_mean                                             6.83 ms
+
+[PLAN] gpu.tiles: gpu.tiles
+[PASS] matmul_rounding.nvm                                  578.71 ms
+[PASS] matmul_rounding.fvm                                  552.28 ms
+[PASS] matmul_rounding.jit                                  548.86 ms
+[PASS] max_special_values                                      2.27 s
+[PASS] max_grid_stride                                      665.05 ms
+[PASS] benchmark_protocol                                   870.26 ms
+[PASS] fusion.nvm                                           564.62 ms
+[PASS] fusion.fvm                                           543.11 ms
+[PASS] fusion.jit                                           547.38 ms
+[PASS] boundaries.nvm                                       599.65 ms
+[PASS] boundaries.fvm                                       595.92 ms
+[PASS] boundaries.jit                                       585.66 ms
+[PASS] vector_add                                           484.99 ms
+[PASS] softmax                                              523.25 ms
+[PASS] matmul                                               503.41 ms
+[PASS] consistency.nvm                                      633.35 ms
+[PASS] consistency.fvm                                      629.39 ms
+[PASS] consistency.jit                                      627.31 ms
+[PASS] index_maps.nvm                                       593.12 ms
+[PASS] index_maps.fvm                                       591.59 ms
+[PASS] index_maps.jit                                       596.89 ms
+[PASS] mapped_fusion.nvm                                    567.87 ms
+[PASS] mapped_fusion.fvm                                    572.26 ms
+[PASS] mapped_fusion.jit                                    562.45 ms
+[PASS] aggregate_outputs.nvm                                617.51 ms
+[PASS] aggregate_outputs.fvm                                652.78 ms
+[PASS] aggregate_outputs.jit                                613.70 ms
+[PASS] gradients.nvm                                        686.88 ms
+[PASS] gradients.fvm                                        685.35 ms
+[PASS] gradients.jit                                        687.52 ms
+[PASS] specialized_branches.nvm                             594.31 ms
+[PASS] specialized_branches.fvm                             622.25 ms
+[PASS] specialized_branches.jit                             630.80 ms
+[PASS] value_gradient.nvm                                   677.59 ms
+[PASS] value_gradient.fvm                                   680.08 ms
+[PASS] value_gradient.jit                                   667.01 ms
+[PASS] resident_transfers.nvm                               575.20 ms
+[PASS] resident_transfers.fvm                               562.42 ms
+[PASS] resident_transfers.jit                               571.30 ms
+[PASS] resident_compute.nvm                                 595.98 ms
+[PASS] resident_compute.fvm                                 600.12 ms
+[PASS] resident_compute.jit                                 607.32 ms
+[PASS] resident_outputs.nvm                                 663.25 ms
+[PASS] resident_outputs.fvm                                 668.08 ms
+[PASS] resident_outputs.jit                                 674.62 ms
+[PASS] resident_scalars.nvm                                 640.50 ms
+[PASS] resident_scalars.fvm                                 638.37 ms
+[PASS] resident_scalars.jit                                 615.74 ms
+[PASS] scalar_arithmetic.nvm                                613.28 ms
+[PASS] scalar_zero.nvm                                      489.58 ms
+[PASS] scalar_arithmetic.fvm                                633.09 ms
+[PASS] scalar_zero.fvm                                      500.78 ms
+[PASS] scalar_arithmetic.jit                                662.16 ms
+[PASS] scalar_zero.jit                                      533.44 ms
+[PASS] scalar_zero_positive                                 571.05 ms
+[PASS] scalar_zero_control.nvm                              498.51 ms
+[PASS] scalar_zero_control.fvm                              511.44 ms
+[PASS] scalar_zero_control.jit                              507.08 ms
+[PASS] module_lease                                            1.41 s
+
+[PLAN] gpu.tiles_transfer: gpu.tiles_transfer
+[PASS] large_upload_completion                                 1.08 s
+
+[SUMMARY] total: 85, pass: 85, fail: 0
