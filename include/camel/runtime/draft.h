@@ -94,7 +94,12 @@ struct DraftNodeHeader {
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
-    uint8_t reserved                 = 0;
+    // The numeric permissions the program granted to the node with @numeric(...)
+    // (camel/core/operator_semantics.h, PermissionMask; design principles 2.13), 0 when none.
+    // Graph content, not a derived fact: rewrites keep it as they keep the origin (a node that
+    // replaces another inherits it, inlined and cloned nodes keep their own), and the encoder
+    // writes it to the frozen graph's permission column (GCGraph::nodePermissions).
+    uint8_t permissions = 0;
     // Source origin (camel::source::origin_id_t) of the node, 0 when unknown. Rewrites keep it:
     // a node that replaces another inherits its origin, inlined nodes keep the callee's.
     uint64_t origin = 0;
@@ -118,6 +123,7 @@ struct DraftNodeInit {
     GCNodeKind kind                   = GCNodeKind::Data;
     uint8_t runtimeFlags              = 0;
     uint64_t origin                   = 0;
+    uint8_t permissions               = 0; // see DraftNodeHeader::permissions
     std::span<const std::byte> payload{};
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
@@ -352,6 +358,9 @@ class GraphDraft {
     /// something about the graph as a whole when its definition is not known.
     uint64_t firstNodeOrigin() const;
     void setNodeOrigin(gc_node_ref_t id, uint64_t origin);
+    /// Numeric permissions of node `id` (see DraftNodeHeader::permissions).
+    uint8_t nodePermissions(gc_node_ref_t id) const;
+    void setNodePermissions(gc_node_ref_t id, uint8_t permissions);
     void rewriteNode(gc_node_ref_t id, const DraftNodeInit &init);
     void appendNormPort(gc_node_ref_t id);
     void appendWithPort(gc_node_ref_t id);

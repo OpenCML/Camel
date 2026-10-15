@@ -2,6 +2,8 @@
 
 
 > **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 2.13。
+>
+> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。下标映射、归约律（第二阶段）、事实库与 `LOOP`（第三阶段）、资源与定义图（第四阶段）尚未实现。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
 依据：`docs/design-principles.cn.md`（2.9–2.13，尤其 2.13 的"浮点的数值契约"与 `do` 式循环头；第 6 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
 基线提交：`6bf31d1f`（`fsh-dev`，v0.2.12 合入之后）。
@@ -1007,6 +1009,51 @@ func row_sums(rows: Tensor<f32>[]): (Tensor<f32>, int) {
 7. 持久化编译缓存时的键（10.6 (iii)）；设备地址、流、事件、活分配不持久化。
 8. 第 3b 阶段之后，Tiles 自己的分析结果（布局、分块）若放进核心的事实库，种类登记为 `tiles.*`，带 `targetHash`。
 9. 调度、布局、Tensor Core、流与事件、内存池、自动调优：按分工，不需要核心做任何事（入口与内核语言见 tiles-route）；需要的语义事实缺了，提给核心。
+
+### 14.1 第一阶段对 Tiles 改了什么（`lane/opsem-p1`）
+
+**CPU 的结果变了，Tiles 的参考随之变：**
+
+- `max`/`min`（逐元素的 `maximum`/`minimum`、`max_axis`/`min_axis`）是 IEEE 754-2019 的 `maximum`/`minimum`：任一边是 NaN 得**规范的 quiet NaN**（`0x7fc00000`，符号位为 0，无载荷；与输入是哪个 NaN 无关，所以任意次序、任意分块逐位相同），`-0 < +0`。Tiles 的 `max_axis` 今天保留"首个 NaN 与 ±0 的平局规则"并带下标比较，要改为这条规则，带下标的并行比较可以去掉（6.9 第 6 条）。CUDA 的 `fmaxf` 不是它：用"两边有 NaN 则规范 NaN，否则相等时按位与（取 `+0`）、不等时取大"的比较序列。
+- `relu(x) = maximum(x, +0)`：NaN 得规范 NaN，`-0` 得 `+0`。Tiles 今天的 `a<0.0f?0.0f:a` 对 NaN 给原 NaN、对 `-0` 给 `-0`，两处都要改（6.9 第 3 条）。
+- `matmul` 的规范算法是按 k 递增的 FMA 链，从 `+0` 开始（Q7 取乙）：Tiles 现有的 `fmaf` 累加符合；K 尾部"排除而不是补 0"仍是必要的。CPU 的 GEMM 已改为同一算法（以前每 256 个 k 一块分别从 0 累加再相加），`linear`/`matmul_add` 先算完链再加偏置。
+- `softmax` 的 CPU 内核与定义 `exp(x - m) / sum(exp(x - m))` 逐位一致（除法，不是乘倒数；和在 f64 里累加、最后舍入为 f32）。Tiles 把 softmax 写成组合，逐位比较时以定义为准。
+
+**查询一个算子的数值语义：**
+
+```cpp
+#include "camel/core/operator_table.h"   // 带 camel/core/operator_semantics.h
+using namespace camel::core;
+const OperatorTable &table = OperatorTable::instance();
+if (const sem::OperatorSemantics *s = table.semantics(operId)) {   // 无锁；nullptr = 未声明，按 Opaque 处理
+    s->key.toString();               // "tensor:matmul@1.0"，跨进程的键（编译缓存用它，不用 OperId）
+    s->numeric.cls;                  // Exact / CorrectlyRounded / Bounded / Opaque
+    s->numeric.compute;              // 舍入所在的类型（Float32、Float64）
+    s->numeric.ulpBound;             // Bounded 才有：exp、log 为 2
+    s->numeric.specials;             // 与 IEEE 不同之处：exp 把次正规数结果冲为 0（subnormals = false）
+    s->numeric.sensitiveTo;          // 哪些许可会改变它的结果；不在其中的许可对它无作用
+    s->faults;                       // nullopt = 未声明（看 mayFault 位）；标量除法有 {DivisionByZero, 1}
+}
+table.bind(sem::OperatorKey::parse("tensor:matmul@1.0").value());  // 读缓存：主版本相同且次版本不高于本进程的才得到 OperId
+table.declarationEpoch();            // 声明有增改时加一
+```
+
+已声明的：内建 `:op/` 标量的加减乘除、取模、取负、比较（i32/int/f32/float）；张量的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`、`neg`、`abs`、`relu`、`sqrt`、`rsqrt`、`exp`、`log`、`sum`、`sum_axis`、`mean`、`mean_axis`、`max_axis`、`min_axis`、`sum_to`、`matmul`、`reshape`、`flatten`、`unsqueeze`、`transpose`、`permute`、`slice`、`broadcast_like`、`expand_axis`。`softmax`、`matmul_grad_*`、`cast_like` 等未声明（Opaque）。张量算子的声明描述 f32 的情形；整数与布尔元素一律精确。`camel inspect --ops <程序>` 在每个已声明的算子上打印 `"semantics": {...}`，可以直接核对。下标映射与归约律是第二阶段：Tiles 在此之前仍按今天的方式（`reindex`、名字）取得映射与累加类型。
+
+**查询一个节点被授予的许可：**
+
+```cpp
+#include "camel/runtime/graph.h"
+uint8_t granted = graph->nodePermissions(nodeRef);   // sem::PermissionMask；没有许可列的图一律 0
+bool any        = graph->hasNodePermissions();
+// 位：sem::kReassociate、kContract、kApproxMath、kChangePrecision、kNoNans、kNoInfs、kNoSignedZeros、kFlushSubnormals
+// （源码里的 finite_math = 后四位）；sem::permissionsText(mask) 给出名字。
+```
+
+- 许可只由程序写 `@numeric(...)` 授予（函数或块，词法上嵌在其中的臂、循环体、lambda 一起），被调用的函数不继承；没有模块级默认、没有命令行开关，**`tiles.run` 等入口不接受许可**。
+- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 与 `tensor::fuse` 不把许可不同的节点合并（融合出的节点带它们共同的许可）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
+- 编译缓存的键要包含用到的每个 `OperatorKey` 与每个节点的许可（10.6 的 (iii)）。
+- 许可只允许、不要求：没有许可时必须给规范结果；有许可时给规范结果也总是对的。
 
 ---
 

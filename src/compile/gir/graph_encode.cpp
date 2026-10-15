@@ -444,6 +444,7 @@ class EncodeSession {
                 .kind         = header->kind,
                 .runtimeFlags = header->runtimeFlags,
                 .origin       = header->origin,
+                .permissions  = header->permissions,
             };
             std::vector<std::byte> payloadStorage;
 

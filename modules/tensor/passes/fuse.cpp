@@ -103,14 +103,18 @@ std::optional<Match> findMatch(const GraphDraft &draft) {
         // Float addition is commutative, so the product may be either operand.
         for (size_t k = 0; k < 2; ++k) {
             const gc_node_ref_t mm = ins[k];
+            // The fused node stands for the whole pattern, so every node of it must have been
+            // granted the same numeric permissions (design principles 2.13), which it keeps.
             if (operOf(draft, mm) != ops.matmul || draft.normInputsOf(mm).size() != 2 ||
-                !isPrivateIntermediate(draft, mm, id)) {
+                !isPrivateIntermediate(draft, mm, id) ||
+                draft.nodePermissions(mm) != draft.nodePermissions(id)) {
                 continue;
             }
             Match m{.matmul = mm, .add = id, .relu = kInvalidNodeRef, .bias = ins[1 - k]};
             const auto users = draft.normUsersOf(id);
             if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
-                isPrivateIntermediate(draft, id, users[0])) {
+                isPrivateIntermediate(draft, id, users[0]) &&
+                draft.nodePermissions(users[0]) == draft.nodePermissions(id)) {
                 m.relu = users[0];
             }
             return m;
@@ -145,6 +149,7 @@ void fuse(GraphDraft &draft, const Match &m) {
     const gc_node_ref_t fused = draft.addOperNode(draft.header(root)->dataType, def->kernel, uri);
     draft.setNormInputs(fused, inputs);
     draft.setCtrlInputs(fused, ctrl);
+    draft.setNodePermissions(fused, draft.nodePermissions(m.add));
 
     draft.replaceAllValueUses(root, fused);
     draft.replaceAllCtrlUses(root, fused);

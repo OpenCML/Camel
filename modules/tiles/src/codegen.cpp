@@ -114,6 +114,32 @@ __device__ __forceinline__ float tiles_minimum(float a, float b) {
                                                                  IndexExpr::variable(coordinate));
                 return emit(in, index.cuda());
             };
+            // Contract only a private multiply in this launch, with permission
+            // on both original operations. Keep all other f32 rounding points.
+            if (value.op == "add" && (value.permissions & core::sem::kContract)) {
+                for (size_t side = 0; side < 2; ++side) {
+                    const auto productId = value.inputs[side];
+                    const auto &product  = p.nodes[productId];
+                    if (product.op != "multiply" || !(product.permissions & core::sem::kContract) ||
+                        std::find(launch.members.begin(), launch.members.end(), productId) ==
+                            launch.members.end())
+                        continue;
+                    const auto atProduct =
+                        broadcastIndex(product.shape, value.shape, IndexExpr::variable(coordinate));
+                    const auto left = emit(
+                        product.inputs[0],
+                        broadcastIndex(p.nodes[product.inputs[0]].shape, product.shape, atProduct)
+                            .cuda());
+                    const auto right = emit(
+                        product.inputs[1],
+                        broadcastIndex(p.nodes[product.inputs[1]].shape, product.shape, atProduct)
+                            .cuda());
+                    const auto other = input(value.inputs[1 - side]);
+                    code << "t" << member << "=fmaf(" << left << ',' << right << ',' << other
+                         << ");\n";
+                    return "t" + std::to_string(member);
+                }
+            }
             const auto a = input(value.inputs[0]);
             const auto b = value.inputs.size() == 2 ? input(value.inputs[1]) : "";
             code << "{ float a=" << a << ";\n";

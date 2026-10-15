@@ -274,6 +274,22 @@ class Builder {
     bool waited_;
     bool synced_;
     bool varied_;
+    // The numeric permissions in force where the builder is (design principles 2.13): those of
+    // the nearest GCT EXEC, which already include every enclosing block and function
+    // (GCT::Node::numericPermissions). Every OPER node made while they are in force gets them
+    // (stampPermissions); a function's graph starts from those of its own body, whatever was
+    // in force where it is built from.
+    uint8_t numericPermissions_ = 0;
+    void stampPermissions(node_handle_t operNode) const;
+    /// Sets numericPermissions_ for a scope and puts the previous value back at its end.
+    struct NumericPermissionScope {
+        uint8_t &current;
+        uint8_t outer;
+        NumericPermissionScope(uint8_t &c, uint8_t permissions) : current(c), outer(c) {
+            current = permissions;
+        }
+        ~NumericPermissionScope() { current = outer; }
+    };
     // Inside a `var` declaration: the names it binds are variables.
     bool declaresVariable_ = false;
 

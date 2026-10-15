@@ -1,0 +1,29 @@
+/**
+ * Annotations that are not accepted: an unknown permission, an annotation other than
+ * @numeric with names in parentheses, an empty @numeric(), and a decorator on a block.
+ */
+module invalid
+
+func twice(f: (x: int) => int): (x: int) => int {
+    return (x: int) => f(f(x))
+}
+
+@numeric(reassociate, fast)
+func a(x: float): float { return x * 2.0 }
+
+@kernelish(reassociate)
+func b(x: float): float { return x * 2.0 }
+
+@numeric()
+func c(x: float): float { return x * 2.0 }
+
+func d(x: float): float {
+    @twice
+    {
+        return x * 2.0
+    }
+}
+
+func main(): int sync {
+    return 0
+}

@@ -382,7 +382,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     vector<node_ptr_t> decls;
     vector<node_ptr_t> stmts;
 
-    node_ptr_t root = tree_->makeExec();
+    node_ptr_t root = makeExec();
 
     // The namespaces the module declares, and the `using namespace` of its top level, which
     // apply to the whole module whatever their position (design principles 2.12).
@@ -841,7 +841,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
 
     // The names of the declaration get a scope of their own, which is not a block of the
     // program: in a sync block the initializer keeps its place in the block's order.
-    node_ptr_t res = tree_->makeExec(false, true);
+    node_ptr_t res = makeExec(false, true);
 
     // Handle different unpacking types
     switch (dataDeclLoad->unpackType()) {
@@ -1184,7 +1184,7 @@ node_ptr_t Builder::visitUsingNamespaceDecl(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
     LEAVE("UsingNamespaceDecl");
-    return tree_->makeExec();
+    return makeExec();
 }
 
 /*
@@ -1227,7 +1227,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
             // Case 2: Multiple data nodes - build once with Factory to avoid recomputing the type.
             TupleDataFactory tupleFactory;
             bool dangling       = false;
-            node_ptr_t execNode = tree_->makeExec(false, true);
+            node_ptr_t execNode = makeExec(false, true);
 
             for (const auto &item : *dataNodes) {
                 node_ptr_t dataNode = visitData(item);
@@ -1282,6 +1282,13 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
         .commit(keyword, branch);
 }
 
+/// An EXEC with the numeric permissions in force here (GCT::Node::numericPermissions).
+node_ptr_t Builder::makeExec(bool synced, bool operands) {
+    node_ptr_t exec = tree_->makeExec(synced, operands);
+    exec->setNumericPermissions(numericPermissions_);
+    return exec;
+}
+
 /*
 StmtBlock(bool sync) : Stmt* stmts ;
 */
@@ -1304,7 +1311,15 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast) {
                 "to run the statements of a block in order");
         throw BuildAbortException();
     }
-    node_ptr_t execNode = tree_->makeExec(stmtBlock->synced());
+    // The block's own grant joins those of the blocks it is in, for everything written in it.
+    const uint8_t outerPermissions = numericPermissions_;
+    numericPermissions_ |= stmtBlock->numeric();
+    struct PermissionScope {
+        uint8_t &current;
+        uint8_t outer;
+        ~PermissionScope() { current = outer; }
+    } permissionScope{numericPermissions_, outerPermissions};
+    node_ptr_t execNode = makeExec(stmtBlock->synced());
 
     // Push a new scope for the statement block
     pushScope();
@@ -1776,7 +1791,7 @@ node_ptr_t Builder::visitLogicalExpr(const AST::node_ptr_t &ast) {
         "gct.logical.decided");
 
     const auto armOf = [&](CaseType caseType, node_ptr_t value) {
-        node_ptr_t execNode = tree_->makeExec();
+        node_ptr_t execNode = makeExec();
         setOriginFromOrigin(
             context_,
             execNode,
@@ -1845,7 +1860,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             "gct.tagged.branch");
         node_ptr_t lhsNode  = visitData(lhsASTNode);
         node_ptr_t rhsNode  = visitData(ast->atAs<AST::DataLoad>(1));
-        node_ptr_t execNode = tree_->makeExec();
+        node_ptr_t execNode = makeExec();
         setOriginFromOrigin(
             context_,
             execNode,
@@ -1917,7 +1932,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
         if (passedNode != nullptr) {
-            node_ptr_t execNode = tree_->makeExec();
+            node_ptr_t execNode = makeExec();
             setOriginFromAst(
                 context_,
                 execNode,
@@ -2206,7 +2221,7 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
     } else {
         // empty else block
         // If no "else" block exists, attach an empty execution block
-        *elseCase << tree_->makeExec();
+        *elseCase << makeExec();
     }
     registerGctSemantic(
         context_,
@@ -2473,7 +2488,7 @@ node_ptr_t Builder::visitArrayData(const AST::node_ptr_t &ast) {
 
     ArrayDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = tree_->makeExec(false, true);
+    node_ptr_t execNode = makeExec(false, true);
 
     // `[1, null, 3]`: a `null` among other elements makes the array one of `T?` (design
     // principles 2.10), whose elements are put into that form when the program runs. Which
@@ -2548,7 +2563,7 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
         node_ptr_t typeNode = place(tree_->makeType(type, type->implMark()), body, "gct.func.type");
         const ValueUseScope valueUseScope(*this);
         valueUse_           = {};
-        node_ptr_t bodyNode = place(tree_->makeExec(false), body, "gct.block");
+        node_ptr_t bodyNode = place(makeExec(false), body, "gct.block");
         *bodyNode << visitData(body);
         node_ptr_t funcNode = place(tree_->makeFunc(std::string()), body, "gct.func");
         *funcNode << typeNode << bodyNode;
@@ -2622,7 +2637,7 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
     // the array is built from computed elements of exactly that type.
     entered = true;
     ArrayDataFactory factory;
-    node_ptr_t execNode = tree_->makeExec(false, true);
+    node_ptr_t execNode = makeExec(false, true);
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         bool nested         = false;
         node_ptr_t dataNode = visitDataInto(item, elemType, nested);
@@ -2662,7 +2677,7 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
 
     StructDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = tree_->makeExec(false, true);
+    node_ptr_t execNode = makeExec(false, true);
     std::unordered_set<string> fieldNames;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
@@ -2700,7 +2715,7 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
 
     TupleDataFactory factory;
     bool dangling       = false;
-    node_ptr_t execNode = tree_->makeExec(false, true);
+    node_ptr_t execNode = makeExec(false, true);
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);

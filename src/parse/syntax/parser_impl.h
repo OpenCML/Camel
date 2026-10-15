@@ -184,6 +184,8 @@ class ParserImpl {
     void parseNamespaceDecl();
     void parseFuncAnno();
     void parseFuncDecl();
+    void parseFuncDeclRest(size_t m);
+    void parseAnnotatedStmt();
     /// At `operator` followed by an operator symbol, right after `func`: the name of an
     /// operator overload rather than a function named `operator`.
     bool atOperatorName() const;

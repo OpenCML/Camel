@@ -140,6 +140,11 @@ int main() {
         generate(scalarCode);
         if (kernel::generationCacheStats().misses != firstStats.misses + 1 || scalarCode.source == firstSource)
             throw std::runtime_error("graph literal reused incompatible source template");
+        const auto beforePermission = kernel::generationCacheStats();
+        scalarCode.nodes.back().permissions = camel::core::sem::kContract;
+        generate(scalarCode);
+        if (kernel::generationCacheStats().misses != beforePermission.misses + 1)
+            throw std::runtime_error("numeric permissions missing from source-template key");
         std::weak_ptr<int> cacheOwner;
         {
             Program borrowed;
@@ -287,3 +292,4 @@ int main() {
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }
+

@@ -1,0 +1,5 @@
+std::nvm: numeric permission boundaries, broadcast FMA and strict reuse passed
+std::fvm: numeric permission boundaries, broadcast FMA and strict reuse passed
+std::jit: numeric permission boundaries, broadcast FMA and strict reuse passed
+std::inline std::fvm: numeric permission boundaries, broadcast FMA and strict reuse passed
+std::opt std::nvm: numeric permission boundaries, broadcast FMA and strict reuse passed

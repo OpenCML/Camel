@@ -127,6 +127,12 @@ class Builder {
     // parameters (typeasAllowed_), and records what was bound (declaredTypeVars_) so the
     // declaration can be checked. A type function may only appear as the base of
     // `Name<...>` (typeFunctionBase_).
+    // The numeric permissions in force where the builder is (design principles 2.13): the
+    // union of the `@numeric(...)` grants of the blocks and functions it is inside. Every EXEC
+    // is made with them (makeExec).
+    uint8_t numericPermissions_ = 0;
+    node_ptr_t makeExec(bool synced = false, bool operands = false);
+
     bool funcDeclPending_  = false;
     bool declSignature_    = false;
     // The function type visited next is the signature of a function being defined (a

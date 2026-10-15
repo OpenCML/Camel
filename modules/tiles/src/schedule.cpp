@@ -488,6 +488,12 @@ std::string inspect(const Program &p) {
             out << ',';
         out << p.outputs[i];
     }
+    out << "],\"numeric_permissions\":[";
+    for (size_t i = 0; i < p.nodes.size(); ++i) {
+        if (i)
+            out << ',';
+        out << static_cast<unsigned>(p.nodes[i].permissions);
+    }
     out << "]}";
     return out.str();
 }

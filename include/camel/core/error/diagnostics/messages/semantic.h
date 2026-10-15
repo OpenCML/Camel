@@ -129,6 +129,7 @@ enum class SemanticDiag : uint32_t {
     // and up.
     DeclaredTypeMismatch         = 0x000110,
     ModuleTypeCycle              = 0x000111,
+    InvalidAnnotation            = 0x000112,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

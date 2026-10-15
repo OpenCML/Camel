@@ -7,6 +7,44 @@ the [architecture proposal](../../docs/design/indexed-computation/README.md).
 Unresolved language semantics require an author decision. Backend policy and
 module operator contracts must be explicit; they do not redefine Camel syntax.
 
+## Lexical permissions and controlled contraction (2026-10-16)
+
+Integrated fsh-dev through 0017dcf7, including @numeric function/block syntax,
+per-node graph permissions and rewrite/CSE preservation. Tiles copies the grant
+only to nodes lowered from that operator, never to previously lowered inputs or
+separate callees. Physical source-template identity includes the permission byte;
+inspection exposes every lowered node's mask.
+
+The first policy-dependent implementation is f32 elementwise multiply/add
+contraction: a private product in the same launch and both nodes' contract bits
+are required. The code generator emits fmaf explicitly and retains --fmad=false
+for every other operation. Broadcast index composition is preserved. Shared or
+returned products retain their original rounding point. No other permission is
+currently consumed to relax arithmetic; those bytes are retained for later passes.
+
+Manual five-path checks (NVM, FVM, JIT, inline/FVM, opt/NVM) distinguish a rounded
+zero from the exact FMA residual, check reversed addition, permission isolation,
+private/shared products and strict execution after cached contracted execution.
+They also pass with moving GC and allocation/safepoint stress plus heap checks.
+The combined local integration subset passed 160/160 before adding the dedicated
+GC plan entry; the complete GPU plan then passed 64/64 including that entry.
+The eight-step affine benchmark's optimized median was 0.025792 ms strictly and
+0.024160 ms with contract on RTX 4060 Ti (about 1.07x in this run). Maximum absolute
+deviation from the unfused reference was 1.1921e-7 for the contracted version.
+These are device-event timings for this workload, not end-to-end or Triton claims;
+raw reports and local plan logs are retained in docs/performance/tiles.
+Remote RTX 3090 validation passed 97/97 primary cases plus 63/63 core/parse cases,
+and the five execution paths also passed moving-GC stress. GPU 7's timing run was
+contended by an existing Python process (100% utilization on the subsequent check),
+so those timings are retained only as an excluded observation. A fresh run on
+GPU 0, observed idle before measurement, gave strict 0.015424 ms and contracted
+0.015712 ms: no measured speedup there. Before/after GPU 0 state and the GPU 7
+contention snapshot are retained. A single short device-event run is not evidence
+of a general performance gain; the authorized instruction selection is verified
+independently by source and exact cancellation cases.
+The benchmark comparison limitation for relaxed algorithms is explicit in README;
+its tolerance gate is not weakened by this change.
+
 ## Core integration and canonical extrema (2026-10-16)
 
 Integrated remote fsh-dev through d05050f7 into the Tiles working branch: stable

@@ -11,6 +11,7 @@
 // Owned, shape-specialized computation and launch plan. No GC pointers survive compilation.
 #pragma once
 
+#include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include <cstddef>
 #include <cstdint>
@@ -46,7 +47,8 @@ struct Node {
     // Units are elements, independent of CUDA thread/block placement.
     size_t offset = 0;
     std::vector<size_t> strides;
-    DType dtype = DType::F32;
+    DType dtype                           = DType::F32;
+    core::sem::PermissionMask permissions = core::sem::kNoPermissions;
     std::shared_ptr<const DeviceValue>
         resident; // Borrowed immutable input, retained through execution.
 };
