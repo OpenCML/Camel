@@ -1,0 +1,22 @@
+/**
+ * matmul's canonical algorithm (design principles 2.13): every element is one chain of fused
+ * multiply-adds in ascending k from +0, so the product has the same bits in every GEMM unit
+ * (run with and without CAMEL_TENSOR_ISA=generic) and the fused forms of `x @ w + b` give the
+ * bits of the unfused expression (run with and without tensor::fuse). K is beyond one cache
+ * block of the blocked GEMM (256), and the shapes leave edge tiles.
+ */
+module gemm_canonical
+
+import { random, seed, sum, abs, relu, linear } from tensor
+
+func main(): int sync {
+    seed(5)
+    let a = random([33, 600], -1.0, 1.0)
+    let b = random([600, 29], -1.0, 1.0)
+    let bias = random([29], -1.0, 1.0)
+    let p = a @ b
+    'gemm product_sum={}'->format<sum(p)>->println
+    'gemm affine_sum={} relu_sum={}'->format<sum(a @ b + bias), sum(relu(a @ b + bias))>->println
+    'gemm linear_diff={}'->format<sum(abs(linear(a, b, bias) - (p + bias)))>->println
+    return 0
+}

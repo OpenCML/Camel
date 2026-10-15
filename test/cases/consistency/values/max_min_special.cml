@@ -1,0 +1,29 @@
+/**
+ * math::max and math::min are IEEE 754-2019 maximum and minimum (design principles 2.13): a NaN
+ * on either side gives NaN, and -0 is below +0 whichever side each zero is on.
+ */
+module max_min_special
+
+import { max, min, is_nan } from math
+
+func neg(x: float): float { return -x }
+func sub(a: float, b: float): float { return a - b }
+
+func main(): int sync {
+    let pz = 0.0
+    let nz = neg(0.0)
+    let nan = sub(1.0e308 * 10.0, 1.0e308 * 10.0)
+    println(max(pz, nz))
+    println(max(nz, pz))
+    println(min(pz, nz))
+    println(min(nz, pz))
+    println(max(nz, nz))
+    println(min(pz, pz))
+    println(is_nan(max(nan, 1.0)))
+    println(is_nan(max(1.0, nan)))
+    println(is_nan(min(nan, 1.0)))
+    println(is_nan(min(1.0, nan)))
+    println(max(3, 5))
+    println(min(-2.5, 1.5))
+    return 0
+}

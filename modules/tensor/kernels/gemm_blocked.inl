@@ -23,20 +23,37 @@
  * included so each unit compiles the same algorithm with its own vector width
  * and target flags; it is not a public header.
  *
- * Algorithm (Goto-style):
+ * The arithmetic is the canonical algorithm of matmul (design principles 2.13):
+ * every element of the product is one chain of fused multiply-adds in ascending
+ * k, starting from +0,
+ *
+ *     acc = +0;  for k = 0 .. K-1:  acc = fma(A[i][k], B[k][j], acc)
+ *
+ * and only then combined with C: C = alpha * acc (beta == 0) or
+ * C = alpha * acc + beta * C, each step rounded as written. The fused multiply-
+ * add is written explicitly (fmaVec), and the units that include this file are
+ * compiled with contraction off, so the bits are the same on every processor:
+ * with FMA hardware it is one instruction, without it the C library's correctly
+ * rounded fmaf (slow, but such x86-64 processors predate 2013).
+ *
+ * Blocking (Goto-style) changes where the work happens, never the order of the
+ * steps of one chain:
  *   for each (MC x NC) output tile, in parallel:
- *     for each K block of depth KC:
+ *     for each K block of depth KC, in ascending order:
  *       pack the tile's B[KC x NC] columns into NR-wide panels (zero padded)
  *       pack the tile's A[MC x KC] rows into MR-tall panels (zero padded)
- *       run the MR x NR micro-kernel over the tile
+ *       run the MR x NR micro-kernel over the tile, continuing each chain from
+ *       the value the previous K block left in the tile's carry buffer
  * The micro-kernel keeps an MR x NR accumulator block in vector registers
  * using GCC/Clang vector extensions. Transposed operands are handled entirely
- * by the packing routines.
+ * by the packing routines. The zero padding only fills lanes (rows beyond mr,
+ * columns beyond nr) whose results are never stored; k is never padded.
  */
 
 #include "parallel.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -66,6 +83,19 @@ inline vfloat loadVec(const float *p) {
 }
 
 inline void storeVec(float *p, vfloat v) { std::memcpy(p, &v, sizeof(v)); }
+
+/// acc + a * b with one rounding, lane by lane: one step of matmul's canonical algorithm.
+inline vfloat fmaVec(vfloat a, vfloat b, vfloat acc) {
+#if defined(__has_builtin) && __has_builtin(__builtin_elementwise_fma)
+    return __builtin_elementwise_fma(a, b, acc);
+#else
+    vfloat r;
+    for (int i = 0; i < kVecWidth; ++i) {
+        r[i] = std::fma(a[i], b[i], acc[i]);
+    }
+    return r;
+#endif
+}
 
 inline vfloat splat(float x) {
     vfloat v;
@@ -121,14 +151,33 @@ void packA(
     }
 }
 
-/// C[mr x nr] += alpha * Ap(panel) * Bp(panel). Full tiles store directly; edges go through a buffer.
+/// The last step of an element: C = alpha * acc (beta == 0, C is not read) or
+/// C = alpha * acc + beta * C. With beta == 1 the second form is the addition of the
+/// unfused `matmul(x, w) + bias` (the product on the left), so linear and matmul_add give
+/// the bits of that expression.
+inline float finish(float acc, float c, float alpha, float beta) {
+    const float product = alpha * acc;
+    if (beta == 0.0f) {
+        return product;
+    }
+    return beta == 1.0f ? product + c : product + beta * c;
+}
+
+/**
+ * Runs the chains of one MR x NR block over the kc steps of one K block.
+ *
+ * `carry` holds the block's MR x NR accumulators between K blocks (contiguous, row-major,
+ * padding lanes included). The first K block starts every chain from +0, a later one from
+ * `carry`; a block that is not the last stores the accumulators back to `carry`, the last one
+ * finishes them into C (only the mr x nr elements that exist).
+ */
 void microKernel(
-    int64_t kc, const float *Ap, const float *Bp, float *C, int64_t ldc, float alpha, int64_t mr,
-    int64_t nr) {
+    int64_t kc, const float *Ap, const float *Bp, float *carry, bool first, bool last, float *C,
+    int64_t ldc, float alpha, float beta, int64_t mr, int64_t nr) {
     vfloat acc[kMR][kNVec];
     for (int i = 0; i < kMR; ++i) {
         for (int v = 0; v < kNVec; ++v) {
-            acc[i][v] = splat(0.0f);
+            acc[i][v] = first ? splat(0.0f) : loadVec(carry + i * kNR + v * kVecWidth);
         }
     }
     for (int64_t k = 0; k < kc; ++k) {
@@ -140,16 +189,23 @@ void microKernel(
         for (int i = 0; i < kMR; ++i) {
             const vfloat av = splat(a[i]);
             for (int v = 0; v < kNVec; ++v) {
-                acc[i][v] += av * b[v];
+                acc[i][v] = fmaVec(av, b[v], acc[i][v]);
             }
         }
     }
-    const vfloat alphaVec = splat(alpha);
-    if (mr == kMR && nr == kNR) {
+    if (!last) {
         for (int i = 0; i < kMR; ++i) {
             for (int v = 0; v < kNVec; ++v) {
-                float *dst = C + i * ldc + v * kVecWidth;
-                storeVec(dst, loadVec(dst) + alphaVec * acc[i][v]);
+                storeVec(carry + i * kNR + v * kVecWidth, acc[i][v]);
+            }
+        }
+        return;
+    }
+    if (mr == kMR && nr == kNR && beta == 0.0f) {
+        const vfloat alphaVec = splat(alpha);
+        for (int i = 0; i < kMR; ++i) {
+            for (int v = 0; v < kNVec; ++v) {
+                storeVec(C + i * ldc + v * kVecWidth, alphaVec * acc[i][v]);
             }
         }
         return;
@@ -157,12 +213,12 @@ void microKernel(
     alignas(64) float tile[kMR][kNR];
     for (int i = 0; i < kMR; ++i) {
         for (int v = 0; v < kNVec; ++v) {
-            storeVec(&tile[i][v * kVecWidth], alphaVec * acc[i][v]);
+            storeVec(&tile[i][v * kVecWidth], acc[i][v]);
         }
     }
     for (int64_t i = 0; i < mr; ++i) {
         for (int64_t j = 0; j < nr; ++j) {
-            C[i * ldc + j] += tile[i][j];
+            C[i * ldc + j] = finish(tile[i][j], C[i * ldc + j], alpha, beta);
         }
     }
 }
@@ -178,19 +234,15 @@ float *scratch(std::unique_ptr<float[]> &buffer, size_t &capacity, size_t count)
     return buffer.get();
 }
 
-/// Scales the C tile [ic:ic+mc, jc:jc+nc] by beta (beta == 0 clears it).
-void scaleTile(float *C, int64_t ldc, int64_t ic, int64_t mc, int64_t jc, int64_t nc, float beta) {
-    if (beta == 1.0f) {
-        return;
-    }
+/// Finishes the C tile [ic:ic+mc, jc:jc+nc] when there is no product to accumulate (K == 0, or
+/// alpha == 0, where A and B are not read): every chain is its starting value +0.
+void finishEmptyTile(
+    float *C, int64_t ldc, int64_t ic, int64_t mc, int64_t jc, int64_t nc, float alpha,
+    float beta) {
     for (int64_t i = ic; i < ic + mc; ++i) {
         float *row = C + i * ldc + jc;
-        if (beta == 0.0f) {
-            std::fill_n(row, nc, 0.0f);
-        } else {
-            for (int64_t j = 0; j < nc; ++j) {
-                row[j] *= beta;
-            }
+        for (int64_t j = 0; j < nc; ++j) {
+            row[j] = finish(0.0f, row[j], alpha, beta);
         }
     }
 }
@@ -241,17 +293,32 @@ void CAMEL_GEMM_ENTRY(
             bufferB,
             capacityB,
             static_cast<size_t>(((ncTile + kNR - 1) / kNR) * kNR * kcMax));
+        // The accumulators of a whole tile between K blocks (only when there is more than one
+        // K block): one MR x NR block per micro tile.
+        const int64_t rowBlocks = (kMC + kMR - 1) / kMR;
+        const int64_t colBlocks = (ncTile + kNR - 1) / kNR;
+        thread_local std::unique_ptr<float[]> bufferCarry;
+        thread_local size_t capacityCarry = 0;
+        float *carry                      = nullptr;
+        if (K > kKC) {
+            carry = scratch(
+                bufferCarry,
+                capacityCarry,
+                static_cast<size_t>(rowBlocks * colBlocks * kMR * kNR));
+        }
         for (int64_t t = begin; t < end; ++t) {
             const int64_t ic = (t / nTiles) * kMC;
             const int64_t mc = std::min(kMC, M - ic);
             const int64_t jc = (t % nTiles) * ncTile;
             const int64_t nc = std::min(ncTile, N - jc);
-            scaleTile(C, ldc, ic, mc, jc, nc, beta);
-            if (alpha == 0.0f) {
+            if (alpha == 0.0f || K == 0) {
+                finishEmptyTile(C, ldc, ic, mc, jc, nc, alpha, beta);
                 continue;
             }
             for (int64_t pc = 0; pc < K; pc += kKC) {
                 const int64_t kc = std::min(kKC, K - pc);
+                const bool first = pc == 0;
+                const bool last  = pc + kc == K;
                 packB(B, ldb, transB, pc, kc, jc, nc, packedB);
                 packA(A, lda, transA, ic, mc, pc, kc, packedA);
                 for (int64_t jr = 0; jr < nc; jr += kNR) {
@@ -260,7 +327,22 @@ void CAMEL_GEMM_ENTRY(
                     for (int64_t ir = 0; ir < mc; ir += kMR) {
                         const float *Ap  = packedA + (ir / kMR) * kc * kMR;
                         const int64_t mr = std::min<int64_t>(kMR, mc - ir);
-                        microKernel(kc, Ap, Bp, C + (ic + ir) * ldc + jc + jr, ldc, alpha, mr, nr);
+                        float *blockCarry =
+                            carry ? carry + ((ir / kMR) * colBlocks + jr / kNR) * kMR * kNR
+                                  : nullptr;
+                        microKernel(
+                            kc,
+                            Ap,
+                            Bp,
+                            blockCarry,
+                            first,
+                            last,
+                            C + (ic + ir) * ldc + jc + jr,
+                            ldc,
+                            alpha,
+                            beta,
+                            mr,
+                            nr);
                     }
                 }
             }

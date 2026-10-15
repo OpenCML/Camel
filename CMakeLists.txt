@@ -50,7 +50,8 @@ add_definitions(-DNOMINMAX)
 # which is always on arm64 and only with -mfma (or -march levels that imply it) on x86-64, so
 # the same source printed different numbers on macOS (docs/design-principles.cn.md 2.11: the
 # output is the same bytes on every platform). Applies to libcamel, the modules and the tools.
-# The tensor GEMM and unary kernels opt back in (modules/tensor/CMakeLists.txt).
+# The tensor unary kernels opt back in (modules/tensor/CMakeLists.txt); the GEMM writes its
+# fused multiply-adds explicitly.
 add_compile_options(-ffp-contract=off)
 
 # Shared library: Camel core (libcamel)
