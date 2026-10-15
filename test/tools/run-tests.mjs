@@ -706,7 +706,9 @@ function runOneTest(test, sharedVars, logContext) {
         env[text.slice(0, eq)] = text.slice(eq + 1)
     }
     env.CAMEL_HOME = path.join(REPO_ROOT, 'out', 'latest')
-    env.PATH = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env.PATH || ''}`
+    // Windows commonly inherits `Path`; a second `PATH` key would hide the compiler paths.
+    const pathKey = IS_WINDOWS ? Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
+    env[pathKey] = `${path.join(env.CAMEL_HOME, 'bin')}${path.delimiter}${env[pathKey] || ''}`
 
     const started = performance.now()
     const proc = spawnSync(toolExe, args, {
