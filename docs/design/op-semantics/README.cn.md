@@ -1,7 +1,7 @@
 # 算子语义协议与图事实（设计稿）
 
 
-> **2026-10-15 已裁定**：第 12 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 2.13。
+> **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 2.13。
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
 依据：`docs/design-principles.cn.md`（2.9–2.13，尤其 2.13 的"浮点的数值契约"与 `do` 式循环头；第 6 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
 基线提交：`6bf31d1f`（`fsh-dev`，v0.2.12 合入之后）。
