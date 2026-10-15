@@ -239,7 +239,21 @@ and a Boolean validity mask travel together through coordinate substitution.
 Host evaluation short-circuits masks and skips invalid addresses; CUDA lowering
 prints conditional loads with exact fallback bits. The host evaluator is useful
 for checking mappings but is not a symbolic bounds proof. Kernel loops, stores,
-barriers and arithmetic still need migration to a complete structured kernel IR.
+barriers still need migration to a complete structured kernel IR.
+
+Elementwise f32 and scalar f64 arithmetic now use immutable, typed `ScalarExpr`
+trees. Conversions and FMA are explicit operations; basic CUDA arithmetic uses
+round-to-nearest intrinsics so each retained node preserves its rounding point.
+The host evaluator preserves intermediate IEEE bit patterns and checks the host
+rounding mode. It covers arithmetic bodies, not complete kernels or graph faults:
+scalar division's zero check remains in the surrounding kernel control flow.
+A native GPU differential check compares 5,120 f32/f64 arithmetic results
+against this evaluator, including random bit patterns, signed zeros, subnormals,
+infinities, NaNs and explicit casts. Extrema compare canonical NaN bits; other
+arithmetic compares NaN classification because its payload is unspecified.
+Host transcendental results are not a proof of CUDA's declared ulp bounds.
+The selected FMA still requires the original nodes' permissions and operator
+contracts; constructing a physical FMA expression does not grant permission.
 
 Single-use pointwise and index-map producers can fuse into axis sum/mean. Each
 output thread computes its producer values in f32 and folds them in increasing

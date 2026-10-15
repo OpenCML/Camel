@@ -1,0 +1,7 @@
+[32m[PASS][0m large_upload_completion                                 1.02 s
+
+[36m[SUMMARY][0m total: 98, pass: 98, fail: 0
+tiles module lease: eviction, launch and teardown passed
+tiles resources: cross-thread drain, release and context restoration passed
+tiles precision: subnormals, rounding and explicit FMA bits passed
+tiles scalar device: 5120 typed host/CUDA results matched

@@ -15,6 +15,8 @@
 #include "tiles/internal/index_expr.h"
 #include "tiles/internal/access.h"
 #include "tiles/internal/codegen_cache.h"
+#include "tiles/internal/scalar_expr.h"
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -36,6 +38,44 @@ template<class F> void rejects(const Program &original, F mutate, const char *re
 
 int main() {
     try {
+        using kernel::ScalarExpr;
+        using kernel::ScalarValue;
+        using kernel::ScalarOp;
+        const auto a = ScalarExpr::symbol("a", DType::F32);
+        const auto b = ScalarExpr::symbol("b", DType::F32);
+        const auto c = ScalarExpr::symbol("c", DType::F32);
+        const auto separate = ScalarExpr::apply(ScalarOp::Add, {ScalarExpr::apply(ScalarOp::Multiply, {a,b}), c});
+        const auto fused = ScalarExpr::apply(ScalarOp::Fma, {a,b,c});
+        const std::unordered_map<std::string, ScalarValue> operands = {
+            {"a", ScalarValue::f32(1.0f + std::ldexp(1.0f,-23))},
+            {"b", ScalarValue::f32(1.0f - std::ldexp(1.0f,-23))}, {"c", ScalarValue::f32(-1)}};
+        if (separate.evaluate(operands).bits != 0 || fused.evaluate(operands).asF32() != -std::ldexp(1.0f,-46))
+            throw std::runtime_error("scalar IR lost an explicit rounding boundary");
+        if (separate.cuda() != "__fadd_rn(__fmul_rn(a,b),c)")
+            throw std::runtime_error("scalar IR CUDA rounding instructions mismatch");
+        const auto maximum = ScalarExpr::apply(ScalarOp::Maximum, {a,b});
+        const auto minimum = ScalarExpr::apply(ScalarOp::Minimum, {a,b});
+        if (maximum.evaluate({{"a",ScalarValue::f32(-0.0f)},{"b",ScalarValue::f32(0)}}).bits != 0 ||
+            minimum.evaluate({{"a",ScalarValue::f32(0)},{"b",ScalarValue::f32(-0.0f)}}).bits != 0x80000000U ||
+            maximum.evaluate({{"a",{DType::F32,0xffc01234U}},{"b",ScalarValue::f32(1)}}).bits != 0x7fc00000U)
+            throw std::runtime_error("scalar IR extrema bit contract mismatch");
+        const auto half = ScalarExpr::literal(ScalarValue::f64(1.0 + std::ldexp(1.0,-24)));
+        if (ScalarExpr::cast(DType::F32,half).evaluate({}).asF32() != 1.0f ||
+            a.substitute("a",ScalarExpr::literal({DType::F32,1})).evaluate({}).bits != 1)
+            throw std::runtime_error("scalar IR cast or subnormal mismatch");
+        if (!std::isinf(ScalarExpr::apply(ScalarOp::Divide,{a,b}).evaluate({{"a",ScalarValue::f32(1)},{"b",ScalarValue::f32(0)}}).asF32()))
+            throw std::runtime_error("physical division must preserve IEEE semantics");
+        auto rejectScalar = [](auto action) {
+            try { action(); } catch (const std::exception &) { return; }
+            throw std::runtime_error("accepted invalid scalar expression");
+        };
+        rejectScalar([&]{ (void)ScalarExpr::apply(ScalarOp::Add,{a}); });
+        rejectScalar([&]{ (void)ScalarExpr::apply(ScalarOp::Add,{a,half}); });
+        rejectScalar([&]{ (void)a.substitute("a",half); });
+        rejectScalar([&]{ (void)a.evaluate({}); });
+        rejectScalar([&]{ (void)a.evaluate({{"a",ScalarValue::f64(1)}}); });
+        rejectScalar([&]{ (void)ScalarExpr::symbol("a;return",DType::F32); });
+        std::cout << "tiles scalar expressions: typed rounding, FMA and IEEE bits passed\n";
         using kernel::IndexExpr;
         const auto i = IndexExpr::variable("i");
         // Transpose a 2x3 array, then apply a strided slice of the flattened view.
