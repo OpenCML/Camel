@@ -893,5 +893,5 @@ tool = "python"
 case = "../../cases/modules/tiles/module_lease.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed"]
+expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed", "tiles resources: cross-thread drain, release and context restoration passed"]
 timeout_ms = 60000

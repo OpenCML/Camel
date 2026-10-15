@@ -54,11 +54,12 @@ word reports success. Observing a consumer result must also observe failures fro
 its required producers. Identity results, duplicate outputs and empty outputs
 must preserve those obligations even when they enqueue no arithmetic kernel.
 
-Current `Resources` cleanup and timing-event cleanup assume that the caller has
-made the owning CUDA context current. That assumption is valid for the existing
-synchronous call scope but cannot be retained for cross-thread destruction of a
-pending submission. Activation, cleanup and restoration of the prior context
-must be internal to that ownership boundary. Finalizers must not throw or acquire
+`Resources` now owns its backend and activates its context for allocation and
+cleanup, restoring the caller's context afterward. Its native regression queues
+an upload and destroys the owner on a second thread, checking successful stream
+draining, device/pinned-memory/stream release and context restoration. Timing-event
+cleanup still relies on its synchronous caller's context and must be replaced or
+extended before use in a pending submission. Finalizers must not throw or acquire
 Camel allocator locks; a failed CUDA context activation must not trigger use of
 handles in an unrelated current context.
 

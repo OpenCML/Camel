@@ -10,9 +10,79 @@
 
 // Exercise a module after cache eviction and verify backend lifetime ordering.
 #include "tiles/internal/cuda_backend.h"
+#include "tiles/internal/cuda_resources.h"
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 using namespace camel::tiles::cuda_detail;
+
+namespace {
+decltype(&::cuMemFree) releaseDevice;
+decltype(&::cuMemFreeHost) releaseHost;
+decltype(&::cuStreamDestroy) releaseStream;
+decltype(&::cuStreamSynchronize) drainStream;
+int releasedDevice = 0, releasedHost = 0, releasedStream = 0;
+bool drained = false;
+CUresult CUDAAPI checkedDrain(CUstream stream) {
+    auto result = drainStream(stream);
+    drained = result == CUDA_SUCCESS;
+    return result;
+}
+CUresult CUDAAPI checkedDevice(CUdeviceptr pointer) {
+    auto result = releaseDevice(pointer);
+    if (drained && result == CUDA_SUCCESS) ++releasedDevice;
+    return result;
+}
+CUresult CUDAAPI checkedHost(void *pointer) {
+    auto result = releaseHost(pointer);
+    if (drained && result == CUDA_SUCCESS) ++releasedHost;
+    return result;
+}
+CUresult CUDAAPI checkedStream(CUstream stream) {
+    auto result = releaseStream(stream);
+    if (drained && result == CUDA_SUCCESS) ++releasedStream;
+    return result;
+}
+void testResourceThread() {
+    auto backend = std::make_shared<Backend>();
+    std::weak_ptr<Backend> weak = backend;
+    auto resources = std::make_unique<Resources>(backend);
+    constexpr size_t count = 4 * 1024 * 1024;
+    auto pointer = resources->allocate(count);
+    auto host = resources->allocateHost(count);
+    std::memset(host, 17, count);
+    auto &api = backend->api;
+    {
+        Current current(api, backend->context);
+        api.check(api.cuMemcpyHtoDAsync(pointer, host, count, resources->stream), "queue resource test upload");
+    }
+    auto getCurrent = api.driver.symbol<decltype(&::cuCtxGetCurrent)>("cuCtxGetCurrent");
+    releaseDevice = api.cuMemFree;
+    releaseHost = api.cuMemFreeHost;
+    releaseStream = api.cuStreamDestroy;
+    drainStream = api.cuStreamSynchronize;
+    api.cuMemFree = checkedDevice;
+    api.cuMemFreeHost = checkedHost;
+    api.cuStreamDestroy = checkedStream;
+    api.cuStreamSynchronize = checkedDrain;
+    backend.reset();
+    if (weak.expired()) throw std::runtime_error("resources lost their backend");
+    bool contextsRestored = false;
+    std::thread worker([owned = std::move(resources), getCurrent, weak, &contextsRestored]() mutable {
+        auto observer = weak.lock(); // Keep the dynamically loaded query function alive.
+        CUcontext before = nullptr, after = nullptr;
+        auto first = getCurrent(&before);
+        owned.reset();
+        auto last = getCurrent(&after);
+        contextsRestored = first == CUDA_SUCCESS && last == CUDA_SUCCESS && before == after;
+    });
+    worker.join();
+    if (!contextsRestored || !weak.expired() || releasedDevice != 1 || releasedHost != 1 || releasedStream != 1)
+        throw std::runtime_error("cross-thread resource teardown did not drain, free and restore context");
+    std::cout << "tiles resources: cross-thread drain, release and context restoration passed\n";
+}
+}
 
 int main() {
     try {
@@ -55,6 +125,7 @@ int main() {
         if (!weakModule.expired() || !weakBackend.expired())
             throw std::runtime_error("module/backend ownership cycle");
         std::cout << "tiles module lease: eviction, launch and teardown passed\n";
+        testResourceThread();
         return 0;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';

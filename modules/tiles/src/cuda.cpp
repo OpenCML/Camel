@@ -25,6 +25,7 @@
 
 #ifdef CAMEL_TILES_CUDA
 #include "tiles/internal/cuda_backend.h"
+#include "tiles/internal/cuda_resources.h"
 
 namespace camel::tiles {
 using namespace cuda_detail;
@@ -40,50 +41,6 @@ struct OwnedAllocation {
             CUcontext popped;
             backend->api.cuCtxPopCurrent(&popped);
         }
-    }
-};
-
-// The stream is drained before buffers are freed, including on a failed launch.
-struct Resources {
-    Api &api;
-    CUstream stream = nullptr;
-    std::vector<CUdeviceptr> buffers;
-    std::vector<void *> hostBuffers;
-    explicit Resources(Api &a) : api(a) {
-        api.check(api.cuStreamCreate(&stream, CU_STREAM_NON_BLOCKING), "create stream");
-    }
-    ~Resources() {
-        if (stream)
-            api.cuStreamSynchronize(stream);
-        for (auto ptr : buffers)
-            if (ptr)
-                api.cuMemFree(ptr);
-        for (auto ptr : hostBuffers)
-            api.cuMemFreeHost(ptr);
-        if (stream)
-            api.cuStreamDestroy(stream);
-    }
-    CUdeviceptr allocate(size_t size) {
-        CUdeviceptr ptr = 0;
-        api.check(api.cuMemAlloc(&ptr, std::max(size, size_t(1))), "allocate device memory");
-        try {
-            buffers.push_back(ptr);
-        } catch (...) {
-            api.cuMemFree(ptr);
-            throw;
-        }
-        return ptr;
-    }
-    void *allocateHost(size_t size) {
-        void *ptr = nullptr;
-        api.check(api.cuMemHostAlloc(&ptr, size, 0), "allocate pinned host memory");
-        try {
-            hostBuffers.push_back(ptr);
-        } catch (...) {
-            api.cuMemFreeHost(ptr);
-            throw;
-        }
-        return ptr;
     }
 };
 
@@ -105,7 +62,7 @@ class DeviceRun {
   public:
     DeviceRun(std::shared_ptr<const Program> snapshot, Api &a, ModuleLease module)
         : moduleLease(std::move(module)), programOwner(std::move(snapshot)), program(*programOwner),
-          api(a), resources(a) {
+          api(a), resources(moduleLease.backend) {
         const auto &p = program;
         std::vector<CUdeviceptr> allocations;
         for (auto bytes : p.storage.bytes)
@@ -286,7 +243,7 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     b->api.check(
         b->api.cuMemAlloc(&allocation->pointer, std::max(size_t(1), data.size())),
         "allocate resident tensor");
-    Resources staging(b->api);
+    Resources staging(b);
     if (!data.empty()) {
         const size_t size = data.size();
         void *pinned      = staging.allocateHost(size);

@@ -1,7 +1,7 @@
 include(${CMAKE_CURRENT_SOURCE_DIR}/../camel_module.cmake)
 add_camel_module(
   NAME tiles
-  SOURCES src/module.cpp src/compiler.cpp src/codegen.cpp src/cuda.cpp src/cuda_backend.cpp src/schedule.cpp src/device.cpp
+  SOURCES src/module.cpp src/compiler.cpp src/codegen.cpp src/cuda.cpp src/cuda_backend.cpp src/cuda_resources.cpp src/schedule.cpp src/device.cpp
   EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include
   EXTRA_LIBS tensor_cmo nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS}
 )
@@ -16,7 +16,7 @@ target_link_libraries(tiles-plan-check PRIVATE libcamel fmt::fmt)
 # Load the driver and NVRTC lazily: importing tiles never requires a GPU.
 find_package(CUDAToolkit QUIET)
 if(CUDAToolkit_FOUND)
-  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp src/cuda_backend.cpp)
+  add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp src/cuda_backend.cpp src/cuda_resources.cpp)
   target_compile_features(tiles-module-lease PRIVATE cxx_std_23)
   target_include_directories(tiles-module-lease PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(tiles-module-lease PRIVATE ${CMAKE_DL_LIBS})
