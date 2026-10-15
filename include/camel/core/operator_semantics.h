@@ -38,9 +38,13 @@
  *   Permission         the five permissions a program grants with @numeric(...), the fifth
  *                      (finite_math) split into its four assumptions: one byte
  *
- * The index semantics (iteration domain, access maps, reduction laws: design sections 5 and 7)
- * come in phase 2, the resources and the definition graph (sections 8 and 9) in phase 4; each
- * is a new optional member of OperatorSemantics, absent until then.
+ * Phase 2 adds the index semantics (design section 5, camel/core/index_semantics.h):
+ *
+ *   indexing           the instantiation function: for the facts known at one call, the
+ *                      iteration domain, the access map of every operand and the write map
+ *
+ * The resources and the definition graph (sections 8 and 9) come in phase 4, each a new
+ * optional member of OperatorSemantics, absent until then.
  *
  * An operator's declaration says only what the operator does. Permissions are never part of
  * it: they are written by the program on its own code and stored on the graph, one byte per
@@ -49,6 +53,7 @@
 
 #pragma once
 
+#include "camel/core/index_semantics.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
 
@@ -199,6 +204,10 @@ struct FaultSpec {
 
 struct OperatorSemantics {
     OperatorKey key;
+    /// The index semantics (camel/core/index_semantics.h): the instance of one call. Empty when
+    /// not declared: the operator reads its operands whole and writes its result whole, and
+    /// nothing is known about which elements depend on which.
+    InstantiateFn indexing;
     NumericSemantics numeric;
     /// The faults the operator can raise. nullopt: not declared, the operator's mayFault trait
     /// decides ("may fault, anyhow"). An empty list: it never faults.

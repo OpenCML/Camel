@@ -42,6 +42,7 @@
 #include "passes/sched/nodevm/nodevm.h"
 #include "passes/sched/taskflow/taskflow.h"
 #include "passes/test/fault.h"
+#include "passes/test/index_semantics.h"
 #include "passes/test/semantics.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
@@ -677,6 +678,11 @@ PassFactory lookupPassFactory(const std::string &name) {
     if (resolved == kOperatorSemanticsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
         return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
             return std::make_unique<OperatorSemanticsTestPass>(ctx);
+        };
+    }
+    if (resolved == kIndexSemanticsTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<IndexSemanticsTestPass>(ctx);
         };
     }
     return nullptr;
