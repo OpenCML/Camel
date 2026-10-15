@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -57,8 +57,8 @@ class Server {
         std::string uri;
         std::string path;
         std::string text;
-        json version = nullptr;
-        bool stale     = true; // the text changed since `model` was built
+        json version   = nullptr;
+        bool stale     = true;  // the text changed since `model` was built
         bool published = false; // diagnostics of `model` were pushed
         semantic::model_ptr_t model;
         /// The last model whose text compiled: where a text that does not compile takes the
@@ -70,9 +70,14 @@ class Server {
     std::string executableDir_;
     std::map<std::string, Document> documents_;
     std::vector<std::string> workspaceRoots_;
-    bool shutdown_      = false;
+    bool refreshDiagnostics_ = false;
+    bool documentChanges_    = false;
+    unsigned refreshId_      = 0;
+    json activeRequest_      = nullptr;
+    std::map<std::string, semantic::model_ptr_t> projectModels_;
+    bool shutdown_        = false;
     bool pushDiagnostics_ = true;
-    int debounceMs_     = 150;
+    int debounceMs_       = 150;
     /// Workspace files that are not open, parsed for workspace/symbol: path -> (stamp, model).
     std::map<std::string, std::pair<std::string, semantic::model_ptr_t>> workspaceCache_;
 
@@ -83,6 +88,15 @@ class Server {
     Document *document(const json &params);
     const semantic::SemanticModel &modelOf(Document &doc);
     void refreshStale();
+    void invalidateModels();
+    semantic::AnalysisOptions
+    analysisOptions(const std::string &path, const std::string &text) const;
+    void checkCancelled();
+    std::map<std::string, std::string> workspaceSources();
+    semantic::model_ptr_t projectModel(const std::string &path, const std::string &text);
+    json workspaceRename(const json &params, bool prepare);
+    json callHierarchy(const std::string &method, const json &params);
+    json readingSupport(const std::string &method, const json &params);
     void publish(Document &doc);
     json diagnosticsOf(Document &doc);
 

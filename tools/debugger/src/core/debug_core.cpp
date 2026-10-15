@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,9 +23,10 @@
  *
  *   status                                   state, the last stop
  *   setBreakpoints {path, lines}             replaces the line breakpoints of a file
+ *   setFunctionBreakpoints {names}           replaces the function breakpoints
  *   setNodeBreakpoints {origins}             replaces the node breakpoints
  *   setExceptionFilters {filters}            "uncaught", "isolated"
- *   configure {stopOnEntry}
+ *   configure {stopOnEntry, frames}          frames: "functions" (default) or "subgraphs"
  *   continue | pause
  *   step {unit: "line"|"node", mode: "over"|"in"|"out", graph?}
  *   terminate | restart                      ends the run from inside (RunAborted)
@@ -33,7 +34,8 @@
  *   stackTrace | scopes {frame} | variables {reference} | evaluate {frame, expression}
  *   graph {frame} | exceptionInfo
  *
- * Events (DebugCore::events): loaded, started, stopped, continued, breakpoint, finished.
+ * Events (DebugCore::events): loaded, started, stopped, continued, breakpoint, note, finished.
+ * A `note` is a sentence for the user (a breakpoint that was never hit, and why).
  */
 
 #include "debug_core.h"
@@ -43,6 +45,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <sstream>
 
 namespace debugger::core {
@@ -59,16 +62,20 @@ constexpr size_t kMaxChildren = 100;
 
 json fail(const std::string &message) { return json{{"ok", false}, {"error", message}}; }
 
-const char *lineStateMessage(LineState state) {
-    switch (state) {
+std::string lineStateMessage(const LineResolution &r) {
+    switch (r.state) {
     case LineState::Executable:
         return "";
     case LineState::NoCode:
         return "No code on this line.";
     case LineState::NotDepended:
-        return "The code on this line is not executed: nothing depends on its result. "
-               "Evaluation is driven by dependencies; to run it, use its result or put it in "
+        return "Line " + std::to_string(r.line) +
+               " is not executed: " + whyNotExecuted(r.state, r.names) +
+               ". Evaluation is driven by dependencies; to run it, use its result or put it in "
                "a sync block.";
+    case LineState::NotCalled:
+        return "Line " + std::to_string(r.line) +
+               " is not executed: " + whyNotExecuted(r.state, r.names) + ".";
     case LineState::Removed:
         return "The code on this line is not in the graph that runs: a pass removed or "
                "replaced it.";
@@ -158,6 +165,8 @@ void DebugCore::beginRun(const std::string &notice) {
     activationBase_.clear();
     handles_.clear();
     instructionCache_.clear();
+    explainedLines_.clear();
+    hitBreakpoints_.clear();
     pending_          = Pending::None;
     runIndexed_       = false;
     step_             = Step{};
@@ -179,6 +188,9 @@ void DebugCore::beginRun(const std::string &notice) {
 
 void DebugCore::endRun(const std::string &outcome, std::optional<int> exitCode) {
     camel::execute::setExecutionObserver(nullptr);
+    if (outcome != "terminated") {
+        reportUnhitBreakpoints();
+    }
     stack_.clear();
     activationBase_.clear();
     handles_.clear();
@@ -214,6 +226,18 @@ json DebugCore::breakpointJson(const LineBreakpoint &bp) const {
     return j;
 }
 
+json DebugCore::breakpointJson(const FunctionBreakpoint &bp) const {
+    json j{{"id", bp.id}, {"verified", bp.verified}, {"name", bp.name}};
+    if (!bp.fullName.empty()) {
+        j["function"] = bp.fullName;
+    }
+    if (!bp.message.empty()) {
+        j["message"] = bp.message;
+    }
+    j["graphs"] = bp.graphs.size();
+    return j;
+}
+
 void DebugCore::verify(LineBreakpoint &bp) {
     // mutex_ is held by the caller; the index has its own lock.
     bp.origins.clear();
@@ -225,8 +249,60 @@ void DebugCore::verify(LineBreakpoint &bp) {
     }
     LineResolution r = index_.resolveLine(bp.path, bp.line);
     bp.verified      = r.state == LineState::Executable;
-    bp.message       = lineStateMessage(r.state);
+    bp.message       = lineStateMessage(r);
+    if (bp.verified && !r.called && !r.names.empty()) {
+        // Verified all the same: the line is in the program and holds a breakpoint, which
+        // will not be hit (said again at the end, reportUnhitBreakpoints).
+        bp.message = "Nothing in the program calls `" + r.names.front() + "`.";
+    }
     bp.origins       = std::move(r.origins);
+    bp.resolution    = std::move(r);
+}
+
+void DebugCore::verify(FunctionBreakpoint &bp) {
+    // mutex_ is held by the caller; the index has its own lock.
+    bp.graphs.clear();
+    bp.fullName.clear();
+    std::lock_guard<std::mutex> lock(indexMutex_);
+    if (!index_.isCompiled()) {
+        bp.verified = false;
+        bp.message  = "The program has not been compiled yet.";
+        return;
+    }
+    FunctionResolution r = index_.resolveFunction(bp.name);
+    bp.verified          = r.found;
+    bp.message           = r.message;
+    bp.fullName          = r.fullName;
+    bp.graphs            = std::move(r.graphs);
+}
+
+void DebugCore::reportUnhitBreakpoints() {
+    // A line breakpoint that was not hit because nothing uses what its line computes, or
+    // nothing calls the function it is in, was never hit for a reason the graph shows: said
+    // once more now that the program has ended (4.2). Of another breakpoint that was not hit
+    // nothing is said: why a node was not reached (an arm not taken, ...) is not recorded.
+    std::vector<std::string> notes;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto &bp : lineBreakpoints_) {
+            const LineResolution &r = bp.resolution;
+            LineState why           = r.state;
+            if (r.state == LineState::Executable && !r.called) {
+                why = LineState::NotCalled;
+            }
+            if (hitBreakpoints_.count(bp.id) != 0 ||
+                (why != LineState::NotDepended && why != LineState::NotCalled)) {
+                continue;
+            }
+            notes.push_back(
+                "Breakpoint at " + std::filesystem::path(bp.path).filename().string() + ":" +
+                std::to_string(bp.line) + " was never hit: line " + std::to_string(bp.line) +
+                " was not executed: " + whyNotExecuted(why, r.names) + ".");
+        }
+    }
+    for (auto &text : notes) {
+        pushEvent(json{{"type", "note"}, {"text", std::move(text)}});
+    }
 }
 
 void DebugCore::reverifyAll() {
@@ -239,6 +315,15 @@ void DebugCore::reverifyAll() {
             const auto origins       = bp.origins;
             verify(bp);
             if (was != bp.verified || before != bp.message || origins != bp.origins) {
+                changed.push_back(breakpointJson(bp));
+            }
+        }
+        for (auto &bp : functionBreakpoints_) {
+            const bool was           = bp.verified;
+            const std::string before = bp.message;
+            const auto graphs        = bp.graphs;
+            verify(bp);
+            if (was != bp.verified || before != bp.message || graphs != bp.graphs) {
                 changed.push_back(breakpointJson(bp));
             }
         }
@@ -278,6 +363,30 @@ json DebugCore::setLineBreakpoints(const json &args) {
     return json{{"ok", true}, {"breakpoints", std::move(out)}};
 }
 
+json DebugCore::setFunctionBreakpoints(const json &args) {
+    std::vector<std::string> names;
+    if (args.contains("names") && args["names"].is_array()) {
+        for (const auto &n : args["names"]) {
+            if (n.is_string() && !n.get<std::string>().empty()) {
+                names.push_back(n.get<std::string>());
+            }
+        }
+    }
+    json out = json::array();
+    std::lock_guard<std::mutex> lock(mutex_);
+    functionBreakpoints_.clear();
+    for (const std::string &name : names) {
+        FunctionBreakpoint bp;
+        bp.id   = nextBreakpointId_++;
+        bp.name = name;
+        verify(bp);
+        out.push_back(breakpointJson(bp));
+        functionBreakpoints_.push_back(std::move(bp));
+    }
+    configVersion_.fetch_add(1);
+    return json{{"ok", true}, {"breakpoints", std::move(out)}};
+}
+
 void DebugCore::refreshConfig() {
     std::lock_guard<std::mutex> lock(mutex_);
     seenConfig_ = configVersion_.load();
@@ -288,6 +397,12 @@ void DebugCore::refreshConfig() {
         }
         for (origin_t o : bp.origins) {
             lineBreakpointByOrigin_[o].push_back(bp.id);
+        }
+    }
+    functionBreakpointByGraph_.clear();
+    for (const auto &bp : functionBreakpoints_) {
+        for (const std::string &graph : bp.graphs) {
+            functionBreakpointByGraph_[graph].push_back(bp.id);
         }
     }
     nodeBreakpointSet_.clear();
@@ -312,6 +427,7 @@ void DebugCore::activationLeft() {
     const size_t base = activationBase_.back();
     activationBase_.pop_back();
     if (stack_.size() > base) {
+        handOnLine(base);
         stack_.resize(base);
     }
     pending_ = Pending::None;
@@ -348,16 +464,17 @@ DebugCore::ShadowFrame &DebugCore::pushFrame(GCGraph *graph, Frame *frame) {
 }
 
 DebugCore::ShadowFrame &DebugCore::pushCallee(GCGraph *graph, Frame *frame) {
-    const bool called = !stack_.empty();
-    const int file    = called ? stack_.back().lastFile : -1;
-    const int line    = called ? stack_.back().lastLine : 0;
-    ShadowFrame &f    = pushFrame(graph, frame);
-    if (called && f.info->arm) {
+    const bool called    = !stack_.empty();
+    ShadowFrame &f       = pushFrame(graph, frame);
+    // After the push: pushing may have moved the frames.
+    ShadowFrame *caller = called ? &stack_[stack_.size() - 2] : nullptr;
+    placeCallee(f, caller);
+    if (caller && f.info->folds()) {
         // The arm of a branch is code of the function that branches: its frame goes on with
         // the line that function is on, so a line the branch and its arm share is entered
         // once (2.1), not once in each.
-        f.lastFile = file;
-        f.lastLine = line;
+        f.lastFile = caller->lastFile;
+        f.lastLine = caller->lastLine;
     }
     return f;
 }
@@ -367,11 +484,13 @@ DebugCore::ShadowFrame &DebugCore::replaceTop(GCGraph *graph, Frame *frame) {
     stack_.pop_back();
     ShadowFrame &f = pushFrame(graph, frame);
     f.tailReplaced = old.tailReplaced + 1;
-    if (f.info->arm) {
-        // As in pushCallee; and a line step that started in the function goes on in its arm.
+    placeReplacement(f, old, stack_.size() > 1 ? &stack_[stack_.size() - 2] : nullptr);
+    if (f.info->folds()) {
+        // As in pushCallee; and a line step that started in the function goes on in its arm
+        // (a step by activation goes on by itself: the arm is part of it).
         f.lastFile = old.lastFile;
         f.lastLine = old.lastLine;
-        if (step_.frame == old.id) {
+        if (step_.frame == old.id && !step_.folded) {
             step_.frame = f.id;
         }
     }
@@ -421,9 +540,10 @@ void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
             pushCallee(graph, site.frame);
             break;
         case InstructionEffect::Return:
+            handOnLine(stack_.size() - 1);
             stack_.pop_back();
             if (stack_.empty()) {
-                pushFrame(graph, site.frame);
+                placeCallee(pushFrame(graph, site.frame), nullptr);
             }
             stack_.back().lastEffect = InstructionEffect::None;
             break;
@@ -438,9 +558,11 @@ void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
     ShadowFrame &f = stack_.back();
     if (f.frame != site.frame || f.graph != graph) {
         // Not expected; follow the interpreter rather than show a frame it is not in.
-        const uint32_t replaced = f.tailReplaced;
+        const ShadowFrame old = std::move(stack_.back());
         stack_.pop_back();
-        pushFrame(graph, site.frame).tailReplaced = replaced;
+        ShadowFrame &now = pushFrame(graph, site.frame);
+        now.tailReplaced = old.tailReplaced;
+        placeReplacement(now, old, stack_.size() > 1 ? &stack_[stack_.size() - 2] : nullptr);
     }
     ShadowFrame &top = stack_.back();
     if (top.pendingNode >= 0) {
@@ -475,8 +597,11 @@ void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
 // ---------------------------------------------------------------------------------------
 
 bool DebugCore::stepReached(const ShadowFrame &f, const Arrival &a) const {
-    const size_t depth = stack_.size();
-    const bool located = a.loc != nullptr && a.loc->valid();
+    // A step started with frames folded counts activations of functions: the frames of the
+    // arms of a function are the function's frame (5.4). Otherwise it counts shadow frames.
+    const size_t depth   = step_.folded ? f.presentedDepth : stack_.size();
+    const uint64_t frame = step_.folded ? f.activation : f.id;
+    const bool located   = a.loc != nullptr && a.loc->valid();
     switch (step_.kind) {
     case StepKind::None:
         return false;
@@ -486,14 +611,14 @@ bool DebugCore::stepReached(const ShadowFrame &f, const Arrival &a) const {
         }
         return step_.into || depth <= step_.depth;
     case StepKind::Line:
-        // DESIGN-QUESTION(line-step-order): the next line in execution order, not in the text.
+        // Design principles 2.11: the next line in execution order, not in the text.
         if (!located) {
             return false;
         }
         if (!step_.into && depth > step_.depth) {
             return false;
         }
-        if (f.id != step_.frame) {
+        if (frame != step_.frame) {
             // The caller after a return, a callee (step in), or the frame that replaced this
             // one by a tail call. DESIGN-QUESTION(step-over-tail-call)
             return true;
@@ -515,7 +640,7 @@ bool DebugCore::stepReached(const ShadowFrame &f, const Arrival &a) const {
         if (depth < step_.depth) {
             return true;
         }
-        return f.id == step_.frame && step_.foreign && a.function != step_.function;
+        return frame == step_.frame && step_.foreign && a.function != step_.function;
     }
     return false;
 }
@@ -535,14 +660,29 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
     }
     const bool located = f.loc.valid();
     // DESIGN-QUESTION(line-breakpoint-hits): a line is stopped at when the frame enters it,
-    // once per visit, not once per node of the line.
-    const bool entering = located && !(f.lastFile == f.loc.file && f.lastLine == f.loc.line);
+    // once per visit, not once per node of the line. With frames folded the frame is the
+    // activation of the function: a line it is on is not entered again when an arm of it
+    // starts, and is when the activation comes back to it after the arm (5.4).
+    const LinePosition on = foldsFrames() ? f.activationLine
+                                          : LinePosition{f.lastFile, f.lastLine, f.lastFunction};
+    const bool entering = located && !(on.file == f.loc.file && on.line == f.loc.line);
     std::string reason;
     json details = json::object();
     if (entering) {
         if (auto it = lineBreakpointByOrigin_.find(a.origin); it != lineBreakpointByOrigin_.end()) {
             reason                   = "breakpoint";
             details["breakpointIds"] = it->second;
+        }
+    }
+    if (f.awaitingEntry && located) [[unlikely]] {
+        // The first located node of an activation: the entry of its function (3.3).
+        f.awaitingEntry = false;
+        const GraphInfo *function = f.function != nullptr ? f.function : f.info;
+        if (auto it = functionBreakpointByGraph_.find(function->stableId);
+            it != functionBreakpointByGraph_.end() && reason.empty()) {
+            reason                   = "breakpoint";
+            details["breakpointIds"] = it->second;
+            details["function"]      = function->name;
         }
     }
     if (reason.empty() && a.origin != 0 && nodeBreakpointSet_.count(a.origin) != 0) {
@@ -561,12 +701,25 @@ void DebugCore::arrive(ShadowFrame &f, const Arrival &a) {
             reason = "pause";
         }
     }
+    if ((reason == "step" || reason == "breakpoint") && step_.kind != StepKind::None) {
+        // A line step that stops says which lines it went past that did not execute because
+        // nothing uses their result (4.2), also when a breakpoint ends it.
+        if (json skipped = skippedLines(f, a); !skipped.empty()) {
+            details["skipped"] = std::move(skipped);
+        }
+    }
     if (located) {
-        f.lastFile     = f.loc.file;
-        f.lastLine     = f.loc.line;
-        f.lastFunction = a.function;
+        f.lastFile       = f.loc.file;
+        f.lastLine       = f.loc.line;
+        f.lastFunction   = a.function;
+        f.activationLine = LinePosition{f.loc.file, f.loc.line, a.function};
     }
     if (!reason.empty()) {
+        if (auto ids = details.find("breakpointIds"); ids != details.end()) {
+            for (const auto &id : *ids) {
+                hitBreakpoints_.insert(id.get<int>());
+            }
+        }
         stop(reason, std::move(details));
     }
 }
@@ -620,54 +773,13 @@ void DebugCore::faultRaised(const camel::core::error::RuntimeFault &fault, bool 
 // Being stopped
 // ---------------------------------------------------------------------------------------
 
-json DebugCore::frameJson(const ShadowFrame &f, bool top) {
-    json j{{"id", f.id}, {"graph", f.info->name}, {"graphId", f.info->stableId}};
-    std::string name = f.info->display;
-    if (f.info->arm) {
-        j["arm"] = true;
-    }
-    if (f.tailReplaced > 0) {
-        // DESIGN-QUESTION(tail-call-stack): the callers a tail call replaced are gone; say so
-        // instead of inventing them.
-        name += " (tail call, " + std::to_string(f.tailReplaced) +
-                (f.tailReplaced == 1 ? " frame replaced)" : " frames replaced)");
-        j["tailReplaced"] = f.tailReplaced;
-    }
-    if (f.loc.valid()) {
-        int function;
-        std::string path;
-        {
-            std::lock_guard<std::mutex> lock(indexMutex_);
-            function = index_.functionOf(f.loc);
-            path     = index_.filePath(f.loc.file);
-            if (function != f.info->function && function >= 0) {
-                const std::string &from = index_.function(function)->name;
-                name += " [inlined code of " + from + "]";
-                j["inlinedFrom"] = from;
-            }
-        }
-        j["path"]      = path;
-        j["line"]      = f.loc.line;
-        j["column"]    = f.loc.column;
-        j["endLine"]   = f.loc.endLine;
-        j["endColumn"] = f.loc.endColumn;
-    }
-    j["name"] = name;
-    j["top"]  = top;
-    if (f.node != nullptr) {
-        j["node"] = json{
-            {"ref", f.node->ref},
-            {"kind", kindName(f.node->kind)},
-            {"label", f.node->label},
-            {"origin", f.node->origin}};
-    }
-    return j;
-}
-
 json DebugCore::stackJson() {
+    // Innermost first; with frames folded, the frames of one activation are shown as one.
     json frames = json::array();
     for (size_t i = stack_.size(); i-- > 0;) {
-        frames.push_back(frameJson(stack_[i], i + 1 == stack_.size()));
+        const Chain chain = chainOf(stack_[i]);
+        frames.push_back(frameJson(chain, i + 1 == stack_.size()));
+        i -= chain.size() - 1;
     }
     return frames;
 }
@@ -677,7 +789,7 @@ json DebugCore::describeStop(const std::string &reason, json details) {
     j["reason"]  = reason;
     j["depth"]   = stack_.size();
     if (!stack_.empty()) {
-        j["frame"] = frameJson(stack_.back(), true);
+        j["frame"] = frameJson(chainOf(stack_.back()), true);
     }
     return j;
 }
@@ -777,13 +889,30 @@ json DebugCore::resume(Step step, bool stepping) {
             if (stack_.empty()) {
                 return fail("no frame");
             }
-            const ShadowFrame &f = stack_.back();
-            step.depth           = stack_.size();
-            step.frame           = f.id;
-            step.file            = f.lastFile;
-            step.line            = f.lastLine;
-            step.function        = f.lastFunction;
-            step.foreign         = f.lastFunction != f.info->function;
+            ShadowFrame &f = stack_.back();
+            // A step counts what the stack shows when it starts: activations of functions
+            // with frames folded, shadow frames otherwise (5.4).
+            step.folded = foldsFrames();
+            const auto lineOf = [&](const ShadowFrame &frame) {
+                return step.folded ? frame.activationLine
+                                   : LinePosition{frame.lastFile, frame.lastLine, frame.lastFunction};
+            };
+            const LinePosition at = lineOf(f);
+            step.startActivation  = f.activation;
+            step.depth            = step.folded ? f.presentedDepth : stack_.size();
+            step.frame            = step.folded ? f.activation : f.id;
+            step.file             = at.file;
+            step.line             = at.line;
+            step.function         = at.function;
+            step.foreign          = at.function != f.info->function;
+            // The frame shown below this one: the shadow frame under the frames shown as this
+            // one, which is the innermost of its own activation.
+            const size_t bottom = static_cast<size_t>(chainOf(f).back() - stack_.data());
+            if (bottom > 0) {
+                const ShadowFrame &caller = stack_[bottom - 1];
+                step.caller               = step.folded ? caller.activation : caller.id;
+                step.callerLine           = lineOf(caller);
+            }
             std::lock_guard<std::mutex> lock(mutex_);
             resumeStep_    = step;
             resumePending_ = true;
@@ -840,56 +969,146 @@ DebugCore::nodeVariable(ShadowFrame &f, const NodeInfo &n, std::string name) {
     return v;
 }
 
-std::vector<DebugCore::Variable> DebugCore::localsOf(ShadowFrame &f) {
+std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
+    // `chain` is innermost first; its last frame is the function's own frame, unless an arm
+    // replaced it by a tail call. With frames folded the names of the function and of the
+    // arms it is in are one list; an arm's own names are there only while it runs (5.4).
+    const bool folded         = foldsFrames();
+    const ShadowFrame &inner  = *chain.front();
+    const GraphInfo *function = folded && inner.function != nullptr ? inner.function : inner.info;
     std::vector<Variable> out;
-    const auto addPort = [&](gc_node_ref_t ref) {
-        if (const NodeInfo *n = f.info->node(ref)) {
-            if (auto v = nodeVariable(f, *n, n->label)) {
-                out.push_back(std::move(*v));
-            }
+    std::unordered_map<std::string, size_t> shown; // name -> index in out
+    std::unordered_set<std::string> fromArmPort;  // names shown for a port of an arm
+
+    // The values the function captured are in the Captured scope; an arm passed one of them
+    // has a port of the same name.
+    std::unordered_set<std::string> capturedNames;
+    for (gc_node_ref_t ref : function->capturePorts) {
+        if (const NodeInfo *n = function->node(ref)) {
+            capturedNames.insert(n->label);
         }
-    };
-    for (gc_node_ref_t ref : f.graph->withPorts()) {
-        addPort(ref);
     }
-    for (gc_node_ref_t ref : f.graph->normPorts()) {
-        addPort(ref);
+
+    // Ports, outermost frame first: the parameters, then what each arm was passed (named
+    // after what its caller passed). The innermost frame's value is the one the running code
+    // sees.
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        ShadowFrame &f   = **it;
+        const bool arm   = f.info->folds();
+        const auto addPort = [&](gc_node_ref_t ref) {
+            if (!arm && f.info->capturePorts.count(ref) != 0) {
+                return; // a captured value: the Captured scope
+            }
+            const NodeInfo *n = f.info->node(ref);
+            if (n == nullptr) {
+                return;
+            }
+            if (arm && folded && (n->label == "port" || capturedNames.count(n->label) != 0)) {
+                return; // a value without a name in the source, or a captured one
+            }
+            auto v = nodeVariable(f, *n, n->label);
+            if (!v) {
+                return;
+            }
+            if (auto known = shown.find(n->label); folded && known != shown.end()) {
+                out[known->second] = std::move(*v);
+                return;
+            }
+            shown.emplace(n->label, out.size());
+            if (arm) {
+                fromArmPort.insert(n->label);
+            }
+            out.push_back(std::move(*v));
+        };
+        for (gc_node_ref_t ref : f.graph->withPorts()) {
+            addPort(ref);
+        }
+        for (gc_node_ref_t ref : f.graph->normPorts()) {
+            addPort(ref);
+        }
     }
-    // The names declared in the function this graph was built from. A generic function has
-    // one binding per instance for each declaration: the one whose node is in this graph is
-    // this instance's.
+
+    // The names declared in the function the frames were built from. A binding is shown from
+    // the frame its node is in. One whose node is in none of them is left out when it is a
+    // value of another frame of the function: of an arm that is not running, or, in the view
+    // by subgraphs, of the function's frame below an arm. Otherwise the frame says why it has
+    // no value. A generic function has one binding per instance for each declaration: the
+    // one whose node is in this frame is this instance's.
     std::vector<const Binding *> bindings;
+    std::unordered_set<std::string> chainGraphs;
+    for (const ShadowFrame *f : chain) {
+        chainGraphs.insert(f->info->stableId);
+    }
+    // An arm that replaced the function's frame by a tail call holds only what it uses.
+    const bool functionReplaced = folded && chain.back()->info != function;
+    std::unordered_map<std::string, bool> armGraphs; // by stable id: a running arm
+    std::unordered_set<origin_t> built;              // nodes in the graph before the passes
     {
         std::lock_guard<std::mutex> lock(indexMutex_);
-        bindings = index_.bindingsOfFunction(f.info->function);
+        bindings = index_.bindingsOfFunction(folded ? function->function : inner.info->function);
+        for (const Binding *b : bindings) {
+            armGraphs.emplace(b->graph, index_.isArm(b->graph));
+            if (index_.inInitialGraph(b->node)) {
+                built.insert(b->node);
+            }
+        }
     }
+    const bool functionInChain = std::any_of(chain.begin(), chain.end(), [&](const ShadowFrame *f) {
+        return f->info == function;
+    });
     std::unordered_map<origin_t, size_t> byDeclaration; // decl -> index in out
     for (const Binding *b : bindings) {
+        ShadowFrame *home     = nullptr;
         const NodeInfo *found = nullptr;
-        auto [first, last]    = f.info->byOrigin.equal_range(b->node);
-        for (auto it = first; it != last; ++it) {
-            found = &f.info->nodes[it->second];
-            break;
+        for (ShadowFrame *f : chain) {
+            if (auto at = f->info->byOrigin.find(b->node); at != f->info->byOrigin.end()) {
+                home  = f;
+                found = &f->info->nodes[at->second];
+                break;
+            }
         }
         auto known = byDeclaration.find(b->decl);
         if (found == nullptr) {
-            if (known == byDeclaration.end()) {
+            const bool ofThisChain = b->graph.empty() || chainGraphs.count(b->graph) != 0;
+            if (!ofThisChain && armGraphs[b->graph]) {
+                continue; // a name of an arm that is not running
+            }
+            if (!ofThisChain && !functionInChain && b->graph == function->stableId &&
+                !functionReplaced) {
+                continue; // in the view by subgraphs: a name of the function's own frame
+            }
+            std::string note;
+            if (functionReplaced && b->graph == function->stableId) {
+                note = "<not held: the arm that runs replaced the function's frame and does not "
+                       "use it>";
+            } else if (built.count(b->node) == 0) {
+                // The builder left it out: what the source computes there is used by nothing.
+                note = "<not in the graph: nothing uses its value>";
+            } else {
+                note = "<not in the graph: a pass removed it>";
+            }
+            if (known == byDeclaration.end() && shown.count(b->name) == 0) {
                 Variable v;
                 v.name      = b->name;
                 v.evaluated = false;
-                v.note      = "<not in the graph: nothing depends on it, or a pass removed it>";
+                v.note      = std::move(note);
                 v.view.type = b->type;
                 byDeclaration.emplace(b->decl, out.size());
                 out.push_back(std::move(v));
             }
             continue;
         }
-        auto v = nodeVariable(f, *found, b->name);
+        auto v = nodeVariable(*home, *found, b->name);
         if (!v) {
             continue;
         }
         if (known != byDeclaration.end()) {
             out[known->second] = std::move(*v); // replaces "not in the graph" of another instance
+        } else if (auto port = shown.find(b->name);
+                   port != shown.end() && fromArmPort.count(b->name) != 0) {
+            // The arm's port was this name, passed in: one entry, from the binding.
+            byDeclaration.emplace(b->decl, port->second);
+            out[port->second] = std::move(*v);
         } else {
             byDeclaration.emplace(b->decl, out.size());
             out.push_back(std::move(*v));
@@ -898,54 +1117,111 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(ShadowFrame &f) {
     return out;
 }
 
-std::vector<DebugCore::Variable> DebugCore::capturedOf(ShadowFrame &f) {
+std::vector<DebugCore::Variable> DebugCore::capturedOf(const Chain &chain) {
+    const bool folded         = foldsFrames();
+    const ShadowFrame &inner  = *chain.front();
+    const GraphInfo *function = folded && inner.function != nullptr ? inner.function : inner.info;
     std::vector<Variable> out;
-    for (gc_node_ref_t ref : f.graph->closureNodes()) {
-        if (const NodeInfo *n = f.info->node(ref)) {
-            if (auto v = nodeVariable(f, *n, n->label)) {
+    std::unordered_map<std::string, size_t> shown;
+    std::unordered_set<std::string> capturedNames;
+    for (gc_node_ref_t ref : function->capturePorts) {
+        if (const NodeInfo *n = function->node(ref)) {
+            capturedNames.insert(n->label);
+        }
+    }
+    const auto add = [&](ShadowFrame &f, gc_node_ref_t ref) {
+        const NodeInfo *n = f.info->node(ref);
+        if (n == nullptr) {
+            return;
+        }
+        if (auto v = nodeVariable(f, *n, n->label)) {
+            if (auto known = shown.find(n->label); known != shown.end()) {
+                out[known->second] = std::move(*v); // the innermost frame's
+            } else {
+                shown.emplace(n->label, out.size());
                 out.push_back(std::move(*v));
+            }
+        }
+    };
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        ShadowFrame &f = **it;
+        if (f.info->folds() && folded) {
+            // What an arm was passed of the function's captured values.
+            for (gc_node_ref_t ref : f.graph->withPorts()) {
+                if (const NodeInfo *n = f.info->node(ref); n && capturedNames.count(n->label)) {
+                    add(f, ref);
+                }
+            }
+            continue;
+        }
+        // Closure nodes, then the captures a directly called function has as `with` ports.
+        for (gc_node_ref_t ref : f.graph->closureNodes()) {
+            add(f, ref);
+        }
+        for (gc_node_ref_t ref : f.graph->withPorts()) {
+            if (f.info->capturePorts.count(ref) != 0) {
+                add(f, ref);
             }
         }
     }
     return out;
 }
 
-std::vector<DebugCore::Variable> DebugCore::inlinedOf(ShadowFrame &f) {
+std::vector<DebugCore::Variable> DebugCore::inlinedOf(const Chain &chain) {
     std::vector<Variable> out;
-    for (const NodeInfo &n : f.info->nodes) {
-        if (n.origin == 0) {
-            continue;
-        }
-        std::vector<const Binding *> bindings;
-        std::string owner;
-        {
-            std::lock_guard<std::mutex> lock(indexMutex_);
-            bindings = index_.bindingsOfNode(n.origin);
+    std::unordered_set<std::string> shown;
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        ShadowFrame &f = **it;
+        for (const NodeInfo &n : f.info->nodes) {
+            if (n.origin == 0) {
+                continue;
+            }
+            std::vector<const Binding *> bindings;
+            std::string owner;
+            {
+                std::lock_guard<std::mutex> lock(indexMutex_);
+                bindings = index_.bindingsOfNode(n.origin);
+                for (const Binding *b : bindings) {
+                    if (b->function != f.info->function && b->function >= 0) {
+                        owner = index_.function(b->function)->name;
+                    }
+                }
+            }
             for (const Binding *b : bindings) {
-                if (b->function != f.info->function && b->function >= 0) {
-                    owner = index_.function(b->function)->name;
+                if (b->function == f.info->function || b->function < 0) {
+                    continue;
+                }
+                std::string name = owner + "." + b->name;
+                if (shown.count(name) != 0) {
+                    continue;
+                }
+                if (auto v = nodeVariable(f, n, name)) {
+                    shown.insert(std::move(name));
+                    out.push_back(std::move(*v));
                 }
             }
         }
-        for (const Binding *b : bindings) {
-            if (b->function == f.info->function || b->function < 0) {
-                continue;
-            }
-            if (auto v = nodeVariable(f, n, owner + "." + b->name)) {
-                out.push_back(std::move(*v));
-            }
-        }
     }
     return out;
 }
 
-std::vector<DebugCore::Variable> DebugCore::nodesOf(ShadowFrame &f) {
+std::vector<DebugCore::Variable> DebugCore::nodesOf(const Chain &chain) {
+    // The graph view's values; with frames folded, of every graph of the frame, each node
+    // of a subgraph prefixed with what the subgraph is.
     std::vector<Variable> out;
-    for (const NodeInfo &n : f.info->nodes) {
-        std::string name =
-            "%" + std::to_string(n.ref) + " " + kindName(n.kind) + " " + n.label;
-        if (auto v = nodeVariable(f, n, std::move(name))) {
-            out.push_back(std::move(*v));
+    const ShadowFrame &inner  = *chain.front();
+    const GraphInfo *function = inner.function != nullptr ? inner.function : inner.info;
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        ShadowFrame &f           = **it;
+        const std::string prefix = chain.size() > 1 && f.info != function
+                                       ? f.info->display + " "
+                                       : std::string();
+        for (const NodeInfo &n : f.info->nodes) {
+            std::string name =
+                prefix + "%" + std::to_string(n.ref) + " " + kindName(n.kind) + " " + n.label;
+            if (auto v = nodeVariable(f, n, std::move(name))) {
+                out.push_back(std::move(*v));
+            }
         }
     }
     return out;
@@ -993,14 +1269,15 @@ json DebugCore::scopesJson(uint64_t frameId) {
             {"count", count},
             {"expensive", expensive}});
     };
-    add("Locals", Handle::Kind::Locals, localsOf(*f).size(), false);
-    if (const size_t n = capturedOf(*f).size(); n > 0) {
+    const Chain chain = chainOf(*f);
+    add("Locals", Handle::Kind::Locals, localsOf(chain).size(), false);
+    if (const size_t n = capturedOf(chain).size(); n > 0) {
         add("Captured", Handle::Kind::Captured, n, false);
     }
-    if (const size_t n = inlinedOf(*f).size(); n > 0) {
+    if (const size_t n = inlinedOf(chain).size(); n > 0) {
         add("Inlined", Handle::Kind::Inlined, n, false);
     }
-    add("Nodes", Handle::Kind::Nodes, nodesOf(*f).size(), true);
+    add("Nodes", Handle::Kind::Nodes, nodesOf(chain).size(), true);
     return json{{"ok", true}, {"scopes", std::move(scopes)}};
 }
 
@@ -1016,16 +1293,16 @@ json DebugCore::handleJson(int reference) {
     json variables;
     switch (handle.kind) {
     case Handle::Kind::Locals:
-        variables = variablesJson(localsOf(*f), handle.frame);
+        variables = variablesJson(localsOf(chainOf(*f)), handle.frame);
         break;
     case Handle::Kind::Captured:
-        variables = variablesJson(capturedOf(*f), handle.frame);
+        variables = variablesJson(capturedOf(chainOf(*f)), handle.frame);
         break;
     case Handle::Kind::Inlined:
-        variables = variablesJson(inlinedOf(*f), handle.frame);
+        variables = variablesJson(inlinedOf(chainOf(*f)), handle.frame);
         break;
     case Handle::Kind::Nodes:
-        variables = variablesJson(nodesOf(*f), handle.frame);
+        variables = variablesJson(nodesOf(chainOf(*f)), handle.frame);
         break;
     case Handle::Kind::Value: {
         size_t total = 0;
@@ -1055,7 +1332,8 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
     if (f == nullptr) {
         return fail("no such frame");
     }
-    // name ( '.' member | '[' index ']' )*
+    // name ( '::' name )* ( '.' member | '[' index ']' )*: a full name such as
+    // `lib::Config::limit` names a value of a module's top level (design principles 2.12).
     const auto isNameChar = [](char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
     };
@@ -1066,8 +1344,16 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
         }
     }
     size_t pos = 0;
-    while (pos < text.size() && isNameChar(text[pos])) {
-        ++pos;
+    for (;;) {
+        while (pos < text.size() && isNameChar(text[pos])) {
+            ++pos;
+        }
+        if (pos + 2 < text.size() && text[pos] == ':' && text[pos + 1] == ':' &&
+            isNameChar(text[pos + 2])) {
+            pos += 2;
+            continue;
+        }
+        break;
     }
     const std::string name = text.substr(0, pos);
     std::vector<std::string> path;
@@ -1095,17 +1381,24 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
             "evaluated.");
     }
     // The name: a local or parameter, then a captured name, then an inlined one. Of several
-    // declarations of the name, one that has a value is preferred, the latest of them.
+    // declarations of the name, one that has a value is preferred, the latest of them. A
+    // captured value is shown by its full name and found by it, or by the end of it as the
+    // source writes it where it is used (`limit`, `Config::limit`).
+    enum class Match { Exact, Inlined, FullName };
     std::optional<Variable> found;
-    const auto consider = [&](std::vector<Variable> candidates, bool qualified) {
+    const auto consider = [&](std::vector<Variable> candidates, Match match) {
         for (auto &v : candidates) {
             std::string_view shown = v.name;
-            if (qualified) {
+            if (match == Match::Inlined) {
                 if (auto dot = shown.rfind('.'); dot != std::string_view::npos) {
                     shown = shown.substr(dot + 1);
                 }
             }
-            if (shown != name) {
+            const bool matches =
+                shown == name ||
+                (match == Match::FullName && shown.size() > name.size() + 2 &&
+                 shown.ends_with(name) && shown.substr(0, shown.size() - name.size()).ends_with("::"));
+            if (!matches) {
                 continue;
             }
             if (!found || v.evaluated || !found->evaluated) {
@@ -1113,12 +1406,13 @@ json DebugCore::evaluateJson(uint64_t frameId, const std::string &expression) {
             }
         }
     };
-    consider(localsOf(*f), false);
+    const Chain chain = chainOf(*f);
+    consider(localsOf(chain), Match::Exact);
     if (!found) {
-        consider(capturedOf(*f), false);
+        consider(capturedOf(chain), Match::FullName);
     }
     if (!found) {
-        consider(inlinedOf(*f), true);
+        consider(inlinedOf(chain), Match::Inlined);
     }
     if (!found) {
         return fail("'" + name + "' is not a name of this frame.");
@@ -1268,10 +1562,14 @@ json DebugCore::command(const std::string &name, const json &args) {
                 {"ok", true},
                 {"state", state},
                 {"stop", lastStop_},
+                {"frames", foldsFrames() ? "functions" : "subgraphs"},
                 {"lastEvent", nextEventSeq_ - 1}};
         }
         if (name == "setBreakpoints") {
             return setLineBreakpoints(args);
+        }
+        if (name == "setFunctionBreakpoints") {
+            return setFunctionBreakpoints(args);
         }
         if (name == "setNodeBreakpoints") {
             std::vector<origin_t> origins;
@@ -1305,6 +1603,15 @@ json DebugCore::command(const std::string &name, const json &args) {
             return json{{"ok", true}};
         }
         if (name == "configure") {
+            if (auto frames = args.find("frames"); frames != args.end()) {
+                // How the stack shows the subgraphs of a function (5.4); takes effect at the
+                // next question about the stack, also while the program is stopped.
+                if (!frames->is_string() ||
+                    (*frames != "functions" && *frames != "subgraphs")) {
+                    return fail("configure: frames is \"functions\" or \"subgraphs\"");
+                }
+                foldFrames_.store(*frames == "functions");
+            }
             std::lock_guard<std::mutex> lock(mutex_);
             if (args.contains("stopOnEntry") && args["stopOnEntry"].is_boolean()) {
                 stopOnEntry_ = args["stopOnEntry"].get<bool>();

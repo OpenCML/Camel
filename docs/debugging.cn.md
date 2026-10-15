@@ -2,10 +2,10 @@
 
 中文简体 | [English](debugging.en.md)
 
-`camel-db` 是 Camel 的调试器。本文讲通过
-[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/)（DAP）进行的源码级调试：
-源码行断点、单步、调用栈、变量。任何带 DAP 客户端的编辑器都能用；[`editors/vscode`](../editors/vscode)
-里的 VS Code 扩展已经配置好。
+`camel-db` 是 Camel 的调试器。本文讲源码级调试：源码行断点与函数断点、单步、调用栈、变量。在编辑器里走
+[Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/)（DAP）：任何带 DAP
+客户端的编辑器都能用，[`editors/vscode`](../editors/vscode) 里的 VS Code 扩展已经配置好。在终端里，
+`camel-db` 的 REPL 有同样的命令（[第 2 节](#2-在命令行里)）。
 
 Camel 的程序是一张图，调试器不把它伪装成别的东西。"下一行""调用栈""变量"在 Camel 里各是什么意思，见
 [第 3 节](#3-你看到的是什么为什么)；读一遍，可以少很多意外。设计与内部结构见
@@ -34,7 +34,8 @@ Camel 的程序是一张图，调试器不把它伪装成别的东西。"下一�
     "passes": ["std::fvm"],
     "args": ["n=10"],
     "stopOnEntry": false,
-    "stepBy": "line"
+    "stepBy": "line",
+    "frames": "functions"
 }
 ```
 
@@ -47,13 +48,86 @@ Camel 的程序是一张图，调试器不把它伪装成别的东西。"下一�
 | `env` | 为程序追加的环境变量。 |
 | `stopOnEntry` | 在第一个有源码位置的节点之前停下。 |
 | `stepBy` | `line`（默认）或 `node`：单步命令以什么为单位，见 [3.2](#32-下一行是下一个被执行的行)。 |
+| `frames` | `functions`（默认）或 `subgraphs`：分支的臂并入所在函数的帧，还是各自成帧，见 [3.3](#33-调用栈是函数调用的链)。 |
 
-断点照常在行号旁设置。*单步跳过*、*单步调试*、*单步跳出*、*暂停*、*继续*、*停止*，*调用堆栈*、*变量*、
-*监视* 面板以及把鼠标悬停在名字上，都走标准协议。*断点* 面板里有两项针对故障：
-**Faults that end the program**（使程序终止的故障，默认开启）与 **Faults isolated by attempt**
-（被 `attempt` 隔离的故障）。
+断点照常在行号旁设置；*函数断点*（*断点* 面板上的 **+**）接受函数的完整名字 `模块::路径::名字`，只有一个
+模块有这个名字时也可以省略模块（[3.3](#33-调用栈是函数调用的链)）。*单步跳过*、*单步调试*、*单步跳出*、
+*暂停*、*继续*、*停止*，*调用堆栈*、*变量*、*监视* 面板以及把鼠标悬停在名字上，都走标准协议。*断点*
+面板里有两项针对故障：**Faults that end the program**（使程序终止的故障，默认开启）与
+**Faults isolated by attempt**（被 `attempt` 隔离的故障）。命令 **Camel: Toggle Subgraph Frames**
+（调试 Camel 程序时也是 *调用堆栈* 视图标题上的一个按钮）在程序运行或停住时切换 `frames`。
 
 ## 2. 在命令行里
+
+### 2.1 REPL
+
+`camel-db <file.cml>` 加载文件并给出提示符。调试会话的命令：
+
+| 命令 | |
+|------|---|
+| `break <文件>:<行>`、`break <行>`、`break <函数>`（`b`） | 在一行上（只给行号时是已加载的文件）或按完整名字在一个函数上设断点 |
+| `delete` | 删除全部断点 |
+| `run [遍 ...]`（`r`） | 运行已加载的文件，可带遍序列（`run std::fvm`），等到停下 |
+| `continue`（`c`） | 继续，等到下一次停下 |
+| `next`（`n`）、`step`、`finish` | 按源码行单步跳过、进入、跳出 |
+| `nexti`（`ni`）、`stepi`（`si`） | 按图节点单步跳过、进入 |
+| `pause` | 让运行中的程序在下一个节点停下 |
+| `bt`（`backtrace`、`where`） | 调用栈 |
+| `locals [n]` | `bt` 中第 `n` 帧的变量（默认最上面一帧） |
+| `print <名字>`（`p`） | 一个名字的值，可带成员访问（`p.x`、`t.0`、`xs[2]`） |
+| `frames [functions\|subgraphs]` | 显示或切换分支的臂怎样显示（[3.3](#33-调用栈是函数调用的链)） |
+
+让程序运行的命令会等到程序停下或结束，途中打印程序的输出。`help` 列出全部命令（其余的是 Web 界面任务
+用的命令）；Ctrl+C 结束等待，不结束程序。用
+[`folded.cml`](../test/cases/tools/debugger/fixtures/folded.cml) 的一次会话（每条命令会以它发出的核心命令
+回显一行 `(camel-db) debug ...`，这里略去）：
+
+```text
+(camel-db) file folded.cml
+Loaded: folded.cml (task 8766).
+(camel-db) break 31
+Breakpoint 1 at folded.cml:31
+(camel-db) break 18
+Breakpoint 2 at folded.cml:18 (not verified: Line 18 is not executed: nothing uses the value of `unused`. Evaluation is driven by dependencies; to run it, use its result or put it in a sync block.)
+(camel-db) run std::fvm
+Running folded.cml
+Stopped (breakpoint) in main  folded.cml:31:17
+(camel-db) step
+Stopped (step) in pick  folded.cml:17:18
+(camel-db) next
+Stopped (step) in pick  folded.cml:19:18
+  line 18 was not executed: nothing uses the value of `unused`
+(camel-db) next
+Stopped (step) in pick  folded.cml:20:9
+(camel-db) next
+Stopped (step) in pick  folded.cml:21:13
+(camel-db) bt
+#0  pick  folded.cml:21:13
+#1  main  folded.cml:31:17
+#2  __root__
+(camel-db) locals
+[Locals]
+  n: int = 3
+  base: int = 4
+  unused: int = <not in the graph: nothing uses its value>
+  r: int = <not evaluated>
+  big: int = 12
+  ok: bool = <not evaluated>
+(camel-db) frames subgraphs
+Frames: subgraphs (every subgraph that runs is a frame).
+(camel-db) bt
+#0  pick [arm at line 20]  folded.cml:21:13
+#1  pick  folded.cml:20:9
+#2  main  folded.cml:31:17
+#3  __root__
+(camel-db) continue
+14
+Run completed.
+Breakpoint at folded.cml:18 was never hit: line 18 was not executed: nothing uses the value of `unused`.
+Program finished: completed (exit code 0).
+```
+
+### 2.2 脚本化的 DAP 会话
 
 `camel-db --dap` 在标准输入输出上讲 DAP，所以通常由编辑器启动。不用编辑器想试一次会话，仓库里有一个
 小的脚本客户端：
@@ -63,17 +137,19 @@ node test/tools/debugger/dap_session.mjs test/cases/tools/debugger/fixtures/recu
      --passes std::fvm b:8 go stack vars c stack vars
 ```
 
-`b:<行号>` 设断点，`go` 启动，`c` 继续，`n` / `s` / `o` 是跳过、进入、跳出，`ni` / `si` 按图节点单步，
-`stack`、`vars`、`nodes`、`e:<名字>` 查看；脚本开头列出了全部步骤。上面这次会话，断点设在一个尾递归函数里：
+`b:<行号>` 设断点，`f:<名字>` 设函数断点，`go` 启动，`c` 继续，`n` / `s` / `o` 是跳过、进入、跳出，
+`ni` / `si` 按图节点单步，`stack`、`vars`、`nodes`、`e:<名字>` 查看，`frames:subgraphs` /
+`frames:functions` 切换帧的显示（`--frames` 在启动时设定）；脚本开头列出了全部步骤。上面这次会话，断点设在
+一个尾递归函数里：
 
 ```text
 -> setBreakpoints {"source":{"path":".../recursion.cml"},"breakpoints":[{"line":8}]}
    line 8: verified
 -> configurationDone
    (node %18 OPER :op/eq_l)
-<- stopped (breakpoint) in loop at recursion.cml:8:17
+<- stopped (breakpoint) in spin at recursion.cml:8:17
 -> stackTrace {"threadId":1}
-   #11 loop  recursion.cml:8
+   #11 spin  recursion.cml:8
    #2 main  recursion.cml:13
    #1 __root__  recursion.cml:11
 -> scopes {"frameId":11}
@@ -82,9 +158,9 @@ node test/tools/debugger/dap_session.mjs test/cases/tools/debugger/fixtures/recu
      acc: int = 0
 -> continue {"threadId":1}
    (node %18 OPER :op/eq_l)
-<- stopped (breakpoint) in loop (tail call, 2 frames replaced) at recursion.cml:8:17
+<- stopped (breakpoint) in spin (tail call, 1 frame replaced) at recursion.cml:8:17
 -> stackTrace {"threadId":1}
-   #13 loop (tail call, 2 frames replaced)  recursion.cml:8
+   #13 spin (tail call, 1 frame replaced)  recursion.cml:8
    #2 main  recursion.cml:13
    #1 __root__  recursion.cml:11
 -> scopes {"frameId":13}
@@ -107,8 +183,9 @@ node test/tools/debugger/dap_session.mjs test/cases/tools/debugger/fixtures/recu
 
 一行可以有多个节点，也可以一个都没有：
 
-- **没有节点的行**放不了断点。断点显示为未验证，消息说明是哪种情况：这一行没有代码；或者代码
-  *不会执行，因为没有任何东西依赖它的结果*；或者被某个遍删掉了。第二种情况正是 Camel 的执行模型。在
+- **没有节点的行**放不了断点。断点显示为未验证，消息说明是哪种情况：这一行没有代码；或者代码不会执行，
+  因为没有东西用到它的结果（*Line 2 is not executed: nothing uses the value of `unused`.*）；或者被某个遍
+  删掉了。第二种情况正是 Camel 的执行模型。在
 
   ```camel
   func next(x: int): int {
@@ -117,8 +194,12 @@ node test/tools/debugger/dap_session.mjs test/cases/tools/debugger/fixtures/recu
   }
   ```
 
-  里，`+ 100` 不在运行的图中；同一位置如果写的是 `println(x)`，也不会打印。要让它执行，把代码放进
-  同步块（`func next(x: int): int sync { ... }`），或者使用它的结果。
+  里，`+ 100` 不在运行的图中；同一位置如果写的是 `println(x)`，也不会打印（*nothing uses its result*）。
+  要让它执行，把代码放进同步块（`func next(x: int): int sync { ... }`），或者使用它的结果。程序结束时，
+  调试器会再说一次这样的断点为什么没有命中（在调试控制台里，或在 REPL 里）。
+- **没有东西调用的函数**里的行可以放断点，消息是 *Nothing in the program calls `helper`.*，它不会命中，
+  结束时也同样说明。因为别的原因没有命中的断点（没被选中的臂、没有发生的调用），调试器什么也不说：它只说
+  从图上知道的事。
 - **行断点**在一次函数激活*进入*该行时停下：每次到访停一次，而不是该行每个节点停一次。
 
 ### 3.2 "下一行"是下一个被执行的行
@@ -135,21 +216,35 @@ node test/tools/debugger/dap_session.mjs test/cases/tools/debugger/fixtures/recu
   加一次加法），启动时写 `"stepBy": "node"`：同样三条命令就停在下一个*节点*，列号指明是哪一个。DAP
   客户端也可以逐条请求指定 `granularity: "instruction"`。每次停下时伴随的 `camel/stopped` 事件带有该节点
   （`%20 OPER :op/add_l`）。
+- **没有执行的行。** 行单步越过一行、而那一行因为没有东西用到它的结果而没有执行时，调试器说一次：在调试
+  控制台里（在 REPL 里是停顿下面），*line 18 was not executed: nothing uses the value of `unused`*。说的是
+  单步起点与停点之间的行、单步离开的函数剩下的行、进入的函数开头的行；不说只是还没运行到的行，也不说没被
+  选中的分支臂。
 
 调试器从不改变程序的执行顺序，也从不为了显示而去求值。
 
-### 3.3 调用栈是子图的调用链
+### 3.3 调用栈是函数调用的链
 
-函数是子图；一帧是一张图的一次激活。
+函数是子图；一帧是一个函数的一次激活。
 
 - 最底下的 **`__root__`** 是入口图，它唯一的工作是调用 `main`。
 - **尾调用替换栈帧。** 以调用结尾的函数不再返回自身，两个后端都复用它的帧。栈如实显示现有的东西：
-  一个尾递归循环不论跑了多久都只有*一*帧，并标出它替换过多少帧：`loop (tail call, 4 frames replaced)`。
+  一个尾递归循环不论跑了多久都只有*一*帧，并标出它替换过多少帧：`spin (tail call, 2 frames replaced)`。
   不虚构栈帧。
-- **分支的臂是独立的子图。** `if c then f(x) else g(x)` 编译成一个分支节点和两张小图。停在臂里时显示为
-  `pick [arm at line 9]`；分支是函数最后一件事时，臂替换了函数的帧
-  （`... (tail call, 1 frame replaced)`）。臂能看到它所在函数的名字。没被选中的臂不执行：里面的断点有效，
+- **分支的臂属于所在函数的帧。** `if c then f(x) else g(x)`（以及 `match`、`&&`、`||`、`??`、`!!`、
+  `?->`）编译成一个分支节点和每条臂一张小图，但臂是它所在函数的代码，栈也这样显示：停在臂里就是停在
+  `pick` 的帧里，行单步从函数进入臂、再回到函数，与走过函数的其他行一样，臂里声明的名字在臂运行时是函数的
+  名字之一，`fact` 在 `else` 臂里调用自己就是 `fact` 上面一个 `fact`。没被选中的臂不执行：里面的断点有效，
   但永远不会命中。
+- **需要时显示真实的子图。** 用 `"frames": "subgraphs"`（或 *Camel: Toggle Subgraph Frames*，或 REPL 的
+  `frames subgraphs`），每条臂是自己的一帧 `pick [arm at line 9]`，在函数的帧之上；分支是函数最后一件事时
+  在函数的帧的位置（`... (tail call, 1 frame replaced)`）；行单步跳过一条臂如同跳过一次调用，尾调用也计入
+  臂的帧（按函数显示时的 `spin (tail call, 2 frames replaced)`，这里是 `spin (tail call, 4 frames replaced)`）。
+  Camel 有了循环之后，循环也按同样的方式显示。
+- **完整的名字。** 函数按完整名字 `模块::路径::名字` 显示，与 Camel 其他地方一样：模块 `names_lib` 的命名
+  空间 `Config` 里的函数是 `names_lib::Config::clamp`，程序自身某个命名空间里的是 `util::half`（省略模块）。
+  函数断点接受同样的名字；只有一个模块有这个名字时也可以省略模块（`Config::clamp`），否则断点说明名字有
+  歧义，并列出各个完整名字。
 - **lambda** 显示为 `main [lambda at line 14]`。`map`、`filter`、`reduce`、`foreach` 的每次元素调用各是一帧。
 - **泛型函数**对每组实参类型各有一张图（`twice<i64>`、`twice<string>`）；源码里的一个断点绑定到全部实例。
 
@@ -165,11 +260,13 @@ node test/tools/debugger/dap_session.mjs test/cases/tools/debugger/fixtures/recu
 - **`T?`** 显示值或 `null`；**`T!`** 显示值或 `error <种类>: <消息>`，可展开为种类、消息与位置；
 - 数组、元组、结构体可展开为元素与字段（前 100 个）。
 
-作用域：**Locals**（参数与函数里声明的名字）、**Captured**（lambda 捕获的名字）、**Inlined**
-（内联进这张图的其他函数的名字）、**Nodes**（按编号、种类、标签列出图的每个值节点：这一帧的图视图）。
+作用域：**Locals**（参数与函数里声明的名字，以及正在运行的臂里声明的名字）、**Captured**（lambda 捕获的
+名字，以及函数用到的模块顶层的值，按完整名字：`names_lib::Config::limit`）、**Inlined**（内联进这张图的
+其他函数的名字）、**Nodes**（按编号、种类、标签列出图的每个值节点：这一帧的图视图）。
 
-**监视与悬停**接受一个名字，后面可以跟成员访问：`p.x`、`t.0`、`xs[2]`。其他表达式会被拒绝：求值意味着
-在停住的程序里构造并运行一张图。
+**监视与悬停**接受一个名字，后面可以跟成员访问：`p.x`、`t.0`、`xs[2]`；模块的值可以用完整名字，也可以用
+源码里写的结尾部分（`limit`、`Config::limit`）。其他表达式会被拒绝：求值意味着在停住的程序里构造并运行
+一张图。
 
 ### 3.5 故障
 

@@ -287,3 +287,17 @@ expect_exit = 0
 expect_stdout_contains = ["total 16380", "[      2.,       4.,       6.,       8.,      10.,      12.]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "gradient_broadcast_axes"
+kind = "behavior"
+case = "../../../cases/modules/tensor/gradient_broadcast.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 2 && values.every(x => x === 0), 'broadcast gradient must preserve nonreduced axes')
+}
+"""
+timeout_ms = 10000

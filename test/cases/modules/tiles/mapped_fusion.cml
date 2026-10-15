@@ -1,0 +1,22 @@
+module tiles_mapped_fusion
+import { Tensor, random, seed, sum, abs, transpose, slice, reshape } from tensor
+import { run, inspect, benchmark } from tiles
+
+func pipeline(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    return reshape(slice(transpose((a + 1.0) * (b + 2.0)), 0, 1, 10, 2), [35])
+}
+func forked(x: Tensor<f32>): Tensor<f32> {
+    let t = transpose(x + 1.0)
+    return t + t
+}
+func main(): int sync {
+    seed(91)
+    let a = random([7, 11], -3.0, 3.0)
+    let b = random([1, 11], -1.0, 1.0)
+    println(inspect<pipeline>((a, b)))
+    println(inspect<forked>(a))
+    println(sum(abs(run<pipeline>((a, b)) - pipeline(a, b))))
+    println(sum(abs(run<forked>(a) - forked(a))))
+    println(benchmark<pipeline>((a, b)))
+    return 0
+}

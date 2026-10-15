@@ -92,7 +92,7 @@ if (manifest && grammar && languageConfig) {
 
     // The commands and settings src/extension.ts implements.
     const commands = (contributes.commands || []).map((entry) => entry.command)
-    for (const command of ['camel.restartServer', 'camel.showGraph', 'camel.runWithPasses']) {
+    for (const command of ['camel.restartServer', 'camel.showGraph', 'camel.runWithPasses', 'camel.debug.toggleSubgraphFrames']) {
         check(commands.includes(command), `package.json: command ${command} is not contributed`)
     }
     check((manifest.activationEvents || []).includes('onLanguage:camel'), 'package.json: no activation event onLanguage:camel')

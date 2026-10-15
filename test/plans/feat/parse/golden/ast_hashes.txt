@@ -1465,8 +1465,12 @@ d29e1d868c4ce8cc ok test/cases/tools/debugger/fixtures/broken.cml
 7e1a9682585b8b8a ok test/cases/tools/debugger/fixtures/closures.cml
 8b036e968f8e9a48 ok test/cases/tools/debugger/fixtures/exit_code.cml
 0abba5230f5ac082 ok test/cases/tools/debugger/fixtures/faults.cml
+5d5fdd94a66a9ca0 ok test/cases/tools/debugger/fixtures/folded.cml
 1e1df3e53bc679d5 ok test/cases/tools/debugger/fixtures/generic.cml
 6f155654657abc2e ok test/cases/tools/debugger/fixtures/loop_forever.cml
+33f2763094775c70 ok test/cases/tools/debugger/fixtures/names.cml
+711bb4a022b77a4e ok test/cases/tools/debugger/fixtures/names_lib.cml
+e65335a2fe8dfdfb ok test/cases/tools/debugger/fixtures/names_other.cml
 0ad36696c2c83012 ok test/cases/tools/debugger/fixtures/order.cml
 9d9ea8b44d812925 ok test/cases/tools/debugger/fixtures/recursion.cml
 de2b4111ac30bce6 ok test/cases/tools/debugger/fixtures/unhandled.cml

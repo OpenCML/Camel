@@ -1,0 +1,27 @@
+module tiles_max_special
+import { Tensor, reshape, max, save_npy } from tensor
+import { nan, inf } from math
+import { get_env } from sys
+import { run, inspect } from tiles
+with <width: int>
+func sample(i: int): float {
+    let row = i / width
+    let col = i % width
+    return if row == 0 then (if col == 0 then nan() else 4.0)
+        else if row == 1 then (if col == 1 then nan() else 4.0)
+        else if row == 2 then (if col == 0 then 0.0 else -0.0)
+        else if row == 3 then (if col == 1 then -0.0 else if col == width - 1 then 0.0 else -1.0)
+        else if row == 4 then -inf()
+        else if row == 5 then (if col == width - 1 then inf() else -inf())
+        else if row == 6 then nan()
+        else (if col == 1 || col == width - 1 then 9.0 else -2.0)
+}
+func maximum(x: Tensor<f32>): Tensor<f32> { return max(x, -1) }
+func main(): int sync {
+    let width = int(get_env('TILES_TEST_WIDTH'))
+    let x = reshape(range(0, 8 * width)->map<sample<width>>, [8, width])
+    println(inspect<maximum>(x))
+    save_npy(maximum(x), get_env('TILES_TEST_OUT') + '/cpu.npy')
+    save_npy(run<maximum>(x), get_env('TILES_TEST_OUT') + '/gpu.npy')
+    return 0
+}

@@ -1,7 +1,7 @@
 # camel-ls：LSP 语言服务器
 include(${CMAKE_CURRENT_SOURCE_DIR}/../libcamel_tool.cmake)
 
-add_executable(camel-ls main.cpp server.cpp protocol.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../format/fmt.cpp)
+add_executable(camel-ls main.cpp server.cpp workspace.cpp reading.cpp calls.cpp protocol.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../format/fmt.cpp)
 set_target_properties(camel-ls PROPERTIES
     CXX_STANDARD 23 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF
 )

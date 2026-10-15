@@ -2,13 +2,15 @@
 // and for trying the adapter without an editor:
 //
 //     node test/tools/debugger/dap_session.mjs <program.cml> [--passes a,b] [--args n=1,m=2]
-//          [--entry] <step>...
+//          [--entry] [--frames functions|subgraphs] <step>...
 //
-// Steps: `b:<line>[,<line>...]` line breakpoints (before `go`, or while stopped), `go`
+// Steps: `b:<line>[,<line>...]` line breakpoints (before `go`, or while stopped),
+// `f:<name>[,<name>...]` function breakpoints (full names, or without the module), `go`
 // (configurationDone and wait for the first stop or the end), `c` continue, `n` next, `s` step
 // in, `o` step out, `ni` / `si` the same by graph node, `stack`, `vars`, `nodes` (the Nodes
 // scope), `e:<expr>` evaluate, `x` exception info, `filters:<a,b>`, `pause`, `wait`,
-// `raw:<command>` any request without arguments.
+// `frames:functions` / `frames:subgraphs` switch how the stack shows the arms of branches
+// (camel/setFrames), `raw:<command>` any request without arguments.
 // Every request is shown as `-> command` and what came back in a short form; `--trace` prints
 // the messages themselves.
 
@@ -25,6 +27,7 @@ while (argv.length) {
     if (a === '--passes') config.passes = argv.shift().split(',').filter(Boolean)
     else if (a === '--args') config.args = argv.shift().split(',').filter(Boolean)
     else if (a === '--entry') config.stopOnEntry = true
+    else if (a === '--frames') config.frames = argv.shift()
     else if (a === '--trace') trace = true
     else steps.push(a)
 }
@@ -81,7 +84,11 @@ for (const step of steps) {
     if (step.startsWith('b:')) {
         const r = await req('setBreakpoints', { source: { path: program }, breakpoints: step.slice(2).split(',').map((l) => ({ line: Number(l) })) })
         for (const b of r.body?.breakpoints || []) console.log(`   line ${b.line}: ${b.verified ? 'verified' : 'not verified: ' + b.message}`)
-    } else if (step.startsWith('filters:')) await req('setExceptionBreakpoints', { filters: step.slice(8).split(',').filter(Boolean) })
+    } else if (step.startsWith('f:')) {
+        const r = await req('setFunctionBreakpoints', { breakpoints: step.slice(2).split(',').map((name) => ({ name })) })
+        for (const b of r.body?.breakpoints || []) console.log(`   function breakpoint ${b.id}: ${b.verified ? 'verified' : 'not verified: ' + b.message}`)
+    } else if (step.startsWith('frames:')) await req('camel/setFrames', { frames: step.slice(7) })
+    else if (step.startsWith('filters:')) await req('setExceptionBreakpoints', { filters: step.slice(8).split(',').filter(Boolean) })
     else if (step === 'go') { await req('configurationDone'); await waitStop() }
     else if (step === 'c') { await req('continue', { threadId: 1 }); await waitStop() }
     else if (step === 'n') { await req('next', { threadId: 1 }); await waitStop() }
