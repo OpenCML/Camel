@@ -1,0 +1,61 @@
+id = "modules.index_semantics"
+order = 364
+tier = "feat"
+tags = ["feat", "modules", "tensor", "semantics"]
+desc = "The index semantics of operators (camel/core/index_semantics.h, docs/design/op-semantics sections 5 and 7): the quasi-affine expression language, the structural validation of instances, the query through the operator table, the text form, splitting dims for tiles and the strided view of a row-major operand."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "core"
+desc = "test::index_semantics (CAMEL_ENABLE_TEST_PASSES): expressions simplify and intern as they are built (constants fold, a constant term goes right and a constant factor left, nested scales multiply), floordiv and mod are mathematical (-7 floordiv 2 = -4, -7 mod 2 = 1), the affine form of an expression with known parameters, and the forms outside the quasi-affine language are rejected (a product of two dims, a division by zero or by a dim, overflow). validate rejects a combining write without a law, a reduction written uniquely, an extent that depends on a dim, a divisor parameter not known to be positive (and accepts it once a constraint requires it), an expression id outside the instance. instantiate returns the declared instance, and none for an operator without index semantics, an instantiation function that finds none, one that throws, one that returns an invalid instance. splitDims of a matrix product by 4 on m and k keeps exactly M*N*K points inside the guard, with the original bounds as the guard; rowMajorView gives a transpose's and a slice's offset and strides, and none for a reshape across axes."
+kind = "behavior"
+case = "../../../cases/consistency/values/max_min_special.cml"
+args = ["${case}", "test::index_semantics"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const l of [
+  'INDEX fold 5', 'INDEX add_zero d0', 'INDEX constant_right d0 + 1', 'INDEX constants_merge d0 - 3',
+  'INDEX subtract d0 - d1', 'INDEX scale_nested 12*d0', 'INDEX param_factor p0*d0', 'INDEX const_factor_first 2*p0',
+  'INDEX div_mod ((d0 + d1) floordiv 4) mod 3', 'INDEX div_by_one d0 0', 'INDEX interned yes', 'INDEX floor_negative -4 1',
+  'INDEX evaluate 21', 'INDEX affine 0 5 -2', 'INDEX affine_mod none', 'INDEX affine_unknown none',
+  'INDEX product_of_dims rejected: a product of two expressions that are not constants or parameters is not quasi-affine',
+  'INDEX mod_by_zero rejected: a floordiv or mod divides by a positive constant or by a parameter',
+  'INDEX div_by_dim rejected: a floordiv or mod divides by a positive constant or by a parameter',
+  'INDEX overflow rejected: index arithmetic overflows 64 bits',
+  'INDEX validate_matmul ok',
+  'INDEX validate_combine_without_law rejected: a combining write names no reduction law',
+  'INDEX validate_reduction_written_unique rejected: a domain with a reduction dim writes each result element more than once, not uniquely',
+  'INDEX validate_extent_mentions_dim rejected: the extent of n depends on a dim',
+  'INDEX validate_divisor_not_known_positive rejected: a floordiv or mod divides by s, which the constraints do not require to be positive',
+  'INDEX validate_divisor_required_positive ok',
+  'INDEX validate_expression_out_of_range rejected: expression 999 is not in the instance',
+  'INDEX query_declared instance', 'INDEX query_no_instance none', 'INDEX query_throws none',
+  'INDEX query_invalid none', 'INDEX query_undeclared none',
+  'params   M = extent(0, 0) = 2; K = extent(0, 1) = 4; N = extent(1, 1) = 3',
+  'domain   m < M parallel; n < N parallel; k < K reduction',
+  'norm 0   (m, k)', 'norm 1   (k, n)',
+  'domain   m_o < (M + 3) floordiv 4 parallel; m_i < 4 parallel; n < N parallel; k_o < (K + 3) floordiv 4 reduction; k_i < 4 reduction',
+  'guard    4*m_o + m_i < M, 4*k_o + k_i < K',
+  'norm 0   (4*m_o + m_i, 4*k_o + k_i)',
+  'INDEX split_valid yes', 'INDEX split_extents 2 4 3 2 4', 'INDEX split_points 105',
+  'INDEX split_bad_dim rejected: splitDims: a dim out of range or a factor below 1',
+  'INDEX view_transpose offset 0 strides 1 5', 'INDEX view_slice offset 1 strides 2 5', 'INDEX view_reshape none',
+]) line(l)
+}
+"""
+
+[[tests]]
+name = "core_test_pass_needs_the_environment"
+desc = "test::index_semantics is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
+kind = "negative"
+case = "../../../cases/consistency/values/max_min_special.cml"
+args = ["${case}", "test::index_semantics"]
+expect_exit = 1
+expect_output_not_contains = ["INDEX "]
