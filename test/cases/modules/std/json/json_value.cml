@@ -1,8 +1,8 @@
 /**
- * json.decode gives a `Json`: a value of a definite type whose content is known only when the
- * program runs (design principles 2.12). The program looks into it with the operators of the
- * json module, each of which gives a value of a definite type, and a missing member or a value
- * of another kind is null.
+ * json.decode gives a `Json!` (design principles 2.12, 2.13): a value of a definite type whose
+ * content is known only when the program runs, or an error value when the text is not JSON.
+ * The program looks into a `Json` with the operators of the json module, each of which gives a
+ * value of a definite type, and a missing member or a value of another kind is null.
  */
 module json_value
 
@@ -14,11 +14,12 @@ func port_of(config: Json): int {
     return config->get<'server'>->get<'port'>->as_int ?? 8080
 }
 
-func main(): int sync {
-    let j = decode('{"server": {"host": "example.org", "port": 9000}, "tags": ["a", "b", 3], "ratio": 2, "on": true, "none": null}')
+// What the program does with the document; `j` also stands in for a text that is not JSON
+// below, where a Json is needed either way.
+func report(j: Json): int sync {
     println(j)
     println(kind(j), kind(j->get<'tags'> ?? j), is_null(j->get<'none'> ?? j))
-    println(port_of(j), port_of(decode('{}')))
+    println(port_of(j), port_of(decode('{}') !! j))
     println(j->get<'server'>->get<'host'>->as_string ?? '?')
     println(j->get<'tags'>->get<0>->as_string ?? '?', j->get<'tags'>->get<2>->as_int ?? -1)
     println(j->get<'tags'>->get<5>->as_string ?? 'out of range', j->get<'tags'>->get<2>->as_string ?? 'not a string')
@@ -31,7 +32,14 @@ func main(): int sync {
     println(server.host, server.port)
     let typed = decode_as('{"id": 7, "payload": {"any": [1, {"x": null}]}}', { id: 0, payload: j }) !! { id: -1, payload: j }
     println(typed.id, typed.payload, kind(typed.payload))
-    println(encode(j->get<'tags'> ?? j), encode([j->get<'on'> ?? j, decode('1.5')]))
-    println(decode('18446744073709551615'), decode('-3'), decode('"s"'))
+    println(encode(j->get<'tags'> ?? j), encode([j->get<'on'> ?? j, decode('1.5') !! j]))
+    println(decode('18446744073709551615') !! j, decode('-3') !! j, decode('"s"') !! j)
+    // Text that is not JSON: an error value, not a fault.
+    let bad = decode('{"a": ')
+    println(match bad { case error e => 'error' case v => kind(v) }, port_of(bad !! j))
     return 0
+}
+
+func main(): int sync {
+    return decode('{"server": {"host": "example.org", "port": 9000}, "tags": ["a", "b", 3], "ratio": 2, "on": true, "none": null}') ?-> report !! 1
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -82,7 +82,8 @@ ResolverFunc memberRule(TypeCode keyCode) {
 JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     // `Json`: a JSON value whose shape is known only when the program runs (value.h). Its
     // static type is definite; a program looks into it through the operators below (design
-    // principles 2.12: `decode` gives a self-describing `Json`, not an `any`).
+    // principles 2.12: `decode` gives a self-describing `Json`, not an `any`). Text that is
+    // not JSON gives an error value: `decode` returns a `Json!` (design principles 2.13).
     exportType(Reference("Json"), JsonType::get());
 
     // encode takes a value of every type that has a JSON form, a Json among them (a type
@@ -113,7 +114,10 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
         OperatorGroup::create(
             "decode",
             {{"json:decode",
-              StaticFuncTypeResolver::create({}, {{Type::String(), false}}, JsonType::get())}}));
+              StaticFuncTypeResolver::create(
+                  {},
+                  {{Type::String(), false}},
+                  TupleType::fallible(JsonType::get()))}}));
     // DESIGN-QUESTION(json-typed-decode): decoding to a given type. A call cannot be handed a
     // type, so the type is that of a `shape` argument whose value is not read:
     // `decode_as<[] as Map<string, int>>(text)` or `decode_as(text, [] as Map<string, int>)`.

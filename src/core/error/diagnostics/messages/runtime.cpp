@@ -342,15 +342,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::JsonDecodeFailed,
-            {
-                "JsonDecodeFailed",
-                "json.decode: the text is not valid JSON ({0}). The text begins: '{1}'.",
-                "The line and column in the message are positions in the decoded text, not in "
-                "the program.",
-            },
-        },
-        {
             RuntimeDiag::JsonEncodeUnsupported,
             {
                 "JsonEncodeUnsupported",

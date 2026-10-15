@@ -2323,17 +2323,19 @@ line.
 #### `decode`
 
 ```camel
-decode: (text: string) => Json
+decode: (text: string) => Json!
 ```
 
 The value a JSON text describes, as a `Json`: a value of a definite type whose content is
-known only when the program runs. Look into it with get, as_int, as_array and the other
-operators below, each of which gives a value of a definite type; read a part whose shape is
-known with decode_as. Prints as its JSON text.
+known only when the program runs; an error value when the text is not JSON (design
+principles 2.13). Look into a Json with get, as_int, as_array and the other operators below,
+each of which gives a value of a definite type and takes a `Json?` as well, so that calls
+chain; read a part whose shape is known with decode_as. Prints as its JSON text. In the
+examples below, `j` is a Json decoded so.
 
 - Pure.
-- Failure: fault `JsonDecodeFailed` when the text is not JSON.
-- Example: `decode('{"port": 80}')->get<'port'>->as_int ?? 0` gives `80`
+- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning).
+- Example: `decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1` gives `80`
 
 #### `decode_as`
 
@@ -2358,7 +2360,7 @@ kind: (j: Json) => string
 The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 
 - Pure.
-- Example: `kind(decode('[1]'))` gives `'array'`
+- Example: `kind(j)` gives `'array', for j of '[1]'`
 
 #### `is_null`
 
@@ -2369,7 +2371,7 @@ is_null: (j: Json) => bool
 Whether a Json is the JSON null.
 
 - Pure.
-- Example: `is_null(decode('null'))` gives `true`
+- Example: `is_null(j)` gives `true, for j of 'null'`
 
 #### `get`
 
@@ -2381,7 +2383,7 @@ The member key of an object; null when j is not an object, has no such member, o
 itself (so that calls chain: j->get<'a'>->get<'b'>).
 
 - Pure.
-- Example: `decode('{"a": 1}')->get<'a'>` gives `1, a Json?`
+- Example: `j->get<'a'>` gives `1, a Json?, for j of '{"a": 1}'`
 
 #### `get`
 
@@ -2393,7 +2395,7 @@ The element index of an array; null when j is not an array, the index is out of 
 is null itself.
 
 - Pure.
-- Example: `decode('[5, 6]')->get<1>->as_int ?? 0` gives `6`
+- Example: `j->get<1>->as_int ?? 0` gives `6, for j of '[5, 6]'`
 
 #### `as_bool`
 
@@ -2404,7 +2406,7 @@ as_bool: (j: Json | Json?) => bool?
 The bool a Json holds; null for any other kind.
 
 - Pure.
-- Example: `decode('true')->as_bool ?? false` gives `true`
+- Example: `j->as_bool ?? false` gives `true, for j of 'true'`
 
 #### `as_int`
 
@@ -2415,7 +2417,7 @@ as_int: (j: Json | Json?) => int?
 The integer a Json holds; null for any other kind (a number with a fraction is not an int).
 
 - Pure.
-- Example: `decode('42')->as_int ?? 0` gives `42`
+- Example: `j->as_int ?? 0` gives `42, for j of '42'`
 
 #### `as_float`
 
@@ -2426,7 +2428,7 @@ as_float: (j: Json | Json?) => float?
 The number a Json holds, an integer included; null for any other kind.
 
 - Pure.
-- Example: `decode('2')->as_float ?? 0.0` gives `2.0`
+- Example: `j->as_float ?? 0.0` gives `2.0, for j of '2'`
 
 #### `as_string`
 
@@ -2437,7 +2439,7 @@ as_string: (j: Json | Json?) => string?
 The string a Json holds; null for any other kind.
 
 - Pure.
-- Example: `decode('"hi"')->as_string ?? ''` gives `'hi'`
+- Example: `j->as_string ?? ''` gives `'hi', for j of '"hi"'`
 
 #### `as_array`
 
@@ -2448,7 +2450,7 @@ as_array: (j: Json | Json?) => Json[]?
 The elements of a JSON array; null for any other kind.
 
 - Pure.
-- Example: `len(decode('[1, "a"]')->as_array ?? [])` gives `2`
+- Example: `len(j->as_array ?? [])` gives `2, for j of '[1, "a"]'`
 
 #### `as_object`
 
@@ -2459,7 +2461,7 @@ as_object: (j: Json | Json?) => Map<string, Json>?
 The members of a JSON object, by name; null for any other kind.
 
 - Pure.
-- Example: `keys(decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>))` gives `['a', 'b']`
+- Example: `keys(j->as_object ?? ([] as Map<string, Json>))` gives `['a', 'b'], for j of '{"b": 1, "a": 2}'`
 
 <a id="re"></a>
 

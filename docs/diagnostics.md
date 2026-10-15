@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-143 diagnostics: 129 errors, 14 warnings.
+142 diagnostics: 128 errors, 14 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -150,7 +150,6 @@ prints one entry.
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error |
 | `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error |
 | `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error |
-| `0x04000037` | [RuntimeDiag::JsonDecodeFailed](#jsondecodefailed) | Error |
 | `0x04000038` | [RuntimeDiag::JsonEncodeUnsupported](#jsonencodeunsupported) | Error |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error |
@@ -2560,14 +2559,17 @@ There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 
 ```camel
 module if_condition
 
-import { decode } from json
+import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
 // bool (docs/design/any-typing, defect D5). It is a `Json` now, and a condition is a bool.
-func main(): int sync {
-    let a = decode('true')
+func check(a: Json): int sync {
     println(if a then 1 else 2)
     return 0
+}
+
+func main(): int sync {
+    return decode('true') ?-> check !! 1
 }
 ```
 
@@ -2592,13 +2594,12 @@ A case is compared with the value matched, so the type of that value must accept
 ```camel
 module match_subject
 
-import { decode } from json
+import { Json, decode } from json
 
 // A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
 // bit, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing, defect D5). It
 // is a `Json` now, and a case has the type of the value matched.
-func main(): int sync {
-    let v = decode('"ab"')
+func check(v: Json): int sync {
     let r = match v {
         case 1 => 'one'
         case 'ab' => 'ab'
@@ -2606,6 +2607,10 @@ func main(): int sync {
     }
     println(r)
     return 0
+}
+
+func main(): int sync {
+    return decode('"ab"') ?-> check !! 1
 }
 ```
 
@@ -3795,24 +3800,6 @@ Check that the path exists and that the program may access it; a relative path i
 
 ```text
 Check the path and the permissions of the directories on it.
-```
-
-*No example: no test small enough to show raises it.*
-
-### JsonDecodeFailed
-
-`0x04000037` · Error · `RuntimeDiag::JsonDecodeFailed`
-
-**Message**
-
-```text
-json.decode: the text is not valid JSON ({0}). The text begins: '{1}'.
-```
-
-**Help**
-
-```text
-The line and column in the message are positions in the decoded text, not in the program.
 ```
 
 *No example: no test small enough to show raises it.*

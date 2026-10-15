@@ -36,7 +36,7 @@ There is no type `any`: after compilation every value has a definite type (desig
 | `e as any` | nothing: the value keeps its own type |
 | values of different types side by side (`any[]`, `(int, any)`) | a tuple or a struct: `(int, string)`, `{ id: int, name: string }` |
 | JSON of a known shape | `json::decode_as(text, shape)`, whose result is a `T!` |
-| JSON of an unknown shape | `json::decode(text)` gives a `Json`: its type is definite, its content known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none), as in `j->get<'server'>->get<'port'>->as_int ?? 8080` |
+| JSON of an unknown shape | `json::decode(text)` gives a `Json!`: an error value `JsonParseError` when the text is not JSON (not a fault, design principles 2.13), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 2.13). For a known shape use `decode_as`, whose target type is given by a shape value for now |
 
 The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 

@@ -1,14 +1,17 @@
 module cast_out
 
-import { decode } from json
+import { Json, decode } from json
 
 // Nothing reads a decoded value as another type unchecked. `decode('12345') as string` (an
 // `any` then) followed the integer as an address (segmentation fault; docs/design/any-typing,
-// t03 and t06d). decode gives a `Json` now, which converts to nothing; its content is read
-// with the accessors of the json module or with decode_as.
-func main(): int sync {
-    let a = decode('12345')
+// t03 and t06d). A decoded value is a `Json` now, which converts to nothing; its content is
+// read with the accessors of the json module or with decode_as.
+func show(a: Json): int sync {
     let s = a as string
     println(s)
     return 0
+}
+
+func main(): int sync {
+    return decode('12345') ?-> show !! 1
 }
