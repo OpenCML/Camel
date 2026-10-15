@@ -451,3 +451,8 @@ releases the original backend reference and confirms the lease keeps it alive,
 then checks both weak references expire after final release. This establishes
 module lifetime safety for pending work; asynchronous submission itself remains
 to be implemented.
+
+Committed af5956ed rebuilds and passes 82/82 relevant tests on local RTX 4060 Ti
+and remote RTX 3090 device 7, including the native cache-eviction lifetime test.
+Remote output is retained in
+`docs/performance/tiles/2026-10-15-rtx3090-module-lease-tests.txt`.
