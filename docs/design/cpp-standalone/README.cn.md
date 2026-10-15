@@ -1,6 +1,6 @@
 # 脱离运行时的 `std::cpp`（设计稿）
 
-状态：**设计稿，阶段 0–3 已落地（12.1 是每个阶段之后的数字）。第 13 节列出要负责人确认的问题；其余是本线的工作方向，落地的部分以代码与测试为准。**
+状态：**设计稿，阶段 0–3 已落地，并已变基到 `fsh-dev` 的 `d270689c`（12.1 是每个阶段之后的数字，12.4 是变基时的改动）。第 13 节列出要负责人确认的问题；其余是本线的工作方向，落地的部分以代码与测试为准。**
 依据：`docs/design-principles.cn.md` 2.12“后端与运行时”（2026-10-14：`std::cpp` 的目标是生成可以脱离运行时独立部署的程序；无法同义转换的情形可以引用 Camel 的运行时模块，但要尽量做干净；故障带源码位置、遵守递归上限、尾调用不使栈增长；后端可以少回收甚至不回收垃圾），2.11“实现方向”（内存管理不进入语义：对象没有可观察的身份，回收的时机不可观察，C++ 算子通过句柄接触对象）；[`std::cpp` 与内存管理模型](../cpp-memory/README.cn.md)（以下简称“调研稿”）；[计算图的对外数据模型](../graph-model/README.cn.md) 第 0、3、5.1、6 节；[`any` 的报告](../any-typing/README.cn.md)。
 基线：`fsh-dev` 的 `a7274883`，Linux x86-64 容器内的 Release 构建，`clang++` 18。
 
@@ -367,12 +367,16 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 | 内联表达式 | `:op/lt_l`、`:op/eq_b`、`:op/not`、`:op/mul_d` | `a < b`、`!a`、`a * b` |
 | 回绕的整数运算 | `:op/add_l`、`:op/neg_i` | `rt::add(a, b)`、`rt::neg(a)` |
 | 带位置的头文件函数 | `:op/div_l`、`:op/idx_arr`、`:op/dtol`、`:op/stol` | `rt::div(a, b, site_3)` |
-| 头文件函数 | `:io/println`、`:str/format`、`:op/add_s`、`math:sqrt`、`time:now` | `rt::println(a, b)` |
+| 头文件函数 | `:io/println`、`:str/format`、`:op/add_s`、`:str/join`、`:struct/zip`、`math:sqrt`、`time:now`、`rand:*`、`statistics:mean` | `rt::println(a, b)` |
 | 变量单元 | `:var/new`、`:var/get`、`:op/assn_*` | 局部变量的声明、读、赋值（5.3） |
 | 调用子图的算子（`callsGraphs`） | `:mark/map_arr`、`:mark/reduce_arr`、`:mark/isolate` | C++ 循环与 `rt::attempt`（7.2） |
 | 运行时模块（桥） | `tensor:*`、`python:*`、`onnx:*`，以及还没有独立译法的模块算子 | 第 9 节 |
 
 表里每一项的行为以运行时的实现为准，按 URI 一一对照着写（例如整数乘方是 `static_cast<int64_t>(std::pow(base, exp))`【读码 `ops.cpp` 的 `__builtin__pow__`】，浮点除以零是故障）。打印的文字用 `camel/utils/number_text.h` 的 `floatText`，与运行时同一份代码。
+
+`random` 模块的算子（`rand:seed`、`rand`、`randn`、`randint`、`choice`、`sample`、`shuffle`）由 `camel/standalone/random.h` 译：与模块用同一个 `std::mt19937_64`（默认种子相同）和 `camel/utils/random.h` 的同一套分布（整数用 Lemire 的方法，正态用极坐标法与 fdlibm 的对数），洗牌与抽样的取下标方式也照模块写，所以种子相同时生成的程序与解释器打印相同的数【实测：`draws.cml`、`modules/std/random/basic.cml`】。
+
+内部算子 `:op/assn_append`（`acc = acc->append<v>` 合成的一个节点，由另一条线引入，导出前应被降低）若出现在转译器面前，在该节点处以 `TranslationRefused` 拒绝，不猜它的含义。
 
 运行时里有两处行为看起来是意外，生成的程序照样复现，并报告给负责人（第 14 节）：`println<'{}+{}'>(1, 2)` 打印 `1+2` 之后多一个空行；`print<'{}-{}'>(3, 4)` 在末尾加了换行【实测 `m5.cml`】。
 
@@ -427,7 +431,7 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 
 **引用计数的检查**（还没有做）：头文件在 `CAMEL_STANDALONE_CHECK` 宏下记录分配与释放的次数，程序结束时不相等就报告（不算环，5.4）；`cppexec --check` 用它编译清单。另可用地址消毒器（`-fsanitize=address`）编译清单，捕捉释放后使用。
 
-**默认测试集里实际有的**（阶段 1–3）：`feat/trans/cpp.agree_with_fvm` 跑 `test/tools/cppexec/expect.txt` 的 42 个程序（`test/cases/trans/cpp/exec/` 下 10 个专门写的，加上语料里的 32 个），在负载下约 30–35 秒；其余 `std::cpp` 用例检查生成的文字与拒绝的诊断。`cppexec` 对 `std::fvm` 也跑同样的遍（`--passes`），两边是同一张图。
+**默认测试集里实际有的**（阶段 1–3 与变基之后）：`feat/trans/cpp.agree_with_fvm` 跑 `test/tools/cppexec/expect.txt` 的 47 个程序（`test/cases/trans/cpp/exec/` 下 11 个专门写的，加上语料里的 36 个，其中有 `&&`/`||`、`x == null` 与窄化、带种子的随机数），在负载下约 30–40 秒；其余 `std::cpp` 用例检查生成的文字与拒绝的诊断。`cppexec` 对 `std::fvm` 也跑同样的遍（`--passes`），两边是同一张图。
 
 ---
 
@@ -451,10 +455,15 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 | 1–2，先 `std::inline` | 776 | 215 | 215 | 212 | 177 |
 | 3（本稿此版） | 783 | 464 | 464 | 455 | 412 |
 | 3，先 `std::inline` | 783 | 464 | 464 | 455 | 412 |
+| 变基到 `d270689c` 并加随机数之后 | 866 | 545 | 545 | 535 | 492 |
+| 再加 `join`、`zip`、`statistics.mean`/`stdev`（本稿此版） | 866 | 564 | 564 | 551 | 505 |
+| 同上，先 `std::inline` | 865 | 563 | 563 | 550 | 505 |
 
 语料是 `test/cases benchmarks examples exemplars`（基线时 1,096 个程序，阶段 3 时 1,106 个），`python3 test/tools/cppexec/run.py --jobs 4 <这四个目录>` 量出【实测】。“写出 C++”之后没有一个编译不过、运行崩溃。阶段 3 时写出了 C++ 却与 `std::fvm` 不同的 9 个：5 个打印计时或当前时间；4 个依赖运行时今天“在原地追加”的 `append`（`xs->append<x>` 写成语句，见 5.2：2.12 裁定之后它们会是编译期错误，`cppexec` 把它们单独列为 `differs: in-place append (2.12)`）。
 
 仍被拒绝的 319 个里，按第一个理由：张量（返回、形参、算子，约 200 个，要第 9 节的外部对象）、映射与集合、带参数的 `main`（27 个，等 Q7）、`any`、`PyObject`。
+
+变基之后语料是 1,232 个程序（`fsh-dev` 加了许多用例），到达转译器的 866 个。写出了 C++ 的 564 个全部编得过、没有一个运行崩溃；与 `std::fvm` 不同的 13 个：8 个打印计时或当前时间（`perf/fib_recursive`、`linear/nvm/acc`、`para/core/monte_carlo_pi`、`asian_option_mc` 等，后两个用带种子的随机数，除计时一行外相同），5 个是“在原地追加”（上面 4 个加 `linear/nvm/lambda`，它原先因 `:str/join` 被拒）。先 `std::inline` 时少的一个是 `para/core/asian_option_mc`：负载下 `std::fvm` 一侧 60 秒内没跑完，不是转译的问题。仍被拒绝的 302 个：张量 193、带参数的 `main` 29、映射与集合 25、数组或 `T!` 上还没有独立译法的模块算子 32（`algo` 的排序、`str:split`、`fs:try_read_text` 等；`algo` 的排序要等“返回新值”那条线）、把函数值交给模块算子 12（`autodiff:grad`）、`PyObject` 7、`Json` 3。
 
 ### 12.3 基准
 
@@ -469,6 +478,18 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 | 尾递归逐个 `concat` 十万个元素、逐个拼十万个字符 | 32.8 s [24.5, 35.5]，174 MB | 28.8 s [26.0, 36.2] | **0.012 s [0.009, 0.017]，9.4 MB** |
 
 最后一行是 5.2 的“计数为 1 时就地改”的效果：尾调用改写形参时，新值里唯一一次读旧值的地方写成 `std::move`，`concat`／字符串拼接拿到的块没有别人拿着，就地追加，数组按倍数增长。解释器在这里是平方级的。`fib(32)` 带着精确的递归计数（7.4）仍比即时编译快。
+
+变基到 `d270689c` 之后（分代回收成为默认，即时编译线的改进进来了）再量一次，同样 7 轮，机器负载 3–6【实测】。生成的程序以 `-ffp-contract=off` 编译：
+
+| 程序 | `std::fvm` | `std::inline std::jit` | `std::cpp`（clang -O2） |
+|---|---|---|---|
+| `a01_fib` | 0.327 s [0.283, 0.386] | 0.023 s [0.021, 0.027] | **0.016 s [0.011, 0.016]** |
+| `a03_tail_loop` | 0.711 s [0.625, 0.796] | 0.150 s [0.130, 0.192] | **0.017 s [0.012, 0.025]** |
+| `a04_string_churn` | 0.273 s [0.227, 0.327]，14.5 MB | 0.212 s [0.173, 0.257]，14.8 MB | **0.110 s [0.084, 0.141]，9.4 MB** |
+| `a07_fib_float` | 0.042 s [0.033, 0.068] | 0.010 s [0.009, 0.014] | **0.007 s [0.005, 0.008]** |
+| 逐个 `concat`、逐个拼字符（同上） | 11.99 s [11.72, 20.48]，97.4 MB | 11.73 s [11.61, 11.80]，97.8 MB | **0.005 s [0.005, 0.006]，9.4 MB** |
+
+分代回收把 `a04` 上解释器的峰值内存从 123.5 MB 降到 14.5 MB，生成的程序仍更少（引用计数，没有回收器）；尾递归的即时编译快了四倍多，生成的程序仍快一个数量级。两次的负载不同，同一列前后相比只能看大小。
 
 ### 12.2 调研稿附录 B 的缺陷
 
@@ -489,6 +510,17 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 | D10 `main` 不返回整数是内部错误 | 7.3；`entry/declared_string.cml` |
 | D11 内联之后不认区域形态与 `SYNC` | 6.2、6.4；先 `std::inline` 的全语料一行（12.1） |
 | D12 `camel-cpp` 与文档 | 第 10 节；`docs/cpp_export_build.md` 改写 |
+
+### 12.4 变基到 `fsh-dev` 的 `d270689c` 时的改动
+
+- **图的存储。** 算子以 `OperId` 识别：变量与 `:mark/` 算子按 `oper::VarNew`、`oper::VarGet`、`oper::MapArr` 等与 `OperatorTable::isAssignment` 认，不再比较 URI 文字；译法表（第 8 节）仍以 URI 为键，那是算子的公开名字，模块算子也没有固定的 id。函数类型不再带捕获的名字，捕获形参的名字取 `graph->captureNames()`（与 `std::dot` 相同）。帧布局的改动不影响转译器（它不读帧）。
+- **模块。** 所有模块的顶层值在同一个根图里，根图的出口是对入口 `main` 的调用；转译器本来就这样找入口，算出来的顶层值照旧写成 `top_level`，导入的字面量值作为实参传给 `main_`（`module_root.plan.toml` 的 `root.values_cpp` 改为检查 `main_(0, 3.14159)`）。
+- **`&&`/`||` 是分支、`x == null`、窄化。** 都落在已有的 `BRCH`/`JOIN` 与 `:op/tag_*` 上，生成代码的写法不用改；清单加入 `consistency/logical/short_circuit.cml`、`pure.cml` 与 `consistency/narrowing/narrow.cml`，与 `std::fvm` 相同【实测】。
+- **`any`。** `TypeCode::Any` 已删除；`Json` 类型不翻译（拒绝，语料里 3 个程序）。
+- **随机数。** 见第 8 节：与 `random` 模块同一套算法，种子相同时输出相同。
+- **浮点。** 运行时以 `-ffp-contract=off` 构建（`3af224da`），生成程序的构建命令（文件头注释、`camel-cpp`、`cppexec`、`docs/cpp_export_build.md`）也加上，否则有 FMA 的平台上 `a * b + c` 可能合并而与解释器差最后一位。顺带修了要链接运行时的程序的文件头注释：构建命令里原来写出了字面的 `\n`。
+- **分代回收成为默认。** 只影响 12.3 里 `std::fvm` 一侧的数字。
+- **`:op/assn_append`。** 见第 8 节：在它被降低之前遇到就拒绝。
 
 ---
 
@@ -537,7 +569,7 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 
 ## 14. 最不放心的地方
 
-1. **运行时迁移到“`append` 返回新值”之前**（2.12），旧语义下就地修改的程序在两种后端上结果不同（5.2）。迁移之后这类程序是编译期错误；在那之前对照测试要把它们列为已知差异。
+1. **运行时迁移到“`append` 返回新值”之前**（2.12），旧语义下就地修改的程序在两种后端上结果不同（5.2）。负责这项迁移的线让 `append`、`extend`、`apply` 与 `algo` 的排序返回新值，并把 `acc = acc->append<v>` 合成内部算子 `:op/assn_append`，由它让导出遍处理；在它合入之前，`cppexec` 把这 4 个程序列为已知差异，转译器遇到 `:op/assn_append` 就拒绝（第 8 节）。
 2. **引用计数的正确性**靠头文件里的少数几个类与转译器写 `std::move` 的位置。`std::move` 写错的后果是读到被移走的空句柄，而不是悄悄读到别的对象；11 的计数检查与地址消毒器能发现泄漏与重复释放。
 3. **故障报告的“逐字节相同”**依赖转译时渲染的摘录与运行时的渲染一致；渲染器以后改格式时两者同时改（同一份代码），但 `CAMEL_ERROR_FORMAT=json` 这类格式本稿没有覆盖，第一步只做 `text` 与 `short`。
 4. **执行序与 `std::fvm` 相同**只在两者都用 `buildReachableExecutionTopoIndices` 时成立；即时编译线或图存储线如果改了 `std::fvm` 取序的方式，这一点要跟着检查（`ExecPlan::order()` 统一之后自然成立）。
