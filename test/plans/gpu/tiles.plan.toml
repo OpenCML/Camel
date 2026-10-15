@@ -732,3 +732,96 @@ assert(values.length === 9 && values.every(x => x === 0), 'resident scalar preci
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "scalar_arithmetic.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_arithmetic.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 7 && lines.slice(0,5).every(x => Number(x) === 0), 'scalar arithmetic or gradient mismatch')
+const p = JSON.parse(lines[5]), b = JSON.parse(lines[6])
+assert(p.kernels === 1 && p.allocated_bytes === 8 && p.borrowed_bytes === 16, 'scalar chain did not fuse')
+assert(b.optimized.plan.kernels === 1 && b.unfused.plan.kernels === 5, 'missing scalar fusion control')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'f64 fusion changed numerical results')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero.nvm"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_arithmetic.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_arithmetic.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 7 && lines.slice(0,5).every(x => Number(x) === 0), 'scalar arithmetic or gradient mismatch')
+const p = JSON.parse(lines[5]), b = JSON.parse(lines[6])
+assert(p.kernels === 1 && p.allocated_bytes === 8 && p.borrowed_bytes === 16, 'scalar chain did not fuse')
+assert(b.optimized.plan.kernels === 1 && b.unfused.plan.kernels === 5, 'missing scalar fusion control')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'f64 fusion changed numerical results')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero.fvm"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_arithmetic.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_arithmetic.cml"
+args = ["${case}", "std::macro", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 7 && lines.slice(0,5).every(x => Number(x) === 0), 'scalar arithmetic or gradient mismatch')
+const p = JSON.parse(lines[5]), b = JSON.parse(lines[6])
+assert(p.kernels === 1 && p.allocated_bytes === 8 && p.borrowed_bytes === 16, 'scalar chain did not fuse')
+assert(b.optimized.plan.kernels === 1 && b.unfused.plan.kernels === 5, 'missing scalar fusion control')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'f64 fusion changed numerical results')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero.jit"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_zero_positive"
+kind = "negative"
+case = "../../cases/modules/tiles/scalar_zero_positive.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["division by zero at Tiles node"]
+timeout_ms = 60000

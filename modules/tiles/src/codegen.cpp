@@ -69,7 +69,37 @@ void generate(Program &p, ScheduleOptions options) {
         const size_t count = elements(n.shape);
         code << "// " << n.op << "\nextern \"C\" __global__ void " << launch.name
              << "(float** v) {\n";
-        if (n.op == "sum_all" || n.op == "mean_all") {
+        if (n.op.starts_with("scalar_")) {
+            launch.blockX = launch.gridX = 1;
+            auto operand                 = [&](size_t in) {
+                return std::find(launch.members.begin(), launch.members.end(), in) !=
+                               launch.members.end()
+                           ? "t" + std::to_string(in)
+                           : load(in, "0");
+            };
+            for (auto member : launch.members) {
+                const auto &value = p.nodes[member];
+                code << "double t" << member << ";\n";
+                if (value.op == "constant64") {
+                    code << "t" << member << "=__longlong_as_double("
+                         << std::to_string(static_cast<uint64_t>(value.attributes[0])) << "ULL);\n";
+                    continue;
+                }
+                code << "{double a=" << operand(value.inputs[0]) << ";\n";
+                if (value.inputs.size() == 2)
+                    code << "double b=" << operand(value.inputs[1]) << ";\n";
+                if (value.op == "scalar_div")
+                    code << "if(b==0.0){atomicMin(reinterpret_cast<unsigned*>(v[" << p.nodes.size()
+                         << "])," << member << "U);" << load(id, "0") << "=0.0;return;}\n";
+                const std::string expr = value.op == "scalar_add"   ? "a+b"
+                                         : value.op == "scalar_sub" ? "a-b"
+                                         : value.op == "scalar_mul" ? "a*b"
+                                         : value.op == "scalar_div" ? "a/b"
+                                                                    : "-a";
+                code << "t" << member << "=" << expr << ";}\n";
+            }
+            code << load(id, "0") << "=t" << id << ";\n";
+        } else if (n.op == "sum_all" || n.op == "mean_all") {
             launch.blockX = launch.gridX = 1;
             const size_t size            = elements(p.nodes[n.inputs[0]].shape);
             code << "double acc=0.0;\nfor(unsigned long long r=0;r<" << literal(size)

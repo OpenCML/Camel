@@ -169,8 +169,12 @@ zero/one seeds, `sum_to` and rank-two matmul gradients. Broadcast/expand use ind
 maps; matmul gradients use transpose maps and matmul. `sum_to` preserves the
 tensor implementation's row-major f32 accumulation order, distinct from the f64
 accumulation of `sum_axis`. This supports tested polynomial, row-reduction,
-broadcast and dense-layer gradients, not all derivative rules. Scalar loss
-arithmetic beyond full sum/mean, arbitrary pullback closures, control flow and
+broadcast and dense-layer gradients, not all derivative rules. F64 scalar
+addition, subtraction, multiplication, division and negation are supported,
+including composed scalar losses. Single-use scalar chains fuse with exact
+double intermediates and disabled contraction. Scalar division by either sign
+of zero faults before a result is returned, using a device fault word checked
+at completion. Other scalar math functions, arbitrary pullback closures, control flow and
 unsupported derivative operators still require further lowering work.
 
 Static `transpose`, `permute` (including negative axes) and positive-step `slice`

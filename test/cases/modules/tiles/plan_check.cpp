@@ -104,7 +104,19 @@ int main() {
             x.nodes[0].resident = value;
         }, "invalid resident input");
         rejects(borrowed, [](auto &x) { x.nodes[0].dtype = DType::F64; }, "input payload dtype");
-        std::cout << "tiles plan validation: 30 rejected mutations\n";
+        Program scalarOps;
+        scalarOps.nodes = {{.op="constant64", .attributes={0}, .dtype=DType::F64},
+                           {.op="constant64", .attributes={0}, .dtype=DType::F64},
+                           {.op="scalar_add", .inputs={0,1}, .dtype=DType::F64},
+                           {.op="scalar_neg", .inputs={2}, .dtype=DType::F64}};
+        scalarOps.outputs = {3};
+        schedule(scalarOps);
+        if (scalarOps.launches.size() != 1 || scalarOps.storage.bytes != std::vector<size_t>{8})
+            throw std::runtime_error("scalar chain did not fuse into one f64 result");
+        rejects(scalarOps, [](auto &x) { x.nodes[2].dtype = DType::F32; }, "scalar arithmetic type or arity");
+        rejects(scalarOps, [](auto &x) { x.nodes[2].inputs = {0}; }, "scalar arithmetic type or arity");
+        rejects(scalarOps, [](auto &x) { x.nodes[0] = Node{.op="input", .data={1}}; }, "scalar operand type");
+        std::cout << "tiles plan validation: 33 rejected mutations\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }

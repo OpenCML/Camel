@@ -374,3 +374,29 @@ Committed 4f2a3db7 rebuilds and passes 71/71 relevant checks on local RTX 4060 T
 and remote RTX 3090 device 7. The three scalar-residency VM cases run with moving
 GC stress and macro expansion of value-and-gradient. Remote results are retained
 in `docs/performance/tiles/2026-10-15-rtx3090-resident-scalar-tests.txt`.
+
+## F64 scalar arithmetic and fusion
+
+Builtin f64 addition, subtraction, multiplication, division and negation lower
+directly from their registered graph operators. Constants preserve their bit
+patterns; runtime scalar values can come from reductions or resident inputs.
+Single-use scalar arithmetic/constant chains fuse separately from tensor indexing
+chains, preserving double rounding points with NVRTC contraction disabled. Shared
+and returned values remain materialized. The unfused schedule provides the same
+operations as a numerical and timing control.
+
+Scalar division follows Camel's fault contract, including both signs of zero.
+A per-execution device fault word records a failing node; completion checks it
+before publishing any host or resident result. This avoids CUDA traps that could
+poison the context. The flag is reset on the ordered stream before each run or
+benchmark repetition. Tensor elementwise division keeps its existing semantics.
+This adds scalar fault-reporting overhead only to graphs containing scalar division;
+inspection's allocation metrics describe value storage, not runtime pointer tables
+or this fault word. General math functions, comparisons and control flow remain
+separate lowering work.
+
+Manual tests compare a composed scalar loss and its generated gradients with CPU
+results, check resident scalar inputs, and compare fused/unfused outputs exactly.
+The test arithmetic chain uses one kernel and one eight-byte result allocation;
+the reference uses five kernels. Positive/negative zero division faults are tested
+through host and resident return paths. Native plan validation covers 33 mutations.

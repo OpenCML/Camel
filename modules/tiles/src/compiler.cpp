@@ -288,6 +288,36 @@ class Compiler {
     }
 
     Value operation(const std::string &uri, const std::vector<Value> &args) {
+        static const std::unordered_map<std::string, std::string> scalarOps = {
+            {":op/add_d", "scalar_add"},
+            {":op/sub_d", "scalar_sub"},
+            {":op/mul_d", "scalar_mul"},
+            {":op/div_d", "scalar_div"},
+            {":op/neg_d", "scalar_neg"}};
+        if (auto op = scalarOps.find(uri); op != scalarOps.end()) {
+            const size_t arity = op->second == "scalar_neg" ? 1 : 2;
+            if (args.size() != arity)
+                throw std::runtime_error("scalar operation arity");
+            Node node{.op = op->second, .shape = {}, .dtype = DType::F64};
+            for (const auto &arg : args) {
+                if (!arg.type || arg.type->code() != ty::TypeCode::Float64)
+                    throw std::runtime_error("scalar operation requires f64 operands");
+                if (arg.tensor != SIZE_MAX) {
+                    if (program.nodes[arg.tensor].dtype != DType::F64)
+                        throw std::runtime_error("scalar operand storage mismatch");
+                    node.inputs.push_back(arg.tensor);
+                } else if (arg.constant && std::holds_alternative<double>(*arg.constant)) {
+                    node.inputs.push_back(append(
+                        Node{
+                            .op         = "constant64",
+                            .shape      = {},
+                            .attributes = {std::bit_cast<int64_t>(std::get<double>(*arg.constant))},
+                            .dtype      = DType::F64}));
+                } else
+                    throw std::runtime_error("scalar operand is unavailable");
+            }
+            return {.type = ty::Type::Float64(), .tensor = append(std::move(node))};
+        }
         const auto *def = tensor::ops::OpRegistry::instance().find(uri);
         if (!def || !def->traits.pure)
             throw std::runtime_error("unsupported or effectful operator '" + uri + "'");

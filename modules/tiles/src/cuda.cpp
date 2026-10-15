@@ -13,6 +13,7 @@
 #include "tiles/program.h"
 #include <algorithm>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -384,6 +385,8 @@ class DeviceRun {
     std::vector<CUfunction> kernels;
     std::vector<void *> hostInputs;
     CUdeviceptr table;
+    CUdeviceptr fault = 0;
+    void *clearFault  = nullptr;
 
   public:
     DeviceRun(const Program &p, Api &a, CUmodule module) : program(p), api(a), resources(a) {
@@ -401,6 +404,14 @@ class DeviceRun {
                 pointers[id] = allocation->pointer;
             } else if (p.storage.slots[id] != SIZE_MAX)
                 pointers[id] = allocations[p.storage.slots[id]];
+        if (std::any_of(p.nodes.begin(), p.nodes.end(), [](const auto &n) {
+                return n.op == "scalar_div";
+            })) {
+            fault                                = resources.allocate(sizeof(unsigned));
+            clearFault                           = resources.allocateHost(sizeof(unsigned));
+            *static_cast<unsigned *>(clearFault) = UINT_MAX;
+            pointers.push_back(fault);
+        }
         table                   = resources.allocate(pointers.size() * sizeof(CUdeviceptr));
         const size_t tableBytes = pointers.size() * sizeof(CUdeviceptr);
         void *hostTable         = resources.allocateHost(tableBytes);
@@ -426,6 +437,10 @@ class DeviceRun {
     }
     CUstream stream() const { return resources.stream; }
     void upload() {
+        if (fault)
+            api.check(
+                api.cuMemcpyHtoDAsync(fault, clearFault, sizeof(unsigned), resources.stream),
+                "clear scalar fault");
         for (size_t id = 0; id < program.nodes.size(); ++id) {
             const auto &n = program.nodes[id];
             if (!n.data.empty())
@@ -466,6 +481,12 @@ class DeviceRun {
     }
     void synchronize() {
         api.check(api.cuStreamSynchronize(resources.stream), "complete GPU computation");
+        if (fault) {
+            unsigned node;
+            api.check(api.cuMemcpyDtoH(&node, fault, sizeof(node)), "read scalar fault");
+            if (node != UINT_MAX)
+                throw std::runtime_error("division by zero at Tiles node " + std::to_string(node));
+        }
     }
     std::vector<std::byte> download() {
         synchronize();

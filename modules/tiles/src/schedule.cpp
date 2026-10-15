@@ -50,6 +50,10 @@ bool binary(const std::string &op) {
 bool indexedScalar(const std::string &op) {
     return unary(op) || binary(op) || op == "reshape" || op == "reindex";
 }
+bool scalar64(const std::string &op) {
+    return op == "constant64" || op == "scalar_add" || op == "scalar_sub" || op == "scalar_mul" ||
+           op == "scalar_div" || op == "scalar_neg";
+}
 void require(bool valid, const std::string &message) {
     if (!valid)
         throw std::runtime_error("invalid tiles plan: " + message);
@@ -121,6 +125,18 @@ void validate(const Program &p) {
         }
         require(!n.resident, "computed value borrows input storage");
         require(n.data.empty(), "computed value has host payload");
+        if (n.op == "scalar_add" || n.op == "scalar_sub" || n.op == "scalar_mul" ||
+            n.op == "scalar_div" || n.op == "scalar_neg") {
+            require(
+                n.dtype == DType::F64 && n.shape.empty() && n.attributes.empty() &&
+                    n.inputs.size() == (n.op == "scalar_neg" ? 1 : 2),
+                "scalar arithmetic type or arity");
+            for (auto in : n.inputs)
+                require(
+                    p.nodes[in].dtype == DType::F64 && p.nodes[in].shape.empty(),
+                    "scalar operand type");
+            continue;
+        }
         if (n.op == "sum_all" || n.op == "mean_all") {
             require(
                 n.dtype == DType::F64 && n.shape.empty() && n.inputs.size() == 1 &&
@@ -217,7 +233,9 @@ void schedule(Program &p, ScheduleOptions options) {
         size_t target = consumer[id];
         if (!options.fuseElementwise ||
             std::find(p.outputs.begin(), p.outputs.end(), id) != p.outputs.end() ||
-            users[id] != 1 || !indexedScalar(p.nodes[id].op) || !indexedScalar(p.nodes[target].op))
+            users[id] != 1 ||
+            !((indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[target].op)) ||
+              (scalar64(p.nodes[id].op) && scalar64(p.nodes[target].op))))
             continue;
         size_t root = owner[target];
         if (groupSize[root] == 64)
@@ -313,7 +331,9 @@ void validatePlan(const Program &p) {
                 id < p.nodes.size() && stageOf[id] == SIZE_MAX,
                 "duplicate/invalid scheduled value");
             require(
-                launch.members.size() == 1 || indexedScalar(p.nodes[id].op),
+                launch.members.size() == 1 ||
+                    (indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[launch.node].op)) ||
+                    (scalar64(p.nodes[id].op) && scalar64(p.nodes[launch.node].op)),
                 "invalid fused domain");
             for (auto in : p.nodes[id].inputs) {
                 require(
