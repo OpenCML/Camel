@@ -312,7 +312,7 @@ cd2479e5aabb7c48 ok stdlib/array.cml
 191bfdbcd7a88967 ok stdlib/signatures/algo.cml
 3f20be7d0332af35 ok stdlib/signatures/crypto.cml
 7b5ff78ccfa0d052 ok stdlib/signatures/fs.cml
-8db3ce3042e9b317 no stdlib/signatures/globals.cml
+43529b245d314277 no stdlib/signatures/globals.cml
 debcb685683e6262 ok stdlib/signatures/json.cml
 550b03294b54a2b5 ok stdlib/signatures/math.cml
 f8d330763bbcd3e8 ok stdlib/signatures/os.cml
@@ -1522,6 +1522,7 @@ cf57643df47bb00e ok test/cases/trans/cpp/unary_scalar.cml
 2962091323bcb20f ok test/cases/trans/cpp/exec/draws.cml
 3a02833f9072052e ok test/cases/trans/cpp/exec/faults.cml
 fc3f5a807ef6f0ac ok test/cases/trans/cpp/exec/functions.cml
+861745fe0e5aa4b3 ok test/cases/trans/cpp/exec/print_formats.cml
 fa55cb6ca13acda7 ok test/cases/trans/cpp/exec/recursion_limit.cml
 b51151106e56a3ff ok test/cases/trans/cpp/exec/scalars.cml
 b6e07599df719cc2 ok test/cases/trans/cpp/exec/strings.cml

@@ -190,7 +190,8 @@ print: (x: T, ...rest: U...) => T
 
 Writes the arguments, separated by spaces, without a line end, and gives back the first one
 (so that the write can be part of the data flow). The other arguments may each have a type
-of their own.
+of their own. With a format, print<fmt>(...), writes the format with the arguments put in,
+also without a line end.
 
 - With effects: writes to standard output.
 - Example: `print('a', 1)` gives `a 1`
@@ -203,7 +204,8 @@ println: (x: T, ...rest: U...) => T
 
 Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
 that the write can be part of the data flow). The other arguments may each have a type of
-their own.
+their own. With a format, println<fmt>(...), writes the format with the arguments put in and
+one line end.
 
 - With effects: writes to standard output.
 - Example: `println('a', 1)` gives `a 1`

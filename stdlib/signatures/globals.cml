@@ -98,7 +98,8 @@ inner func error(kind: string, message: string): Error {
 
 /// Writes the arguments, separated by spaces, without a line end, and gives back the first one
 /// (so that the write can be part of the data flow). The other arguments may each have a type
-/// of their own.
+/// of their own. With a format, print<fmt>(...), writes the format with the arguments put in,
+/// also without a line end.
 /// @effect writes to standard output
 /// @example print('a', 1)    // a 1
 inner func print(x: T, ...rest: U...): T {
@@ -107,7 +108,8 @@ inner func print(x: T, ...rest: U...): T {
 
 /// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
 /// that the write can be part of the data flow). The other arguments may each have a type of
-/// their own.
+/// their own. With a format, println<fmt>(...), writes the format with the arguments put in and
+/// one line end.
 /// @effect writes to standard output
 /// @example println('a', 1)    // a 1
 inner func println(x: T, ...rest: U...): T {
