@@ -241,10 +241,12 @@ void schedule(Program &p, ScheduleOptions options) {
             continue;
         size_t root = owner[target];
         // Ordered reductions expose only output-row parallelism. Keep expensive
-        // math in its pointwise stage when fewer than one warp of rows exists.
+        // math in its pointwise stage unless at least 64 warps of rows exist.
+        // A few output warps leave most SMs idle while serializing math over
+        // the reduction axis (observed on both RTX 4060 Ti and RTX 3090).
         // Cheap producer chains can still fuse on either side of this boundary.
         const auto &op = p.nodes[id].op;
-        if (orderedAxis(p.nodes[root].op) && elements(p.nodes[root].shape) < 32 &&
+        if (orderedAxis(p.nodes[root].op) && elements(p.nodes[root].shape) < 2048 &&
             (op == "exp" || op == "log" || op == "sqrt" || op == "rsqrt"))
             continue;
         if (groupSize[root] == 64)

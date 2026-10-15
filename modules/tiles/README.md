@@ -208,7 +208,7 @@ output thread computes its producer values in f32 and folds them in increasing
 axis order with the existing f64 accumulator, then rounds the result to f32.
 This removes producer buffers without granting reassociation or contraction.
 The ordered reduction uses 32-thread blocks; expensive math is kept in a separate
-pointwise stage when fewer than 32 output rows exist, to avoid serializing it into
+pointwise stage when fewer than 2048 output rows exist, to avoid serializing it into
 too few lanes. Shared results and observable producer outputs remain boundaries.
 `reduction_benchmark.cml` measures three shapes against the unfused CUDA schedule;
 this heuristic is not an autotuner and does not guarantee every shape improves.
