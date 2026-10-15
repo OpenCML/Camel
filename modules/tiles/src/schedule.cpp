@@ -18,6 +18,11 @@
 #include <stdexcept>
 
 namespace camel::tiles {
+const void *hostData(const Node &node) {
+    if (node.scalarBits)
+        return &*node.scalarBits;
+    return node.data.empty() ? nullptr : node.data.data();
+}
 size_t bytes(const Node &node) {
     const size_t width = node.dtype == DType::F64 ? sizeof(double) : sizeof(float);
     const size_t count = elements(node.shape);
@@ -48,7 +53,7 @@ bool binary(const std::string &op) {
            std::string::npos;
 }
 bool indexedScalar(const std::string &op) {
-    return unary(op) || binary(op) || op == "reshape" || op == "reindex";
+    return unary(op) || binary(op) || op == "reshape" || op == "reindex" || op == "cast_f32";
 }
 bool scalar64(const std::string &op) {
     return op == "constant64" || op == "scalar_add" || op == "scalar_sub" || op == "scalar_mul" ||
@@ -112,20 +117,22 @@ void validate(const Program &p) {
             require(in < id, "dependency is not topologically earlier");
         if (n.op == "input") {
             require(
-                n.dtype == DType::F32 || (n.resident && n.shape.empty()),
+                n.dtype == DType::F32 || (n.dtype == DType::F64 && n.shape.empty()),
                 "input payload dtype");
             require(n.inputs.empty(), "input has dependencies");
             if (n.resident)
                 require(
-                    n.data.empty() && n.resident->shape == n.shape &&
+                    n.data.empty() && !n.scalarBits && n.resident->shape == n.shape &&
                         n.resident->dtype == n.dtype && n.resident->owner && n.resident->address,
                     "invalid resident input");
+            else if (n.dtype == DType::F64)
+                require(n.scalarBits.has_value() && n.data.empty(), "invalid scalar input payload");
             else
-                require(n.data.size() == count, "invalid input payload");
+                require(!n.scalarBits && n.data.size() == count, "invalid input payload");
             continue;
         }
         require(!n.resident, "computed value borrows input storage");
-        require(n.data.empty(), "computed value has host payload");
+        require(n.data.empty() && !n.scalarBits, "computed value has host payload");
         if (n.op == "scalar_add" || n.op == "scalar_sub" || n.op == "scalar_mul" ||
             n.op == "scalar_div" || n.op == "scalar_neg") {
             require(

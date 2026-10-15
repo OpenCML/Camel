@@ -95,11 +95,12 @@ class DeviceRun {
             "upload argument table");
         hostInputs.assign(p.nodes.size(), nullptr);
         for (size_t id = 0; id < p.nodes.size(); ++id) {
-            const auto &data = p.nodes[id].data;
-            if (data.empty())
+            const auto &node = p.nodes[id];
+            const auto *data = hostData(node);
+            if (!data)
                 continue;
-            hostInputs[id] = resources.allocateHost(data.size() * sizeof(float));
-            std::memcpy(hostInputs[id], data.data(), data.size() * sizeof(float));
+            hostInputs[id] = resources.allocateHost(bytes(node));
+            std::memcpy(hostInputs[id], data, bytes(node));
         }
         for (const auto &launch : p.launches) {
             CUfunction kernel;
@@ -117,13 +118,9 @@ class DeviceRun {
                 "clear scalar fault");
         for (size_t id = 0; id < program.nodes.size(); ++id) {
             const auto &n = program.nodes[id];
-            if (!n.data.empty())
+            if (hostInputs[id])
                 api.check(
-                    api.cuMemcpyHtoDAsync(
-                        pointers[id],
-                        hostInputs[id],
-                        n.data.size() * sizeof(float),
-                        resources.stream),
+                    api.cuMemcpyHtoDAsync(pointers[id], hostInputs[id], bytes(n), resources.stream),
                     "upload input");
         }
         // Pageable synchronous copies can return after staging, before DMA completes.
@@ -301,10 +298,10 @@ std::vector<std::byte> execute(std::shared_ptr<const Program> snapshot) {
         })) {
         std::vector<std::byte> result;
         for (auto output : p.outputs) {
-            const auto &data = p.nodes[output].data;
-            if (!data.empty()) {
-                auto *begin = reinterpret_cast<const std::byte *>(data.data());
-                result.insert(result.end(), begin, begin + data.size() * sizeof(float));
+            const auto &node = p.nodes[output];
+            if (const auto *data = hostData(node)) {
+                auto *begin = static_cast<const std::byte *>(data);
+                result.insert(result.end(), begin, begin + bytes(node));
             }
         }
         return result;

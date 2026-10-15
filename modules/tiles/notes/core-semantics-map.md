@@ -21,7 +21,7 @@ Replacing graph URI dispatch did not remove this private representation.
 
 | Tags | Domain/access requirements | Numeric/reduction requirements |
 | --- | --- | --- |
-| `input` | Dense logical shape; host snapshot or borrowed device allocation | f32 tensor or resident f64 scalar; no computation |
+| `input` | Dense logical shape; host snapshot or borrowed device allocation | f32 tensor or host/resident f64 scalar; no computation; scalar payload bits are not part of generated source |
 | `constant64` | Scalar domain | Exact stored f64 bit pattern |
 | `cast_f32` | Scalar identity mapping | Explicit f64-to-f32 conversion boundary |
 | `scalar_add`, `scalar_sub`, `scalar_mul`, `scalar_div`, `scalar_neg` | Scalar domain, one or two inputs | Ordered f64 arithmetic; scalar division faults on either signed zero |

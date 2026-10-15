@@ -107,7 +107,7 @@ void generate(Program &p, ScheduleOptions options) {
             if (value.inputs.size() == 2)
                 code << "float b=" << b << ";\n";
             std::string expr;
-            if (value.op == "reshape" || value.op == "reindex")
+            if (value.op == "reshape" || value.op == "reindex" || value.op == "cast_f32")
                 expr = "a";
             if (value.op == "add")
                 expr = "a+b";

@@ -4,6 +4,16 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "runtime_scalars"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/runtime_scalars.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: runtime scalar values", "std::fvm: runtime scalar values", "std::jit: runtime scalar values"]
+timeout_ms = 180000
+
+[[tests]]
 name = "ordered_reduction_fusion"
 kind = "behavior"
 tool = "python"

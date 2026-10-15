@@ -34,12 +34,14 @@ operations are independent of the flag that disables implicit contraction.
   calls and use `download` only when host values are needed. Returned inputs and
   repeated leaves share native ownership. Completion is synchronous. Scalar leaves
   retain f64 storage, including mixed loss/gradient results. Device scalar inputs
-  are runtime values; ordinary host scalar inputs are specialized constants.
+  and ordinary host `float` inputs are runtime values with exact f64 payloads.
 - `run<fn>(inputs)` specializes a function graph for actual input shapes, compiles
   CUDA with NVRTC, executes on the GPU, and returns host `Tensor<f32>` or `float` leaves
   in the function's original tuple/struct structure. Nested nonempty tuples and
-  structs of these values are supported as parameters and results. Scalar input
-  values are specialized constants at this stage. Pass the single
+  structs of these values are supported as parameters and results. Host `float`
+  arguments and captured floats are uploaded as runtime inputs, so changing their
+  values does not change generated code. Graph DATA literals remain constants;
+  integer attributes and static branch conditions still specialize the graph. Pass the single
   parameter directly for a unary function, or a tuple for multiple parameters.
 - `source<fn>(inputs)` returns generated CUDA without initializing CUDA or
   executing the function body. It performs the same graph validation as `run`.

@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,8 @@ struct Node {
     std::vector<size_t> inputs;
     std::vector<int64_t> attributes;
     std::vector<float> data; // Owned host input or scalar constant; never part of a code-cache key.
+    std::optional<uint64_t>
+        scalarBits; // Owned runtime f64 input, including exact special-value bits.
     // reindex: source linear address = offset + sum(output_coordinate[d] * strides[d]).
     // Units are elements, independent of CUDA thread/block placement.
     size_t offset = 0;
@@ -75,6 +78,7 @@ struct Program {
 
 size_t elements(const Shape &shape);
 size_t bytes(const Node &node);
+const void *hostData(const Node &node);
 Program compile(Function *function, const std::vector<Argument> &arguments);
 void generate(Program &program, ScheduleOptions options = {});
 bool elementwise(const std::string &op);

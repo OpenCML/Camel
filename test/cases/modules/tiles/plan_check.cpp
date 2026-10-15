@@ -109,6 +109,18 @@ int main() {
         if (fusedReduction.launches.size() != 2 || fusedReduction.storage.slots[2] == SIZE_MAX)
             throw std::runtime_error("reduction fused an observable producer output");
         std::cout << "tiles ordered reductions: fusion boundaries and plan mutations passed\n";
+        Program scalarInput;
+        scalarInput.nodes = {{.op="input", .shape={}, .scalarBits=0x3ff0000000000001ULL, .dtype=DType::F64}};
+        scalarInput.outputs = {0};
+        schedule(scalarInput);
+        if (bytes(scalarInput.nodes[0]) != 8 || !hostData(scalarInput.nodes[0]) ||
+            !scalarInput.launches.empty())
+            throw std::runtime_error("host scalar input representation mismatch");
+        rejects(scalarInput, [](auto &x) { x.nodes[0].scalarBits.reset(); }, "invalid scalar input payload");
+        rejects(scalarInput, [](auto &x) { x.nodes[0].data = {1.0}; }, "invalid scalar input payload");
+        rejects(scalarInput, [](auto &x) { x.nodes[0].dtype = DType::F32; }, "invalid input payload");
+        rejects(scalarInput, [](auto &x) { x.nodes[0].shape = {1}; }, "input payload dtype");
+        std::cout << "tiles scalar inputs: typed payload and shape validation passed\n";
         Program p;
         p.nodes = {{.op="input", .shape={4}, .data={1,2,3,4}},
                    {.op="add", .shape={4}, .inputs={0,0}},
