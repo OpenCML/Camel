@@ -1304,8 +1304,9 @@ edc0933b2879e034 ok test/cases/modules/tensor/struct_covariance.cml
 9b3631a2c3d96971 ok test/cases/modules/tensor/bounds/index_const.cml
 89d99ce4a5953e19 ok test/cases/modules/tensor/bounds/index_declared_shape.cml
 d3b22a76b9447c7c ok test/cases/modules/tensor/bounds/slice_const.cml
+cacf8edb964db017 ok test/cases/modules/tensor/bounds/slice_runtime.cml
 c41c203317520001 ok test/cases/modules/tensor/bounds/slice_untaken_branch.cml
-5414cac2ea18ddc0 ok test/cases/modules/tensor/bounds/unknown_runtime.cml
+de5507fd01609a65 ok test/cases/modules/tensor/bounds/unknown_runtime.cml
 faa0ea9f24882649 ok test/cases/modules/tensor/shape_diagnostics/add.cml
 e206a199eadd54f5 ok test/cases/modules/tensor/shape_diagnostics/concat.cml
 4fcbef58e5ad13aa ok test/cases/modules/tensor/shape_diagnostics/concat_rank.cml
