@@ -11,6 +11,7 @@
 // Shape-specialized CUDA lowering; all intermediate arrays remain on the device.
 #include "tiles/program.h"
 #include <algorithm>
+#include <functional>
 #include <sstream>
 #include <stdexcept>
 
@@ -20,9 +21,9 @@ std::string literal(size_t n) { return std::to_string(n) + "ULL"; }
 std::string load(size_t id, const std::string &at) {
     return "v[" + std::to_string(id) + "][" + at + "]";
 }
-std::string broadcastIndex(const Shape &input, const Shape &output) {
+std::string broadcastIndex(const Shape &input, const Shape &output, const std::string &at = "i") {
     if (input == output)
-        return "i";
+        return at;
     if (input.size() > output.size())
         throw std::runtime_error("invalid broadcast rank");
     size_t inStride = 1, outStride = 1;
@@ -33,13 +34,24 @@ std::string broadcastIndex(const Shape &input, const Shape &output) {
             if (input[j] != 1 && input[j] != output[d])
                 throw std::runtime_error("invalid broadcast shape");
             if (input[j] > 1)
-                expr += "+((i/" + literal(outStride) + ")%" + literal(input[j]) + ")*" +
+                expr += "+((" + at + "/" + literal(outStride) + ")%" + literal(input[j]) + ")*" +
                         literal(inStride);
             inStride *= std::max<int64_t>(input[j], 1);
         }
         outStride *= std::max<int64_t>(output[d], 1);
     }
     return expr;
+}
+std::string mappedIndex(const Node &n, const std::string &at) {
+    size_t stride       = 1;
+    std::string address = literal(n.offset);
+    for (size_t d = n.shape.size(); elements(n.shape) && d-- > 0;) {
+        const size_t extent = std::max<size_t>(n.shape[d], 1);
+        address += "+((" + at + "/" + literal(stride) + ")%" + literal(extent) + ")*" +
+                   literal(n.strides[d]);
+        stride *= extent;
+    }
+    return "(" + address + ")";
 }
 } // namespace
 
@@ -114,18 +126,30 @@ void generate(Program &p, ScheduleOptions options) {
                     code << "float t" << member << ";\n";
                 // Every node retains its f32 rounding point. NVRTC's --fmad=false
                 // prevents contraction across these assignments.
-                for (auto member : launch.members) {
-                    const auto &value = p.nodes[member];
-                    auto input        = [&](size_t in) {
-                        if (std::find(launch.members.begin(), launch.members.end(), in) !=
-                            launch.members.end())
-                            return std::string("t") + std::to_string(in);
-                        return load(in, broadcastIndex(p.nodes[in].shape, value.shape));
+                std::function<std::string(size_t, const std::string &)> emit;
+                emit = [&](size_t member, const std::string &at) -> std::string {
+                    if (std::find(launch.members.begin(), launch.members.end(), member) ==
+                        launch.members.end())
+                        return load(member, at);
+                    const auto &value     = p.nodes[member];
+                    const auto coordinate = "q" + std::to_string(member);
+                    code << "unsigned long long " << coordinate << "=" << at << ";\n";
+                    auto input = [&](size_t in) {
+                        const auto index =
+                            value.op == "reindex" ? mappedIndex(value, coordinate)
+                            : value.op == "reshape"
+                                ? coordinate
+                                : broadcastIndex(p.nodes[in].shape, value.shape, coordinate);
+                        return emit(in, index);
                     };
-                    code << "{ float a=" << input(value.inputs[0]) << ";\n";
+                    const auto a = input(value.inputs[0]);
+                    const auto b = value.inputs.size() == 2 ? input(value.inputs[1]) : "";
+                    code << "{ float a=" << a << ";\n";
                     if (value.inputs.size() == 2)
-                        code << "float b=" << input(value.inputs[1]) << ";\n";
+                        code << "float b=" << b << ";\n";
                     std::string expr;
+                    if (value.op == "reshape" || value.op == "reindex")
+                        expr = "a";
                     if (value.op == "add")
                         expr = "a+b";
                     if (value.op == "subtract")
@@ -153,18 +177,12 @@ void generate(Program &p, ScheduleOptions options) {
                     if (value.op == "relu")
                         expr = "a<0.0f?0.0f:a";
                     code << "t" << member << "=" << expr << "; }\n";
-                }
+                    return "t" + std::to_string(member);
+                };
+                emit(id, "i");
                 code << load(id, "i") << "=t" << id << ";\n";
             } else if (n.op == "reindex") {
-                size_t stride       = 1;
-                std::string address = literal(n.offset);
-                for (size_t d = n.shape.size(); count && d-- > 0;) {
-                    const size_t extent = std::max<size_t>(n.shape[d], 1);
-                    address += "+((i/" + literal(stride) + ")%" + literal(extent) + ")*" +
-                               literal(n.strides[d]);
-                    stride *= extent;
-                }
-                code << load(id, "i") << "=" << load(n.inputs[0], address) << ";\n";
+                code << load(id, "i") << "=" << load(n.inputs[0], mappedIndex(n, "i")) << ";\n";
             } else if (n.op == "sum_axis" || n.op == "mean_axis" || n.op == "max_axis") {
                 const auto &shape = p.nodes[n.inputs[0]].shape;
                 size_t axis = n.attributes[0], width = shape[axis], inner = 1;

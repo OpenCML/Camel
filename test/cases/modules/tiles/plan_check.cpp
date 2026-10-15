@@ -60,7 +60,8 @@ int main() {
         rejects(indexed, [](auto &x) { x.nodes[1].offset = 1; }, "index map outside source domain");
         rejects(indexed, [](auto &x) { x.nodes[1].strides[0] = SIZE_MAX; }, "index map address overflow");
         rejects(p, [](auto &x) { x.nodes[1].strides = {1}; }, "unexpected index map");
-        std::cout << "tiles plan validation: 16 rejected mutations\n";
+        rejects(p, [](auto &x) { x.nodes[2].op = "add"; x.nodes[2].inputs = {1,1}; }, "fused value must have one use");
+        std::cout << "tiles plan validation: 17 rejected mutations\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }

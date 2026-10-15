@@ -285,3 +285,63 @@ assert(values.length === 6 && values.every(x => x === 0), 'index mapping differs
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "mapped_fusion.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/mapped_fusion.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 5, 'expected plans, errors and benchmark')
+const p = JSON.parse(lines[0]), fork = JSON.parse(lines[1]), b = JSON.parse(lines[4])
+assert(p.kernels === 1 && p.materialized_values === 5 && p.allocated_bytes === 500, 'mapped intermediates were not eliminated')
+assert(fork.kernels === 2, 'shared mapped result must remain materialized')
+assert(Number(lines[2]) === 0 && Number(lines[3]) === 0, 'mapped fusion differs from CPU')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'fused/unfused mapped result differs')
+assert(!b.identical_device_code, 'expected different fusion schedules')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "mapped_fusion.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/mapped_fusion.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 5, 'expected plans, errors and benchmark')
+const p = JSON.parse(lines[0]), fork = JSON.parse(lines[1]), b = JSON.parse(lines[4])
+assert(p.kernels === 1 && p.materialized_values === 5 && p.allocated_bytes === 500, 'mapped intermediates were not eliminated')
+assert(fork.kernels === 2, 'shared mapped result must remain materialized')
+assert(Number(lines[2]) === 0 && Number(lines[3]) === 0, 'mapped fusion differs from CPU')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'fused/unfused mapped result differs')
+assert(!b.identical_device_code, 'expected different fusion schedules')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "mapped_fusion.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/mapped_fusion.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 5, 'expected plans, errors and benchmark')
+const p = JSON.parse(lines[0]), fork = JSON.parse(lines[1]), b = JSON.parse(lines[4])
+assert(p.kernels === 1 && p.materialized_values === 5 && p.allocated_bytes === 500, 'mapped intermediates were not eliminated')
+assert(fork.kernels === 2, 'shared mapped result must remain materialized')
+assert(Number(lines[2]) === 0 && Number(lines[3]) === 0, 'mapped fusion differs from CPU')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'fused/unfused mapped result differs')
+assert(!b.identical_device_code, 'expected different fusion schedules')
+}
+"""
+timeout_ms = 60000

@@ -168,3 +168,22 @@ variants. The committed revision 4428c59a was rebuilt through `npm run build`
 locally and on the remote Clang 23/CUDA 12.3 environment. Both reruns passed
 41/41. Remote device 7 test output is retained in
 `docs/performance/tiles/2026-10-15-rtx3090-index-maps-tests.txt`.
+
+## Fusion across index domains
+
+Scalar-stage fusion now includes reindex and reshape and no longer requires
+equal result shapes. Code generation recursively propagates logical coordinates
+through every edge, materializing an f32 temporary for each arithmetic node.
+Each internal value must have exactly one use; the validator enforces this and
+rejects disconnected or multiply used internal values. Shared outputs remain
+stage boundaries. The existing interval planner consequently keeps boundary
+buffers alive through the fused launch without allocating internal map results.
+
+The new broadcast/arithmetic/transpose/slice/reshape case becomes one kernel
+from six, with 500 allocated bytes and five materialized values (two tensor
+inputs, two scalar constants and the output). Its shared-result companion has
+two kernels. CPU comparisons and fused/unfused benchmark correctness gates pass
+on all three engines; local host/GPU/tensor plans pass 44/44, including 17 native
+rejected-plan mutations. This small case establishes allocation/launch removal,
+not representative throughput. Cross-reduction fusion and persistent device
+storage are still separate outstanding work.

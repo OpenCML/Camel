@@ -55,8 +55,8 @@ element types, and unsupported tensor operations produce diagnostics.
 
 The compiler snapshots inputs into an owned IR, retaining no Camel GC pointers
 across CUDA work. Shape inference reuses the tensor operation registry.
-Intermediates remain on the device. Equal-domain single-use elementwise chains
-are fused into groups of at most 64 operations. Shared results and domain changes
+Intermediates remain on the device. Single-use indexed scalar chains
+are fused into groups of at most 64 operations. Shared results and reductions
 retain materialization boundaries. Each fused node keeps an f32 rounding point;
 the scheduler does not reassociate expressions or reorder reductions. Allocation
 slots are reused only after their last reader on the ordered stream has finished;
@@ -124,8 +124,11 @@ Static `transpose`, `permute` (including negative axes) and positive-step `slice
 lower to a checked index map: source address equals an element offset plus the
 dot product of output coordinates and element strides. Bounds are checked before
 CUDA execution, including arithmetic overflow. Empty domains do not dereference
-addresses. These operations currently materialize contiguous outputs; they do
-not yet introduce aliasing or fuse through layout changes. This representation
+addresses. Transpose, permutation, slice and reshape can fuse with each other
+and with elementwise operations across different domains. Generated loads
+compose each edge's coordinates, including broadcasting, while preserving f32
+rounding points. Shared results and non-scalar operations remain materialization
+boundaries; there is no storage aliasing. This representation
 separates logical indexing from thread placement and is a foundation for later
 map composition and view elimination, not the complete indexed-domain design.
 

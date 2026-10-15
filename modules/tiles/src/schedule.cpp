@@ -39,6 +39,9 @@ bool binary(const std::string &op) {
     return std::string("|add|subtract|multiply|divide|maximum|minimum|").find("|" + op + "|") !=
            std::string::npos;
 }
+bool indexedScalar(const std::string &op) {
+    return unary(op) || binary(op) || op == "reshape" || op == "reindex";
+}
 void require(bool valid, const std::string &message) {
     if (!valid)
         throw std::runtime_error("invalid tiles plan: " + message);
@@ -149,13 +152,12 @@ void schedule(Program &p, ScheduleOptions options) {
             ++users[in];
             consumer[in] = id;
         }
-    // Reverse traversal attaches chains to their final consumer. Only equal-domain,
-    // single-use elementwise nodes fuse; broadcasting stays on the boundary loads.
+    // Reverse traversal attaches single-use scalar computations to their consumer.
+    // Each dependency carries its own logical index; layouts need not share a domain.
     for (size_t id = count; id-- > 0;) {
         size_t target = consumer[id];
         if (!options.fuseElementwise || id == p.output || users[id] != 1 ||
-            !elementwise(p.nodes[id].op) || !elementwise(p.nodes[target].op) ||
-            p.nodes[id].shape != p.nodes[target].shape)
+            !indexedScalar(p.nodes[id].op) || !indexedScalar(p.nodes[target].op))
             continue;
         size_t root = owner[target];
         if (groupSize[root] == 64)
@@ -245,13 +247,13 @@ void validatePlan(const Program &p) {
                 launch.blockY <= 1024 / launch.blockX && launch.gridX > 0 &&
                 launch.gridX <= 2147483647 && launch.gridY > 0 && launch.gridY <= 65535,
             "launch dimensions");
+        std::vector<size_t> internalUses(p.nodes.size());
         for (auto id : launch.members) {
             require(
                 id < p.nodes.size() && stageOf[id] == SIZE_MAX,
                 "duplicate/invalid scheduled value");
             require(
-                launch.members.size() == 1 || (elementwise(p.nodes[id].op) &&
-                                               p.nodes[id].shape == p.nodes[launch.node].shape),
+                launch.members.size() == 1 || indexedScalar(p.nodes[id].op),
                 "invalid fused domain");
             for (auto in : p.nodes[id].inputs) {
                 require(
@@ -260,9 +262,13 @@ void validatePlan(const Program &p) {
                 require(
                     stageOf[in] == stage + 1 || p.storage.slots[in] != SIZE_MAX,
                     "register value escapes stage");
+                if (stageOf[in] == stage + 1)
+                    ++internalUses[in];
             }
             stageOf[id] = stage + 1;
         }
+        for (auto id : launch.members)
+            require(id == launch.node || internalUses[id] == 1, "fused value must have one use");
     }
     for (auto stage : stageOf)
         require(stage != SIZE_MAX, "unscheduled value");
