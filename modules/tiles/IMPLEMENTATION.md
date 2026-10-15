@@ -575,3 +575,35 @@ standard build, native checks and matrix probe passed again. RTX 3090 device 7
 rebuilt the committed tree and passed all 85 relevant tests; see
 `docs/performance/tiles/2026-10-16-rtx3090-access-tests.txt`. No speedup is claimed.
 
+# Ordered producer/reduction fusion (2026-10-16)
+
+Commit `1aa02be3` fuses single-use pointwise/index-map producers into axis
+sum/mean. A shared scalar emitter preserves each producer's f32 rounding point;
+one thread per output retains the ordered f64 accumulator, including across all
+axis positions. Reductions use 32-thread blocks. Shared producers and observable
+outputs stay materialized. Native plan checks reject invalid reduction strategy
+and launch mutations. The three host VMs pass byte-for-byte CPU/GPU checks for
+broadcast, transpose, non-last axes, cancellation, empty axes and empty outputs.
+
+The initial producer policy regressed the 512x1025 exponential workload on RTX
+3090: 0.65x the unfused CUDA baseline. Commit `cd906d69` retains expensive math in
+a pointwise stage below 2048 output rows. Final RTX 3090 median ratios for
+4x513, 512x1025 and 4096x65 are approximately 1.20x, 1.04x and 1.67x; corresponding
+kernel counts are 2, 2 and 1, versus four unfused kernels. Near-unity differences
+are not evidence of a reliable speedup. This is a static heuristic, not an
+autotuner or a guarantee across devices/shapes. Full softmax/layernorm fusion,
+shared-producer fusion and device-specific tuning remain unfinished.
+
+The committed final policy rebuilt and passed 86/86 relevant tests on both RTX
+4060 Ti and RTX 3090 device 7. Evidence under `docs/performance/tiles/`:
+
+- `2026-10-16-rtx3090-reduction-tests.txt`: initial feature, 86/86.
+- `2026-10-16-rtx3090-reduction-cost-tests.txt`: final policy, 86/86.
+- `2026-10-16-{rtx4060ti,rtx3090}-ordered-reduction.jsonl`: initial feature samples.
+- `2026-10-16-{rtx4060ti,rtx3090}-reduction-cost-policy.jsonl`: final samples.
+
+Reproduce with `test/cases/modules/tiles/reduction_benchmark.cml` using the normal
+build and selected CUDA device. Reports preserve 21 raw event samples per variant,
+compiler options and correctness gates. The performance reference is unfused
+CUDA with the same ordered arithmetic, not Triton, cuBLAS or a CPU baseline.
+
