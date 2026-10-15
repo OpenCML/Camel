@@ -450,6 +450,9 @@ name = "limit.raised.native.stack_full"
 desc = "Limit 1000000, a native recursion of 900000 levels: the 8 MiB stack of the main thread does not hold it, and the diagnostic says so, at the recursive call."
 args = ["--max-recursion-depth", "1000000", "${case}", "${backend}"]
 backends = ["inline_jit"]
+# Only compiled code recurses on the native stack; a build without the JIT interprets this
+# recursion in heap frames and finishes it.
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 envs = ["N=900000"]
 timeout_ms = 120000
 expect_exit = 1

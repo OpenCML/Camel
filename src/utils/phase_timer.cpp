@@ -44,8 +44,11 @@
 namespace camel::utils::phase {
 
 namespace detail {
+/// Whether phases are being recorded. Read on every Scope; written once, before the first.
 bool gEnabled = false;
 }
+
+bool enabled() { return detail::gEnabled; }
 
 namespace {
 

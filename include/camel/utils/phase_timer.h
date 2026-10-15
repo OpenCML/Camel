@@ -49,14 +49,14 @@
 namespace camel::utils::phase {
 
 namespace detail {
-/// Whether phases are being recorded. Read on every Scope; written once, before the first.
-extern bool gEnabled;
 void begin(std::string_view name, std::string_view detail);
 void end();
 } // namespace detail
 
-/// Whether phases are being recorded.
-inline bool enabled() { return detail::gEnabled; }
+/// Whether phases are being recorded. Out of line on purpose: libcamel is a DLL on Windows,
+/// exported with WINDOWS_EXPORT_ALL_SYMBOLS, which exports functions but not variables, so
+/// the flag itself cannot be read from another binary. Scopes are coarse; the call is cheap.
+bool enabled();
 
 /// Starts recording; the report goes to `path` (`-`: standard error) when report() is called.
 /// The time origin of the report is this call. Calling it again only replaces the path.
