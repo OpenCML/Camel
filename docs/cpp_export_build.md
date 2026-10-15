@@ -35,6 +35,16 @@ c++ -std=c++20 -O2 -ffp-contract=off -I"$CAMEL_HOME/include" prog.cpp -o prog \
 
 它运行时通过 `CAMEL_HOME` 找到模块（`.cmo`），与 `camel` 相同。
 
+Windows 上链接构建产物中附带的导入库，并在运行前将 DLL 目录加入 `PATH`：
+
+```powershell
+clang++ -std=c++20 -O2 -ffp-contract=off -I"$env:CAMEL_HOME/include" prog.cpp "$env:CAMEL_HOME/libs/libcamel.lib" -o prog.exe
+$env:PATH = "$env:CAMEL_HOME/libs;$env:PATH"
+./prog.exe
+```
+
+`camel-cpp` 会自动链接导入库；运行它生成的桥接程序时同样需要上述 DLL 搜索路径。完全独立的程序不需要这一步。
+
 **PowerShell 的重定向**默认写 UTF-16，C++ 编译器读不了；改用：
 
 ```powershell

@@ -72,7 +72,11 @@ def build_command(compiler, msvc, source, target, bridged, camel_home, pch=None)
                "/Fe" + target]
         return cmd + ([os.path.join(lib, "libcamel.lib")] if bridged else [])
     cmd = [compiler, "-std=c++20", "-O2", "-ffp-contract=off", "-w", "-I", include] +         (["-include-pch", pch] if pch else []) + [source, "-o", target]
-    return cmd + (["-L" + lib, "-lcamel", "-Wl,-rpath," + lib] if bridged else [])
+    if not bridged:
+        return cmd
+    if os.name == "nt":
+        return cmd + [os.path.join(lib, "libcamel.lib")]
+    return cmd + ["-L" + lib, "-lcamel", "-Wl,-rpath," + lib]
 
 
 def run(cmd, timeout, env=None, cwd=ROOT):
@@ -106,6 +110,9 @@ def check(program, workdir, args):
     rec = {"program": rel}
     env = dict(os.environ)
     env.setdefault("CAMEL_HOME", os.path.join(ROOT, "out", "latest"))
+    if os.name == "nt":
+        # A bridged executable imports libcamel.dll before its main function can run.
+        env["PATH"] = os.path.join(env["CAMEL_HOME"], "libs") + os.pathsep + env.get("PATH", "")
 
     code, out, err, _ = run([CAMEL, rel] + args.passes + ["std::cpp"], args.timeout, env)
     text = out + "\n" + err
@@ -216,7 +223,7 @@ def main():
     if not programs:
         ap.error("no programs")
 
-    workdir = args.keep or tempfile.mkdtemp(prefix="cppexec-")
+    workdir = os.path.abspath(args.keep) if args.keep else tempfile.mkdtemp(prefix="cppexec-")
     os.makedirs(workdir, exist_ok=True)
     args.pch = None
     if not args.no_pch and "clang" in os.path.basename(compiler).lower():
