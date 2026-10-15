@@ -4,6 +4,39 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "matmul_rounding.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_rounding.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim() === "0.0", "matmul contracted a multiply/add pair") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_rounding.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_rounding.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim() === "0.0", "matmul contracted a multiply/add pair") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_rounding.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_rounding.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim() === "0.0", "matmul contracted a multiply/add pair") }
+"""
+timeout_ms = 60000
+
+[[tests]]
 name = "max_special_values"
 kind = "behavior"
 tool = "python"

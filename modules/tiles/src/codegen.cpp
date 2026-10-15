@@ -148,6 +148,8 @@ void generate(Program &p, ScheduleOptions options) {
             launch.blockX = launch.blockY = 16;
             launch.gridX                  = static_cast<unsigned>(std::max(gx, size_t(1)));
             launch.gridY                  = static_cast<unsigned>(std::max(gy, size_t(1)));
+            // Strict arithmetic rounds the product before the addition. Explicit
+            // intrinsics prevent contraction even if compilation options change.
             code << "__shared__ float a[16][16], b[16][16];\n"
                  << "unsigned long long row=(unsigned long long)blockIdx.y*16+threadIdx.y;\n"
                  << "unsigned long long col=(unsigned long long)blockIdx.x*16+threadIdx.x;\n"
@@ -161,7 +163,7 @@ void generate(Program &p, ScheduleOptions options) {
                  << load(n.inputs[1], "(base+threadIdx.y)*" + literal(cols) + "+col") << ":0.0f;\n"
                  << "__syncthreads();\n#pragma unroll\nfor(int t=0;t<16;++t)"
                  << " if(base+t<" << literal(k)
-                 << ") acc=fmaf(a[threadIdx.y][t],b[t][threadIdx.x],acc);\n"
+                 << ") acc=__fadd_rn(acc,__fmul_rn(a[threadIdx.y][t],b[t][threadIdx.x]));\n"
                  << "__syncthreads();\n}\nif(row<" << literal(m) << " && col<" << literal(cols)
                  << ") " << load(id, "row*" + literal(cols) + "+col") << "=acc;\n";
         } else {
