@@ -157,7 +157,9 @@ const std::string DataDeclLoad::geneCode() const {
     return result;
 }
 
-const std::string FuncDeclLoad::geneCode() const { return "func " + ref_.toString(); }
+const std::string FuncDeclLoad::geneCode() const {
+    return "func " + (operatorSymbol_.empty() ? ref_.toString() : "operator " + operatorSymbol_);
+}
 
 const std::string TypeDeclLoad::geneCode() const {
     std::string result = "type ";

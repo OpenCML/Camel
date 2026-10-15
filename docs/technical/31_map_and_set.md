@@ -121,7 +121,7 @@ A key (and a set element) must have a total order and an equality that cannot ch
 | `int`, `i32`, `bool`, `string` | yes | total order; a string is compared by bytes, as its length and index are |
 | a tuple of key types | yes | compared element by element |
 | `float`, `f32` | no | `NaN != NaN` (a key that cannot be found again), `0.0 == -0.0` with different bits |
-| `T[]` | no | an array can be changed in place through a `var` (`append`), so a key could change after it was inserted |
+| `T[]` | no | not among the key types of design principles 2.10 (the reason given first, that `append` changed an array in place, no longer holds since 2.12) |
 | struct | no | admissible in principle (field by field in declaration order); left out until asked for |
 | function, `Tensor`, other module types, `any` | no | no equality the language defines |
 | `T?`, `T!` | no | `==` is not defined for them (note 29, Q5) |

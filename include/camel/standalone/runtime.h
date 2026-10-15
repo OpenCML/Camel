@@ -12,36 +12,25 @@
  * See the the MIT license for more details.
  *
  * Author: Zhenjie Wei
- * Created: Mar. 11, 2026
- * Updated: Apr. 11, 2026
+ * Created: Oct. 14, 2026
+ * Updated: Oct. 14, 2026
  * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * The one header a program written by std::cpp includes: the standalone runtime, header-only
+ * and built on the C++20 standard library (docs/design/cpp-standalone/README.cn.md, 3.3).
  */
 
 #pragma once
 
-#include <string>
-#include <string_view>
-
-enum class CppEmitMode {
-    Plain,
-    Module,
-    Inspect,
-    Bench,
-};
-
-enum class CppOperatorEmitKind {
-    InlineBinary,
-    InlineUnary,
-    NumericCast,
-    RuntimeFallback,
-};
-
-struct CppOperatorSpec {
-    std::string_view uri;
-    CppOperatorEmitKind emitKind;
-    int normArity;
-    int withArity;
-    std::string_view symbol;
-};
-
-const CppOperatorSpec *findCppOperatorSpec(std::string_view uri);
+#include "camel/standalone/array.h"
+#include "camel/standalone/core.h"
+#include "camel/standalone/fn.h"
+#include "camel/standalone/format.h"
+#include "camel/standalone/hof.h"
+#include "camel/standalone/library.h"
+#include "camel/standalone/num.h"
+#include "camel/standalone/opt.h"
+#include "camel/standalone/random.h"
+#include "camel/standalone/str.h"

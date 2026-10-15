@@ -872,10 +872,10 @@ void NodeVMSchedPass::evalMarkedOperator(
     namespace ops = camel::core::oper;
     switch (oper) {
     case ops::MapArr:
-        evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
-        break;
     case ops::ApplyArr:
-        evalMarkedOperator_apply_arr(graph, nodeRef, currFrame);
+        // `apply` (f from T to T) returns a new array, like `map`: it no longer changes the
+        // array it is given (design principles 2.12).
+        evalMarkedOperator_map_arr(graph, nodeRef, currFrame);
         break;
     case ops::FilterArr:
         evalMarkedOperator_filter_arr(graph, nodeRef, currFrame);
@@ -925,31 +925,6 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
         slot_t result = call(func->graph(), frame);
         currFrame.get<Array *>(resultSlot)->set<slot_t>(i, result, resultType);
     }
-}
-
-void NodeVMSchedPass::evalMarkedOperator_apply_arr(
-    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
-    const auto normInputs = graph->normInputsOf(nodeRef);
-    const auto withInputs = graph->withInputsOf(nodeRef);
-    ASSERT(
-        !normInputs.empty() && !withInputs.empty(),
-        "apply_arr requires array and function inputs.");
-    const auto arrSlot   = dataIndexOf(graph, normInputs.front());
-    const auto funcSlot  = dataIndexOf(graph, withInputs.front());
-    const size_t arrSize = currFrame.get<Array *>(arrSlot)->size();
-    auto *arrType        = currFrame.typeAt<ArrayType>(arrSlot);
-
-    for (size_t i = 0; i < arrSize; ++i) {
-        Array *arr     = currFrame.get<Array *>(arrSlot);
-        Function *func = currFrame.get<Function *>(funcSlot);
-        slot_t element = arr->data()[i];
-        requireRecursionRoom(graph);
-        Frame *frame   = framePool_.acquire(func->graph());
-        bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        slot_t result = call(func->graph(), frame);
-        currFrame.get<Array *>(arrSlot)->set<slot_t>(i, result, arrType);
-    }
-    currFrame.set(dataIndexOf(graph, nodeRef), currFrame.get<Array *>(arrSlot));
 }
 
 void NodeVMSchedPass::evalMarkedOperator_filter_arr(

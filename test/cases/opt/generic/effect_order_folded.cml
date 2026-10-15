@@ -36,7 +36,7 @@ func main(): int sync {
     var seen: int[] = []
     sync func visit(i: int): void {
         return if i >= len(items) then null else sync {
-            seen->append<items[i]>
+            seen = seen->append<items[i]>
             return visit(i + 1)
         }
     }

@@ -11,7 +11,8 @@
  *            each parameter reads what was written through the other
  *   11       ... and both writes land in the caller's variable
  *   9        a struct variable replaced by the callee
- *   [1, 2, 3, 4] 4   an array variable: appended in place by the callee, then replaced
+ *   [1, 2, 3, 4] 4   an array variable: bound by the callee to it with 4 appended
+ *                    (`xs = xs->append<v>`, design principles 2.12), then replaced
  *   15       a tuple variable replaced by the callee
  *   2        a var with-parameter
  *   7        a write is visible before the callee returns (read through a second reference)
@@ -55,7 +56,7 @@ sync func move_to(var p: Point, v: int) {
 }
 
 func push(var xs: int[], v: int): int sync {
-    xs->append<v>
+    xs = xs->append<v>
     return len(xs)
 }
 

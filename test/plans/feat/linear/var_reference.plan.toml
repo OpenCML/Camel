@@ -1229,29 +1229,29 @@ timeout_ms = 4000
 
 [[tests]]
 name = "let_appended"
-desc = "An in-place operator (`append`) applied to a `let` array. It is a compile-time error."
+desc = "`append` written as a statement on a `let` array: it returns a new array and changes nothing (design principles 2.12), so the statement does nothing. It is a compile-time error, which says to use the result."
 kind = "negative"
 case = "../../../cases/linear/byref/let_appended.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 10
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
-expect_output_contains = ["'xs' is immutable"]
+expect_output_contains = ["'append' changes nothing", "use the result"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
 name = "param_sorted"
-desc = "An in-place operator (`sort`) applied to a parameter declared without `var`. It is a compile-time error."
+desc = "`sort` written as a statement on a parameter: it returns a new array and changes nothing (design principles 2.12), so the statement does nothing. It is a compile-time error."
 kind = "negative"
 case = "../../../cases/linear/byref/param_sorted.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 15
-expect_output_contains = ["'xs' is immutable"]
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 5
+expect_output_contains = ["'sort' changes nothing"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -3629,3 +3629,16 @@ assert(out === 'fold 30510 | cse 20304 3 | dce 2 112 | call 10203 8 | value 1030
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "var_array_append.macro"
+desc = "A differentiated function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_append`, design principles 2.12) and reads its length (`:var/peek`): no gradient flows through the array; value and gradient are those of the plain call, under std::macro on the node VM and the bytecode VM."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/var_array_append.cml"
+args = ["${case}", "std::macro", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "plain call: value 3.0\nvalue_and_grad: value 3.0 grad 3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -1,0 +1,38 @@
+/**
+ * Operator overloads of the program (design principles 2.12): binary and unary operators,
+ * indexing, comparison, `&` and `|` on types of the program, next to the built-in overloads
+ * of the same operators; `+=` on a type of the program is `x = x + y` through its `+`.
+ */
+module basic
+
+type Mask = { bits: int }
+type Vec = { x: float, y: float }
+
+func operator &(a: Mask, b: Mask): Mask { return { bits: a.bits * b.bits } }
+func operator |(a: Mask, b: Mask): Mask { return { bits: a.bits + b.bits } }
+func operator !(m: Mask): Mask { return { bits: 1 - m.bits } }
+func operator +(a: Vec, b: Vec): Vec { return { x: a.x + b.x, y: a.y + b.y } }
+func operator -(a: Vec, b: Vec): Vec { return { x: a.x - b.x, y: a.y - b.y } }
+func operator -(a: Vec): Vec { return { x: 0.0 - a.x, y: 0.0 - a.y } }
+func operator *(k: float, v: Vec): Vec { return { x: k * v.x, y: k * v.y } }
+func operator [](v: Vec, i: int): float { return if i == 0 then v.x else v.y }
+func operator <(a: Vec, b: Vec): bool { return a.x < b.x }
+
+func main(): int sync {
+    let m: Mask = { bits: 1 }
+    let n: Mask = { bits: 0 }
+    println((m & n).bits, (m | n).bits, (!n).bits)
+    let v: Vec = { x: 1.0, y: 2.0 }
+    let w: Vec = { x: 3.0, y: 5.0 }
+    let s = v + w
+    println(s.x, s.y, (w - v).x, (-v).y, (2.0 * v).y, v[1], v < w, w < v)
+    println(1 + 2, 'a' + 'b', 3 - 1, -4, true & false, 2.5 * 2.0)
+    var acc: Vec = { x: 0.0, y: 0.0 }
+    acc += v
+    acc += w
+    var mask: Mask = { bits: 2 }
+    mask &= m
+    mask |= m
+    println(acc.x, acc.y, mask.bits)
+    return 0
+}

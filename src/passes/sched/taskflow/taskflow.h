@@ -711,8 +711,6 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
 
     void mark_map_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
-    void mark_apply_arr(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     void mark_filter_arr(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame *frame);
     void mark_reduce_arr(

@@ -1,0 +1,22 @@
+/// Tail calls do not make the stack grow (design principles 2.12): ten million steps of a
+/// self tail call (it overflowed the native stack, docs/design/cpp-memory appendix B D8), and a
+/// pair of functions that call each other in tail position, a million steps.
+module tail_calls
+
+func count(i: int, acc: int): int {
+    return if i == 0 then acc else count(i - 1, acc + i % 7)
+}
+
+func even(n: int): bool {
+    return if n == 0 then true else odd(n - 1)
+}
+
+func odd(n: int): bool {
+    return if n == 0 then false else even(n - 1)
+}
+
+func main(): int sync {
+    println(count(10000000, 0))
+    println(even(1000000), odd(1000001), even(7))
+    return 0
+}

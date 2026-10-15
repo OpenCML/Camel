@@ -552,9 +552,6 @@ void FastVMSchedPass::evalMarkedOperator(
     case MarkOpCode::MapArr:
         evalMarkedOperator_map_arr(self, nargs, wargs, currFrame);
         break;
-    case MarkOpCode::ApplyArr:
-        evalMarkedOperator_apply_arr(self, nargs, wargs, currFrame);
-        break;
     case MarkOpCode::FilterArr:
         evalMarkedOperator_filter_arr(self, nargs, wargs, currFrame);
         break;
@@ -592,27 +589,6 @@ void FastVMSchedPass::evalMarkedOperator_map_arr(
         slot_t result = callElement(site, frame);
         currFrame.get<Array *>(self)->set<slot_t>(i, result, resultType);
     }
-}
-
-void FastVMSchedPass::evalMarkedOperator_apply_arr(
-    data_idx_t self, data_arr_t nargs, data_arr_t wargs, Frame &currFrame) {
-    const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
-    auto *arrType        = currFrame.typeAt<ArrayType>(nargs[0]);
-
-    for (size_t i = 0; i < arrSize; ++i) {
-        Array *arr                     = currFrame.get<Array *>(nargs[0]);
-        Function *func                 = currFrame.get<Function *>(wargs[0]);
-        const HigherOrderCallSite site = higherOrderCallSite(func);
-        slot_t element                 = arr->data()[i];
-        requireNestedCallRoom(&currFrame);
-        Frame *frame                   = framePool_.acquire(site.runtimeGraph);
-        populateMarkedCallFrame(frame, func, std::span<const slot_t>(&element, 1));
-
-        slot_t result = callElement(site, frame);
-        currFrame.get<Array *>(nargs[0])->set<slot_t>(i, result, arrType);
-    }
-
-    currFrame.set(self, currFrame.get<Array *>(nargs[0]));
 }
 
 void FastVMSchedPass::evalMarkedOperator_filter_arr(

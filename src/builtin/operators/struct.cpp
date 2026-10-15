@@ -191,25 +191,43 @@ slot_t __concat_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
+namespace {
+// A new array holding the elements of `arr` and room for `extra` more. The operators below
+// return new arrays and leave their argument as it was (design principles 2.12): an array
+// that a program still refers to never changes. The room makes the appends that follow
+// cheap; it is not visible, only `size()` elements exist.
+Array *copyWithRoom(const Array *arr, size_t extra, const ArrayType *arrType) {
+    const size_t n = arr->size();
+    Array *res     = Array::create(mm::autoSpace(), 0);
+    res->reserve(n + extra, arrType);
+    for (size_t i = 0; i < n; ++i) {
+        res->append(arr->get<slot_t>(i), arrType);
+    }
+    return res;
+}
+} // namespace
+
+// `xs->append<v>`: a new array, the elements of xs and then v. xs is unchanged.
 slot_t __append_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr  = norm.get<Array *>(0);
-    slot_t elem = with.get<slot_t>(0);
-    arr->append(elem, tt::as_ptr<ArrayType>(norm.type(0)));
-    return rtdata::toSlot(arr);
+    const Array *arr  = norm.get<Array *>(0);
+    const slot_t elem = with.get<slot_t>(0);
+    auto *arrType     = tt::as_ptr<ArrayType>(norm.type(0));
+    Array *res        = copyWithRoom(arr, 1, arrType);
+    res->append(elem, arrType);
+    return rtdata::toSlot(res);
 }
 
+// `xs->extend<ys>`: a new array, the elements of xs and then those of ys. xs is unchanged.
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    Array *more   = with.get<Array *>(0);
-    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-
-    size_t n1 = arr->size(), n2 = more->size();
-    arr->reserve(n1 + n2, arrType);
-
-    for (size_t i = 0; i < n2; ++i)
-        arr->append(more->get<slot_t>(i), arrType);
-
-    return rtdata::toSlot(arr);
+    const Array *arr  = norm.get<Array *>(0);
+    const Array *more = with.get<Array *>(0);
+    auto *arrType     = tt::as_ptr<ArrayType>(norm.type(0));
+    const size_t n2   = more->size();
+    Array *res        = copyWithRoom(arr, n2, arrType);
+    for (size_t i = 0; i < n2; ++i) {
+        res->append(more->get<slot_t>(i), arrType);
+    }
+    return rtdata::toSlot(res);
 }
 
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {

@@ -128,6 +128,8 @@ func main(): int sync {
 
 ## 6.7 其他运算符
 
+下面各节的运算符（`&&`、`||`、`as` 除外）都是函数的调用：`a + b` 是 `__add__(a, b)`，表里列的是内建的重载。程序可以为自己的类型添加重载（`func operator +`，[7.4.5](07_statements.md#745-运算符重载)）；它与内建的、C++ 模块的重载合成一组，按操作数的类型选择。
+
 ### 6.7.1 算术
 
 | 运算符 | 类型 | 说明 |
@@ -409,7 +411,7 @@ func main(): int sync {
 
 - lambda 捕获外层的变量，捕获是引用：外层的 `var` 被修改后 lambda 看到新值，lambda 对它的写入外层也看到。
 - 只有一个签名、且签名不随实参变化的库算子与用户函数一样是函数值：`xs->map<trim>`、`let t = trim`。
-- 代表一组重载（几个同名的用户函数，或有几个签名的算子，如 `abs`）的名字，在被调用者只有一个签名、且那个形参是函数类型的位置上，取签名与之完全相同的那一个：`func on_int(f: (x: int) => int, v: int)` 的调用 `on_int(abs, -3)`。其他位置上它没有单一的函数值，把它当值用是 `SemanticDiag::FunctionNameAsValue`，诊断列出各个签名；写一个写明形参类型的 lambda。签名随实参变化的算子（`println`、`len`、`map`）以及原地修改实参的算子（`append`）同样没有函数值。泛型函数的名字同理（`SemanticDiag::GenericFunctionAsValue`）。
+- 代表一组重载（几个同名的用户函数，或有几个签名的算子，如 `abs`）的名字，在被调用者只有一个签名、且那个形参是函数类型的位置上，取签名与之完全相同的那一个：`func on_int(f: (x: int) => int, v: int)` 的调用 `on_int(abs, -3)`。其他位置上它没有单一的函数值，把它当值用是 `SemanticDiag::FunctionNameAsValue`，诊断列出各个签名；写一个写明形参类型的 lambda。签名随实参变化的算子（`println`、`len`、`map`、`append`）同样没有函数值。泛型函数的名字同理（`SemanticDiag::GenericFunctionAsValue`）。
 - 把这样的名字交给内建的高阶算子时（`xs->map<abs>`、`xs->reduce<max, 0>`、`xs->filter<is_even>`），算子说不出它期望哪个函数，编译器就逐个去问：恰好有一个被算子接受时取它；一个都不接受或有几个都接受时，名字没有值（`SemanticDiag::FunctionNameAsValue`，诊断列出候选）。
 - 带函数类型的声明 `let f: (x: int) => int = inc` 目前不可用（`SemanticDiag::FeatureNotSupported`）；省略类型即可。
 
@@ -490,7 +492,7 @@ DivisionByZero at main.cml:1:38
   | `&=`、`\|=` | `bool`（`a = a & b`、`a = a \| b`：右侧总是求值） |
   | `@=` | 内建类型都没有 |
 
-- **复合赋值不原地修改。** `x op= e` 是算出新值再让 `x` 重新绑定到它。模块定义的类型（如张量）没有自己的复合赋值算子，对它们 `t += u` 就是 `t = t + u`（`-=`、`*=`、`/=`、`%=`、`@=`、`^=` 同理，只要对应的二元运算符对这些类型有定义）：`let a = t` 之后再写 `t += u`，`a` 不变。要原地修改用显式的算子。
+- **复合赋值不原地修改。** `x op= e` 是算出新值再让 `x` 重新绑定到它。模块定义的类型（如张量）以及程序重载了运算符的类型（[7.4.5](07_statements.md#745-运算符重载)）没有自己的复合赋值算子，对它们 `t += u` 就是 `t = t + u`（`-=`、`*=`、`/=`、`%=`、`@=`、`^=`、`&=`、`|=` 同理，只要对应的二元运算符对这些类型有定义）：`let a = t` 之后再写 `t += u`，`a` 不变。要原地修改用显式的算子。
 
 - `wait e` 见 [4.4](04_execution_model.md#44-var引用与-wait)。
 

@@ -857,6 +857,6 @@ bash $T/poll_demo.sh
 
 | 编号 | 观察 | 出处 |
 |---|---|---|
-| O1 | `append` 要求 `var` 实参并原地修改数组（`<value: T> (var arr: T[]) => T[]`），把 `let` 数组传给它是 `ImmutablePassedToVarParam`；设计原则 2.9 写的是"`append` 一类的操作返回新值，不原地修改" | 【实测 `camel $E/defects/o01_append_needs_var.cml`】【读码 `globals.cpp:1382-1388`、`struct.cpp:194-199`】。请负责人裁定以哪边为准（Q3） |
+| O1 | `append` 要求 `var` 实参并原地修改数组（`<value: T> (var arr: T[]) => T[]`），把 `let` 数组传给它是 `ImmutablePassedToVarParam`；设计原则 2.9 写的是"`append` 一类的操作返回新值，不原地修改" | 【实测 `camel $E/defects/o01_append_needs_var.cml`】【读码 `globals.cpp:1382-1388`、`struct.cpp:194-199`】。请负责人裁定以哪边为准（Q3）。**已由设计原则 2.12 裁定：`append` 返回新数组，不修改原数组；本例现在编译并输出 10。** |
 | O2 | `test/plans/feat/trans/cpp.plan.toml` 的 4 个用例都不编译、不运行生成的 C++；`exec_mod_scalar` 的说明与它实际做的不符 | 【读码 该文件】 |
 | O3 | 分代回收器下，一个从不到达安全点的程序把出生区填满后，每次分配都退到年老区：比默认回收器慢 3–6 倍、占两倍内存（2.2）。这是回收器对"无安全点的客户"的行为，今天只有 `std::cpp` 生成的程序会碰到 | 【实测 `tools/measure_all.sh memory`】 |

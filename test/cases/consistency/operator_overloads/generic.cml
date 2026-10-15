@@ -1,0 +1,14 @@
+/**
+ * Generic operator overloads (`typeas` in a parameter's type) next to plain ones: each call
+ * takes the one overload that accepts its operands.
+ */
+module generic
+
+func operator +(a: (typeas T)[], b: T): T[] { return a->append<b> }
+func operator +(a: (typeas T, T), b: T): (T, T) { return (a.1, b) }
+func operator +(a: int[], b: int[]): int[] { return concat(a, b) }
+
+func main(): int sync {
+    println([1, 2] + 3, ['x'] + 'y', (1, 2) + 9, ('p', 'q') + 'r', [1] + [2, 3])
+    return 0
+}

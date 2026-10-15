@@ -249,6 +249,8 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         return wrap(f"{post(n.c[0])}->slice<{arg(n.c[1])}, {arg(n.c[2])}>")
     if k == "contains":
         return wrap(f"{post(n.c[0])}->contains<{arg(n.c[1])}>")
+    if k == "append":
+        return wrap(f"{post(n.c[0])}->append<{arg(n.c[1])}>")
     if k == "join":
         return wrap(f"{post(n.c[0])}->join<{str_lit(n.a['sep'])}>")
     if k in ("zip", "range", "concat"):
@@ -517,7 +519,10 @@ class Evaluator:
     def run(self) -> list:
         g = Env()
         for f in prog_funcs(self.prog):
-            g.d[f.a["name"]] = Closure(f.a["params"], f.c[0], g, f.a["name"], f.a.get("with"))
+            # An operator overload is found by its symbol and arity (`operator -/1`), not by
+            # the name it is declared with (`operator -`), which two overloads may share.
+            key = f.a.get("key", f.a["name"])
+            g.d[key] = Closure(f.a["params"], f.c[0], g, f.a["name"], f.a.get("with"))
         # The top-level values are pure and each uses only the ones made before it: evaluated
         # in that order, before main (design principles 2.11), whatever order they are written in.
         for v in prog_globals(self.prog):
@@ -655,10 +660,18 @@ class Evaluator:
             v = self.ev(n.c[1] if n.c[0].k == "null" else n.c[0], env)
             return (v is None) == (op == "==")
         a, b = self.ev(n.c[0], env), self.ev(n.c[1], env)
+        if isinstance(a, dict) or isinstance(b, dict):
+            return self.overload(env, op, [a, b])
         return binop(op, a, b)
+
+    def overload(self, env, symbol, args):
+        """An operator on a struct: the program's overload of it (design principles 2.12)."""
+        return self.call(env.get(f"operator {symbol}/{len(args)}"), args)
 
     def e_un(self, n, env):
         a = self.ev(n.c[0], env)
+        if isinstance(a, dict):
+            return self.overload(env, n.a["op"], [a])
         if n.a["op"] == "!":
             return not a
         if isinstance(a, float):
@@ -710,6 +723,8 @@ class Evaluator:
 
     def e_idx(self, n, env):
         a, i = self.ev(n.c[0], env), self.ev(n.c[1], env)
+        if isinstance(a, dict):
+            return self.overload(env, "[]", [a, i])
         if not 0 <= i < len(a):
             raise Reject("index out of range")
         return a[i]
@@ -762,6 +777,13 @@ class Evaluator:
         if not 0 <= i <= j <= len(a):
             raise Reject("slice out of range")
         return a[i:j]
+
+    def e_append(self, n, env):
+        # A new array: the one appended to is unchanged (design principles 2.12).
+        r = self.ev(n.c[0], env) + [self.ev(n.c[1], env)]
+        if len(r) > MAX_ARR:
+            raise Reject("array too long")
+        return r
 
     def e_contains(self, n, env):
         a, v = self.ev(n.c[0], env), self.ev(n.c[1], env)

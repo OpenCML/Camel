@@ -232,7 +232,7 @@
 
 ### 效应追踪（`CAMEL_EFFECT_TRACE`）
 
-设置环境变量 `CAMEL_EFFECT_TRACE=<file>` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`、原地数组算子……）。创建和读取 `var` 变量（`:var/new`、`:var/get`）是仅状态的，不产生事件；向变量存入值（`:op/assn*`）则产生事件：
+设置环境变量 `CAMEL_EFFECT_TRACE=<file>` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。创建和读取 `var` 变量（`:var/new`、`:var/get`）是仅状态的，不产生事件；向变量存入值（`:op/assn*`）则产生事件：
 
 ```json
 {"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...","payload":"string=hello|||"}
@@ -351,10 +351,9 @@ Camel CLI（`camel`）负责运行、检查和查看。格式化由单独的工�
   - `-q`, `--quote-prefer <single|double>`  
   - `-m`, `--max-width <N>`（默认 80）
 
-- **camel-cpp**：一步把 `.cml` 转译为 C++ 并编译。产物输出到 `tmp/`。
-  - 用法：`camel-cpp <file.cml>`
-  - 等价于：`camel <file.cml> std::cpp`，输出写入 `tmp/<stem>.cpp`，然后用 clang++ 编译，生成 `tmp/<stem>.exe` 和 `tmp/libcamel.dll`。
-  - 构建位置：`build/tools/camel-cpp/Release/camel-cpp.exe`（Windows；为便于移动，libcamel.dll 会一并复制到旁边）。
+- **camel-cpp**：一步把 `.cml` 转译为 C++ 并编译成可执行文件。
+  - 用法：`camel-cpp <file.cml> [-o <可执行文件>] [std::cpp 之前的遍…]`
+  - 等价于：`camel <file.cml> std::cpp > <名字>.cpp`，再用 `$CXX`（默认 `c++`，Windows 上 `clang++`）以 `-std=c++20 -O2 -ffp-contract=off -I$CAMEL_HOME/include` 编译。生成的程序不依赖 Camel 运行时；用到没有独立译法的模块算子时自动链接 `libcamel`。详见 [cpp_export_build.md](cpp_export_build.md)。
 
 其他工具：`camel-codegen`、`camel-pr`（性能分析器）、`camel-db`（调试器）、`camel-ls`（语言服务器）。全部构建在 `build/tools/` 下，与 `camel` 一起安装到 `out/latest/bin/`。
 
@@ -378,8 +377,8 @@ camel --input test/cases/perf/fib_recursive.cml --timeit std::jit/10
 # 以 JSON 输出 timeit 的汇总
 camel --input test/cases/perf/fib_recursive.cml --timeit std::jit/10 --output-format json
 
-# 转译为 C++ 并编译（一步完成，输出到 tmp/）
-camel-cpp test/cases/linear/nvm/fib.cml
+# 转译为 C++ 并编成可执行文件（一步完成）
+camel-cpp test/cases/linear/nvm/fib.cml -o fib
 
 # 格式化代码（用 camel-format，不是 camel format）
 camel-format -i src/xxx.cml

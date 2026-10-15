@@ -68,6 +68,7 @@ enum class RuntimeDiag : uint32_t {
     // Warnings (severity bits = Warn).
     PassesNeverRun = 0x10000F,
     ConstantExpressionFaults = 0x100015,
+    TranslationLinksRuntime  = 0x100016,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

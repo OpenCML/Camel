@@ -333,8 +333,11 @@ func main(): int {
 实参节点，复制的都只是指针，所以各调度器、各遍之后观察到的是同一个对象，不需要回写，也不要求被调帧存活。
 函数类型仍记录源码签名（参数类型 `T` 与 `var` 标记）；重载决议按值类型进行（`valueTypeOf`）。
 
-- 赋值之外带 `var` 形参的算子（`append`、`extend`、`apply`、`algo::sort` 等）原地修改对象、不重新绑定，
-  它们收到的仍是对象本身（`:var/get` 的结果），实现与 ABI 不变；该调用仍记为对这个变量的一次写入。
+- 赋值之外不再有带 `var` 形参的内建或标准库算子：`append`、`extend`、`apply`、`algo::sort` 等返回新值，
+  不修改实参（设计原则 2.12）。写成语句的 `acc = acc->append<v>` 由图构建器写成 `:op/assn_append`
+  （`__assn_append__`，与 `:op/assn` 同族：`acc` 的单元作为 `var` 实参，记为对它的一次写入）；单元记录
+  它持有的数组是否只被它引用，是时原地追加，否则复制（`src/builtin/operators/ops.cpp`）。模块的算子仍可以
+  声明 `var` 形参：它们收到的是对象本身（`:var/get` 的结果），该调用记为对这个变量的一次写入。
 - `:var/new`、`:var/get`、`:op/assn*` 都不是纯算子：折叠、CSE、特化不会越过它们；CSE 也不合并以
   `:var/get` 的结果为输入的相同表达式（两次求值之间对象可能被原地修改）。`isWrittenInPlace`
   （`include/camel/runtime/draft_writes.h`）仍用于识别传给 `var` 形参的节点。

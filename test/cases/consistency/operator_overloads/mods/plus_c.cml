@@ -1,0 +1,5 @@
+module plus_c
+import { V } from base
+import plus_a
+// The same parameters as the overload of plus_a, which every import of plus_a brings.
+export func operator +(a: V, b: V): V { return a }

@@ -1627,10 +1627,8 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     case oper::Isolate:
         return executeIsolateNode(graph, nodeRef, frame);
     case oper::MapArr:
+    case oper::ApplyArr: // `apply` returns a new array like `map` (design principles 2.12)
         mark_map_arr(graph, nodeRef, frame);
-        break;
-    case oper::ApplyArr:
-        mark_apply_arr(graph, nodeRef, frame);
         break;
     case oper::FilterArr:
         mark_filter_arr(graph, nodeRef, frame);
@@ -2106,10 +2104,8 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         const auto *body = graph->nodeBodyAs<GCOperBody>(nodeRef);
         switch (body->oper) {
         case oper::MapArr:
-            mark_map_arr(graph, nodeRef, frame);
-            break;
         case oper::ApplyArr:
-            mark_apply_arr(graph, nodeRef, frame);
+            mark_map_arr(graph, nodeRef, frame);
             break;
         case oper::FilterArr:
             mark_filter_arr(graph, nodeRef, frame);
@@ -2653,54 +2649,6 @@ void TaskflowExecSchedPass::mark_map_arr(GCGraph *graph, gc_node_ref_t nodeRef, 
             [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
             [&](slot_t value) { arrayAt(frame, resIdx)->set<slot_t>(i, value, resultType); });
     });
-}
-
-void TaskflowExecSchedPass::mark_apply_arr(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
-    TaskflowGcRegion region;
-    const ElementCallSite site{
-        graph,
-        nodeRef,
-        region.thread().callDepth,
-        region.thread().faultDomain};
-    region.enter();
-    const auto arrIdx  = dataIndexOf(graph, graph->normInputsOf(nodeRef).front());
-    const auto funcIdx = dataIndexOf(graph, graph->withInputsOf(nodeRef).front());
-    GCGraph *target    = makeHigherOrderCallSite(frame->get<Function *>(funcIdx)).runtimeGraph;
-    GraphPlan *plan    = planFor(target);
-    const size_t n     = arrayAt(frame, arrIdx)->size();
-    auto *arrType      = frame->typeAt<ArrayType>(arrIdx);
-    // Every element is computed from the array as it was; the results wait in a rooted
-    // scratch array and are written back together.
-    camel::core::mm::RootHandle resultsRoot(camel::core::mm::autoSpace(), "Taskflow.apply.results");
-    {
-        Array *results = Array::create(camel::core::mm::autoSpace(), n);
-        for (size_t i = 0; i < n; ++i) {
-            results->set<slot_t>(i, NullSlot);
-        }
-        resultsRoot.reset(results, arrType);
-    }
-    region.leave();
-
-    runElements(site, plan, n, [&](TaskflowGcRegion &elementRegion, size_t i) {
-        callClosure(
-            elementRegion,
-            site,
-            target,
-            plan,
-            frame,
-            funcIdx,
-            1,
-            [&](std::span<slot_t> args) { args[0] = arrayAt(frame, arrIdx)->get<slot_t>(i); },
-            [&](slot_t value) { resultsRoot.getAs<Array>()->set<slot_t>(i, value, arrType); });
-    });
-
-    region.enter();
-    Array *arr     = arrayAt(frame, arrIdx);
-    Array *results = resultsRoot.getAs<Array>();
-    for (size_t i = 0; i < n; ++i) {
-        arr->set<slot_t>(i, results->get<slot_t>(i), arrType);
-    }
-    frame->set(dataIndexOf(graph, nodeRef), arr);
 }
 
 void TaskflowExecSchedPass::mark_filter_arr(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {

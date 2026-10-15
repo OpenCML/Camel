@@ -8,9 +8,7 @@ import { seed, shuffle } from random
 import { sort } from algo
 
 func sort_block(arr: int[], lo: int, hi: int): int[] {
-    var chunk = arr->slice<lo, hi>
-    wait sort(chunk)
-    return chunk
+    return sort(arr->slice<lo, hi>)
 }
 
 func main(): int sync {

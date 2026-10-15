@@ -128,6 +128,8 @@ func main(): int sync {
 
 ## 6.7 Other operators
 
+The operators of the following sections (except `&&`, `||` and `as`) are calls of functions: `a + b` is `__add__(a, b)`, and the tables list the built-in overloads. A program can add overloads for its own types (`func operator +`, [7.4.5](07_statements.md#745-operator-overloading)); they form one set with the built-in overloads and those of C++ modules, and the types of the operands choose among them.
+
 ### 6.7.1 Arithmetic
 
 | Operator | Types | Notes |
@@ -409,7 +411,7 @@ func main(): int sync {
 
 - A lambda captures variables of the enclosing scope, and a capture is a reference: after an outer `var` is modified the lambda sees the new value, and the outer scope also sees the lambda's writes to it.
 - A library operator with one signature that does not vary with its arguments is a function value like a user function: `xs->map<trim>`, `let t = trim`.
-- A name that stands for a group of overloads (several user functions of one name, or an operator with several signatures such as `abs`) is, where the callee has one signature and its parameter there is a function type, the one whose signature is exactly that type: the call `on_int(abs, -3)` of `func on_int(f: (x: int) => int, v: int)`. Anywhere else it has no single function value, and using it as a value is `SemanticDiag::FunctionNameAsValue`, which lists the signatures; write a lambda that spells out the parameter types. An operator whose signature varies with its arguments (`println`, `len`, `map`) or that changes an argument in place (`append`) has no function value either. The same goes for the name of a generic function (`SemanticDiag::GenericFunctionAsValue`).
+- A name that stands for a group of overloads (several user functions of one name, or an operator with several signatures such as `abs`) is, where the callee has one signature and its parameter there is a function type, the one whose signature is exactly that type: the call `on_int(abs, -3)` of `func on_int(f: (x: int) => int, v: int)`. Anywhere else it has no single function value, and using it as a value is `SemanticDiag::FunctionNameAsValue`, which lists the signatures; write a lambda that spells out the parameter types. An operator whose signature varies with its arguments (`println`, `len`, `map`, `append`) has no function value either. The same goes for the name of a generic function (`SemanticDiag::GenericFunctionAsValue`).
 - When such a name is handed to a built-in higher-order operator (`xs->map<abs>`, `xs->reduce<max, 0>`, `xs->filter<is_even>`), the operator cannot say which function it expects, so the compiler asks it about each: when exactly one is accepted, that one is meant; when none or several are, the name has no value (`SemanticDiag::FunctionNameAsValue`, which lists the candidates).
 - A declaration with a function type, `let f: (x: int) => int = inc`, is currently unavailable (`SemanticDiag::FeatureNotSupported`); just omit the type.
 
@@ -456,7 +458,7 @@ If the element function of `foreach` is to produce side effects, its body must b
   | `&=`, `\|=` | `bool` (`a = a & b`, `a = a \| b`: the right side is always evaluated) |
   | `@=` | None of the built-in types |
 
-- **A compound assignment changes nothing in place.** `x op= e` computes the new value and binds `x` to it. A type defined by a module (a tensor) has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, wherever the binary operator is defined for the types): after `let a = t`, `t += u` leaves `a` unchanged. To change a value in place, use an explicit operator.
+- **A compound assignment changes nothing in place.** `x op= e` computes the new value and binds `x` to it. A type defined by a module (a tensor), and a type for which the program overloads an operator ([7.4.5](07_statements.md#745-operator-overloading)), has no compound-assignment operators of its own, so for it `t += u` is `t = t + u` (likewise `-=`, `*=`, `/=`, `%=`, `@=`, `^=`, `&=`, `|=`, wherever the binary operator is defined for the types): after `let a = t`, `t += u` leaves `a` unchanged. To change a value in place, use an explicit operator.
 
 - For `wait e` see [4.4](04_execution_model.md#44-var-references-and-wait).
 

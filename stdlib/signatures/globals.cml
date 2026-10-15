@@ -231,19 +231,21 @@ inner func zip(xs: T[], ys: U[]): (T, U)[] {
     return ':struct/zip'
 }
 
-/// Adds value at the end of the variable xs, in place, and returns it.
-/// @effect changes its argument
-/// @example append<4>(xs)
+/// A new array: the elements of xs, then value. xs is unchanged; to add to a variable, bind it
+/// to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place
+/// when nothing else refers to it, which cannot be observed).
+/// @pure
+/// @example [1, 2, 3]->append<4>    // [1, 2, 3, 4]
 with <value: T>
-inner func append(var xs: T[]): T[] {
+inner func append(xs: T[]): T[] {
     return ':struct/append_arr'
 }
 
-/// Adds the elements of other at the end of the variable xs, in place, and returns it.
-/// @effect changes its argument
-/// @example extend<[4, 5]>(xs)
+/// A new array: the elements of xs, then those of other. xs is unchanged.
+/// @pure
+/// @example [1, 2, 3]->extend<[4, 5]>    // [1, 2, 3, 4, 5]
 with <other: T[]>
-inner func extend(var xs: T[]): T[] {
+inner func extend(xs: T[]): T[] {
     return ':struct/extend_arr'
 }
 
@@ -286,11 +288,12 @@ inner func foreach(xs: T[]): void {
     return ':mark/foreach_arr'
 }
 
-/// Replaces every element of the variable xs by f of it, in place.
-/// @effect changes its argument
-/// @example apply<(x: int) => x * 2>(xs)
+/// A new array: f of every element of xs, which is unchanged; `map` where f keeps the element
+/// type. The calls have no order among them, as for `map`.
+/// @effect what f does
+/// @example [1, 2, 3]->apply<(x: int) => x * 2>    // [2, 4, 6]
 with <f: (item: T) => T>
-inner func apply(var xs: T[]): T[] {
+inner func apply(xs: T[]): T[] {
     return ':mark/apply_arr'
 }
 

@@ -29,6 +29,10 @@
  * of std::tf is created through this class (cmake/TaskflowWorkerStack.cmake puts it in place of
  * std::thread in Taskflow's worker), so that it has kWorkerStackBytes at least on all three:
  * the process's stack limit (Unix) or the executable's stack size (Windows) where that is larger.
+ *
+ * A thread can also be given its size: the programs std::cpp writes run their `main` on one
+ * whose stack has room for the recursion limit (camel/standalone/core.h). Those programs
+ * include this header, so it uses the standard library and the platform's thread API only.
  */
 
 #pragma once
@@ -46,6 +50,9 @@
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #else
 #include <pthread.h>
@@ -62,9 +69,13 @@ class BigStackThread {
   public:
     BigStackThread() noexcept = default;
 
-    template <typename F> explicit BigStackThread(F &&body) {
+    template <typename F>
+    explicit BigStackThread(F &&body) : BigStackThread(stackBytes(), std::forward<F>(body)) {}
+
+    /// A thread whose stack is `bytes` (a size the platform refuses leaves its default).
+    template <typename F> BigStackThread(std::size_t bytes, F &&body) {
         auto owned = std::make_unique<std::function<void()>>(std::forward<F>(body));
-        start(owned.get());
+        start(owned.get(), bytes);
         (void)owned.release(); // the thread owns it now
     }
 
@@ -148,11 +159,11 @@ class BigStackThread {
         return 0;
     }
 
-    void start(std::function<void()> *body) {
+    void start(std::function<void()> *body, std::size_t bytes) {
         // The size is the reservation: pages are committed as the stack grows.
         const uintptr_t handle = _beginthreadex(
             nullptr,
-            static_cast<unsigned>(stackBytes()),
+            static_cast<unsigned>(bytes),
             &BigStackThread::entry,
             body,
             STACK_SIZE_PARAM_IS_A_RESERVATION,
@@ -173,12 +184,12 @@ class BigStackThread {
         return nullptr;
     }
 
-    void start(std::function<void()> *body) {
+    void start(std::function<void()> *body, std::size_t bytes) {
         pthread_attr_t attr;
         int error = pthread_attr_init(&attr);
         if (error == 0) {
             // A size the platform refuses leaves the default in place.
-            (void)pthread_attr_setstacksize(&attr, stackBytes());
+            (void)pthread_attr_setstacksize(&attr, bytes);
             error = pthread_create(&handle_, &attr, &BigStackThread::entry, body);
             pthread_attr_destroy(&attr);
         }

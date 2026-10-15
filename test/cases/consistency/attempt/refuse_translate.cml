@@ -1,7 +1,7 @@
 /**
- * A pure program whose `main` computes through a fault boundary. A translation pass has no
- * counterpart for the boundary (C++ and ONNX have no value that "may have failed" in this
- * sense), so std::cpp and onnx::export refuse the graph with a diagnostic at the `attempt`.
+ * A pure program whose `main` computes through a fault boundary. ONNX has no counterpart for
+ * the boundary (no value that "may have failed" in this sense), so onnx::export refuses the
+ * graph with a diagnostic at the `attempt`; std::cpp translates it (a C++ try around the call).
  */
 module refuse_translate
 

@@ -102,10 +102,11 @@ construction: no type class has a mutator except `OpenFunctionType::setExitType`
 never holds an open signature. `CAMEL_TYPE_STATS=1` prints what a program allocated per kind
 of type and how many constructions the table answered.
 
-What still grows with commits is the frame layout of a graph a rewrite changed: its slot types
-differ, so the layout is a new tuple type each time the graph is re-encoded differently. The
-frozen-block layout (graph model step 3) replaces the layout object by a `TypeId` array in the
-graph block, freed with the graph.
+A graph's frame layout is not a type in the table at all: it is built at the end of the
+graph's own block in the graph space (`TupleType::constructFrameLayout`) and freed with the
+graph, so a graph a rewrite changes, whose slot types differ, leaves nothing behind in the
+permanent space. (Before graph model step 3 it was an interned tuple type: one new permanent
+object per changed graph per commit.) Static-area layouts are still interned.
 
 `CAMEL_SPACE_SEGMENT_KB=<kilobytes>` sets the first segment of all three spaces. It is a test
 control: with 64 KB a program of a few hundred functions makes every space grow several times,

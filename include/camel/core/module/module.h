@@ -228,6 +228,22 @@ class Module : public std::enable_shared_from_this<Module> {
     /// with (`using namespace lib::Tools` after `import lib`).
     bool hasImportedPrefix(const Reference &prefix) const;
 
+    /// One overload set of an operator that this module imported: the module that exports it
+    /// (null for the operator groups of the built-in module and of the modules of operators,
+    /// merged into one) and the entity (that group, the functions of a module written in
+    /// Camel, or one of its generic functions).
+    struct ImportedOperatorOverloads {
+        std::shared_ptr<Module> mod;
+        Reference remoteRef;
+        entity overloads;
+    };
+    /// Every overload of the operator function `group` (`__add__`) this module imported
+    /// (design principles 2.12: the overloads of an operator from every layer are one set):
+    /// first the operator groups, merged; then what each module written in Camel that this
+    /// one imports, in any form, exports under `group` or `group#k` (a generic overload),
+    /// ordered by module name, then by name.
+    std::vector<ImportedOperatorOverloads> importedOperatorOverloads(const std::string &group) const;
+
     std::optional<Type *> getExportedType(const Reference &ref) const;
     std::optional<entity> getExportedEntity(const Reference &ref) const;
 

@@ -379,24 +379,26 @@ Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
 #### `append`
 
 ```camel
-append: <value: T> (var xs: T[]) => T[]
+append: <value: T> (xs: T[]) => T[]
 ```
 
-Adds value at the end of the variable xs, in place, and returns it.
+A new array: the elements of xs, then value. xs is unchanged; to add to a variable, bind it
+to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place
+when nothing else refers to it, which cannot be observed).
 
-- With effects: changes its argument.
-- Example: `append<4>(xs)`
+- Pure.
+- Example: `[1, 2, 3]->append<4>` gives `[1, 2, 3, 4]`
 
 #### `extend`
 
 ```camel
-extend: <other: T[]> (var xs: T[]) => T[]
+extend: <other: T[]> (xs: T[]) => T[]
 ```
 
-Adds the elements of other at the end of the variable xs, in place, and returns it.
+A new array: the elements of xs, then those of other. xs is unchanged.
 
-- With effects: changes its argument.
-- Example: `extend<[4, 5]>(xs)`
+- Pure.
+- Example: `[1, 2, 3]->extend<[4, 5]>` gives `[1, 2, 3, 4, 5]`
 
 ### Higher-order functions
 
@@ -452,13 +454,14 @@ Calls f for every element, in order.
 #### `apply`
 
 ```camel
-apply: <f: (item: T) => T> (var xs: T[]) => T[]
+apply: <f: (item: T) => T> (xs: T[]) => T[]
 ```
 
-Replaces every element of the variable xs by f of it, in place.
+A new array: f of every element of xs, which is unchanged; `map` where f keeps the element
+type. The calls have no order among them, as for `map`.
 
-- With effects: changes its argument.
-- Example: `apply<(x: int) => x * 2>(xs)`
+- With effects: what f does.
+- Example: `[1, 2, 3]->apply<(x: int) => x * 2>` gives `[2, 4, 6]`
 
 ### Fault isolation
 
@@ -1748,9 +1751,11 @@ element is NaN.
 
 ## `algo`: sorting and array primitives
 
-Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Each algorithm
-comes in two forms: `xxx_sorted` returns a new array, `xxx_sort` sorts a `var` array in place.
-To sort anything else, or by a key, use `sort_by` of the `array` module.
+Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
+returns a new array and leaves its argument unchanged (design principles 2.12): `xxx_sort` and
+`xxx_sorted` are the same operation (`xxx_sort` sorted a `var` array in place before; to sort
+a variable, bind it to the result: `xs = sort(xs)`). To sort anything else, or by a key, use
+`sort_by` of the `array` module.
 
 #### `sorted`
 
@@ -1803,50 +1808,50 @@ A sorted copy of xs, by merge sort.
 #### `sort`
 
 ```camel
-sort: (var xs: T[]) => T[]
+sort: (xs: T[]) => T[]
 ```
 
-Sorts xs in place (quicksort) and returns it.
+A sorted copy of xs (quicksort); the same as sorted.
 
-- With effects: changes its argument.
+- Pure.
 - Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `sort(xs)` gives `xs is now sorted`
+- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `insert_sort`
 
 ```camel
-insert_sort: (var xs: T[]) => T[]
+insert_sort: (xs: T[]) => T[]
 ```
 
-Sorts xs in place by insertion sort and returns it.
+A sorted copy of xs, by insertion sort; the same as insert_sorted.
 
-- With effects: changes its argument.
+- Pure.
 - Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `insert_sort(xs)` gives `xs is now sorted`
+- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `quick_sort`
 
 ```camel
-quick_sort: (var xs: T[]) => T[]
+quick_sort: (xs: T[]) => T[]
 ```
 
-Sorts xs in place by quicksort and returns it.
+A sorted copy of xs, by quicksort; the same as quick_sorted.
 
-- With effects: changes its argument.
+- Pure.
 - Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `quick_sort(xs)` gives `xs is now sorted`
+- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sort`
 
 ```camel
-merge_sort: (var xs: T[]) => T[]
+merge_sort: (xs: T[]) => T[]
 ```
 
-Sorts xs in place by merge sort and returns it.
+A sorted copy of xs, by merge sort; the same as merge_sorted.
 
-- With effects: changes its argument.
+- Pure.
 - Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sort(xs)` gives `xs is now sorted`
+- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
 
 #### `merge_sorted_arrays`
 

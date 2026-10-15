@@ -1,7 +1,8 @@
 /**
- * An in-place operator (`sort`) applied to a parameter declared without `var`.
- * Rejected at compile time (docs/design-principles.cn.md 2.5, 2.6: a side effect
- * must be declared, and only a `var` can be changed).
+ * `sort` written as a statement on a parameter. `sort` returns a new array and changes
+ * nothing (docs/design-principles.cn.md 2.12), so the statement does nothing: a compile-time
+ * error (UnusedPureResult). It used to be refused because `sort` changed its argument in place
+ * and `xs` is not declared `var` (2.5, 2.6).
  */
 module param_sorted
 

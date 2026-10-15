@@ -90,8 +90,6 @@ using camel::runtime::GCOperBody;
 using camel::runtime::GraphDraft;
 using camel::runtime::validateRuntimeGraphPayload;
 
-TupleType *ensureRuntimeTupleType(TupleType *type) { return type ? type : TupleType::layout({}); }
-
 bool canEncodeRuntimeStaticSlotType(Type *type) {
     if (type == nullptr || type->code() == TypeCode::Ref) {
         return false;
@@ -394,8 +392,8 @@ class EncodeSession {
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setFuncType(graph->funcType());
         prepared.draft->setCaptureNames(graph->draft().captureNames());
-        prepared.draft->setRuntimeDataType(
-            ensureRuntimeTupleType(graph->draft().runtimeDataType()));
+        // Every compiled graph has a frame layout, one without slots included.
+        prepared.draft->setRuntimeSlotTypes(graph->draft().runtimeSlotTypes());
         prepared.draft->setClosureType(graph->closureType());
 
         const auto sourceStaticSlots = graph->draft().staticSlots();
@@ -620,7 +618,8 @@ class EncodeSession {
                 subPtrs,
                 staticGraphPtrs,
                 prepared.payloadShape,
-                prepared.staticSlots);
+                prepared.staticSlots,
+                prepared.draft->frameSlotTypes());
             try {
                 prepared.memory =
                     camel::core::mm::graphSpace().alloc(prepared.bytes, alignof(GCGraph));
@@ -968,7 +967,7 @@ class EncodeSession {
             prepared.bytes,
             debugRecord,
             prepared.draft->funcType(),
-            prepared.draft->runtimeDataType(),
+            prepared.draft->frameSlotTypes(),
             staticDataType,
             prepared.draft->closureType(),
             runtimeOuterGraph,

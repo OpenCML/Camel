@@ -52,7 +52,7 @@ let c = a + b
 
 最后一行的词各自的状态见 [8.6](08_top_level_and_grammar.md#86-保留但尚未实现的写法)。
 
-形如 `__x__`（前后各两个下划线）的名字是编译器自己用的：运算符就是这样命名的函数（`a + b` 是 `__add__(a, b)`）。变量、形参、函数都不能取这样的名字（`SemanticDiag::ReservedIdentifier`）。
+形如 `__x__`（前后各两个下划线）的名字是编译器自己用的：运算符就是这样命名的函数（`a + b` 是 `__add__(a, b)`）。变量、形参、函数都不能取这样的名字（`SemanticDiag::ReservedIdentifier`）。程序要给自己的类型定义运算符，写 `func operator +(a: V, b: V): V`（[7.4.5](07_statements.md#745-运算符重载)）；`operator` 不是关键字，只有紧跟在 `func` 之后、后面是一个运算符时才是这种写法。
 
 ## 2.5 字面量
 

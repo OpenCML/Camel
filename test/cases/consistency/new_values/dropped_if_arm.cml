@@ -1,0 +1,15 @@
+/**
+ * The arm of an `if` without `else` gives a value nothing takes: `out->append<9>` there is
+ * the error UnusedPureResult (single-expression arm and block arm).
+ */
+module dropped_if_arm
+
+func main(): int sync {
+    var out: int[] = []
+    if len(out) == 0 then out->append<9>
+    if len(out) == 0 then sync {
+        out->append<9>
+    }
+    println(out)
+    return 0
+}

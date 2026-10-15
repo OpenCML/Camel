@@ -28,7 +28,7 @@ func corner(c: int[][][]): int {
 func main(): int sync {
     let g = grid(3)
     var acc: int[][] = []
-    acc->append<g[2]>
+    acc = acc->append<g[2]>
     let lens = g->map<(r: int[]): int => len(r)>
     let head = second_row_head([[1.0, 2.0], [3.0, 4.0]])
     let deep = corner([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])

@@ -783,7 +783,7 @@ size_t cseDraft(GraphDraft &draft) {
     }
 
     // Two identical expressions over an object that is changed in place are not one value: a
-    // write may lie between them (`len(a)`, `arr->append<4>`, `len(a)`). The object may be
+    // write may lie between them (`len(a)`, `a = a->append<4>`, `len(a)`). The object may be
     // passed to the writer under this node, or be the one a variable holds (`:var/get`), which
     // every other reference to the variable reaches. Neither expression is merged, and a
     // result that is itself written keeps its own slot.
@@ -793,7 +793,7 @@ size_t cseDraft(GraphDraft &draft) {
                 const auto *h = draft.header(in);
                 if (isWrittenInPlace(draft, in) ||
                     (h && h->kind == GCNodeKind::Oper &&
-                     operIdOf(draft, in) == camel::core::oper::VarGet)) {
+                     camel::core::oper::isVariableRead(operIdOf(draft, in)))) {
                     return true;
                 }
             }

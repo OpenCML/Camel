@@ -272,6 +272,26 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
 
+        // A read of a variable that leaves its sole-reference mark set; the compiler writes it
+        // in place of a `:var/get` whose value cannot be kept (Builder::markNonRetainingReads).
+        OperatorGroup::create(
+            "__var_peek__",
+            {
+                {
+                    ":var/peek",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {1, {false}}},
+                        "(variable: var T) => T",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (valueTypeOf(norm[0]) == norm[0]) {
+                                return nullopt; // not a variable
+                            }
+                            return valueTypeOf(norm[0]);
+                        }),
+                },
+            }),
+
         // ======= Assignment operators =======
         // `=` takes any type. A compound assignment takes exactly the types listed for it: a
         // combination without an implementation is rejected when the program is compiled.
@@ -332,6 +352,29 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             }
                             return norm[0];
+                        }),
+                },
+            }),
+        // `acc = acc->append<v>` written as a statement: the compiler writes this group for it
+        // (Builder::rebindingAppendOf), no program can name it. The variable is bound to the
+        // new array, which is built in place when only the variable refers to the old one
+        // (__builtin__assn_append__). Its types are those of `append`.
+        OperatorGroup::create(
+            "__assn_append__",
+            {
+                {
+                    ":op/assn_append",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {2, {true, false}}},
+                        "(var self: T[], value: T) => T[]",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm[0]->code() != TypeCode::Array)
+                                return nullopt;
+                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
+                            if (!arrType->elemType()->equals(norm[1]))
+                                return nullopt;
+                            return arrType;
                         }),
                 },
             }),
@@ -1387,8 +1430,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":struct/append_arr",
                     DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {true}}},
-                        "<value: T> (var arr: T[]) => T[]",
+                        {{1, {false}}, {1, {false}}},
+                        "<value: T> (arr: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -1407,8 +1450,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":struct/extend_arr",
                     DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {true}}},
-                        "<other: T[]> (var arr: T[]) => T[]",
+                        {{1, {false}}, {1, {false}}},
+                        "<other: T[]> (arr: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
@@ -1482,8 +1525,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":mark/apply_arr",
                     DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {true}}},
-                        "<f: (item: T) => T> (var collect: T[]) => T[]",
+                        {{1, {false}}, {1, {false}}},
+                        "<f: (item: T) => T> (collect: T[]) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)

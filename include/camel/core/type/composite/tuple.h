@@ -105,6 +105,16 @@ class TupleType : public CompositeType {
     /// those slot types (create()); the name says what the caller uses it for.
     static TupleType *layout(std::span<Type *const> slotTypes);
 
+    /// Bytes of a frame layout built in place by constructFrameLayout (aligned for TupleType).
+    static size_t frameLayoutBytes(std::span<Type *const> slotTypes);
+    /// The tuple type of `slotTypes` built in `memory` (frameLayoutBytes(slotTypes) bytes,
+    /// aligned for TupleType): the frame layout of one graph, stored in the graph's own block
+    /// (docs/design/graph-model, 4.1: the slot type table is part of the frozen graph). It is
+    /// not in the type table and is released with the graph, so the permanent space does not
+    /// grow with every graph a rewrite changes. Only what lives no longer than the graph may
+    /// refer to it: its frames.
+    static TupleType *constructFrameLayout(void *memory, std::span<Type *const> slotTypes);
+
     /// The type of a variable cell: the one-slot mutable object that a `var` variable denotes
     /// and that is shared, by pointer, with every `var` parameter and capture bound to it. It
     /// has the layout of a one-element tuple but is a distinct type (printed `var T`). Equal

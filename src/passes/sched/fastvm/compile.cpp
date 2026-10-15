@@ -84,9 +84,8 @@ static std::optional<MarkOpCode> markOpCodeOf(camel::core::OperId id) {
     namespace oper = camel::core::oper;
     switch (id) {
     case oper::MapArr:
+    case oper::ApplyArr: // `apply` returns a new array like `map` (design principles 2.12)
         return MarkOpCode::MapArr;
-    case oper::ApplyArr:
-        return MarkOpCode::ApplyArr;
     case oper::ReduceArr:
     case oper::UnorderedReduceArr:
         return MarkOpCode::ReduceArr;

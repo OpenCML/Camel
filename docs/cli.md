@@ -231,7 +231,7 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 
 ### Effect trace (`CAMEL_EFFECT_TRACE`)
 
-Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, in-place array operators, ...), in call order. Creating and reading a `var` variable (`:var/new`, `:var/get`) are state-only and emit no event; a store into one (`:op/assn*`) does:
+Setting the environment variable `CAMEL_EFFECT_TRACE=<file>` makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, including `:op/assn_append`, the statement `acc = acc->append<v>`, ...), in call order. Creating and reading a `var` variable (`:var/new`, `:var/get`) are state-only and emit no event; a store into one (`:op/assn*`) does:
 
 ```json
 {"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...","payload":"string=hello|||"}
@@ -372,10 +372,9 @@ Camel CLI (`camel`) handles run, check, and inspect. Formatting is provided by a
   - `-q`, `--quote-prefer <single|double>`  
   - `-m`, `--max-width <N>` (default 80)
 
-- **camel-cpp**: Transpile `.cml` to C++ and compile in one step. Outputs to `tmp/`.
-  - Usage: `camel-cpp <file.cml>`
-  - Equivalent to: `camel <file.cml> std::cpp` with output written to `tmp/<stem>.cpp`, then compiles with clang++, producing `tmp/<stem>.exe` and `tmp/libcamel.dll`.
-  - Built at: `build/tools/camel-cpp/Release/camel-cpp.exe` (Windows; libcamel.dll is copied alongside for portability).
+- **camel-cpp**: Translate a `.cml` to C++ and build an executable in one step.
+  - Usage: `camel-cpp <file.cml> [-o <executable>] [passes before std::cpp ...]`
+  - Equivalent to: `camel <file.cml> std::cpp > <name>.cpp`, then `$CXX` (default `c++`, `clang++` on Windows) with `-std=c++20 -O2 -ffp-contract=off -I$CAMEL_HOME/include`. The program does not depend on the Camel runtime; when it uses a module operator with no standalone translation, it is linked with `libcamel`. See [cpp_export_build.md](cpp_export_build.md).
 
 Other tools: `camel-codegen`, `camel-pr` (the profiler), `camel-db` (the debugger), `camel-ls` (the language server). All are built under `build/tools/` and installed with `camel` into `out/latest/bin/`.
 
@@ -399,8 +398,8 @@ camel --input test/cases/perf/fib_recursive.cml --timeit std::jit/10
 # Emit the timeit summary as JSON
 camel --input test/cases/perf/fib_recursive.cml --timeit std::jit/10 --output-format json
 
-# Transpile to C++ and compile (one step, output to tmp/)
-camel-cpp test/cases/linear/nvm/fib.cml
+# Translate to C++ and build an executable (one step)
+camel-cpp test/cases/linear/nvm/fib.cml -o fib
 
 # Format code (use camel-format, not camel format)
 camel-format -i src/xxx.cml

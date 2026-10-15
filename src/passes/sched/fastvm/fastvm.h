@@ -234,8 +234,6 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 
     void evalMarkedOperator_map_arr(
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
-    void evalMarkedOperator_apply_arr(
-        data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
     void evalMarkedOperator_filter_arr(
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
     void evalMarkedOperator_reduce_arr(

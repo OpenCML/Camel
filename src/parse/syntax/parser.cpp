@@ -710,7 +710,7 @@ void ParserImpl::parseFuncAnno() {
 }
 
 /// funcDecl : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
-///            'func' identRef parentParams (':' typeExpr)? stmtBlock
+///            'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     while (cur_ == TK::At) {
@@ -730,7 +730,11 @@ void ParserImpl::parseFuncDecl() {
         unexpected({e(TK::KwFunc)});
         return close(m, NK::FuncDecl);
     }
-    parseIdentRef(NK::IdentRef);
+    if (atOperatorName()) {
+        parseOperatorName();
+    } else {
+        parseIdentRef(NK::IdentRef);
+    }
     parseParentParams();
     if (eat(TK::Colon)) {
         typeBeforeBlock_ = true;
@@ -741,6 +745,32 @@ void ParserImpl::parseFuncDecl() {
         parseStmtBlock();
     }
     close(m, NK::FuncDecl);
+}
+
+/// operatorName : IDENTIFIER (OPERATOR | '[' ']')
+///
+/// The IDENTIFIER is the name `operator`; OPERATOR is any operator token. An operator overload (design principles 2.12): `func operator +(a: V, b: V): V`. The notation
+/// is provisional, and this production is the whole of it in the parser: `operator` is not a
+/// keyword (a function may still be called `operator`), it starts this form only right after
+/// `func` and before an operator token other than `(`. Every operator token is taken here;
+/// which of them can be overloaded, and with how many parameters, is decided when the
+/// declaration is compiled (camel/core/operator_names.h), so that the error can say why.
+bool ParserImpl::atOperatorName() const {
+    return cur_ == TK::Identifier && tree_.tokens_.text(pos_) == "operator" &&
+           isPunctuation(peek(1)) && peek(1) != TK::LParen;
+}
+
+void ParserImpl::parseOperatorName() {
+    const size_t m = mark();
+    bump(); // `operator`
+    if (cur_ == TK::LBracket) {
+        // Indexing is written with its two brackets: `func operator [](m: M, i: int): T`.
+        bump();
+        expect(TK::RBracket);
+    } else {
+        bump();
+    }
+    close(m, NK::OperatorName);
 }
 
 /// dataDecl : ('let' | 'var') carrier (':' typeList)? '=' dataList

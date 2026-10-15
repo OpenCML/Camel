@@ -423,6 +423,49 @@ std::optional<entity> Module::getImportedEntity(const Reference &ref, ImportLaye
     return merged;
 }
 
+std::vector<Module::ImportedOperatorOverloads>
+Module::importedOperatorOverloads(const std::string &group) const {
+    std::vector<ImportedOperatorOverloads> result;
+    // The operator groups of the built-in module and of the modules of operators: brought
+    // along by every import (the ambient layer), merged into one group.
+    if (auto ops = getImportedEntity(Reference(group)); ops.has_value() && ops->isOperGroup()) {
+        result.push_back({nullptr, Reference(group), std::move(*ops)});
+    }
+    // The overloads a module written in Camel exports (`export func operator +`): every
+    // import of the module brings them, whatever it names (design principles 2.12), so they
+    // are looked up in the modules imported, not among the names imported. A generic overload
+    // is exported under `group#k` (the GIR builder's exportOperatorOverloads).
+    const auto isOverloadOf = [&](const Reference &ref) {
+        const std::string &ident = ref.ident();
+        return ref.plain() &&
+               (ident == group || (ident.size() > group.size() && ident.starts_with(group) &&
+                                   ident[group.size()] == '#'));
+    };
+    std::vector<std::shared_ptr<Module>> modules;
+    for (const ImportSite &site : importSites_) {
+        if (site.mod && std::ranges::find(modules, site.mod) == modules.end()) {
+            modules.push_back(site.mod);
+        }
+    }
+    std::ranges::sort(modules, [](const auto &a, const auto &b) { return a->name() < b->name(); });
+    for (const auto &mod : modules) {
+        mod->declareEntities();
+        std::vector<std::pair<Reference, entity>> found;
+        mod->exportedEntityNS()->forEach([&](const Reference &ref, const entity &ent) {
+            if (isOverloadOf(ref) && !ent.isOperGroup()) {
+                found.emplace_back(ref, ent);
+            }
+        });
+        std::ranges::sort(found, [](const auto &a, const auto &b) {
+            return a.first.toString() < b.first.toString();
+        });
+        for (auto &[ref, ent] : found) {
+            result.push_back({mod, ref, std::move(ent)});
+        }
+    }
+    return result;
+}
+
 // The export tables of a module written in Camel fill while it is declared (types while its
 // construction tree is built, the rest when the program's graph builder declares it); what is
 // asked for before that is not there yet.

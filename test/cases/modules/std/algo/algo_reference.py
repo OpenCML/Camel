@@ -2,9 +2,10 @@
 """Every operator of the algo module against Python's sorted(), on generated arrays (fixed seed).
 
 Arrays of int and of float; random, with duplicates, already sorted, reversed, constant; lengths 1 to
-257. Each of sorted/quick_sorted/insert_sorted/merge_sorted (new array; the input must be unchanged)
-and sort/quick_sort/insert_sort/merge_sort (in place) is applied to each array, and
-merge_sorted_arrays to pairs of sorted arrays. A second program sorts 200000 elements that are
+257. Each of sorted/quick_sorted/insert_sorted/merge_sorted and sort/quick_sort/insert_sort/
+merge_sort (all return a new array and leave the input unchanged: no operator changes its
+argument, design principles 2.12) is applied to each array, and merge_sorted_arrays to pairs of
+sorted arrays. A second program sorts 200000 elements that are
 already sorted, and reversed, which a quicksort with a first-element pivot cannot do in its stack.
 
 Why this exists: `sorted` and `sort` once returned unsorted arrays (a wrong partition) and no test
@@ -22,8 +23,10 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[4]
 HOME = Path(os.environ.get("CAMEL_HOME", REPO_ROOT / "out" / "latest"))
 CAMEL = HOME / "bin" / ("camel.exe" if os.name == "nt" else "camel")
-COPYING = ["sorted", "quick_sorted", "insert_sorted", "merge_sorted"]
-IN_PLACE = ["sort", "quick_sort", "insert_sort", "merge_sort"]
+# `sort` and the other names without `-ed` sorted their argument in place until design
+# principles 2.12; they now return a new array as the `-ed` names do.
+COPYING = ["sorted", "quick_sorted", "insert_sorted", "merge_sorted",
+           "sort", "quick_sort", "insert_sort", "merge_sort"]
 
 
 def lit(xs, is_float):
@@ -72,15 +75,11 @@ def main() -> int:
             body += [f"    let a{k} = {lit(xs, is_float)}", f"    let r{k} = {op}(a{k})",
                      f"    println('#', r{k})", f"    println('#', a{k})"]
             expected += [ref, xs]
-        for op in IN_PLACE:
-            k += 1
-            body += [f"    var v{k} = {lit(xs, is_float)}", f"    {op}(v{k})", f"    println('#', v{k})"]
-            expected.append(ref)
         other = sorted((rng.randint(-1000, 1000) / 8) if is_float else rng.randint(-1000, 1000) for _ in range(rng.randint(1, 20)))
         k += 1
         body += [f"    let m{k} = merge_sorted_arrays({lit(ref, is_float)}, {lit(other, is_float)})", f"    println('#', m{k})"]
         expected.append(sorted(ref + other))
-    names = ", ".join(COPYING + IN_PLACE + ["merge_sorted_arrays"])
+    names = ", ".join(COPYING + ["merge_sorted_arrays"])
     small = f"module algo_reference\nimport {{ {names} }} from algo\n\nfunc main(): int sync {{\n" + "\n".join(body) + "\n    return 0\n}\n"
     n = 200000
     large = f"""module algo_large
@@ -92,8 +91,7 @@ func main(): int sync {{
     let a = sorted(up)
     let b = sorted(down)
     let c = merge_sorted(down)
-    var d = up->map<(i: int): int => (i * 7919) % {n}>
-    sort(d)
+    let d = sort(up->map<(i: int): int => (i * 7919) % {n}>)
     println('#', a[0], a[{n // 2}], a[{n - 1}], b[0], b[{n // 2}], b[{n - 1}], c[0], c[{n // 2}], c[{n - 1}], d[0], d[{n // 2}], d[{n - 1}])
     return 0
 }}
