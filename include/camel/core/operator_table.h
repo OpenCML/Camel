@@ -284,6 +284,13 @@ class OperatorTable {
      *      to the finite_math assumptions (it has no rounding a permission could change);
      *      Opaque is sensitive to everything; CorrectlyRounded and Bounded name the type
      *      (Float32 or Float64) their steps are rounded in.
+     *   4. Every reduction law is consistent in itself (sem::checkLaw): its constants fit the
+     *      accumulator, a float add or multiply does not claim exact associativity, a law that
+     *      starts from its first contribution faults on an empty domain.
+     *
+     * The instances an instantiation function returns cannot be checked here (it is code);
+     * sem::instantiate validates each one structurally, and the property tests compare the
+     * declarations with the kernels (docs/design/op-semantics, section 12).
      *
      * Every declaration, new or replacing, increments declarationEpoch().
      */

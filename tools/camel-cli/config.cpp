@@ -308,6 +308,7 @@ bool dumpGCT    = false; // Whether to dump Graph Construction Tree
 bool dumpGIR    = false; // Whether to dump Graph Intermediate Representation
 bool dumpTNS    = false; // Whether to dump Topological Node Sequence
 bool dumpOps    = false; // Whether to dump the operators of the imported modules
+bool dumpInstances = false; // Whether to dump the index semantics of every operator node
 bool geneCode   = false; // Whether to generate code from GIR
 int passUntil   = -1;    // Pass until the given pass
 } // namespace Inspect
@@ -652,6 +653,9 @@ bool parseArgs(int argc, char *argv[]) {
          option("--ops", "--operators").set(dumpOps) %
              "list the operators of the built-in module and of every module the program "
              "imports: name, URI, parameter counts, declared purity, signature",
+         option("--instances").set(dumpInstances) %
+             "print the index semantics (iteration domain, access maps, reduction law) of every "
+             "operator node whose operator declares them",
          option("--gen", "--gene-code").set(geneCode) % "generate code from AST",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",

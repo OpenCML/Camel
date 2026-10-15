@@ -206,7 +206,7 @@ namespace {
 
 /// Why `record`, declared for `uri` with the declared traits `traits` (nullopt when the traits
 /// are not declared), cannot be published; empty when it can. The checks of design section 4.4
-/// that apply to the parts phase 1 has (operator_table.h, declareSemantics).
+/// that apply to the parts declared so far (operator_table.h, declareSemantics).
 std::string checkSemantics(
     std::string_view uri, const sem::OperatorSemantics &record,
     const std::optional<OperatorTraits> &traits) {
@@ -258,6 +258,16 @@ std::string checkSemantics(
             return "a bounded operator names the type it computes in";
         }
         break;
+    }
+    // 4. The reduction laws: each consistent in itself, and at most kNoLaw of them (an
+    //    instance names one by a byte).
+    if (record.laws.size() >= sem::kNoLaw) {
+        return "it declares more reduction laws than an instance can name";
+    }
+    for (const sem::ReductionLaw &law : record.laws) {
+        if (auto problem = sem::checkLaw(law)) {
+            return *problem;
+        }
     }
     return {};
 }

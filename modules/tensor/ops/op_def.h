@@ -117,6 +117,12 @@ class InferContext {
 
 using InferFn = std::function<std::optional<type::Type *>(const InferContext &)>;
 
+/// The index semantics of one call (camel/core/index_semantics.h): its iteration domain,
+/// access maps and write map, for the facts inference sees; nullopt when they do not fix it.
+/// Written beside the operator's inference (ops/indexing.cpp) and declared to the core
+/// OperatorTable with the operator's semantics (OperatorSemantics::indexing).
+using IndexFn = std::function<std::optional<core::sem::IndexedInstance>(const InferContext &)>;
+
 /// The result as a constant when the argument types (and constant arguments) fix it, e.g. the
 /// shape of a tensor whose type carries its shape; nullopt otherwise. Mirrored into the core
 /// OperatorTable (setTypeFolder), which std::opt::fold consults.
@@ -145,6 +151,10 @@ struct OpDef {
     /// opaque). The key may be left empty: the registry fills it in from the URI, keeping the
     /// version. Filled in from one table by attachSemantics (semantics.cpp).
     std::optional<core::sem::OperatorSemantics> semantics;
+    /// The index semantics (IndexFn), nullptr when not declared. The registry declares it as
+    /// semantics->indexing; a back end that already holds an InferContext (Tiles) can call it
+    /// through ops::instantiate (indexing.h). Its reduction laws are semantics->laws.
+    IndexFn index = nullptr;
 
     /// Human-readable signature, e.g. "(lhs: Tensor | number, rhs: Tensor | number) => Tensor".
     std::string signature() const;

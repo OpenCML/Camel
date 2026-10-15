@@ -23,10 +23,14 @@
 
 #include "camel/runtime/operator_instance.h"
 
+#include "camel/runtime/reachable.h"
+
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/base.h"
 
+#include <ostream>
+#include <string>
 #include <vector>
 
 namespace camel::runtime {
@@ -106,6 +110,98 @@ std::optional<core::sem::IndexedInstance> instanceOf(const GCGraph &graph, gc_no
     return core::sem::instantiate(
         graph.nodeBodyAs<GCOperBody>(node)->oper,
         core::sem::InstanceContext{.norm = norm, .with = with, .statics = statics});
+}
+
+std::optional<core::sem::ReorderFreedom> reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node) {
+    const auto instance = instanceOf(graph, node);
+    if (!instance || instance->law == core::sem::kNoLaw) {
+        return std::nullopt;
+    }
+    const core::sem::OperatorSemantics *s =
+        core::OperatorTable::instance().semantics(graph.nodeBodyAs<GCOperBody>(node)->oper);
+    // instantiate validated the law's index against these semantics.
+    return core::sem::reorderFreedom(s->laws[instance->law], graph.nodePermissions(node));
+}
+
+namespace {
+
+std::string jsonString(std::string_view text) {
+    std::string out = "\"";
+    for (char c : text) {
+        switch (c) {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        default:
+            out += c;
+        }
+    }
+    return out + "\"";
+}
+
+/// The lines of `text` as a JSON list of strings.
+std::string jsonLines(std::string_view text) {
+    std::string out = "[";
+    size_t start    = 0;
+    while (start < text.size()) {
+        size_t end = text.find('\n', start);
+        end        = end == std::string_view::npos ? text.size() : end;
+        out += (out.size() > 1 ? "," : "") + jsonString(text.substr(start, end - start));
+        start = end + 1;
+    }
+    return out + "]";
+}
+
+std::string freedomJson(const core::sem::ReorderFreedom &f) {
+    std::string out = "[";
+    for (const auto &[on, name] : {std::pair{f.regroup, "regroup"},
+                                   std::pair{f.permute, "permute"},
+                                   std::pair{f.blockIdentity, "block_identity"},
+                                   std::pair{f.contract, "contract"},
+                                   std::pair{f.changePrecision, "change_precision"}}) {
+        if (on) {
+            out += (out.size() > 1 ? "," : "") + jsonString(name);
+        }
+    }
+    return out + "]";
+}
+
+} // namespace
+
+void dumpOperatorInstances(GCGraph *root, std::ostream &os) {
+    const auto &table = core::OperatorTable::instance();
+    for (GCGraph *graph : collectReachableGraphs(root)) {
+        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            if (graph->node(ref)->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const core::OperId id                  = graph->nodeBodyAs<GCOperBody>(ref)->oper;
+            const core::sem::OperatorSemantics *s = table.semantics(id);
+            if (s == nullptr || !s->indexing) {
+                continue;
+            }
+            std::string line = "{\"graph\":" + jsonString(graph->name()) +
+                               ",\"node\":" + std::to_string(ref) +
+                               ",\"uri\":" + jsonString(table.uri(id)) +
+                               ",\"key\":" + jsonString(s->key.toString());
+            const auto instance = instanceOf(*graph, ref);
+            line += ",\"instance\":" +
+                    (instance ? jsonLines(core::sem::toString(*instance, s)) : std::string("null"));
+            if (const uint8_t granted = graph->nodePermissions(ref); granted != 0) {
+                line += ",\"permissions\":" + jsonString(core::sem::permissionsText(granted));
+            }
+            if (const auto freedom = reorderFreedomOf(*graph, ref)) {
+                line += ",\"freedom\":" + freedomJson(*freedom);
+            }
+            os << "INSTANCE " << line << "}\n";
+        }
+    }
 }
 
 } // namespace camel::runtime

@@ -1288,6 +1288,7 @@ bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 3d7759d26aa114a6 ok test/cases/modules/tensor/gemm_canonical.cml
 da2354ac942b715b ok test/cases/modules/tensor/gemm_consistency.cml
 2043dca6b2ea0709 ok test/cases/modules/tensor/gradient_broadcast.cml
+005121e84331caa9 ok test/cases/modules/tensor/index_semantics.cml
 eff506442c7debe6 ok test/cases/modules/tensor/linalg_layout.cml
 966d66b175002584 ok test/cases/modules/tensor/numeric_contract.cml
 960c912dd11a0c89 ok test/cases/modules/tensor/reductions.cml

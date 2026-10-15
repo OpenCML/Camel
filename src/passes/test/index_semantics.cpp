@@ -76,6 +76,125 @@ IndexedInstance matmulInstance(int64_t M, int64_t N, int64_t K) {
     return inst;
 }
 
+/// matmul's law on f32 (design 7.2, Q7 decided: the fused multiply-add chain from +0).
+ReductionLaw fmaChainF32() {
+    return ReductionLaw{
+        .name             = "fma_f32",
+        .kind             = LawKind::FmaChain,
+        .input            = TypeCode::Float32,
+        .accumulator      = TypeCode::Float32,
+        .result           = TypeCode::Float32,
+        .exactCommutative = true,
+        .hasIdentity      = true,
+        .identityBits     = 0x80000000u,
+    };
+}
+
+/// "regroup permute ..." for the freedoms that are granted, "none" when none is.
+std::string freedomText(const ReorderFreedom &f) {
+    std::string out;
+    for (const auto &[on, name] : {std::pair{f.regroup, "regroup"},
+                                   std::pair{f.permute, "permute"},
+                                   std::pair{f.blockIdentity, "block_identity"},
+                                   std::pair{f.contract, "contract"},
+                                   std::pair{f.changePrecision, "change_precision"}}) {
+        if (on) {
+            out += (out.empty() ? "" : " ") + std::string(name);
+        }
+    }
+    return out.empty() ? "none" : out;
+}
+
+/// The reduction laws of the table in design 7.1, and the rules of 7.3 under some grants.
+void lawChecks(std::ostream &os) {
+    const ReductionLaw intAdd{
+        .name             = "sum_i64",
+        .kind             = LawKind::Add,
+        .input            = TypeCode::Int64,
+        .accumulator      = TypeCode::Int64,
+        .result           = TypeCode::Int64,
+        .exactAssociative = true,
+        .exactCommutative = true,
+        .hasIdentity      = true,
+    };
+    const ReductionLaw floatAdd{
+        .name             = "sum_f32",
+        .kind             = LawKind::Add,
+        .input            = TypeCode::Float32,
+        .accumulator      = TypeCode::Float32,
+        .result           = TypeCode::Float32,
+        .exactCommutative = true,
+        .hasIdentity      = true,
+        .identityBits     = 0x80000000u, // -0.0: +0 is not the identity (+0 + -0 = +0)
+    };
+    ReductionLaw floatAddFromIdentity = floatAdd;
+    floatAddFromIdentity.name         = "sum_f32_from_minus_zero";
+    floatAddFromIdentity.initBits     = 0x80000000u;
+    const ReductionLaw maxF32{
+        .name             = "max_f32",
+        .kind             = LawKind::Max,
+        .input            = TypeCode::Float32,
+        .accumulator      = TypeCode::Float32,
+        .result           = TypeCode::Float32,
+        .initBits         = 0xff800000u,
+        .empty            = LawEmpty::Fault,
+        .exactAssociative = true,
+        .exactCommutative = true,
+        .hasIdentity      = true,
+        .identityBits     = 0xff800000u,
+    };
+    ReductionLaw mulAdd = fmaChainF32();
+    mulAdd.name         = "mul_add_f32";
+    mulAdd.kind         = LawKind::MulAdd;
+    const ReductionLaw custom{
+        .name            = "unordered",
+        .kind            = LawKind::Custom,
+        .init            = LawInit::Operand,
+        .initOperand     = 1,
+        .order           = LawOrder::Unordered,
+        .combinerOperand = 0,
+    };
+    for (const ReductionLaw *law :
+         std::initializer_list<const ReductionLaw *>{&intAdd, &floatAdd, &floatAddFromIdentity, &maxF32, &mulAdd, &custom}) {
+        os << "INDEX law " << toString(*law) << "\n";
+        for (const auto &[grant, name] :
+             {std::pair{PermissionMask{0}, "none"},
+              std::pair{PermissionMask{kReassociate}, "reassociate"},
+              std::pair{PermissionMask{kContract | kChangePrecision}, "contract,change_precision"}}) {
+            os << "INDEX freedom " << law->name << " [" << name << "] "
+               << freedomText(reorderFreedom(*law, grant)) << "\n";
+        }
+    }
+    // The consistency checks of a law (design 4.4, check 4), through declareSemantics.
+    auto reject = [&](std::string_view check, ReductionLaw law) {
+        try {
+            OperatorTable::instance().declareSemantics(
+                "semtest:law",
+                OperatorSemantics{.key = OperatorKey::of("semtest:law"), .laws = {std::move(law)}});
+            os << "INDEX law_" << check << " accepted\n";
+        } catch (const std::invalid_argument &e) {
+            os << "INDEX law_" << check << " rejected: " << e.what() << "\n";
+        }
+    };
+    reject("valid", floatAdd);
+    ReductionLaw assoc = floatAdd;
+    assoc.exactAssociative = true;
+    reject("float_add_associative", assoc);
+    ReductionLaw wide  = floatAdd;
+    wide.initBits      = 0x8000000000000000u;
+    reject("constant_too_wide", wide);
+    ReductionLaw first = maxF32;
+    first.init         = LawInit::FirstContribution;
+    first.empty        = LawEmpty::Initial;
+    reject("first_without_fault", first);
+    ReductionLaw nameless = custom;
+    nameless.combinerOperand = 0xFF;
+    reject("custom_without_combiner", nameless);
+    ReductionLaw untyped = intAdd;
+    untyped.accumulator  = TypeCode::Void;
+    reject("untyped", untyped);
+}
+
 } // namespace
 
 camel::runtime::GCGraph *
@@ -171,7 +290,10 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
         auto declare         = [&](std::string_view uri, InstantiateFn fn) {
             table.declareSemantics(
                 uri,
-                OperatorSemantics{.key = OperatorKey::of(uri), .indexing = std::move(fn)});
+                OperatorSemantics{
+                    .key      = OperatorKey::of(uri),
+                    .indexing = std::move(fn),
+                    .laws     = {fmaChainF32()}});
         };
         declare("semtest:matmul", [](const InstanceContext &cx) -> std::optional<IndexedInstance> {
             if (cx.norm.size() != 2) {
@@ -202,9 +324,18 @@ IndexSemanticsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) 
         os << "INDEX query_invalid " << query("semtest:invalid", cx) << "\n";
         os << "INDEX query_undeclared " << query("semtest:nothing", cx) << "\n";
         if (const auto inst = instantiate(table.intern("semtest:matmul"), cx)) {
-            os << "INDEX text\n" << toString(*inst);
+            os << "INDEX text\n" << toString(*inst, table.semantics(table.intern("semtest:matmul")));
         }
+        declare("semtest:undeclared_law", [](const InstanceContext &) -> std::optional<IndexedInstance> {
+            IndexedInstance inst = matmulInstance(2, 3, 4);
+            inst.law             = 1; // the record declares one law, number 0
+            return inst;
+        });
+        os << "INDEX query_undeclared_law " << query("semtest:undeclared_law", cx) << "\n";
     }
+
+    // ---- Reduction laws (design section 7). ----
+    lawChecks(os);
 
     // ---- Splitting dims for tiles (design 5.2, example 5). ----
     {

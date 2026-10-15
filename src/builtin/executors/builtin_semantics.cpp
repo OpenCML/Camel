@@ -30,6 +30,9 @@
  *
  * Every operator is declared at version 1.0. Operators not listed here (pow, the untyped
  * `op/mul` and `op/div`, string operators) have no declaration and read as opaque.
+ *
+ * Beside them, `:mark/unordered_reduce_arr` declares its index semantics and its reduction law
+ * (docs/design/op-semantics 6.6 and 7): an unordered reduction by the function it is given.
  */
 
 #include "builtin.h"
@@ -93,6 +96,55 @@ NumericSemantics rounded(const NumericType &t, PermissionMask sensitiveTo, std::
     };
 }
 
+/**
+ * `unordered_reduce<f, initial>(xs)` (`:mark/unordered_reduce_arr`, module para; design 6.6):
+ * one reduction over the elements of xs, combined by the function value f, starting once from
+ * `initial`, in an order the operator leaves open. Its law is Custom and Unordered: calling it
+ * is the program's own grant of reassociate for this one reduction (reorderFreedom), and grants
+ * nothing inside f. Whether f is associative or commutative is not inferred: not claimed.
+ *
+ *   domain   i < n reduction        n = the length of xs (an extent the type does not fix)
+ *   norm 0   (i)
+ *   with 0   none                   the combining function
+ *   with 1   none                   the initial value (the law's start)
+ *   write    () combine
+ *
+ * Its numeric semantics are those of f: opaque here.
+ */
+void declareUnorderedReduce() {
+    constexpr std::string_view uri = ":mark/unordered_reduce_arr";
+    ReductionLaw law{
+        .name            = "unordered_reduce",
+        .kind            = LawKind::Custom,
+        .init            = LawInit::Operand,
+        .initOperand     = 1,
+        .order           = LawOrder::Unordered,
+        .combinerOperand = 0,
+    };
+    auto indexing = [](const InstanceContext &cx) -> std::optional<IndexedInstance> {
+        if (cx.norm.size() != 1 || cx.with.size() != 2 || cx.norm[0]->code() != TypeCode::Array) {
+            return std::nullopt;
+        }
+        IndexedInstance inst;
+        ExprPool &x = inst.exprs;
+        inst.domain.params.push_back(
+            Param{.name = "n", .source = ParamSource::Extent, .operand = 0, .axis = 0});
+        inst.domain.dims.push_back({"i", x.param(0), DimRole::Reduction});
+        inst.norm   = {Access{.kind = AccessKind::Affine, .coords = {x.dim(0)}}};
+        inst.with   = {Access{.kind = AccessKind::None}, Access{.kind = AccessKind::None}};
+        inst.output = Write{.mode = WriteMode::Combine};
+        inst.law    = 0;
+        return inst;
+    };
+    OperatorTable::instance().declareSemantics(
+        uri,
+        OperatorSemantics{
+            .key      = OperatorKey::of(uri),
+            .indexing = indexing,
+            .laws     = {law},
+        });
+}
+
 } // namespace
 
 void declareBuiltinOperatorSemantics() {
@@ -138,4 +190,5 @@ void declareBuiltinOperatorSemantics() {
                 none);
         }
     }
+    declareUnorderedReduce();
 }

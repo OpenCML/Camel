@@ -102,6 +102,16 @@ std::string semanticsJson(const sem::OperatorSemantics &s) {
         }
         out += ",\"faults\":" + jsonList(faults);
     }
+    if (s.indexing) {
+        out += ",\"indexing\":true";
+    }
+    if (!s.laws.empty()) {
+        std::string laws;
+        for (const sem::ReductionLaw &law : s.laws) {
+            laws += (laws.empty() ? "" : ", ") + law.name;
+        }
+        out += ",\"laws\":" + jsonList(laws);
+    }
     return out + ",\"algorithm\":" + jsonString(n.algorithm) + "}";
 }
 

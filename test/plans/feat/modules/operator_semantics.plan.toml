@@ -113,7 +113,10 @@ for (const [uri, [cls, compute, sensitive]] of Object.entries(expect)) {
   assert(op, `operator ${uri} is not listed`)
   const s = op.semantics
   assert(s, `${uri} has no semantics`)
-  assert(s.key === `${uri}@1.0`, `${uri}: key ${s.key}`)
+  // Phase 2 added index semantics to the tensor operators: version 1.1 (design 4.1).
+  const version = uri.startsWith('tensor:') ? '1.1' : '1.0'
+  assert(s.key === `${uri}@${version}`, `${uri}: key ${s.key}`)
+  assert((s.indexing === true) === uri.startsWith('tensor:'), `${uri}: indexing ${s.indexing}`)
   assert(s.numeric === cls, `${uri}: numeric ${s.numeric}, expected ${cls}`)
   assert(s.compute === compute, `${uri}: compute ${s.compute}, expected ${compute}`)
   assert(JSON.stringify(s.sensitive_to) === JSON.stringify(sensitive), `${uri}: sensitive_to ${JSON.stringify(s.sensitive_to)}`)
@@ -125,5 +128,7 @@ assert(JSON.stringify(byUri.get(':op/div_d').semantics.faults) === '["division_b
 assert(JSON.stringify(byUri.get(':op/add_d').semantics.faults) === '[]', 'scalar float addition never faults')
 assert(byUri.get('tensor:matmul').semantics.faults === undefined, 'tensor faults are not declared yet')
 assert(!byUri.get('tensor:softmax').semantics, 'softmax has no declaration in phase 1')
+assert(JSON.stringify(byUri.get('tensor:sum_axis').semantics.laws) === '["sum_axis_f32","sum_axis_i64","sum_axis_bool"]', 'sum_axis declares a law per dtype')
+assert(JSON.stringify(byUri.get('tensor:matmul').semantics.laws) === '["fma_f32","mul_add_i64"]', 'matmul laws')
 }
 """

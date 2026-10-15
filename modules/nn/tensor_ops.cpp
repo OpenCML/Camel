@@ -30,6 +30,7 @@
 #include "layers.h"
 
 #include "../tensor/kernels/conv.h"
+#include "../tensor/ops/indexing.h"
 #include "../tensor/ops/registry.h"
 #include "../tensor/ops/support.h"
 
@@ -188,6 +189,120 @@ std::optional<Type *> poolInfer(const InferContext &ctx) {
         out[1] = (*x.shape)[1];
     }
     return tensorOf(TypeCode::Float32, out);
+}
+
+/**
+ * The index semantics of max_pool2d and avg_pool2d (docs/design/op-semantics 5.2, example 4:
+ * the window): x: [N, C, H, W] (f32), a square window of `kernel`, `stride` (default the
+ * kernel) and `pad` (default 0):
+ *
+ *   params   oh = derived((H + 2*pad - kernel) floordiv stride + 1), ow likewise
+ *   domain   d0 < N, d1 < C, d2 < oh, d3 < ow parallel; d4 < kernel, d5 < kernel reduction
+ *   norm 0   (d0, d1, stride*d2 + d4 - pad, stride*d3 + d5 - pad)
+ *            valid inside [0, H) x [0, W); outside: max excludes the element (padding with 0
+ *            would change a negative window's maximum), avg reads +0.0 (count_include_pad)
+ *   write    (d0, d1, d2, d3) combine    max: IEEE maximum from -inf; avg: f64 sum from +0
+ *                                        divided by kernel*kernel, rounded once to f32
+ */
+IndexFn poolIndexing(bool max) {
+    namespace sem = camel::core::sem;
+    using Rel     = sem::Constraint::Rel;
+    using ExprId  = sem::ExprId;
+    return [max](const InferContext &ctx) -> std::optional<sem::IndexedInstance> {
+        const TensorFacts x = ctx.facts(0);
+        const auto kernel   = ctx.constInt(1);
+        const auto stride   = ctx.has(2) ? ctx.constInt(2) : kernel;
+        const auto pad      = optConstInt(ctx, 3, 0);
+        if (!x.shape || x.shape->size() != 4 || x.dtype != TypeCode::Float32 || !kernel ||
+            !stride || !pad || *kernel <= 0 || *stride <= 0 || *pad < 0) {
+            return std::nullopt;
+        }
+        const StaticShape &s = *x.shape;
+        for (size_t a : {size_t{2}, size_t{3}}) {
+            if (s[a] != kUnknownDim && s[a] + 2 * *pad < *kernel) {
+                return std::nullopt; // the window does not fit: the kernel rejects it
+            }
+        }
+        IndexBuilder b;
+        auto &e             = b.x();
+        const ExprId K      = b.constant("kernel", 1, *kernel);
+        const ExprId S      = ctx.has(2) ? b.constant("stride", 2, *stride) : K;
+        const ExprId P      = ctx.has(3) ? b.constant("pad", 3, *pad) : e.constant(0);
+        const ExprId N      = b.extent(0, 0, s[0]), C = b.extent(0, 1, s[1]);
+        const ExprId H      = b.extent(0, 2, s[2]), W = b.extent(0, 3, s[3]);
+        b.require(e.constant(1), Rel::Le, S);
+        auto outExtent = [&](ExprId in, int64_t known, const char *name) {
+            const ExprId def =
+                e.add(e.floorDiv(e.sub(e.add(in, e.scale(2, P)), K), S), e.constant(1));
+            const std::optional<int64_t> value =
+                known == kUnknownDim ? std::nullopt
+                                     : std::optional((known + 2 * *pad - *kernel) / *stride + 1);
+            return b.derived(name, value, def);
+        };
+        const ExprId OH = outExtent(H, s[2], "oh"), OW = outExtent(W, s[3], "ow");
+        const ExprId n = b.dim(N), c = b.dim(C), oh = b.dim(OH), ow = b.dim(OW);
+        const ExprId kh = b.dim(K, sem::DimRole::Reduction), kw = b.dim(K, sem::DimRole::Reduction);
+        const ExprId ih = e.sub(e.add(e.mul(S, oh), kh), P);
+        const ExprId iw = e.sub(e.add(e.mul(S, ow), kw), P);
+        sem::Access read = IndexBuilder::affine({n, c, ih, iw});
+        read.valid       = {
+            {e.constant(0), Rel::Le, ih}, {ih, Rel::Lt, H}, {e.constant(0), Rel::Le, iw}, {iw, Rel::Lt, W}};
+        read.onInvalid = max ? sem::OnInvalid::Excluded : sem::OnInvalid::Padding;
+        read.padding   = 0; // +0.0f
+        b.instance.norm.push_back(std::move(read));
+        for (size_t i = 1; i < ctx.size(); ++i) {
+            b.instance.norm.push_back(IndexBuilder::none());
+        }
+        return b.finish({n, c, oh, ow}, sem::WriteMode::Combine, 0);
+    };
+}
+
+/// The semantics of max_pool2d (max) or avg_pool2d: numeric, and the laws of poolIndexing.
+camel::core::sem::OperatorSemantics poolSemantics(bool max) {
+    namespace sem = camel::core::sem;
+    sem::OperatorSemantics s;
+    if (max) {
+        s.numeric = sem::NumericSemantics{
+            .cls         = sem::NumericClass::Exact,
+            .compute     = TypeCode::Float32,
+            .sensitiveTo = sem::kFiniteMath,
+            .algorithm   = "IEEE 754-2019 maximum over the window's elements inside the input, "
+                           "from -inf (a window entirely in the padding gives -inf)",
+        };
+        s.laws = {sem::ReductionLaw{
+            .name             = "max_pool_f32",
+            .kind             = sem::LawKind::Max,
+            .input            = TypeCode::Float32,
+            .accumulator      = TypeCode::Float32,
+            .result           = TypeCode::Float32,
+            .initBits         = 0xff800000u,
+            .exactAssociative = true,
+            .exactCommutative = true,
+            .hasIdentity      = true,
+            .identityBits     = 0xff800000u,
+        }};
+    } else {
+        s.numeric = sem::NumericSemantics{
+            .cls         = sem::NumericClass::CorrectlyRounded,
+            .compute     = TypeCode::Float64,
+            .sensitiveTo = sem::kReassociate | sem::kChangePrecision | sem::kFiniteMath,
+            .algorithm   = "the window's elements (+0 for those in the padding) added to an f64 "
+                           "accumulator from +0 in row-major window order, divided by "
+                           "kernel*kernel in f64, rounded once to f32",
+        };
+        s.laws = {sem::ReductionLaw{
+            .name             = "avg_pool_f32",
+            .kind             = sem::LawKind::Add,
+            .input            = TypeCode::Float32,
+            .accumulator      = TypeCode::Float64,
+            .result           = TypeCode::Float32,
+            .finalize         = sem::LawFinalize::DivideByCount,
+            .exactCommutative = true,
+            .hasIdentity      = true,
+            .identityBits     = 0x8000000000000000u,
+        }};
+    }
+    return s;
 }
 
 // ------------------------------------------------------------------ batch_norm
@@ -481,7 +596,9 @@ std::vector<OpDef> nnTensorOps() {
             .resultDoc = "Tensor",
             .infer     = poolInfer,
             .kernel    = &poolKernel<k::PoolKind::Max>,
-            .traits    = kPure});
+            .traits    = kPure,
+            .semantics = poolSemantics(true),
+            .index     = poolIndexing(true)});
     defs.push_back(
         OpDef{
             .name      = "avg_pool2d",
@@ -490,7 +607,9 @@ std::vector<OpDef> nnTensorOps() {
             .resultDoc = "Tensor",
             .infer     = poolInfer,
             .kernel    = &poolKernel<k::PoolKind::Average>,
-            .traits    = kPure});
+            .traits    = kPure,
+            .semantics = poolSemantics(false),
+            .index     = poolIndexing(false)});
     defs.push_back(
         OpDef{
             .name      = "max_pool2d_grad",

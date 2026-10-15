@@ -28,11 +28,14 @@ add_camel_module(
     ops/op_stats.cpp
     ops/reduction_ops.cpp
     ops/registry.cpp
+    ops/index_builder.cpp
+    ops/indexing.cpp
     ops/semantics.cpp
     ops/support.cpp
     ops/utility_ops.cpp
     ops/vjp.cpp
     passes/fuse.cpp
+    passes/index_eval.cpp
 )
 
 # Contraction (a * b + c into one fused multiply-add) is off in the whole project (top-level
