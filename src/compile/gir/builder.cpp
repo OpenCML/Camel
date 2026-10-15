@@ -2310,24 +2310,38 @@ std::set<node_handle_t> Builder::capturedWritesOf(DraftGraphBuilder *root) const
         auto summary = captures_.find(graph);
         return summary == captures_.end() ? nullptr : &summary->second;
     };
+    // A graph writes only variables it captured, and a write reaches `root` only through
+    // graphs that all captured the variable: only the callees that captured one of root's
+    // variables matter. (With all modules on one root, the calls reach across the whole
+    // program; walking every callee made this quadratic in the length of a call chain.)
+    const auto *rootSummary = summaryOf(root);
+    if (rootSummary == nullptr || rootSummary->variables.empty()) {
+        return {};
+    }
+    const std::unordered_set<node_handle_t> rootVariables(
+        rootSummary->variables.begin(), rootSummary->variables.end());
+    const auto sharesVariable = [&](const CaptureSummary &summary) {
+        return std::ranges::any_of(summary.variables, [&](node_handle_t variable) {
+            return rootVariables.contains(variable);
+        });
+    };
     // The graphs reachable through direct calls and arms. An open body is not looked into:
     // what it will write is not known yet, so all it captured stands for it.
     std::vector<DraftGraphBuilder *> reached{root};
+    std::unordered_set<DraftGraphBuilder *> seen{root};
     std::unordered_map<DraftGraphBuilder *, std::set<node_handle_t>> writes;
     for (size_t i = 0; i < reached.size(); ++i) {
         DraftGraphBuilder *graph = reached[i];
         const auto *summary      = summaryOf(graph);
-        if (summary == nullptr) {
-            writes[graph];
-            continue;
-        }
         if (isOpen(graph)) {
             writes[graph].insert(summary->variables.begin(), summary->variables.end());
             continue;
         }
         writes[graph] = summary->written;
         for (DraftGraphBuilder *callee : summary->callees) {
-            if (std::ranges::find(reached, callee) == reached.end()) {
+            const auto *calleeSummary = summaryOf(callee);
+            if (calleeSummary != nullptr && sharesVariable(*calleeSummary) &&
+                seen.insert(callee).second) {
                 reached.push_back(callee);
             }
         }
@@ -2340,12 +2354,16 @@ std::set<node_handle_t> Builder::capturedWritesOf(DraftGraphBuilder *root) const
         changed = false;
         for (DraftGraphBuilder *graph : reached) {
             const auto *summary = summaryOf(graph);
-            if (summary == nullptr || isOpen(graph)) {
+            if (isOpen(graph)) {
                 continue;
             }
             auto &own = writes[graph];
             for (DraftGraphBuilder *callee : summary->callees) {
-                for (node_handle_t variable : writes[callee]) {
+                auto calleeWrites = writes.find(callee);
+                if (calleeWrites == writes.end()) {
+                    continue; // not reached: it captured none of root's variables
+                }
+                for (node_handle_t variable : calleeWrites->second) {
                     if (std::ranges::find(summary->variables, variable) !=
                             summary->variables.end() &&
                         own.insert(variable).second) {
