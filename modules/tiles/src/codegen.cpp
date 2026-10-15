@@ -71,12 +71,19 @@ void generate(Program &p, ScheduleOptions options) {
         if (n.op == "input")
             continue;
         const size_t count = elements(n.shape);
+        size_t reduction   = SIZE_MAX;
+        if (launch.implementation == "ordered_reduce")
+            for (auto member : launch.members)
+                if (p.nodes[member].op == "sum_axis" || p.nodes[member].op == "mean_axis")
+                    reduction = member;
         code << "// " << n.op << "\nextern \"C\" __global__ void " << launch.name
              << "(float** v) {\n";
         // Every node retains its f32 rounding point. NVRTC's --fmad=false
         // prevents contraction across these assignments.
         std::function<std::string(size_t, const std::string &)> emit;
         emit = [&](size_t member, const std::string &at) -> std::string {
+            if (member == reduction)
+                return "reduced_value";
             if (std::find(launch.members.begin(), launch.members.end(), member) ==
                 launch.members.end())
                 return load(member, at);
@@ -133,8 +140,9 @@ void generate(Program &p, ScheduleOptions options) {
         };
 
         if (launch.implementation == "ordered_reduce") {
-            const auto &shape = p.nodes[n.inputs[0]].shape;
-            const size_t axis = n.attributes[0], width = shape[axis];
+            const auto &reducer = p.nodes[reduction];
+            const auto &shape   = p.nodes[reducer.inputs[0]].shape;
+            const size_t axis = reducer.attributes[0], width = shape[axis];
             size_t inner = 1;
             for (size_t d = axis + 1; d < shape.size(); ++d)
                 inner *= shape[d];
@@ -149,11 +157,13 @@ void generate(Program &p, ScheduleOptions options) {
                  << literal(width * inner) << "+row%" << literal(safeInner) << ";\n"
                  << "double acc=0.0;\nfor(unsigned long long r=0;r<" << literal(width)
                  << ";++r){\n";
-            const auto value = emit(n.inputs[0], "base+r*" + literal(inner));
-            code << "acc+=(double)" << value << ";\n}\n" << load(id, "row") << "=(float)(acc";
-            if (n.op == "mean_axis")
+            const auto value = emit(reducer.inputs[0], "base+r*" + literal(inner));
+            code << "acc+=(double)" << value << ";\n}\nfloat reduced_value=(float)(acc";
+            if (reducer.op == "mean_axis")
                 code << "/" << (width ? std::to_string(width) + ".0" : "0.0");
-            code << ");\n}\n";
+            code << ");\n";
+            const auto result = emit(id, "row");
+            code << load(id, "row") << "=" << result << ";\n}\n";
         } else if (n.op.starts_with("scalar_")) {
             launch.blockX = launch.gridX = 1;
             auto operand                 = [&](size_t in) {

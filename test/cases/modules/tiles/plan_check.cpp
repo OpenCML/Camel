@@ -92,6 +92,18 @@ int main() {
             throw std::runtime_error("producer was not fused into ordered reduction");
         rejects(fusedReduction, [](auto &x) { x.launches[0].blockX = 256; }, "ordered reduction operation or block");
         rejects(fusedReduction, [](auto &x) { x.nodes[3].op = "max_axis"; }, "ordered reduction operation or block");
+        auto epilogue = fusedReduction;
+        epilogue.nodes.push_back(Node{.op="add", .shape={4}, .inputs={3,1}});
+        epilogue.outputs = {4};
+        schedule(epilogue);
+        if (epilogue.launches.size() != 1 || epilogue.storage.slots[3] != SIZE_MAX)
+            throw std::runtime_error("reduction epilogue was materialized");
+        rejects(epilogue, [](auto &x) {
+            x.nodes[4] = Node{.op="reshape", .shape={1,4}, .inputs={3}};
+        }, "ordered reduction epilogue domain");
+        rejects(epilogue, [](auto &x) {
+            x.nodes[4] = Node{.op="sum_axis", .shape={4}, .inputs={2}, .attributes={1}};
+        }, "ordered reduction operation or block");
         fusedReduction.outputs = {2,3};
         schedule(fusedReduction);
         if (fusedReduction.launches.size() != 2 || fusedReduction.storage.slots[2] == SIZE_MAX)

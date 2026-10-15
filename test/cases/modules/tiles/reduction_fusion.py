@@ -18,15 +18,20 @@ with tempfile.TemporaryDirectory(prefix='camel-reduction-fusion-') as folder:
         if result.returncode:
             raise RuntimeError(result.stdout + result.stderr)
         plans = [json.loads(line) for line in result.stdout.splitlines()]
-        assert len(plans) == 3, plans
-        for plan in plans:
-            assert plan['kernels'] == 1 and plan['stages'][0]['implementation'] == 'ordered_reduce', plan
+        assert len(plans) == 6, plans
+        for i, plan in enumerate(plans):
+            assert plan['kernels'] == (2 if i == 4 else 1), plan
+            assert all(stage['implementation'] == 'ordered_reduce' for stage in plan['stages']), plan
             assert plan['allocated_bytes'] < plan['logical_bytes'], plan
-        for name in ['rows', 'columns', 'middle', 'ordered', 'empty', 'no_rows']:
+        for name in ['rows', 'columns', 'middle', 'ordered', 'empty', 'no_rows',
+                     'epilogue', 'two_reductions', 'rounding']:
             cpu = (Path(folder) / f'{name}_cpu.npy').read_bytes()
             gpu = (Path(folder) / f'{name}_gpu.npy').read_bytes()
             assert cpu == gpu, (vm, name)
         ordered = (Path(folder) / 'ordered_gpu.npy').read_bytes()
         offset = 10 + struct.unpack_from('<H', ordered, 8)[0]
         assert struct.unpack('<f', ordered[offset:]) == (0.5,), 'lost ordered f64 accumulator'
+        rounded = (Path(folder) / 'rounding_gpu.npy').read_bytes()
+        offset = 10 + struct.unpack_from('<H', rounded, 8)[0]
+        assert struct.unpack('<I', rounded[offset:]) == (0,), 'lost reduction f32 rounding before epilogue'
         print(f'{vm}: fused reduction bytes, mappings and empty domains passed')

@@ -207,10 +207,13 @@ Single-use pointwise and index-map producers can fuse into axis sum/mean. Each
 output thread computes its producer values in f32 and folds them in increasing
 axis order with the existing f64 accumulator, then rounds the result to f32.
 This removes producer buffers without granting reassociation or contraction.
+Same-shape pointwise consumers can also join the reduction stage: its f32 result
+rounding remains explicit before the epilogue runs. An epilogue group contains
+one reduction; shape-changing consumers and multiple reductions remain separate.
 The ordered reduction uses 32-thread blocks; expensive math is kept in a separate
 pointwise stage when fewer than 2048 output rows exist, to avoid serializing it into
 too few lanes. Shared results and observable producer outputs remain boundaries.
-`reduction_benchmark.cml` measures three shapes against the unfused CUDA schedule;
+`reduction_benchmark.cml` measures three shapes and two affine epilogues against the unfused CUDA schedule;
 this heuristic is not an autotuner and does not guarantee every shape improves.
 
 First-class index domains, public masks, layouts, schedule/resource graphs, loop and

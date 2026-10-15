@@ -254,6 +254,27 @@ void schedule(Program &p, ScheduleOptions options) {
         owner[id] = root;
         ++groupSize[root];
     }
+    // Attach one ordered reduction to a same-domain pointwise epilogue. Domain
+    // changes and multiple reductions stay separate, avoiding recomputation.
+    for (size_t id = count; id-- > 0;) {
+        if (!options.fuseElementwise || !orderedAxis(p.nodes[id].op) || users[id] != 1 ||
+            std::find(p.outputs.begin(), p.outputs.end(), id) != p.outputs.end())
+            continue;
+        const size_t root = owner[consumer[id]];
+        if (root == id || groupSize[root] + groupSize[id] > 64)
+            continue;
+        bool compatible = true;
+        for (size_t member = 0; member < count; ++member)
+            if (owner[member] == root &&
+                (!elementwise(p.nodes[member].op) || p.nodes[member].shape != p.nodes[id].shape))
+                compatible = false;
+        if (!compatible)
+            continue;
+        for (auto &group : owner)
+            if (group == id)
+                group = root;
+        groupSize[root] += groupSize[id];
+    }
     p.launches.clear();
     for (size_t id = 0; id < count; ++id) {
         if (p.nodes[id].op == "input" || owner[id] != id)
@@ -267,7 +288,10 @@ void schedule(Program &p, ScheduleOptions options) {
                 launch.members.push_back(member);
         launch.implementation = "standard";
         const auto &n         = p.nodes[id];
-        if (orderedAxis(n.op) && launch.members.size() > 1) {
+        if (launch.members.size() > 1 &&
+            std::any_of(launch.members.begin(), launch.members.end(), [&](size_t member) {
+                return orderedAxis(p.nodes[member].op);
+            })) {
             launch.implementation = "ordered_reduce";
             launch.blockX         = 32;
         }
@@ -325,11 +349,24 @@ void validatePlan(const Program &p) {
             launch.implementation == "standard" || launch.implementation == "parallel_max" ||
                 launch.implementation == "ordered_reduce",
             "unknown implementation");
-        if (launch.implementation == "ordered_reduce")
+        size_t reduction = SIZE_MAX, reductions = 0;
+        for (auto member : launch.members)
+            if (member < p.nodes.size() && orderedAxis(p.nodes[member].op)) {
+                reduction = member;
+                ++reductions;
+            }
+        if (launch.implementation == "ordered_reduce") {
             require(
-                orderedAxis(p.nodes[launch.node].op) && launch.blockX == 32 && launch.blockY == 1 &&
+                reductions == 1 && launch.blockX == 32 && launch.blockY == 1 &&
                     launch.members.size() > 1,
                 "ordered reduction operation or block");
+            for (auto member : launch.members)
+                if (member > reduction)
+                    require(
+                        member < p.nodes.size() && elementwise(p.nodes[member].op) &&
+                            p.nodes[member].shape == p.nodes[reduction].shape,
+                        "ordered reduction epilogue domain");
+        }
         if (launch.implementation == "parallel_max") {
             const auto &root = p.nodes[launch.node];
             require(
@@ -355,7 +392,7 @@ void validatePlan(const Program &p) {
                 launch.members.size() == 1 ||
                     (indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[launch.node].op)) ||
                     (launch.implementation == "ordered_reduce" &&
-                     (id == launch.node || indexedScalar(p.nodes[id].op))) ||
+                     (id == reduction || indexedScalar(p.nodes[id].op))) ||
                     (scalar64(p.nodes[id].op) && scalar64(p.nodes[launch.node].op)),
                 "invalid fused domain");
             for (auto in : p.nodes[id].inputs) {
