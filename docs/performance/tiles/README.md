@@ -45,3 +45,34 @@ is a desktop GPU. Compilation, transfer and setup costs appear in separate raw
 fields; this table excludes them, graph extraction and host snapshot creation.
 No Triton or cuBLAS comparison has been made yet. Remote RTX 3090 measurements
 and larger working sets remain required before wider performance conclusions.
+
+## Stable parallel maximum, revision 8e7be374
+
+Raw records: [RTX 4060 Ti parallel-max run](2026-10-15-rtx4060ti-parallel-max.jsonl).
+The benchmark now includes `max(x, -1)` for a 128x4097 tensor and explicitly
+disables parallel maximum in its reference policy. Its three optimized medians
+were 0.03520, 0.01987 and 0.01955 ms, versus 0.09046, 0.07485 and 0.07450 ms for
+serial maxima: 2.57–3.81x within these paired measurements. All outputs matched
+the reference before and after timing. This does not authorize reordering sums.
+
+This revision also fixes transfer ordering using pinned, same-stream uploads.
+Consequently cross-revision wall-clock differences cannot be attributed solely
+to maximum reduction. Desktop timing remains variable: the identical-code
+matmul control ranged from 0.92 to 0.99x in this run. Compare paired samples and
+retain the raw records; do not interpret small differences as proven speedups.
+
+## Remote build notes
+
+The baseline revision 75776da8 built and passed 35/35 host/GPU/tensor tests on
+88zjwei's RTX 3090 device 3. It used an isolated source archive under
+`/home/zjwei/camel-eval/tiles-75776da8`, the pre-existing Conda Clang 23.1.2
+toolchain and build virtual environment (CMake 4.4.3, Conan 2.33), and CUDA 12.3.
+The Conda sysroot required a private `CPLUS_INCLUDE_PATH` exposing only the
+system Python multiarch configuration header directory. No system toolchain or
+existing checkout was changed. Standard `npm run build` produced the binaries.
+
+The same isolated directory is being updated to revision 8e7be374 for full
+revalidation and measurements. Until those results are recorded, the baseline
+pass does not establish remote validation of parallel maximum or the upload fix.
+An archive benchmark can record its verified source revision with
+`--source-revision <full-commit-id>`; the runner also records a source fingerprint.

@@ -124,3 +124,8 @@ using the existing Conda Clang 23 toolchain, CMake 4.4.3, Conan 2.33 and CUDA 12
 The Conda sysroot needed a private include path for the system Python multiarch
 configuration header. All 35 baseline host/GPU/tensor checks passed on device 3
 (RTX 3090). Revalidation of the newer transfer/reduction work is in progress.
+
+The committed local 8e7be374 benchmark records are saved under
+`docs/performance/tiles/2026-10-15-rtx4060ti-parallel-max.jsonl`. For 128x4097
+maximum, paired speedups range from 2.57 to 3.81x, with identical checked outputs.
+The same-code control remains noisy, so this is workload-specific evidence.
