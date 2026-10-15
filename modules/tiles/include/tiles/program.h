@@ -60,7 +60,7 @@ struct StoragePlan {
 };
 struct Program {
     std::vector<Node> nodes;
-    size_t output = 0;
+    std::vector<size_t> outputs = {0}; // Ordered tensor leaves of the Camel result.
     std::string source;
     std::vector<Launch> launches;
     StoragePlan storage;

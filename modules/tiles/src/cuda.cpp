@@ -445,14 +445,22 @@ class DeviceRun {
     }
     std::vector<float> download() {
         synchronize();
-        std::vector<float> result(elements(program.nodes[program.output].shape));
-        if (!result.empty())
-            api.check(
-                api.cuMemcpyDtoH(
-                    result.data(),
-                    pointers[program.output],
-                    result.size() * sizeof(float)),
-                "download result");
+        size_t total = 0;
+        for (auto output : program.outputs)
+            total += elements(program.nodes[output].shape);
+        std::vector<float> result(total);
+        size_t offset = 0;
+        for (auto output : program.outputs) {
+            const size_t count = elements(program.nodes[output].shape);
+            if (count)
+                api.check(
+                    api.cuMemcpyDtoH(
+                        result.data() + offset,
+                        pointers[output],
+                        count * sizeof(float)),
+                    "download result");
+            offset += count;
+        }
         return result;
     }
 };
@@ -488,12 +496,14 @@ std::vector<float> execute(const Program &p) {
     Backend &b = backend();
     std::lock_guard lock(b.mutex);
     Current current(b.api, b.context);
-    const size_t count = elements(p.nodes.at(p.output).shape);
-    std::vector<float> result(count);
-    if (!count)
+    if (std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
+            return !elements(p.nodes[id].shape) || p.nodes[id].op == "input";
+        })) {
+        std::vector<float> result;
+        for (auto output : p.outputs)
+            result.insert(result.end(), p.nodes[output].data.begin(), p.nodes[output].data.end());
         return result;
-    if (p.nodes[p.output].op == "input")
-        return p.nodes[p.output].data;
+    }
     CUmodule module = b.module(p.source);
     DeviceRun run(p, b.api, module);
     run.upload();
@@ -504,8 +514,9 @@ std::vector<float> execute(const Program &p) {
 std::string benchmark(const Program &program) {
     using nlohmann::json;
     validatePlan(program);
-    if (!elements(program.nodes[program.output].shape) ||
-        program.nodes[program.output].op == "input")
+    if (std::none_of(program.outputs.begin(), program.outputs.end(), [&](size_t id) {
+            return elements(program.nodes[id].shape) && program.nodes[id].op != "input";
+        }))
         throw std::runtime_error("benchmark requires a nonempty computed output");
     Program reference = program;
     generate(reference, {.fuseElementwise = false, .parallelMax = false});
@@ -531,8 +542,12 @@ std::string benchmark(const Program &program) {
         {"timing", "CUDA event span including launch gaps; inputs restored before every sample"},
         {"includes_graph_specialization", false},
         {"reference_policy", {{"fuse_elementwise", false}, {"parallel_max", false}}},
-        {"identical_device_code", program.source == reference.source},
-        {"output_shape", program.nodes[program.output].shape}};
+        {"identical_device_code", program.source == reference.source}};
+    report["output_shapes"] = json::array();
+    for (auto output : program.outputs)
+        report["output_shapes"].push_back(program.nodes[output].shape);
+    if (program.outputs.size() == 1)
+        report["output_shape"] = program.nodes[program.outputs.front()].shape;
     report["input_shapes"] = json::array();
     for (const auto &n : program.nodes)
         if (n.op == "input")

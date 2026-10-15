@@ -22,17 +22,22 @@ func main(): int sync {
 ## API
 
 - `run<fn>(inputs)` specializes a function graph for actual input shapes, compiles
-  CUDA with NVRTC, executes on the GPU, and returns a host `Tensor<f32>`.
-  Pass one tensor for a unary function or a tuple for multiple parameters.
+  CUDA with NVRTC, executes on the GPU, and returns host `Tensor<f32>` leaves
+  in the function's original tuple/struct structure. Nested nonempty tuples and
+  structs of tensors are supported as parameters and results. Pass the single
+  parameter directly for a unary function, or a tuple for multiple parameters.
 - `source<fn>(inputs)` returns generated CUDA without initializing CUDA or
   executing the function body. It performs the same graph validation as `run`.
 - `inspect<fn>(inputs)` returns a versioned JSON plan summary without CUDA:
   semantic values, kernel groups, materialized values, physical allocations,
-  logical bytes and allocated bytes. These are plan metrics, not timings.
+  logical bytes, allocated bytes and ordered output node IDs. Repeated output
+  IDs preserve repeated result leaves. These are plan metrics, not timings.
 - `benchmark<fn>(inputs)` compares the optimized and unfused schedules with
   the same input snapshots. It returns JSON containing raw CUDA-event samples,
   host compile/load/allocation/transfer times, hardware/compiler metadata, and
-  correctness comparisons. It requires a nonempty computed output.
+  correctness comparisons over every output leaf. It requires at least one
+  nonempty computed output. `output_shapes` lists all leaves in aggregate order;
+  the existing `output_shape` field is also present for a single leaf.
 - `available()` reports whether driver/NVRTC initialization succeeds. A successful
   result does not guarantee a subsequent compilation or memory allocation succeeds.
 - `device()` reports the selected GPU, or raises a diagnostic explaining failure.
@@ -43,7 +48,8 @@ the body by executing it and never silently falls back to CPU execution.
 
 ## Supported subset
 
-Contiguous f32 tensor inputs and outputs; direct nonrecursive function calls;
+Contiguous f32 tensor inputs and outputs, including nested tuple/struct
+construction and field access; direct nonrecursive function calls;
 captured tensors and supported numeric/static attributes; broadcasting arithmetic
 (`+`, `-`, `*`, `/`, minimum, maximum); negation, abs, exp, log, sqrt, rsqrt, relu;
 axis sum/max/mean with static attributes; reshape with static shape; rank-2 matmul.
@@ -61,6 +67,10 @@ retain materialization boundaries. Each fused node keeps an f32 rounding point;
 the scheduler does not reassociate expressions or reorder reductions. Allocation
 slots are reused only after their last reader on the ordered stream has finished;
 a kernel cannot overwrite storage it reads. Inputs start live at upload time.
+Every returned tensor stays live until download, including inputs or intermediates
+that are also returned. Multiple outputs execute as one graph, preserving shared
+work. Result reconstruction briefly excludes GC while assembling aggregates and
+uses the normal typed write barriers; no GC pointers survive in the CUDA cache.
 Plan validation checks topology, shapes, stage boundaries, launch dimensions,
 storage capacities and nonoverlapping lifetimes. Matmul uses masked 16x16 shared-memory tiles and explicit
 f32 FMA. Last-axis maximum uses a block-parallel implementation for widths of at

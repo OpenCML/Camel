@@ -14,7 +14,9 @@
 #include "camel/core/module/builtin.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
@@ -78,13 +80,34 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
         auto program = prepare(with, norm);
         auto data    = execute(program);
-        auto *out    = tensor::TensorObject::create(
-            TypeCode::Float32,
-            program.nodes[program.output].shape,
-            core::mm::autoSpace());
-        if (!data.empty())
-            std::memcpy(out->rawData(), data.data(), data.size() * sizeof(float));
-        return td::toSlot(static_cast<td::Object *>(out));
+        // Prevent collection of partially assembled aggregates while allocating leaves.
+        core::mm::NoCollectionScope noCollection;
+        size_t leaf = 0, offset = 0;
+        auto rebuild = [&](auto &&self, Type *type) -> slot_t {
+            if (tensor::asTensorType(type)) {
+                const auto &shape  = program.nodes[program.outputs.at(leaf++)].shape;
+                const size_t count = elements(shape);
+                auto *out =
+                    tensor::TensorObject::create(TypeCode::Float32, shape, core::mm::autoSpace());
+                if (count)
+                    std::memcpy(out->rawData(), data.data() + offset, count * sizeof(float));
+                offset += count;
+                return td::toSlot(static_cast<td::Object *>(out));
+            }
+            if (type->code() == TypeCode::Tuple) {
+                auto *types = static_cast<TupleType *>(type);
+                auto *tuple = ::Tuple::create(types->size(), core::mm::autoSpace());
+                for (size_t i = 0; i < types->size(); ++i)
+                    tuple->set(i, self(self, types->typeAt(i)), types);
+                return td::toSlot(tuple);
+            }
+            auto *types  = static_cast<StructType *>(type);
+            auto *object = ::Struct::create(types->size(), core::mm::autoSpace());
+            for (size_t i = 0; i < types->size(); ++i)
+                object->set(i, self(self, types->typeAt(i)), types);
+            return td::toSlot(object);
+        };
+        return rebuild(rebuild, static_cast<FunctionType *>(with.type(0))->exitType());
     });
 }
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
@@ -92,11 +115,34 @@ slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
     return checked([] { return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())); });
 }
 
+bool tensorLeaves(Type *type) {
+    if (tensor::asTensorType(type))
+        return true;
+    if (type->code() == TypeCode::Tuple) {
+        auto *tuple = static_cast<TupleType *>(type);
+        if (!tuple->size())
+            return false;
+        for (size_t i = 0; i < tuple->size(); ++i)
+            if (!tensorLeaves(tuple->typeAt(i)))
+                return false;
+        return true;
+    }
+    if (type->code() == TypeCode::Struct) {
+        auto *object = static_cast<StructType *>(type);
+        if (!object->size())
+            return false;
+        for (size_t i = 0; i < object->size(); ++i)
+            if (!tensorLeaves(object->typeAt(i)))
+                return false;
+        return true;
+    }
+    return false;
+}
 std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bool source) {
     if (with.size() != 1 || norm.size() != 1 || with[0]->code() != TypeCode::Function)
         return std::nullopt;
     const auto *fn = static_cast<FunctionType *>(with[0]);
-    if (!tensor::asTensorType(fn->exitType()) || fn->normTypesCount() == 0)
+    if (!tensorLeaves(fn->exitType()) || fn->normTypesCount() == 0)
         return std::nullopt;
     type_vec_t args;
     if (fn->normTypesCount() == 1)
@@ -109,7 +155,7 @@ std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bo
     if (args.size() != fn->normTypesCount())
         return std::nullopt;
     for (size_t i = 0; i < args.size(); ++i) {
-        if (!tensor::asTensorType(args[i]) || fn->normIsVarAt(i) ||
+        if (!tensorLeaves(args[i]) || fn->normIsVarAt(i) ||
             !fn->normTypeAt(i)->assignableFrom(args[i]))
             return std::nullopt;
     }
@@ -128,8 +174,8 @@ class TilesModule final : public BuiltinModule {
                     {{"tiles:" + name,
                       DynamicFuncTypeResolver::create(
                           {{1, {false}}, {1, {false}}},
-                          "<fn: (...) => Tensor>(inputs: Tensor | tuple) => " +
-                              std::string(name != "run" ? "string" : "Tensor"),
+                          "<fn: (...) => TensorAggregate>(inputs: TensorAggregate) => " +
+                              std::string(name != "run" ? "string" : "TensorAggregate"),
                           [source = name != "run"](
                               const type_vec_t &with,
                               const type_vec_t &norm,

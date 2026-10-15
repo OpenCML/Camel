@@ -11,8 +11,10 @@
 // Translate the supported pure tensor subgraphs without running user operators on the host.
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/runtime/graph.h"
@@ -40,6 +42,7 @@ struct Value {
     ty::Type *type = nullptr;
     std::optional<ConstArg> constant;
     size_t tensor = SIZE_MAX;
+    std::vector<Value> fields;
 };
 struct Frame {
     rt::GCGraph *graph;
@@ -61,6 +64,26 @@ class Compiler {
     }
 
     Value host(slot_t slot, ty::Type *type) {
+        if (type->code() == ty::TypeCode::Tuple || type->code() == ty::TypeCode::Struct) {
+            Value value{.type = type};
+            const bool tuple   = type->code() == ty::TypeCode::Tuple;
+            const size_t count = tuple ? static_cast<ty::TupleType *>(type)->size()
+                                       : static_cast<ty::StructType *>(type)->size();
+            for (size_t i = 0; i < count; ++i) {
+                auto *fieldType = tuple ? static_cast<ty::TupleType *>(type)->typeAt(i)
+                                        : static_cast<ty::StructType *>(type)->typeAt(i);
+                auto field      = slot == NullSlot ? NullSlot
+                                  : tuple          ? td::fromSlot<::Tuple *>(slot)->get<slot_t>(i)
+                                                   : td::fromSlot<::Struct *>(slot)->get<slot_t>(i);
+                // FILL templates contain null placeholders. Unfilled leaves cannot
+                // become tensor operands or outputs; the normal checks reject them.
+                value.fields.push_back(
+                    field == NullSlot && ty::isGCTraced(fieldType->code())
+                        ? Value{.type = fieldType}
+                        : host(field, fieldType));
+            }
+            return value;
+        }
         if (tensor::asTensorType(type)) {
             const auto *t = td::fromSlot<tensor::TensorObject *>(slot);
             if (!t || t->dtype() != ty::TypeCode::Float32)
@@ -172,6 +195,37 @@ class Compiler {
                 for (auto in : ins)
                     norm.push_back(eval(f, in));
                 out = call(g->directCalleeGraphOf(id), with, norm);
+                break;
+            }
+            case rt::GCNodeKind::Fill: {
+                if (node->dataType->code() != ty::TypeCode::Tuple &&
+                    node->dataType->code() != ty::TypeCode::Struct)
+                    throw std::runtime_error(
+                        "tiles supports only tuple/struct aggregate construction");
+                out               = eval(f, ins.front());
+                const auto slots  = g->nodeBodyAs<rt::GCFillBody>(id)->slots();
+                const auto values = g->withInputsOf(id);
+                if (slots.size() != values.size())
+                    throw std::runtime_error("aggregate fill arity mismatch");
+                for (size_t i = 0; i < slots.size(); ++i)
+                    out.fields.at(slots[i]) = eval(f, values[i]);
+                out.type = node->dataType;
+                break;
+            }
+            case rt::GCNodeKind::Accs: {
+                auto value         = eval(f, ins.front());
+                const auto *access = g->nodeBodyAs<rt::GCAccsBody>(id);
+                size_t index       = access->value;
+                if (access->accsKind == rt::GCAccsKind::StructKey) {
+                    if (value.type->code() != ty::TypeCode::Struct)
+                        throw std::runtime_error("expected struct aggregate");
+                    auto field =
+                        static_cast<ty::StructType *>(value.type)->findField(access->key());
+                    if (!field)
+                        throw std::runtime_error("missing struct field");
+                    index = *field;
+                }
+                out = value.fields.at(index);
                 break;
             }
             case rt::GCNodeKind::Oper: {
@@ -313,9 +367,22 @@ Program compile(Function *function, const std::vector<Argument> &arguments) {
     for (const auto &a : arguments)
         norm.push_back(c.host(a.value, a.type));
     auto out = c.call(function->graph(), {}, norm, with);
-    if (out.tensor == SIZE_MAX)
-        throw std::runtime_error("tiles requires one tensor result");
-    c.program.output = out.tensor;
+    c.program.outputs.clear();
+    auto collect = [&](auto &&self, const Value &value) -> void {
+        if (value.tensor != SIZE_MAX) {
+            c.program.outputs.push_back(value.tensor);
+        } else if (
+            value.type &&
+            (value.type->code() == ty::TypeCode::Tuple ||
+             value.type->code() == ty::TypeCode::Struct) &&
+            !value.fields.empty()) {
+            for (const auto &field : value.fields)
+                self(self, field);
+        } else {
+            throw std::runtime_error("tiles result must contain nonempty aggregates of tensors");
+        }
+    };
+    collect(collect, out);
     generate(c.program);
     return std::move(c.program);
 }

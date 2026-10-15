@@ -345,3 +345,60 @@ assert(!b.identical_device_code, 'expected different fusion schedules')
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "aggregate_outputs.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/outputs.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 10 && lines.slice(0,8).every(x => Number(x) === 0), 'aggregate results differ from CPU')
+const p = JSON.parse(lines[8]), b = JSON.parse(lines[9])
+assert(p.kernels === 2 && JSON.stringify(p.outputs) === '[2,5,2]', 'shared outputs must be computed once and preserved')
+assert(JSON.stringify(b.output_shapes) === '[[2,3],[3,2],[2,3]]', 'output leaf order or shapes changed')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'multioutput benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "aggregate_outputs.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/outputs.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 10 && lines.slice(0,8).every(x => Number(x) === 0), 'aggregate results differ from CPU')
+const p = JSON.parse(lines[8]), b = JSON.parse(lines[9])
+assert(p.kernels === 2 && JSON.stringify(p.outputs) === '[2,5,2]', 'shared outputs must be computed once and preserved')
+assert(JSON.stringify(b.output_shapes) === '[[2,3],[3,2],[2,3]]', 'output leaf order or shapes changed')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'multioutput benchmark mismatch')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "aggregate_outputs.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/outputs.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 10 && lines.slice(0,8).every(x => Number(x) === 0), 'aggregate results differ from CPU')
+const p = JSON.parse(lines[8]), b = JSON.parse(lines[9])
+assert(p.kernels === 2 && JSON.stringify(p.outputs) === '[2,5,2]', 'shared outputs must be computed once and preserved')
+assert(JSON.stringify(b.output_shapes) === '[[2,3],[3,2],[2,3]]', 'output leaf order or shapes changed')
+assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'multioutput benchmark mismatch')
+}
+"""
+timeout_ms = 60000

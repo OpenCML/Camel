@@ -191,3 +191,26 @@ storage are still separate outstanding work.
 Committed revision 42863511 was rebuilt locally and on 88zjwei (RTX 3090 device
 7); both complete reruns passed 44/44. The remote log is retained at
 `docs/performance/tiles/2026-10-15-rtx3090-mapped-fusion-tests.txt`.
+
+## Aggregate inputs and multiple outputs
+
+The private program now has an ordered output list instead of one output node.
+Compilation recognizes native tuple/struct FILL and ACCS nodes and recursively
+extracts tensor leaves, including nested aggregates passed to direct calls.
+Returned intermediates are fusion boundaries even with one internal consumer;
+every returned value stays live through download. Repeated leaves retain output
+order without repeating computation. Aggregate results are rebuilt with their
+original Camel types under a short no-collection scope and typed write barriers.
+
+The production path downloads all outputs after one graph execution. Benchmark
+correctness compares the full concatenated result; reports include output shapes
+for all leaves. Identity-only results use owned host snapshots, as single-output
+identity did previously. Unsupported non-tensor leaves and empty aggregates are
+rejected by the module resolver. Branches and loops remain outstanding.
+
+Manual runs on all three engines with generational-GC allocation/safepoint stress
+pass nested tuple/struct results, aggregate inputs, direct calls, repeated outputs,
+identity outputs and mixed empty/nonempty results. Native validation now rejects
+20 malformed plans, including an output whose lifetime would overlap reused
+storage. These tests exercise the new resource contract rather than executing
+the graph once per output.

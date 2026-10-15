@@ -74,7 +74,8 @@ std::vector<Lifetime> lifetimes(const Program &p) {
                     launch.members.end())
                     life[in].end = std::max(life[in].end, stage + 1);
     }
-    life[p.output].end = p.launches.size() + 1;
+    for (auto output : p.outputs)
+        life[output].end = p.launches.size() + 1;
     return life;
 }
 } // namespace
@@ -82,7 +83,16 @@ std::vector<Lifetime> lifetimes(const Program &p) {
 bool elementwise(const std::string &op) { return unary(op) || binary(op); }
 
 void validate(const Program &p) {
-    require(!p.nodes.empty() && p.output < p.nodes.size(), "missing output");
+    require(!p.nodes.empty() && !p.outputs.empty(), "missing output");
+    size_t outputElements = 0;
+    for (auto output : p.outputs) {
+        require(output < p.nodes.size(), "missing output");
+        const size_t count = elements(p.nodes[output].shape);
+        require(
+            count <= SIZE_MAX / sizeof(float) - outputElements,
+            "combined output size overflow");
+        outputElements += count;
+    }
     for (size_t id = 0; id < p.nodes.size(); ++id) {
         const auto &n      = p.nodes[id];
         const size_t count = elements(n.shape);
@@ -156,8 +166,9 @@ void schedule(Program &p, ScheduleOptions options) {
     // Each dependency carries its own logical index; layouts need not share a domain.
     for (size_t id = count; id-- > 0;) {
         size_t target = consumer[id];
-        if (!options.fuseElementwise || id == p.output || users[id] != 1 ||
-            !indexedScalar(p.nodes[id].op) || !indexedScalar(p.nodes[target].op))
+        if (!options.fuseElementwise ||
+            std::find(p.outputs.begin(), p.outputs.end(), id) != p.outputs.end() ||
+            users[id] != 1 || !indexedScalar(p.nodes[id].op) || !indexedScalar(p.nodes[target].op))
             continue;
         size_t root = owner[target];
         if (groupSize[root] == 64)
@@ -273,7 +284,8 @@ void validatePlan(const Program &p) {
     for (auto stage : stageOf)
         require(stage != SIZE_MAX, "unscheduled value");
     const auto life = lifetimes(p);
-    require(life[p.output].materialized, "output has no materialized result");
+    for (auto output : p.outputs)
+        require(life[output].materialized, "output has no materialized result");
     std::vector<std::vector<size_t>> occupants(p.storage.bytes.size());
     for (size_t id = 0; id < p.nodes.size(); ++id) {
         size_t slot = p.storage.slots[id];
@@ -319,6 +331,12 @@ std::string inspect(const Program &p) {
             out << s.members[j];
         }
         out << "]}";
+    }
+    out << "],\"outputs\":[";
+    for (size_t i = 0; i < p.outputs.size(); ++i) {
+        if (i)
+            out << ',';
+        out << p.outputs[i];
     }
     out << "]}";
     return out.str();
