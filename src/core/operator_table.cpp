@@ -295,6 +295,24 @@ std::string checkSemantics(
             }
         }
     }
+    // 6. The definition names a function of a library module and binds each parameter to an
+    //    operand. That the function's signature agrees with the operator's, that its effects
+    //    are within the operator's and that no definition reaches its own operator is checked
+    //    when the library is compiled (camel/runtime/definitions.h): it is code in a file.
+    if (record.definition) {
+        const sem::Definition &d = *record.definition;
+        if (d.module.empty() || d.function.empty()) {
+            return "definition: it names a library module and a function";
+        }
+        if (d.params.size() >= 0xFF) {
+            return "definition: too many parameters";
+        }
+        for (const sem::DefinitionParam &param : d.params) {
+            if (param.operand == 0xFF) {
+                return "definition: every parameter is bound to an operand";
+            }
+        }
+    }
     return {};
 }
 
@@ -341,6 +359,21 @@ void OperatorTable::declareResources(std::string_view uri, sem::ResourceSpec res
         record.key = sem::OperatorKey::of(uri);
     }
     record.resources = std::move(resources);
+    declareSemantics(uri, std::move(record));
+}
+
+void OperatorTable::declareDefinition(std::string_view uri, sem::Definition definition) {
+    // As declareResources: a record of its own, or the existing one a minor version up.
+    sem::OperatorSemantics record;
+    if (const auto id = lookup(uri); id && semantics(*id) != nullptr) {
+        record = *semantics(*id);
+        if (record.definition != definition) {
+            ++record.key.minor;
+        }
+    } else {
+        record.key = sem::OperatorKey::of(uri);
+    }
+    record.definition = std::move(definition);
     declareSemantics(uri, std::move(record));
 }
 

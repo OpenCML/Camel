@@ -648,12 +648,17 @@ class GCGraphManager {
     void trackDetached(std::span<GCGraph *const> graphs);
     /// Frees the tracked detached graphs that the program does not reach.
     void releaseDetached();
+    /// Keeps graphs that belong to no program alive and traced for as long as the manager:
+    /// the definition graphs of operators (camel/runtime/definitions.h). Neither clear() nor
+    /// releaseDetached() frees them; a rewrite that uses one encodes a copy into the program.
+    void pin(std::span<GCGraph *const> graphs);
 
   private:
     void rebuildGcRoots();
 
     std::vector<GCGraph *> graphs_;
     std::vector<GCGraph *> detached_;
+    std::vector<GCGraph *> pinned_;
     std::vector<GCGraphDebugRecord *> debugRecords_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
     GCGraph *root_ = nullptr;

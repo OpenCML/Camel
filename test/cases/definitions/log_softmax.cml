@@ -1,0 +1,28 @@
+// log_softmax against its definition, in one run: the kernel (tensor:log_softmax) and the
+// definition (tensor_definitions::log_softmax, the library imported directly) on the same inputs.
+// Each line says whether the two agree in every element (compared as exact text).
+import { Tensor, reshape, log_softmax, numel, random, seed } from tensor
+import tensor_definitions
+
+func elems(t: Tensor<f32>): float[] {
+    let v = reshape(t, [numel(t)])
+    return range(0, numel(t))->map<(i: int): float => v[i]>
+}
+
+func compare(name: string, x: Tensor<f32>, axis: int): int sync {
+    let a = format<elems(log_softmax(x, axis))>("{}")
+    let b = format<elems(tensor_definitions::log_softmax(x, axis))>("{}")
+    println(format<name, if a == b then "same" else "differs">("{} {}"))
+    return 0
+}
+
+func main(): int sync {
+    let clean = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2, -0.5, 0.9, 1.3, -0.1], [3, 4])
+    seed(7)
+    let r = random([16, 9], -10.0, 10.0)
+    compare("clean 1", clean, 1)
+    compare("clean 0", clean, 0)
+    compare("random 1", r, 1)
+    compare("random 0", r, 0)
+    return 0
+}

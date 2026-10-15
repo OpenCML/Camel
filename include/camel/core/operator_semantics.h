@@ -50,6 +50,8 @@
  *                      operand names which resource, which part of it, how it is accessed, how
  *                      the result relates to it, and whether running it is visible outside
  *                      the program
+ *   definition         a Camel function, exported by a library module, that is the operator's
+ *                      normative definition (design section 9, camel/runtime/definitions.h)
  *
  * An operator's declaration says only what the operator does. Permissions are never part of
  * it: they are written by the program on its own code and stored on the graph, one byte per
@@ -67,6 +69,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace camel::core::sem {
@@ -206,6 +209,49 @@ struct FaultSpec {
     bool operator==(const FaultSpec &) const = default;
 };
 
+// ---- Definition (design section 9) ---------------------------------------------------------
+
+/// The value an optional operand has when a call leaves it out (softmax's axis: -1).
+using DefinitionDefault = std::variant<int64_t, double, bool>;
+
+/// Where one parameter of a definition function gets its value at a call of the operator.
+struct DefinitionParam {
+    enum class Kind : uint8_t {
+        Norm, // the ordinary operand `operand`
+        With, // the with operand `operand`
+    };
+    Kind kind       = Kind::Norm;
+    uint8_t operand = 0;
+    /// The value of an optional operand the call leaves out; without one the operand is
+    /// required (a call without it is not expanded).
+    std::optional<DefinitionDefault> fallback;
+
+    bool operator==(const DefinitionParam &) const = default;
+};
+
+/**
+ * The definition of an operator (design section 9; design principles 2.13: "a definition graph
+ * is normative"): a function written in Camel, exported by a library module, that computes
+ * exactly what the operator computes: the axis, the numeric stabilization, the accumulator
+ * type, every conversion. A kernel, fused or hand-written, must agree with it (bit for bit on
+ * the correctly rounded and exact parts; within the declared bound on bounded functions).
+ *
+ * The library is compiled the first time a definition of it is asked for, in the program's
+ * context, and its graphs are kept by the core (camel/runtime/definitions.h). Nothing expands
+ * a definition unless a pass or a back end asks to (expandDefinition).
+ */
+struct Definition {
+    /// The library module, by the name a program imports it with ("tensor_definitions"): a
+    /// Camel file on the module search path. It imports modules written in C++ only.
+    std::string module;
+    /// The exported function that is the definition ("softmax").
+    std::string function;
+    /// One per parameter of the function, in order.
+    std::vector<DefinitionParam> params;
+
+    bool operator==(const Definition &) const = default;
+};
+
 // ---- The record --------------------------------------------------------------------------
 
 struct OperatorSemantics {
@@ -226,6 +272,8 @@ struct OperatorSemantics {
     /// conservatively from the traits (conservativeResources): a pure operator touches none;
     /// any other reads and writes every operand and may return any of them.
     std::optional<ResourceSpec> resources;
+    /// The definition graph (design section 9), nullopt when the operator has none.
+    std::optional<Definition> definition;
 };
 
 } // namespace camel::core::sem

@@ -39,6 +39,7 @@
 namespace camel::runtime {
 class GCGraph;
 class GCGraphManager;
+class DefinitionStore;
 } // namespace camel::runtime
 
 namespace camel::runtime::fact {
@@ -102,6 +103,8 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unique_ptr<camel::runtime::GCGraphManager> runtimeGraphMgr_;
     /// See facts(). Created on first use.
     std::unique_ptr<camel::runtime::fact::FactStore> facts_;
+    /// See definitions(). Created on first use.
+    std::unique_ptr<camel::runtime::DefinitionStore> definitions_;
     error::diagnostic_sink_ptr_t runtimeDiagSink_;
     error::runtime_error_reporter_ptr_t runtimeErrorReporter_;
     camel::source::source_context_ptr_t sourceContext_;
@@ -180,10 +183,17 @@ class Context : public std::enable_shared_from_this<Context> {
     /// See GCGraphManager::trackDetached / releaseDetached.
     void trackDetachedRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs);
     void releaseDetachedRuntimeGraphs();
+    /// See GCGraphManager::pin: graphs the core keeps for the context's lifetime (the
+    /// definition graphs of operators).
+    void pinRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs);
     /// The program's graph facts (camel/runtime/facts.h): what passes and back ends derived
     /// about its graphs, each with a stamp that a read checks. Lives as long as the context;
     /// a fact survives rewrites of the program and reads as absent once it no longer holds.
     camel::runtime::fact::FactStore &facts();
+    /// The definition graphs of operators built in this context (camel/runtime/definitions.h):
+    /// their libraries are compiled the first time a definition is asked for, and their
+    /// graphs kept (pinned) for as long as the context.
+    camel::runtime::DefinitionStore &definitions();
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }

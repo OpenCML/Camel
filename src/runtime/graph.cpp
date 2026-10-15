@@ -1763,6 +1763,18 @@ void GCGraphManager::rebuildGcRoots() {
     for (GCGraph *graph : detached_) {
         gcRoots_.push_back(graph);
     }
+    for (GCGraph *graph : pinned_) {
+        gcRoots_.push_back(graph);
+    }
+}
+
+void GCGraphManager::pin(std::span<GCGraph *const> graphs) {
+    for (GCGraph *graph : graphs) {
+        if (graph && std::find(pinned_.begin(), pinned_.end(), graph) == pinned_.end()) {
+            pinned_.push_back(graph);
+            gcRoots_.push_back(graph);
+        }
+    }
 }
 
 void GCGraphManager::trackDetached(std::span<GCGraph *const> graphs) {
@@ -1806,6 +1818,13 @@ void GCGraphManager::adoptRoot(GCGraph *rootGraph) {
 GCGraphManager::~GCGraphManager() {
     releaseDetached();
     clear();
+    for (GCGraph *graph : pinned_) {
+        delete graph->debug_;
+        graph->~GCGraph();
+        mm::graphSpace().free(graph);
+    }
+    pinned_.clear();
+    gcRoots_.clear();
 }
 
 std::vector<GCGraph *> GCGraphManager::roots() const {
@@ -1832,6 +1851,8 @@ void GCGraphManager::clear() {
     debugRecords_.clear();
     graphs_.clear();
     root_ = nullptr;
+    // The pinned graphs belong to no program: they stay, and stay traced.
+    gcRoots_.insert(gcRoots_.end(), pinned_.begin(), pinned_.end());
 }
 
 void collectStaticGraphRefsRecursive(

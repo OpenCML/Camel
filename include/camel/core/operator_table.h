@@ -305,6 +305,8 @@ class OperatorTable {
      *      state-only), while an operator the traits count as external may declare none (a
      *      refinement: an assignment writes the program's own cell). Checked against the
      *      traits declared so far: declare them first.
+     *   6. A definition names a library module and a function, and binds every parameter to
+     *      an operand (the rest is checked when the library is compiled).
      *
      * The instances an instantiation function returns cannot be checked here (it is code);
      * sem::instantiate validates each one structurally, and the property tests compare the
@@ -319,6 +321,14 @@ class OperatorTable {
     /// it has none, otherwise the same record one minor version up. Checked as
     /// declareSemantics checks (check 5); throws std::invalid_argument when rejected.
     void declareResources(std::string_view uri, sem::ResourceSpec resources);
+
+    /// Declares the definition of the operator `uri` (docs/design/op-semantics, section 9): a
+    /// function of a library module written in Camel that is its normative definition. Its
+    /// semantics record gets it, as declareResources gives resources (a record of its own, or
+    /// the existing one a minor version up: a definition is a fact added). Checked as
+    /// declareSemantics checks (check 6); the definition itself is compiled and checked when it
+    /// is first asked for (camel/runtime/definitions.h).
+    void declareDefinition(std::string_view uri, sem::Definition definition);
 
     /// declareResources for `protocol:name`, one `{name, resources}` each (a module's load).
     void declareResources(

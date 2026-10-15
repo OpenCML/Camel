@@ -90,6 +90,13 @@ class Builder {
     /// the warnings that need them). False when a module is in error.
     bool buildProgram();
 
+    /// Steps two and three for a library: the module `module` (declared with declareModule on
+    /// this builder) and what it imports, built as buildProgram builds a program, without the
+    /// call of an entry function. The definition libraries of operators are built so, by a
+    /// builder of their own (UserDefinedModule::compileAsLibrary). False when a module is in
+    /// error.
+    bool buildLibrary(const camel::core::module::module_ptr_t &module);
+
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
   private:
@@ -216,6 +223,9 @@ class Builder {
     // Switches the builder to the top level of a module for as long as it lives, and back.
     class UnitContext;
     friend class UnitContext;
+    // Steps two and three from `entry` (buildProgram, buildLibrary): every module it imports,
+    // directly or not, then it; the call of `main` only when `callEntry`.
+    bool buildFrom(ModuleUnit &entry, bool callEntry);
     // Step two for one module: its top-level declarations in the order they are written.
     void buildModuleBody(ModuleUnit &unit);
     // Builds the top-level value declaration `declaration` unless it is built: in its own

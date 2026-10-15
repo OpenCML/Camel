@@ -354,6 +354,19 @@ class EncodeSession {
     }
 
   private:
+    /// The prepared graph of `graph` when it is part of the encoded set; nullptr otherwise.
+    PreparedGraph *findPreparedGraph(const graph_ptr_t &graph) {
+        if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
+            return it->second;
+        }
+        if (!graph->stableId().empty()) {
+            if (auto it = preparedByStableId_.find(graph->stableId()); it != preparedByStableId_.end()) {
+                return it->second;
+            }
+        }
+        return nullptr;
+    }
+
     PreparedGraph *resolvePreparedGraph(const graph_ptr_t &graph) {
         ASSERT(graph != nullptr, "Cannot resolve a null compile graph.");
         if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
@@ -960,14 +973,16 @@ class EncodeSession {
         }
         GCGraph *runtimeOuterGraph = nullptr;
         if (const auto &outer = source->outerGraph(); outer != nullptr) {
-            auto *outerPrepared = resolvePreparedGraph(outer);
+            // A graph encoded without the graph it is written in (a function of a library
+            // encoded on its own, camel/runtime/definitions.h) has no outer graph at runtime.
+            auto *outerPrepared = findPreparedGraph(outer);
             CAMEL_LOG_INFO_S(
                 "GIREncode",
                 "Resolve outer graph for '{}': outer='{}' prepared={}.",
                 source->name(),
                 outer->name(),
                 outerPrepared != nullptr);
-            runtimeOuterGraph = outerPrepared->runtime;
+            runtimeOuterGraph = outerPrepared != nullptr ? outerPrepared->runtime : nullptr;
         }
         CAMEL_LOG_INFO_S(
             "GIREncode",

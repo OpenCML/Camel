@@ -311,6 +311,7 @@ f0bc865a95342d5b ok exemplars/05_effect_order/program.cml
 18da615b13dfd8aa ok exemplars/08_structured_control_flow/program.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
 173076cd43673a6b ok stdlib/perf.cml
+57536e3303233d26 ok stdlib/tensor_definitions.cml
 191bfdbcd7a88967 ok stdlib/signatures/algo.cml
 3f20be7d0332af35 ok stdlib/signatures/crypto.cml
 7b5ff78ccfa0d052 ok stdlib/signatures/fs.cml
@@ -965,6 +966,12 @@ e1e169ed073c55e5 ok test/cases/consistency/values/tail_deep.cml
 47f632254922b577 ok test/cases/consistency/values/tail_mutual.cml
 578df1b0ce5442d6 ok test/cases/consistency/values/wait_order.cml
 502d2d473cc4a4e9 ok test/cases/consistency/values/with_params.cml
+7a250294764c09f9 ok test/cases/definitions/bad_definitions.cml
+af3630ffac4ff23b ok test/cases/definitions/broken_definitions.cml
+e74173f109a285b1 ok test/cases/definitions/check.cml
+32b6bc7cea6b5506 ok test/cases/definitions/grad.cml
+065cd079cd39242d ok test/cases/definitions/kernels.cml
+36e7587c16af697f ok test/cases/definitions/log_softmax.cml
 38fb8cae2a40a044 ok test/cases/facts/tensors_and_loops.cml
 61acf4b4dcd0d842 ok test/cases/facts/two_functions.cml
 fe52bbb4e8af47be ok test/cases/feat/mm/capacity/perm_query_types.cml
@@ -1545,6 +1552,7 @@ f300e470487fa1bc ok test/cases/perf/gc/build_tree.cml
 f7282e239e9b6bc9 ok test/cases/perf/gc/fib.cml
 61d0732defe3b304 ok test/cases/perf/gc/jit_const.cml
 3bf44e76d6935b32 ok test/cases/perf/gc/map_chain.cml
+308cd3c79d6d3c2f ok test/cases/resources/effects.cml
 a3872dff9491d245 ok test/cases/smoke/core/fib10_pipeline.cml
 4f768199400dac2f ok test/cases/smoke/core/prl_scheduler.cml
 c75f6a4154956a5e ok test/cases/tools/debugger/fixtures/branch.cml

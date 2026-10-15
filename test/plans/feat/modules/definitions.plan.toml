@@ -1,0 +1,171 @@
+id = "modules.definitions"
+order = 374
+tier = "feat"
+tags = ["feat", "modules", "semantics", "definitions", "tensor"]
+desc = "The definition graphs of operators (camel/runtime/definitions.h, docs/design/op-semantics section 9; design principles 2.13: a definition graph is normative): the definitions the tensor module declares from stdlib/tensor_definitions.cml, the checks that refuse a definition, the kernels against their expanded definitions bit for bit on every back end, log_softmax against its definition, and gradients through the definitions against the operators' own derivative rules."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "declared_and_refused"
+desc = "test::definitions (CAMEL_ENABLE_TEST_PASSES): softmax, log_softmax (key 1.0: only the definition is declared), mean and relu (1.1 + the definition = 1.2) and sigmoid are built from tensor_definitions, each with its parameters and a portable content hash; a definition is built once; matmul has none; a definition without a function is rejected when declared. Refused when built, each with its reason: a cycle of two definitions (exp defined with softmax, which uses exp) and, since, softmax on that cycle too; a definition that reaches its own operator; a function of another arity; an effect in the definition of a pure operator; a generic function; a missing function; a library that does not compile; a library that does not exist."
+kind = "behavior"
+case = "../../../cases/definitions/check.cml"
+args = ["${case}", "test::definitions"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const [uri, key, graph, params] of [
+  ['tensor:softmax', 'tensor:softmax@1.0', 'tensor_definitions::softmax', 2],
+  ['tensor:log_softmax', 'tensor:log_softmax@1.0', 'tensor_definitions::log_softmax', 2],
+  ['tensor:mean', 'tensor:mean@1.2', 'tensor_definitions::mean', 1],
+  ['tensor:relu', 'tensor:relu@1.2', 'tensor_definitions::relu', 1],
+  ['tensor:sigmoid', 'tensor:sigmoid@1.0', 'tensor_definitions::sigmoid', 1],
+]) {
+  const m = out.match(new RegExp(`DEFINITION ${uri} built ${key} graph ${graph} params ${params} hash ([0-9a-f]{16})\\n`))
+  assert(m, `${uri}: ${out.split('\\n').find((l) => l.startsWith('DEFINITION ' + uri + ' '))}`)
+}
+for (const l of [
+  'DEFINITION built_once yes',
+  "DEFINITION none refused: 'tensor:matmul' declares no definition",
+  "DEFINITION without_function rejected: The semantics declared for the operator 'tensor:tanh' are rejected: definition: it names a library module and a function.",
+  "DEFINITION cycle refused: the definition of 'tensor:exp' is refused: a cycle of definitions (tensor:exp -> tensor:softmax -> tensor:exp)",
+  "DEFINITION cycle_refuses_softmax refused: the definition of 'tensor:softmax' is refused: a cycle of definitions (tensor:softmax -> tensor:exp -> tensor:softmax)",
+  "DEFINITION reaches_itself refused: the definition of 'tensor:abs' is refused: a cycle of definitions (tensor:abs -> tensor:abs)",
+  "DEFINITION arity refused: the definition of 'tensor:neg' is refused: 'bad_definitions::two' has no overload of 1 ordinary parameters and no with parameter",
+  "DEFINITION effect_of_pure refused: the definition of 'tensor:sqrt' is refused: the operator is pure and its definition has an effect",
+  "DEFINITION generic refused: the definition of 'tensor:log' is refused: 'bad_definitions::generic' is generic; a definition has one graph",
+  "DEFINITION missing_function refused: the definition of 'tensor:rsqrt' is refused: 'bad_definitions' exports no 'nope'",
+  "DEFINITION library_does_not_compile refused: the definition of 'tensor:gelu' is refused: its library 'broken_definitions' does not compile: SemanticDiag::UnresolvedReference: Unresolved reference: 'undefined_name'.",
+  "DEFINITION library_not_found refused: the definition of 'tensor:erf' is refused: its library 'no_such_library' cannot be loaded: Module 'no_such_library' not found. Search attempts:",
+]) line(l)
+}
+"""
+
+[[tests]]
+name = "test_pass_needs_the_environment"
+desc = "test::definitions is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
+kind = "negative"
+case = "../../../cases/definitions/check.cml"
+args = ["${case}", "test::definitions"]
+expect_exit = 1
+expect_output_not_contains = ["DEFINITION "]
+
+[[tests]]
+name = "kernels"
+desc = "The kernels of softmax (default, positive and negative axes, a large spread, a 3-d tensor, special values, an empty tensor), mean, relu and sigmoid on special values (NaN, infinities, signed zeros, subnormals) and pseudo-random inputs, every element printed exactly. The golden output is the one their expanded definitions give (kernels_expanded)."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/definitions/kernels.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+golden = "golden/definitions/kernels.txt"
+expect_exit = 0
+
+[[tests]]
+name = "kernels_expanded"
+desc = "The same program after test::expand_definitions: every softmax, mean, relu and sigmoid node is replaced by its definition (expandDefinition, inlined), and the output is the same text as the kernels' on every back end: the kernels agree with their definitions bit for bit (a NaN is compared as NaN: the printed text has no sign or payload)."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/definitions/kernels.cml"
+args = ["${case}", "test::expand_definitions", "${backend}"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+golden = "golden/definitions/kernels.txt"
+expect_exit = 0
+
+[[tests]]
+name = "expanded_nodes"
+desc = "test::expand_definitions reports on stderr what it expanded: 10 softmax, 5 mean, 3 sigmoid and 2 relu nodes, none left."
+kind = "behavior"
+case = "../../../cases/definitions/kernels.cml"
+args = ["${case}", "test::expand_definitions", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+for (const l of ['EXPANDED tensor:mean 5', 'EXPANDED tensor:relu 2', 'EXPANDED tensor:sigmoid 3', 'EXPANDED tensor:softmax 10'])
+  assert(err.includes(l + '\n'), `missing: ${l}`)
+assert(!err.includes('NOT EXPANDED'), 'every node is expanded')
+}
+"""
+
+[[tests]]
+name = "log_softmax_disagrees"
+desc = "log_softmax against its definition, in one run (the library imported directly). The kernel takes the log of the f64 sum in f64 and rounds once; the definition rounds the sum to f32 and takes the f32 log, which no tensor operator can do otherwise. They differ in the last bits: a known disagreement, recorded here until the language author rules which side changes (docs/design/op-semantics 14.4)."
+kind = "behavior"
+case = "../../../cases/definitions/log_softmax.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+for (const l of ['clean 1 differs', 'clean 0 differs', 'random 1 differs', 'random 0 differs'])
+  assert(out.includes(l + '\n'), `missing: ${l}`)
+}
+"""
+
+[[tests]]
+name = "gradients"
+desc = "The gradient of each operator through its own derivative rule against the gradient autodiff takes through its definition (the library imported directly): different algorithms, so they agree within a relative 1e-5 (sum |g_op - g_def| / sum |g_op|), not bit for bit; mean and relu exactly."
+kind = "behavior"
+case = "../../../cases/definitions/grad.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+for (const name of ['softmax', 'softmax 0', 'log_softmax', 'mean', 'relu', 'sigmoid'])
+  assert(new RegExp(`^${name} ok `, 'm').test(out), `${name}: ${out}`)
+assert(out.includes('mean ok 0.0\n') && out.includes('relu ok 0.0\n'), 'mean and relu exactly')
+}
+"""
+
+[[tests]]
+name = "gradients_expanded"
+desc = "The same after test::expand_definitions (before std::macro): the operators are expanded, so autodiff goes through the definitions on both sides and the gradients are the same."
+kind = "behavior"
+case = "../../../cases/definitions/grad.cml"
+args = ["${case}", "test::expand_definitions", "std::macro"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+for (const name of ['softmax', 'softmax 0', 'log_softmax', 'mean', 'relu', 'sigmoid'])
+  assert(out.includes(`${name} ok 0.0\n`), `${name}: ${out}`)
+assert(input.normalized.stderr.includes('EXPANDED tensor:softmax 2\n'), 'softmax expanded')
+}
+"""
+
+[[tests]]
+name = "declared_definitions"
+desc = "`camel inspect --ops` shows each definition with how the operands bind it."
+kind = "behavior"
+case = "../../../cases/definitions/kernels.cml"
+args = ["inspect", "--ops", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
+const byUri = new Map(ops.map((o) => [o.uri, o]))
+for (const [uri, text] of [
+  ['tensor:softmax', 'tensor_definitions::softmax(norm 0, norm 1 = -1)'],
+  ['tensor:log_softmax', 'tensor_definitions::log_softmax(norm 0, norm 1 = -1)'],
+  ['tensor:mean', 'tensor_definitions::mean(norm 0)'],
+  ['tensor:relu', 'tensor_definitions::relu(norm 0)'],
+  ['tensor:sigmoid', 'tensor_definitions::sigmoid(norm 0)'],
+]) assert(byUri.get(uri) && byUri.get(uri).semantics.definition === text, `${uri}: ${JSON.stringify(byUri.get(uri))}`)
+assert(!byUri.get('tensor:matmul').semantics.definition, 'matmul has none')
+}
+"""

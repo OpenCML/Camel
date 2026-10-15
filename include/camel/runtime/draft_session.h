@@ -116,6 +116,8 @@ class RuntimeGraphDraftSession {
         const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot);
 
     GCGraph *runtimeRoot() const { return runtimeRoot_; }
+    /// The context of the program the session rewrites.
+    const camel::core::context::context_ptr_t &context() const { return context_; }
 
     bool hasDraft(const GCGraph *graph) const;
     GraphDraft *tryDraft(const GCGraph *graph);
