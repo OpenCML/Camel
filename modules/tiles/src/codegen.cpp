@@ -59,6 +59,17 @@ IndexExpr mappedIndex(const Node &n, const IndexExpr &at) {
 } // namespace
 
 void kernel::emitCUDA(Program &p) {
+    auto canContract = [&](const Node &node) {
+        if (!(node.permissions & core::sem::kContract) || node.semantic >= p.contracts.size())
+            return false;
+        const auto *declaration = p.contracts[node.semantic].declaration;
+        if (!declaration)
+            return false;
+        const auto &numeric = declaration->numeric;
+        return numeric.cls == core::sem::NumericClass::CorrectlyRounded &&
+               numeric.compute == core::type::TypeCode::Float32 &&
+               (numeric.sensitiveTo & core::sem::kContract);
+    };
     auto load = [&](size_t id, const std::string &at) {
         if (p.nodes[id].dtype == DType::F64)
             return "reinterpret_cast<double*>(v[" + std::to_string(id) + "])[" + at + "]";
@@ -116,11 +127,11 @@ __device__ __forceinline__ float tiles_minimum(float a, float b) {
             };
             // Contract only a private multiply in this launch, with permission
             // on both original operations. Keep all other f32 rounding points.
-            if (value.op == "add" && (value.permissions & core::sem::kContract)) {
+            if (value.op == "add" && canContract(value)) {
                 for (size_t side = 0; side < 2; ++side) {
                     const auto productId = value.inputs[side];
                     const auto &product  = p.nodes[productId];
-                    if (product.op != "multiply" || !(product.permissions & core::sem::kContract) ||
+                    if (product.op != "multiply" || !canContract(product) ||
                         std::find(launch.members.begin(), launch.members.end(), productId) ==
                             launch.members.end())
                         continue;

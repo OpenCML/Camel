@@ -9,10 +9,12 @@
  */
 
 // Checked tensor schedules and interval-based storage reuse for one ordered stream.
+#include "camel/core/operator_table.h"
 #include "tiles/device.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <cstdint>
+#include <iomanip>
 #include <limits>
 #include <numeric>
 #include <sstream>
@@ -104,6 +106,26 @@ bool elementwise(const std::string &op) { return unary(op) || binary(op); }
 
 void validate(const Program &p) {
     require(!p.nodes.empty() && !p.outputs.empty(), "missing output");
+    auto &table                 = core::OperatorTable::instance();
+    const auto declarationEpoch = table.declarationEpoch();
+    for (const auto &contract : p.contracts) {
+        const auto id = table.lookup(contract.uri);
+        require(id.has_value(), "operator contract is no longer registered");
+        require(
+            table.semantics(*id) == contract.declaration,
+            "operator declaration changed; recompile the graph");
+        if (contract.key)
+            require(
+                contract.key->uri() == contract.uri && table.bind(*contract.key) == id,
+                "operator semantics changed; recompile the graph");
+        else
+            require(
+                table.semantics(*id) == nullptr,
+                "operator gained a semantic declaration; recompile the graph");
+    }
+    require(
+        table.declarationEpoch() == declarationEpoch,
+        "operator declarations changed during validation; recompile the graph");
     size_t outputBytes = 0;
     for (auto output : p.outputs) {
         require(output < p.nodes.size(), "missing output");
@@ -112,7 +134,10 @@ void validate(const Program &p) {
         outputBytes += count;
     }
     for (size_t id = 0; id < p.nodes.size(); ++id) {
-        const auto &n      = p.nodes[id];
+        const auto &n = p.nodes[id];
+        require(
+            n.semantic == SIZE_MAX || n.semantic < p.contracts.size(),
+            "missing operator contract");
         const size_t count = elements(n.shape);
         bytes(n);
         for (auto in : n.inputs)
@@ -493,6 +518,20 @@ std::string inspect(const Program &p) {
         if (i)
             out << ',';
         out << static_cast<unsigned>(p.nodes[i].permissions);
+    }
+    out << "],\"operator_contracts\":[";
+    for (size_t i = 0; i < p.contracts.size(); ++i) {
+        if (i)
+            out << ',';
+        const auto &contract = p.contracts[i];
+        out << "{\"identity\":"
+            << std::quoted(contract.key ? contract.key->toString() : contract.uri)
+            << ",\"declared\":" << (contract.key ? "true" : "false") << ",\"numeric\":"
+            << std::quoted(
+                   core::sem::numericClassName(
+                       contract.declaration ? contract.declaration->numeric.cls
+                                            : core::sem::NumericClass::Opaque))
+            << '}';
     }
     out << "]}";
     return out.str();
