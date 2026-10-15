@@ -13,7 +13,7 @@ digraph GraphIR {
                 tooltip="() => Tensor";
                 F03 [label="ARGS", type="ARGS", style=dashed, shape=circle];
                 O03 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-                N00 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_4__::node#1"];
+                N00 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor", shape=circle, style=solid, tooltip="t\n__g_4__::node#1"];
                 N01 [label="tenso\nr:relu", type="OPER", shape=diamond, style=solid, tooltip="tensor:relu\n__g_4__::node#2"];
                 F03 -> N00 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
                 N01 -> O03 [label="0", type="EXIT", style=solid];
@@ -24,7 +24,7 @@ digraph GraphIR {
                 tooltip="() => Tensor";
                 F04 [label="ARGS", type="ARGS", style=dashed, shape=circle];
                 O04 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-                N02 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_6__::node#1"];
+                N02 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor", shape=circle, style=solid, tooltip="t\n__g_6__::node#1"];
                 N03 [label="1", type="DATA", shape=circle, style=solid, tooltip="1\n__g_6__::node#-1"];
                 N04 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\n__g_6__::node#2\nrole scalar-boundary: tensor -> host float"];
                 N05 [label="2.0", type="DATA", shape=circle, style=solid, tooltip="2.0\n__g_6__::node#-2"];
@@ -41,7 +41,7 @@ digraph GraphIR {
             }
             F02 [label="ARGS", type="ARGS", style=dashed, shape=circle];
             O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-            N08 [label="t", type="PORT", shape=circle, style=solid, tooltip="t\ngate::node#1"];
+            N08 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="Tensor", shape=circle, style=solid, tooltip="t\ngate::node#1"];
             N09 [label="0", type="DATA", shape=circle, style=solid, tooltip="0\ngate::node#-1"];
             N0A [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\ngate::node#2\nrole scalar-boundary: tensor -> host float"];
             N0B [label="0.5", type="DATA", shape=circle, style=solid, tooltip="0.5\ngate::node#-2"];
