@@ -9,6 +9,7 @@
  */
 
 // Checked tensor schedules and interval-based storage reuse for one ordered stream.
+#include "tiles/device.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <limits>
@@ -106,9 +107,17 @@ void validate(const Program &p) {
             require(in < id, "dependency is not topologically earlier");
         if (n.op == "input") {
             require(n.dtype == DType::F32, "input payload dtype");
-            require(n.inputs.empty() && n.data.size() == count, "invalid input payload");
+            require(n.inputs.empty(), "input has dependencies");
+            if (n.resident)
+                require(
+                    n.data.empty() && n.resident->shape == n.shape && n.resident->owner &&
+                        n.resident->address,
+                    "invalid resident input");
+            else
+                require(n.data.size() == count, "invalid input payload");
             continue;
         }
+        require(!n.resident, "computed value borrows input storage");
         require(n.data.empty(), "computed value has host payload");
         if (n.op == "sum_all" || n.op == "mean_all") {
             require(
@@ -239,7 +248,7 @@ void schedule(Program &p, ScheduleOptions options) {
     p.storage.slots.assign(count, SIZE_MAX);
     std::vector<size_t> order;
     for (size_t id = 0; id < count; ++id)
-        if (life[id].materialized)
+        if (life[id].materialized && !p.nodes[id].resident)
             order.push_back(id);
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
         return life[a].begin < life[b].begin;
@@ -309,7 +318,8 @@ void validatePlan(const Program &p) {
                     stageOf[in] != SIZE_MAX && stageOf[in] <= stage + 1,
                     "unscheduled dependency");
                 require(
-                    stageOf[in] == stage + 1 || p.storage.slots[in] != SIZE_MAX,
+                    stageOf[in] == stage + 1 || p.storage.slots[in] != SIZE_MAX ||
+                        p.nodes[in].resident,
                     "register value escapes stage");
                 if (stageOf[in] == stage + 1)
                     ++internalUses[in];
@@ -327,6 +337,10 @@ void validatePlan(const Program &p) {
     std::vector<std::vector<size_t>> occupants(p.storage.bytes.size());
     for (size_t id = 0; id < p.nodes.size(); ++id) {
         size_t slot = p.storage.slots[id];
+        if (p.nodes[id].resident) {
+            require(slot == SIZE_MAX, "borrowed input has writable allocation");
+            continue;
+        }
         if (!life[id].materialized) {
             require(slot == SIZE_MAX, "register-only value has allocation");
             continue;
@@ -345,8 +359,15 @@ void validatePlan(const Program &p) {
 std::string inspect(const Program &p) {
     validatePlan(p);
     size_t logicalBytes = 0, allocatedBytes = 0, materialized = 0;
+    size_t borrowedBytes = 0, borrowedInputs = 0;
     for (const auto &n : p.nodes)
         logicalBytes += bytes(n);
+    for (const auto &n : p.nodes)
+        if (n.resident) {
+            borrowedBytes += bytes(n);
+            ++borrowedInputs;
+            ++materialized;
+        }
     for (auto bytes : p.storage.bytes)
         allocatedBytes += bytes;
     for (auto slot : p.storage.slots)
@@ -355,7 +376,8 @@ std::string inspect(const Program &p) {
     out << "{\"schema\":1,\"values\":" << p.nodes.size() << ",\"kernels\":" << p.launches.size()
         << ",\"materialized_values\":" << materialized
         << ",\"allocations\":" << p.storage.bytes.size() << ",\"logical_bytes\":" << logicalBytes
-        << ",\"allocated_bytes\":" << allocatedBytes << ",\"stages\":[";
+        << ",\"allocated_bytes\":" << allocatedBytes << ",\"borrowed_inputs\":" << borrowedInputs
+        << ",\"borrowed_bytes\":" << borrowedBytes << ",\"stages\":[";
     for (size_t i = 0; i < p.launches.size(); ++i) {
         if (i)
             out << ',';

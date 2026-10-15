@@ -10,6 +10,7 @@
 
 // Translate the supported pure tensor subgraphs without running user operators on the host.
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -22,6 +23,7 @@
 #include "modules/tensor/ops/support.h"
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
+#include "tiles/device.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <bit>
@@ -65,6 +67,14 @@ class Compiler {
     }
 
     Value host(slot_t slot, ty::Type *type) {
+        if (asDeviceType(type)) {
+            auto *wrapper = td::fromSlot<td::ForeignResourceObject *>(slot);
+            auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceTensor>>();
+            Node node{.op = "input", .shape = resident->shape};
+            node.resident = std::move(resident);
+            auto *exact   = tensor::TensorType::get(ty::TypeCode::Float32, node.shape);
+            return {.type = exact, .tensor = append(std::move(node))};
+        }
         if (type->code() == ty::TypeCode::Tuple || type->code() == ty::TypeCode::Struct) {
             Value value{.type = type};
             const bool tuple   = type->code() == ty::TypeCode::Tuple;

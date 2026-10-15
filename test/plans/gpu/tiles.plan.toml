@@ -588,3 +588,57 @@ assert(values.length === 5 && values.every(x => x === 0), 'resident transfer, ty
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "resident_compute.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_compute.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 9 && lines.slice(0,8).every(x => Number(x) === 0), 'borrowed input computation or immutability mismatch')
+const p = JSON.parse(lines[8])
+assert(p.borrowed_inputs === 1 && p.borrowed_bytes === 24, 'resident input missing from plan')
+assert(p.allocated_bytes === 28 && p.allocations === 2 && p.kernels === 1, 'borrowed input must not allocate a temporary copy')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_compute.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_compute.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 9 && lines.slice(0,8).every(x => Number(x) === 0), 'borrowed input computation or immutability mismatch')
+const p = JSON.parse(lines[8])
+assert(p.borrowed_inputs === 1 && p.borrowed_bytes === 24, 'resident input missing from plan')
+assert(p.allocated_bytes === 28 && p.allocations === 2 && p.kernels === 1, 'borrowed input must not allocate a temporary copy')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "resident_compute.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/resident_compute.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=1", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 9 && lines.slice(0,8).every(x => Number(x) === 0), 'borrowed input computation or immutability mismatch')
+const p = JSON.parse(lines[8])
+assert(p.borrowed_inputs === 1 && p.borrowed_bytes === 24, 'resident input missing from plan')
+assert(p.allocated_bytes === 28 && p.allocations === 2 && p.kernels === 1, 'borrowed input must not allocate a temporary copy')
+}
+"""
+timeout_ms = 60000

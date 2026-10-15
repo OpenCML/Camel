@@ -10,6 +10,7 @@
 
 // Mutation tests for plan validation: failures must precede device execution.
 #include "tiles/program.h"
+#include "tiles/device.h"
 #include <iostream>
 #include <stdexcept>
 using namespace camel::tiles;
@@ -82,7 +83,22 @@ int main() {
         rejects(scalar, [](auto &x) { x.storage.bytes[x.storage.slots[1]] = 4; }, "undersized/missing allocation");
         rejects(scalar, [](auto &x) { x.nodes[1].dtype = DType::F32; }, "scalar reduction type");
         rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "unsupported operation dtype");
-        std::cout << "tiles plan validation: 24 rejected mutations\n";
+        auto borrowed = indexed;
+        auto resident = std::make_shared<DeviceTensor>();
+        resident->shape = {2,3};
+        resident->address = 1; // Validator-only sentinel, never passed to CUDA.
+        resident->owner = std::make_shared<int>(0);
+        borrowed.nodes[0].resident = resident;
+        borrowed.nodes[0].data.clear();
+        schedule(borrowed);
+        validatePlan(borrowed);
+        if (borrowed.storage.slots[0] != SIZE_MAX || borrowed.storage.bytes.size() != 1)
+            throw std::runtime_error("borrowed input must not allocate writable storage");
+        rejects(borrowed, [](auto &x) { x.storage.slots[0] = 0; }, "borrowed input has writable allocation");
+        rejects(borrowed, [](auto &x) { x.nodes[0].data = {1}; }, "invalid resident input");
+        rejects(borrowed, [](auto &x) { x.nodes[1].resident = x.nodes[0].resident; }, "computed value borrows input storage");
+        rejects(borrowed, [](auto &x) { x.nodes[0].resident = std::make_shared<DeviceTensor>(); }, "invalid resident input");
+        std::cout << "tiles plan validation: 28 rejected mutations\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }

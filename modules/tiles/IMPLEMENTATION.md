@@ -309,3 +309,20 @@ Committed 6fecb708 rebuilds successfully on Windows and Linux. Both the local
 RTX 4060 Ti and remote RTX 3090 device 7 pass 62/62 relevant checks, including
 the three resident-transfer cases under moving-GC stress. Remote output is
 retained in `docs/performance/tiles/2026-10-15-rtx3090-resident-tests.txt`.
+
+## Borrowed device inputs
+
+Graph APIs accept device tensor leaves wherever the computation signature expects
+a compatible host tensor, including nested aggregates and mixed host/device
+arguments. The computation function itself stays placement-independent. Compilation
+retains native owners without copying device data to the host. Borrowed inputs
+have no writable storage slot; the verifier rejects accidental assignment to an
+allocation or use as computed-node storage. CUDA binds their existing addresses
+and checks backend ownership. Repeated aliases remain immutable, even when the
+planner reuses other temporary allocations. Inspection reports borrowed input
+count/bytes separately from new allocations. Identity outputs download directly
+from resident storage, and empty domains remain valid.
+
+Local manual checks and the 65/65 relevant suite pass, including all three VMs
+under moving-GC stress and 28 invalid native-plan mutations. Graph results still
+return host values; ownership transfer for resident outputs is the next step.

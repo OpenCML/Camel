@@ -391,7 +391,14 @@ class DeviceRun {
             allocations.push_back(resources.allocate(bytes));
         pointers.assign(p.nodes.size(), 0);
         for (size_t id = 0; id < p.nodes.size(); ++id)
-            if (p.storage.slots[id] != SIZE_MAX)
+            if (p.nodes[id].resident) {
+                auto allocation =
+                    std::static_pointer_cast<OwnedAllocation>(p.nodes[id].resident->owner);
+                if (&allocation->backend->api != &a ||
+                    allocation->pointer != p.nodes[id].resident->address)
+                    throw std::runtime_error("resident input belongs to another CUDA backend");
+                pointers[id] = allocation->pointer;
+            } else if (p.storage.slots[id] != SIZE_MAX)
                 pointers[id] = allocations[p.storage.slots[id]];
         table                   = resources.allocate(pointers.size() * sizeof(CUdeviceptr));
         const size_t tableBytes = pointers.size() * sizeof(CUdeviceptr);
@@ -551,7 +558,8 @@ std::vector<std::byte> execute(const Program &p) {
     std::lock_guard lock(b.mutex);
     Current current(b.api, b.context);
     if (std::all_of(p.outputs.begin(), p.outputs.end(), [&](size_t id) {
-            return !elements(p.nodes[id].shape) || p.nodes[id].op == "input";
+            return !elements(p.nodes[id].shape) ||
+                   (p.nodes[id].op == "input" && !p.nodes[id].resident);
         })) {
         std::vector<std::byte> result;
         for (auto output : p.outputs) {

@@ -186,6 +186,32 @@ bool supportedLeaves(Type *type) {
     }
     return false;
 }
+// Placement changes storage, not the computation function's tensor signature.
+bool acceptsInput(Type *expected, Type *actual) {
+    if (const auto *device = asDeviceType(actual))
+        return expected->assignableFrom(device->hostType());
+    if (actual->code() == TypeCode::Tuple && expected->code() == TypeCode::Tuple) {
+        auto *a = static_cast<TupleType *>(actual);
+        auto *e = static_cast<TupleType *>(expected);
+        if (a->size() != e->size())
+            return false;
+        for (size_t i = 0; i < a->size(); ++i)
+            if (!acceptsInput(e->typeAt(i), a->typeAt(i)))
+                return false;
+        return true;
+    }
+    if (actual->code() == TypeCode::Struct && expected->code() == TypeCode::Struct) {
+        auto *a = static_cast<StructType *>(actual);
+        auto *e = static_cast<StructType *>(expected);
+        if (a->size() != e->size())
+            return false;
+        for (size_t i = 0; i < a->size(); ++i)
+            if (a->fieldName(i) != e->fieldName(i) || !acceptsInput(e->typeAt(i), a->typeAt(i)))
+                return false;
+        return true;
+    }
+    return supportedLeaves(actual) && expected->assignableFrom(actual);
+}
 std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bool source) {
     if (with.size() != 1 || norm.size() != 1 || with[0]->code() != TypeCode::Function)
         return std::nullopt;
@@ -203,8 +229,7 @@ std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bo
     if (args.size() != fn->normTypesCount())
         return std::nullopt;
     for (size_t i = 0; i < args.size(); ++i) {
-        if (!supportedLeaves(args[i]) || fn->normIsVarAt(i) ||
-            !fn->normTypeAt(i)->assignableFrom(args[i]))
+        if (fn->normIsVarAt(i) || !acceptsInput(fn->normTypeAt(i), args[i]))
             return std::nullopt;
     }
     return source ? Type::String() : fn->exitType();

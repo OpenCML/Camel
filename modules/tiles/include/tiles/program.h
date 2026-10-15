@@ -14,6 +14,7 @@
 #include "camel/core/rtdata/base.h"
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,7 @@ class Type;
 namespace camel::tiles {
 
 using Shape = std::vector<int64_t>;
+struct DeviceTensor;
 enum class DType { F32, F64 };
 struct Argument {
     slot_t value;
@@ -42,6 +44,8 @@ struct Node {
     size_t offset = 0;
     std::vector<size_t> strides;
     DType dtype = DType::F32;
+    std::shared_ptr<const DeviceTensor>
+        resident; // Borrowed immutable input, retained through execution.
 };
 
 struct Launch {

@@ -52,8 +52,12 @@ func main(): int sync {
   Device storage is owned through Camel's foreign-resource control blocks and
   released by finalization or end-of-run cleanup. The native allocation retains
   its CUDA context and driver lifetime, and contains no moving-heap pointers.
-  These values are not yet accepted by graph `run`: resident graph execution is
-  the next integration step, not an implicit upload/download fallback.
+  Graph APIs accept these values as inputs, including mixed host/device tensor
+  leaves in tuples and structs. The function keeps its ordinary tensor signature:
+  `run<square>(upload(x))` borrows the existing device allocation without copying
+  the input back to the host. Borrowed inputs are never writable temporary storage.
+  `inspect` reports `borrowed_inputs` and `borrowed_bytes`; `allocated_bytes`
+  excludes them. Results from `run` still return to the host.
 
 The function context is ordinary Camel context, not a compile-time modifier.
 The module inspects the supplied function graph at invocation. It never traces
@@ -175,6 +179,6 @@ map composition and view elimination, not the complete indexed-domain design.
 
 First-class index domains, masks, layouts, schedule/resource graphs, loop and
 branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning, persistent device
-tensors, asynchronous transfers, Tensor Core lowering, autotuning, autodiff
+outputs, asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.
