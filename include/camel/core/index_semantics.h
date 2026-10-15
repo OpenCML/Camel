@@ -42,6 +42,12 @@
  *                 meet there (Unique, Combine by the instance's reduction law, or overwrite in
  *                 the domain's order)
  *
+ * A ReductionLaw (design section 7), declared with the operator's semantics, says how the
+ * contributions that meet at one result coordinate combine: the operation, the accumulator
+ * type, the starting value, the canonical order, and the exact algebraic facts (associativity,
+ * commutativity, identity) that decide, together with the node's permissions, whether a back
+ * end may reorder it (reorderFreedom).
+ *
  * The meaning: for every point t of the domain inside its guard, read every operand at
  * coords(t) (where valid(t) fails, by its OnInvalid policy), compute one contribution, and
  * write it to the result at the write coordinates. The points are visited in the canonical
@@ -323,6 +329,121 @@ struct IndexedInstance {
     /// The extent of every dim, when the parameters it needs are known.
     std::optional<std::vector<int64_t>> extents() const;
 };
+
+// ---- Reduction laws (design section 7) ------------------------------------------------------
+
+/**
+ * How contributions that meet at one result coordinate combine. The same name means different
+ * laws on different types: a float sum is not associative, an integer sum (wrapping) is; so a
+ * law is declared per type, and an operator over several element types declares one law per
+ * type, the instance naming the one its call uses.
+ *
+ * The canonical algorithm is fixed by the law: start from `init`, combine the contributions in
+ * the domain's canonical order (Ascending), each converted from `input` to `accumulator` and
+ * combined in `accumulator` arithmetic, then finalize and convert (round once) to `result`.
+ * Anything else (another order, another grouping, partial results per block, another
+ * precision) needs the freedom reorderFreedom grants.
+ */
+enum class LawKind : uint8_t {
+    Add,      // acc + c
+    Mul,      // acc * c
+    MulAdd,   // acc + a * b: the product rounded, then the sum (two roundings)
+    FmaChain, // fma(a, b, acc): one rounding per step
+    Max,      // IEEE 754-2019 maximum for floats (NaN wins, -0 < +0); the larger value otherwise
+    Min,      // IEEE 754-2019 minimum for floats; the smaller value otherwise
+    ArgMax,   // the (value, index) pair that is lexicographically largest, first index on ties
+    ArgMin,
+    And,
+    Or,
+    Custom, // a function value of the call (combinerOperand)
+};
+
+std::string_view lawKindName(LawKind kind);
+
+enum class LawInit : uint8_t {
+    Constant,          // initBits, in the accumulator type
+    FirstContribution, // the first contribution in canonical order (an empty domain has none)
+    Operand,           // the with operand initOperand
+};
+
+enum class LawEmpty : uint8_t {
+    Initial, // no contribution: the result is the initial value (finalized)
+    Fault,   // no contribution is a fault (FaultKind::EmptyReduction)
+};
+
+enum class LawOrder : uint8_t {
+    Ascending, // the canonical order of the domain
+    Unordered, // the operator itself leaves the order open (unordered_reduce): as reassociate
+};
+
+enum class LawFinalize : uint8_t {
+    None,
+    DivideByCount, // the accumulator in f64 divided by the number of contributions in f64
+};
+
+struct ReductionLaw {
+    /// A name for the text form and diagnostics: "sum_f32_via_f64".
+    std::string name;
+    LawKind kind = LawKind::Add;
+    /// The element type of the operands combined, the type they are converted to and combined
+    /// in, and the type of the result (the accumulator rounded once at the end). Void for a
+    /// Custom law over any type.
+    type::TypeCode input       = type::TypeCode::Void;
+    type::TypeCode accumulator = type::TypeCode::Void;
+    type::TypeCode result      = type::TypeCode::Void;
+    LawInit init               = LawInit::Constant;
+    /// Constant: the bits of the starting value in the accumulator type (low 32 bits for f32).
+    uint64_t initBits = 0;
+    /// Operand: the with operand that holds the starting value.
+    uint8_t initOperand = 0xFF;
+    LawEmpty empty      = LawEmpty::Initial;
+    LawOrder order      = LawOrder::Ascending;
+    LawFinalize finalize = LawFinalize::None;
+    /// For these types and the operator's special values: regrouping (resp. permuting) the
+    /// contributions gives the same bits. Never claimed for float addition or multiplication.
+    bool exactAssociative = false;
+    bool exactCommutative = false;
+    /// The exact identity of the combining operation (x op e = x for every x), when there is
+    /// one: -0.0 for float addition (+0.0 is not: +0 + -0 = +0), -inf for maximum.
+    bool hasIdentity      = false;
+    uint64_t identityBits = 0;
+    /// Custom: the with operand holding the combining function.
+    uint8_t combinerOperand = 0xFF;
+};
+
+/// What a back end may do with a reduction at one node (design 7.3).
+struct ReorderFreedom {
+    bool regroup         = false; // combine in another grouping: a tree, blocks, split-k
+    bool permute         = false; // combine in another order: atomics, partials in any order
+    bool blockIdentity   = false; // every block may start from the identity; otherwise only the
+                                  // first block starts from the initial value, the others from
+                                  // their first contribution
+    bool contract        = false; // a multiply and the add as one fused multiply-add
+    bool changePrecision = false; // another accumulator or input precision
+};
+
+/**
+ * The freedom `law` leaves at a node granted `granted` (camel/runtime/graph.h,
+ * nodePermissions), design 7.3. With g = granted plus reassociate when the law is Unordered:
+ *
+ *   regroup          exactAssociative or reassociate in g
+ *   permute          exactCommutative and regroup
+ *   blockIdentity    regroup, the law has an identity, starts from a constant, and that
+ *                    constant is the identity
+ *   contract         FmaChain (it is the canonical algorithm), or MulAdd with contract in g
+ *   changePrecision  a float accumulator and change_precision in g
+ */
+ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t granted);
+
+/// The text form of a law: "sum_f32: add f32 -> f64 -> f32, init 0x0, ascending, empty
+/// initial, commutative, identity 0x8000000000000000".
+std::string toString(const ReductionLaw &law);
+
+/// The problem with a law in words (design 4.4, check 4), nullopt when it is consistent: the
+/// constants fit the accumulator type, a float add or multiply does not claim exact
+/// associativity, a law starting from its first contribution faults when there is none, a
+/// Custom law names its combining operand, an Operand start names its operand.
+std::optional<std::string> checkLaw(const ReductionLaw &law);
 
 // ---- Instantiation ------------------------------------------------------------------------
 

@@ -47,7 +47,28 @@ for (const l of [
   'INDEX split_valid yes', 'INDEX split_extents 2 4 3 2 4', 'INDEX split_points 105',
   'INDEX split_bad_dim rejected: splitDims: a dim out of range or a factor below 1',
   'INDEX view_transpose offset 0 strides 1 5', 'INDEX view_slice offset 1 strides 2 5', 'INDEX view_reshape none',
+  'write    (m, n) combine law fma_f32',
+  'law      fma_f32: fma_chain f32 -> f32 -> f32, init 0x0, ascending, empty initial, commutative, identity 0x80000000',
+  'INDEX query_undeclared_law none',
+  'INDEX freedom sum_i64 [none] regroup permute block_identity',
+  'INDEX freedom sum_f32 [none] none', 'INDEX freedom sum_f32 [reassociate] regroup permute',
+  'INDEX freedom sum_f32 [contract,change_precision] change_precision',
+  'INDEX freedom sum_f32_from_minus_zero [reassociate] regroup permute block_identity',
+  'INDEX freedom max_f32 [none] regroup permute block_identity',
+  'INDEX freedom mul_add_f32 [none] none', 'INDEX freedom mul_add_f32 [contract,change_precision] contract change_precision',
+  'INDEX freedom unordered [none] regroup',
+  'INDEX law_valid accepted',
 ]) line(l)
+for (const [check, reason] of [
+  ['float_add_associative', 'law sum_f32: floating-point add is not exactly associative'],
+  ['constant_too_wide', 'law sum_f32: a constant does not fit its 32-bit accumulator'],
+  ['first_without_fault', 'law max_f32: it starts from its first contribution, so having none is a fault'],
+  ['custom_without_combiner', 'law unordered: a custom law names the operand of its combining function'],
+  ['untyped', 'law sum_i64: it names its input, accumulator and result types'],
+]) {
+  const m = out.match(new RegExp(`INDEX law_${check} (.*)`))
+  assert(m && m[1].startsWith('rejected:') && m[1].includes(reason), `${check}: ${m ? m[1] : 'missing'}`)
+}
 }
 """
 

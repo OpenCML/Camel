@@ -44,4 +44,13 @@ namespace camel::runtime {
 std::optional<camel::core::sem::IndexedInstance>
 instanceOf(const GCGraph &graph, gc_node_ref_t node);
 
+/**
+ * What a back end may do with the reduction of the OPER node `node` (design 7.3): the law its
+ * instance combines by, with the permissions the program granted the node
+ * (GCGraph::nodePermissions). nullopt when the node has no instance or its instance does not
+ * reduce.
+ */
+std::optional<camel::core::sem::ReorderFreedom>
+reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node);
+
 } // namespace camel::runtime

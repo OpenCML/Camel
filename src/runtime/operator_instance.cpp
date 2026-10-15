@@ -108,4 +108,15 @@ std::optional<core::sem::IndexedInstance> instanceOf(const GCGraph &graph, gc_no
         core::sem::InstanceContext{.norm = norm, .with = with, .statics = statics});
 }
 
+std::optional<core::sem::ReorderFreedom> reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node) {
+    const auto instance = instanceOf(graph, node);
+    if (!instance || instance->law == core::sem::kNoLaw) {
+        return std::nullopt;
+    }
+    const core::sem::OperatorSemantics *s =
+        core::OperatorTable::instance().semantics(graph.nodeBodyAs<GCOperBody>(node)->oper);
+    // instantiate validated the law's index against these semantics.
+    return core::sem::reorderFreedom(s->laws[instance->law], graph.nodePermissions(node));
+}
+
 } // namespace camel::runtime
