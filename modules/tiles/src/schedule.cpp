@@ -1,0 +1,280 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license: https://opensource.org/license/mit
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
+ * Author: Camel Contributors
+ * Created: Oct. 15, 2026
+ * Updated: Oct. 15, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+// Checked tensor schedules and interval-based storage reuse for one ordered stream.
+#include "tiles/program.h"
+#include <algorithm>
+#include <limits>
+#include <numeric>
+#include <sstream>
+#include <stdexcept>
+
+namespace camel::tiles {
+size_t elements(const Shape &shape) {
+    size_t count = 1;
+    for (int64_t d : shape) {
+        if (d < 0 || static_cast<uint64_t>(d) >
+                         std::numeric_limits<size_t>::max() / std::max(count, size_t(1)))
+            throw std::runtime_error("invalid or overflowing tensor shape");
+        count *= static_cast<size_t>(d);
+    }
+    if (count > std::numeric_limits<size_t>::max() / sizeof(float))
+        throw std::runtime_error("tensor byte size overflows");
+    return count;
+}
+
+namespace {
+bool unary(const std::string &op) {
+    return std::string("|neg|abs|exp|log|sqrt|rsqrt|relu|").find("|" + op + "|") !=
+           std::string::npos;
+}
+bool binary(const std::string &op) {
+    return std::string("|add|subtract|multiply|divide|maximum|minimum|").find("|" + op + "|") !=
+           std::string::npos;
+}
+void require(bool valid, const std::string &message) {
+    if (!valid)
+        throw std::runtime_error("invalid tiles plan: " + message);
+}
+Shape broadcast(const Shape &a, const Shape &b) {
+    Shape result(std::max(a.size(), b.size()), 1);
+    for (size_t i = 0; i < result.size(); ++i) {
+        int64_t x = i < a.size() ? a[a.size() - 1 - i] : 1;
+        int64_t y = i < b.size() ? b[b.size() - 1 - i] : 1;
+        require(x == y || x == 1 || y == 1, "incompatible broadcast extents");
+        result[result.size() - 1 - i] = x == 1 ? y : x;
+    }
+    return result;
+}
+struct Lifetime {
+    size_t begin = 0, end = 0;
+    bool materialized = false;
+};
+std::vector<Lifetime> lifetimes(const Program &p) {
+    std::vector<Lifetime> life(p.nodes.size());
+    for (size_t id = 0; id < p.nodes.size(); ++id)
+        if (p.nodes[id].op == "input")
+            life[id].materialized = true;
+    for (size_t stage = 0; stage < p.launches.size(); ++stage) {
+        const auto &launch = p.launches[stage];
+        life[launch.node]  = {stage + 1, stage + 1, true};
+        for (auto id : launch.members)
+            for (auto in : p.nodes[id].inputs)
+                if (std::find(launch.members.begin(), launch.members.end(), in) ==
+                    launch.members.end())
+                    life[in].end = std::max(life[in].end, stage + 1);
+    }
+    life[p.output].end = p.launches.size() + 1;
+    return life;
+}
+} // namespace
+
+bool elementwise(const std::string &op) { return unary(op) || binary(op); }
+
+void validate(const Program &p) {
+    require(!p.nodes.empty() && p.output < p.nodes.size(), "missing output");
+    for (size_t id = 0; id < p.nodes.size(); ++id) {
+        const auto &n      = p.nodes[id];
+        const size_t count = elements(n.shape);
+        for (auto in : n.inputs)
+            require(in < id, "dependency is not topologically earlier");
+        if (n.op == "input") {
+            require(n.inputs.empty() && n.data.size() == count, "invalid input payload");
+            continue;
+        }
+        require(n.data.empty(), "computed value has host payload");
+        const bool reduction = n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis";
+        require(
+            elementwise(n.op) || reduction || n.op == "reshape" || n.op == "matmul",
+            "unknown operation");
+        require(n.inputs.size() == (binary(n.op) || n.op == "matmul" ? 2 : 1), "operation arity");
+        const auto &a = p.nodes[n.inputs[0]].shape;
+        if (unary(n.op))
+            require(a == n.shape, "unary result shape");
+        if (binary(n.op))
+            require(broadcast(a, p.nodes[n.inputs[1]].shape) == n.shape, "binary result shape");
+        if (n.op == "reshape")
+            require(elements(a) == count, "reshape element count");
+        if (n.op == "matmul") {
+            const auto &b = p.nodes[n.inputs[1]].shape;
+            require(a.size() == 2 && b.size() == 2, "matmul rank");
+            require(a[1] == b[0] && n.shape == Shape{a[0], b[1]}, "matmul dimensions");
+        }
+        if (reduction) {
+            require(
+                n.attributes.size() == 1 && n.attributes[0] >= 0 &&
+                    size_t(n.attributes[0]) < a.size(),
+                "reduction axis");
+            size_t axis = n.attributes[0];
+            require(n.op != "max_axis" || a[axis] != 0, "empty maximum");
+            Shape kept = a, removed = a;
+            kept[axis] = 1;
+            removed.erase(removed.begin() + axis);
+            require(n.shape == kept || n.shape == removed, "reduction output shape");
+        }
+    }
+}
+
+void schedule(Program &p) {
+    validate(p);
+    const size_t count = p.nodes.size();
+    std::vector<size_t> users(count), consumer(count, SIZE_MAX), owner(count), groupSize(count, 1);
+    std::iota(owner.begin(), owner.end(), 0);
+    for (size_t id = 0; id < count; ++id)
+        for (auto in : p.nodes[id].inputs) {
+            ++users[in];
+            consumer[in] = id;
+        }
+    // Reverse traversal attaches chains to their final consumer. Only equal-domain,
+    // single-use elementwise nodes fuse; broadcasting stays on the boundary loads.
+    for (size_t id = count; id-- > 0;) {
+        size_t target = consumer[id];
+        if (id == p.output || users[id] != 1 || !elementwise(p.nodes[id].op) ||
+            !elementwise(p.nodes[target].op) || p.nodes[id].shape != p.nodes[target].shape)
+            continue;
+        size_t root = owner[target];
+        if (groupSize[root] == 64)
+            continue;
+        owner[id] = root;
+        ++groupSize[root];
+    }
+    p.launches.clear();
+    for (size_t id = 0; id < count; ++id) {
+        if (p.nodes[id].op == "input" || owner[id] != id)
+            continue;
+        Launch launch{
+            .node     = id,
+            .elements = elements(p.nodes[id].shape),
+            .name     = "tiles_" + std::to_string(id)};
+        for (size_t member = 0; member <= id; ++member)
+            if (owner[member] == id)
+                launch.members.push_back(member);
+        p.launches.push_back(std::move(launch));
+    }
+    const auto life = lifetimes(p);
+    p.storage       = {};
+    p.storage.slots.assign(count, SIZE_MAX);
+    std::vector<size_t> order;
+    for (size_t id = 0; id < count; ++id)
+        if (life[id].materialized)
+            order.push_back(id);
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        return life[a].begin < life[b].begin;
+    });
+    std::vector<size_t> until;
+    for (auto id : order) {
+        size_t bytes    = std::max(size_t(1), elements(p.nodes[id].shape) * sizeof(float));
+        size_t selected = SIZE_MAX;
+        for (size_t slot = 0; slot < until.size(); ++slot)
+            if (until[slot] < life[id].begin && p.storage.bytes[slot] >= bytes &&
+                (selected == SIZE_MAX || p.storage.bytes[slot] < p.storage.bytes[selected]))
+                selected = slot;
+        if (selected == SIZE_MAX) {
+            selected = until.size();
+            until.push_back(0);
+            p.storage.bytes.push_back(bytes);
+        }
+        until[selected]     = life[id].end;
+        p.storage.slots[id] = selected;
+    }
+    validatePlan(p);
+}
+
+void validatePlan(const Program &p) {
+    validate(p);
+    require(p.storage.slots.size() == p.nodes.size(), "storage mapping size");
+    std::vector<size_t> stageOf(p.nodes.size(), SIZE_MAX);
+    for (size_t i = 0; i < p.nodes.size(); ++i)
+        if (p.nodes[i].op == "input")
+            stageOf[i] = 0;
+    for (size_t stage = 0; stage < p.launches.size(); ++stage) {
+        const auto &launch = p.launches[stage];
+        require(
+            launch.node < p.nodes.size() && !launch.members.empty() &&
+                launch.members.back() == launch.node,
+            "invalid stage root");
+        require(launch.elements == elements(p.nodes[launch.node].shape), "launch extent");
+        require(
+            launch.blockX > 0 && launch.blockY > 0 && launch.blockX <= 1024 &&
+                launch.blockY <= 1024 / launch.blockX && launch.gridX > 0 &&
+                launch.gridX <= 2147483647 && launch.gridY > 0 && launch.gridY <= 65535,
+            "launch dimensions");
+        for (auto id : launch.members) {
+            require(
+                id < p.nodes.size() && stageOf[id] == SIZE_MAX,
+                "duplicate/invalid scheduled value");
+            require(
+                launch.members.size() == 1 || (elementwise(p.nodes[id].op) &&
+                                               p.nodes[id].shape == p.nodes[launch.node].shape),
+                "invalid fused domain");
+            for (auto in : p.nodes[id].inputs) {
+                require(
+                    stageOf[in] != SIZE_MAX && stageOf[in] <= stage + 1,
+                    "unscheduled dependency");
+                require(
+                    stageOf[in] == stage + 1 || p.storage.slots[in] != SIZE_MAX,
+                    "register value escapes stage");
+            }
+            stageOf[id] = stage + 1;
+        }
+    }
+    for (auto stage : stageOf)
+        require(stage != SIZE_MAX, "unscheduled value");
+    const auto life = lifetimes(p);
+    require(life[p.output].materialized, "output has no materialized result");
+    std::vector<std::vector<size_t>> occupants(p.storage.bytes.size());
+    for (size_t id = 0; id < p.nodes.size(); ++id) {
+        size_t slot = p.storage.slots[id];
+        if (!life[id].materialized) {
+            require(slot == SIZE_MAX, "register-only value has allocation");
+            continue;
+        }
+        require(
+            slot < p.storage.bytes.size() &&
+                p.storage.bytes[slot] >= elements(p.nodes[id].shape) * sizeof(float),
+            "undersized/missing allocation");
+        for (auto other : occupants[slot])
+            require(
+                life[id].end < life[other].begin || life[other].end < life[id].begin,
+                "overlapping buffer lifetimes");
+        occupants[slot].push_back(id);
+    }
+}
+
+std::string inspect(const Program &p) {
+    validatePlan(p);
+    size_t logicalBytes = 0, allocatedBytes = 0, materialized = 0;
+    for (const auto &n : p.nodes)
+        logicalBytes += elements(n.shape) * sizeof(float);
+    for (auto bytes : p.storage.bytes)
+        allocatedBytes += bytes;
+    for (auto slot : p.storage.slots)
+        materialized += slot != SIZE_MAX;
+    std::ostringstream out;
+    out << "{\"schema\":1,\"values\":" << p.nodes.size() << ",\"kernels\":" << p.launches.size()
+        << ",\"materialized_values\":" << materialized
+        << ",\"allocations\":" << p.storage.bytes.size() << ",\"logical_bytes\":" << logicalBytes
+        << ",\"allocated_bytes\":" << allocatedBytes << ",\"stages\":[";
+    for (size_t i = 0; i < p.launches.size(); ++i) {
+        if (i)
+            out << ',';
+        const auto &s = p.launches[i];
+        out << "{\"output\":" << s.node << ",\"members\":[";
+        for (size_t j = 0; j < s.members.size(); ++j) {
+            if (j)
+                out << ',';
+            out << s.members[j];
+        }
+        out << "]}";
+    }
+    out << "]}";
+    return out.str();
+}
+} // namespace camel::tiles

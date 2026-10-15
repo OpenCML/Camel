@@ -4,6 +4,33 @@ tier = "feat"
 tags = ["feat", "modules", "tiles"]
 
 [[tests]]
+name = "plan"
+kind = "behavior"
+case = "../../../cases/modules/tiles/plan.cml"
+args = ["${case}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const p = JSON.parse(input.stdout)
+assert(p.schema === 1 && p.kernels === 1, 'expected one fused kernel')
+assert(p.values === 4 && p.materialized_values === 2, 'unexpected fusion boundary')
+assert(p.logical_bytes === 48 && p.allocated_bytes === 24, 'unexpected memory plan')
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "plan_validation"
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/tiles/plan_check.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tiles plan validation: 10 rejected mutations"]
+timeout_ms = 10000
+
+[[tests]]
 name = "source"
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 kind = "behavior"

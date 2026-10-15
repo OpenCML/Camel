@@ -335,6 +335,7 @@ bool available() {
 }
 
 std::vector<float> execute(const Program &p) {
+    validatePlan(p);
     Backend &b = backend();
     std::lock_guard lock(b.mutex);
     Current current(b.api, b.context);
@@ -346,11 +347,17 @@ std::vector<float> execute(const Program &p) {
         return p.nodes[p.output].data;
     CUmodule module = b.module(p.source);
     Resources resources(b.api);
-    std::vector<CUdeviceptr> pointers;
-    for (const auto &n : p.nodes) {
+    std::vector<CUdeviceptr> allocations;
+    for (auto bytes : p.storage.bytes)
+        allocations.push_back(resources.allocate(bytes));
+    std::vector<CUdeviceptr> pointers(p.nodes.size(), 0);
+    for (size_t id = 0; id < p.nodes.size(); ++id) {
+        const auto &n = p.nodes[id];
+        if (p.storage.slots[id] == SIZE_MAX)
+            continue;
         size_t bytes = elements(n.shape) * sizeof(float);
-        auto ptr     = resources.allocate(bytes);
-        pointers.push_back(ptr);
+        auto ptr     = allocations[p.storage.slots[id]];
+        pointers[id] = ptr;
         if (!n.data.empty())
             b.api.check(b.api.cuMemcpyHtoD(ptr, n.data.data(), bytes), "upload input");
     }

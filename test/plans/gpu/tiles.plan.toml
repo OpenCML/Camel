@@ -4,6 +4,66 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "fusion.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/fusion.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 4, 'expected two plans and two errors')
+const chain = JSON.parse(lines[0]), fork = JSON.parse(lines[2])
+assert(chain.kernels === 1 && chain.stages[0].members.length === 5, 'chain was not fused')
+assert(fork.kernels === 2 && fork.allocations < fork.materialized_values, 'shared result or storage reuse incorrect')
+assert(chain.allocated_bytes < chain.logical_bytes / 2, 'fusion did not remove intermediate storage')
+assert(Number(lines[1]) < 0.0002 && Number(lines[3]) < 0.0002, 'GPU fusion differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "fusion.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/fusion.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 4, 'expected two plans and two errors')
+const chain = JSON.parse(lines[0]), fork = JSON.parse(lines[2])
+assert(chain.kernels === 1 && chain.stages[0].members.length === 5, 'chain was not fused')
+assert(fork.kernels === 2 && fork.allocations < fork.materialized_values, 'shared result or storage reuse incorrect')
+assert(chain.allocated_bytes < chain.logical_bytes / 2, 'fusion did not remove intermediate storage')
+assert(Number(lines[1]) < 0.0002 && Number(lines[3]) < 0.0002, 'GPU fusion differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "fusion.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/fusion.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 4, 'expected two plans and two errors')
+const chain = JSON.parse(lines[0]), fork = JSON.parse(lines[2])
+assert(chain.kernels === 1 && chain.stages[0].members.length === 5, 'chain was not fused')
+assert(fork.kernels === 2 && fork.allocations < fork.materialized_values, 'shared result or storage reuse incorrect')
+assert(chain.allocated_bytes < chain.logical_bytes / 2, 'fusion did not remove intermediate storage')
+assert(Number(lines[1]) < 0.0002 && Number(lines[3]) < 0.0002, 'GPU fusion differs from CPU')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
 name = "boundaries.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/boundaries.cml"

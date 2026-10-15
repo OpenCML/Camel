@@ -39,21 +39,32 @@ struct Node {
 
 struct Launch {
     size_t node;
+    std::vector<size_t> members;
     size_t elements;
     std::string name;
     unsigned blockX = 256, blockY = 1;
     unsigned gridX = 1, gridY = 1;
+};
+struct StoragePlan {
+    std::vector<size_t> slots; // Node -> physical allocation; SIZE_MAX means register-only.
+    std::vector<size_t> bytes;
 };
 struct Program {
     std::vector<Node> nodes;
     size_t output = 0;
     std::string source;
     std::vector<Launch> launches;
+    StoragePlan storage;
 };
 
 size_t elements(const Shape &shape);
 Program compile(Function *function, const std::vector<Argument> &arguments);
 void generate(Program &program);
+bool elementwise(const std::string &op);
+void validate(const Program &program);
+void schedule(Program &program);
+void validatePlan(const Program &program);
+std::string inspect(const Program &program);
 std::vector<float> execute(const Program &program);
 std::string deviceInfo();
 bool available();

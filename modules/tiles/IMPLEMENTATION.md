@@ -65,3 +65,22 @@ the first NVRTC path does not settle that choice for the whole architecture.
 
 Current implementation limitations are listed in README.md. Baseline timings
 from the test runner include startup/compilation and are not kernel benchmarks.
+
+## Verified schedule foundation
+
+The semantic node list remains independent from kernel groups and physical
+allocation slots. A validation boundary checks shapes/topology before scheduling
+and group/lifetime legality before execution. The first scheduler fuses only
+single-use equal-domain elementwise chains (64-operation limit); no arithmetic
+reassociation or reduction-order change is authorized by this optimization.
+An ordered-stream interval plan reuses allocations after all prior readers.
+This is the initial resource implementation, not the final asynchronous model.
+
+`inspect` exposes schema version 1 and stage membership plus byte/allocation
+counts. In the `7x259` pipeline test, five elementwise operations become one
+kernel and allocation capacity falls from 44,556 logical bytes to 15,548 bytes.
+The shared-result example uses two kernels and 15,544 allocated bytes versus
+37,300 logical bytes. These measurements establish launch/storage reduction,
+not yet a wall-clock speedup. Native malformed-plan tests exercise the verifier.
+The updated host/GPU Tiles and tensor suite passes 34/34 tests, including ten
+native rejected-plan mutations and fusion tests across all three execution engines.

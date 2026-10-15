@@ -64,6 +64,11 @@ slot_t sourceKernel(ArgsView &with, ArgsView &norm, Context &) {
         return td::toSlot(::String::from(program.source, core::mm::autoSpace()));
     });
 }
+slot_t inspectKernel(ArgsView &with, ArgsView &norm, Context &) {
+    return checked([&] {
+        return td::toSlot(::String::from(inspect(prepare(with, norm)), core::mm::autoSpace()));
+    });
+}
 slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
         auto program = prepare(with, norm);
@@ -110,7 +115,7 @@ class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
-        for (const std::string name : {"run", "source"}) {
+        for (const std::string name : {"run", "source", "inspect"}) {
             exportEntity(
                 name,
                 OperatorGroup::create(
@@ -119,8 +124,8 @@ class TilesModule final : public BuiltinModule {
                       DynamicFuncTypeResolver::create(
                           {{1, {false}}, {1, {false}}},
                           "<fn: (...) => Tensor>(inputs: Tensor | tuple) => " +
-                              std::string(name == "source" ? "string" : "Tensor"),
-                          [source = name == "source"](
+                              std::string(name != "run" ? "string" : "Tensor"),
+                          [source = name != "run"](
                               const type_vec_t &with,
                               const type_vec_t &norm,
                               const ModifierSet &) { return resolve(with, norm, source); })}}));
@@ -145,13 +150,18 @@ class TilesModule final : public BuiltinModule {
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
                     {"source", &sourceKernel},
+                    {"inspect", &inspectKernel},
                     {"available", &availableKernel},
                     {"device", &deviceKernel}});
         });
         // run may initialize a driver/compile code; never execute it in constant folding.
         core::OperatorTable::instance().declare(
             "tiles",
-            {{"run", false}, {"source", false}, {"available", false}, {"device", false}});
+            {{"run", false},
+             {"source", false},
+             {"inspect", false},
+             {"available", false},
+             {"device", false}});
         loaded_ = true;
         return true;
     }

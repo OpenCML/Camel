@@ -34,19 +34,6 @@ namespace ty = core::type;
 namespace td = core::rtdata;
 using tensor::ops::ConstArg;
 
-size_t elements(const Shape &shape) {
-    size_t count = 1;
-    for (int64_t d : shape) {
-        if (d < 0 || static_cast<uint64_t>(d) >
-                         std::numeric_limits<size_t>::max() / std::max(count, size_t(1)))
-            throw std::runtime_error("invalid or overflowing tensor shape");
-        count *= static_cast<size_t>(d);
-    }
-    if (count > std::numeric_limits<size_t>::max() / sizeof(float))
-        throw std::runtime_error("tensor byte size overflows");
-    return count;
-}
-
 namespace {
 struct Value {
     ty::Type *type = nullptr;

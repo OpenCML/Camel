@@ -26,6 +26,9 @@ func main(): int sync {
   Pass one tensor for a unary function or a tuple for multiple parameters.
 - `source<fn>(inputs)` returns generated CUDA without initializing CUDA or
   executing the function body. It performs the same graph validation as `run`.
+- `inspect<fn>(inputs)` returns a versioned JSON plan summary without CUDA:
+  semantic values, kernel groups, materialized values, physical allocations,
+  logical bytes and allocated bytes. These are plan metrics, not timings.
 - `available()` reports whether driver/NVRTC initialization succeeds. A successful
   result does not guarantee a subsequent compilation or memory allocation succeeds.
 - `device()` reports the selected GPU, or raises a diagnostic explaining failure.
@@ -48,8 +51,14 @@ element types, and unsupported tensor operations produce diagnostics.
 
 The compiler snapshots inputs into an owned IR, retaining no Camel GC pointers
 across CUDA work. Shape inference reuses the tensor operation registry.
-Intermediates remain on the device, but each operation currently has a separate
-kernel and allocation. Matmul uses masked 16x16 shared-memory tiles and explicit
+Intermediates remain on the device. Equal-domain single-use elementwise chains
+are fused into groups of at most 64 operations. Shared results and domain changes
+retain materialization boundaries. Each fused node keeps an f32 rounding point;
+the scheduler does not reassociate expressions or reorder reductions. Allocation
+slots are reused only after their last reader on the ordered stream has finished;
+a kernel cannot overwrite storage it reads. Inputs start live at upload time.
+Plan validation checks topology, shapes, stage boundaries, launch dimensions,
+storage capacities and nonoverlapping lifetimes. Matmul uses masked 16x16 shared-memory tiles and explicit
 f32 FMA. Axis reductions are serial per output, with f64 accumulation for sum/mean.
 There is no fast-math mode; GPU transcendental results need not be bitwise equal
 to CPU results. Floating-point agreement is tested with tolerances.
@@ -83,11 +92,13 @@ Run NVIDIA execution checks explicitly with
 all-plans runner). These cover vector addition, softmax, odd-size tiled matmul,
 broadcasting, fresh values with cached code, reshape, captures, direct calls,
 negative-axis reduction, and empty dimensions across NodeVM, FastVM, and JIT.
+The host plan also runs native mutation tests built by the standard build. Its
+test executable stays in the build tree and is not a distributed runtime tool.
 
 ## Remaining architecture
 
 First-class index domains, masks, layouts, schedule/resource graphs, loop and
-branch lowering, parallel reductions, fusion, memory planning, persistent device
+branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning, persistent device
 tensors, asynchronous transfers, Tensor Core lowering, autotuning, autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.
