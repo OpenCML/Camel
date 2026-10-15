@@ -90,6 +90,7 @@ struct Resources {
 // Both normal execution and benchmarking use this exact upload/launch/download path.
 // Allocation reuse can overwrite inputs, so every repetition must restore them.
 class DeviceRun {
+    ModuleLease moduleLease; // Outlives stream draining and all execution resources.
     const Program &program;
     Api &api;
     Resources resources;
@@ -101,7 +102,8 @@ class DeviceRun {
     void *clearFault  = nullptr;
 
   public:
-    DeviceRun(const Program &p, Api &a, CUmodule module) : program(p), api(a), resources(a) {
+    DeviceRun(const Program &p, Api &a, ModuleLease module)
+        : moduleLease(std::move(module)), program(p), api(a), resources(a) {
         std::vector<CUdeviceptr> allocations;
         for (auto bytes : p.storage.bytes)
             allocations.push_back(resources.allocate(bytes));
@@ -142,7 +144,7 @@ class DeviceRun {
         for (const auto &launch : p.launches) {
             CUfunction kernel;
             api.check(
-                api.cuModuleGetFunction(&kernel, module, launch.name.c_str()),
+                api.cuModuleGetFunction(&kernel, moduleLease.compiled->module, launch.name.c_str()),
                 "resolve kernel");
             kernels.push_back(kernel);
         }
@@ -344,7 +346,7 @@ std::vector<std::byte> execute(const Program &p) {
         }
         return result;
     }
-    CUmodule module = b.module(p.source);
+    auto module = b.module(p.source);
     DeviceRun run(p, b.api, module);
     run.upload();
     run.launch();
@@ -415,18 +417,17 @@ std::string benchmark(const Program &program) {
     const char *names[]    = {"optimized", "unfused"};
     std::unique_ptr<DeviceRun> runs[2];
     for (size_t i = 0; i < 2; ++i) {
-        const auto &p = *plans[i];
-        auto &r       = report[names[i]];
-        r["plan"]     = json::parse(inspect(p));
-        r["compile_cache_hit"] =
-            std::any_of(b.cache.begin(), b.cache.end(), [&](const Compiled &c) {
-                return c.source == p.source;
-            });
-        start                         = Clock::now();
-        CUmodule module               = b.module(p.source);
-        r["compile_load_host_ms"]     = elapsed(start);
-        start                         = Clock::now();
-        runs[i]                       = std::make_unique<DeviceRun>(p, b.api, module);
+        const auto &p             = *plans[i];
+        auto &r                   = report[names[i]];
+        r["plan"]                 = json::parse(inspect(p));
+        r["compile_cache_hit"]    = std::any_of(b.cache.begin(), b.cache.end(), [&](const auto &c) {
+            return c->source == p.source;
+        });
+        start                     = Clock::now();
+        auto module               = b.module(p.source);
+        r["compile_load_host_ms"] = elapsed(start);
+        start                     = Clock::now();
+        runs[i]                   = std::make_unique<DeviceRun>(p, b.api, module);
         r["allocation_setup_host_ms"] = elapsed(start);
         r["device_ms"]                = json::array();
         r["upload_host_ms"]           = json::array();

@@ -434,3 +434,20 @@ not advertise asynchronous execution yet.
 Committed b327286c rebuilds and passes the existing 81/81 relevant tests on local
 RTX 4060 Ti and remote RTX 3090 device 7. Remote results are retained in
 `docs/performance/tiles/2026-10-15-rtx3090-backend-split-tests.txt`.
+
+## Compiled-module leases
+
+Execution now owns a module lease containing both the compiled module and its
+backend. The cache retains shared compiled entries; eviction drops only its own
+reference. A lease releases its module before its backend, and execution releases
+the lease after draining the stream and freeing execution resources. Assignment
+is disabled to prevent memberwise replacement from releasing a backend before
+the old module. Cache entries do not own the backend, avoiding an ownership cycle.
+Module destruction activates its retained context before unloading.
+
+A native CUDA test compiles 34 additional source variants, verifies the original
+module has left the 32-entry cache, then executes the retained kernel. It also
+releases the original backend reference and confirms the lease keeps it alive,
+then checks both weak references expire after final release. This establishes
+module lifetime safety for pending work; asynchronous submission itself remains
+to be implemented.

@@ -218,26 +218,31 @@ Backend::Backend() {
     architecture = "--gpu-architecture=compute_" + std::to_string(target);
     api.check(api.cuDevicePrimaryCtxRetain(&context, device), "retain CUDA context");
 }
+Compiled::Compiled(Api &api, CUcontext context, const std::string &source)
+    : api(api), context(context), source(source) {}
+Compiled::~Compiled() {
+    if (module && api.cuCtxPushCurrent(context) == CUDA_SUCCESS) {
+        api.cuModuleUnload(module);
+        CUcontext popped;
+        api.cuCtxPopCurrent(&popped);
+    }
+}
+ModuleLease::ModuleLease(std::shared_ptr<Backend> backend, std::shared_ptr<Compiled> compiled)
+    : backend(std::move(backend)), compiled(std::move(compiled)) {}
 Backend::~Backend() {
     if (context) {
-        if (api.cuCtxPushCurrent(context) == CUDA_SUCCESS) {
-            for (const auto &item : cache)
-                api.cuModuleUnload(item.module);
-            CUcontext popped;
-            api.cuCtxPopCurrent(&popped);
-        }
+        cache.clear();
         api.cuDevicePrimaryCtxRelease(device);
     }
 }
-CUmodule Backend::module(const std::string &source) {
+ModuleLease Backend::module(const std::string &source) {
     for (size_t i = 0; i < cache.size(); ++i) {
-        if (cache[i].source != source)
+        if (cache[i]->source != source)
             continue;
-        CUmodule found = cache[i].module;
-        // Refresh recency before loading another variant. A benchmark keeps two
-        // variants live under the same mutex; the second load must not evict the first.
+        auto found = cache[i];
+        // Refresh recency; execution leases survive removal of the cache reference.
         std::rotate(cache.begin() + i, cache.begin() + i + 1, cache.end());
-        return found;
+        return {shared_from_this(), std::move(found)};
     }
     nvrtcProgram program = nullptr;
     api.check(
@@ -262,19 +267,13 @@ CUmodule Backend::module(const std::string &source) {
     api.check(api.nvrtcGetPTXSize(program, &size), "get PTX size");
     std::string ptx(size, '\0');
     api.check(api.nvrtcGetPTX(program, ptx.data()), "get PTX");
-    CUmodule module;
-    api.check(api.cuModuleLoadData(&module, ptx.data()), "load PTX");
-    try {
-        cache.push_back({source, module});
-    } catch (...) {
-        api.cuModuleUnload(module);
-        throw;
-    }
+    auto compiled = std::make_shared<Compiled>(api, context, source);
+    api.check(api.cuModuleLoadData(&compiled->module, ptx.data()), "load PTX");
+    cache.push_back(compiled);
     if (cache.size() > 32) {
-        api.cuModuleUnload(cache.front().module);
         cache.pop_front();
     }
-    return module;
+    return {shared_from_this(), std::move(compiled)};
 }
 std::shared_ptr<Backend> sharedBackend() {
     static auto instance = std::make_shared<Backend>();

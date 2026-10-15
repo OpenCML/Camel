@@ -84,20 +84,37 @@ struct Current {
     ~Current();
 };
 struct Compiled {
+    Api &api;
+    CUcontext context;
     std::string source;
-    CUmodule module;
+    CUmodule module = nullptr;
+    Compiled(Api &api, CUcontext context, const std::string &source);
+    ~Compiled();
+    Compiled(const Compiled &) = delete;
 };
-class Backend {
+class Backend;
+// Destruction releases the module before its backend. Assignment is forbidden
+// because memberwise assignment could release the old backend too early.
+struct ModuleLease {
+    std::shared_ptr<Backend> backend;
+    std::shared_ptr<Compiled> compiled;
+    ModuleLease(std::shared_ptr<Backend> backend, std::shared_ptr<Compiled> compiled);
+    ModuleLease(const ModuleLease &)            = default;
+    ModuleLease(ModuleLease &&)                 = default;
+    ModuleLease &operator=(const ModuleLease &) = delete;
+    ModuleLease &operator=(ModuleLease &&)      = delete;
+};
+class Backend : public std::enable_shared_from_this<Backend> {
   public:
     Api api;
     CUdevice device;
     CUcontext context = nullptr;
     std::string description, architecture;
-    std::deque<Compiled> cache;
+    std::deque<std::shared_ptr<Compiled>> cache;
     std::mutex mutex;
     Backend();
     ~Backend();
-    CUmodule module(const std::string &source);
+    ModuleLease module(const std::string &source);
 };
 std::shared_ptr<Backend> sharedBackend();
 Backend &backend();

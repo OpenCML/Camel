@@ -852,3 +852,13 @@ args = ["${case}", "std::jit"]
 expect_exit = 1
 expect_output_contains = ["division by zero at Tiles node"]
 timeout_ms = 60000
+
+[[tests]]
+name = "module_lease"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/module_lease.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tiles module lease: eviction, launch and teardown passed"]
+timeout_ms = 60000
