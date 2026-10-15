@@ -808,18 +808,6 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     const GCGraph *g      = frame.graph;
     const auto *node      = g->node(ref);
     const std::string uri = operatorUri(g, ref);
-    if (uri == ":op/assn_append") {
-        // `acc = acc->append<v>` as one internal operator: a pass lowers it to the variable
-        // operators and the append before exporters see the graph; met here, that pass did
-        // not run, and translating it would guess at what it means.
-        refuse(
-            g,
-            ref,
-            std::format(
-                "{} uses the internal operator ':op/assn_append' (`acc = acc->append<v>`), which "
-                "std::cpp translates only once it is lowered",
-                describeFunction(g)));
-    }
     if (!program_.values.type(node->dataType)) {
         refuse(
             g,
@@ -1384,10 +1372,19 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref) {
 
 namespace {
 
-/// Whether the operator `id` reads or writes a variable it is given first: :var/get and the
-/// assignments.
+/// Whether the operator `id` reads or writes a variable it is given first: :var/get,
+/// :var/peek and the assignments (:op/assn_append among them).
 bool isVariableAccess(camel::core::OperId id) {
-    return id == camel::core::oper::VarGet || camel::core::OperatorTable::instance().isAssignment(id);
+    return camel::core::oper::isVariableRead(id) ||
+           camel::core::OperatorTable::instance().isAssignment(id);
+}
+
+/// Whether `text` is one C++ identifier (a name the emitter bound), not an expression.
+bool isIdentifier(std::string_view text) {
+    return !text.empty() && !std::isdigit(static_cast<unsigned char>(text.front())) &&
+           std::all_of(text.begin(), text.end(), [](char c) {
+               return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+           });
 }
 
 /// The operator an assignment `x op= v` computes `x op v` with (":op/assn_add_l" gives
@@ -1491,9 +1488,33 @@ bool FunctionEmitter::lowerVariable(
     const bool local       = cell.cell == CppValue::Cell::Local;
     const std::string read = local ? cell.text : cell.text + ".get()";
     const Type *type       = g->node(ref)->dataType;
-    if (id == camel::core::oper::VarGet) {
-        // Read now: a later assignment must not change what this read gave.
+    if (camel::core::oper::isVariableRead(id)) {
+        // Read now: a later assignment must not change what this read gave. :var/peek is the
+        // same read; what it tells the interpreter (the array may still be grown in place)
+        // the reference count tells the generated program.
         bind(frame, ref, read, false, out, "read");
+        return true;
+    }
+    if (uri == ":op/assn_append") {
+        // `acc = acc->append<v>` (the ops lane's rebinding): the variable is bound to a new
+        // array, the old one unchanged. The variable gives its array up for the call, so when
+        // nothing else holds it rt::append grows it in place (design note 5.2), which is what
+        // the interpreter's sole-reference mark does. The element is computed first: an
+        // expression that read the variable must see the array before it is given up.
+        std::string item = valueOf(frame, norm[1]).text;
+        if (!isIdentifier(item)) {
+            const std::string name = locals_.unique(std::format("item{}", nextValue_++));
+            out.push_back(Stmt::line(std::format(
+                "const {} {} = {};",
+                cppType(g, norm[1], g->node(norm[1])->dataType),
+                name,
+                withoutParentheses(item))));
+            item = name;
+        }
+        out.push_back(Stmt::line(
+            local ? std::format("{0} = rt::append(std::move({0}), {1});", cell.text, item)
+                  : std::format("{0}.set(rt::append({0}.take(), {1}));", cell.text, item)));
+        bind(frame, ref, read, false, out, "assigned");
         return true;
     }
     // An assignment: `x = v`, or `x = x op v` computed as the operator `op` is.

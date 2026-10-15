@@ -255,15 +255,12 @@ expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 
 
 [[tests]]
 name = "new_values.rebinding_loop.cpp"
-desc = "std::cpp does not translate arrays: the in-place append is refused with a located TranslationRefused at the rebinding, no crash."
-kind = "negative"
+desc = "std::cpp writes the rebinding as rt::append on the variable, which gives its array up for the call (grown in place when nothing else holds it): a captured variable through its cell, a var parameter likewise. That the compiled program prints what std::fvm prints is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
+kind = "behavior"
 case = "../../../cases/consistency/new_values/rebinding_loop.cml"
 args = ["${case}", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 15
-expect_diagnostic_column = 13
-expect_output_contains = ["':op/assn_append'"]
+expect_exit = 0
+expect_stdout_contains = [".set(rt::append(", ".take(), "]
 
 [[tests]]
 name = "new_values.value_used"

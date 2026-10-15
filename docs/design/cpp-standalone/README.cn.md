@@ -376,7 +376,7 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 
 `random` 模块的算子（`rand:seed`、`rand`、`randn`、`randint`、`choice`、`sample`、`shuffle`）由 `camel/standalone/random.h` 译：与模块用同一个 `std::mt19937_64`（默认种子相同）和 `camel/utils/random.h` 的同一套分布（整数用 Lemire 的方法，正态用极坐标法与 fdlibm 的对数），洗牌与抽样的取下标方式也照模块写，所以种子相同时生成的程序与解释器打印相同的数【实测：`draws.cml`、`modules/std/random/basic.cml`】。
 
-内部算子 `:op/assn_append`（`acc = acc->append<v>` 合成的一个节点，由另一条线引入，导出前应被降低）若出现在转译器面前，在该节点处以 `TranslationRefused` 拒绝，不猜它的含义。
+内部算子 `:op/assn_append`（`acc = acc->append<v>` 这条重新绑定合成的一个节点，第一个操作数是变量单元）写成 `acc = rt::append(std::move(acc), v);`，捕获或经 `var` 参数共享的单元写成 `acc.set(rt::append(acc.take(), v));`：变量在这次调用里交出它的数组，没有别人拿着时 `rt::append` 原地追加，这正是解释器里“只有变量引用它”的标记（`holdsUnsharedArray`）所做的；元素若是表达式先算进一个局部，读到的仍是交出之前的数组。`:var/peek`（不清除那个标记的读）在生成的程序里与 `:var/get` 相同，引用计数本身就记着同一件事【实测：`consistency/new_values/rebinding_loop.cml`、`peek_loop.cml`、`peek.cml` 与 `std::fvm` 相同】。
 
 运行时里有两处行为看起来是意外，生成的程序照样复现，并报告给负责人（第 14 节）：`println<'{}+{}'>(1, 2)` 打印 `1+2` 之后多一个空行；`print<'{}-{}'>(3, 4)` 在末尾加了换行【实测 `m5.cml`】。
 
@@ -458,6 +458,8 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 | 变基到 `d270689c` 并加随机数之后 | 866 | 545 | 545 | 535 | 492 |
 | 再加 `join`、`zip`、`statistics.mean`/`stdev`（本稿此版） | 866 | 564 | 564 | 551 | 505 |
 | 同上，先 `std::inline` | 865 | 563 | 563 | 550 | 505 |
+| 变基到算子线（`append` 返回新值）之后，译 `:op/assn_append` | 879 | 574 | 574 | 566 | 521 |
+| 同上，先 `std::inline` | 879 | 574 | 574 | 566 | 521 |
 
 语料是 `test/cases benchmarks examples exemplars`（基线时 1,096 个程序，阶段 3 时 1,106 个），`python3 test/tools/cppexec/run.py --jobs 4 <这四个目录>` 量出【实测】。“写出 C++”之后没有一个编译不过、运行崩溃。阶段 3 时写出了 C++ 却与 `std::fvm` 不同的 9 个：5 个打印计时或当前时间；4 个依赖运行时今天“在原地追加”的 `append`（`xs->append<x>` 写成语句，见 5.2：2.12 裁定之后它们会是编译期错误，`cppexec` 把它们单独列为 `differs: in-place append (2.12)`）。
 
@@ -520,7 +522,7 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 - **随机数。** 见第 8 节：与 `random` 模块同一套算法，种子相同时输出相同。
 - **浮点。** 运行时以 `-ffp-contract=off` 构建（`3af224da`），生成程序的构建命令（文件头注释、`camel-cpp`、`cppexec`、`docs/cpp_export_build.md`）也加上，否则有 FMA 的平台上 `a * b + c` 可能合并而与解释器差最后一位。顺带修了要链接运行时的程序的文件头注释：构建命令里原来写出了字面的 `\n`。
 - **分代回收成为默认。** 只影响 12.3 里 `std::fvm` 一侧的数字。
-- **`:op/assn_append`。** 见第 8 节：在它被降低之前遇到就拒绝。
+- **`:op/assn_append` 与 `:var/peek`。** 见第 8 节：前者写成变量交出数组的 `rt::append`，后者当作读。
 
 ---
 
@@ -569,7 +571,7 @@ python3 test/tools/cppexec/run.py [--passes "std::inline"] [--jobs N] 程序或�
 
 ## 14. 最不放心的地方
 
-1. **运行时迁移到“`append` 返回新值”之前**（2.12），旧语义下就地修改的程序在两种后端上结果不同（5.2）。负责这项迁移的线让 `append`、`extend`、`apply` 与 `algo` 的排序返回新值，并把 `acc = acc->append<v>` 合成内部算子 `:op/assn_append`，由它让导出遍处理；在它合入之前，`cppexec` 把这 4 个程序列为已知差异，转译器遇到 `:op/assn_append` 就拒绝（第 8 节）。
+1. **“`append` 返回新值”**（2.12）已由另一条线迁移：`append`、`extend`、`apply` 与 `algo` 的排序返回新值，`acc = acc->append<v>` 是 `:op/assn_append`，转译器照第 8 节译。那条线合入之后，原先因“在原地追加”而不同的 5 个程序在两种后端上结果相同，`cppexec` 不再有 `differs: in-place append (2.12)` 一类（12.1 最后两行）。
 2. **引用计数的正确性**靠头文件里的少数几个类与转译器写 `std::move` 的位置。`std::move` 写错的后果是读到被移走的空句柄，而不是悄悄读到别的对象；11 的计数检查与地址消毒器能发现泄漏与重复释放。
 3. **故障报告的“逐字节相同”**依赖转译时渲染的摘录与运行时的渲染一致；渲染器以后改格式时两者同时改（同一份代码），但 `CAMEL_ERROR_FORMAT=json` 这类格式本稿没有覆盖，第一步只做 `text` 与 `short`。
 4. **执行序与 `std::fvm` 相同**只在两者都用 `buildReachableExecutionTopoIndices` 时成立；即时编译线或图存储线如果改了 `std::fvm` 取序的方式，这一点要跟着检查（`ExecPlan::order()` 统一之后自然成立）。
