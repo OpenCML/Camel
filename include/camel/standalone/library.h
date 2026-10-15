@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -25,9 +25,11 @@
 
 #pragma once
 
+#include "camel/standalone/array.h"
 #include "camel/standalone/str.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <string>
 
@@ -44,6 +46,34 @@ inline double now() {
 inline Str getEnv(const Str &name) {
     const char *value = std::getenv(name.str().c_str());
     return value != nullptr ? Str(value) : Str();
+}
+
+/// `statistics.mean(xs)` (statistics:mean, modules/statistics/operators.cpp): the sum in double,
+/// element by element, over the count; 0 for the empty array.
+template <typename T> double statisticsMean(const Array<T> &xs) {
+    if (xs.empty()) {
+        return 0.0;
+    }
+    double sum = 0.0;
+    for (const T &x : xs) {
+        sum += static_cast<double>(x);
+    }
+    return sum / static_cast<double>(xs.size());
+}
+
+/// `statistics.stdev(xs)` (statistics:stdev): the sample standard deviation (over n - 1); 0 for
+/// fewer than two elements.
+template <typename T> double statisticsStdev(const Array<T> &xs) {
+    if (xs.size() <= 1) {
+        return 0.0;
+    }
+    const double mean = statisticsMean(xs);
+    double squares    = 0.0;
+    for (const T &x : xs) {
+        const double d = static_cast<double>(x) - mean;
+        squares += d * d;
+    }
+    return std::sqrt(squares / static_cast<double>(xs.size() - 1));
 }
 
 } // namespace camel::standalone

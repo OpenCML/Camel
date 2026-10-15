@@ -1488,8 +1488,8 @@ b4c8a24177615791 ok test/cases/tools/lsp/fixtures/main.cml
 2ac9ffbf1479b5ef ok test/cases/trans/cpp/refuse_tensor.cml
 cf57643df47bb00e ok test/cases/trans/cpp/unary_scalar.cml
 7c8e91fcce1d27ca ok test/cases/trans/cpp/exec/branches.cml
-3919eeb6277dfc2b ok test/cases/trans/cpp/exec/composites.cml
-0727bc03665a9436 ok test/cases/trans/cpp/exec/draws.cml
+83fd90c16b8bd541 ok test/cases/trans/cpp/exec/composites.cml
+2962091323bcb20f ok test/cases/trans/cpp/exec/draws.cml
 3a02833f9072052e ok test/cases/trans/cpp/exec/faults.cml
 fc3f5a807ef6f0ac ok test/cases/trans/cpp/exec/functions.cml
 fa55cb6ca13acda7 ok test/cases/trans/cpp/exec/recursion_limit.cml

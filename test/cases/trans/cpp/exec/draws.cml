@@ -1,8 +1,10 @@
 /// The module random in a compiled program: seeded, it draws the numbers the interpreter draws
-/// (both use camel/utils/random.h on one std::mt19937_64), and its faults are reported alike.
+/// (both use camel/utils/random.h on one std::mt19937_64), and its faults are reported alike;
+/// statistics.mean and stdev over what it drew.
 module draws
 
 import { seed, rand, randn, randint, choice, sample, shuffle } from random
+import { mean, stdev } from statistics
 
 func pick(xs: int[]): int {
     return choice(xs)
@@ -14,10 +16,12 @@ func main(): int sync {
     let xs = [10, 20, 30, 40, 50, 60]
     println(choice(xs), sample(xs, 3), sample(xs, 0), shuffle(xs))
     println(xs)
+    let walk = [randn(), randn(), randn(), randn()]
+    let none: int[] = []
+    println(mean(xs), stdev(xs), mean(walk), stdev(walk), mean(none), stdev([1]))
     // the same seed gives the same draws again
     seed(7)
     println(rand())
-    let none: int[] = []
     println(attempt(pick, [1]) !! 0, attempt(pick, none) !! -1)
     println(sample(xs, 7))
     return 0

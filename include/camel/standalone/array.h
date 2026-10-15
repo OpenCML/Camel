@@ -35,6 +35,7 @@
 #pragma once
 
 #include "camel/standalone/core.h"
+#include "camel/standalone/str.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -222,6 +223,18 @@ template <typename T> bool contains(const Array<T> &xs, const std::type_identity
     return false;
 }
 
+/// `xs->join<sep>` (:str/join, str.cpp __join__): the strings with `separator` between them.
+inline Str join(const Array<Str> &xs, const Str &separator) {
+    std::string out;
+    for (std::size_t i = 0; i < xs.size(); ++i) {
+        if (i > 0) {
+            out += separator.view();
+        }
+        out += xs[i].view();
+    }
+    return Str(out);
+}
+
 /// `range(start, stop[, step])` (:struct/range): a step of 0 is InvalidArgument at `site`
 /// (values: "range", what is wrong).
 inline Array<int64_t> range(int64_t start, int64_t stop, int64_t step, const Site &site) {
@@ -242,6 +255,37 @@ inline Array<int64_t> range(int64_t start, int64_t stop, int64_t step, const Sit
     int64_t value = start;
     for (std::size_t i = 0; i < count; ++i, value += step) {
         out.push(value);
+    }
+    return out;
+}
+
+/// `zip(xs, ys, ...)` (:struct/zip): the array of tuples `R::value_type{xs[i], ys[i], ...}`;
+/// arrays of different lengths are InvalidArgument at `site` (values: "zip", what is wrong,
+/// worded as struct.cpp's __zip__ words it).
+template <typename R, typename First, typename... Rest>
+R zip(const Site &site, const Array<First> &first, const Array<Rest> &...rest) {
+    const std::size_t n = first.size();
+    std::size_t index   = 1;
+    auto check          = [&](std::size_t size) {
+        ++index;
+        if (size == n) {
+            return;
+        }
+        fault(
+            site,
+            {"zip",
+             sizeof...(Rest) == 1
+                 ? "the two sequences have " + std::to_string(n) + " and " +
+                       std::to_string(size) + " elements, and they must have the same number"
+                 : "sequences 1 and " + std::to_string(index) + " have " + std::to_string(n) +
+                       " and " + std::to_string(size) +
+                       " elements, and all must have the same number"});
+    };
+    (check(rest.size()), ...);
+    R out;
+    out.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        out.push(typename R::value_type{first[i], rest[i]...});
     }
     return out;
 }

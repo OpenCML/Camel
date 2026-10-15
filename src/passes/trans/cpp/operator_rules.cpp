@@ -297,6 +297,7 @@ Rules buildRules() {
     r[":op/add_s"]             = infix("+");
     r[":struct/len_str"]       = runtimeFunction("length");
     r[":op/idx_str"]           = faultingFunction("byteAt", RuntimeDiag::IndexOutOfRange, 3);
+    r[":str/join"]             = withArgument("join");
     r[":struct/contains_str"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             return std::format("rt::contains({}, {})", c.norm(0).text, c.with(0).text);
@@ -329,6 +330,20 @@ Rules buildRules() {
     r[":struct/append_arr"]  = withArgument("append");
     r[":struct/extend_arr"]  = withArgument("concat");
     r[":struct/contains_arr"] = withArgument("contains");
+    r[":struct/zip"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            std::string args;
+            for (size_t i = 0; i < c.normCount(); ++i) {
+                args += ", " + c.norm(i).text;
+            }
+            return std::format(
+                "rt::zip<{}>({}{})",
+                c.cppType(c.resultType()),
+                c.site(RuntimeDiag::InvalidArgument, marks(2)),
+                args);
+        },
+        false,
+    };
     r[":struct/slice_arr"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
             return std::format(
@@ -371,6 +386,8 @@ Rules buildRules() {
     // ---- Modules with a standalone translation ----
     r["time:now"]    = runtimeFunction("now", false);
     r["sys:get_env"] = runtimeFunction("getEnv", false);
+    r["statistics:mean"]  = runtimeFunction("statisticsMean");
+    r["statistics:stdev"] = runtimeFunction("statisticsStdev");
     // random draws as modules/random does, through camel/utils/random.h (standalone/random.h).
     r["rand:seed"]    = runtimeFunction("randomSeed", false);
     r["rand:rand"]    = runtimeFunction("randomUnit", false);

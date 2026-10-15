@@ -29,5 +29,9 @@ func main(): int sync {
     println([1.5, 2.0] == [1.5, 2.0], (1, 'a') == (1, 'b'), [p] == [{ x: 7, y: -14 }])
     let words = ['b', 'a']
     println(words, string(words), '{}|{:>8}'->format<words, 'x'>)
+    println(words->join<', '>, ['x']->join<'-'>, words->join<''>)
+    println(zip([1, 2], words), zip(words, [1.5, 2.5], [true, false]))
+    let none: int[] = []
+    println(zip(none, none), zip([1, 2, 3], words))
     return 0
 }
