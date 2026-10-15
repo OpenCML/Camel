@@ -48,7 +48,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-t`, `--threads <num>`: Maximum number of threads  
 - `--max-recursion-depth <n>`: Limit on the calls that may be open at once without being tail calls (1 to 1000000; see "Resource limits"). Also `CAMEL_MAX_RECURSION_DEPTH=<n>`; the option wins  
 - `--max-macro-depth <n>`: Limit on nested calls while `std::macro` evaluates a call ahead of time (default 64; same range). Also `CAMEL_MAX_MACRO_DEPTH=<n>`  
-- `--gc <collector>`: Collector of run-time values: `mark-sweep` (default; an object keeps its address) or `generational` (young objects are copied and die cheaply; see "The collector"). Also `CAMEL_GC=<collector>`; the option wins  
+- `--gc <collector>`: Collector of run-time values: `generational` (default; young objects are copied and die cheaply) or `mark-sweep` (an object keeps its address; see "The collector"). Also `CAMEL_GC=<collector>`; the option wins  
 - `-n`, `--no-cache`: Disable cache modules  
 - `-I`, `--include <dir>`: Add module search path (can be used multiple times)  
 - `-L`, `--stdlib <path>`: Standard library path, added to the module search path. When omitted, the environment variable `CAMEL_STD_LIB` is used; with neither, the standard library is looked up in the `stdlib` directory next to the executable and under the installation root (`CAMEL_HOME`)  
@@ -297,10 +297,10 @@ Run-time values (arrays, strings, tuples, structs, function values, maps, tensor
 
 | Collector | How | Choose it when |
 |---|---|---|
-| `mark-sweep` (default) | Every object stays where it was allocated. Small objects come from a free list in the elder space, large ones (above 4 KB) are separate blocks; a major collection marks what is reachable and sweeps the rest | always safe; what every release so far has run |
-| `generational` | Small objects are allocated by bumping a pointer in a 4 MB birth space. A minor collection copies the survivors (to a survivor space, to the elder space after four survivals) and frees everything else at once; major collections mark and sweep the elder and large-object spaces as above | the program makes many short-lived small values: allocation is cheaper and the dead cost nothing. A program that builds a large structure and keeps it pays for copying it up to four times |
+| `mark-sweep` | Every object stays where it was allocated. Small objects come from a free list in the elder space, large ones (above 4 KB) are separate blocks; a major collection marks what is reachable and sweeps the rest | an object must keep its address, for example while debugging the collector itself; the default of releases up to v0.2.9 |
+| `generational` (default) | Small objects are allocated by bumping a pointer in a 4 MB birth space. A minor collection copies the survivors (to a survivor space, to the elder space after four survivals) and frees everything else at once; major collections mark and sweep the elder and large-object spaces as above | the program makes many short-lived small values: allocation is cheaper and the dead cost nothing. A program that builds a large structure and keeps it pays for copying it up to four times |
 
-`--gc generational` on the command line, or `CAMEL_GC=generational` in the environment; `--gc` wins. `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling of the latter. Anything else than the two names is refused (`--gc`) or ignored with a line on standard error (`CAMEL_GC`). The collector applies to `std::nvm`, `std::fvm`, `std::tf` / `std::prl` and to the interpreted part of `std::jit`; with `generational`, `std::jit` leaves a function whose graph holds an object constant (a string literal, a constant array) to the interpreter, because compiled code would contain the constant's address.
+`--gc mark-sweep` on the command line, or `CAMEL_GC=mark-sweep` in the environment, selects the other collector; `--gc` wins. `CAMEL_GC_ENABLE_YOUNG_COPYING=1`, the older spelling of `CAMEL_GC=generational`, no longer changes anything. Anything else than the two names is refused (`--gc`) or ignored with a line on standard error (`CAMEL_GC`). The collector applies to `std::nvm`, `std::fvm`, `std::tf` / `std::prl` and to the interpreted part of `std::jit`; with `generational`, compiled code reads an object constant (a string literal, a constant array) from the static area each time instead of embedding its address, so `std::jit` compiles such functions under both collectors.
 
 Related settings, all environment variables:
 

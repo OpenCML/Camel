@@ -206,8 +206,12 @@ jobs:
             exit 1
           fi
 
+      # The default collector is generational; the no-JIT job runs the whole set under the
+      # other one, so that mark-sweep stays tested on every push.
       - name: Test (smoke + feat)
         run: node scripts/test.js
+        env:
+          CAMEL_GC: ${{ matrix.cfg.nojit && 'mark-sweep' || '' }}
 
       - name: Upload test logs
         if: failure()

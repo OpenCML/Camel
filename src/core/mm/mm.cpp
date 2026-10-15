@@ -96,9 +96,10 @@ GenerationalAllocatorWithGC::CollectionKind envCollectionKind() {
 std::atomic<int> selectedCollectorMode{-1};
 std::atomic<bool> autoSpaceCreated{false};
 
-// The collector the environment asks for. CAMEL_GC_ENABLE_YOUNG_COPYING=1 is the older name
-// of CAMEL_GC=generational and is still read; safepoint poisoning is a mode of the moving
-// collector and implies it.
+// The collector the environment asks for; generational unless CAMEL_GC names mark-sweep
+// (design principles 2.12: generational collection is the default once usable).
+// CAMEL_GC_ENABLE_YOUNG_COPYING, the older name of CAMEL_GC=generational, no longer changes
+// anything; safepoint poisoning is a mode of the moving collector and implies it.
 CollectorMode collectorModeFromEnv() {
     if (envFlag("CAMEL_GC_POISON")) {
         return CollectorMode::Generational;
@@ -108,11 +109,10 @@ CollectorMode collectorModeFromEnv() {
             return *mode;
         }
         std::cerr << "[camel] " << kCollectorModeEnv << "=" << raw
-                  << " is not a collector (mark-sweep, generational); using mark-sweep\n";
-        return CollectorMode::MarkSweep;
+                  << " is not a collector (mark-sweep, generational); using generational\n";
+        return CollectorMode::Generational;
     }
-    return envFlag("CAMEL_GC_ENABLE_YOUNG_COPYING") ? CollectorMode::Generational
-                                                   : CollectorMode::MarkSweep;
+    return CollectorMode::Generational;
 }
 
 // The allocator whose statistics are printed at exit (CAMEL_GC_STATS).

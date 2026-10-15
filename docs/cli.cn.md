@@ -49,7 +49,7 @@
 - `-t`, `--threads <num>`：最大线程数  
 - `--max-recursion-depth <n>`：可同时处于打开状态且不是尾调用的调用数上限（1 到 1000000；见“资源上限”）。也可用 `CAMEL_MAX_RECURSION_DEPTH=<n>`；选项优先  
 - `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。也可用 `CAMEL_MAX_MACRO_DEPTH=<n>`  
-- `--gc <collector>`：运行时值的回收器：`mark-sweep`（默认，对象地址不变）或 `generational`（分代，年轻对象会被复制）。也可用 `CAMEL_GC=<collector>`；命令行选项优先。详见英文版 `docs/cli.md` 的 "The collector" 一节  
+- `--gc <collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。也可用 `CAMEL_GC=<collector>`；命令行选项优先。详见英文版 `docs/cli.md` 的 "The collector" 一节  
 - `-n`, `--no-cache`：不使用缓存模块  
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次使用）  
 - `-L`, `--stdlib <path>`：指定标准库路径，加入模块搜索路径。省略时用环境变量 `CAMEL_STD_LIB`；两者都没有时，标准库在可执行文件旁和安装根目录（`CAMEL_HOME`）下的 `stdlib` 目录里查找  
