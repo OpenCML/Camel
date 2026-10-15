@@ -559,3 +559,19 @@ evidence is `docs/performance/tiles/2026-10-16-rtx3090-bit-probes-tests.txt`.
 The numerical audit also records versioned NVIDIA documentation and its ULP
 metric; vendor error tables are supporting evidence, not exhaustive proofs.
 
+# Structured predicated accesses (2026-10-16)
+
+Commit `b07df4a2` adds physical Boolean predicates and buffer accesses with a
+shared coordinate-substitution interface. Host evaluation short-circuits masks
+and does not evaluate a masked-out address. Matrix tile loads now consume these
+objects; their CUDA printer uses conditional loads and exact fallback bits.
+This is a physical lowering facility, not a second definition of Camel tensor
+semantics or a complete structured kernel IR. Arithmetic, loops, barriers and
+stores remain to be migrated.
+
+Manual native checks and the matrix FMA probe passed before extending the plan
+assertion. Local relevant tests passed 85/85; after the formatting hook, the
+standard build, native checks and matrix probe passed again. RTX 3090 device 7
+rebuilt the committed tree and passed all 85 relevant tests; see
+`docs/performance/tiles/2026-10-16-rtx3090-access-tests.txt`. No speedup is claimed.
+
