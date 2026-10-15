@@ -129,3 +129,20 @@ The committed local 8e7be374 benchmark records are saved under
 `docs/performance/tiles/2026-10-15-rtx4060ti-parallel-max.jsonl`. For 128x4097
 maximum, paired speedups range from 2.57 to 3.81x, with identical checked outputs.
 The same-code control remains noisy, so this is workload-specific evidence.
+
+## Cross-platform validation of the transfer and reduction path
+
+Revision 8e7be374 rebuilt successfully on the remote Linux toolchain. All 38
+checks passed on RTX 3090 device 7, including large uploads and stable parallel
+maximum. An earlier attempt on occupied device 3 had four CUDA-context allocation
+failures; these were environment failures, not numerical mismatches. The rerun
+and the shared-machine conditions are recorded in `docs/performance/tiles/`.
+
+Three fresh-process benchmark runs (12 reports) have the same source fingerprint
+as the local measurements, with exact optimized/reference matches before and
+after timing. Paired maximum speedups were 13.05–13.79x; elementwise 4.36–4.62x;
+softmax 1.20–1.21x. Matmul remains an identical-code control (0.99–1.01x).
+These validate the present internal schedules on a second architecture, not the
+full target design or a performance advantage over Triton. Indexed domains,
+structured control, multiple outputs, device-resident values, general schedule
+and resource graphs, Tensor Core lowering and external baselines remain open.
