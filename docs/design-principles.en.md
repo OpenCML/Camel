@@ -422,6 +422,33 @@ At present all complicated type computation is implemented directly by operators
   let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else hit
   ```
 
+- **Explicit type arguments at a call: both layers.** First: a type parameter that appears only in the result type is inferred from the expected type (a `let` annotation, a parameter's type, a return position), as `let cfg: Config! = json::decode_as(text)`; this extends 2.10's "a generic is instantiated once the context determines it". Second: where nothing can be inferred, `f::<T>(x)` (as in Rust), as `json::decode_as::<Config>(text)`, `empty::<int>()`. `f<w>` still means `with` arguments and partial application only; both together are `f::<T><w>(x)`. With these, the "shape value" form of `decode_as` is retired.
+- **Sum types follow Rust's `enum`**: variants have names and may carry a tuple or a struct of data; they may be generic and recursive.
+
+  ```camel
+  type Shape = enum {
+      Circle(float),
+      Rect { w: float, h: float },
+      Empty,
+  }
+  let s = Shape::Rect { w: 2.0, h: 3.0 }
+  let area = match s {
+      case Shape::Circle(r)     => 3.14159 * r * r
+      case Shape::Rect { w, h } => w * h
+      case Shape::Empty         => 0.0
+  }
+  type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
+  ```
+
+  A `match` over an `enum` that lists every variant needs no `case _` (as with `bool`, `T?`, `T!`). Variants are not told apart by the type of their value (that would be run-time type discrimination, excluded by 2.9). The `A | B` that can be written today but that no value can enter is retired; `|` remains the logical or. No node kind is added on the graph: constructing enters a tag, `match` reads the tag, branches and takes the data out in the arm, as for `T?` and `T!`, which can be seen as two built-in `enum`s.
+- **Tensor dimensions may have names**: where a dimension first appears in a parameter's type it is bound with `constas n` (the same pattern as `typeas T` binding a type variable), and is written `n` afterwards; a name that appears only in the result type is an error.
+
+  ```camel
+  func dense(x: Tensor<f32, const [constas n, 3]>, w: Tensor<f32, const [3, constas k]>): Tensor<f32, const [n, k]>
+  ```
+
+  Dimensions allow addition and multiplication by a constant (linear forms, whose equality is decidable); other results are unknown. Where an argument's dimension is unknown (`?`), compilation lets it pass and the call checks it at run time (as `as` does). Named dimensions are only checked; they create no instances: a function still has one graph.
+
 - **`std::cpp`**: the fault reports of generated programs are byte-identical to the interpreter's; recursion is counted exactly (as on every back end); the extra blank line of `println<fmt>` and the extra line feed of `print<fmt>` are defects of the interpreter and are fixed there; `std::cpp::bench` is removed; `map`/`filter` run sequentially in generated programs for now; `main` takes its parameters as `--arg name=value`, as the command line does.
 
 ---
@@ -476,10 +503,8 @@ When you meet one of the following, ask the language author:
 
 - The type notation for "may fail": 2.9 decides on `T!`; the grammar also has an earlier reserved `T ? U` (called ErrorThen in the syntax tree), and the relation between the two is to be decided.
 - The concrete content of the type-expression language: the meaning and fate of each of the reserved type operators `&`, `\`, `+`, `-`, `^` and of `typeof`, `keyof`, `ident of T`; how conditions and matching are written in type functions.
-- How numeric parameters in types (such as the dimensions of a tensor) are bound to names, and how arithmetic is done on them.
 - The meaning of `typeof` applied to a constant value, and its use in generics.
 - How failure or non-termination of the evaluation of a type function is handled.
-- Whether the type parameters of a generic function may be given explicitly at the call.
 - The behaviour when the same mutable object is written through references in several places outside a sync block, none of them with `wait`.
 - **After a fault in a parallel `map`, whether elements of smaller index that have not started still run** (`parallel-fault-lower-elements`):
   `range(0, 64)->map<bad>` where every element faults and a worker happens to run element 40 first. Implemented: only the elements with an index above 40 are not started, 0 to 39 still run, so the one reported is always element 0, as on the linear back ends and the same on every run.
