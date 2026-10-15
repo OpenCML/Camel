@@ -106,12 +106,14 @@ void validate(const Program &p) {
         for (auto in : n.inputs)
             require(in < id, "dependency is not topologically earlier");
         if (n.op == "input") {
-            require(n.dtype == DType::F32, "input payload dtype");
+            require(
+                n.dtype == DType::F32 || (n.resident && n.shape.empty()),
+                "input payload dtype");
             require(n.inputs.empty(), "input has dependencies");
             if (n.resident)
                 require(
-                    n.data.empty() && n.resident->shape == n.shape && n.resident->owner &&
-                        n.resident->address,
+                    n.data.empty() && n.resident->shape == n.shape &&
+                        n.resident->dtype == n.dtype && n.resident->owner && n.resident->address,
                     "invalid resident input");
             else
                 require(n.data.size() == count, "invalid input payload");

@@ -84,7 +84,7 @@ int main() {
         rejects(scalar, [](auto &x) { x.nodes[1].dtype = DType::F32; }, "scalar reduction type");
         rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "unsupported operation dtype");
         auto borrowed = indexed;
-        auto resident = std::make_shared<DeviceTensor>();
+        auto resident = std::make_shared<DeviceValue>();
         resident->shape = {2,3};
         resident->address = 1; // Validator-only sentinel, never passed to CUDA.
         resident->owner = std::make_shared<int>(0);
@@ -97,8 +97,14 @@ int main() {
         rejects(borrowed, [](auto &x) { x.storage.slots[0] = 0; }, "borrowed input has writable allocation");
         rejects(borrowed, [](auto &x) { x.nodes[0].data = {1}; }, "invalid resident input");
         rejects(borrowed, [](auto &x) { x.nodes[1].resident = x.nodes[0].resident; }, "computed value borrows input storage");
-        rejects(borrowed, [](auto &x) { x.nodes[0].resident = std::make_shared<DeviceTensor>(); }, "invalid resident input");
-        std::cout << "tiles plan validation: 28 rejected mutations\n";
+        rejects(borrowed, [](auto &x) { x.nodes[0].resident = std::make_shared<DeviceValue>(); }, "invalid resident input");
+        rejects(borrowed, [](auto &x) {
+            auto value = std::make_shared<DeviceValue>(*x.nodes[0].resident);
+            value->dtype = DType::F64;
+            x.nodes[0].resident = value;
+        }, "invalid resident input");
+        rejects(borrowed, [](auto &x) { x.nodes[0].dtype = DType::F64; }, "input payload dtype");
+        std::cout << "tiles plan validation: 30 rejected mutations\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }

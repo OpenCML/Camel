@@ -122,16 +122,16 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
     });
 }
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
-slot_t wrapDevice(std::shared_ptr<DeviceTensor> resident) {
-    auto *owner = new std::shared_ptr<DeviceTensor>(std::move(resident));
+slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
+    auto *owner = new std::shared_ptr<DeviceValue>(std::move(resident));
     td::ForeignResourceDescriptor descriptor;
     descriptor.kind    = "tiles.Device";
-    descriptor.deleter = [](void *p) { delete static_cast<std::shared_ptr<DeviceTensor> *>(p); };
+    descriptor.deleter = [](void *p) { delete static_cast<std::shared_ptr<DeviceValue> *>(p); };
     return td::toSlot(
         td::ForeignResourceObject::create(core::mm::autoSpace(), std::move(descriptor), owner));
 }
 Type *buildResidentType(Type *type) {
-    if (tensor::asTensorType(type))
+    if (tensor::asTensorType(type) || type->code() == TypeCode::Float64)
         return DeviceType::get(type);
     if (type->code() == TypeCode::Tuple) {
         auto *tuple = static_cast<TupleType *>(type);
@@ -194,6 +194,10 @@ slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &) {
 }
 slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
     return checked([&] {
+        if (norm.type(0)->code() == TypeCode::Float64) {
+            double value = norm.get<double>(0);
+            return wrapDevice(uploadValue({}, DType::F64, std::as_bytes(std::span(&value, 1))));
+        }
         Shape shape;
         std::vector<float> data;
         {
@@ -206,19 +210,24 @@ slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
             if (count)
                 data.assign(tensor->dataAs<float>(), tensor->dataAs<float>() + count);
         }
-        auto resident = uploadTensor(shape, data);
+        auto resident = uploadValue(shape, DType::F32, std::as_bytes(std::span(data)));
         return wrapDevice(std::move(resident));
     });
 }
 slot_t downloadKernel(ArgsView &, ArgsView &norm, Context &) {
     return checked([&] {
         auto *wrapper = norm.get<td::ForeignResourceObject *>(0);
-        auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceTensor>>();
-        auto data     = downloadTensor(*resident);
+        auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
+        auto data     = downloadValue(*resident);
+        if (resident->dtype == DType::F64) {
+            double value;
+            std::memcpy(&value, data.data(), sizeof(value));
+            return td::toSlot(value);
+        }
         auto *out =
             tensor::TensorObject::create(TypeCode::Float32, resident->shape, core::mm::autoSpace());
         if (!data.empty())
-            std::memcpy(out->rawData(), data.data(), data.size() * sizeof(float));
+            std::memcpy(out->rawData(), data.data(), data.size());
         return td::toSlot(out);
     });
 }
@@ -313,8 +322,8 @@ class TilesModule final : public BuiltinModule {
                     {{"tiles:" + name,
                       DynamicFuncTypeResolver::create(
                           {{0, {}}, {1, {false}}},
-                          name == "upload" ? "(Tensor) => Device<Tensor>"
-                                           : "(Device<Tensor>) => Tensor",
+                          name == "upload" ? "(T: Tensor or float) => Device<T>"
+                                           : "(Device<T>) => T",
                           [upload = name == "upload"](
                               const type_vec_t &with,
                               const type_vec_t &norm,
@@ -322,6 +331,8 @@ class TilesModule final : public BuiltinModule {
                               if (!with.empty() || norm.size() != 1)
                                   return std::nullopt;
                               if (upload) {
+                                  if (norm[0]->code() == TypeCode::Float64)
+                                      return DeviceType::get(norm[0]);
                                   const auto *tensor = tensor::asTensorType(norm[0]);
                                   if (!tensor ||
                                       (tensor->dtype() && *tensor->dtype() != TypeCode::Float32))

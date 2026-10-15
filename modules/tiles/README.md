@@ -21,12 +21,13 @@ func main(): int sync {
 
 ## API
 
-- `run_device<fn>(inputs)` executes the same graph and returns `Device<Tensor<...>>`
+- `run_device<fn>(inputs)` executes the same graph and returns `Device<Tensor<...>>` or `Device<float>`
   leaves in the result's original tuple/struct structure. Outputs retain their
   allocations instead of downloading; feed them directly into subsequent graph
   calls and use `download` only when host values are needed. Returned inputs and
-  repeated leaves share native ownership. Completion is synchronous. This API
-  currently requires tensor-only result leaves; scalar device results are pending.
+  repeated leaves share native ownership. Completion is synchronous. Scalar leaves
+  retain f64 storage, including mixed loss/gradient results. Device scalar inputs
+  are runtime values; ordinary host scalar inputs are specialized constants.
 - `run<fn>(inputs)` specializes a function graph for actual input shapes, compiles
   CUDA with NVRTC, executes on the GPU, and returns host `Tensor<f32>` or `float` leaves
   in the function's original tuple/struct structure. Nested nonempty tuples and
@@ -55,6 +56,7 @@ func main(): int sync {
   storage. Static dtype/shape refinements are retained. `download(deviceValue)`
   returns a host tensor. Both transfers complete before returning; repeated
   downloads preserve the device value. Empty tensors are supported.
+  `upload(float)` and `download(Device<float>)` preserve all f64 bits.
   Device storage is owned through Camel's foreign-resource control blocks and
   released by finalization or end-of-run cleanup. The native allocation retains
   its CUDA context and driver lifetime, and contains no moving-heap pointers.
@@ -185,6 +187,6 @@ map composition and view elimination, not the complete indexed-domain design.
 
 First-class index domains, masks, layouts, schedule/resource graphs, loop and
 branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning,
-scalar device values, asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
+asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.

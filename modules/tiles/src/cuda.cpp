@@ -484,20 +484,18 @@ class DeviceRun {
         }
         return result;
     }
-    std::vector<std::shared_ptr<DeviceTensor>> retainOutputs(std::shared_ptr<Backend> backend) {
+    std::vector<std::shared_ptr<DeviceValue>> retainOutputs(std::shared_ptr<Backend> backend) {
         synchronize();
-        std::vector<std::shared_ptr<DeviceTensor>> result;
-        std::unordered_map<size_t, std::shared_ptr<DeviceTensor>> retained;
+        std::vector<std::shared_ptr<DeviceValue>> result;
+        std::unordered_map<size_t, std::shared_ptr<DeviceValue>> retained;
         for (auto id : program.outputs) {
             if (auto it = retained.find(id); it != retained.end()) {
                 result.push_back(it->second);
                 continue;
             }
             const auto &node = program.nodes[id];
-            if (node.dtype != DType::F32)
-                throw std::runtime_error("resident outputs currently require f32 tensors");
-            auto value = node.resident ? std::make_shared<DeviceTensor>(*node.resident)
-                                       : std::make_shared<DeviceTensor>();
+            auto value       = node.resident ? std::make_shared<DeviceValue>(*node.resident)
+                                             : std::make_shared<DeviceValue>();
             if (!node.resident) {
                 auto owner     = std::make_shared<OwnedAllocation>();
                 owner->backend = backend;
@@ -506,6 +504,7 @@ class DeviceRun {
                 if (allocation == resources.buffers.end())
                     throw std::runtime_error("resident output allocation is not owned");
                 value->shape   = node.shape;
+                value->dtype   = node.dtype;
                 value->address = pointers[id];
                 value->owner   = owner;
                 // Transfer only after every potentially throwing field assignment.
@@ -536,8 +535,10 @@ double elapsed(Clock::time_point start) {
 } // namespace
 
 std::string deviceInfo() { return backend().description; }
-std::shared_ptr<DeviceTensor> uploadTensor(const Shape &shape, const std::vector<float> &data) {
-    if (elements(shape) != data.size())
+std::shared_ptr<DeviceValue>
+uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
+    if (bytes(Node{.shape = shape, .dtype = dtype}) != data.size() ||
+        (dtype == DType::F64 && !shape.empty()))
         throw std::runtime_error("device upload shape mismatch");
     auto b = sharedBackend();
     std::lock_guard lock(b->mutex);
@@ -545,11 +546,11 @@ std::shared_ptr<DeviceTensor> uploadTensor(const Shape &shape, const std::vector
     auto allocation     = std::make_shared<OwnedAllocation>();
     allocation->backend = b;
     b->api.check(
-        b->api.cuMemAlloc(&allocation->pointer, std::max(size_t(1), data.size() * sizeof(float))),
+        b->api.cuMemAlloc(&allocation->pointer, std::max(size_t(1), data.size())),
         "allocate resident tensor");
     Resources staging(b->api);
     if (!data.empty()) {
-        const size_t size = data.size() * sizeof(float);
+        const size_t size = data.size();
         void *pinned      = staging.allocateHost(size);
         std::memcpy(pinned, data.data(), size);
         b->api.check(
@@ -557,23 +558,24 @@ std::shared_ptr<DeviceTensor> uploadTensor(const Shape &shape, const std::vector
             "upload resident tensor");
         b->api.check(b->api.cuStreamSynchronize(staging.stream), "complete resident upload");
     }
-    auto result     = std::make_shared<DeviceTensor>();
+    auto result     = std::make_shared<DeviceValue>();
     result->shape   = shape;
+    result->dtype   = dtype;
     result->address = allocation->pointer;
     result->owner   = std::move(allocation);
     return result;
 }
-std::vector<float> downloadTensor(const DeviceTensor &tensor) {
+std::vector<std::byte> downloadValue(const DeviceValue &tensor) {
     if (!tensor.owner || !tensor.address)
         throw std::runtime_error("invalid resident tensor");
     auto allocation = std::static_pointer_cast<OwnedAllocation>(tensor.owner);
     auto b          = allocation->backend;
     std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
-    std::vector<float> result(elements(tensor.shape));
+    std::vector<std::byte> result(bytes(Node{.shape = tensor.shape, .dtype = tensor.dtype}));
     if (!result.empty())
         b->api.check(
-            b->api.cuMemcpyDtoH(result.data(), allocation->pointer, result.size() * sizeof(float)),
+            b->api.cuMemcpyDtoH(result.data(), allocation->pointer, result.size()),
             "download resident tensor");
     return result;
 }
@@ -612,11 +614,8 @@ std::vector<std::byte> execute(const Program &p) {
     return run.download();
 }
 
-std::vector<std::shared_ptr<DeviceTensor>> executeResident(const Program &p) {
+std::vector<std::shared_ptr<DeviceValue>> executeResident(const Program &p) {
     validatePlan(p);
-    for (auto id : p.outputs)
-        if (p.nodes[id].dtype != DType::F32)
-            throw std::runtime_error("resident outputs currently require f32 tensors");
     auto b = sharedBackend();
     std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
@@ -806,15 +805,15 @@ std::string deviceInfo() {
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
-std::vector<std::shared_ptr<DeviceTensor>> executeResident(const Program &) {
+std::vector<std::shared_ptr<DeviceValue>> executeResident(const Program &) {
     (void)deviceInfo();
     return {};
 }
-std::shared_ptr<DeviceTensor> uploadTensor(const Shape &, const std::vector<float> &) {
+std::shared_ptr<DeviceValue> uploadValue(const Shape &, DType, std::span<const std::byte>) {
     (void)deviceInfo();
     return {};
 }
-std::vector<float> downloadTensor(const DeviceTensor &) {
+std::vector<std::byte> downloadValue(const DeviceValue &) {
     (void)deviceInfo();
     return {};
 }

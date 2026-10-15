@@ -24,8 +24,8 @@ TypeCode DeviceType::typeCode() {
 DeviceType::DeviceType(Type *host)
     : OtherType(typeCode(), 1, copyParams(std::span<Type *const>(&host, 1))) {}
 DeviceType *DeviceType::get(Type *host) {
-    if (!tensor::asTensorType(host))
-        throw std::runtime_error("Device currently requires a tensor type");
+    if (!tensor::asTensorType(host) && host->code() != TypeCode::Float64)
+        throw std::runtime_error("Device requires a tensor or float type");
     static std::mutex mutex;
     static std::unordered_map<Type *, DeviceType *> types;
     std::lock_guard lock(mutex);
@@ -66,7 +66,8 @@ slot_t DeviceType::castSlotFrom(slot_t value, Type *other) const {
 }
 bool DeviceType::typeArguments() const { return true; }
 OtherType *DeviceType::cloneWithParams(std::span<Type *const> params) const {
-    if (params.size() != 1 || !tensor::asTensorType(params[0]))
+    if (params.size() != 1 ||
+        (!tensor::asTensorType(params[0]) && params[0]->code() != TypeCode::Float64))
         return nullptr;
     return get(params[0]);
 }

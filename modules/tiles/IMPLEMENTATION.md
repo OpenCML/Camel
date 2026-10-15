@@ -354,3 +354,18 @@ Committed ccdc7a76 rebuilds and passes 68/68 relevant checks on both local
 RTX 4060 Ti and remote RTX 3090 device 7, including all three VMs under GC stress.
 The remote log is retained in
 `docs/performance/tiles/2026-10-15-rtx3090-resident-output-tests.txt`.
+
+## Typed scalar residency
+
+Native device values now carry dtype as well as shape and ownership. Transfers
+use checked byte counts, and `Device<float>` preserves f64 scalars without passing
+through tensor f32 storage. `run_device` supports mixed tensor/scalar aggregates,
+including value-and-gradient results. Device scalar inputs remain runtime values
+and can cross graph boundaries; tensor operators insert their existing explicit
+f32 conversion, while scalar identity and output retain f64 precision. Validation
+rejects resident dtype mismatches and nonscalar f64 inputs. This does not yet add
+general scalar arithmetic lowering or asynchronous execution.
+
+Manual moving-GC checks cover resident loss/gradient reuse, precise f64 values
+16777217.0 and 1.0000000000000002, host/device scalar identity, explicit upload,
+and empty sum results. Native validation now exercises 30 rejected mutations.

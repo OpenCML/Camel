@@ -13,16 +13,19 @@
 #include "camel/core/type/other.h"
 #include "tiles/program.h"
 #include <memory>
+#include <span>
 
 namespace camel::tiles {
-struct DeviceTensor {
+struct DeviceValue {
     Shape shape;
+    DType dtype      = DType::F32;
     uint64_t address = 0;
     std::shared_ptr<void> owner;
 };
-std::shared_ptr<DeviceTensor> uploadTensor(const Shape &shape, const std::vector<float> &data);
-std::vector<float> downloadTensor(const DeviceTensor &tensor);
-std::vector<std::shared_ptr<DeviceTensor>> executeResident(const Program &program);
+std::shared_ptr<DeviceValue>
+uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
+std::vector<std::byte> downloadValue(const DeviceValue &value);
+std::vector<std::shared_ptr<DeviceValue>> executeResident(const Program &program);
 
 class DeviceType final : public core::type::OtherType {
   public:
