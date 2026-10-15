@@ -326,3 +326,7 @@ from resident storage, and empty domains remain valid.
 Local manual checks and the 65/65 relevant suite pass, including all three VMs
 under moving-GC stress and 28 invalid native-plan mutations. Graph results still
 return host values; ownership transfer for resident outputs is the next step.
+
+Committed 5814f1f9 rebuilds and passes 65/65 checks on both local RTX 4060 Ti
+and remote RTX 3090 device 7. The post-commit remote log is retained in
+`docs/performance/tiles/2026-10-15-rtx3090-borrowed-input-tests.txt`.
