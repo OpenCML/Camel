@@ -29,6 +29,7 @@
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/facts.h"
+#include "camel/runtime/loop_lowering.h"
 #include "camel/runtime/reachable.h"
 
 #include <format>
@@ -299,4 +300,116 @@ GCGraph *FactStoreTestPass::apply(GCGraph *graph, std::ostream &os) {
         "FACTS counts puts={} hits={} misses={} stale={} revalidated={} computed={}\n",
         c.puts, c.hits, c.misses, c.stale, c.revalidated, c.computed);
     return root2;
+}
+
+// ---- Seed and check: facts across other passes ----------------------------------------------
+
+namespace {
+
+/// The graphs of the program of `root`, by lineage.
+std::unordered_map<uint64_t, GCGraph *> graphsByLineage(GCGraph *root) {
+    std::unordered_map<uint64_t, GCGraph *> byLineage;
+    for (GCGraph *graph : collectReachableGraphs(root)) {
+        byLineage.emplace(graph->lineage(), graph);
+    }
+    return byLineage;
+}
+
+/// Reads every stored fact against the program of `root`, prints the tallies per graph (lines
+/// `FACTS <prefix> <graph> valid=.. revalidated=.. stale=..`) and returns how many facts are
+/// about graphs the program does not have.
+size_t tally(std::ostream &os, FactStore &store, GCGraph *root, std::string_view prefix) {
+    const auto byLineage = graphsByLineage(root);
+    // Two graphs of one program never share a lineage (a commit copies each graph once).
+    for (GCGraph *graph : collectReachableGraphs(root)) {
+        if (byLineage.at(graph->lineage()) != graph) {
+            os << "FACTS " << prefix << " shared lineage " << graph->name() << " "
+               << byLineage.at(graph->lineage())->name() << "\n";
+        }
+    }
+    struct Tally {
+        size_t valid = 0, revalidated = 0, stale = 0;
+    };
+    std::map<std::string, Tally> perGraph;
+    size_t gone = 0;
+    std::vector<StoredFact> stored;
+    store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
+    for (const StoredFact &fact : stored) {
+        std::vector<Anchor> anchors;
+        for (const auto &[lineage, node] : fact.anchors) {
+            if (auto it = byLineage.find(lineage); it != byLineage.end()) {
+                anchors.push_back(Anchor{it->second, node});
+            }
+        }
+        if (anchors.size() != fact.anchors.size()) {
+            ++gone;
+            continue;
+        }
+        Tally &t = perGraph[anchors[0].graph->name()];
+        switch (store.probe(fact.kind, anchors, fact.stamp.targetHash)) {
+        case Status::Valid:
+            ++t.valid;
+            break;
+        case Status::Revalidated:
+            ++t.revalidated;
+            break;
+        default:
+            ++t.stale;
+            break;
+        }
+    }
+    for (const auto &[name, t] : perGraph) {
+        os << std::format(
+            "FACTS {} {} valid={} revalidated={} stale={}\n", prefix, name, t.valid, t.revalidated, t.stale);
+    }
+    return gone;
+}
+
+} // namespace
+
+GCGraph *FactSeedTestPass::apply(GCGraph *graph, std::ostream &os) {
+    FactStore &store = context_->facts();
+    computeFacts(store, graph);
+    std::map<std::string, size_t> perKind;
+    store.forEach([&](const StoredFact &fact) { ++perKind[kindInfo(fact.kind).key]; });
+    for (const auto &[kind, n] : perKind) {
+        os << "FACTS seeded " << kind << " " << n << "\n";
+    }
+    return graph;
+}
+
+GCGraph *FactCheckTestPass::apply(GCGraph *graph, std::ostream &os) {
+    FactStore &store = context_->facts();
+    const size_t gone = tally(os, store, graph, "graph");
+    os << "FACTS gone " << gone << "\n";
+
+    // What was stale is computed again; then every stored fact must equal a fresh computation.
+    const Counts before = store.counts();
+    computeFacts(store, graph);
+    os << "FACTS recomputed " << store.counts().computed - before.computed << "\n";
+    const auto byLineage = graphsByLineage(graph);
+    size_t equal = 0, differ = 0;
+    std::vector<StoredFact> stored;
+    store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
+    for (const StoredFact &fact : stored) {
+        std::vector<Anchor> anchors;
+        for (const auto &[lineage, node] : fact.anchors) {
+            if (auto it = byLineage.find(lineage); it != byLineage.end()) {
+                anchors.push_back(Anchor{it->second, node});
+            }
+        }
+        if (anchors.size() == fact.anchors.size()) {
+            if (const auto same = store.verify(fact.kind, anchors)) {
+                ++(*same ? equal : differ);
+            }
+        }
+    }
+    os << std::format("FACTS verify equal={} differ={}\n", equal, differ);
+
+    // A back end's private lowering: a copy of every graph, new only where a loop was.
+    if (programHasLoops(graph)) {
+        GCGraph *lowered = lowerLoopsToTailRecursion(context_, graph);
+        (void)tally(os, store, lowered, "lowered");
+    }
+    return graph;
 }

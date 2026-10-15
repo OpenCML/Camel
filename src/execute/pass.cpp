@@ -691,6 +691,16 @@ PassFactory lookupPassFactory(const std::string &name) {
             return std::make_unique<FactStoreTestPass>(ctx);
         };
     }
+    if (resolved == kFactSeedTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<FactSeedTestPass>(ctx);
+        };
+    }
+    if (resolved == kFactCheckTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<FactCheckTestPass>(ctx);
+        };
+    }
     return nullptr;
 }
 

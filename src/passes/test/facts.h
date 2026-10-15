@@ -31,6 +31,17 @@
  * revalidated; then a new operator declaration: facts that read declarations go stale, the
  * others stay. It needs a program whose `main` calls a function `f` that does not call `main`.
  * It returns the committed program.
+ *
+ * `test::facts_seed` and `test::facts_check` bracket other passes (rewrites interact with facts,
+ * design 10.5): `camel p.cml test::facts_seed std::inline test::facts_check`. The first computes
+ * every core fact of the program and prints how many of each kind (`FACTS seeded <kind> <n>`).
+ * The second reads every stored fact against the program as it is now and prints, per graph,
+ * how many are valid, revalidated (Cone) and stale, and how many are about graphs the program
+ * no longer has (`FACTS graph <name> valid=.. revalidated=.. stale=..`, `FACTS gone <n>`); then
+ * it computes again what was stale and verifies every stored fact against a fresh computation
+ * (`FACTS verify equal=<n> differ=<n>`): a pass's rewrite is never reused silently. When the
+ * program has loops it also lowers them privately, as std::fvm does, and reads the facts on
+ * the copy (`FACTS lowered <name> ...`): the graph that held the loop is new, the others are not.
  */
 
 #pragma once
@@ -39,7 +50,22 @@
 
 inline constexpr const char *kFactStoreTestPass = "test::facts";
 
+inline constexpr const char *kFactSeedTestPass    = "test::facts_seed";
+inline constexpr const char *kFactCheckTestPass   = "test::facts_check";
+
 class FactStoreTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+};
+
+class FactSeedTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+};
+
+class FactCheckTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;

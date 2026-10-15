@@ -154,8 +154,8 @@ class RuntimeGraphDraftSession {
     camel::core::context::context_ptr_t context_;
     GCGraph *runtimeRoot_ = nullptr;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
-    /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself: a
-    /// pass that asks to edit a graph is taken to have changed it.
+    /// The graphs handed out for editing (edit, rootDraft) or changed by the commit itself.
+    /// The commit drops those it encodes back to the same content (sameContent).
     std::unordered_set<GCGraph *> edited_;
     std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher>
         specializationCache_;

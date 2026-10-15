@@ -432,8 +432,8 @@ class GCGraph : public camel::core::rtdata::Object {
     uint64_t lineage() const { return lineage_; }
     /// The graph's revision, standing in for the design's Revision until graph-model step 5
     /// (facts.h): a process-wide serial number. A commit keeps it for a graph it did not change
-    /// and gives a new one to a graph it changed: one a pass edited, or one that refers (at any
-    /// depth) to a graph that changed. Equal serials mean equal content.
+    /// and gives a new one to a graph it changed: one a pass edited into different content, or
+    /// one that refers (at any depth) to a graph that changed. Equal serials mean equal content.
     uint64_t serial() const { return serial_; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
