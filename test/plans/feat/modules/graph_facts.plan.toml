@@ -160,3 +160,28 @@ assert(/FACTS graph main valid=0 revalidated=\d+ stale=[1-9]/.test(out), 'main c
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 }
 """
+
+[[tests]]
+name = "persistence_round_trip"
+desc = "test::facts_persist: every encodable fact (shapes, reorder freedom, effects: class ii; permissions: class i) is exported in a process-independent form whose text reads back to the same fact; loaded into an empty store against the same program, each is stored (or matches the graph) and equals a fresh computation; after main changes, the facts about main and the root (which refers to it) are refused as 'graph changed' and the others are stored."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["${case}", "test::facts_persist"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const l of [
+  'FACTS exported core.shape 14', 'FACTS exported core.reorder 2', 'FACTS exported core.effects 9',
+  'FACTS exported core.permissions 1', 'FACTS text round trip 26/26',
+  'FACTS imported stored 25', 'FACTS imported matches the graph 1',
+  'FACTS loaded equal to a fresh computation 25/25',
+  'FACTS reloaded main graph changed 6', 'FACTS reloaded __root__ graph changed 1',
+  'FACTS reloaded layer stored 5', 'FACTS reloaded total stored 3', 'FACTS reloaded total matches the graph 1',
+  '60.0',
+]) line(l)
+assert(!/FACTS reloaded (layer|total|twice|count)\S* graph changed/.test(out), 'unchanged graphs load')
+}
+"""

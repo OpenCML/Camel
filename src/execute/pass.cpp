@@ -701,6 +701,11 @@ PassFactory lookupPassFactory(const std::string &name) {
             return std::make_unique<FactCheckTestPass>(ctx);
         };
     }
+    if (resolved == kFactPersistTestPass && std::getenv(kTestPassesEnvVar) != nullptr) {
+        return [](const context_ptr_t &ctx) -> std::unique_ptr<GraphIRPass> {
+            return std::make_unique<FactPersistTestPass>(ctx);
+        };
+    }
     return nullptr;
 }
 

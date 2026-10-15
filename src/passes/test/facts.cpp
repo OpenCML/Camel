@@ -28,6 +28,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/fact_persist.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/loop_lowering.h"
 #include "camel/runtime/reachable.h"
@@ -412,4 +413,71 @@ GCGraph *FactCheckTestPass::apply(GCGraph *graph, std::ostream &os) {
         (void)tally(os, store, lowered, "lowered");
     }
     return graph;
+}
+
+// ---- Persistence ------------------------------------------------------------------------------
+
+GCGraph *FactPersistTestPass::apply(GCGraph *graph, std::ostream &os) {
+    FactStore &store = context_->facts();
+    computeFacts(store, graph);
+    const std::vector<PortableFact> facts = exportFacts(store, graph);
+    std::map<std::string, size_t> perKind;
+    size_t textRoundTrips = 0;
+    for (const PortableFact &fact : facts) {
+        ++perKind[fact.kind];
+        const auto back = parsePortableFact(toText(fact));
+        textRoundTrips += back && *back == fact ? 1 : 0;
+    }
+    for (const auto &[kind, n] : perKind) {
+        os << "FACTS exported " << kind << " " << n << "\n";
+    }
+    os << std::format("FACTS text round trip {}/{}\n", textRoundTrips, facts.size());
+
+    // Into an empty store, against the same program.
+    store.clear();
+    std::map<std::string, size_t> results;
+    for (const PortableFact &fact : facts) {
+        ++results[std::string(importResultName(importFact(store, graph, fact)))];
+    }
+    for (const auto &[result, n] : results) {
+        os << "FACTS imported " << result << " " << n << "\n";
+    }
+    size_t equal = 0, verified = 0;
+    const auto byLineage = graphsByLineage(graph);
+    std::vector<StoredFact> stored;
+    store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
+    for (const StoredFact &fact : stored) {
+        std::vector<Anchor> anchors;
+        for (const auto &[lineage, node] : fact.anchors) {
+            anchors.push_back(Anchor{byLineage.at(lineage), node});
+        }
+        if (const auto same = store.verify(fact.kind, anchors)) {
+            ++verified;
+            equal += *same ? 1 : 0;
+        }
+    }
+    os << std::format("FACTS loaded equal to a fresh computation {}/{}\n", equal, verified);
+
+    // Change main (an unused constant more), then load again.
+    RuntimeGraphDraftSession session(context_, graph);
+    GraphDraft &main = session.edit(named(graph, "main"));
+    (void)main.materializeStaticValue(
+        camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
+    GCGraph *changed = session.commit();
+    store.clear();
+    std::unordered_map<std::string, std::string> nameOf; // stable id -> name
+    for (GCGraph *g : collectReachableGraphs(changed)) {
+        nameOf.emplace(g->stableId(), g->name());
+    }
+    std::map<std::string, std::map<std::string, size_t>> perGraph;
+    for (const PortableFact &fact : facts) {
+        const ImportResult result = importFact(store, changed, fact);
+        ++perGraph[nameOf[fact.anchors[0].first]][std::string(importResultName(result))];
+    }
+    for (const auto &[name, counts] : perGraph) {
+        for (const auto &[result, n] : counts) {
+            os << "FACTS reloaded " << name << " " << result << " " << n << "\n";
+        }
+    }
+    return changed;
 }

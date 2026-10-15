@@ -42,6 +42,12 @@
  * (`FACTS verify equal=<n> differ=<n>`): a pass's rewrite is never reused silently. When the
  * program has loops it also lowers them privately, as std::fvm does, and reads the facts on
  * the copy (`FACTS lowered <name> ...`): the graph that held the loop is new, the others are not.
+ *
+ * `test::facts_persist` exports the program's facts as a cache would (fact_persist.h), checks
+ * that each line of text reads back to the same fact, loads them into an empty store (every
+ * fact stored or matching the graph, and equal to a fresh computation), then edits `main`
+ * (adds an unused constant) and loads them again: the facts about `main` and the graphs that
+ * refer to it are refused (`graph changed`), the others are stored.
  */
 
 #pragma once
@@ -52,6 +58,7 @@ inline constexpr const char *kFactStoreTestPass = "test::facts";
 
 inline constexpr const char *kFactSeedTestPass    = "test::facts_seed";
 inline constexpr const char *kFactCheckTestPass   = "test::facts_check";
+inline constexpr const char *kFactPersistTestPass = "test::facts_persist";
 
 class FactStoreTestPass : public RuntimeGraphRewritePass {
   public:
@@ -66,6 +73,12 @@ class FactSeedTestPass : public RuntimeGraphRewritePass {
 };
 
 class FactCheckTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+};
+
+class FactPersistTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
