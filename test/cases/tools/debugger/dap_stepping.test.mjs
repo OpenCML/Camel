@@ -1,8 +1,11 @@
 // Stepping over the Debug Adapter Protocol, on both debuggable back ends. A step runs the
 // program to the next graph node that starts another source line (next, stepIn, stepOut) or to
 // the next node (granularity "instruction"); the line reached is the next one in execution
-// order. Also: recursion as a stack of frames, a tail recursion as the one frame it is, and the
-// arm of a branch that is not taken.
+// order, and a line the step went past because nothing uses its result is said in the debug
+// console (design principles 2.11). Also: recursion as a stack of frames, a tail recursion as
+// the one frame it is, with the arms of the branches folded into the frames of their function
+// (the default) or shown as the subgraphs they are (frames: "subgraphs"), and the arm of a
+// branch that is not taken.
 
 import { runTest, check, checkEq, fixture, lineOf } from '../../../tools/debugger/client.mjs'
 
@@ -49,6 +52,16 @@ await runTest(async (t) => {
 
             stop = await step(dap, 'next')
             checkEq(at(stop), `work:${L('c')}`, on('the line that is never executed is not a stop: execution order, not text order'))
+            checkEq(
+                stop?.body && (await dap.waitEvent('camel/stopped', (b) => b.skipped))?.body?.skipped?.map((l) => [l.line, l.names]),
+                [[L('unused'), []]],
+                on('the stop names the line the step went past, which holds no name'),
+            )
+            check(
+                dap.outputOf('console').includes(`line ${L('unused')} was not executed: nothing uses its result\n`),
+                on('and the debug console says why it did not execute'),
+                dap.outputOf('console'),
+            )
 
             stop = await step(dap, 'next')
             checkEq(at(stop), `main:${L('print')}`, on('next at the last line of a function returns to the caller'))
@@ -105,12 +118,75 @@ await runTest(async (t) => {
             await dap.stop()
         }
 
-        // ---- recursion: a frame per call; a tail recursion: one frame ----------------------
+        // ---- recursion, frames of functions (the default): a frame per call -----------------
         {
             const dap = await t.dap()
             const factLine = lineOf(RECURSION, 'mark:fact')
             const loopLine = lineOf(RECURSION, 'mark:loop')
-            await dap.launch(RECURSION, { passes: [backend] }, { [RECURSION]: [factLine, loopLine] })
+            await dap.launch(RECURSION, { passes: [backend] }, { [RECURSION]: [factLine, loopLine] }, { supportsInvalidatedEvent: true })
+            let stop
+            const ns = []
+            for (let i = 0; i < 4; i++) {
+                stop = await dap.waitStop()
+                checkEq(at(stop), `fact:${factLine}`, on(`folded: call ${i + 1} of fact stops at its line, once`))
+                ns.push((await dap.variables(stop.top.id)).n?.value)
+                if (i < 3) {
+                    await dap.request('continue', { threadId: 1 })
+                }
+            }
+            checkEq(ns, ['4', '3', '2', '1'], on('folded: each frame has its own n'))
+            checkEq(
+                stop.names,
+                ['fact', 'fact', 'fact', 'fact', 'main', '__root__'],
+                on('folded: the arms that called fact are part of the frames of fact: one frame per call'),
+            )
+            const callerLocals = await dap.variables(stop.frames[1].id)
+            checkEq(callerLocals?.n?.value, '2', on('folded: the caller sees its n'))
+
+            // The switch, while stopped: the real subgraphs, then the frames of functions again.
+            const toSubgraphs = await dap.request('camel/setFrames', { frames: 'subgraphs' })
+            check(toSubgraphs.success, on('camel/setFrames is accepted'), toSubgraphs)
+            const invalidated = await dap.waitEvent('invalidated')
+            checkEq(invalidated?.body?.areas, ['stacks', 'variables'], on('the client is told to fetch the stack and the variables again'))
+            let names = (await dap.request('stackTrace', { threadId: 1 })).body?.stackFrames?.map((f) => f.name) || []
+            check(
+                names.length === 6 && names[0] === 'fact' &&
+                    names.slice(1, 4).every((n) => /^fact \[arm at line \d+\] \(tail call, 1 frame replaced\)$/.test(n)),
+                on('switched to subgraphs: the callers are the arms of fact that replaced its frame'),
+                names,
+            )
+            await dap.request('camel/setFrames', { frames: 'functions' })
+            names = (await dap.request('stackTrace', { threadId: 1 })).body?.stackFrames?.map((f) => f.name) || []
+            checkEq(names, ['fact', 'fact', 'fact', 'fact', 'main', '__root__'], on('switched back: frames of functions'))
+            const bad = await dap.request('camel/setFrames', { frames: 'graphs' })
+            check(!bad.success && /functions.*subgraphs/.test(bad.message || ''), on('camel/setFrames names its two values'), bad)
+
+            // spin(5, 0): a tail call of spin replaces the frame of spin; the arm that makes the
+            // call is part of it, so only the frames of spin are counted.
+            await dap.request('continue', { threadId: 1 })
+            const loopNames = []
+            const loopDepths = []
+            for (let i = 0; i < 3; i++) {
+                stop = await dap.waitStop()
+                loopNames.push(stop?.name)
+                loopDepths.push(stop?.frames.length)
+                await dap.request('continue', { threadId: 1 })
+            }
+            checkEq(
+                loopNames,
+                ['spin', 'spin (tail call, 1 frame replaced)', 'spin (tail call, 2 frames replaced)'],
+                on('folded: a tail recursion counts the frames of spin it replaced'),
+            )
+            checkEq(loopDepths, [3, 3, 3], on('folded: and the stack does not grow'))
+            await dap.stop()
+        }
+
+        // ---- recursion, frames of subgraphs: a frame per call; a tail recursion: one frame ---
+        {
+            const dap = await t.dap()
+            const factLine = lineOf(RECURSION, 'mark:fact')
+            const loopLine = lineOf(RECURSION, 'mark:loop')
+            await dap.launch(RECURSION, { passes: [backend], frames: 'subgraphs' }, { [RECURSION]: [factLine, loopLine] })
 
             // fact(4): one stop per call, each a level deeper.
             const depths = []

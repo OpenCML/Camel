@@ -33,8 +33,8 @@ await runTest(async (t) => {
         check(sum?.verified === true && sum.line === sumLine, on('a line with a node is verified'), sum)
         check(unused?.verified === false, on('a line whose code nothing depends on is not verified'), unused)
         check(
-            /nothing depends on its result/.test(unused?.message || ''),
-            on('and the message says why: evaluation is driven by dependencies'),
+            /^Line \d+ is not executed: nothing uses the value of `unused`\. Evaluation is driven by dependencies/.test(unused?.message || ''),
+            on('and the message says why: nothing uses the value the line computes'),
             unused,
         )
         check(s.configurationDone.success, on('configurationDone starts the program'), s.configurationDone)

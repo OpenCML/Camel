@@ -1,0 +1,34 @@
+module main
+
+// The arms of a branch are subgraphs; the debugger folds them into the frame of the
+// function they are written in (design principles 2.11).
+
+namespace geo {
+    func scale(x: int): int {
+        return x * 3                          // mark:scale
+    }
+}
+
+func positive(n: int): bool {
+    return n > 0                              // mark:positive
+}
+
+func pick(n: int): int {
+    let base = n + 1                          // mark:base
+    let unused = n * 100                      // mark:unused
+    let r = if n > 2 then {
+        let big = geo::scale(base)            // mark:big
+        big + 1                               // mark:bigret
+    } else {
+        let small = base - 1                  // mark:small
+        small
+    }
+    let ok = n > 1 && positive(r)             // mark:and
+    return if ok then r + 1 else 0            // mark:ret
+}
+
+func main(): int sync {
+    let v = pick(3)                           // mark:call
+    println(v)                                // mark:print
+    return 0
+}

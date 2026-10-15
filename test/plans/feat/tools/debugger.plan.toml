@@ -26,8 +26,20 @@ timeout_ms = 300000
 
 [[tests]]
 name = "debugger.dap_stepping"
-desc = "Steps over DAP on both back ends: next, stepIn, stepOut by source line in execution order (a line that is never executed is not a stop), the same by graph node (granularity instruction), recursion as one frame per call, a tail recursion as the one frame it is, and a branch whose untaken arm never stops."
+desc = "Steps over DAP on both back ends: next, stepIn, stepOut by source line in execution order (a line that is never executed is not a stop, and the console says why), the same by graph node (granularity instruction), recursion as one frame per call with the arms folded into the frames of their function or, switched by camel/setFrames or launched with frames subgraphs, as the subgraphs they are, a tail recursion as the one frame it is, and a branch whose untaken arm never stops."
 case = "../../../cases/tools/debugger/dap_stepping.test.mjs"
+timeout_ms = 300000
+
+[[tests]]
+name = "debugger.dap_frames"
+desc = "How the program is presented over DAP on both back ends (design principles 2.11, 2.12): the arms of a branch are part of the frame of their function (line steps go through them, their names are the frame's while they run), the frames setting and camel/setFrames show the real subgraphs instead; a line step that goes past a line nothing uses the result of says so, and so does a breakpoint on it that was never hit; full names in the stack, captured values, evaluate and function breakpoints (ambiguous without the module, a function nothing calls)."
+case = "../../../cases/tools/debugger/dap_frames.test.mjs"
+timeout_ms = 300000
+
+[[tests]]
+name = "debugger.cli_session"
+desc = "The REPL of camel-db (commands on stdin) on both back ends: breakpoints on a line, on a line nothing uses (with the reason) and on a function by its full name; run, step, next, finish with the line a step went past explained; bt, locals and print in the frame of a function with an arm folded into it; frames subgraphs and functions; the end of the run with the never-hit breakpoint explained; quit."
+case = "../../../cases/tools/debugger/cli_session.test.mjs"
 timeout_ms = 300000
 
 [[tests]]

@@ -1,0 +1,27 @@
+module main
+
+// Full names in the debugger (design principles 2.12): functions of other modules are shown
+// as `module::path::name`, the entry module's own without the module.
+
+import names_lib
+import names_other
+
+namespace util {
+    func half(x: int): int {
+        return x / 2                               // mark:half
+    }
+}
+
+// Nothing calls it: a breakpoint in it says so.
+func neverCalled(x: int): int {
+    return x - 1                                   // mark:never
+}
+
+func main(): int sync {
+    let a = names_lib::twice(21)                   // mark:a
+    let b = names_lib::Config::clamp(a)            // mark:b
+    let c = util::half(b)                          // mark:c
+    let d = names_other::twice(c)                  // mark:d
+    println(d)                                     // mark:print
+    return 0
+}
