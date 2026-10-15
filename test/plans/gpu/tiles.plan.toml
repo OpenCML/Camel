@@ -936,3 +936,14 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::fvm: numeric permission boundaries", "std::jit: numeric permission boundaries", "std::inline std::fvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
 timeout_ms = 180000
+
+[[tests]]
+name = "numeric_permissions_moving_gc"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/numeric_permissions.py"
+args = ["${case}"]
+envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
+timeout_ms = 180000
