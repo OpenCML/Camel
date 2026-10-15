@@ -407,3 +407,10 @@ requires the absence of scalar division anywhere in the compiled computation.
 An explicit empty-output case must fault on all three VMs. This preserves the
 selected Tiles execution contract; it does not impose new restrictions on other
 Camel optimization passes.
+
+Committed 53441739 (including scalar lowering/fusion 0fad8a89) rebuilds and passes
+81/81 relevant tests on local RTX 4060 Ti and remote RTX 3090 device 7. Remote
+results are retained in
+`docs/performance/tiles/2026-10-15-rtx3090-scalar-arithmetic-tests.txt`. The scalar
+benchmark is a fusion correctness control; no end-to-end performance claim is
+inferred from kernel count alone.
