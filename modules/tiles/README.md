@@ -21,6 +21,13 @@ func main(): int sync {
 
 ## API
 
+NVRTC always receives `--fmad=false`, `--prec-div=true`, `--prec-sqrt=true`
+and `--ftz=false`. The in-process module cache compares the source and all compiler
+options, including the target architecture; device/context and NVRTC library are
+fixed for each cache owner's lifetime. Benchmark reports expose `compile_options`.
+These defaults do not grant numerical relaxation permissions. Explicit FMA
+operations are independent of the flag that disables implicit contraction.
+
 - `run_device<fn>(inputs)` executes the same graph and returns `Device<Tensor<...>>` or `Device<float>`
   leaves in the result's original tuple/struct structure. Outputs retain their
   allocations instead of downloading; feed them directly into subsequent graph

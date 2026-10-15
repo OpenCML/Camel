@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -359,6 +359,7 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
         {"target", b.architecture},
         {"dtype", "f32"},
         {"fmad", false},
+        {"compile_options", b.compileOptions()},
         {"initialization_host_ms", initializationMs},
         {"warmups", 5},
         {"repetitions", 21},
@@ -393,7 +394,7 @@ std::string benchmark(std::shared_ptr<const Program> snapshot) {
         auto &r                   = report[names[i]];
         r["plan"]                 = json::parse(inspect(p));
         r["compile_cache_hit"]    = std::any_of(b.cache.begin(), b.cache.end(), [&](const auto &c) {
-            return c->source == p.source;
+            return c->source == p.source && c->options == b.compileOptions();
         });
         start                     = Clock::now();
         auto module               = b.module(p.source);

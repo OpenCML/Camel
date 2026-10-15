@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -87,8 +87,11 @@ struct Compiled {
     Api &api;
     CUcontext context;
     std::string source;
+    std::vector<std::string> options;
     CUmodule module = nullptr;
-    Compiled(Api &api, CUcontext context, const std::string &source);
+    Compiled(
+        Api &api, CUcontext context, const std::string &source,
+        const std::vector<std::string> &options);
     ~Compiled();
     Compiled(const Compiled &) = delete;
 };
@@ -114,6 +117,7 @@ class Backend : public std::enable_shared_from_this<Backend> {
     std::mutex mutex;
     Backend();
     ~Backend();
+    std::vector<std::string> compileOptions() const;
     ModuleLease module(const std::string &source);
 };
 std::shared_ptr<Backend> sharedBackend();

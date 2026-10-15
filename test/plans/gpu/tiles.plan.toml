@@ -74,6 +74,7 @@ assert(records.length === 4, 'expected four benchmark workloads')
 for (const r of records) {
   assert(r.schema === 1 && r.repetitions === 21 && r.warmups === 5, 'unexpected measurement protocol')
   assert(r.device && r.driver_version > 0 && r.nvrtc_version, 'missing hardware/compiler provenance')
+  assert(JSON.stringify(r.compile_options) === JSON.stringify([r.target, '--std=c++14', '--fmad=false', '--prec-div=true', '--prec-sqrt=true', '--ftz=false']), 'unexpected numerical compiler policy')
   assert(r.correctness_before.mismatches === 0 && r.correctness_after.mismatches === 0, 'correctness gate failed')
   for (const name of ['optimized', 'unfused']) {
     const v = r[name]

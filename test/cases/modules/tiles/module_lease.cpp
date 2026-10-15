@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -94,6 +94,18 @@ int main() {
             Current current(backend->api, backend->context);
             const std::string source = "extern \"C\" __global__ void retained(int* p){*p=42;}";
             lease = std::make_unique<ModuleLease>(backend->module(source));
+            const std::vector<std::string> expectedOptions = {
+                backend->architecture, "--std=c++14", "--fmad=false", "--prec-div=true",
+                "--prec-sqrt=true", "--ftz=false"};
+            if (lease->compiled->options != expectedOptions)
+                throw std::runtime_error("missing explicit numerical compiler options");
+            if (backend->module(source).compiled != lease->compiled)
+                throw std::runtime_error("identical compilation did not reuse the cache");
+            // A stale cache entry with a different numerical policy must miss.
+            lease->compiled->options.back() = "--ftz=true";
+            auto fresh = backend->module(source);
+            if (fresh.compiled == lease->compiled || fresh.compiled->options != expectedOptions)
+                throw std::runtime_error("cache reused an incompatible numerical policy");
             weakModule = lease->compiled;
             for (int i = 0; i < 34; ++i)
                 (void)backend->module(source + "\n// variant " + std::to_string(i));

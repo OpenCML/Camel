@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -218,8 +218,9 @@ Backend::Backend() {
     architecture = "--gpu-architecture=compute_" + std::to_string(target);
     api.check(api.cuDevicePrimaryCtxRetain(&context, device), "retain CUDA context");
 }
-Compiled::Compiled(Api &api, CUcontext context, const std::string &source)
-    : api(api), context(context), source(source) {}
+Compiled::Compiled(
+    Api &api, CUcontext context, const std::string &source, const std::vector<std::string> &options)
+    : api(api), context(context), source(source), options(options) {}
 Compiled::~Compiled() {
     if (module && api.cuCtxPushCurrent(context) == CUDA_SUCCESS) {
         api.cuModuleUnload(module);
@@ -235,9 +236,22 @@ Backend::~Backend() {
         api.cuDevicePrimaryCtxRelease(device);
     }
 }
+std::vector<std::string> Backend::compileOptions() const {
+    // These are language defaults, not permissions to relax numerical semantics.
+    return {
+        architecture,
+        "--std=c++14",
+        "--fmad=false",
+        "--prec-div=true",
+        "--prec-sqrt=true",
+        "--ftz=false"};
+}
 ModuleLease Backend::module(const std::string &source) {
+    const auto options = compileOptions();
+    // Device, context and NVRTC library are fixed for this backend's lifetime.
+    // Compare the exact compiler arguments as well as the source text.
     for (size_t i = 0; i < cache.size(); ++i) {
-        if (cache[i]->source != source)
+        if (cache[i]->source != source || cache[i]->options != options)
             continue;
         auto found = cache[i];
         // Refresh recency; execution leases survive removal of the cache reference.
@@ -253,8 +267,11 @@ ModuleLease Backend::module(const std::string &source) {
         nvrtcProgram &p;
         ~Guard() { a.nvrtcDestroyProgram(&p); }
     } guard{api, program};
-    const char *options[] = {architecture.c_str(), "--std=c++14", "--fmad=false"};
-    auto status           = api.nvrtcCompileProgram(program, 3, options);
+    std::vector<const char *> arguments;
+    for (const auto &option : options)
+        arguments.push_back(option.c_str());
+    auto status =
+        api.nvrtcCompileProgram(program, static_cast<int>(arguments.size()), arguments.data());
     if (status != NVRTC_SUCCESS) {
         size_t size = 0;
         api.check(api.nvrtcGetProgramLogSize(program, &size), "read NVRTC log");
@@ -267,7 +284,7 @@ ModuleLease Backend::module(const std::string &source) {
     api.check(api.nvrtcGetPTXSize(program, &size), "get PTX size");
     std::string ptx(size, '\0');
     api.check(api.nvrtcGetPTX(program, ptx.data()), "get PTX");
-    auto compiled = std::make_shared<Compiled>(api, context, source);
+    auto compiled = std::make_shared<Compiled>(api, context, source, options);
     api.check(api.cuModuleLoadData(&compiled->module, ptx.data()), "load PTX");
     cache.push_back(compiled);
     if (cache.size() > 32) {
