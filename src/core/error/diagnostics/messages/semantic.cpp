@@ -688,8 +688,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "MatchCaseTypeMismatch",
                 "This case of a 'match' on a value of type '{0}' is a value of type '{1}'.",
-                "A case is compared with the value matched, so it must have the same type. "
-                "Write the case as a value of that type, or convert the value matched first.",
+                "A case is compared with the value matched, so the type of that value must "
+                "accept it (design principles 2.13). Write the case as a value of that type, or "
+                "convert the value matched first.",
             },
         },
         {
@@ -744,9 +745,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "OperatorNotOverloadable",
                 "'{0}' cannot be overloaded: {1}.",
                 "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', "
-                "'^', '@', '==', '!=', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the "
-                "unary '-', '!', '~'. '&&', '||', '?\?', '!!', '->', '?->', '..', 'as', "
-                "assignment and compound assignment are constructs of the language.",
+                "'^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the "
+                "unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '?\?', '!!', '->', '?->', "
+                "'..', 'as', assignment and compound assignment are constructs of the language.",
             },
         },
         {
@@ -786,6 +787,46 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A function that returns a 'T!' reports its failure through that value. Take "
                 "the value apart with '!!', '?->' or 'match', return it from a function that "
                 "declares a 'T!', or drop it on purpose with 'let _ = ...'.",
+            },
+        },
+        {
+            SemanticDiag::DeclaredTypeMismatch,
+            {
+                "DeclaredTypeMismatch",
+                "This value has type '{0}', which is not the declared type '{1}'.",
+                "A declaration written with a type takes a value of that type; nothing is "
+                "converted on the way (a number does not become a float by itself). Convert "
+                "the value explicitly, e.g. 'float(n)' or 'v as T', or change the declared "
+                "type.",
+            },
+        },
+        {
+            SemanticDiag::ModuleTypeCycle,
+            {
+                "ModuleTypeCycle",
+                "The type '{0}' is part of a cycle of types across modules: {1}.",
+                "Each of these types needs the next one to be declared first, and the last needs "
+                "the first: none of them can be. Remove one of the references that close the "
+                "cycle.",
+            },
+        },
+        {
+            SemanticDiag::NullTestNeverNull,
+            {
+                "NullTestNeverNull",
+                "{0} has type '{1}', which is never null: this test is always {2}.",
+                "Only a value of type 'T?' can be null. In the arm of 'if x != null' the name "
+                "'x' is already a 'T'. Remove the test, or test a value that may be null.",
+            },
+        },
+        {
+            SemanticDiag::KnownNotNull,
+            {
+                "KnownNotNull",
+                "'{0}' is known not to be null here (it has type '{1}'): the null case of "
+                "'{2}' is never taken.",
+                "An 'if' around this narrowed the name: in the arm where it is not null it is a "
+                "'T'. Use the name directly.",
             },
         },
         {

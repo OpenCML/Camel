@@ -1,0 +1,14 @@
+module tiles_matmul
+import { Tensor, reshape } from tensor
+import { run } from tiles
+
+func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    return a @ b
+}
+
+func main(): int sync {
+    let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let b = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2])
+    println(run<product>((a, b)))
+    return 0
+}

@@ -36,7 +36,7 @@
 #include <vector>
 
 /// Nothing is inlined into a graph that would then hold more nodes than this. A runtime graph
-/// addresses its nodes, node blocks and edges with 16 bits; the cap keeps a graph the rewrite
+/// addresses its nodes and edges with 16 bits; the cap keeps a graph the rewrite
 /// grows well inside that representation.
 inline constexpr size_t kMaxInlineOwnerNodes = 4096;
 

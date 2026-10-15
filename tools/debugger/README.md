@@ -63,6 +63,17 @@ camel-db -f script.cml --serve --logfile debug.log
 | `run` | `r` | 运行已加载的文件；内存扫描与断点（GIR 节点、alloc 空间）由统一断点机制控制。 |
 | `verbose [on\|off]` | | 开启/关闭详细输出（同上：对应库内 **info** / **fatal** 阈值；与 `camel` CLI 的 `-v`/`-l` 语义一致，均为 `Logger` 全局阈值）。 |
 | `logfile [path]` | | 将程序输出写入文件（path 为空或 off 则关闭）；与 Logger 共用，可动态追加。 |
+| `break <文件>:<行>` / `break <行>` / `break <函数>` | `b` | 源码行断点，或按完整名字（`模块::路径::名字`，只有一个模块有该名字时可省略模块）的函数断点。 |
+| `delete` | | 删除全部源码行断点与函数断点。 |
+| `run [遍 ...]` | `r` | 运行（可带遍序列，如 `run std::fvm`）并等到停下或结束；途中打印程序输出。 |
+| `continue` | `c` | 继续并等到下一次停下。 |
+| `next` / `step` / `finish` | `n` | 按源码行（执行顺序）单步跳过 / 进入 / 跳出；越过的、因无人使用其结果而未执行的行会给出说明。 |
+| `nexti` / `stepi` | `ni` / `si` | 按图节点单步跳过 / 进入。 |
+| `pause` | | 让运行中的程序在下一个节点停下。 |
+| `bt` | `backtrace` / `where` | 调用栈（完整名字）。 |
+| `locals [n]` | | `bt` 第 n 帧的变量（默认最上面一帧）。 |
+| `print <名字>` | `p` | 名字的值，可带成员访问。 |
+| `frames [functions\|subgraphs]` | | 分支的臂并入所在函数的帧（默认），或显示真实的子图结构。 |
 | `help` | `h` / `?` | 显示帮助。 |
 | `version` | `v` | 显示版本。 |
 | `quit` | `q` / `exit` | 退出 debugger（会停止 API 服务）。 |
@@ -75,6 +86,9 @@ camel-db -f script.cml --serve --logfile debug.log
 (camel-db) run
 (camel-db) quit
 ```
+
+源码级调试的命令（断点、单步、栈、变量、`frames`）作用于前台任务，经父进程的 `debug` 命令转发给该任务的调试核心；
+一次完整的会话见 [docs/debugging.cn.md](../../docs/debugging.cn.md) 第 2 节。
 
 ### 3. Web UI（推荐）
 

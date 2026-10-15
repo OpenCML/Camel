@@ -523,7 +523,7 @@ MacroEvaluator::tryExecuteDirectFunc(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
                 ownerGraph->normInputsOf(nodeRef));
         },
         true);
-    return anchorResult(value, node->dataType, node->flags);
+    return anchorResult(value, node->dataType(), node->flags);
 }
 
 std::optional<MacroEvalResult> MacroEvaluator::tryExecuteIndirectCall(
@@ -574,7 +574,7 @@ std::optional<MacroEvalResult> MacroEvaluator::tryExecuteIndirectCall(
                 ownerGraph->normInputsOf(nodeRef));
         },
         true);
-    return anchorResult(value, node->dataType, node->flags);
+    return anchorResult(value, node->dataType(), node->flags);
 }
 
 std::optional<MacroEvalResult>
@@ -636,7 +636,7 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         }
         slot_t value = (*op)(withView, normView, *context_);
         framePool_.release(frame);
-        return anchorResult(value, node->dataType, node->flags);
+        return anchorResult(value, node->dataType(), node->flags);
     } catch (...) {
         framePool_.release(frame);
         throw;
@@ -728,7 +728,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             ASSERT(!normInputs.empty(), "CAST node must have one norm input.");
             gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
             Type *srcType        = frame->typeAt<Type>(srcIdx);
-            Type *dstType        = node->dataType;
+            Type *dstType        = node->dataType();
             slot_t value         = frame->get<slot_t>(srcIdx);
             frame->set(node->dataIndex, dstType->castSlotFrom(value, srcType));
         } break;
@@ -752,7 +752,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             const auto dataInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
             ASSERT(!normInputs.empty(), "FILL node must have one source input.");
             gc_data_idx_t srcIdx = dataIndexOf(runtimeGraph, normInputs.front());
-            Type *srcType        = node->dataType;
+            Type *srcType        = node->dataType();
             ASSERT(isGCTraced(srcType->code()), "FILL target type is not GC-traced.");
             Object *sourceObj = frame->get<Object *>(srcIdx);
             ASSERT(sourceObj != nullptr, "FILL source object is null.");
@@ -812,7 +812,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             if (node->dataIndex == 0) {
                 break;
             }
-            if (node->dataType == Type::Void()) {
+            if (node->dataType() == Type::Void()) {
                 frame->set(node->dataIndex, NullSlot);
                 break;
             }

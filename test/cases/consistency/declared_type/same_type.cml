@@ -1,0 +1,22 @@
+/**
+ * A declaration written with a type takes a value of that type (language reference 7.2):
+ * `var acc: V = p` with `p: V` was refused as "dynamic type casting". Converting a value to
+ * its own type does nothing (design principles 2.12).
+ */
+type V = { x: float, y: float }
+
+func shift(p: V, by: float): V sync {
+    var acc: V = p
+    let n: int = len([1, 2, 3])
+    let q: V = acc
+    acc = { x: q.x + by, y: q.y + float(n) }
+    return acc
+}
+
+func main(): int sync {
+    let xs: int[] = [3, 1, 2]->map<(v: int): int => v * 2>
+    let m: int? = xs[0]
+    println(shift({ x: 1.0, y: 2.0 }, 0.5))
+    println(xs, m ?? 0)
+    return 0
+}

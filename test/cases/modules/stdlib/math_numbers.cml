@@ -11,16 +11,16 @@ func main(): int sync {
 
     println(min(3, 5), max(3, 5), min(-3, -5), max(-3, -5), min(7, 7))
     println(min(top, bottom), max(top, bottom))
-    println(min(2.5, 1.5), max(2.5, 1.5), min(-0.0, 0.0), max(inf(), 1.0), min(-inf(), 1.0))
+    println(min(2.5, 1.5), max(2.5, 1.5), min(-0.0, 0.0), max(inf, 1.0), min(-inf, 1.0))
     // a NaN on either side gives NaN
-    println(is_nan(min(nan(), 1.0)), is_nan(min(1.0, nan())), is_nan(max(nan(), 1.0)), is_nan(max(1.0, nan())))
+    println(is_nan(min(nan, 1.0)), is_nan(min(1.0, nan)), is_nan(max(nan, 1.0)), is_nan(max(1.0, nan)))
 
     println(clamp(15, 0, 10), clamp(-5, 0, 10), clamp(5, 0, 10), clamp(5, 5, 5), clamp(top, bottom, 0))
-    println(clamp(1.5, 0.0, 1.0), clamp(-0.5, 0.0, 1.0), clamp(0.25, 0.0, 1.0), clamp(inf(), 0.0, 1.0))
-    println(is_nan(clamp(nan(), 0.0, 1.0)))
+    println(clamp(1.5, 0.0, 1.0), clamp(-0.5, 0.0, 1.0), clamp(0.25, 0.0, 1.0), clamp(inf, 0.0, 1.0))
+    println(is_nan(clamp(nan, 0.0, 1.0)))
 
     println(sign(-3), sign(0), sign(8), sign(top), sign(bottom))
-    println(sign(-2.5), sign(0.0), sign(2.5), sign(-inf()), sign(inf()), is_nan(sign(nan())))
+    println(sign(-2.5), sign(0.0), sign(2.5), sign(-inf), sign(inf), is_nan(sign(nan)))
 
     println(gcd(12, 18), gcd(18, 12), gcd(-12, 18), gcd(12, -18), gcd(-12, -18), gcd(17, 5))
     println(gcd(0, 5), gcd(5, 0), gcd(0, 0), gcd(top, top), gcd(bottom, 2), gcd(bottom, top))

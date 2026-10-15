@@ -24,7 +24,10 @@ Each program ends in one of these outcomes:
 
 --expect <file> reads a list of programs (one path per line, relative to the repository; '#'
 starts a comment) that must all be "same", runs them, and exits with 1 if one is not. That is
-the form the test plan uses (test/plans/feat/trans/cpp.plan.toml).
+the form the test plan uses (test/plans/feat/trans/cpp.plan.toml). A path may be followed by the
+arguments of the program's `main` (`--arg name=value ...`, design principles 2.13): `camel`
+is given them before the file, the generated program on its command line. A program may be
+listed several times with different arguments (or none: the report of the missing ones).
 
 --have-compiler exits 0 when a C++ compiler is found (the plan's precondition), 1 otherwise.
 """
@@ -104,10 +107,12 @@ def first_difference(a, b):
     return "same lines, different line ends or trailing text"
 
 
-def check(program, workdir, args):
-    """The record of one program."""
+def check(entry, workdir, args):
+    """The record of one program, run with the arguments of its `main` (`entry` is the path and
+    those arguments)."""
+    program, entry_args = entry
     rel = os.path.relpath(program, ROOT).replace("\\", "/")
-    rec = {"program": rel}
+    rec = {"program": rel + ("".join(" " + a for a in entry_args))}
     env = dict(os.environ)
     env.setdefault("CAMEL_HOME", os.path.join(ROOT, "out", "latest"))
     if os.name == "nt":
@@ -130,7 +135,7 @@ def check(program, workdir, args):
             rec["detail"] = (text.strip().splitlines() or ["exit %s" % code])[-1][:200]
         return rec
 
-    stem = re.sub(r"[^A-Za-z0-9_]", "_", rel)
+    stem = re.sub(r"[^A-Za-z0-9_]", "_", rec["program"])[:150]
     source = os.path.join(workdir, stem + ".cpp")
     target = os.path.join(workdir, stem + EXE)
     with open(source, "w", encoding="utf-8", newline="\n") as f:
@@ -148,12 +153,12 @@ def check(program, workdir, args):
         rec["detail"] = (errors[0] if errors else (cout + cerr).strip()[-200:])[:200]
         return rec
 
-    fcode, fout, ferr, _ = run([CAMEL, rel] + args.passes + ["std::fvm"], args.timeout, env)
+    fcode, fout, ferr, _ = run([CAMEL] + entry_args + [rel] + args.passes + ["std::fvm"], args.timeout, env)
     if fcode is None:
         rec["outcome"] = "not a program"
         rec["detail"] = "std::fvm does not finish within %s s" % args.timeout
         return rec
-    ccode, xout, xerr, _ = run([target], args.timeout, env)
+    ccode, xout, xerr, _ = run([target] + entry_args, args.timeout, env)
     rec["fvm_exit"], rec["cpp_exit"] = fcode, ccode
     if ccode is None or ccode < 0:
         rec["outcome"] = "crashes"
@@ -174,15 +179,18 @@ def check(program, workdir, args):
 
 
 def expand(paths):
+    """(program, arguments of its main) for every path: a directory gives its programs, a path
+    followed by arguments (an entry of an --expect list) that program with them."""
     files = []
-    for p in paths:
+    for entry in paths:
+        p, *entry_args = entry.split()
         p = os.path.join(ROOT, p) if not os.path.isabs(p) else p
         if os.path.isdir(p):
             for root, _, names in os.walk(p):
-                files += [os.path.join(root, n) for n in names if n.endswith(".cml")]
+                files += [(os.path.join(root, n), ()) for n in names if n.endswith(".cml")]
         else:
-            files.append(p)
-    return sorted(set(files))
+            files.append((p, tuple(entry_args)))
+    return [(p, list(a)) for p, a in sorted(set(files))]
 
 
 def read_expect(path):
@@ -267,7 +275,9 @@ def main():
             print("  %s: %s: %s" % (r["program"], r["outcome"], r.get("detail", "")))
 
     if args.expect:
-        wanted = {os.path.relpath(p, ROOT).replace("\\", "/") for p in expand(expected)}
+        # Keyed as the records are: the program and the arguments of its main.
+        wanted = {os.path.relpath(p, ROOT).replace("\\", "/") + "".join(" " + x for x in a)
+                  for p, a in expand(expected)}
         bad = [r for r in records if r["program"] in wanted and r["outcome"] != "same"]
         for r in bad:
             print("FAIL %s: %s: %s" % (r["program"], r["outcome"], r.get("detail", "")))

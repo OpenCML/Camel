@@ -431,7 +431,10 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             const auto &load = stmt->loadAs<AST::StmtLoad>();
             usings           = load->scopeUsings();
             if (load->stmtType() == AST::StmtType::Func) {
-                path = stmt->loadAs<AST::FuncDeclLoad>()->ref().paths();
+                // An operator is named without its namespaces (it belongs to the module,
+                // design principles 2.13); it is still lowered in the block it is written in.
+                const auto &func = stmt->loadAs<AST::FuncDeclLoad>();
+                path = func->operatorSymbol().empty() ? func->ref().paths() : func->declaredIn();
             } else if (load->stmtType() == AST::StmtType::Type) {
                 path = stmt->loadAs<AST::TypeDeclLoad>()->ref().paths();
             } else if (load->stmtType() == AST::StmtType::Data &&
@@ -462,6 +465,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         }
         node_ptr_t node = visitStmt(stmt);
         tree_->addUsings(node, usings);
+        tree_->setNamespaceOf(node, namespacePath_);
         return node;
     };
 
@@ -639,6 +643,14 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
             .at(load->tokenRange())
             .commit(path, "import returned empty.");
         throw BuildAbortException();
+    }
+
+    // A module importing itself: allowed, and it has no effect (design principles 2.13). Its
+    // names are its own already (with or without its own name in front, 2.12); the import
+    // binds nothing, and records no import a cycle could be made of.
+    if (mod == module_) {
+        LEAVE("ImportDecl");
+        return nullptr;
     }
 
     // Where the import stands, for the errors of the imported module and for the importers
@@ -875,42 +887,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 }
 
                 if (i < typeNodes->size() && !enteredLiteral) {
-                    Type *type = declaredType;
-                    // Try a static type conversion first.
-                    // A declared function type says which function a name stands for
-                    // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
-                    // no node.
-                    if (asTagged(type) != nullptr ||
-                        (type->code() == TypeCode::Function &&
-                         dataNode->type() != NodeKind::DATA) ||
-                        (dataNode->type() == NodeKind::DATA && containsTypeVar(type))) {
-                        // Decided when the generic function is instantiated. A declared
-                        // `T?` / `T!` puts the value into that form (design principles
-                        // 2.10): a CAST, for any expression.
-                        node_ptr_t castNode = tree_->makeCast(type, true);
-                        *castNode << dataNode;
-                        setOriginFromAst(
-                            context_,
-                            castNode,
-                            ast,
-                            camel::source::OriginKind::GctNode,
-                            "gct.cast");
-                        dataNode = castNode;
-                    } else if (dataNode->type() == NodeKind::DATA) {
-                        const auto &data   = dataNode->data();
-                        auto convertedData = data->convertTo(type);
-                        if (convertedData) {
-                            dataNode = tree_->makeData(convertedData);
-                        } else {
-                            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, type);
-                            throw BuildAbortException();
-                        }
-                    } else {
-                        diags_->of(SemanticDiag::FeatureNotSupported)
-                            .at(ast->load()->tokenRange())
-                            .commit("dynamic type casting");
-                        throw BuildAbortException();
-                    }
+                    dataNode = declaredValue(dataNode, declaredType, ast);
                 }
 
                 // Ensure the data node is of type Data
@@ -947,41 +924,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                         TypePositionGuard position(*this, TypePosition::Annotation);
                         type = visitType(typeASTNode);
                     }
-                    // Try a static type conversion first.
-                    // A declared function type says which function a name stands for
-                    // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
-                    // no node.
-                    if (asTagged(type) != nullptr ||
-                        (type->code() == TypeCode::Function &&
-                         dataNode->type() != NodeKind::DATA) ||
-                        (dataNode->type() == NodeKind::DATA && containsTypeVar(type))) {
-                        // Decided when the generic function is instantiated. A declared
-                        // `T?` / `T!` puts the value into that form (design principles
-                        // 2.10): a CAST, for any expression.
-                        node_ptr_t castNode = tree_->makeCast(type, true);
-                        *castNode << dataNode;
-                        setOriginFromAst(
-                            context_,
-                            castNode,
-                            ast,
-                            camel::source::OriginKind::GctNode,
-                            "gct.cast");
-                        dataNode = castNode;
-                    } else if (dataNode->type() == NodeKind::DATA) {
-                        const auto &data   = dataNode->data();
-                        auto convertedData = data->convertTo(type);
-                        if (convertedData) {
-                            dataNode = tree_->makeData(convertedData);
-                        } else {
-                            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, type);
-                            throw BuildAbortException();
-                        }
-                    } else {
-                        diags_->of(SemanticDiag::FeatureNotSupported)
-                            .at(ast->load()->tokenRange())
-                            .commit("dynamic type casting");
-                        throw BuildAbortException();
-                    }
+                    dataNode = declaredValue(dataNode, type, ast);
                 }
 
                 const string id     = std::to_string(idIndex_++);
@@ -1162,6 +1105,18 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             }
         }
     } poisonOnFailure{*this, typeLoad->ref().toString()};
+    // In progress until it is declared, for a module whose types this one needs and which
+    // needs this one back (rejectTypeCycle).
+    struct InProgress {
+        camel::core::context::Context &context;
+        InProgress(
+            camel::core::context::Context &ctx, const camel::core::module::Module *mod,
+            const std::string &name)
+            : context(ctx) {
+            context.enterTypeDeclaration(mod, name);
+        }
+        ~InProgress() { context.leaveTypeDeclaration(); }
+    } inProgress{*context_, module_.get(), typeLoad->ref().toString()};
     TypePositionGuard position(*this, TypePosition::TypeDeclaration);
     if (typeLoad->params().empty()) {
         type = visitType(typeNode);
@@ -2632,6 +2587,27 @@ Type *taggedElementTarget(Type *type) {
 
 } // namespace
 
+node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast) {
+    // A literal of the declared type, converted now (`let x: float = 1`). A declared `T?` /
+    // `T!` and a type written with a type variable (decided when the generic function is
+    // instantiated) are left to the CAST, and so is a function type, which a literal cannot
+    // have.
+    if (value->type() == NodeKind::DATA && asTagged(type) == nullptr && !containsTypeVar(type)) {
+        if (data_ptr_t converted = value->data()->convertTo(type)) {
+            return tree_->makeData(converted);
+        }
+        reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
+        throw BuildAbortException();
+    }
+    // Any other expression: an annotation CAST (see the declaration). An expression of the
+    // declared type used to be refused here as "dynamic type casting" (`var acc: V = p`
+    // with `p: V`); converting a value to its own type does nothing (design principles 2.12).
+    node_ptr_t castNode = tree_->makeCast(type, true);
+    *castNode << value;
+    setOriginFromAst(context_, castNode, ast, camel::source::OriginKind::GctNode, "gct.cast");
+    return castNode;
+}
+
 node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered) {
     entered        = false;
     Type *elemType = taggedElementTarget(type);
@@ -3492,6 +3468,39 @@ bool Builder::usableNamespace(const Reference &ref) const {
     return module_->hasImportedPrefix(ref);
 }
 
+void Builder::rejectTypeCycle(
+    const std::shared_ptr<camel::core::module::Module> &source, const Reference &remote,
+    const Reference &ref, const AST::node_ptr_t &ast) {
+    const auto key = std::make_pair(
+        static_cast<const camel::core::module::Module *>(source.get()),
+        remote.toString());
+    if (context_->onReportedTypeCycle(key.first, key.second)) {
+        throw BuildAbortException(); // reported where the cycle closed
+    }
+    const auto &inProgress = context_->typeDeclarationsInProgress();
+    const auto start       = std::ranges::find(inProgress, key);
+    if (start == inProgress.end()) {
+        return; // not on a cycle: the name is reported as not resolved
+    }
+    // From the declaration that is needed again to the one that needs it, then that one again:
+    // `a::A -> b::B -> a::A`.
+    const auto shown = [](const std::pair<const camel::core::module::Module *, std::string> &d) {
+        const std::string &module =
+            d.first->declaredName().empty() ? d.first->name() : d.first->declaredName();
+        return module + "::" + d.second;
+    };
+    std::string chain;
+    for (auto it = start; it != inProgress.end(); ++it) {
+        chain += shown(*it) + " -> ";
+        context_->markTypeCycle(it->first, it->second);
+    }
+    chain += shown(key);
+    diags_->of(SemanticDiag::ModuleTypeCycle)
+        .at(ast->load()->tokenRange())
+        .commit(ref.toString(), chain);
+    throw BuildAbortException();
+}
+
 Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     const std::string written = ref.toString();
     // The module's own name may qualify its names (design principles 2.12).
@@ -3525,6 +3534,10 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     if (const auto imported = module_->getImportedType(ref, ImportLayer::Named)) {
         return imported.value();
     }
+    if (const auto source = module_->importedSource(ref, ImportLayer::Named)) {
+        // Imported, and not declared (yet): perhaps the types form a cycle across modules.
+        rejectTypeCycle(source->first, source->second, ref, ast);
+    }
     // Layer 4: through a `using namespace` in force; two that give different types are an
     // error where the name is used.
     std::vector<std::pair<std::string, Type *>> viaUsing;
@@ -3532,23 +3545,30 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
         for (const Reference &using_ : frame) {
             const std::string prefixed = using_.toString() + "::" + written;
             Type *type                 = nullptr;
+            // The full name of the candidate, for AmbiguousName (design principles 2.13).
+            std::string shown = prefixed;
             for (size_t depth = namespacePath_.size() + 1; depth-- > 0 && type == nullptr;) {
                 std::string candidate;
                 for (size_t i = 0; i < depth; ++i) {
                     candidate += namespacePath_[i] + "::";
                 }
                 if (auto own = typeScope_->get(Reference(candidate + prefixed))) {
-                    type = own.value();
+                    type  = own.value();
+                    shown = module_->qualifiedName(Reference(candidate + prefixed));
                 }
             }
             if (type == nullptr) {
                 if (auto imported = module_->getImportedType(Reference(prefixed), ImportLayer::Named)) {
                     type = imported.value();
+                    if (const auto source =
+                            module_->importedSource(Reference(prefixed), ImportLayer::Named)) {
+                        shown = source->first->qualifiedName(source->second);
+                    }
                 }
             }
             if (type != nullptr &&
                 std::ranges::none_of(viaUsing, [&](const auto &have) { return have.second == type; })) {
-                viaUsing.emplace_back(prefixed, type);
+                viaUsing.emplace_back(shown, type);
             }
         }
     }

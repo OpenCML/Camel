@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: May. 01, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -28,9 +28,12 @@
 #include <functional>
 #include <memory>
 #include <ostream>
+#include <set>
 #include <span>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace camel::runtime {
@@ -71,6 +74,10 @@ struct EntryConfig {
     size_t maxRecursionDepth = 0;
     size_t maxMacroDepth     = 0;
 
+    // Editor analysis can omit the executable entry and supply unsaved module texts.
+    bool requireEntry = true;
+    std::function<std::optional<std::string>(const std::string &)> sourceOverride;
+
     std::string toString() const;
 };
 
@@ -80,6 +87,11 @@ class Context : public std::enable_shared_from_this<Context> {
 
     module_ptr_t mainModule_;
     std::unordered_map<std::string, module_ptr_t> modules_;
+    /// The type declarations being built right now, outermost first, across every module (see
+    /// enterTypeDeclaration).
+    std::vector<std::pair<const module::Module *, std::string>> typeDeclarations_;
+    /// The type declarations found on a cycle (see markTypeCycle).
+    std::set<std::pair<const module::Module *, std::string>> typeCycleMembers_;
     std::unordered_map<std::string, module_ptr_t> builtinModules_;
 
     std::unique_ptr<ExecutorManager> exeMgr_;
@@ -137,6 +149,10 @@ class Context : public std::enable_shared_from_this<Context> {
         const EntryConfig &entryConf       = EntryConfig(),
         const error::DiagsConfig &diagConf = error::DiagsConfig());
 
+    bool requireEntry() const { return entryConfig_.requireEntry; }
+    std::optional<std::string> sourceOverride(const std::string &path) const {
+        return entryConfig_.sourceOverride ? entryConfig_.sourceOverride(path) : std::nullopt;
+    }
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     size_t maxThreads() const { return entryConfig_.maxThreads; }
     size_t maxRecursionDepth() const { return entryConfig_.maxRecursionDepth; }
@@ -161,6 +177,31 @@ class Context : public std::enable_shared_from_this<Context> {
     const ExecutorManager &execMgr() const { return *exeMgr_; }
 
     void setMainModule(module_ptr_t module) { mainModule_ = module; }
+
+    // ---- Type declarations in progress (design principles 2.13) ----------------------------
+    // Modules may import each other's types (2.11). A type declaration of one module that
+    // needs a type of another module compiles that module's types in the middle of its own
+    // declaration; when that module needs, in turn, the type being declared, the types form a
+    // cycle across the modules. Each module has its own construction-tree builder, so the
+    // declarations in progress are kept here, where all of them see them.
+    /// Records that the type `name` of `mod` is being declared (until the matching leave).
+    void enterTypeDeclaration(const module::Module *mod, const std::string &name) {
+        typeDeclarations_.emplace_back(mod, name);
+    }
+    void leaveTypeDeclaration() { typeDeclarations_.pop_back(); }
+    /// The declarations in progress, outermost first.
+    const std::vector<std::pair<const module::Module *, std::string>> &
+    typeDeclarationsInProgress() const {
+        return typeDeclarations_;
+    }
+    /// Remembers the members of a cycle that was reported, so that the failures that follow
+    /// from it (in the other modules of the cycle) are not reported again.
+    void markTypeCycle(const module::Module *mod, const std::string &name) {
+        typeCycleMembers_.emplace(mod, name);
+    }
+    bool onReportedTypeCycle(const module::Module *mod, const std::string &name) const {
+        return typeCycleMembers_.contains({mod, name});
+    }
 
     /// Returns main module plus all UserDefinedModules from modules_ (excluding builtin)
     std::vector<module_ptr_t> allUserModules() const;

@@ -232,13 +232,13 @@ timeout_ms = 4000
 
 [[tests]]
 name = "algo.reference"
-desc = "Every operator of the algo module (sorted, quick_sorted, insert_sorted, merge_sorted, sort, quick_sort, insert_sort, merge_sort, merge_sorted_arrays) against Python's sorted() on generated int and float arrays (random, duplicates, sorted, reversed, constant; lengths 1 to 257; fixed seed), the input of every form unchanged (no operator sorts its argument in place, design principles 2.12), and 200000 already sorted / reversed elements. sorted and sort once returned unsorted arrays (wrong quicksort partition), and no sort ordered floats (slots were compared as unsigned integers)."
+desc = "Every operator of the algo module (sort, quick_sort, insert_sort, merge_sort, merge_sorted_arrays; the `-ed` twins are gone, design principles 2.13) against Python's sorted() on generated int and float arrays (random, duplicates, sorted, reversed, constant; lengths 1 to 257; fixed seed), the input of every form unchanged (no operator sorts its argument in place, 2.12), also as the rebinding `v = v->sort` that sorts in place when nothing else holds the array (2.13), and 200000 already sorted / reversed elements. The sorts once returned unsorted arrays (wrong quicksort partition), and no sort ordered floats (slots were compared as unsigned integers)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/std/algo/algo_reference.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["1530 results and one large program, 0 wrong", "PASS"]
+expect_stdout_contains = ["1890 results and one large program, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000

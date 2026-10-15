@@ -123,12 +123,50 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", ".cml:5:"]
 
 [[tests]]
 name = "narrowing.plain_with_null"
-desc = "A value that cannot be null is not compared with `null`."
-kind = "negative"
+desc = "A value that cannot be null may be compared with `null` (design principles 2.13): a name or any other value, either order; the result is fixed and each test is warned about (NullTestNeverNull)."
+kind = "behavior"
 case = "../../../cases/consistency/narrowing/compare_plain_with_null.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "false\ntrue\nfalse\n"
+verify_script = """
+const warned = input.stderr.split('\n').filter((l) => l.includes('SemanticDiag::NullTestNeverNull'))
+assert(warned.length === 3, 'three warnings: ' + input.stderr)
+for (const at of [':5:18:', ':6:21:', ':7:22:']) {
+  assert(warned.some((l) => l.includes(at)), 'a warning at ' + at + ': ' + input.stderr)
+}
+assert(warned.some((l) => l.includes("'a' has type 'int', which is never null: this test is always true")), input.stderr)
+"""
+
+[[tests]]
+name = "narrowing.after_narrowing"
+desc = "In the arm where `x` is narrowed, `??` and a `match` with `case null` on `x` are allowed (KnownNotNull), also in a nested arm, and testing `x` against null again gives a fixed result (NullTestNeverNull); design principles 2.13. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/narrowing/after_narrowing.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "4 8 true set 4\nnone\nnone\n"
+verify_script = """
+const lines = input.stderr.split('\n').filter((l) => l.includes('[Warn]'))
+const at = (where, name) => lines.some((l) => l.includes(where) && l.includes(name))
+assert(lines.length === 5, 'five warnings: ' + input.stderr)
+assert(at(':7:19:', 'KnownNotNull') && at(':8:17:', 'KnownNotNull') && at(':11:31:', 'KnownNotNull'), input.stderr)
+assert(at(':9:22:', 'NullTestNeverNull') && at(':10:25:', 'NullTestNeverNull'), input.stderr)
+assert(lines.some((l) => l.includes("the null case of 'match' is never taken")), input.stderr)
+"""
+
+[[tests]]
+name = "narrowing.shadowed_not_narrowed"
+desc = "A lambda parameter that shadows a narrowed name is not the narrowed name: `??` on it stays an error."
+kind = "negative"
+case = "../../../cases/consistency/narrowing/shadowed_not_narrowed.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", ".cml:4:"]
+expect_output_contains = ["SemanticDiag::TaggedOperandMismatch", ".cml:4:"]
 
 [[tests]]
 name = "narrowing.functions"

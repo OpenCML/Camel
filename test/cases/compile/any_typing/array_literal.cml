@@ -1,13 +1,17 @@
 module array_literal
 
-import { decode } from json
+import { Json, decode } from json
 
 // A computed element whose type is not the element type the literal elements fixed is a
 // mismatch. With an `any` element (what decode gave) the literal used to take the type of the
 // later element, so the decoded string's address became an `int` that could be added to
 // (docs/design/any-typing, defect D2).
-func main(): int sync {
-    let xs = [decode('"ab"'), 5]
+func check(a: Json): int sync {
+    let xs = [a, 5]
     println(xs[0] + xs[1] > 1000)
     return 0
+}
+
+func main(): int sync {
+    return decode('"ab"') ?-> check !! 1
 }

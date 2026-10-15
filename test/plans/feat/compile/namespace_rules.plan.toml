@@ -311,3 +311,36 @@ case = "../../../cases/compile/namespace_rules/p01_qualified.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
 expect_stdout_contains = ["lib::root", "lib::Tools::inc", "lib::Deep::Inner::three"]
+
+[[tests]]
+name = "ns.p33_reopen_using"
+desc = "Reopening a namespace block does not carry the `using namespace` of an earlier block of it (design principles 2.13): the first block uses `inc` unqualified, the second cannot."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p33_reopen_using.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_diagnostic_line = 11
+expect_output_contains = ["Unresolved reference: 'inc'"]
+
+[[tests]]
+name = "ns.p34_ambiguous_qualified"
+desc = "An ambiguous name lists its candidates by their full names, `module::path::name`, whatever aliases the imports gave the modules (design principles 2.13)."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p34_ambiguous_qualified.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AmbiguousName"
+expect_diagnostic_line = 8
+expect_output_contains = ["The name 'inc' is ambiguous here: lib::Tools::inc, lib2::Tools::inc"]
+
+[[tests]]
+name = "ns.p35_ambiguous_type"
+desc = "The same for a type name: the candidates by their full names (design principles 2.13)."
+kind = "negative"
+case = "../../../cases/compile/namespace_rules/p35_ambiguous_type.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AmbiguousName"
+expect_diagnostic_line = 7
+expect_output_contains = ["The name 'P' is ambiguous here: libt1::Shapes::P, libt2::Shapes::P"]

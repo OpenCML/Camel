@@ -1,0 +1,29 @@
+module tiles_value_gradient
+import { Tensor, reshape, sum, mean, abs, zeros } from tensor
+import { value_and_grad } from autodiff
+import { run, inspect, benchmark } from tiles
+func loss(x: Tensor<f32>): float { return sum(x * x) }
+func total(x: Tensor<f32>): float { return sum(x) }
+func average(x: Tensor<f32>): float { return mean(x) }
+func normalize(x: Tensor<f32>): Tensor<f32> { return x / sum(x) }
+func mixed(x: Tensor<f32>): (float, Tensor<f32>, float) { return (sum(x), x + 1.0, 1.0000000000000002) }
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    let vg = value_and_grad(loss)
+    let cpu = vg(x)
+    let gpu = run<vg>(x)
+    println(gpu.0 - cpu.0)
+    println(sum(abs(gpu.1 - cpu.1)))
+    let exact = reshape([16777216.0, 1.0], [2])
+    println(run<total>(exact) - 16777217.0)
+    println(run<average>(exact) - 8388608.5)
+    println(sum(abs(run<normalize>(x) - normalize(x))))
+    let result = run<mixed>(exact)
+    println(result.0 - 16777217.0)
+    println(sum(abs(result.1 - (exact + 1.0))))
+    println(result.2 - 1.0000000000000002)
+    println(run<total>(zeros([0])))
+    println(inspect<mixed>(exact))
+    println(benchmark<vg>(x))
+    return 0
+}

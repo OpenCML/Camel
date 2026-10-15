@@ -118,6 +118,12 @@ class Tree {
     void addUsings(const Node *node, const std::vector<Reference> &usings);
     const std::vector<Reference> *usingsOf(const Node *node) const;
 
+    /// The namespaces of the block a top-level declaration is written in, when its name does
+    /// not say them: an operator overload, whose name is the operator's (design principles
+    /// 2.13). Null for any other node; the namespaces of a name are then its path.
+    void setNamespaceOf(const Node *node, const std::vector<std::string> &path);
+    const std::vector<std::string> *namespaceOf(const Node *node) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -168,6 +174,7 @@ class Tree {
     // A deque: an element keeps its address while others are added.
     std::deque<data_ptr_t> constants_;
     std::unordered_map<const Node *, std::vector<Reference>> usings_;
+    std::unordered_map<const Node *, std::vector<std::string>> namespaces_;
 };
 
 } // namespace camel::compile::gct

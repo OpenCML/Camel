@@ -2,13 +2,13 @@
 """Every operator of the algo module against Python's sorted(), on generated arrays (fixed seed).
 
 Arrays of int and of float; random, with duplicates, already sorted, reversed, constant; lengths 1 to
-257. Each of sorted/quick_sorted/insert_sorted/merge_sorted and sort/quick_sort/insert_sort/
-merge_sort (all return a new array and leave the input unchanged: no operator changes its
-argument, design principles 2.12) is applied to each array, and merge_sorted_arrays to pairs of
-sorted arrays. A second program sorts 200000 elements that are
+257. Each of sort/quick_sort/insert_sort/merge_sort (all return a new array and leave the input
+unchanged: no operator changes its argument, design principles 2.12) is applied to each array,
+also as the in-place rebinding `v = v->sort` (2.13), and merge_sorted_arrays to pairs of sorted
+arrays. A second program sorts 200000 elements that are
 already sorted, and reversed, which a quicksort with a first-element pivot cannot do in its stack.
 
-Why this exists: `sorted` and `sort` once returned unsorted arrays (a wrong partition) and no test
+Why this exists: the sorting operators once returned unsorted arrays (a wrong partition) and no test
 compared their output with anything.
 """
 import os
@@ -23,10 +23,12 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[4]
 HOME = Path(os.environ.get("CAMEL_HOME", REPO_ROOT / "out" / "latest"))
 CAMEL = HOME / "bin" / ("camel.exe" if os.name == "nt" else "camel")
-# `sort` and the other names without `-ed` sorted their argument in place until design
-# principles 2.12; they now return a new array as the `-ed` names do.
-COPYING = ["sorted", "quick_sorted", "insert_sorted", "merge_sorted",
-           "sort", "quick_sort", "insert_sort", "merge_sort"]
+# Every sorting operator returns a new array and leaves its argument unchanged (design
+# principles 2.12); only the names without `-ed` remain (2.13). Each is also checked as the
+# rebinding `v = v->op` of a variable, which the compiler turns into the operator's in-place
+# form (Builder::inPlaceRebindingOf): on a copy the first time (the variable was made from a
+# value something else refers to), on the variable's own array the second time.
+COPYING = ["sort", "quick_sort", "insert_sort", "merge_sort"]
 
 
 def lit(xs, is_float):
@@ -73,8 +75,10 @@ def main() -> int:
         for op in COPYING:
             k += 1
             body += [f"    let a{k} = {lit(xs, is_float)}", f"    let r{k} = {op}(a{k})",
-                     f"    println('#', r{k})", f"    println('#', a{k})"]
-            expected += [ref, xs]
+                     f"    println('#', r{k})", f"    println('#', a{k})",
+                     f"    var v{k} = a{k}", f"    v{k} = v{k}->{op}", f"    println('#', v{k})",
+                     f"    println('#', a{k})", f"    v{k} = v{k}->{op}", f"    println('#', v{k})"]
+            expected += [ref, xs, ref, xs, ref]
         other = sorted((rng.randint(-1000, 1000) / 8) if is_float else rng.randint(-1000, 1000) for _ in range(rng.randint(1, 20)))
         k += 1
         body += [f"    let m{k} = merge_sorted_arrays({lit(ref, is_float)}, {lit(other, is_float)})", f"    println('#', m{k})"]
@@ -83,14 +87,15 @@ def main() -> int:
     small = f"module algo_reference\nimport {{ {names} }} from algo\n\nfunc main(): int sync {{\n" + "\n".join(body) + "\n    return 0\n}\n"
     n = 200000
     large = f"""module algo_large
-import {{ sorted, sort, merge_sorted }} from algo
+import {{ sort, merge_sort }} from algo
 
 func main(): int sync {{
     let up = range(0, {n})
     let down = up->map<(i: int): int => {n} - 1 - i>
-    let a = sorted(up)
-    let b = sorted(down)
-    let c = merge_sorted(down)
+    let a = sort(up)
+    var b = down
+    b = b->sort
+    let c = merge_sort(down)
     let d = sort(up->map<(i: int): int => (i * 7919) % {n}>)
     println('#', a[0], a[{n // 2}], a[{n - 1}], b[0], b[{n // 2}], b[{n - 1}], c[0], c[{n // 2}], c[{n - 1}], d[0], d[{n // 2}], d[{n - 1}])
     return 0

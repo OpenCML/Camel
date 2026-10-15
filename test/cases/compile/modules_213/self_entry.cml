@@ -1,0 +1,14 @@
+// Design principles 2.13: a module importing itself is allowed and has no effect. This file is
+// the entry module and imports itself by its file name, in both forms; it is not loaded a
+// second time (each diagnostic of it would be reported twice), and its names stay its own.
+module self_entry
+
+import self_entry
+import { twice } from self_entry
+
+func twice(x: int): int { return x * 2 }
+
+func main(): int sync {
+    println(twice(4), self_entry::twice(5))
+    return 0
+}

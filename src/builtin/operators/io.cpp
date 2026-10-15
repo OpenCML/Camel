@@ -50,128 +50,75 @@ void writeToStdout(const std::string &text, bool flush) {
     }
 }
 
-} // namespace
-
-slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    slot_t result = NullSlot;
-    std::ostringstream out;
-    bool flush = false;
-    if (with.size() > 0) {
-        String *fmtStrObj  = with.get<String *>(0);
-        std::string fmtStr = fmtStrObj->toString();
-
-        fmt::dynamic_format_arg_store<fmt::format_context> store;
-        for (size_t i = 0; i < norm.size(); ++i) {
-            TypeCode code = norm.code(i);
-            switch (code) {
-            case TypeCode::Int32:
-                store.push_back(norm.get<Int32>(i));
-                break;
-            case TypeCode::Int64:
-                store.push_back(norm.get<Int64>(i));
-                break;
-            case TypeCode::Float32:
-                store.push_back(camel::builtin::LanguageFloat<Float32>{norm.get<Float32>(i)});
-                break;
-            case TypeCode::Float64:
-                store.push_back(camel::builtin::LanguageFloat<Float64>{norm.get<Float64>(i)});
-                break;
-            default:
-                std::ostringstream oss;
-                printSlot(oss, norm.slot(i), norm.type(i));
-                store.push_back(oss.str());
-                break;
-            }
-        }
-
-        try {
-            std::string resultStr = fmt::vformat(fmtStr, store);
-            out << resultStr << '\n';
-            flush = true;
-        } catch (const fmt::format_error &e) {
-            throwRuntimeFault(
-                RuntimeDiag::FormatFailed,
-                std::string(fmtStr),
-                std::string(e.what()));
-        }
-
-        if (norm.size() > 0) {
-            result = norm.slot(0);
-        }
-    } else {
+/// What `print` and `println` write for their arguments, without a line end: the arguments
+/// separated by one space, or, with a format (`print<fmt>(...)`), the format with the
+/// arguments put in. Returns the first argument (an effect function returns a value, design
+/// principles 2.10), null when there is none. `formatted` says whether a format was given.
+slot_t writeArguments(ArgsView &with, ArgsView &norm, std::ostringstream &out, bool &formatted) {
+    slot_t result = norm.size() > 0 ? norm.slot(0) : NullSlot;
+    formatted     = with.size() > 0;
+    if (!formatted) {
         for (size_t i = 0; i < norm.size(); i++) {
             if (i > 0) {
                 out << " ";
-            } else {
-                result = norm.slot(i);
             }
-            slot_t data = norm.slot(i);
-            printSlot(out, data, norm.type(i));
+            printSlot(out, norm.slot(i), norm.type(i));
+        }
+        return result;
+    }
+    String *fmtStrObj  = with.get<String *>(0);
+    std::string fmtStr = fmtStrObj->toString();
+
+    fmt::dynamic_format_arg_store<fmt::format_context> store;
+    for (size_t i = 0; i < norm.size(); ++i) {
+        TypeCode code = norm.code(i);
+        switch (code) {
+        case TypeCode::Int32:
+            store.push_back(norm.get<Int32>(i));
+            break;
+        case TypeCode::Int64:
+            store.push_back(norm.get<Int64>(i));
+            break;
+        case TypeCode::Float32:
+            store.push_back(camel::builtin::LanguageFloat<Float32>{norm.get<Float32>(i)});
+            break;
+        case TypeCode::Float64:
+            store.push_back(camel::builtin::LanguageFloat<Float64>{norm.get<Float64>(i)});
+            break;
+        default:
+            std::ostringstream oss;
+            printSlot(oss, norm.slot(i), norm.type(i));
+            store.push_back(oss.str());
+            break;
         }
     }
+    try {
+        out << fmt::vformat(fmtStr, store);
+    } catch (const fmt::format_error &e) {
+        throwRuntimeFault(RuntimeDiag::FormatFailed, std::string(fmtStr), std::string(e.what()));
+    }
+    return result;
+}
 
-    writeToStdout(out.str(), flush);
+} // namespace
+
+// `print` ends nothing with a line end, with a format or without; `println` ends what it
+// writes with exactly one. (The formatted forms used to add one more: `print<fmt>` a line end
+// and `println<fmt>` an empty line. Design principles 2.13 calls that a defect of the
+// interpreter; the generated C++ programs copied it and were fixed with it.)
+slot_t __op_print__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    std::ostringstream out;
+    bool formatted      = false;
+    const slot_t result = writeArguments(with, norm, out, formatted);
+    // A formatted print is flushed as it was when it ended a line.
+    writeToStdout(out.str(), formatted);
     return result;
 }
 
 slot_t __op_println__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    slot_t result = NullSlot;
     std::ostringstream out;
-    bool flush = false;
-    if (with.size() > 0) {
-        String *fmtStrObj  = with.get<String *>(0);
-        std::string fmtStr = fmtStrObj->toString();
-
-        fmt::dynamic_format_arg_store<fmt::format_context> store;
-        for (size_t i = 0; i < norm.size(); ++i) {
-            TypeCode code = norm.code(i);
-            switch (code) {
-            case TypeCode::Int32:
-                store.push_back(norm.get<Int32>(i));
-                break;
-            case TypeCode::Int64:
-                store.push_back(norm.get<Int64>(i));
-                break;
-            case TypeCode::Float32:
-                store.push_back(camel::builtin::LanguageFloat<Float32>{norm.get<Float32>(i)});
-                break;
-            case TypeCode::Float64:
-                store.push_back(camel::builtin::LanguageFloat<Float64>{norm.get<Float64>(i)});
-                break;
-            default:
-                std::ostringstream oss;
-                printSlot(oss, norm.slot(i), norm.type(i));
-                store.push_back(oss.str());
-                break;
-            }
-        }
-
-        try {
-            std::string resultStr = fmt::vformat(fmtStr, store);
-            out << resultStr << '\n';
-            flush = true;
-        } catch (const fmt::format_error &e) {
-            throwRuntimeFault(
-                RuntimeDiag::FormatFailed,
-                std::string(fmtStr),
-                std::string(e.what()));
-        }
-
-        if (norm.size() > 0) {
-            result = norm.slot(0);
-        }
-    } else {
-        for (size_t i = 0; i < norm.size(); i++) {
-            if (i > 0) {
-                out << " ";
-            } else {
-                result = norm.slot(i);
-            }
-            slot_t data = norm.slot(i);
-            printSlot(out, data, norm.type(i));
-        }
-    }
-
+    bool formatted      = false;
+    const slot_t result = writeArguments(with, norm, out, formatted);
     out << '\n';
     writeToStdout(out.str(), true);
     return result;

@@ -1,0 +1,5 @@
+module names_other
+
+export func twice(x: int): int {
+    return x + x                                   // mark:othertwice
+}

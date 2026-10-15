@@ -806,6 +806,9 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
     unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
     unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setOperatorSymbol(operatorSymbol);
+    if (!operatorSymbol.empty()) {
+        unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDeclaredIn(namespaceStack_);
+    }
     if (annoListNode) {
         *funcDeclNode << annoListNode;
     }

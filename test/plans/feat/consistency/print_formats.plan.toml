@@ -1,0 +1,21 @@
+id = "consistency.print_formats"
+order = 366
+tier = "feat"
+tags = ["feat", "consistency", "io", "backends"]
+desc = "`print<fmt>` ends with no line end and `println<fmt>` with one, as without a format (design principles 2.13; the extra line end and the extra empty line were defects of the interpreter). The generated C++ prints the same (feat/trans/cpp.agree_with_fvm runs this program too)."
+
+[defaults]
+normalizers = ["normalize_newlines"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+timeout_ms = 20000
+
+[[tests]]
+name = "print_formats.backends"
+desc = "Formatted and plain print / println interleaved: exactly the line ends written. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/trans/cpp/exec/print_formats.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3-4|1+2\nnext\n[5][a]\n0.50\n"

@@ -163,6 +163,25 @@ type::resolver_ptr_t OperatorTable::resolver(std::string_view uri) const {
     return id ? resolver(*id) : nullptr;
 }
 
+void OperatorTable::setInPlaceForm(std::string_view uri, std::string_view inPlaceUri) {
+    std::unique_lock lock(mutex_);
+    const OperId form = internLocked(inPlaceUri);
+    entries_[internLocked(uri)].inPlace = entries_[form].uri;
+}
+
+std::optional<std::string> OperatorTable::inPlaceForm(std::string_view uri) const {
+    const auto id = lookup(uri);
+    if (!id) {
+        return std::nullopt;
+    }
+    std::shared_lock lock(mutex_);
+    const SymId form = entries_[*id].inPlace;
+    if (form == kEmptySym) {
+        return std::nullopt;
+    }
+    return std::string(symbolText(form));
+}
+
 void OperatorTable::setTypeFolder(std::string_view uri, TypeFolder folder) {
     std::unique_lock lock(mutex_);
     entries_[internLocked(uri)].folder = std::make_unique<TypeFolder>(std::move(folder));

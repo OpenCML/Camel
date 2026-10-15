@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -31,6 +31,7 @@
 
 #pragma once
 
+#include "camel/core/operator_table.h"
 #include "op_def.h"
 
 #include <memory>
@@ -48,6 +49,8 @@ class OpRegistry {
 
     /// Definition for a full URI such as "tensor:matmul", or nullptr.
     const OpDef *find(std::string_view uri) const;
+    /// Definition for a graph's process-local operator identity, or nullptr.
+    const OpDef *find(core::OperId id) const;
 
     std::vector<oper_group_ptr_t> operatorGroups(std::string_view protocol) const;
     std::unordered_map<std::string, operator_t> kernelMap(std::string_view protocol) const;
@@ -62,6 +65,7 @@ class OpRegistry {
     mutable std::mutex mutex_;
     std::vector<Entry> entries_; // registration order
     std::unordered_map<std::string, size_t> byUri_;
+    std::unordered_map<core::OperId, size_t> byId_;
 };
 
 /// Registers the tensor module's own operators (idempotent).

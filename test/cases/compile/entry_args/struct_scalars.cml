@@ -1,0 +1,8 @@
+// A struct parameter of `main`: camel reads it from a directory of files; a program std::cpp
+// writes reads only scalars from its command line, so std::cpp refuses it, at `main`.
+type P = { a: int, b: float }
+
+func main(p: P): int sync {
+    println(p.a, p.b)
+    return 0
+}

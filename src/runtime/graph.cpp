@@ -45,6 +45,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <format>
 #include <functional>
@@ -117,14 +118,27 @@ Type *effectiveDraftNodeType(const GraphDraft &draft, const DraftNodeHeader &hea
     return nullptr;
 }
 
+/// The TypeId a node record stores for `type`: types outside the type table (open signatures,
+/// unions, type variables) are given one here (TypeTable::adopt), so every type a frozen graph
+/// names has an id.
+camel::core::type::TypeId typeIdOf(Type *type) {
+    if (type == nullptr) {
+        return camel::core::type::kNoTypeId;
+    }
+    if (type->typeId() == camel::core::type::kNoTypeId) {
+        camel::core::type::TypeTable::instance().adopt(type);
+    }
+    return type->typeId();
+}
+
 struct GraphArenaLayout {
     size_t graphBytes          = 0;
-    size_t dependencyBytes     = 0;
-    size_t subGraphBytes       = 0;
-    size_t staticGraphRefBytes = 0;
+    size_t refBytes            = 0; // the reference table
+    size_t refRoleBytes        = 0; // its roles, padded to the next array's alignment
     size_t tupleBytes          = 0;
-    size_t nodeBlockBytes      = 0;
-    size_t edgeBytes           = 0;
+    size_t nodeBytes           = 0;
+    size_t payloadBytes        = 0;
+    size_t inputBytes          = 0;
     size_t normPortBytes       = 0;
     size_t withPortBytes       = 0;
     size_t closureBytes        = 0;
@@ -138,25 +152,23 @@ GraphArenaLayout planGraphArenaLayout(
     std::span<GCGraph *const> staticGraphRefs, const GCGraphPayloadShape &payload,
     std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots) {
     GraphArenaLayout layout{
-        .graphBytes      = camel::core::mm::alignUp(sizeof(GCGraph), alignof(GCGraph)),
-        .dependencyBytes = camel::core::mm::alignUp(
-            bytesForArray<GCGraph *>(dependencies.size()),
+        .graphBytes = camel::core::mm::alignUp(sizeof(GCGraph), alignof(GCGraph)),
+        // Room for every graph the three lists name; a graph named twice takes one entry and
+        // leaves its room unused.
+        .refBytes = bytesForArray<GCGraph *>(
+            dependencies.size() + subGraphs.size() + staticGraphRefs.size()),
+        .refRoleBytes = camel::core::mm::alignUp(
+            dependencies.size() + subGraphs.size() + staticGraphRefs.size(),
             alignof(GCGraph *)),
-        .subGraphBytes = camel::core::mm::alignUp(
-            bytesForArray<GCGraph *>(subGraphs.size()),
-            alignof(GCGraph *)),
-        .staticGraphRefBytes = camel::core::mm::alignUp(
-            bytesForArray<GCGraph *>(staticGraphRefs.size()),
-            alignof(GCGraph *)),
-        .tupleBytes     = staticSlots.empty()
-                              ? 0
-                              : camel::core::mm::alignUp(
-                                    sizeof(::Tuple) + sizeof(slot_t) * staticSlots.size(),
-                                    alignof(::Tuple)),
-        .nodeBlockBytes = camel::core::mm::alignUp(
-            bytesForArray<gc_block_t>(payload.nodeBlockCount),
-            alignof(gc_block_t)),
-        .edgeBytes = camel::core::mm::alignUp(
+        .tupleBytes = staticSlots.empty()
+                          ? 0
+                          : camel::core::mm::alignUp(
+                                sizeof(::Tuple) + sizeof(slot_t) * staticSlots.size(),
+                                alignof(::Tuple)),
+        // nodeCount records and the sentinel; a multiple of 16 bytes.
+        .nodeBytes    = sizeof(GCNode) * (static_cast<size_t>(payload.nodeCount) + 1),
+        .payloadBytes = bytesForArray<gc_payload_word_t>(payload.payloadWordCount),
+        .inputBytes   = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.edgeCount),
             alignof(gc_node_ref_t)),
         .normPortBytes = camel::core::mm::alignUp(
@@ -173,9 +185,9 @@ GraphArenaLayout planGraphArenaLayout(
             alignof(GCBranchArm)),
     };
     const size_t beforeFrameLayout =
-        layout.graphBytes + layout.dependencyBytes + layout.subGraphBytes +
-        layout.staticGraphRefBytes + layout.tupleBytes + layout.nodeBlockBytes + layout.edgeBytes +
-        layout.normPortBytes + layout.withPortBytes + layout.closureBytes + layout.branchArmBytes;
+        layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
+        layout.nodeBytes + layout.payloadBytes + layout.inputBytes + layout.normPortBytes +
+        layout.withPortBytes + layout.closureBytes + layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
@@ -277,17 +289,42 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     const size_t runtimeSlotCount = graph->runtimeDataType() ? graph->runtimeDataType()->size() : 0;
     const size_t staticSlotCount  = graph->staticSlots().size();
 
-    for (gc_node_ref_t ref = 0; ref < graph->nodeBlockCount();) {
+    const GCGraphNativePayload *payload = graph->nodePayload();
+    for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
         const GCNode *node = graph->node(ref);
-        if (!node) {
-            break;
+        // The input runs are consecutive and inside the input table; the sentinel after the
+        // last node closes the last run.
+        const GCNode *next = node + 1;
+        if (!(node->inBegin <= node->withBegin && node->withBegin <= node->ctrlBegin &&
+              node->ctrlBegin <= next->inBegin && next->inBegin <= payload->edgeCount)) {
+            throw std::runtime_error(std::format(
+                "Runtime graph '{}' has node {} with inputs outside the input table.",
+                graph->name(),
+                ref));
         }
-        if (node->blockCount == 0) {
-            throw std::runtime_error(
-                std::format(
-                    "Runtime graph '{}' has zero-sized node block at ref {}.",
+        if (node->hasPayload() && node->payload >= payload->payloadWordCount) {
+            throw std::runtime_error(std::format(
+                "Runtime graph '{}' has node {} with a payload outside the payload area.",
+                graph->name(),
+                ref));
+        }
+        switch (node->kind) {
+        case GCNodeKind::Func:
+        case GCNodeKind::Call:
+        case GCNodeKind::Accs:
+        case GCNodeKind::Fill:
+        case GCNodeKind::Brch:
+        case GCNodeKind::Join:
+        case GCNodeKind::Oper:
+            if (!node->hasPayload()) {
+                throw std::runtime_error(std::format(
+                    "Runtime graph '{}' has node {} of a kind with a payload without one.",
                     graph->name(),
                     ref));
+            }
+            break;
+        default:
+            break;
         }
         if (node->dataIndex > 0 && static_cast<size_t>(node->dataIndex) >= runtimeSlotCount) {
             throw std::runtime_error(
@@ -316,29 +353,20 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                     graph->name(),
                     ref));
         }
-        auto validateSlice = [&](Slice slice, std::string_view edgeKind) {
-            const auto refs = graph->edgeSlice(slice);
-            if (slice.count != refs.size()) {
-                throw std::runtime_error(
-                    std::format(
-                        "Runtime graph '{}' has out-of-range {} slice at ref {}.",
-                        graph->name(),
-                        edgeKind,
-                        ref));
-            }
-            for (gc_node_ref_t edgeRef : refs) {
-                validateRef(edgeRef, edgeKind);
-            }
-        };
-        validateSlice(node->normInputs, "norm-input");
-        validateSlice(node->withInputs, "with-input");
-        validateSlice(node->ctrlInputs, "ctrl-input");
-        validateSlice(node->normOutputs, "norm-output");
-        validateSlice(node->withOutputs, "with-output");
-        validateSlice(node->ctrlOutputs, "ctrl-output");
+        for (gc_node_ref_t input : graph->normInputsOf(ref)) {
+            validateRef(input, "norm-input");
+        }
+        for (gc_node_ref_t input : graph->withInputsOf(ref)) {
+            validateRef(input, "with-input");
+        }
+        for (gc_node_ref_t input : graph->ctrlInputsOf(ref)) {
+            validateRef(input, "ctrl-input");
+        }
         if (node->kind == GCNodeKind::Func) {
-            const auto *body = node->bodyAs<GCFuncBody>();
-            if (!body || !body->calleeGraph) {
+            // A graph names another graph only through its reference table (I12/I13).
+            const auto *body = graph->nodeBodyAs<GCFuncRef>(ref);
+            if (!body || body->ref >= graph->refs().size() || !graph->refs()[body->ref] ||
+                (graph->refRoles(body->ref) & kGraphRefCallee) == 0) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has FUNC node {} without callee graph.",
@@ -373,62 +401,8 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                         ref));
             }
         }
-        // Inputs and outputs are stored separately and must mirror each other: every scheduler
-        // walks one of the two directions and trusts the other.
-        const auto requireMirrored = [&](std::span<const gc_node_ref_t> inputs,
-                                         auto outputsOf,
-                                         std::span<const gc_node_ref_t> outputs,
-                                         auto inputsOf,
-                                         std::string_view edgeKind) {
-            for (gc_node_ref_t input : inputs) {
-                const auto users = (graph->*outputsOf)(input);
-                if (std::find(users.begin(), users.end(), ref) == users.end()) {
-                    throw std::runtime_error(
-                        std::format(
-                            "Runtime graph '{}' has asymmetric {} edge {} -> {}: missing among "
-                            "the outputs of {}.",
-                            graph->name(),
-                            edgeKind,
-                            input,
-                            ref,
-                            input));
-                }
-            }
-            for (gc_node_ref_t user : outputs) {
-                const auto sources = (graph->*inputsOf)(user);
-                if (std::find(sources.begin(), sources.end(), ref) == sources.end()) {
-                    throw std::runtime_error(
-                        std::format(
-                            "Runtime graph '{}' has asymmetric {} edge {} -> {}: missing among "
-                            "the inputs of {}.",
-                            graph->name(),
-                            edgeKind,
-                            ref,
-                            user,
-                            user));
-                }
-            }
-        };
-        requireMirrored(
-            graph->normInputsOf(ref),
-            &GCGraph::normOutputsOf,
-            graph->normOutputsOf(ref),
-            &GCGraph::normInputsOf,
-            "norm");
-        requireMirrored(
-            graph->withInputsOf(ref),
-            &GCGraph::withOutputsOf,
-            graph->withOutputsOf(ref),
-            &GCGraph::withInputsOf,
-            "with");
-        requireMirrored(
-            graph->ctrlInputsOf(ref),
-            &GCGraph::ctrlOutputsOf,
-            graph->ctrlOutputsOf(ref),
-            &GCGraph::ctrlInputsOf,
-            "ctrl");
         if (node->kind == GCNodeKind::Brch) {
-            const auto *body = node->bodyAs<GCBrchBody>();
+            const auto *body = graph->nodeBodyAs<GCBrchBody>(ref);
             if (!body) {
                 throw std::runtime_error(
                     std::format(
@@ -463,7 +437,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             }
         }
         if (node->kind == GCNodeKind::Join) {
-            const auto *body = node->bodyAs<GCJoinBody>();
+            const auto *body = graph->nodeBodyAs<GCJoinBody>(ref);
             if (!body) {
                 throw std::runtime_error(
                     std::format(
@@ -494,35 +468,15 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                         ref));
             }
         }
-        ref = graph->nextNodeRef(ref);
     }
 }
 
-std::byte *mutableNodeStorage(gc_block_t *blocks, gc_node_ref_t ref) {
-    return reinterpret_cast<std::byte *>(blocks + ref);
-}
-
-const std::byte *nodeStorage(const gc_block_t *blocks, gc_node_ref_t ref) {
-    return reinterpret_cast<const std::byte *>(blocks + ref);
-}
-
-template <typename Body> void writeBody(gc_block_t *blocks, gc_node_ref_t ref, const Body &body) {
+template <typename Body>
+void writeBody(gc_payload_word_t *payload, const GCNode &node, const Body &body) {
     static_assert(
         std::is_trivially_copyable_v<Body>,
         "GC node bodies must remain trivially copyable.");
-    auto *dst = mutableNodeStorage(blocks, ref) + sizeof(GCNode);
-    std::memcpy(dst, &body, sizeof(Body));
-}
-
-std::span<const gc_node_ref_t>
-sliceView(const gc_node_ref_t *storage, Slice slice, gc_cnt_t totalCount) {
-    if (!storage || slice.count == 0) {
-        return {};
-    }
-    if (static_cast<size_t>(slice.offset) + static_cast<size_t>(slice.count) > totalCount) {
-        throw std::runtime_error("GCGraph edge slice is out of bounds.");
-    }
-    return {storage + slice.offset, slice.count};
+    std::memcpy(payload + node.payload, &body, sizeof(Body));
 }
 
 std::span<const GCBranchArm>
@@ -537,36 +491,27 @@ branchSliceView(const GCBranchArm *storage, gc_off_t offset, gc_cnt_t count, gc_
 }
 
 struct PlannedDraftNode {
-    gc_node_ref_t draftId = kInvalidNodeRef;
-    gc_node_ref_t ref     = kInvalidNodeRef;
-    gc_cnt_t blockCount   = 0;
+    gc_node_ref_t draftId   = kInvalidNodeRef;
+    gc_node_ref_t ref       = kInvalidNodeRef;
+    gc_off_t payload        = kNoPayload; // word offset in the payload area
+    size_t payloadWordCount = 0;
 };
 
 struct DraftPayloadPlan {
     std::vector<PlannedDraftNode> nodes;
     std::vector<gc_node_ref_t> runtimeRefsByDraftId;
-    std::vector<std::vector<gc_node_ref_t>> normUsersByDraftId;
-    std::vector<std::vector<gc_node_ref_t>> withUsersByDraftId;
-    std::vector<std::vector<gc_node_ref_t>> ctrlUsersByDraftId;
-    gc_cnt_t nodeBlockCount = 0;
-    gc_cnt_t edgeCount      = 0;
-    gc_cnt_t branchArmCount = 0;
+    gc_cnt_t edgeCount        = 0;
+    gc_cnt_t payloadWordCount = 0;
+    gc_cnt_t branchArmCount   = 0;
 };
 
-void appendUniqueDraftUser(
-    std::vector<std::vector<gc_node_ref_t>> &usersByDraftId, gc_node_ref_t inputId,
-    gc_node_ref_t userId) {
-    auto &users = usersByDraftId[inputId];
-    if (std::find(users.begin(), users.end(), userId) == users.end()) {
-        users.push_back(userId);
-    }
-}
-
-gc_cnt_t draftNodeBlockCount(const DraftNodeHeader &header) {
+/// Words of the payload area a node of this kind takes: its body (for ACCS, OPER and FILL the
+/// bytes the draft holds), rounded up to whole words; 0 for kinds without a payload.
+size_t draftPayloadWords(const DraftNodeHeader &header) {
     size_t bodyBytes = 0;
     switch (header.kind) {
     case GCNodeKind::Func:
-        bodyBytes = sizeof(GCFuncBody);
+        bodyBytes = sizeof(GCFuncRef);
         break;
     case GCNodeKind::Call:
         bodyBytes = sizeof(GCCallBody);
@@ -574,7 +519,7 @@ gc_cnt_t draftNodeBlockCount(const DraftNodeHeader &header) {
     case GCNodeKind::Accs:
     case GCNodeKind::Oper:
     case GCNodeKind::Fill:
-        bodyBytes = header.payloadBytes;
+        bodyBytes = std::max<size_t>(header.payloadBytes, 1);
         break;
     case GCNodeKind::Brch:
         bodyBytes = sizeof(GCBrchBody);
@@ -583,22 +528,18 @@ gc_cnt_t draftNodeBlockCount(const DraftNodeHeader &header) {
         bodyBytes = sizeof(GCJoinBody);
         break;
     default:
-        bodyBytes = 0;
-        break;
+        return 0;
     }
-    return blocksForBytes(sizeof(GCNode) + bodyBytes);
+    return (bodyBytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
 }
 
-/// The edge table of a graph holds, for every node, its norm, with and ctrl inputs and its
-/// norm, with and ctrl users: two entries per edge. It is the first quantity a graph of
-/// ordinary operators exhausts (a node with two inputs that is used once costs three entries
-/// and one node), long before the node count.
-constexpr const char *kNodeBlocks =
-    "node blocks (the 8-byte units nodes are stored in: a node takes several, for its header "
-    "and for what it carries)";
-constexpr const char *kEdgeTableEntries =
-    "edge table entries (one for each input and one for each user of every node, that is two "
-    "per edge)";
+/// The capacities of a runtime graph, as the quantities a GraphCapacityError names. The node
+/// and input counts are 16-bit, and so is the word offset of a payload.
+constexpr const char *kNodes = "nodes";
+constexpr const char *kEdges = "edges (every input of every node is one)";
+constexpr const char *kPayloadWords =
+    "payload words (the 8-byte units of what nodes carry beyond their record: callees, "
+    "operators, constructed positions, branch tables)";
 
 DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     auto requireAlive = [&](gc_node_ref_t owner, gc_node_ref_t ref, std::string_view lane) {
@@ -620,30 +561,13 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
 
     DraftPayloadPlan plan;
     plan.runtimeRefsByDraftId.assign(draft.nodeSlotCount(), kInvalidNodeRef);
-    plan.normUsersByDraftId.resize(draft.nodeSlotCount());
-    plan.withUsersByDraftId.resize(draft.nodeSlotCount());
-    plan.ctrlUsersByDraftId.resize(draft.nodeSlotCount());
 
-    for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
-        if (!draft.alive(draftId)) {
-            continue;
-        }
-        for (gc_node_ref_t ref : draft.normInputsOf(draftId)) {
-            requireAlive(draftId, ref, "norm-input");
-            appendUniqueDraftUser(plan.normUsersByDraftId, ref, draftId);
-        }
-        for (gc_node_ref_t ref : draft.withInputsOf(draftId)) {
-            requireAlive(draftId, ref, "with-input");
-            appendUniqueDraftUser(plan.withUsersByDraftId, ref, draftId);
-        }
-        for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
-            requireAlive(draftId, ref, "ctrl-input");
-            appendUniqueDraftUser(plan.ctrlUsersByDraftId, ref, draftId);
-        }
-    }
-
-    size_t nodeBlocks     = 0;
+    // Live nodes keep their draft order and take dense NodeIds. A graph that does not fit is
+    // measured to the end, so that the error states what it needs and not where counting
+    // stopped.
+    size_t nodeCount      = 0;
     size_t edgeCount      = 0;
+    size_t payloadWords   = 0;
     size_t branchArmCount = 0;
     for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
         if (!draft.alive(draftId)) {
@@ -651,40 +575,44 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         }
         const DraftNodeHeader *header = draft.header(draftId);
         ASSERT(header != nullptr, "Draft payload plan requires a non-null node header.");
-        for (gc_node_ref_t ref : plan.normUsersByDraftId[draftId]) {
-            requireAlive(draftId, ref, "derived-norm-user");
+        for (gc_node_ref_t ref : draft.normInputsOf(draftId)) {
+            requireAlive(draftId, ref, "norm-input");
         }
-        for (gc_node_ref_t ref : plan.withUsersByDraftId[draftId]) {
-            requireAlive(draftId, ref, "derived-with-user");
+        for (gc_node_ref_t ref : draft.withInputsOf(draftId)) {
+            requireAlive(draftId, ref, "with-input");
         }
-        for (gc_node_ref_t ref : plan.ctrlUsersByDraftId[draftId]) {
-            requireAlive(draftId, ref, "ctrl-user");
+        for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
+            requireAlive(draftId, ref, "ctrl-input");
         }
         if (header->kind == GCNodeKind::Brch) {
             for (const GCBranchArm &arm : draft.branchArmsOf(draftId)) {
                 requireAlive(draftId, arm.head, "branch-head");
                 requireAlive(draftId, arm.tail, "branch-tail");
             }
-        }
-        const gc_cnt_t blockCount = draftNodeBlockCount(*header);
-        // A graph that does not fit is measured to the end, so that the error states what
-        // it needs and not the point where the count stopped.
-        if (nodeBlocks + blockCount <= std::numeric_limits<gc_off_t>::max()) {
-            plan.nodes.push_back(PlannedDraftNode{
-                .draftId    = draftId,
-                .ref        = static_cast<gc_off_t>(nodeBlocks),
-                .blockCount = blockCount,
-            });
-            plan.runtimeRefsByDraftId[draftId] = static_cast<gc_off_t>(nodeBlocks);
-        }
-        nodeBlocks += blockCount;
-        edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
-                     draft.ctrlInputsOf(draftId).size() + plan.normUsersByDraftId[draftId].size() +
-                     plan.withUsersByDraftId[draftId].size() +
-                     plan.ctrlUsersByDraftId[draftId].size();
-        if (header->kind == GCNodeKind::Brch) {
             branchArmCount += draft.branchArmsOf(draftId).size();
         }
+        const size_t words = draftPayloadWords(*header);
+        // The NodeId kInvalidNodeRef and the payload offset kNoPayload are reserved.
+        if (nodeCount < kInvalidNodeRef && payloadWords + words < kNoPayload) {
+            plan.nodes.push_back(PlannedDraftNode{
+                .draftId          = draftId,
+                .ref              = static_cast<gc_node_ref_t>(nodeCount),
+                .payload          = words == 0 ? kNoPayload : static_cast<gc_off_t>(payloadWords),
+                .payloadWordCount = words,
+            });
+            plan.runtimeRefsByDraftId[draftId] = static_cast<gc_node_ref_t>(nodeCount);
+        }
+        ++nodeCount;
+        payloadWords += words;
+        edgeCount += draft.normInputsOf(draftId).size() + draft.withInputsOf(draftId).size() +
+                     draft.ctrlInputsOf(draftId).size();
+    }
+    // One NodeId (kInvalidNodeRef) and one payload offset (kNoPayload) are reserved.
+    if (nodeCount >= kInvalidNodeRef) {
+        throw GraphCapacityError(kNodes, nodeCount, kInvalidNodeRef - 1);
+    }
+    if (payloadWords >= kNoPayload) {
+        throw GraphCapacityError(kPayloadWords, payloadWords, kNoPayload - 1);
     }
 
     for (gc_node_ref_t ref : draft.normPorts()) {
@@ -701,19 +629,19 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     requireAlive(kInvalidNodeRef, draft.outputNode(), "output");
     requireAlive(kInvalidNodeRef, draft.returnNode(), "return");
 
-    plan.nodeBlockCount = narrowIntegral<gc_cnt_t>(nodeBlocks, kNodeBlocks);
-    plan.edgeCount      = narrowIntegral<gc_cnt_t>(edgeCount, kEdgeTableEntries);
-    plan.branchArmCount = narrowIntegral<gc_cnt_t>(branchArmCount, "branch arms");
+    plan.edgeCount        = narrowIntegral<gc_cnt_t>(edgeCount, kEdges);
+    plan.payloadWordCount = static_cast<gc_cnt_t>(payloadWords);
+    plan.branchArmCount   = narrowIntegral<gc_cnt_t>(branchArmCount, "branch arms");
     return plan;
 }
 
 GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPayloadPlan &plan) {
     return GCGraphPayloadShape{
-        .nodeCount      = narrowIntegral<gc_cnt_t>(plan.nodes.size(), "nodes"),
-        .nodeBlockCount = plan.nodeBlockCount,
-        .edgeCount      = plan.edgeCount,
-        .normPortCount  = narrowIntegral<gc_cnt_t>(draft.normPorts().size(), "parameters"),
-        .withPortCount  = narrowIntegral<gc_cnt_t>(draft.withPorts().size(), "'with' parameters"),
+        .nodeCount        = narrowIntegral<gc_cnt_t>(plan.nodes.size(), kNodes),
+        .edgeCount        = plan.edgeCount,
+        .payloadWordCount = plan.payloadWordCount,
+        .normPortCount    = narrowIntegral<gc_cnt_t>(draft.normPorts().size(), "parameters"),
+        .withPortCount    = narrowIntegral<gc_cnt_t>(draft.withPorts().size(), "'with' parameters"),
         .closureCount   = narrowIntegral<gc_cnt_t>(draft.closureNodes().size(), "captured values"),
         .branchArmCount = plan.branchArmCount,
     };
@@ -726,20 +654,20 @@ void emitDraftPayload(
         payload.nodeCount == narrowIntegral<gc_cnt_t>(plan.nodes.size(), "nodes"),
         "Draft payload arena shape does not match the planned node count.");
 
-    gc_off_t edgeCursor      = 0;
+    size_t inputCursor       = 0;
     gc_off_t branchArmCursor = 0;
-    auto appendSlice         = [&](std::span<const gc_node_ref_t> refs) -> Slice {
-        Slice slice{.offset = edgeCursor, .count = 0};
+    // Appends the runtime refs of `refs` to the input table; returns where they begin.
+    auto appendInputs = [&](std::span<const gc_node_ref_t> refs) -> gc_off_t {
+        const auto begin = static_cast<gc_off_t>(inputCursor);
         for (gc_node_ref_t draftRef : refs) {
             ASSERT(
                 draftRef < plan.runtimeRefsByDraftId.size(),
                 "Draft edge emission encountered a node outside the payload plan.");
             const gc_node_ref_t runtimeRef = plan.runtimeRefsByDraftId[draftRef];
             ASSERT(runtimeRef != kInvalidNodeRef, "Draft edge emission encountered a dead node.");
-            payload.edges[edgeCursor++] = runtimeRef;
+            payload.inputs[inputCursor++] = runtimeRef;
         }
-        slice.count = narrowIntegral<gc_cnt_t>(edgeCursor - slice.offset, "edges of one node");
-        return slice;
+        return begin;
     };
 
     // A GATE forwards its (last) norm input: FastVM reads the producer, NodeVM reads the gate's
@@ -766,21 +694,16 @@ void emitDraftPayload(
             planned.ref,
             static_cast<int>(draftHeader->kind),
             draft.payloadOf(planned.draftId).size_bytes());
-        auto *header =
-            reinterpret_cast<GCNode *>(mutableNodeStorage(payload.nodeBlocks, planned.ref));
-        *header = GCNode{
-            .dataIndex   = slotOf(planned.draftId),
-            .blockCount  = planned.blockCount,
-            .normInputs  = appendSlice(draft.normInputsOf(planned.draftId)),
-            .withInputs  = appendSlice(draft.withInputsOf(planned.draftId)),
-            .ctrlInputs  = appendSlice(draft.ctrlInputsOf(planned.draftId)),
-            .normOutputs = appendSlice(plan.normUsersByDraftId[planned.draftId]),
-            .withOutputs = appendSlice(plan.withUsersByDraftId[planned.draftId]),
-            .ctrlOutputs = appendSlice(plan.ctrlUsersByDraftId[planned.draftId]),
-            .dataType    = effectiveDraftNodeType(draft, *draftHeader),
-            .kind        = draftHeader->kind,
-            .flags       = draftHeader->runtimeFlags,
-        };
+        GCNode &record       = payload.nodes[planned.ref];
+        record.kind          = draftHeader->kind;
+        record.flags         = draftHeader->runtimeFlags;
+        record.dataIndex     = slotOf(planned.draftId);
+        record.typeId        = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
+        record.inBegin       = appendInputs(draft.normInputsOf(planned.draftId));
+        record.withBegin     = appendInputs(draft.withInputsOf(planned.draftId));
+        record.ctrlBegin     = appendInputs(draft.ctrlInputsOf(planned.draftId));
+        record.payload       = planned.payload;
+        const GCNode &header = record;
 
         const auto payloadBytes = draft.payloadOf(planned.draftId);
         switch (draftHeader->kind) {
@@ -800,13 +723,25 @@ void emitDraftPayload(
                     "FUNC node runtimeRef={} callee after resolve={}.",
                     planned.ref,
                     static_cast<const void *>(body.calleeGraph));
-                writeBody(payload.nodeBlocks, planned.ref, body);
+                // The frozen node names the callee by its index in the reference table; a
+                // callee that is not in it is a graph the encoder was not told this one calls.
+                const auto *refIndex = payload.refIndex;
+                const auto found =
+                    refIndex ? refIndex->find(body.calleeGraph)
+                             : std::unordered_map<const GCGraph *, uint32_t>::const_iterator{};
+                if (refIndex == nullptr || found == refIndex->end()) {
+                    throw std::runtime_error(std::format(
+                        "FUNC node {} calls a graph that is not among the graphs this graph "
+                        "calls (its reference table).",
+                        planned.ref));
+                }
+                writeBody(payload.payload, header, GCFuncRef{.ref = found->second});
             }
             break;
         case GCNodeKind::Call:
             writeBody(
-                payload.nodeBlocks,
-                planned.ref,
+                payload.payload,
+                header,
                 payloadBytes.empty() ? GCCallBody{}
                                      : *reinterpret_cast<const GCCallBody *>(payloadBytes.data()));
             break;
@@ -815,7 +750,7 @@ void emitDraftPayload(
         case GCNodeKind::Fill:
             if (!payloadBytes.empty()) {
                 std::memcpy(
-                    mutableNodeStorage(payload.nodeBlocks, planned.ref) + sizeof(GCNode),
+                    payload.payload + header.payload,
                     payloadBytes.data(),
                     payloadBytes.size_bytes());
             }
@@ -832,8 +767,8 @@ void emitDraftPayload(
                 };
             }
             writeBody(
-                payload.nodeBlocks,
-                planned.ref,
+                payload.payload,
+                header,
                 GCBrchBody{
                     .join       = plan.runtimeRefsByDraftId[draftBody->join],
                     .armOffset  = armOffset,
@@ -849,12 +784,19 @@ void emitDraftPayload(
                                   : *reinterpret_cast<const GCJoinBody *>(payloadBytes.data());
             body.brch       = body.brch == kInvalidNodeRef ? kInvalidNodeRef
                                                            : plan.runtimeRefsByDraftId[body.brch];
-            writeBody(payload.nodeBlocks, planned.ref, body);
+            writeBody(payload.payload, header, body);
         } break;
         default:
             break;
         }
     }
+
+    // The sentinel record: its first input ends the last node's input run.
+    payload.nodes[plan.nodes.size()] = GCNode{
+        .inBegin   = static_cast<gc_off_t>(inputCursor),
+        .withBegin = static_cast<gc_off_t>(inputCursor),
+        .ctrlBegin = static_cast<gc_off_t>(inputCursor),
+    };
 
     for (size_t i = 0; i < draft.normPorts().size(); ++i) {
         payload.normPorts[i] = plan.runtimeRefsByDraftId[draft.normPorts()[i]];
@@ -892,7 +834,7 @@ void emitDraftPayload(
         }
         const auto *expected = reinterpret_cast<const GCJoinBody *>(payloadBytes.data());
         const auto *written  = reinterpret_cast<const GCJoinBody *>(
-            mutableNodeStorage(payload.nodeBlocks, planned.ref) + sizeof(GCNode));
+            payload.payload + payload.nodes[planned.ref].payload);
         if (expected->armCount != written->armCount) {
             throw std::runtime_error(
                 std::format(
@@ -906,7 +848,7 @@ void emitDraftPayload(
     }
 
     ASSERT(
-        edgeCursor == payload.edgeCount,
+        inputCursor == payload.edgeCount,
         "Draft direct payload emission did not match edge count.");
     ASSERT(
         branchArmCursor == payload.branchArmCount,
@@ -947,15 +889,18 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
 GCGraphNativePayload
 allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shape) {
     GCGraphNativePayload payload{};
-    payload.nodeBlocks     = arenaAllocArray<gc_block_t>(arena, shape.nodeBlockCount);
-    payload.edges          = arenaAllocArray<gc_node_ref_t>(arena, shape.edgeCount);
+    payload.nodes            = static_cast<GCNode *>(arena.alloc(
+        sizeof(GCNode) * (static_cast<size_t>(shape.nodeCount) + 1),
+        alignof(gc_payload_word_t)));
+    payload.payload          = arenaAllocArray<gc_payload_word_t>(arena, shape.payloadWordCount);
+    payload.inputs           = arenaAllocArray<gc_node_ref_t>(arena, shape.edgeCount);
     payload.normPorts      = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
     payload.withPorts      = arenaAllocArray<gc_node_ref_t>(arena, shape.withPortCount);
     payload.closure        = arenaAllocArray<gc_node_ref_t>(arena, shape.closureCount);
     payload.branchArms     = arenaAllocArray<GCBranchArm>(arena, shape.branchArmCount);
-    payload.nodeCount      = shape.nodeCount;
-    payload.nodeBlockCount = shape.nodeBlockCount;
-    payload.edgeCount      = shape.edgeCount;
+    payload.nodeCount        = shape.nodeCount;
+    payload.edgeCount        = shape.edgeCount;
+    payload.payloadWordCount = shape.payloadWordCount;
     payload.normPortCount  = shape.normPortCount;
     payload.withPortCount  = shape.withPortCount;
     payload.closureCount   = shape.closureCount;
@@ -965,24 +910,25 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
 
 GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload) {
     return GCGraphPayloadArena{
-        .nodeBlocks     = payload.nodeBlocks,
-        .edges          = payload.edges,
-        .normPorts      = payload.normPorts,
-        .withPorts      = payload.withPorts,
-        .closure        = payload.closure,
-        .branchArms     = payload.branchArms,
-        .nodeCount      = payload.nodeCount,
-        .nodeBlockCount = payload.nodeBlockCount,
-        .edgeCount      = payload.edgeCount,
-        .normPortCount  = payload.normPortCount,
-        .withPortCount  = payload.withPortCount,
-        .closureCount   = payload.closureCount,
-        .branchArmCount = payload.branchArmCount,
-        .entryNode      = payload.entryNode,
-        .exitNode       = payload.exitNode,
-        .outputNode     = payload.outputNode,
-        .returnNode     = payload.returnNode,
-        .returnKind     = payload.returnKind,
+        .nodes            = payload.nodes,
+        .inputs           = payload.inputs,
+        .payload          = payload.payload,
+        .normPorts        = payload.normPorts,
+        .withPorts        = payload.withPorts,
+        .closure          = payload.closure,
+        .branchArms       = payload.branchArms,
+        .nodeCount        = payload.nodeCount,
+        .edgeCount        = payload.edgeCount,
+        .payloadWordCount = payload.payloadWordCount,
+        .normPortCount    = payload.normPortCount,
+        .withPortCount    = payload.withPortCount,
+        .closureCount     = payload.closureCount,
+        .branchArmCount   = payload.branchArmCount,
+        .entryNode        = payload.entryNode,
+        .exitNode         = payload.exitNode,
+        .outputNode       = payload.outputNode,
+        .returnNode       = payload.returnNode,
+        .returnKind       = payload.returnKind,
     };
 }
 
@@ -1072,7 +1018,7 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
         "constructInPlace begin: name='{}' bytes={} deps={} subs={} staticRefs={} staticSlots={} "
-        "nodes={} blocks={} edges={}.",
+        "nodes={} payloadWords={} edges={}.",
         debugRecord ? debugRecord->name : std::string{"<null>"},
         bytes,
         dependencies.size(),
@@ -1080,18 +1026,43 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
         staticGraphRefs.size(),
         staticSlots.size(),
         payloadShape.nodeCount,
-        payloadShape.nodeBlockCount,
+        payloadShape.payloadWordCount,
         payloadShape.edgeCount);
     FixedBufferAllocator arena(memory, bytes);
     void *graphMem = arena.alloc(sizeof(GCGraph), alignof(GCGraph));
     ASSERT(graphMem == memory, "Graph arena must place GCGraph at the start of its owned block.");
 
-    GCGraph **dependencyStorage       = arenaCopyArray<GCGraph *>(arena, dependencies);
-    GCGraph **subGraphStorage         = arenaCopyArray<GCGraph *>(arena, subGraphs);
-    GCGraph **staticRefStorage        = arenaCopyArray<GCGraph *>(arena, staticGraphRefs);
+    // The reference table: the three lists merged, each graph once, with the roles it has in
+    // them (callees first, in their order, then nested graphs, then constants' graphs).
+    const size_t refCapacity = dependencies.size() + subGraphs.size() + staticGraphRefs.size();
+    auto *refStorage         = static_cast<GCGraph **>(
+        arena.alloc(bytesForArray<GCGraph *>(refCapacity), alignof(GCGraph *)));
+    auto *refRoleStorage = static_cast<uint8_t *>(
+        arena.alloc(camel::core::mm::alignUp(refCapacity, alignof(GCGraph *)), alignof(GCGraph *)));
+    std::unordered_map<const GCGraph *, uint32_t> refIndex;
+    size_t refCount    = 0;
+    const auto addRefs = [&](std::span<GCGraph *const> graphs, uint8_t role) {
+        for (GCGraph *ref : graphs) {
+            if (ref == nullptr) {
+                continue;
+            }
+            const auto [it, added] = refIndex.emplace(ref, static_cast<uint32_t>(refCount));
+            if (added) {
+                refStorage[refCount]     = ref;
+                refRoleStorage[refCount] = 0;
+                ++refCount;
+            }
+            refRoleStorage[it->second] |= role;
+        }
+    };
+    addRefs(dependencies, kGraphRefCallee);
+    addRefs(subGraphs, kGraphRefNested);
+    addRefs(staticGraphRefs, kGraphRefStatic);
     ::Tuple *staticArea               = buildStaticAreaInArena(arena, staticDataType, staticSlots);
     GCGraphNativePayload ownedPayload = allocPayloadInArena(arena, payloadShape);
     GCGraphPayloadArena payloadArena  = makePayloadArenaView(ownedPayload);
+    payloadArena.refs                 = std::span<GCGraph *const>(refStorage, refCount);
+    payloadArena.refIndex             = &refIndex;
     // The frame layout is part of the graph (see TupleType::constructFrameLayout); the padding
     // planned for it lets it start aligned wherever the arrays before it ended.
     TupleType *runtimeDataType = nullptr;
@@ -1102,12 +1073,12 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     }
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
-        "constructInPlace allocated arenas: name='{}' staticArea={} nodeBlocks={} edges={} "
+        "constructInPlace allocated arenas: name='{}' staticArea={} nodes={} inputs={} "
         "branchArms={}.",
         debugRecord ? debugRecord->name : std::string{"<null>"},
         static_cast<const void *>(staticArea),
-        static_cast<const void *>(ownedPayload.nodeBlocks),
-        static_cast<const void *>(ownedPayload.edges),
+        static_cast<const void *>(ownedPayload.nodes),
+        static_cast<const void *>(ownedPayload.inputs),
         static_cast<const void *>(ownedPayload.branchArms));
     emitPayload(payloadArena);
     CAMEL_LOG_INFO_S(
@@ -1127,12 +1098,9 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
         staticDataType,
         closureType,
         outerGraph,
-        dependencyStorage,
-        subGraphStorage,
-        staticRefStorage,
-        narrowIntegral<gc_cnt_t>(dependencies.size(), "called graphs"),
-        narrowIntegral<gc_cnt_t>(subGraphs.size(), "nested graphs"),
-        narrowIntegral<gc_cnt_t>(staticGraphRefs.size(), "graphs referenced by constants"),
+        refStorage,
+        refRoleStorage,
+        narrowIntegral<gc_cnt_t>(refCount, "graphs referred to"),
         ownedPayload,
         staticArea);
 
@@ -1141,30 +1109,21 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
             subGraph->outerGraph_ = graph;
         }
     }
-    for (gc_node_ref_t ref = 0; ref < graph->nodeBlockCount();) {
+    for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
         const GCNode *node = graph->node(ref);
-        if (node == nullptr) {
-            throw std::runtime_error(
-                "Constructed graph exposes a null node inside its node-block range.");
-        }
         if (node->kind == GCNodeKind::Join) {
-            const auto *body     = node->bodyAs<GCJoinBody>();
+            const auto *body     = graph->nodeBodyAs<GCJoinBody>(ref);
             const auto armInputs = graph->withInputsOf(ref);
             if (body->armCount != armInputs.size()) {
-                throw std::runtime_error(
-                    std::format(
-                        "Constructed graph '{}' has corrupted JOIN node {} immediately after "
-                        "construction: armCount={} inputs={} graph={} nodeBlocks={} nodePtr={}.",
-                        graph->name(),
-                        ref,
-                        body->armCount,
-                        armInputs.size(),
-                        static_cast<const void *>(graph),
-                        static_cast<const void *>(ownedPayload.nodeBlocks),
-                        static_cast<const void *>(node)));
+                throw std::runtime_error(std::format(
+                    "Constructed graph '{}' has corrupted JOIN node {} immediately after "
+                    "construction: armCount={} inputs={}.",
+                    graph->name(),
+                    ref,
+                    body->armCount,
+                    armInputs.size()));
             }
         }
-        ref = graph->nextNodeRef(ref);
     }
     ASSERT(arena.available() == 0, "Graph arena planning did not match graph emission.");
     EXEC_WHEN_DEBUG(
@@ -1181,15 +1140,12 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
 GCGraph::GCGraph(
     GCGraphDebugRecord *debugRecord, camel::core::type::FunctionType *funcType,
     camel::core::type::TupleType *runtimeDataType, camel::core::type::TupleType *staticDataType,
-    camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **dependencies,
-    GCGraph **subGraphs, GCGraph **staticGraphRefs, gc_cnt_t dependencyCount,
-    gc_cnt_t subGraphCount, gc_cnt_t staticGraphRefCount, const GCGraphNativePayload &payload,
-    ::Tuple *staticArea)
+    camel::core::type::TupleType *closureType, GCGraph *outerGraph, GCGraph **refs,
+    uint8_t *refRoles, gc_cnt_t refCount, const GCGraphNativePayload &payload, ::Tuple *staticArea)
     : debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraph_(outerGraph),
-      dependencies_(dependencies), subGraphs_(subGraphs), staticGraphRefs_(staticGraphRefs),
-      dependencyCount_(dependencyCount), subGraphCount_(subGraphCount),
-      staticGraphRefCount_(staticGraphRefCount), nativePayload_(payload), staticArea_(staticArea) {}
+      refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
+      staticArea_(staticArea) {}
 
 GCGraphPayloadShape describeDraftNativePayload(const GraphDraft &draft) {
     return describeDraftPayload(draft, planDraftPayload(draft));
@@ -1239,6 +1195,26 @@ void validateRuntimeGraphCalls(const GCGraph *graph) {
                     callee->name(),
                     callee->normPorts().size(),
                     callee->withPorts().size()));
+        }
+    }
+    // A graph refers to other graphs only through its reference table (design 3.7, I12): the
+    // graphs the function constants of its static area point to are entries of it too.
+    if (const TupleType *types = graph->staticDataType()) {
+        const auto slots = graph->staticSlots();
+        std::vector<GCGraph *> referenced;
+        std::unordered_set<const Object *> visited;
+        for (size_t i = 1; i < slots.size() && i < types->size(); ++i) {
+            collectStaticGraphRefsRecursive(referenced, slots[i], types->typeAt(i), visited);
+        }
+        const auto refs = graph->refs();
+        for (GCGraph *ref : referenced) {
+            if (std::find(refs.begin(), refs.end(), ref) == refs.end()) {
+                throw std::runtime_error(std::format(
+                    "Runtime graph '{}' has a function constant of graph '{}', which is not in "
+                    "its reference table.",
+                    graph->name(),
+                    ref ? ref->name() : std::string("<null>")));
+            }
         }
     }
 }
@@ -1312,14 +1288,14 @@ void GCGraph::clearExtraSlots() {
     }
 }
 
-std::span<GCGraph *const> GCGraph::dependencies() const {
-    return {dependencies_, dependencyCount_};
-}
-
-std::span<GCGraph *const> GCGraph::subGraphs() const { return {subGraphs_, subGraphCount_}; }
-
-std::span<GCGraph *const> GCGraph::staticGraphRefs() const {
-    return {staticGraphRefs_, staticGraphRefCount_};
+std::vector<GCGraph *> GCGraph::refsWithRole(uint8_t role) const {
+    std::vector<GCGraph *> graphs;
+    for (gc_cnt_t i = 0; i < refCount_; ++i) {
+        if ((refRoles_[i] & role) != 0) {
+            graphs.push_back(refs_[i]);
+        }
+    }
+    return graphs;
 }
 
 std::span<const slot_t> GCGraph::staticSlots() const {
@@ -1332,12 +1308,6 @@ bool GCGraph::hasNodePayload() const { return !nativePayload_.empty(); }
 const GCGraphNativePayload *GCGraph::nodePayload() const {
     return nativePayload_.empty() ? nullptr : &nativePayload_;
 }
-
-gc_cnt_t GCGraph::nodeCount() const { return nativePayload_.nodeCount; }
-
-gc_cnt_t GCGraph::nodeBlockCount() const { return nativePayload_.nodeBlockCount; }
-
-gc_cnt_t GCGraph::edgeCount() const { return nativePayload_.edgeCount; }
 
 gc_cnt_t GCGraph::branchArmCount() const { return nativePayload_.branchArmCount; }
 
@@ -1359,42 +1329,60 @@ gc_node_ref_t GCGraph::returnNodeRef() const { return nativePayload_.returnNode;
 
 GCReturnKind GCGraph::returnKind() const { return nativePayload_.returnKind; }
 
-const GCNode *GCGraph::node(gc_node_ref_t ref) const {
-    const auto &payload = nativePayload_;
-    if (!payload.nodeBlocks || ref == kInvalidNodeRef || ref >= payload.nodeBlockCount) {
-        return nullptr;
+gc_node_ref_t GCGraph::nodeRef(const GCNode *nodePtr) const {
+    const GCNode *base = nativePayload_.nodes;
+    if (base == nullptr || nodePtr < base || nodePtr >= base + nativePayload_.nodeCount) {
+        return kInvalidNodeRef;
     }
-    return reinterpret_cast<const GCNode *>(nodeStorage(payload.nodeBlocks, ref));
+    return static_cast<gc_node_ref_t>(nodePtr - base);
 }
 
-bool GCGraph::containsNodeRef(gc_node_ref_t ref) const { return node(ref) != nullptr; }
-
-gc_node_ref_t GCGraph::nodeRef(const GCNode *nodePtr) const {
-    const auto &payload = nativePayload_;
-    if (!payload.nodeBlocks || !nodePtr) {
-        return kInvalidNodeRef;
+std::span<const std::byte> GCGraph::nodePayloadBytes(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    if (n == nullptr || !n->hasPayload()) {
+        return {};
     }
-
-    const auto *base      = reinterpret_cast<const std::byte *>(payload.nodeBlocks);
-    const auto *nodeBytes = reinterpret_cast<const std::byte *>(nodePtr);
-    const auto *limit     = base + static_cast<size_t>(payload.nodeBlockCount) * kGCBlockBytes;
-    if (nodeBytes < base || nodeBytes >= limit) {
-        return kInvalidNodeRef;
+    // The size follows from the kind (and for a FILL from its slot count), as the encoder
+    // laid it out (draftPayloadWords): no scan for the next payload.
+    const auto *body = reinterpret_cast<const std::byte *>(nativePayload_.payload + n->payload);
+    size_t bytes     = 0;
+    switch (n->kind) {
+    case GCNodeKind::Func:
+        bytes = sizeof(GCFuncRef);
+        break;
+    case GCNodeKind::Call:
+        bytes = sizeof(GCCallBody);
+        break;
+    case GCNodeKind::Accs:
+        bytes = sizeof(GCAccsBody);
+        break;
+    case GCNodeKind::Oper:
+        bytes = sizeof(GCOperBody);
+        break;
+    case GCNodeKind::Fill:
+        bytes = sizeof(GCFillBody) +
+                sizeof(gc_slot_idx_t) * reinterpret_cast<const GCFillBody *>(body)->slotCount;
+        break;
+    case GCNodeKind::Brch:
+        bytes = sizeof(GCBrchBody);
+        break;
+    case GCNodeKind::Join:
+        bytes = sizeof(GCJoinBody);
+        break;
+    default:
+        return {};
     }
-
-    const size_t byteOffset = static_cast<size_t>(nodeBytes - base);
-    if ((byteOffset % kGCBlockBytes) != 0) {
-        return kInvalidNodeRef;
-    }
-    return narrowIntegral<gc_node_ref_t>(byteOffset / kGCBlockBytes, "node blocks");
+    const size_t words = (bytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
+    return {body, words * kPayloadWordBytes};
 }
 
 GCGraph *GCGraph::directCalleeGraphOf(gc_node_ref_t ref) const {
     const GCNode *n = node(ref);
-    if (!n || n->kind != GCNodeKind::Func || !n->hasBody()) {
+    if (!n || n->kind != GCNodeKind::Func || !n->hasPayload()) {
         return nullptr;
     }
-    return n->bodyAs<GCFuncBody>()->calleeGraph;
+    const uint32_t index = nodeBodyAs<GCFuncRef>(ref)->ref;
+    return index < refCount_ ? refs_[index] : nullptr;
 }
 
 gc_node_ref_t GCGraph::matchedJoinOutputOf(gc_node_ref_t ref) const {
@@ -1410,51 +1398,86 @@ gc_node_ref_t GCGraph::matchedJoinOutputOf(gc_node_ref_t ref) const {
     return candidate;
 }
 
-gc_node_ref_t GCGraph::nextNodeRef(gc_node_ref_t ref) const {
-    const GCNode *current = node(ref);
-    if (!current) {
-        return nodeBlockCount();
+GCUseIndex::GCUseIndex(const GCGraph &graph) {
+    // Users in node order, each user once per group even when it reads the node twice: the
+    // order and the uniqueness the encoder gave the stored outputs before they were dropped.
+    // Two passes over the input table: count, then place (a counting sort by source).
+    const size_t count  = graph.nodeCount();
+    const auto groupsOf = [&](gc_node_ref_t user) {
+        return std::array<std::span<const gc_node_ref_t>, 3>{
+            graph.normInputsOf(user),
+            graph.withInputsOf(user),
+            graph.ctrlInputsOf(user)};
+    };
+    // A user reading one source twice in one group is listed once: it is skipped when the
+    // previous entry placed for that (source, group) is the same user.
+    std::vector<uint32_t> sizes(count * 3, 0);
+    std::vector<gc_node_ref_t> lastUser(count * 3, kInvalidNodeRef);
+    for (gc_node_ref_t user = 0; user < count; ++user) {
+        const auto groups = groupsOf(user);
+        for (size_t kind = 0; kind < 3; ++kind) {
+            for (gc_node_ref_t input : groups[kind]) {
+                const size_t at = static_cast<size_t>(input) * 3 + kind;
+                if (lastUser[at] != user) {
+                    lastUser[at] = user;
+                    ++sizes[at];
+                }
+            }
+        }
     }
-    return narrowIntegral<gc_node_ref_t>(
-        static_cast<size_t>(ref) + current->blockCount,
-        "node blocks");
+    begins_.resize(count * 3 + 1);
+    uint32_t total = 0;
+    for (size_t at = 0; at < count * 3; ++at) {
+        begins_[at] = total;
+        total += sizes[at];
+    }
+    begins_[count * 3] = total;
+    users_.resize(total);
+    std::vector<uint32_t> cursor(begins_.begin(), begins_.end() - 1);
+    std::fill(lastUser.begin(), lastUser.end(), kInvalidNodeRef);
+    for (gc_node_ref_t user = 0; user < count; ++user) {
+        const auto groups = groupsOf(user);
+        for (size_t kind = 0; kind < 3; ++kind) {
+            for (gc_node_ref_t input : groups[kind]) {
+                const size_t at = static_cast<size_t>(input) * 3 + kind;
+                if (lastUser[at] != user) {
+                    lastUser[at]         = user;
+                    users_[cursor[at]++] = user;
+                }
+            }
+        }
+    }
 }
 
-const GCNode *GCGraph::nextNode(gc_node_ref_t ref) const { return node(nextNodeRef(ref)); }
-
-std::span<const gc_node_ref_t> GCGraph::edgeSlice(Slice slice) const {
-    const auto &payload = nativePayload_;
-    return sliceView(payload.edges, slice, payload.edgeCount);
+const GCUseIndex &GCGraph::uses() const {
+    if (GCUseIndex *known = uses_.load(std::memory_order_acquire)) {
+        return *known;
+    }
+    auto *built          = new GCUseIndex(*this);
+    GCUseIndex *expected = nullptr;
+    if (!uses_.compare_exchange_strong(
+            expected,
+            built,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        delete built; // another thread was first
+        return *expected;
+    }
+    return *built;
 }
 
-std::span<const gc_node_ref_t> GCGraph::normInputsOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    return n ? edgeSlice(n->normInputs) : std::span<const gc_node_ref_t>{};
-}
-
-std::span<const gc_node_ref_t> GCGraph::withInputsOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    return n ? edgeSlice(n->withInputs) : std::span<const gc_node_ref_t>{};
-}
-
-std::span<const gc_node_ref_t> GCGraph::ctrlInputsOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    return n ? edgeSlice(n->ctrlInputs) : std::span<const gc_node_ref_t>{};
-}
+GCGraph::~GCGraph() { delete uses_.load(std::memory_order_acquire); }
 
 std::span<const gc_node_ref_t> GCGraph::normOutputsOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    return n ? edgeSlice(n->normOutputs) : std::span<const gc_node_ref_t>{};
+    return containsNodeRef(ref) ? uses().norm(ref) : std::span<const gc_node_ref_t>();
 }
 
 std::span<const gc_node_ref_t> GCGraph::withOutputsOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    return n ? edgeSlice(n->withOutputs) : std::span<const gc_node_ref_t>{};
+    return containsNodeRef(ref) ? uses().with(ref) : std::span<const gc_node_ref_t>();
 }
 
 std::span<const gc_node_ref_t> GCGraph::ctrlOutputsOf(gc_node_ref_t ref) const {
-    const GCNode *n = node(ref);
-    return n ? edgeSlice(n->ctrlOutputs) : std::span<const gc_node_ref_t>{};
+    return containsNodeRef(ref) ? uses().ctrl(ref) : std::span<const gc_node_ref_t>();
 }
 
 std::span<const gc_node_ref_t> GCGraph::normPorts() const {
@@ -1487,7 +1510,7 @@ std::span<const GCBranchArm> GCGraph::branchArmsOf(gc_node_ref_t brchRef) const 
     if (!n || n->kind != GCNodeKind::Brch) {
         return {};
     }
-    const auto *body = n->bodyAs<GCBrchBody>();
+    const auto *body = nodeBodyAs<GCBrchBody>(brchRef);
     return branchSliceView(
         payload.branchArms,
         body->armOffset,
@@ -1501,8 +1524,7 @@ bool GCGraph::equals(
     (void)type;
     (void)deep;
     auto *otherGraph = dynamic_cast<const GCGraph *>(other);
-    return otherGraph != nullptr &&
-           otherGraph->nativePayload_.nodeBlocks == nativePayload_.nodeBlocks &&
+    return otherGraph != nullptr && otherGraph->nativePayload_.nodes == nativePayload_.nodes &&
            otherGraph->funcType_ == funcType_;
 }
 
@@ -1521,12 +1543,9 @@ camel::core::rtdata::Object *GCGraph::clone(
         staticDataType_,
         closureType_,
         outerGraph_,
-        dependencies_,
-        subGraphs_,
-        staticGraphRefs_,
-        dependencyCount_,
-        subGraphCount_,
-        staticGraphRefCount_,
+        refs_,
+        refRoles_,
+        refCount_,
         nativePayload_,
         staticArea_);
     for (size_t i = 0; i < kExtraSlotCount; ++i) {
@@ -1537,7 +1556,7 @@ camel::core::rtdata::Object *GCGraph::clone(
 
 void GCGraph::print(std::ostream &os, const camel::core::type::Type *type) const {
     (void)type;
-    os << "GCGraph(name=" << name() << ", nodeBlocks=" << nodeBlockCount() << ")";
+    os << "GCGraph(name=" << name() << ", nodes=" << nodeCount() << ")";
 }
 
 void GCGraph::updateRefs(
@@ -1567,14 +1586,8 @@ void GCGraph::updateRefs(
                 .slotIndex = camel::core::rtdata::RefTraceInfo::npos,
             }));
     };
-    for (gc_cnt_t i = 0; i < dependencyCount_; ++i) {
-        traceEdge(dependencies_[i]);
-    }
-    for (gc_cnt_t i = 0; i < subGraphCount_; ++i) {
-        traceEdge(subGraphs_[i]);
-    }
-    for (gc_cnt_t i = 0; i < staticGraphRefCount_; ++i) {
-        traceEdge(staticGraphRefs_[i]);
+    for (gc_cnt_t i = 0; i < refCount_; ++i) {
+        traceEdge(refs_[i]);
     }
 }
 

@@ -1,8 +1,9 @@
 module runtime_json
 
-import { decode } from json
+import { Json, decode } from json
 
-func main(): int sync {
-    println(decode('{bad json'))
-    return 0
+// Text that is not JSON: decode gives an error value (design principles 2.13), which reaches
+// the exit of a `main` that declares a `T!` unhandled.
+func main(): Json! sync {
+    return decode('{bad json')
 }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -91,8 +91,8 @@ struct DiagnosticInfo {
     uint32_t file = 0; // index into the model's files
     Range range;
     int severity = 1; // 1 error, 2 warning, 3 information, 4 hint
-    std::string code;       // "0x........"
-    std::string name;       // "SemanticDiag::UnresolvedReference"
+    std::string code; // "0x........"
+    std::string name; // "SemanticDiag::UnresolvedReference"
     std::string message;
     std::string suggestion;
     std::vector<std::string> notes;
@@ -187,6 +187,8 @@ struct AnalysisOptions {
     /// compiler says nothing about (the text does not compile) take their types from the
     /// declaration of the same name and place in it.
     model_ptr_t previous;
+    bool requireEntry = true;
+    std::map<std::string, std::string> sourceOverrides;
 };
 
 /// A completion candidate.
@@ -202,6 +204,9 @@ struct Completion {
         Keyword,
     };
     std::string label;
+    /// The text written when the candidate is chosen, when it differs from `label` (a member
+    /// of a namespace is shown by its full name and written by its own); empty: the label.
+    std::string insert;
     Kind kind = Kind::Variable;
     std::string detail; // the type or the signature
     std::string doc;
@@ -280,7 +285,9 @@ class SemanticModel {
     std::optional<SignatureHelp> signatureHelp(uint32_t offset) const;
     std::vector<SemanticToken> semanticTokens() const;
     /// Whether what is at `offset` can be renamed, and to `newName` when one is given.
-    RenameResult rename(uint32_t offset, const std::string &newName) const;
+    RenameResult rename(uint32_t offset, const std::string &newName, bool workspace = false) const;
+    std::vector<Location>
+    referencesTo(const std::vector<Location> &decls, bool includeDeclaration) const;
     /// The name of the top-level function around `offset`; empty outside one.
     std::string functionAround(uint32_t offset) const;
 

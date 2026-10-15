@@ -382,12 +382,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "render.runtime_json"
-desc = "Text that is not JSON, with the position in the text and its beginning."
+desc = "Text that is not JSON: decode gives an error value (design principles 2.13; it was the fault JsonDecodeFailed), with the position in the text and its beginning; unhandled at the exit of a main that declares Json!."
 kind = "snapshot"
 case = "../../../cases/compile/diag_render/runtime_json.cml"
 args = ["--error-format", "text", "${case}"]
 expect_exit = 1
-snapshot_stream = "stdout"
+snapshot_stream = "stderr"
 snapshot_compare = "text_exact"
 golden = "golden/diag_render/runtime_json.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

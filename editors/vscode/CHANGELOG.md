@@ -13,5 +13,7 @@
 - Semantic token modifiers `mutable` and `sync`, with a default style (underline, italic).
 - Debugger type `camel`: starts `camel-db --dap` (setting `camel.debugger.path`, then
   `$CAMEL_HOME/bin`, then `PATH`); launch attributes `program`, `passes`, `args`, `cwd`, `env`,
-  `stopOnEntry`, `stepBy`; breakpoints in `.cml` files; F5 debugs the current file. Not yet tried
-  in the VS Code user interface.
+  `stopOnEntry`, `stepBy`, `frames`; breakpoints in `.cml` files and on functions (by full
+  name); F5 debugs the current file. Command **Camel: Toggle Subgraph Frames** (also in the title
+  of the Call Stack view) switches between the arms of branches folded into their function's
+  frame and every subgraph as a frame. Not yet tried in the VS Code user interface.

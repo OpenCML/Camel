@@ -656,6 +656,15 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
             lastCmoLoadError_ = std::move(err);
         return mod;
     }
+    // The file of the entry module (which is registered under no module name): the entry
+    // itself, not a second copy of it. A module may import itself, to no effect (design
+    // principles 2.13), and another module may import the entry back.
+    if (mainModule_ && !mainModule_->path().empty()) {
+        std::error_code ec;
+        if (fs::equivalent(path, mainModule_->path(), ec) && !ec) {
+            return mainModule_;
+        }
+    }
     return UserDefinedModule::fromFile(moduleName, path, shared_from_this());
 }
 

@@ -1,9 +1,13 @@
 # The Debugger: Source View, Graph View and the Debug Adapter Protocol
 
-This note is the design of source-level debugging in `camel-db` (`tools/debugger`) and of its
-Debug Adapter Protocol (DAP) front end. It follows the ruling of
+This note is the design of source-level debugging in `camel-db` (`tools/debugger`), of its
+Debug Adapter Protocol (DAP) front end and of its REPL. It follows the rulings of
 [design principles](../design-principles.cn.md) 2.9: *the debugger has a source-line view and a
-graph-node view, and it steps by line and by node.* Positions and origins are those of
+graph-node view, and it steps by line and by node*; 2.11: *the arms of a branch are folded into
+the frame of their function by default, and can be shown as the real subgraphs; a line step
+follows the order of execution, and when a line did not execute because nothing used its
+result, the debugger says so*; 2.12: *the debugger shows full names, `module::path::name`, the
+module left out when that is not ambiguous.* Positions and origins are those of
 [10](10_source_mapping_and_debug_locations.md); names come from the builders' report channel of
 [32](32_semantic_query_layer.md); faults are those of [33](33_fault_isolation.md). The guide
 for users is [Debugging Camel Programs](../debugging.en.md).
@@ -71,9 +75,14 @@ Nodes of a callee belong to the callee's frame and do not make the caller leave 
 `let a = f(x) + 1` is entered once even though `f` runs in between.
 
 The arm of a branch is a graph of its own (5.4), but it is code of the function that
-branches. Its frame therefore starts on the line its function is on: a line the branch node and
-the first node of the arm share is entered once, and a line step that started in the function
-goes on in an arm that replaced the function's frame by a tail call.
+branches. With frames of functions (the default) the frame that enters a line is the
+activation of the function, whichever of its graphs runs the node: a line the branch node and
+the first node of the arm share is entered once, the lines of the arm are entered as lines of
+the function, and when the arm returns the function enters the line it goes on with (the join
+of `let r = if ... then { ... }` is on the line of the `let`, which is entered again). With
+frames of subgraphs the frame of an arm starts on the line its function is on, so a shared line
+is entered once there too, and a line step that started in the function goes on in an arm that
+replaced the function's frame by a tail call.
 
 ## 3. Breakpoints
 
@@ -103,19 +112,48 @@ in the graph before the passes, those in the graph that runs.
 | Builder | Before passes | Running | Message |
 |:--:|:--:|:--:|---|
 | none | | | No code on this line. |
-| some | none | | The code on this line is not executed: nothing depends on its result. Evaluation is driven by dependencies; to run it, use its result or put it in a sync block. |
+| some | none | | Line 7 is not executed: nothing uses the value of `y`. Evaluation is driven by dependencies; to run it, use its result or put it in a sync block. |
 | some | some | none | The code on this line is not in the graph that runs: a pass (...) removed or replaced it. |
 | | | some | verified |
 
-The second row is the sentence design principles 2.1 asks tools to be able to say.
+The second row is the sentence design principles 2.1 asks tools to be able to say. It names the
+values declared on the line that are in no graph (`let y = ...`); a line that declares none (a
+call written as a statement outside a sync block) says *nothing uses its result*. The second row
+has a variant: when the source function the line is written in has no graph that the program
+can reach, the reason is that nothing calls the function (*Line 5 is not executed: nothing
+calls `helper`.*). "Can reach" is by calls and function values only: from the entry graph, the
+graphs of FUNC nodes (`GCGraph::dependencies`) and the graphs of the function values in the
+static area (`staticGraphRefs`). Being declared is not being called: every top-level function
+is a subgraph of the root graph, so the lines of a function nothing calls are normally in the
+graph; their breakpoints are verified and say *Nothing in the program calls `helper`.*
 
-### 3.3 Node breakpoints
+**At the end of the run** (completed or failed, not terminated) the core sends a `note` for each
+line breakpoint that was never hit for one of these two reasons:
+*Breakpoint at a.cml:7 was never hit: line 7 was not executed: nothing uses the value of `y`.*
+Of any other breakpoint that was not hit nothing is said: why a node was not reached (the arm
+of a branch not taken, a call that was not made) is not known from the graph, and the debugger
+does not guess.
+
+### 3.3 Function breakpoints
+
+A function breakpoint is a name: the full name `module::path::name` of a function (the module
+left out for the entry module's own, as the graph builder names graphs), or the name without
+its module when only one module has a function of that name; otherwise it is ambiguous and the
+answer lists the full names. A generic function is named without type arguments (every
+instance) or with them (`first<int>`, one instance). The program stops at the first located
+node of every activation of the function: a call, a recursive call, each tail call of a tail
+recursion; never in an arm (an arm is part of its function's activation, 5.4). Function
+breakpoints are answered against the graph that will run, like line breakpoints, and a
+function nothing calls is found with the message *Nothing in the program calls `f`.* Over DAP
+this is `setFunctionBreakpoints`; in the REPL, `break <name>`.
+
+### 3.4 Node breakpoints
 
 A node breakpoint is an origin id (what the graph view offers when a node is clicked); the
 program stops before every node with that origin, in whichever graph it now is. This is the
 existing `gir-breakpoints` of the HTTP API, kept.
 
-### 3.4 Other breakpoints
+### 3.5 Other breakpoints
 
 Allocation breakpoints and pipeline-stage breakpoints (`DebugBreakpoint::Hit`) exist only in a
 Debug build of `libcamel`; they are unchanged and reachable over the HTTP API only.
@@ -124,6 +162,12 @@ Debug build of `libcamel`; they are unchanged and reachable over the HTTP API on
 
 All steps resume the program and stop at the first node that satisfies a predicate. `S` is the
 frame stopped in, `d` its depth, `L` its current line.
+
+A *frame* here is what the stack shows when the step starts (5.4): with frames of functions,
+the activation of a function, the frames of its arms included, and `d` counts activations; with
+frames of subgraphs, a shadow frame. So with frames of functions a line step goes through the
+arm of a branch as through any other lines of the function, and with frames of subgraphs it
+steps over the arm as over a call.
 
 **Step by node** (DAP `next`/`stepIn` with `granularity: "instruction"`): the next node the
 scheduler runs. Nodes the scheduler does nothing for (constants, ports, gates) are not stops.
@@ -134,8 +178,8 @@ in a frame F with depth(F) <= d such that F is not S, or line(N) is not L. In wo
 this frame enters another line, or until it has returned and its caller runs its next located
 node.
 
-The line reached is the next one *in execution order*, not the next one in the text.
-`DESIGN-QUESTION(line-step-order)`. Reasons:
+The line reached is the next one *in execution order*, not the next one in the text (design
+principles 2.11). Reasons:
 
 - the next line of the text may never run (nothing depends on it), may already have run, or
   may run much later; stopping "there" would mean stopping somewhere else and pretending;
@@ -158,7 +202,36 @@ depth. For stepping, the replacement is a new frame at depth `d`, so a line step
 chain of tail calls has returned to the real caller. A recursion written as tail calls is thus
 stepped like the loop it is. `DESIGN-QUESTION(step-over-tail-call)`.
 
-### 4.2 Inlined calls
+### 4.2 Lines that did not execute
+
+Design principles 2.11: when a line did not execute because nothing used its result, the
+debugger says so. It says it when a line step goes past such a line, and at the end of the run
+for a breakpoint on one (3.2); never for a line whose reason it cannot establish from the graph.
+
+"Such a line" is a line of state *not depended on* of 3.2: the graph builder made nodes for it
+(their origins exist) and none of them is in the graph before the passes nor in the one that
+runs; it is a line of the function the step is in, not of a lambda written there. A line a pass
+removed is not one (the pass may have folded it or moved it: the reason is the pass's), nor a
+line that is in the graph and has not run yet, nor the arm of a branch that was not taken.
+
+A line step (by line, over, in or out; not a node step) that stops, at its end or at a
+breakpoint, reports the lines it went past, in the order of the text:
+
+| Where the step stopped | The lines reported |
+|---|---|
+| in the frame it started in | those between the line it started on and the line it stopped on, when it went forward in the text |
+| in another frame, the frame it started in being gone | those after the line it started on, to the end of that function |
+| in the frame below the one it started in (a return, a step out) | also those between the call and the line it stopped on |
+| in a frame the step entered (a call, a tail call) | also those from the first line of the entered function to the line it stopped on |
+
+Each line is reported once per activation. The stop carries them as `skipped`:
+`[{path, line, names, text}]`, with `text` like *line 7 was not executed: nothing uses the value
+of `y`* (*nothing uses its result* when the line declares no name); the DAP adapter writes the
+texts to the debug console before the `stopped` event and puts them in `camel/stopped`, and the
+REPL prints them under the stop. A variable whose node is not in the graph says the same:
+`<not in the graph: nothing uses its value>`, or `<not in the graph: a pass removed it>`.
+
+### 4.3 Inlined calls
 
 After `std::inline` the callee's nodes are in the caller's graph and there is no frame. Nodes
 keep their origins, so the debugger knows which *function of the source* a node was written in
@@ -194,25 +267,77 @@ whose only work is the call of `main`) is shown last, without a location.
 After a tail call the caller's frame is gone; both back ends reuse it. The stack is shown as
 it is, and the frame that was entered by a tail call carries the count of frames it replaced:
 `loop (tail call, 3 frames replaced)`. No frames are invented. `DESIGN-QUESTION(tail-call-stack)`.
+With frames of functions (5.4) the count is of activations of functions: the arm that replaced
+its own function's frame is part of that function and is not counted, so the third iteration of
+`spin` in `return if n == 0 then acc else spin(n - 1, acc + n)` is
+`spin (tail call, 2 frames replaced)`; with frames of subgraphs every shadow frame counts
+(`spin (tail call, 4 frames replaced)`).
 
 ### 5.3 Inlined code
 
-See 4.2: `main [inlined code of g]`, located in `g`.
+See 4.3: `main [inlined code of g]`, located in `g` (the full name of `g`, 5.5).
 
-### 5.4 Arms and lambdas
+### 5.4 Arms and lambdas: frames of functions, or of subgraphs
 
-`if c then a else b` (and `??`, `!!`, `?->`, `match`) is a branch node and one graph per arm;
-the builder names these graphs itself (`__g_7__`), like the graphs of lambdas. A frame of such
-a graph is shown as what it is in the source: `fact [arm at line 4]`,
-`main [lambda at line 14]` (the nearest enclosing graph with a name of the source, and the first
-line of the graph's nodes). Which graphs are arms is read from the branch nodes of the running
-program (`GCGraph::branchArmsOf`).
+`if c then a else b` (and `match`, `??`, `!!`, `?->`, `&&`, `||` and narrowing, which are the
+same structure) is a branch node and one graph per arm; the builder names these graphs itself
+(`__g_7__`), like the graphs of lambdas. Which graphs are arms, and of which graphs (their
+*owners*, the graphs that hold the branch node), is read from the branch nodes of the running
+program (`GCGraph::branchArmsOf`); a graph the compiler named that is no arm is a lambda.
+
+Design principles 2.11: an arm is code of the function it is written in, so by default
+(`frames` is `functions`) its frame is part of the frame of that function. The core keeps one
+shadow frame per activation of a graph, as the schedulers run them, and groups them into
+*activations of functions*:
+
+- the frame of an arm, called by a frame of one of its owners, is part of the caller's
+  activation; so is the frame of an arm that replaced a frame of its owner by a tail call (the
+  branch was the last thing the owner did); an arm of an arm is part of the same activation;
+- every other frame starts an activation: a call of a function or of a lambda, the tail call of
+  one. A tail call that replaces the only frame of an activation replaces the activation (and
+  is counted, 5.2); one that replaces the frame of an arm whose function goes on below is shown
+  as a call by that function.
+
+The frames of an activation are adjacent on the shadow stack. Shown as one frame, they have the
+name of the function (the graph the activation started with, or the function the arm belongs
+to when the function's own frame was replaced), the position of the innermost frame, and as
+names: the parameters, the names of the function, and the names declared in the arms that are
+running (a name declared in an arm is there while the arm runs, as a block's names are); a port
+of an arm stands for the function's value of the same name and is not shown twice. When an arm
+replaced its function's frame, a name of the function the arm does not use is
+`<not held: the arm that runs replaced the function's frame and does not use it>`. The stack
+frame carries `function` (the full name) and `subgraphs` (the arms folded in); `graph` and
+`graphId` stay those of the graph that runs, which the graph view and node breakpoints use.
+
+`frames` `subgraphs` shows every shadow frame: an arm is `fact [arm at line 4]` (the nearest
+enclosing graph with a name of the source, and the first line of the graph's nodes), with
+`(tail call, 1 frame replaced)` when it replaced its function's frame, and has its own names
+only. Lambdas are frames of their own in both settings: a function value is a function.
+
+The setting is the core command `configure {frames}`, the DAP launch attribute `frames` and
+custom request `camel/setFrames` (VS Code: *Camel: Toggle Subgraph Frames*), and the REPL
+command `frames`. It changes what the next question about the stack sees, also while the
+program is stopped; a step uses the setting it started with.
 
 An arm takes the values it uses from its function as unnamed `with` ports. The debugger names
 such a port after what the caller passes there (a port of the caller, or the name bound to the
-node), so an arm shows `n`, not `port`. When the branch is the last thing a function does, the
-arm is entered by a tail call and replaces the function's frame; the frame says so
-(`fact [arm at line 4] (tail call, 1 frame replaced)`). `DESIGN-QUESTION(arm-frames)`.
+node), so an arm shows `n`, not `port`.
+
+A loop (design principles 2.10, 2.12) will be a `LOOP` node with a condition subgraph and a body
+subgraph; they are code of the function the loop is written in and fold the same way. In the
+index they will be a role of graph that folds (`GraphRole`), with the graph that holds the
+`LOOP` node as their owner, so the activations, the names and the steps need no other change.
+
+### 5.5 Full names
+
+Design principles 2.12: the debugger shows the full name `module::path::name` of everything it
+names, the module left out for the entry module's own, as the graph builder names graphs (and
+dumps and diagnostics show them): `names_lib::Config::clamp`, `util::half` for a function of a
+namespace of the entry module. That is the name of a frame, of the function an arm or a lambda
+belongs to, of the function of inlined code, of a function breakpoint, and of a captured value
+of a module (`names_lib::Config::limit`; a local captured by a lambda or passed to an arm keeps
+its local name). Evaluate (and hover) finds a captured value by its full name or by the end of
+it the source writes where it is used (`limit`, `Config::limit`).
 
 ## 6. Variables, values, faults
 
@@ -226,14 +351,17 @@ finds, in the graph of the frame, the node with that origin (or the port), and r
 The node that creates the cell of a `var` carries the origin of the declaration for this (the
 builder gave it none before).
 
-Scopes of a frame:
+Scopes of a frame (with frames of functions, of every graph of the frame, 5.4):
 
-- **Locals**: parameters (`with` parameters marked), `let` and `var` names of the function the
-  graph was built from;
-- **Captured**: names the function captured from an enclosing one (closure ports);
+- **Locals**: parameters, `let` and `var` names of the function the graph was built from;
+- **Captured**: names the function captured from an enclosing one or from a module's top level
+  (closure ports, and the `with` ports after the declared ones of a function called directly),
+  values of modules by their full names (5.5);
 - **Inlined**: names of other functions whose nodes were inlined into this graph, grouped by
   function;
-- **Nodes**: every value node of the graph by ref, kind and label: the graph view's values.
+- **Nodes**: every value node of the graph by ref, kind and label: the graph view's values
+  (with frames of functions, the nodes of an arm are prefixed with the arm, `pick [arm at line
+  20] %3 OPER ...`).
 
 ### 6.2 Values
 
@@ -255,8 +383,9 @@ Printing is cut at a fixed length. Whether a node has run is tracked by the debu
 (the slot the previous node wrote), so a slot that was never written is never dereferenced.
 
 **Evaluate** (DAP `evaluate`): a name of the selected frame, optionally followed by member
-accesses (`p.x`, `t.0`, `xs[2]`). No other expressions: evaluating one would mean building and
-running a graph in the stopped program.
+accesses (`p.x`, `t.0`, `xs[2]`); a name may be qualified (`lib::Config::limit`, 5.5). No
+other expressions: evaluating one would mean building and running a graph in the stopped
+program.
 
 All reads happen on the thread of the stopped program, while it waits in the hook: nothing
 runs concurrently with them, no collection can start, and no pointer to a Camel object is kept
@@ -370,7 +499,7 @@ are not stops.
   answered again against the graph the scheduler is given (3.1). What is lost: the name of a
   `let` bound to a call that was inlined or a value that was folded (its node is gone: the
   name shows *not in the graph*, the Nodes scope shows what exists); frames of inlined
-  functions (4.2). What `std::macro` evaluates itself (a macro call with
+  functions (4.3). What `std::macro` evaluates itself (a macro call with
   constant arguments) runs before the scheduler starts and is not stopped in; the call is a
   constant of the graph afterwards.
 - Order of evaluation under the debugger is the back end's own; the debugger never reorders.
@@ -394,10 +523,11 @@ for a worker that crashed.
 
 | Request | | Notes |
 |---|---|---|
-| `initialize` | yes | capabilities: `supportsConfigurationDoneRequest`, `supportsTerminateRequest`, `supportTerminateDebuggee`, `supportsSteppingGranularity`, `supportsExceptionInfoRequest`, `supportsEvaluateForHovers`, two `exceptionBreakpointFilters`; honours `linesStartAt1` / `columnsStartAt1` |
-| `launch` | yes | `program`, `passes` (array or string), `args` (`name=value` array, or an object), `cwd`, `env`, `stopOnEntry`, `stepBy` (`line` / `node`) |
-| `attach` | no | error response: `camel-db` starts the program itself |
+| `initialize` | yes | capabilities: `supportsConfigurationDoneRequest`, `supportsFunctionBreakpoints`, `supportsTerminateRequest`, `supportTerminateDebuggee`, `supportsSteppingGranularity`, `supportsExceptionInfoRequest`, `supportsEvaluateForHovers`, two `exceptionBreakpointFilters`; honours `linesStartAt1` / `columnsStartAt1`, and `supportsInvalidatedEvent` for `camel/setFrames` |
+| `launch` | yes | `program`, `passes` (array or string), `args` (`name=value` array, or an object), `cwd`, `env`, `stopOnEntry`, `stepBy` (`line` / `node`), `frames` (`functions` / `subgraphs`, 5.4) |
+| `attach` | no | error response: `camel-db` starts the program itself (so `frames` is a launch attribute only) |
 | `setBreakpoints` | yes | source lines; each answered `verified` or with the reason (3.2); `breakpoint` events when the answer changes after the passes |
+| `setFunctionBreakpoints` | yes | by full name, or without the module when one module has the name (3.3); answered like line breakpoints |
 | `setExceptionBreakpoints` | yes | filters `uncaught` (default), `isolated` |
 | `configurationDone` | yes | starts the program, once |
 | `threads` | yes | one thread, id 1 |
@@ -410,18 +540,20 @@ for a worker that crashed.
 | `terminate` | yes | ends the run at its next node; the process is killed after 2 s without one |
 | `disconnect` | yes | kills the worker and ends the adapter |
 | `camel/graph` | yes | custom: the graph of a frame (nodes with state and value, edges, DOT) |
-| `restart`, `setFunctionBreakpoints`, `setVariable`, `setExpression`, `stepBack`, `goto`, `completions`, `disassemble`, `readMemory`, `loadedSources`, `modules`, data and instruction breakpoints, conditions, hit counts, logpoints | no | error response `Unsupported request` (the capabilities do not announce them) |
+| `camel/setFrames` | yes | custom: `{frames}`, `"functions"` or `"subgraphs"` (5.4), at any time; then an `invalidated` event for `stacks` and `variables` when the client takes it |
+| `restart`, `setVariable`, `setExpression`, `stepBack`, `goto`, `completions`, `disassemble`, `readMemory`, `loadedSources`, `modules`, data and instruction breakpoints, conditions, hit counts, logpoints | no | error response `Unsupported request` (the capabilities do not announce them) |
 
 | Event | | Notes |
 |---|---|---|
 | `initialized` | yes | after the launch response |
-| `stopped` | yes | reasons `breakpoint` (with `hitBreakpointIds`), `step`, `pause`, `entry`, `exception` (with the diagnostic's text) |
+| `stopped` | yes | reasons `breakpoint` and `function breakpoint` (with `hitBreakpointIds`), `step`, `pause`, `entry`, `exception` (with the diagnostic's text) |
 | `continued` | yes | |
-| `output` | yes | `stdout` and `stderr` of the program; `console` for notices of the debugger |
+| `output` | yes | `stdout` and `stderr` of the program; `console` for notices of the debugger, the lines a step went past (4.2) and the breakpoints never hit (3.2) |
 | `breakpoint` | yes | reason `changed` |
 | `exited`, `terminated` | yes | in this order, after the last `output` |
-| `camel/stopped` | yes | custom, before each `stopped`: the frame with its current node |
-| `thread`, `module`, `loadedSource`, `process`, `capabilities`, `progress*`, `invalidated`, `memory` | no | |
+| `camel/stopped` | yes | custom, before each `stopped`: the frame with its current node, and `skipped` (4.2) |
+| `invalidated` | yes | after `camel/setFrames`, to a client that announced `supportsInvalidatedEvent` |
+| `thread`, `module`, `loadedSource`, `process`, `capabilities`, `progress*`, `memory` | no | |
 
 A request that cannot be served gets an error response with the reason in `message` and in
 `body.error`: unknown commands, requests before `launch`, queries while the program runs,
@@ -439,26 +571,53 @@ snippets, and registers a `DebugAdapterDescriptorFactory` that returns
 current file on F5 when there is no `launch.json`. `scripts/check-manifest.mjs` checks the
 contribution against the adapter's source (every launch attribute is one the adapter reads).
 
+### 7.4 The REPL
+
+`camel-db` without `--dap` is the gateway with its REPL (`tools/debugger/src/repl.cpp`,
+`repl_debug.cpp`). `file <path>` makes the file a task in a worker; the source-level commands go
+to the debug core of the foreground task as the gateway's `debug` command, which echoes them and
+forwards them (the debugger's product principles 2.1):
+
+| Command | Core command |
+|---|---|
+| `break <file>:<line>`, `break <line>` (of the loaded file), `break <function>` (`b`) | `setBreakpoints` (the REPL keeps the lines of each file), `setFunctionBreakpoints`; the program is compiled first so that the answer is the real one |
+| `delete` | both, emptied |
+| `run [pass ...]` (`r`), `continue` (`c`) | the gateway's `launch` and `continue` |
+| `next` (`n`), `step`, `finish`; `nexti` (`ni`), `stepi` (`si`) | `step` by line over, in, out; by node over, in |
+| `pause` | `pause` |
+| `bt` (`backtrace`, `where`), `locals [n]`, `print <name>` (`p`) | `stackTrace`, `scopes` and `variables` of frame `n` of the last `bt`, `evaluate` |
+| `frames`, `frames functions`, `frames subgraphs` | `configure {frames}`; without an argument, the setting |
+
+A command that lets the program run waits for the next stop or the end of the run, polling the
+core's events, and prints on the way what the program printed (the task's log), the
+breakpoints whose answer changed, the core's notes, and at the stop the frame and the lines the
+step went past (4.2). Ctrl+C ends the wait, not the program. The output of the REPL is meant
+for people: `test/cases/tools/debugger/cli_session.test.mjs` checks it line by line.
+
 ## 8. Design questions
 
-Each is implemented as recommended and marked in the code.
+Each is implemented as recommended and marked in the code, except those the language author
+has ruled since, which say so.
 
 1. `line-breakpoint-hits`: stop once when a frame enters the line (recommended), or once per
    node of the line.
-2. `line-step-order`: the next line in execution order (recommended), or in the text.
+2. `line-step-order`: the next line in execution order, or in the text. **Ruled** (design
+   principles 2.11): in execution order.
 3. `step-over-tail-call`: a line step over a tail call stops in the callee (recommended), or
    runs until the chain returns to the caller.
 4. `tail-call-stack`: show the stack as it is, marking replaced frames (recommended), or keep
    a shadow record of replaced callers for display.
 5. `inlined-frames`: one frame marked as inlined code, stepping by source function
    (recommended), or have `std::inline` record call sites so that virtual frames can be shown.
+   (Ruling 2.11 folds arms into the frame of their function; whether a function inlined into
+   another should then be shown as a frame of its own has not been ruled.)
 6. `parallel-debugging`: run on the sequential `std::fvm` with a notice (implemented), refuse
    to debug, or stop-the-world with one current node per worker.
-7. `arm-frames`: show the arm of a branch as the frame it is, named after its function
-   (implemented), or fold arms into the frame of their function so that the stack looks like
-   the source. Minimal example: `func fact(n: int): int { return if n <= 1 then 1 else n * fact(n - 1) }`
-   stopped in the third call shows `fact`, `fact [arm at line 1] (tail call, 1 frame replaced)`
-   twice, `main`; folded it would show `fact` three times.
+7. `arm-frames`: show the arm of a branch as the frame it is, or fold arms into the frame of
+   their function. **Ruled** (design principles 2.11): folded by default, the real subgraphs on
+   request (5.4). `func fact(n: int): int { return if n <= 1 then 1 else n * fact(n - 1) }`
+   stopped in the third call shows `fact` three times, `main`; with frames of subgraphs `fact`,
+   `fact [arm at line 1] (tail call, 1 frame replaced)` twice, `main`.
 
 ## 9. Status
 
@@ -470,22 +629,29 @@ been run since), macOS, and the VS Code user interface (the tests speak DAP to t
 |---|---|
 | Line breakpoints, with the reason when unverified; re-answered after the passes | implemented, tested on `std::fvm` and `std::nvm` |
 | Node breakpoints (HTTP API) | implemented, tested through the gateway |
+| Function breakpoints by full name (3.3) | implemented, tested on both back ends, over DAP and in the REPL |
 | Steps by line and by node: over, in, out | implemented, tested on both back ends |
+| Lines that did not execute, at steps and for breakpoints never hit (4.2) | implemented, tested on both back ends, over DAP and in the REPL |
 | Stack: calls, recursion, tail calls, arms, lambdas, generic instances | implemented; arms and tail calls tested on both back ends |
+| Frames of functions with arms folded in, or of subgraphs (5.4); the switch at launch, while stopped, in the REPL | implemented, tested on both back ends; the VS Code toggle type-checked only |
+| Full names (5.5): frames, captured values of modules, evaluate, function breakpoints | implemented, tested |
 | Variables: locals, captured, `var` cells, structured values, not evaluated, not in the graph | implemented, tested |
-| Evaluate: names with member accesses | implemented, tested |
+| Evaluate: names with member accesses, qualified names | implemented, tested |
+| REPL: breakpoints, steps, stack, variables, frames (7.4) | implemented, tested on both back ends |
 | Faults: stop with the diagnostic, isolated faults by filter | implemented, tested on both back ends |
 | DAP adapter (7.3) | implemented, tested |
 | `std::jit`, `std::prl` | run as `std::fvm` with a notice; tested |
 | After `std::inline` / `std::opt` | positions kept, breakpoints re-answered, inlined code labelled; tested for no crash and for the surviving positions |
 | Graph view over DAP (`camel/graph`) | implemented, one check; no editor front end uses it yet |
-| Web UI: line breakpoints, source view | not done: the Vue front end still offers node breakpoints and node steps only |
+| Web UI: line breakpoints, source view, a call stack | not done: the Vue front end still offers node breakpoints and node steps only, so it has no frames to fold (the HTTP API takes `configure {frames}` like the other clients) |
 | Conditional breakpoints, hit counts, logpoints, set value, restart, attach | not done |
 | Stop at an error value that reaches the exit of `main` unhandled | not done: reported as without a debugger (stderr, exit code 1) |
-| A frame per inlined call (4.2), the names of `let`s bound to inlined calls | not done: needs the inliner to record call sites |
+| A frame per inlined call (4.3), the names of `let`s bound to inlined calls | not done: needs the inliner to record call sites |
 
 **Tests** (`test/plans/feat/tools/debugger.plan.toml`, in the default set): `http_gateway` (the
-Web UI's API), `dap_session`, `dap_stepping`, `dap_faults`, `dap_protocol`. The DAP tests start
+Web UI's API), `dap_session`, `dap_stepping`, `dap_frames` (folded arms, the switch, lines that
+did not execute, full names, function breakpoints), `dap_faults`, `dap_protocol`, and
+`cli_session` (the REPL, through its standard input). The DAP tests start
 `camel-db --dap` and speak the protocol on its pipes (`test/tools/debugger/client.mjs`); every
 wait is on an event or a response with a 60 s limit, none on time, and each process a test
 starts is ended by `disconnect` and then by its pid. `test/tools/debugger/dap_session.mjs` runs

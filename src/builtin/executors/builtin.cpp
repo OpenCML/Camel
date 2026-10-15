@@ -86,6 +86,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"var/new", __builtin__var_new__},
         {"var/get", __builtin__var_get__},
         {"var/peek", __builtin__var_peek__},
+        // `xs = xs->sort` as a statement (Builder::inPlaceRebindingOf); with :op/assn_owned
+        // below, not groups a program can name.
+        {"var/take", __builtin__var_take__},
 
         // ops
         {"op/assn_i", __builtin__assn__},
@@ -97,6 +100,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/assn", __builtin__assn__},
         // `acc = acc->append<v>` as a statement; not a group a program can name.
         {"op/assn_append", __builtin__assn_append__},
+        {"op/assn_owned", __builtin__assn_owned__},
 
         {"op/assn_add_i", __builtin__assn_add_i__},
         {"op/assn_add_l", __builtin__assn_add_l__},
@@ -360,6 +364,7 @@ void registerBuiltinOperatorTraits() {
     registry.set(":var/new", {.stateOnly = true});
     registry.set(":var/get", {.stateOnly = true});
     registry.set(":var/peek", {.stateOnly = true});
+    registry.set(":var/take", {.stateOnly = true});
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}

@@ -607,16 +607,16 @@ GCGraph *bindEntryArguments(
         const size_t k    = isWith ? i : i - withCount;
         const bool known  =
             funcType && (isWith ? k < funcType->withTypesCount() : k < funcType->normTypesCount());
-        formals.push_back(
-            Formal{
-                .name   = portNameOf(root, i),
-                .port   = isWith ? root->withPorts()[k] : root->normPorts()[k],
-                .isWith = isWith,
-                .isVar  = known && (isWith ? funcType->withIsVarAt(k) : funcType->normIsVarAt(k)),
-                .type   = known ? (isWith ? funcType->withTypeAt(k) : funcType->normTypeAt(k))
-                                : root->node(isWith ? root->withPorts()[k] : root->normPorts()[k])
-                                      ->dataType,
-            });
+        formals.push_back(Formal{
+            .name   = portNameOf(root, i),
+            .port   = isWith ? root->withPorts()[k] : root->normPorts()[k],
+            .isWith = isWith,
+            .isVar  = known && (isWith ? funcType->withIsVarAt(k) : funcType->normIsVarAt(k)),
+            .type =
+                known
+                    ? (isWith ? funcType->withTypeAt(k) : funcType->normTypeAt(k))
+                    : root->node(isWith ? root->withPorts()[k] : root->normPorts()[k])->dataType(),
+        });
     }
     std::string known;
     for (const Formal &formal : formals) {

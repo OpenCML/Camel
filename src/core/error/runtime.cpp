@@ -266,7 +266,6 @@ bool isIsolatableFault(RuntimeDiag diag) {
     // A library operator that is not declared `T!` failed.
     case RuntimeDiag::FileOpenFailed:
     case RuntimeDiag::FileSystemError:
-    case RuntimeDiag::JsonDecodeFailed:
     case RuntimeDiag::JsonEncodeUnsupported:
     case RuntimeDiag::RegexInvalid:
     case RuntimeDiag::TimeFormatFailed:

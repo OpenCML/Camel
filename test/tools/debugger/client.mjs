@@ -1,4 +1,5 @@
-// Test drivers for camel-db: its HTTP API (the gateway and its workers) and its debug adapter.
+// Test drivers for camel-db: its HTTP API (the gateway and its workers), its debug adapter, and
+// its REPL.
 //
 // No dependencies: the tests run with the Node that runs the test runner. A test file is a
 // script of its own:
@@ -6,7 +7,8 @@
 //     import { runTest, check, Gateway, DapClient } from '../../../tools/debugger/client.mjs'
 //     await runTest(async (t) => {
 //         const dap = await t.dap()            // a debug adapter (camel-db --dap), or
-//         const gw = await t.gateway()         // a gateway with its HTTP API
+//         const gw = await t.gateway()         // a gateway with its HTTP API, or
+//         const repl = await t.repl()          // the REPL (camel-db, commands on stdin)
 //         check(cond, 'what was expected')
 //     })
 //
@@ -454,6 +456,59 @@ export class DapClient {
     }
 }
 
+/**
+ * The REPL of camel-db, as a user types to it: one command per line on its standard input.
+ * The REPL prints its prompt `(camel-db) ` when it is ready for the next line (and echoes the
+ * commands it executes after the prompt, on lines of their own), so the answer to a command is
+ * what it printed until the output ends with a prompt again.
+ */
+export class ReplClient {
+    static PROMPT = '(camel-db) '
+
+    static async start(options = {}) {
+        const repl = new ReplClient()
+        repl.output = ''
+        repl.proc = spawn(debuggerPath(), options.args || [], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env, ...(options.env || {}) },
+            cwd: options.cwd,
+        })
+        repl.proc.stdout.on('data', (d) => (repl.output += d))
+        repl.proc.stderr.on('data', (d) => (repl.output += d))
+        repl.proc.stdin.on('error', () => {})
+        repl.exited = new Promise((resolve) => repl.proc.on('exit', (code, signal) => resolve({ code, signal })))
+        if (!(await until(() => repl.output.endsWith(ReplClient.PROMPT), WAIT_MS))) {
+            throw new Error(`the REPL did not start: ${repl.output}`)
+        }
+        return repl
+    }
+
+    /** Sends one line; resolves with what the REPL printed in answer (null when it did not
+     *  come back to its prompt in time). */
+    async command(line, timeoutMs = WAIT_MS) {
+        const start = this.output.length
+        this.proc.stdin.write(`${line}\n`)
+        const done = await until(
+            () => this.output.length > start && this.output.endsWith(ReplClient.PROMPT),
+            timeoutMs,
+        )
+        return done ? this.output.slice(start, this.output.length - ReplClient.PROMPT.length) : null
+    }
+
+    /** Ends the REPL with `quit`; resolves with how the process ended. */
+    async quit() {
+        this.proc.stdin.write('quit\n')
+        return Promise.race([this.exited, sleep(WAIT_MS).then(() => null)])
+    }
+
+    async stop() {
+        if (this.proc.exitCode === null && this.proc.signalCode === null) {
+            this.proc.kill('SIGKILL')
+            await this.exited
+        }
+    }
+}
+
 /** Runs `body`, cleans up what it started, prints the verdict and exits. */
 export async function runTest(body) {
     const started = []
@@ -463,6 +518,12 @@ export async function runTest(body) {
             const gw = await Gateway.start(options)
             started.push(gw)
             return gw
+        },
+        /** The REPL, at its first prompt. */
+        async repl(options) {
+            const repl = await ReplClient.start(options)
+            started.push(repl)
+            return repl
         },
         /** A debug adapter, not yet initialised. */
         async dap(options) {

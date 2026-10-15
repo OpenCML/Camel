@@ -1,13 +1,14 @@
 /**
  * A Json computed by `std::macro` becomes a constant in the static area of `main`; the
  * collector traces it there like any other object (docs/design/any-typing, t16: as an `any`
- * constant it was skipped, and forced collection printed wrong values or crashed).
+ * constant it was skipped, and forced collection printed wrong values or crashed). decode
+ * gives a `Json!` (design principles 2.13): the constant is that value.
  */
 module json_gc_macro
 
 import { Json, decode, get, as_string, as_array } from json
 
-macro func table(): Json {
+macro func table(): Json! {
     return decode('{"rows": ["r0", "r1", "r2"], "name": "t"}')
 }
 
@@ -15,10 +16,14 @@ func churn(n: int): int {
     return len(range(0, n)->map<(i: int): string => 'item-' + string(i)>)
 }
 
-func main(n: int): int sync {
-    let t = table()
+func show(t: Json, n: int): int sync {
     let c = churn(n)
     let rows = (t->get<'rows'>->as_array ?? [])->map<(x: Json): string => x->as_string ?? '?'>
     println(c, rows, t->get<'name'>->as_string ?? '?')
     return 0
+}
+
+func main(n: int): int sync {
+    let t = table()
+    return t ?-> ((j: Json): int => show(j, n)) !! 1
 }

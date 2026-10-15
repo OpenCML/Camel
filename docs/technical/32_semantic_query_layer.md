@@ -145,10 +145,21 @@ a request cancelled while it waited is not computed.
 
 ## 6. Limits and open points
 
-- **Imported modules are read from disk**, not from the editor's unsaved text.
-- **References are those of one compilation**: the entry file and what it imports. Who
-  imports a file is not known, which is why exported names cannot be renamed and why
-  references asked from a library file miss its users.
+- **Workspace snapshots** overlay open editor text on imported modules. Open/change/close,
+  save and watched-file events invalidate cached models and request a diagnostic refresh.
+  Pull-diagnostic clients compile on demand; push clients retain idle analysis. Ordinary
+  CLI compilation still requires an entry function; editor analysis does not.
+- **Workspace references and exported-function rename** scan sources under workspace roots,
+  including unopened files, matching canonical declaration locations across compilations.
+  Rename validates all affected sources with a shared rewritten snapshot before returning
+  versioned edits. Aliases, conflicts and unsupported exported declarations are refused.
+  There is no incremental dependency index; scans are bounded at 5000 sources and fail
+  explicitly above that limit. Cancellation is checked between compilations, not within one.
+- **Reading features** include scope/comment folding, token/scope selection ranges, explicit
+  named annotation type navigation, inferred local type hints and unambiguous literal argument
+  names. Call hierarchy uses resolved callee references, not guessed indirect runtime calls.
+  Quick fixes only replace a unique one-character unresolved name and must compile successfully.
+  File moves invalidate analysis but do not rewrite imports.
 - **Fields** are found by receiver type text, not by a declaration: a struct type has no
   identity beyond its fields. Rename of fields is refused.
 - **Type references** are resolved by scope only; the GCT builder reports the type an

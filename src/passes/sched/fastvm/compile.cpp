@@ -316,7 +316,7 @@ static bytecode_vec_t compileRuntimeGraph(
         switch (record->kind) {
         case camel::runtime::GCNodeKind::Cast: {
             requireInputCount("CAST", runtimeNodeIndex, "norm", normOps.size(), 1);
-            Type *targetType = record->dataType;
+            Type *targetType = record->dataType();
             BytecodeExtra extra;
             extra.pType = targetType;
             appendBytecode(
@@ -345,7 +345,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 normOps,
                 withOps,
                 true,
-                {.pType = record->dataType},
+                {.pType = record->dataType()},
                 2);
             *reinterpret_cast<const camel::runtime::GCFillBody **>(bc->extra2()) =
                 graph->nodeBodyAs<camel::runtime::GCFillBody>(runtimeNodeIndex);
@@ -364,13 +364,13 @@ static bytecode_vec_t compileRuntimeGraph(
 
             size_t index = 0;
 
-            switch (srcRecord->dataType->code()) {
+            switch (srcRecord->dataType()->code()) {
             case TypeCode::Tuple: {
                 ASSERT(
                     accBody->accsKind == camel::runtime::GCAccsKind::TupleIndex,
                     "ACCS tuple access must be numeric.");
                 index                 = accBody->value;
-                const auto &tupleType = tt::as_ptr<TupleType>(srcRecord->dataType);
+                const auto &tupleType = tt::as_ptr<TupleType>(srcRecord->dataType());
                 if (index >= tupleType->size()) {
                     ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(to_string(index));
                     index = 0;
@@ -384,7 +384,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 const std::string_view keyView = accBody->key();
                 const std::string key(keyView.data(), keyView.size());
                 const auto *structType =
-                    tt::as_ptr<camel::core::type::StructType>(srcRecord->dataType);
+                    tt::as_ptr<camel::core::type::StructType>(srcRecord->dataType());
                 const auto &optIndex = structType->findField(key);
                 if (!optIndex.has_value()) {
                     ctx->rtmDiags()->of(SemanticDiag::InvalidAccessIndex).commit(key);
@@ -457,7 +457,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 normOps,
                 withOps,
                 true,
-                {.pType = record->dataType});
+                {.pType = record->dataType()});
 
             break;
         }

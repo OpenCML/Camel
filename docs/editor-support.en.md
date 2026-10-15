@@ -77,13 +77,13 @@ See [`editors/vscode/README.md`](../editors/vscode/README.md) for details.
 | Diagnostics (push) | `textDocument/publishDiagnostics` | Implemented. Published when a document is opened or changed, for clients that do not announce pull diagnostics (pushing to a client that pulls would show every problem twice); `initializationOptions.diagnostics` = `"push"`, `"pull"` or `"both"` overrides. |
 | Diagnostics (pull) | `textDocument/diagnostic` | Implemented. Code, catalog name, suggestion and notes in `data`, secondary locations as `relatedInformation`. |
 | Incremental sync | `textDocument/didChange` (incremental) | Implemented (range edits, UTF-16 positions). |
-| Hover | `textDocument/hover` | Implemented: declaration as written, types in source spelling, comment lines above a declaration, instances of a generic function and the instance or overload a call resolved to, fields, literals, library signatures, the `--explain` entry of a diagnostic under the cursor. |
+| Hover | `textDocument/hover` | Implemented: declaration as written, types in source spelling, comment lines above a declaration, instances of a generic function and the instance or overload a call resolved to, fields, literals, library signatures, the `--explain` entry of a diagnostic under the cursor. A member of a namespace is shown by its full name, `func Tools::inc(x: int): int` (design principles 2.13); so are the outline and completion. |
 | Go to definition | `textDocument/definition` | Implemented: locals, parameters, functions (the overload a call chose), type aliases, type variables, imported names across files. Not for library functions implemented in C++. |
 | Find references | `textDocument/references` | Implemented within one program: the open file and the modules it imports. |
 | Document highlight | `textDocument/documentHighlight` | Implemented. |
 | Document symbols | `textDocument/documentSymbol` | Implemented (hierarchical; works on files with syntax errors). |
 | Workspace symbols | `workspace/symbol` | Implemented: open documents and the `.cml` files under the workspace folders, parsed, not compiled. |
-| Completion | `textDocument/completion` | Implemented: names in scope, fields after `.`, module members after `::`, keywords, built-in and library functions with signatures; also while the text does not parse. |
+| Completion | `textDocument/completion` | Implemented: names in scope, fields after `.`, module members after `::`, keywords, built-in and library functions with signatures; also while the text does not parse. A namespace member is labelled with its full name (`Tools::inc`) and inserts the part that is written there (`inc`). |
 | Signature help | `textDocument/signatureHelp` | Implemented for functions called by name; not for `f<...>(` and not for function values without a declared type. |
 | Rename | `textDocument/rename` | Implemented with `prepareRename`; refused, with the reason, whenever a reference could be missed (see limitations). |
 | Semantic tokens | `textDocument/semanticTokens/full` | Implemented (`full`). |

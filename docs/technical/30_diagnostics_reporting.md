@@ -126,7 +126,8 @@ executing. The catch-all `RuntimeDiag::RuntimeError` says only "An error has occ
 the built-in operators and the modules `fs`, `json`, `re`, `time`, `math` (and single sites of
 `os`, `random`, `crypto`, `algo`, `statistics`) now raise codes of their own with the values
 involved (`InvalidNumberText`, `FormatFailed`, `OperandTypeUnsupported`, `FieldNotFound`,
-`InvalidArgument`, `FileOpenFailed`, `FileSystemError`, `JsonDecodeFailed`,
+`InvalidArgument`, `FileOpenFailed`, `FileSystemError`, `JsonDecodeFailed` (retired: `json.decode`
+returns an error value since design principles 2.13),
 `JsonEncodeUnsupported`, `RegexInvalid`, `TimeFormatFailed`, `OperatorNotImplemented`).
 
 Only the code and the message of a fault changed. What is a fault and what is an error value is

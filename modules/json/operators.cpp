@@ -13,11 +13,12 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 #include <nlohmann/json.hpp>
 
+#include <format>
 #include <optional>
 
 #include "camel/core/context/context.h"
@@ -45,6 +46,7 @@ using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 using camel::json::isJsonType;
+using camel::json::JsonType;
 using camel::json::JsonValue;
 
 namespace {
@@ -404,12 +406,14 @@ slot_t __json_encode__(ArgsView &, ArgsView &norm, Context &ctx) {
     return toSlot(String::from(out, mm::autoSpace()));
 }
 
-slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
-    String *str = norm.get<String *>(0);
-    if (!str)
-        return NullSlot;
+// decode(text): a `Json!`. Text that is not JSON is an error value `JsonParseError`, not a
+// fault (design principles 2.13): decoding is an operation declared to fail, like parse_int.
+slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &) {
+    static const TupleType *result = TupleType::fallible(JsonType::get());
+    String *str                    = norm.get<String *>(0);
+    const std::string_view text    = str ? str->view() : std::string_view();
     try {
-        return toSlot(JsonValue::fromJson(json::parse(str->c_str())));
+        return makeOk(toSlot(JsonValue::fromJson(json::parse(text.begin(), text.end()))), result);
     } catch (const json::exception &e) {
         // nlohmann's text is "[json.exception.parse_error.101] parse error at line 1, column
         // 2: ...": the bracketed id is the library's, the rest says where and what.
@@ -418,7 +422,7 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
             what = what.substr(close + 2);
         }
         // The start of the text, on one line, so that the message shows what was decoded.
-        std::string head(str->c_str());
+        std::string head(text);
         const bool cut = head.size() > 40;
         head           = head.substr(0, 40);
         for (char &c : head) {
@@ -426,7 +430,15 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &ctx) {
                 c = ' ';
             }
         }
-        throwRuntimeFault(RuntimeDiag::JsonDecodeFailed, what, head + (cut ? "..." : ""));
+        // The line and column are positions in the decoded text, not in the program.
+        return makeError(
+            "JsonParseError",
+            std::format(
+                "the text is not valid JSON ({}); the text begins: '{}{}'",
+                what,
+                head,
+                cut ? "..." : ""),
+            "<json::decode>");
     }
 }
 

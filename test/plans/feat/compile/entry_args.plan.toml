@@ -342,30 +342,38 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
-name = "entry_args.cpp_refused"
-desc = "std::cpp does not translate a main with parameters yet: a located TranslationRefused at main, with or without the values given (it was an unlocated internal error of the pass)."
+name = "entry_args.cpp_bound"
+desc = "std::cpp translates a main with parameters (design principles 2.13): values bound with --arg when it translates are constants of the program."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true", "std::cpp"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 7
-expect_diagnostic_column = 1
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: 'main' takes parameters"]
-expect_output_not_contains = ["internal error", ":?:?:"]
+expect_exit = 0
+expect_stdout_contains = ["main_(0, 3, 0.5, lit::str_hi, true)", "int main(int argc, char **argv)"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.cpp_refused_open"
-desc = "The same without values."
+name = "entry_args.cpp_open"
+desc = "Parameters left open are read by the generated program from its command line, --arg name=value as camel takes them, each by its declared type (design principles 2.13). That the program's output and reports agree with camel's is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["rt::EntryArguments args(argc, argv, {{\"n\", rt::EntryKind::Int}, {\"rate\", rt::EntryKind::Float}, {\"name\", rt::EntryKind::Text}, {\"loud\", rt::EntryKind::Bool}}", "args.integer(0), args.number(1), args.text(2), args.boolean(3)"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.cpp_struct_refused"
+desc = "A parameter of a type the command line gives camel through files (a struct) is refused by std::cpp, located at main and naming the parameter."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/struct_scalars.cml"
+args = ["-E", "short", "${case}", "std::cpp"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 7
-expect_output_contains = ["Translation pass 'std::cpp' refused the graph: 'main' takes parameters"]
+expect_output_contains = ["RuntimeDiag::TranslationRefused", ".cml:5:1:", "the parameter 'p' of 'main' has type", "std::cpp reads from the command line only the parameters of type int, i32, float, f32, bool and string"]
 expect_output_not_contains = ["internal error", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+

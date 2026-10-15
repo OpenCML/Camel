@@ -1,0 +1,80 @@
+id = "modules.tiles"
+order = 367
+tier = "feat"
+tags = ["feat", "modules", "tiles"]
+
+[[tests]]
+name = "plan"
+kind = "behavior"
+case = "../../../cases/modules/tiles/plan.cml"
+args = ["${case}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const p = JSON.parse(input.stdout)
+assert(p.schema === 1 && p.kernels === 1, 'expected one fused kernel')
+assert(p.values === 4 && p.materialized_values === 2, 'unexpected fusion boundary')
+assert(p.logical_bytes === 48 && p.allocated_bytes === 24, 'unexpected memory plan')
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "plan_validation"
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/tiles/plan_check.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["tiles plan validation: 33 rejected mutations"]
+timeout_ms = 10000
+
+[[tests]]
+name = "source"
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+kind = "behavior"
+case = "../../../cases/modules/tiles/source.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["extern \"C\" __global__", "i<3ULL", "v[2][i]=a+b"]
+timeout_ms = 10000
+
+[[tests]]
+name = "reject_effect"
+kind = "negative"
+case = "../../../cases/modules/tiles/reject_effect.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["unsupported or effectful operator ':io/println'"]
+verify_script = """
+({ input, assert }) => {
+assert(!input.stdout.includes('BODY MUST NOT EXECUTE'), 'compilation executed an effect')
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "selected_branch_effect"
+kind = "negative"
+case = "../../../cases/modules/tiles/branch_effect.cml"
+args = ["${case}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["unsupported or effectful operator ':io/println'"]
+verify_script = """
+({ input, assert }) => {
+assert(!input.stdout.includes('effect must not run'), 'specialization executed a selected effect')
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "empty_mean"
+kind = "negative"
+case = "../../../cases/modules/tiles/empty_mean.cml"
+args = ["${case}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["mean of empty tensor"]
+timeout_ms = 10000

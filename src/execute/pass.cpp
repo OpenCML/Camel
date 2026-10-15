@@ -331,7 +331,6 @@ PassScopePtr initPassScope() {
                          {
                              {"module", def(PASS(CppModuleDumpPass))},
                              {"inspect", def(PASS(CppInspectDumpPass))},
-                             {"bench", def(PASS(CppBenchDumpPass))},
                          })},
                     {"topo_node_seq", def(PASS(TopoNodeSeqDumpPass))},
                     {"gc",
@@ -436,7 +435,6 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::cxx", "std::cpp"},
     {"std::cppmod", "std::cpp::module"},
     {"std::cppinspect", "std::cpp::inspect"},
-    {"std::cppbench", "std::cpp::bench"},
     {"std::tns", "std::topo_node_seq"},
     {"std::gcsnap", "std::gc::snapshot"},
     {"std::gcverify", "std::gc::verify"},

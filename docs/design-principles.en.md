@@ -449,6 +449,7 @@ At present all complicated type computation is implemented directly by operators
 
   Dimensions allow addition and multiplication by a constant (linear forms, whose equality is decidable); other results are unknown. Where an argument's dimension is unknown (`?`), compilation lets it pass and the call checks it at run time (as `as` does). Named dimensions are only checked; they create no instances: a function still has one graph.
 
+- **The reserved `T ? U` is retired**: a value that may fail is written `T!` only, and error values have one type (told apart by their Kind). Should typed errors be needed later, they come as `T ! E` once `enum` exists. The special reading of `T ?` followed by a type goes with it: `?` is only the nullable mark.
 - **`std::cpp`**: the fault reports of generated programs are byte-identical to the interpreter's; recursion is counted exactly (as on every back end); the extra blank line of `println<fmt>` and the extra line feed of `print<fmt>` are defects of the interpreter and are fixed there; `std::cpp::bench` is removed; `map`/`filter` run sequentially in generated programs for now; `main` takes its parameters as `--arg name=value`, as the command line does.
 
 ---
@@ -501,7 +502,6 @@ All of the following are misreadings that have actually happened; check against 
 
 When you meet one of the following, ask the language author:
 
-- The type notation for "may fail": 2.9 decides on `T!`; the grammar also has an earlier reserved `T ? U` (called ErrorThen in the syntax tree), and the relation between the two is to be decided.
 - The concrete content of the type-expression language: the meaning and fate of each of the reserved type operators `&`, `\`, `+`, `-`, `^` and of `typeof`, `keyof`, `ident of T`; how conditions and matching are written in type functions.
 - The meaning of `typeof` applied to a constant value, and its use in generics.
 - How failure or non-termination of the evaluation of a type function is handled.

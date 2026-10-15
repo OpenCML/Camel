@@ -26,6 +26,7 @@
 
 #include "camel/standalone/array.h"
 #include "camel/standalone/core.h"
+#include "camel/standalone/entry.h"
 #include "camel/standalone/fn.h"
 #include "camel/standalone/format.h"
 #include "camel/standalone/hof.h"

@@ -1,0 +1,7 @@
+import geo
+
+func main(): int sync {
+    let s = geo::Geo::p(1, 2) + geo::Geo::p(10, 20)
+    println(s.x, s.y)
+    return 0
+}

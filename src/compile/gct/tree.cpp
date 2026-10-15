@@ -76,6 +76,17 @@ void Tree::addUsings(const Node *node, const std::vector<Reference> &usings) {
     }
 }
 
+void Tree::setNamespaceOf(const Node *node, const std::vector<std::string> &path) {
+    if (!path.empty()) {
+        namespaces_[node] = path;
+    }
+}
+
+const std::vector<std::string> *Tree::namespaceOf(const Node *node) const {
+    const auto it = namespaces_.find(node);
+    return it == namespaces_.end() ? nullptr : &it->second;
+}
+
 const std::vector<Reference> *Tree::usingsOf(const Node *node) const {
     const auto it = usings_.find(node);
     return it == usings_.end() ? nullptr : &it->second;

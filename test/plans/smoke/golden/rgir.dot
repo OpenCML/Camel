@@ -7,7 +7,7 @@ digraph GraphIR {
                 label="__g_4__";
                 F03 [label="ARGS", type="ARGS"];
                 O03 [label="EXIT", type="EXIT"];
-                N00 [label="PORT", type="PORT"];
+                N00 [label="n", type="PORT", param_name="n", param_kind="capture", param_index="0", value_type="int"];
                 F03 -> N00 [label="0", type="WITH_PORT"];
                 N00 -> O03 [label="0", type="EXIT"];
             }
@@ -15,7 +15,7 @@ digraph GraphIR {
                 label="__g_6__";
                 F04 [label="ARGS", type="ARGS"];
                 O04 [label="EXIT", type="EXIT"];
-                N01 [label="PORT", type="PORT"];
+                N01 [label="n", type="PORT", param_name="n", param_kind="capture", param_index="0", value_type="int"];
                 N02 [label="1", type="DATA", origin=236, span="8:41-8:42", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml"];
                 N03 [label=":op/sub_l", type="OPER", origin=237, span="8:39-8:40", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml"];
                 N04 [label="fib", type="FUNC", origin=238, span="8:36-8:43", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml"];
@@ -36,7 +36,7 @@ digraph GraphIR {
             }
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N09 [label="n", type="PORT"];
+            N09 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int"];
             N0A [label="1", type="DATA", origin=227, span="8:19-8:20", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml"];
             N0B [label=":op/le_l", type="OPER", origin=228, span="8:16-8:18", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml"];
             N0C [label="JOIN", type="JOIN", origin=230, span="8:11-8:56", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml"];

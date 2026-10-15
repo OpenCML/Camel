@@ -1,8 +1,8 @@
 /**
  * A function too large for one runtime graph once every call in it is inlined: `f13` calls
  * `f12` twice, which calls `f11` twice, and so on down to `f0`, about 2^13 copies of each of
- * three operators. A graph addresses its edge table with 16 bits (65535 entries, two per
- * edge), and the export inlines everything (ONNX has no calls). onnx::export refuses at the
+ * three operators. A graph addresses its edges with 16 bits (65535 of them), and the export
+ * inlines everything (ONNX has no calls). onnx::export refuses at the
  * export_model call (line 72) and names the graph, the quantity, the size reached and the
  * limit; it used to stop with the unlocated internal error "Draft runtime edge arena size
  * exceeds the target integral width".

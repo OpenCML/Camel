@@ -1,0 +1,22 @@
+module tiles_scalar_arithmetic
+import { Tensor, reshape, sum, abs } from tensor
+import { value_and_grad } from autodiff
+import { run, run_device, upload, download, inspect, benchmark } from tiles
+func loss(x: Tensor<f32>): float { return -(sum(x * x) + sum(x) * 2.0 - 1.0) / 3.0 }
+func arithmetic(a: float, b: float): float { return (a + b) * 2.0 - a / b }
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(run<loss>(x) - loss(x))
+    let vg = value_and_grad(loss)
+    let cpu = vg(x)
+    let gpu = run_device<vg>(upload(x))
+    println(download(gpu.0) - cpu.0)
+    println(sum(abs(download(gpu.1) - cpu.1)))
+    let a = upload(16777217.0)
+    let b = upload(2.0)
+    println(run<arithmetic>((a, b)) - arithmetic(16777217.0, 2.0))
+    println(download(run_device<arithmetic>((a, b))) - arithmetic(16777217.0, 2.0))
+    println(inspect<arithmetic>((a, b)))
+    println(benchmark<arithmetic>((a, b)))
+    return 0
+}

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -33,6 +33,7 @@
 #include "camel/parse/syntax/token.h"
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <set>
 #include <sstream>
@@ -105,7 +106,7 @@ uint32_t LineIndex::offsetOfUtf16(uint32_t line, uint32_t character) const {
         if (units + width > character) {
             break; // inside a surrogate pair: the position before it
         }
-        units  += width;
+        units += width;
         offset += length;
     }
     return offset;
@@ -124,8 +125,8 @@ uint32_t LineIndex::offsetOfCodePoint(uint32_t line, uint32_t character) const {
 }
 
 LineIndex::Position LineIndex::utf16PositionOf(uint32_t offset) const {
-    offset  = std::min<uint32_t>(offset, static_cast<uint32_t>(text_.size()));
-    auto it = std::upper_bound(lineStarts_.begin(), lineStarts_.end(), offset);
+    offset              = std::min<uint32_t>(offset, static_cast<uint32_t>(text_.size()));
+    auto it             = std::upper_bound(lineStarts_.begin(), lineStarts_.end(), offset);
     const uint32_t line = static_cast<uint32_t>(it - lineStarts_.begin()) - 1;
     uint32_t units      = 0;
     uint32_t at         = lineStarts_[line];
@@ -135,7 +136,7 @@ LineIndex::Position LineIndex::utf16PositionOf(uint32_t offset) const {
             break; // an offset inside a sequence: the position of its start
         }
         units += length == 4 ? 2 : 1;
-        at    += length;
+        at += length;
     }
     return Position{line, units};
 }
@@ -168,8 +169,8 @@ bool isKeywordToken(uint16_t type) {
 }
 
 const std::vector<std::string> &builtinTypeNames() {
-    static const std::vector<std::string> names = {
-        "int", "float", "bool", "string", "void", "i32", "i64", "f32", "f64", "Map", "Set"};
+    static const std::vector<std::string> names =
+        {"int", "float", "bool", "string", "void", "i32", "i64", "f32", "f64", "Map", "Set"};
     return names;
 }
 
@@ -215,12 +216,8 @@ const std::vector<std::string> &semanticTokenTypes() {
 }
 
 const std::vector<std::string> &semanticTokenModifiers() {
-    static const std::vector<std::string> modifiers = {
-        "declaration",
-        "readonly",
-        "mutable",
-        "sync",
-        "defaultLibrary"};
+    static const std::vector<std::string> modifiers =
+        {"declaration", "readonly", "mutable", "sync", "defaultLibrary"};
     return modifiers;
 }
 
@@ -241,7 +238,7 @@ struct SemanticModel::Target {
     int32_t ref    = -1;
     size_t segment = 0;
     /// The declaration under the cursor (index into the main file's decls).
-    int32_t decl = -1;
+    int32_t decl         = -1;
     const Member *member = nullptr;
 };
 
@@ -346,11 +343,8 @@ SemanticModel::resolvedTargets(uint32_t file, size_t refIndex, size_t segment) c
         return canonical(facts.targets);
     }
     if (ref.path.size() == 1) {
-        for (uint32_t id : fm.syntax.lookup(
-                 ref.scope,
-                 ref.name(),
-                 ref.range.start,
-                 ref.kind == RefKind::Type)) {
+        for (uint32_t id :
+             fm.syntax.lookup(ref.scope, ref.name(), ref.range.start, ref.kind == RefKind::Type)) {
             addDecl(id);
         }
     } else if (ref.target >= 0) {
@@ -393,7 +387,7 @@ SemanticModel::Target SemanticModel::targetAt(uint32_t offset) const {
                 if (facts.isOperator) {
                     target.kind               = Target::Kind::External;
                     target.operatorSignatures = facts.operatorSignatures;
-                    target.external           = ref.path.size() == 1 ? external(ref.name()) : nullptr;
+                    target.external = ref.path.size() == 1 ? external(ref.name()) : nullptr;
                     return target;
                 }
                 // A name of the built-in module or of an imported namespace.
@@ -571,7 +565,8 @@ std::optional<uint32_t> SemanticModel::typeOfChain(uint32_t end) const {
         }
         break;
     }
-    if (at > 0 && (file.text[at - 1] == ':' || file.text[at - 1] == ')' || file.text[at - 1] == ']')) {
+    if (at > 0 &&
+        (file.text[at - 1] == ':' || file.text[at - 1] == ')' || file.text[at - 1] == ']')) {
         return std::nullopt; // a path or a call result: not a plain chain of names
     }
     const auto decls = file.syntax.lookup(file.syntax.scopeAt(at), names.front(), at, false);
@@ -618,16 +613,34 @@ std::string SemanticModel::declType(uint32_t file, uint32_t decl) const {
     return {};
 }
 
+namespace {
+/// `header`, the text of the declaration `d`, with the name it declares written in full
+/// (`func Tools::inc(x: int): int`): a member of a namespace is shown by its full name (design
+/// principles 2.13). The name is the first occurrence of it after the keyword.
+std::string withShownName(const Decl &d, const char *keyword) {
+    if (d.qualified.empty()) {
+        return d.header;
+    }
+    const size_t key = d.header.find(keyword);
+    const size_t at =
+        d.header.find(d.name, key == std::string::npos ? 0 : key + std::strlen(keyword));
+    if (at == std::string::npos) {
+        return d.header;
+    }
+    return d.header.substr(0, at) + d.qualified + d.header.substr(at + d.name.size());
+}
+} // namespace
+
 std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
     const Decl &d          = files_[file].syntax.decls[decl];
     const DeclFacts &facts = files_[file].declFacts[decl];
     const std::string type = declType(file, decl);
     const auto typed       = [&](const std::string &prefix) {
-        return type.empty() ? prefix + d.name : prefix + d.name + ": " + type;
+        return type.empty() ? prefix + d.shownName() : prefix + d.shownName() + ": " + type;
     };
     switch (d.kind) {
     case DeclKind::Function:
-        return d.header;
+        return withShownName(d, "func ");
     case DeclKind::Parameter:
     case DeclKind::WithParameter: {
         // As written (`x: typeas T`), which says more than one instance's type.
@@ -641,7 +654,7 @@ std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
     case DeclKind::Binding:
         return typed("");
     case DeclKind::Type:
-        return d.header;
+        return withShownName(d, "type ");
     case DeclKind::TypeParameter:
         return "type parameter " + d.name;
     case DeclKind::TypeVariable:
@@ -656,7 +669,7 @@ std::string SemanticModel::declLabel(uint32_t file, uint32_t decl) const {
     case DeclKind::Module:
         return "import " + d.importedFrom;
     case DeclKind::Namespace:
-        return "namespace " + d.name;
+        return "namespace " + d.shownName();
     case DeclKind::Alias:
         return "use " + d.name;
     }
@@ -798,10 +811,11 @@ std::optional<Hover> SemanticModel::hover(uint32_t offset) const {
     if (target.ref >= 0 && file.syntax.refs[target.ref].kind == RefKind::Type) {
         for (const auto &[range, type] : file.typeExprs) {
             if (range == file.syntax.refs[target.ref].range) {
-                code("type " + file.syntax.refs[target.ref].name() +
-                     (types_[type].text == file.syntax.refs[target.ref].name()
-                          ? ""
-                          : " = " + types_[type].text));
+                code(
+                    "type " + file.syntax.refs[target.ref].name() +
+                    (types_[type].text == file.syntax.refs[target.ref].name()
+                         ? ""
+                         : " = " + types_[type].text));
                 return Hover{md.str(), target.range};
             }
         }
@@ -828,8 +842,9 @@ std::optional<Hover> SemanticModel::hover(uint32_t offset) const {
         // An operator written as an operator: the type the call resolved to.
         for (const auto &[range, type] : file.operatorCalls) {
             if (range == info.range) {
-                code("operator " + file.text.substr(range.start, range.length()) + ": " +
-                     types_[type].text);
+                code(
+                    "operator " + file.text.substr(range.start, range.length()) + ": " +
+                    types_[type].text);
                 return Hover{md.str(), info.range};
             }
         }
@@ -845,6 +860,14 @@ std::vector<Location> SemanticModel::definition(uint32_t offset) const {
     return target.decls;
 }
 
+std::vector<Location>
+SemanticModel::referencesTo(const std::vector<Location> &decls, bool includeDeclaration) const {
+    Target target;
+    target.kind  = Target::Kind::Decls;
+    target.decls = canonical(decls);
+    return occurrences(target, includeDeclaration);
+}
+
 std::vector<Location> SemanticModel::references(uint32_t offset, bool includeDeclaration) const {
     return occurrences(targetAt(offset), includeDeclaration);
 }
@@ -855,9 +878,10 @@ std::vector<std::pair<Range, bool>> SemanticModel::highlights(uint32_t offset) c
         if (loc.file != 0) {
             continue;
         }
-        out.emplace_back(loc.range, main().syntax.declAtName(loc.range.start) != nullptr &&
-                                        main().syntax.declAtName(loc.range.start)->nameRange ==
-                                            loc.range);
+        out.emplace_back(
+            loc.range,
+            main().syntax.declAtName(loc.range.start) != nullptr &&
+                main().syntax.declAtName(loc.range.start)->nameRange == loc.range);
     }
     return out;
 }
@@ -879,7 +903,7 @@ std::vector<OutlineItem> SemanticModel::outline() const {
                 continue;
             }
             OutlineItem item;
-            item.name      = decl.name;
+            item.name      = decl.shownName();
             item.kind      = decl.kind;
             item.range     = decl.fullRange;
             item.selection = decl.nameRange;
@@ -905,8 +929,7 @@ std::string SemanticModel::functionAround(uint32_t offset) const {
     std::string name;
     for (const Decl &decl : file.syntax.decls) {
         if (decl.kind == DeclKind::Function && decl.fullRange.touches(offset) &&
-            (decl.container < 0 ||
-             file.syntax.decls[decl.container].kind == DeclKind::Namespace)) {
+            (decl.container < 0 || file.syntax.decls[decl.container].kind == DeclKind::Namespace)) {
             name = decl.name;
         }
     }
@@ -960,7 +983,7 @@ Completion completionOf(const ExternalName &ext, int rank) {
     item.detail = ext.signatures.empty() ? "" : ext.signatures.front();
     if (ext.signatures.size() > 1) {
         item.detail += "  (+" + std::to_string(ext.signatures.size() - 1) + " overloads)";
-        item.doc     = joinLines(ext.signatures);
+        item.doc = joinLines(ext.signatures);
     }
     item.rank = rank;
     return item;
@@ -975,7 +998,8 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
 
     // Nothing inside a comment or a string.
     for (const TokenInfo &token : file.syntax.tokens) {
-        if (token.range.start < offset && offset < token.range.end + (token.channel == 3 ? 1u : 0u) &&
+        if (token.range.start < offset &&
+            offset < token.range.end + (token.channel == 3 ? 1u : 0u) &&
             (token.channel >= 3 || isKind(token.type, TK::String) ||
              isKind(token.type, TK::MultiStr) || isKind(token.type, TK::FString))) {
             return items;
@@ -995,7 +1019,8 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
     }
 
     // After a dot: the fields of the value before it.
-    if (before > 0 && file.text[before - 1] == '.' && (before < 2 || file.text[before - 2] != '.')) {
+    if (before > 0 && file.text[before - 1] == '.' &&
+        (before < 2 || file.text[before - 2] != '.')) {
         uint32_t end = before - 1;
         while (end > 0 && (file.text[end - 1] == ' ' || file.text[end - 1] == '\t' ||
                            file.text[end - 1] == '\n' || file.text[end - 1] == '\r')) {
@@ -1067,8 +1092,10 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
             file.syntax.decls[current].bodyScope >= 0) {
             for (uint32_t id : file.syntax.scopes[file.syntax.decls[current].bodyScope].decls) {
                 const Decl &decl = file.syntax.decls[id];
+                // Shown by its full name; what is written after `N::` is the rest of it.
                 Completion item;
-                item.label  = decl.name;
+                item.label  = decl.shownName();
+                item.insert = decl.name;
                 item.kind   = completionKind(decl.kind);
                 item.detail = decl.kind == DeclKind::Function ? decl.header : declType(0, id);
                 item.doc    = decl.doc;
@@ -1086,13 +1113,16 @@ std::vector<Completion> SemanticModel::completions(uint32_t offset) const {
         if (decl.nameRange.touches(offset)) {
             continue;
         }
+        // A member of a namespace is shown by its full name and written by its own name,
+        // which is in scope here (design principles 2.12, 2.13).
         Completion item;
-        item.label = decl.name;
-        item.kind  = completionKind(decl.kind);
+        item.label  = decl.shownName();
+        item.insert = decl.qualified.empty() ? std::string() : decl.name;
+        item.kind   = completionKind(decl.kind);
         if (decl.kind == DeclKind::Import) {
             const DeclFacts &facts = file.declFacts[id];
-            item.kind   = facts.importedType && !facts.importedFunction ? Completion::Kind::Type
-                                                                        : Completion::Kind::Function;
+            item.kind = facts.importedType && !facts.importedFunction ? Completion::Kind::Type
+                                                                      : Completion::Kind::Function;
             item.detail = facts.importedSignatures.empty() ? "from " + decl.importedFrom
                                                            : facts.importedSignatures.front();
         } else if (decl.kind == DeclKind::Function) {
@@ -1248,8 +1278,8 @@ std::optional<SignatureHelp> SemanticModel::signatureHelp(uint32_t offset) const
         return std::nullopt;
     }
     SignatureHelp help;
-    help.activeParameter = commas;
-    const uint32_t callAt = tokens[at].range.start;
+    help.activeParameter   = commas;
+    const uint32_t callAt  = tokens[at].range.start;
     const auto addExternal = [&](const ExternalName &ext) {
         for (const std::string &signature : ext.signatures) {
             SignatureInfo info;
@@ -1259,7 +1289,8 @@ std::optional<SignatureHelp> SemanticModel::signatureHelp(uint32_t offset) const
         }
     };
     if (path.size() == 1) {
-        const auto decls = file.syntax.lookup(file.syntax.scopeAt(callAt), path.front(), callAt, false);
+        const auto decls =
+            file.syntax.lookup(file.syntax.scopeAt(callAt), path.front(), callAt, false);
         for (uint32_t id : decls) {
             const Decl &decl = file.syntax.decls[id];
             SignatureInfo info;
@@ -1281,8 +1312,8 @@ std::optional<SignatureHelp> SemanticModel::signatureHelp(uint32_t offset) const
                     for (const Decl *param : norm) {
                         // Positional parameters come after the name.
                         const size_t nameAt = info.label.find(decl.name + "(");
-                        from                = std::max(from, nameAt == std::string::npos ? 0 : nameAt);
-                        const size_t found  = info.label.find(param->header, from);
+                        from = std::max(from, nameAt == std::string::npos ? 0 : nameAt);
+                        const size_t found = info.label.find(param->header, from);
                         if (found == std::string::npos) {
                             continue;
                         }
@@ -1457,12 +1488,12 @@ std::vector<SemanticToken> SemanticModel::semanticTokens() const {
             if (ext->kind == ExternalName::Kind::Value) {
                 put(ref.nameRange(), TVariable, MReadonly);
             } else {
-                const uint8_t type = ext->kind == ExternalName::Kind::Type
-                                         ? TType
-                                         : (ext->kind == ExternalName::Kind::Namespace
-                                                ? TNamespace
-                                                : (ext->macro || facts.macroCall ? TMacro
-                                                                                 : TFunction));
+                const uint8_t type =
+                    ext->kind == ExternalName::Kind::Type
+                        ? TType
+                        : (ext->kind == ExternalName::Kind::Namespace
+                               ? TNamespace
+                               : (ext->macro || facts.macroCall ? TMacro : TFunction));
                 put(ref.nameRange(), type, ext->module.empty() ? MDefaultLibrary : 0);
             }
         }
@@ -1504,7 +1535,8 @@ std::vector<SemanticToken> SemanticModel::semanticTokens() const {
 // Rename
 // ---------------------------------------------------------------------------------------
 
-RenameResult SemanticModel::rename(uint32_t offset, const std::string &newName) const {
+RenameResult
+SemanticModel::rename(uint32_t offset, const std::string &newName, bool workspace) const {
     RenameResult result;
     const FileModel &file = main();
     const Target target   = targetAt(offset);
@@ -1556,9 +1588,9 @@ RenameResult SemanticModel::rename(uint32_t offset, const std::string &newName) 
         }
         for (uint32_t id : file.syntax.scopes[decl->scope].decls) {
             const Decl &other = file.syntax.decls[id];
-            if (other.name == decl->name && (other.kind == DeclKind::Function) ==
-                                                (decl->kind == DeclKind::Function)) {
-                if (other.exported) {
+            if (other.name == decl->name &&
+                (other.kind == DeclKind::Function) == (decl->kind == DeclKind::Function)) {
+                if (other.exported && !workspace) {
                     return refuse(
                         "'" + target.name +
                         "' is exported: modules that import it are not known here and would break");
@@ -1575,7 +1607,7 @@ RenameResult SemanticModel::rename(uint32_t offset, const std::string &newName) 
     // Every identifier spelt like the name must be accounted for: a reference the compiler
     // resolved to these declarations, a reference it resolved elsewhere, or not a reference
     // at all (a field, a key). One the compiler did not visit could be either: refuse.
-    const bool isType = isTypeDeclKind(first.kind);
+    const bool isType           = isTypeDeclKind(first.kind);
     std::vector<Location> edits = decls;
     size_t unconfirmed          = 0;
     for (size_t i = 0; i < file.syntax.refs.size(); ++i) {
@@ -1635,18 +1667,19 @@ RenameResult SemanticModel::rename(uint32_t offset, const std::string &newName) 
             "called): they cannot be confirmed");
     }
     // Other files of the program that use the name.
-    for (uint32_t f = 1; f < files_.size(); ++f) {
+    for (uint32_t f = 1; !workspace && f < files_.size(); ++f) {
         for (size_t i = 0; i < files_[f].syntax.refs.size(); ++i) {
-            if (intersects(resolvedTargets(f, i, files_[f].syntax.refs[i].path.size() - 1), decls)) {
+            if (intersects(
+                    resolvedTargets(f, i, files_[f].syntax.refs[i].path.size() - 1),
+                    decls)) {
                 return refuse("'" + first.name + "' is used in another file: " + files_[f].path);
             }
         }
     }
 
     if (!newName.empty()) {
-        const bool identifier =
-            !(newName[0] >= '0' && newName[0] <= '9') &&
-            std::all_of(newName.begin(), newName.end(), isWordChar);
+        const bool identifier = !(newName[0] >= '0' && newName[0] <= '9') &&
+                                std::all_of(newName.begin(), newName.end(), isWordChar);
         if (!identifier) {
             return refuse("'" + newName + "' is not an identifier");
         }
@@ -1718,7 +1751,8 @@ std::string SemanticModel::dump() const {
     for (size_t i = 0; i < file.syntax.refs.size(); ++i) {
         const Ref &ref        = file.syntax.refs[i];
         const RefFacts &facts = file.refFacts[i];
-        os << "  " << at(0, ref.range) << " " << file.text.substr(ref.range.start, ref.range.length())
+        os << "  " << at(0, ref.range) << " "
+           << file.text.substr(ref.range.start, ref.range.length())
            << (ref.kind == RefKind::Type ? " (type)" : "") << (ref.callee ? " (callee)" : "");
         os << (facts.resolved ? " compiler" : " scope");
         for (const Location &loc : resolvedTargets(0, i, ref.path.size() - 1)) {

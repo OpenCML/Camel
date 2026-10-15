@@ -14,9 +14,11 @@ add_executable(camel-debugger
     src/run.cpp
     src/worker.cpp
     src/repl.cpp
+    src/repl_debug.cpp
     src/command/dispatcher.cpp
     src/command/commands.cpp
     src/core/debug_core.cpp
+    src/core/frames.cpp
     src/core/program_index.cpp
     src/core/values.cpp
     src/dap/adapter.cpp

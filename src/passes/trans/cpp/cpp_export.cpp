@@ -29,35 +29,12 @@ using camel::passes::cpp::CppEmitMode;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 
-/// Whether the entry function takes parameters: the entry graph has ports of its own, or
-/// (their values were bound) it calls the entry function with arguments. A `main` that only
-/// captures is called through a closure (FILL), which the emitter handles.
-bool entryTakesParameters(const GCGraph *root) {
-    if (!root->withPorts().empty() || !root->normPorts().empty()) {
-        return true;
-    }
-    const auto callRef = root->returnNodeRef();
-    const auto *call   = root->node(callRef);
-    if (!call || call->kind != GCNodeKind::Call) {
-        return false;
-    }
-    const auto with = root->withInputsOf(callRef);
-    if (with.empty()) {
-        return false;
-    }
-    const auto *callee = root->node(with.front());
-    return callee && callee->kind != GCNodeKind::Fill &&
-           (with.size() > 1 || !root->normInputsOf(callRef).empty());
-}
-
 const char *passName(CppEmitMode mode) {
     switch (mode) {
     case CppEmitMode::Module:
         return "std::cpp::module";
     case CppEmitMode::Inspect:
         return "std::cpp::inspect";
-    case CppEmitMode::Bench:
-        return "std::cpp::bench";
     default:
         return "std::cpp";
     }
@@ -67,23 +44,6 @@ const char *passName(CppEmitMode mode) {
 
 camel::runtime::GCGraph *CppDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     ASSERT(graph != nullptr, "C++ dump requires a non-null runtime root graph.");
-
-    // Where the arguments of a Camel `main` with parameters come from in the C++ program is
-    // not written yet (docs/design/cpp-standalone/README.cn.md, 7.3 and question Q7).
-    if (entryTakesParameters(graph) &&
-        (mode_ == CppEmitMode::Plain || mode_ == CppEmitMode::Bench)) {
-        auto diag =
-            context_->rtmDiags()->of(camel::core::error::RuntimeDiag::TranslationRefused);
-        if (const uint64_t origin = camel::execute::entryFunctionOrigin(*context_);
-            origin != camel::source::kInvalidOriginId) {
-            diag.atOrigin(origin);
-        }
-        diag.commit(
-            passName(mode_),
-            "'main' takes parameters, and std::cpp does not translate the parameters of the "
-            "entry function yet (the C++ program it writes calls 'main' with no arguments)");
-        return nullptr;
-    }
 
     camel::passes::cpp::ProgramEmitter emitter(context_, mode_);
     try {

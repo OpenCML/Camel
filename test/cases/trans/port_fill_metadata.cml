@@ -1,0 +1,11 @@
+// Named with/normal parameters, captured values in zero-argument functions, and aggregate FILLs.
+module port_fill_metadata
+with <offset: int>
+func assemble(items: int[]): int[] {
+    let count = len(items)
+    let make = (): int[] => [offset, count]
+    let pair = (offset, count)
+    let record = { value: offset, size: count }
+    return if count > 0 then make() else [pair.0, record.size]
+}
+func main(): int[] { return assemble<3>([1, 2]) }

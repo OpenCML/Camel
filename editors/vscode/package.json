@@ -120,6 +120,15 @@
                 ],
                 "default": "line",
                 "markdownDescription": "What Step Over, Step Into and Step Out step by: `line` (the next source line that executes) or `node` (the next graph node, several of which may be on one line)."
+              },
+              "frames": {
+                "type": "string",
+                "enum": [
+                  "functions",
+                  "subgraphs"
+                ],
+                "default": "functions",
+                "markdownDescription": "How the call stack shows the arms of branches (`if`, `match`, `&&`, `||`, `??`, ...): `functions` folds them into the frame of the function they are written in; `subgraphs` shows each arm as the subgraph frame it is. Switch during a session with **Camel: Toggle Subgraph Frames**."
               }
             }
           }
@@ -183,6 +192,12 @@
         "command": "camel.runWithPasses",
         "title": "Run Current File with Passes…",
         "category": "Camel"
+      },
+      {
+        "command": "camel.debug.toggleSubgraphFrames",
+        "title": "Toggle Subgraph Frames",
+        "category": "Camel",
+        "icon": "$(type-hierarchy-sub)"
       }
     ],
     "menus": {
@@ -194,6 +209,17 @@
         {
           "command": "camel.runWithPasses",
           "when": "editorLangId == camel"
+        },
+        {
+          "command": "camel.debug.toggleSubgraphFrames",
+          "when": "debugType == camel"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "camel.debug.toggleSubgraphFrames",
+          "when": "view == workbench.debug.callStackView && debugType == camel",
+          "group": "navigation"
         }
       ],
       "editor/context": [

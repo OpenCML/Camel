@@ -27,17 +27,17 @@ libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/bu
 
 `OperatorGroup`（`include/camel/core/operator.h`）包含：
 
-- **name**：算子组名，如 `"sorted"`、`"__add__"`，即模块导出的名字。
+- **name**：算子组名，如 `"sort"`、`"__add__"`，即模块导出的名字。
 - **resolvers**：`vector<pair<uri, resolver_ptr_t>>`，每个重载对应一个 URI 和一个类型解析器。
 
 `OperatorGroup::resolve()` 按声明顺序依次尝试各重载，返回第一个接受实参的重载的 `OperatorIndex`（组名、函数类型、URI）。因此重载的先后顺序有意义。
 
 ```cpp
 OperatorGroup::create(
-    "sorted",
+    "sort",
     {
         {
-            "algo:sorted",
+            "algo:sort",
             DynamicFuncTypeResolver::create(
                 {{0, {}}, {1, {false}}},
                 "<> (array: T[]) => T[]",
@@ -98,7 +98,7 @@ OperatorGroup::create(
 示例：
 
 - `:op/add_i` → protocol 为空，suffix=`op/add_i`
-- `algo:sorted` → protocol=`algo`，suffix=`sorted`
+- `algo:sort` → protocol=`algo`，suffix=`sort`
 - `python:py_call` → protocol=`python`，suffix=`py_call`
 
 ### 3.2 Executor 与 opsMap
@@ -133,11 +133,15 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 以 `algo` 为例（`modules/algo/`）：
 
-- `module.cpp`：`getOperatorGroups()` 声明算子组，URI 为 `algo:sorted`、`algo:sort` 等；模块构造函数逐个 `exportEntity(group->name(), group)`；`load()` 调用 `context_->registerExecutorFactory("algo", factory)`。
-- `operators.cpp`：`getAlgoOpsMap()` 返回 suffix → `operator_t` 的映射，key 为 `sorted`、`sort` 等。
+- `module.cpp`：`getOperatorGroups()` 声明算子组，URI 为 `algo:sort`、`algo:merge_sort` 等；模块构造函数逐个 `exportEntity(group->name(), group)`；`load()` 调用 `context_->registerExecutorFactory("algo", factory)`。
+- `operators.cpp`：`getAlgoOpsMap()` 返回 suffix → `operator_t` 的映射，key 为 `sort`、`sort_in_place` 等（`*_in_place` 是 `xs = xs->sort` 用的就地形式，见 `OperatorTable::setInPlaceForm`）。
 - `executor.cpp`：`createAlgoExecutor()` 用上述映射构造 `Executor` 的子类。
 
 `.cmo` 模块的类继承 `camel::core::module::BuiltinModule`，以模块名作为名字。
+
+### 3.5 模块导出的值
+
+C++ 模块也可以导出值（设计原则 2.13）：在构造函数里 `exportValue(Reference("pi"), std::make_shared<DoubleData>(std::numbers::pi))`（`Module::exportValue`，公开接口 `include/camel/core/module/module.h`）。程序写 `math::pi`（或 `import { pi } from math` 后写 `pi`），不带括号；用到的地方就是这个常量，与写一个字面量相同：图上是使用处所在的图里的一个 `DATA` 节点，没有 root 上的节点，也不需要捕获。能导出的是能作为图中常量的数据（标量、字符串以及它们组成的复合数据），类型就是数据的类型。同一个名字只能导出一样东西：一个值与一个算子组不能同名。
 
 ## 4. 语义性质（纯度）注册
 
@@ -246,6 +250,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
   `@pure` 或 `@effect <原因>`、`@fails <失败时的行为>`、`@example <代码>    // <结果>`，函数体里
   `return '<URI>'`（`*` 通配一组只在类型上不同的重载）。这些文件不参与编译。
 - 用 Camel 写的库（`stdlib/<模块>.cml`）本身就是签名文件：读它的 `export func` 与 `///` 注释。
+- C++ 模块导出的值写作 `export let 名字: 类型 = 值`，带 `///` 说明与 `@example`，不写 `@pure` 与 URI（它不是算子，`--verify-ops` 不核对它）。
 - `node scripts/stdlib-reference.mjs --write` 由它们生成 `docs/stdlib-reference.md`；`--verify-doc` 检查
   文档是最新的；`--verify-ops` 用 `camel inspect --ops` 的结果核对签名文件：每个已注册的算子都有声明、
   每条声明都对应一个已注册的算子、参数个数一致、`@pure`/`@effect` 与登记的纯度一致。三者都在默认测试
