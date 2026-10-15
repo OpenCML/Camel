@@ -3,7 +3,9 @@
 
 > **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 2.13。
 >
-> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。下标映射、归约律（第二阶段）、事实库与 `LOOP`（第三阶段）、资源与定义图（第四阶段）尚未实现。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
+> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 2.13 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。事实库与 `LOOP`（第三阶段）、资源与定义图（第四阶段）尚未实现。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
+>
+> **第二阶段已实现（`lane/opsem-p2`）**：下标语义的数据结构与查询（`camel/core/index_semantics.h`：准仿射表达式、迭代域、访问与写映射、四种越界策略、间接访问的形式、归约律与 `reorderFreedom`、`splitDims`、`rowMajorView`；`camel/runtime/operator_instance.h`：冻结图节点上的实例）；第一批声明（逐元素族连同广播、`transpose`/`permute`/`slice`/`reshape`/`flatten`/`unsqueeze`/`broadcast_like`/`expand_axis`、`sum`/`mean` 全量与按轴、`max`/`min` 按轴（张量模块没有全量的 `max`/`min`）、`sum_to`、`matmul`、`nn` 的两种池化作为窗口的例子、`unordered_reduce` 的律）；`camel inspect --instances`；声明求值器 `tensor::test_index_eval`（与 CPU 内核逐位比较，见第 12 节）。给 Tiles 的说明见 14.2 节。与本稿字面不同的几处（均为窄读，见 14.2 与各处注释）：实例只有一个 `law` 下标（`Write` 不另存）；`Domain::guard` 表示分块尾部不存在的点；`LawInit::Operand`（`unordered_reduce` 的 `initial`）；`LawEmpty::Fault` 指归约维为空即故障（`max_axis` 的内核在结果为空时也拒绝空轴）；声明附在张量算子的 `OpDef::index` 上，与 `infer` 并列。
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
 依据：`docs/design-principles.cn.md`（2.9–2.13，尤其 2.13 的"浮点的数值契约"与 `do` 式循环头；第 6 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
 基线提交：`6bf31d1f`（`fsh-dev`，v0.2.12 合入之后）。
@@ -1054,6 +1056,72 @@ bool any        = graph->hasNodePermissions();
 - 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 与 `tensor::fuse` 不把许可不同的节点合并（融合出的节点带它们共同的许可）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
 - 编译缓存的键要包含用到的每个 `OperatorKey` 与每个节点的许可（10.6 的 (iii)）。
 - 许可只允许、不要求：没有许可时必须给规范结果；有许可时给规范结果也总是对的。
+
+### 14.2 第二阶段给 Tiles 的（`lane/opsem-p2`）
+
+**CPU 的结果、图的转储、程序的输出都没有变**；只增加了声明与查询。已声明下标语义的张量算子的键升为 `@1.1`（次版本：只多了事实，4.1）；内建 `:op/` 仍是 `@1.0`；新声明的 `nn:max_pool2d`、`nn:avg_pool2d`、`:mark/unordered_reduce_arr` 是 `@1.0`。
+
+**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`slice`（正步长，越界的起止点按内核夹到 [0, n]）、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。每个实例由声明求值器（`tensor::test_index_eval`）在 2520 个随机调用上与 CPU 内核逐位比较过（第 12 节）。
+
+**取得一个实例：**
+
+```cpp
+#include "camel/runtime/operator_instance.h"   // 带 camel/core/operator_semantics.h、index_semantics.h
+using namespace camel::core;
+// (1) 冻结图上的 OPER 节点：输入的类型（带形状）与静态输入（DATA 常量，经过 GATE 也算）
+std::optional<sem::IndexedInstance> inst = camel::runtime::instanceOf(*graph, nodeRef);
+// (2) Tiles 已经为 def->infer 建好了 InferContext（类型 + ConstArg）：直接问 OpDef
+#include "modules/tensor/ops/indexing.h"
+auto inst2 = camel::tensor::ops::instantiate(*def, tensor::ops::InferContext(types, constants));
+// (3) 只有类型与常量的槽：sem::instantiate(operId, sem::InstanceContext{.norm = types, .statics = statics})
+const sem::OperatorSemantics *s = OperatorTable::instance().semantics(operId);
+sem::toString(*inst, s);       // 规范的文本形式（也是将来持久化缓存的键的来源）
+```
+
+`nullopt`（"无实例"）的情形与读法见 5.4：秩未知、轴或常量实参不是常量、某一维可能是 1 也可能不是（Q9）、内核会拒绝的调用、混合 dtype 的 `matmul`。Tiles 在形状特化之后再问一次即可：特化后的类型给出带值的参数。没有值的参数（`Tensor<f32, const [-1, 3]>` 的第 0 维）仍是参数，实例照样有。
+
+**实例里有什么**（`camel inspect --instances <程序>` 逐节点打印，例：`layers` 里的 `matmul(x: [2,3], w: [3,4])`）：
+
+```
+params   s0_0 = extent(0, 0) = 2; s1_1 = extent(1, 1) = 4; s0_1 = extent(0, 1) = 3; s1_0 = extent(1, 0) = 3
+domain   d0 < s0_0 parallel; d1 < s1_1 parallel; d2 < s0_1 reduction
+where    s0_1 = s1_0
+norm 0   (d0, d2)
+norm 1   (d2, d1)
+write    (d0, d1) combine law fma_f32
+law      fma_f32: fma_chain f32 -> f32 -> f32, init 0x0, ascending, empty initial, commutative, identity 0x80000000
+```
+
+- `inst.domain.dims`：每维的范围（表达式，`inst.extents()` 在参数都有值时给出整数）与角色；规范顺序是元组的字典序，归约按这个顺序是"递增"。`domain.params`：参数的来源（`extent(操作数, 轴)`、`static(操作数[元素])`、`runtime`、`derived`）与值。`domain.constraints`：参数的前置条件。`domain.guard`：分块之后尾部不存在的点（`sem::splitDims`）。
+- `inst.norm[i]`：第 i 个操作数的访问：`Affine` 的 `coords` 每轴一个准仿射表达式（`inst.exprs.evaluate(e, point, inst.paramValues())`、`inst.exprs.affine(e, dims, values)`）；`valid` 与 `onInvalid`（`Unreachable`／`Fault`／`Excluded`／`Padding`）；`None` 表示不读元素（`axis`、`shape` 等常量实参，`broadcast_like` 的 `like`）。
+- `inst.output`：写坐标与方式；`Combine` 时 `s->laws[inst.law]` 是归约律（累加类型、初值的位、顺序、空域是初值还是故障、`DivideByCount`、确切的结合与交换、单位元）。Tiles 今天按名字选的累加类型都从律里读：`sum_axis_f32` 是 `f32 -> f64 -> f32`，`sum_f32`（全量）是 `f32 -> f64 -> f64`，`sum_to_f32` 是 `f32 -> f32 -> f32`，从 +0 起；`max_axis_f32` 从 −∞ 起，空轴是故障。
+- 逐元素的判定（取代名字列表，5.5）：每个 `Affine` 访问的每个坐标是某个维或常数 0，写是 `(d0, d1, ...)` 的 `Unique`。
+
+**能不能重排**（7.3）：
+
+```cpp
+std::optional<sem::ReorderFreedom> f = camel::runtime::reorderFreedomOf(*graph, nodeRef);
+// 或 sem::reorderFreedom(s->laws[inst.law], graph->nodePermissions(nodeRef))
+f->regroup;          // 分块、树形、split-k
+f->permute;          // 原子加、任意次序合并部分和
+f->blockIdentity;    // 每块都从单位元起；否则只有第一块带初值，其余从各自的第一个贡献起
+f->contract;         // FMA（fma_chain 的律本来就是）
+f->changePrecision;  // 换累加或输入精度
+```
+
+没有许可时：`max`/`min` 律可以任意分组与置换（IEEE `maximum` 确切可结合可交换，6.9 第 6 条的带下标比较可以去掉）；浮点 `sum` 不行；整数律可以。程序写 `@numeric(reassociate)` 之后浮点 `sum` 可以分组与置换，但 `blockIdentity` 仍为假：初值是 +0 而单位元是 −0，所以只有第一块从 +0 起（7.2 说的"不同的零号"）。`unordered_reduce` 的律是 `Unordered`，自带分组的许可。
+
+**怎样把逻辑映射与 Tiles 的存储映射复合（5.7）。** 核心只给逻辑坐标；Tiles 的 `reindex`（偏移 + 步长）是"访问映射 ∘ 行主序存储"：
+
+```cpp
+// x 的形状 shape（行主序）；实例的域就是结果的各维
+std::optional<sem::StridedView> v = sem::rowMajorView(inst, inst.norm[0], shape);
+// x 在点 t 读的元素的线性下标 = v->offset + Σ v->strides[d] * t[d]
+```
+
+例：`transpose` 读 `(d1, d0)`，`shape = [3, 5]` 得 `offset 0, strides (1, 5)`；`slice(x, 1, 1, ., 2)` 读 `(d0, 1 + 2*d1)` 得 `offset 1, strides (5, 2)`；广播的轴读常数 0，步长为 0（Tiles 现在的 `broadcastIndex`）；`reshape` 跨轴时坐标里有 `floordiv`/`mod`，`rowMajorView` 返回 `nullopt`：它不是步长视图，按 Tiles 现在的做法是"线性下标不变"（行主序存储下逻辑映射与存储映射恰好抵消，5.2 例 3）。融合时把生产者的访问代入消费者的坐标（`ExprPool` 的表达式可以按维代入，`sem::splitDims` 是一个现成的例子）。分块：`sem::splitDims(inst, {{dim, 16}, ...})` 把维 `d` 换成 `16*d_o + d_i`，原来的界成为 `guard`：写在尾部不发生，归约在尾部排除（不是补 0），即 Tiles 现在的 `if (base + t < k)`。
+
+**还不在第二阶段里的**：事实库（3b）、`LOOP`（3a）、资源与定义图（4）；`gather`/`scatter` 的 `Indirect` 访问形式已在数据结构里，算子的声明在第四阶段；`conv2d` 的实例（im2col 之后的 FMA 链加偏置）没有声明；`softmax`、`argmax` 等仍是不透明的。
 
 ---
 
