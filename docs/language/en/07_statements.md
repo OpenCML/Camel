@@ -315,6 +315,42 @@ func main(): int sync {
 
 A call of an annotated function is checked against the parameters of the function the annotation returns. Annotated functions can take part in overloading.
 
+### 7.6.1 `@numeric`: numeric permissions
+
+`@numeric(permission, ...)` before a function declaration or a block grants that code permissions to change floating-point results (design principles 2.13). It is not a decorator: it does not change the function's value, it only relaxes the canonical algorithm ([3.2.1](03_data_model.md#321-the-numeric-contract-of-floating-point)).
+
+| Permission | Allows |
+|---|---|
+| `reassociate` | reordering or regrouping a reduction (a chain of additions or multiplications, `sum`, the inner products of a matrix multiplication) |
+| `contract` | contracting a multiplication and an addition into one fused multiply-add |
+| `approx_math` | approximate math functions (approximate division and square root included) |
+| `change_precision` | lower or higher input or accumulation precision (TF32, bf16, or an f64 accumulator for f32) |
+| `finite_math` | assuming no NaN, no infinity, no distinction of the sign of zero, subnormals may become zero; the four can also be written apart: `no_nans`, `no_infs`, `no_signed_zeros`, `flush_subnormals` |
+
+```cml
+import { sqrt } from math
+
+@numeric(reassociate, contract)
+func dot(a: float, b: float, c: float, d: float): float {
+    return a * b + c * d          // may be evaluated as fma(a, b, c * d)
+}
+
+func norm(x: float, y: float): float {
+    let s = x * x
+    @numeric(approx_math)
+    {
+        return sqrt(s + y * y)    // the code of the block may use an approximate square root
+    }
+}
+```
+
+- **It applies to the code it is written on**: the function body or the block, with the branch arms, loop bodies and lambdas lexically inside it. A block's permissions join those of the function around it.
+- **A called function does not inherit them**: the functions `dot` calls keep the canonical algorithm unless they carry their own `@numeric`. After inlining every node keeps its own permissions.
+- **A permission allows, it never requires.** The CPU back ends (`std::nvm`, `std::fvm`, `std::jit`, `std::prl`, `std::cpp`) always give the canonical results; later back ends (Tiles, for example) may use other algorithms on the nodes that have a permission.
+- There is no module-wide default and no command-line or pipeline switch; a back end's entry point (such as `tiles.run`) takes no permissions.
+- The permissions are recorded on every node of the graph: `std::rgir` and `std::gir` show `numeric="..."` on the nodes that have any, `camel inspect -a` and `-c` on the blocks. Common-subexpression merging and tensor fusion do not merge nodes with different permissions.
+- An unknown permission, another name followed by parentheses (`@foo(x)`), an empty `@numeric()` and a decorator written on a block are compile-time errors, `SemanticDiag::InvalidAnnotation`.
+
 ## 7.7 Type declarations
 
 ```
