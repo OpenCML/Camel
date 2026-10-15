@@ -78,7 +78,20 @@ tile boundaries and distinguishes the continuous chain (1) from independent
 panel accumulators (2). This does not grant contraction to ordinary multiply/add
 nodes; their NVRTC policy remains `--fmad=false`.
 
-## Remaining contract work
+## CUDA library accuracy evidence (2026-10-16)
+
+The [CUDA 12.3 mathematical functions table](https://docs.nvidia.com/cuda/archive/12.3.0/cuda-c-programming-guide/index.html#mathematical-functions)
+and [CUDA 12.6 table](https://docs.nvidia.com/cuda/archive/12.6.0/cuda-c-programming-guide/index.html#mathematical-functions)
+list full-range errors of 2 ULP for `expf` and 1 ULP for `logf`. Their metric is
+distance from the correctly rounded binary32 result, not distance from the exact
+real number. NVIDIA describes these as results of extensive, non-exhaustive
+testing rather than guaranteed bounds. This is supporting evidence for the
+current library selection, not a proof of Camel's complete numeric contract.
+Contract-specific high-precision reference tests must use a clearly defined ULP
+metric and check exceptional values separately. The same tables specify correctly
+rounded division and square root under the precise options now fixed by Tiles.
+
+## Remaining validation and author clarification
 
 The native module-lease test includes a runtime-input GPU bit probe for the
 explicit NVRTC policy: smallest-subnormal multiplication and addition, division

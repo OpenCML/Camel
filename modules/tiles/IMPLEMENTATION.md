@@ -548,3 +548,14 @@ panel sums. Both probes run on nvm/fvm/jit. The committed implementation passed
 evidence is `docs/performance/tiles/2026-10-16-rtx3090-fma-contract-tests.txt`.
 This is not yet a proof of full CPU/GPU numerical equivalence.
 
+# Numeric policy bit probes (2026-10-16)
+
+Commit `cb749c40` adds runtime-input CUDA probes for binary32 subnormal handling,
+division, square root, ordinary multiply/add and explicit FMA. Raw result words
+are checked against exact expected values. Manual local execution passed before
+the plan assertion was added; local GPU plan passed 59/59. The isolated RTX 3090
+device 7 checkout rebuilt this commit and passed all 85 Tiles/GPU/tensor cases;
+evidence is `docs/performance/tiles/2026-10-16-rtx3090-bit-probes-tests.txt`.
+The numerical audit also records versioned NVIDIA documentation and its ULP
+metric; vendor error tables are supporting evidence, not exhaustive proofs.
+
