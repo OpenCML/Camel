@@ -139,6 +139,9 @@ enum class SemanticDiag : uint32_t {
     IntegerLiteralTruncated      = 0x1000A0,
     // Rulings of 2026-10-13 (design principles 2.11): 0xC0 and up.
     UnusedFallibleValue          = 0x1000C0,
+    // Rulings of 2026-10-15 (design principles 2.13): 0x110 and up.
+    NullTestNeverNull            = 0x100110,
+    KnownNotNull                 = 0x100111,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

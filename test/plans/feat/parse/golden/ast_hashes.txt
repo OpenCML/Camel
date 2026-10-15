@@ -842,8 +842,9 @@ dc8dc27c5f7a3dbe ok test/cases/consistency/match/complete_matches.cml
 a1f60a8caff88921 ok test/cases/consistency/match/no_case_matches_int.cml
 c9d34b821dc49a7b ok test/cases/consistency/match/no_case_matches_string.cml
 0495ba1f7fc9045b ok test/cases/consistency/match/one_bool_case.cml
+aa9d06542e0e3593 ok test/cases/consistency/narrowing/after_narrowing.cml
 5c1d4c7f62d6e0c0 ok test/cases/consistency/narrowing/compare_functions.cml
-2bc554b928ba3532 ok test/cases/consistency/narrowing/compare_plain_with_null.cml
+d38d5873af3af067 ok test/cases/consistency/narrowing/compare_plain_with_null.cml
 de55fc3b7ec7904d ok test/cases/consistency/narrowing/compare_two_nullables.cml
 77f5a6b64d1f5f55 ok test/cases/consistency/narrowing/else_of_conjunction.cml
 2020eeaebeffe10d ok test/cases/consistency/narrowing/graph.cml
@@ -852,6 +853,7 @@ d8686bd4d937bf48 ok test/cases/consistency/narrowing/graph_match.cml
 d0cf6dd2a3832ca7 ok test/cases/consistency/narrowing/narrow.cml
 1771b5bbf3850063 ok test/cases/consistency/narrowing/negated_not_narrowed.cml
 865ed91dbd0860cb ok test/cases/consistency/narrowing/outside_arm.cml
+ce9f252eae863889 ok test/cases/consistency/narrowing/shadowed_not_narrowed.cml
 b53dba50128e5966 ok test/cases/consistency/narrowing/var_not_narrowed.cml
 f6ddcf3cdcc7fdad ok test/cases/consistency/new_values/append_new.cml
 d52429882ec44afb ok test/cases/consistency/new_values/dropped_foreach_lambda.cml
@@ -899,6 +901,7 @@ dc66f9a3b30af3d6 ok test/cases/consistency/partial_application/err_var_parameter
 738e031e45934477 ok test/cases/consistency/surface/minus.cml
 d4f13f2219953ff5 ok test/cases/consistency/surface/operator_values.cml
 8e26a3132888f115 ok test/cases/consistency/surface/zip_many.cml
+15ebc24108746389 ok test/cases/consistency/unused_fallible/if_arms.cml
 5573cf0b886f5abc ok test/cases/consistency/unused_fallible/main_declared.cml
 e1a2eaf5d1672b85 ok test/cases/consistency/unused_fallible/main_undeclared.cml
 17322c85d5170d4c ok test/cases/consistency/unused_fallible/outside_sync.cml

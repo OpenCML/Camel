@@ -1,6 +1,9 @@
-// A value that cannot be null is not compared with `null`.
+// A value that cannot be null may be compared with `null`: the result is fixed, and the
+// compiler warns (design principles 2.13).
 func main(): int sync {
     let a = 1
-    println(a == null)
+    println(a == null)          // line 5: warned, always false
+    println(null != a)          // line 6: warned, always true
+    println(a + 1 == null)      // line 7: warned, a value that is not a name
     return 0
 }

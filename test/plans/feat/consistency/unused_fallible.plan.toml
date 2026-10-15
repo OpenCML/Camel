@@ -67,3 +67,21 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_starts_with = "1\n"
 expect_output_not_contains = ["UnusedFallibleValue"]
+
+[[tests]]
+name = "unused_fallible.if_arms"
+desc = "The arm of an `if` without `else` whose `T!` nothing uses is warned about in every form: a narrowing `if`, a block arm, the end of a longer block; a value used by `!!` or dropped with `let _` is not (design principles 2.13)."
+kind = "behavior"
+case = "../../../cases/consistency/unused_fallible/if_arms.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "2\n"
+verify_script = """
+const lines = input.stderr.split('\n').filter((l) => l.includes("[Warn]: This value has type 'int!'"))
+assert(lines.length === 3, 'three warnings: ' + input.stderr)
+for (const at of [':11:', ':12:', ':15:']) {
+  assert(lines.some((l) => l.includes(at)), 'a warning at ' + at + ': ' + input.stderr)
+}
+"""

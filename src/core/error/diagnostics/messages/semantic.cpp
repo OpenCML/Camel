@@ -800,6 +800,25 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NullTestNeverNull,
+            {
+                "NullTestNeverNull",
+                "{0} has type '{1}', which is never null: this test is always {2}.",
+                "Only a value of type 'T?' can be null. In the arm of 'if x != null' the name "
+                "'x' is already a 'T'. Remove the test, or test a value that may be null.",
+            },
+        },
+        {
+            SemanticDiag::KnownNotNull,
+            {
+                "KnownNotNull",
+                "'{0}' is known not to be null here (it has type '{1}'): the null case of "
+                "'{2}' is never taken.",
+                "An 'if' around this narrowed the name: in the arm where it is not null it is a "
+                "'T'. Use the name directly.",
+            },
+        },
+        {
             SemanticDiag::IntegerLiteralTruncated,
             {
                 "IntegerLiteralTruncated",

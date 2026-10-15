@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-141 diagnostics: 129 errors, 12 warnings.
+143 diagnostics: 129 errors, 14 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -122,6 +122,8 @@ prints one entry.
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
 | `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
+| `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn |
+| `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -2999,6 +3001,74 @@ A function that returns a 'T!' reports its failure through that value. Take the 
 func main() sync {
     println('start')
     parse_int('zz')
+}
+```
+
+### NullTestNeverNull
+
+`0x03100110` · Warn · `SemanticDiag::NullTestNeverNull`
+
+**Message**
+
+```text
+{0} has type '{1}', which is never null: this test is always {2}.
+```
+
+**Help**
+
+```text
+Only a value of type 'T?' can be null. In the arm of 'if x != null' the name 'x' is already a 'T'. Remove the test, or test a value that may be null.
+```
+
+**Example** (`test/cases/consistency/narrowing/compare_plain_with_null.cml`, run as `camel -E short test/cases/consistency/narrowing/compare_plain_with_null.cml ${backend}`)
+
+```camel
+// A value that cannot be null may be compared with `null`: the result is fixed, and the
+// compiler warns (design principles 2.13).
+func main(): int sync {
+    let a = 1
+    println(a == null)          // line 5: warned, always false
+    println(null != a)          // line 6: warned, always true
+    println(a + 1 == null)      // line 7: warned, a value that is not a name
+    return 0
+}
+```
+
+### KnownNotNull
+
+`0x03100111` · Warn · `SemanticDiag::KnownNotNull`
+
+**Message**
+
+```text
+'{0}' is known not to be null here (it has type '{1}'): the null case of '{2}' is never taken.
+```
+
+**Help**
+
+```text
+An 'if' around this narrowed the name: in the arm where it is not null it is a 'T'. Use the name directly.
+```
+
+**Example** (`test/cases/consistency/narrowing/after_narrowing.cml`, run as `camel -E short test/cases/consistency/narrowing/after_narrowing.cml ${backend}`)
+
+```camel
+func describe(x: int?, ready: bool): string {
+    return if x != null && ready then {
+        let a = x ?? 0                                  // line 7: warned, `??`
+        let b = match x { case null => -1  case v => v * 2 }   // line 8: warned, `match`
+        let c = x != null                               // line 9: warned, always true
+        let d = if x == null then 'null' else 'set'     // line 10: warned, always false
+        let e = if ready then x ?? 1 else 0             // line 11: warned, in a nested arm
+        return '{} {} {} {} {}'->format<a, b, c, d, e>
+    } else 'none'
+}
+
+func main(): int sync {
+    println(describe(4, true))
+    println(describe(null, true))
+    println(describe(4, false))
+    return 0
 }
 ```
 
