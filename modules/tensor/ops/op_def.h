@@ -39,6 +39,7 @@
 
 #include "../type.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_semantics.h"
 #include "vjp.h"
 
 #include <functional>
@@ -139,6 +140,11 @@ struct OpDef {
     OpTraits traits;
     VjpFn vjp = nullptr; // reverse-mode rule; nullptr when the operator is not differentiable
     FoldFn foldFromTypes = nullptr; // constant result from argument types, when they fix it
+    /// What the operator computes (camel/core/operator_semantics.h), declared to the core
+    /// OperatorTable on registration; nullopt for an operator without a declaration (read as
+    /// opaque). The key may be left empty: the registry fills it in from the URI, keeping the
+    /// version. Filled in from one table by attachSemantics (semantics.cpp).
+    std::optional<core::sem::OperatorSemantics> semantics;
 
     /// Human-readable signature, e.g. "(lhs: Tensor | number, rhs: Tensor | number) => Tensor".
     std::string signature() const;

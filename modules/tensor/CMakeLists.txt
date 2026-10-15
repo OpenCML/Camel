@@ -28,6 +28,7 @@ add_camel_module(
     ops/op_stats.cpp
     ops/reduction_ops.cpp
     ops/registry.cpp
+    ops/semantics.cpp
     ops/support.cpp
     ops/utility_ops.cpp
     ops/vjp.cpp
