@@ -4,12 +4,14 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Context-independent lifetime management for pending CUDA execution resources.
 #include "tiles/internal/cuda_resources.h"
+
+#include <memory>
 #ifdef CAMEL_TILES_CUDA
 #include <algorithm>
 #include <utility>

@@ -4,12 +4,15 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Own a stream and its staging/storage until all submitted work has drained.
 #pragma once
+
+#include <memory>
+#include <vector>
 #ifdef CAMEL_TILES_CUDA
 #include "tiles/internal/cuda_backend.h"
 

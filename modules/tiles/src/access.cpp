@@ -10,6 +10,11 @@
 
 // Checked host evaluation and CUDA printing of predicated physical accesses.
 #include "tiles/internal/access.h"
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <unordered_map>
 #include <utility>
 
 namespace camel::tiles::kernel {

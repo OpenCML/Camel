@@ -11,7 +11,11 @@
 // Physical access masks and addresses, independent of CUDA statement strings.
 #pragma once
 #include "tiles/internal/index_expr.h"
+#include <cstdint>
+#include <memory>
 #include <optional>
+#include <string>
+#include <unordered_map>
 
 namespace camel::tiles::kernel {
 class Predicate {

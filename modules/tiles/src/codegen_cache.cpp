@@ -11,9 +11,12 @@
 // Exact structural keys before CUDA printing, bounded LRU and per-call storage plans.
 #include "tiles/internal/codegen_cache.h"
 #include <algorithm>
+#include <cstdint>
 #include <list>
 #include <mutex>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace camel::tiles {
 namespace {

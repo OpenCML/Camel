@@ -4,15 +4,18 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 // Address composition, checked host evaluation and final CUDA serialization.
 #include "tiles/internal/index_expr.h"
 #include <algorithm>
+#include <cstdint>
 #include <limits>
+#include <memory>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 namespace camel::tiles::kernel {
