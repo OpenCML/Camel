@@ -21,3 +21,13 @@ Pinned staging allocations are included in host setup time, but `inspect`'s
 allocated-byte metric describes device storage only. The future asynchronous
 API must keep pinned buffers and device storage alive through completion events;
 it must not remove these dependencies when removing the synchronous wait.
+
+Execution objects own an immutable native program snapshot through shared
+ownership. The snapshot retains borrowed device inputs and launch metadata until
+after stream draining and resource cleanup. The module boundary moves the compiled
+program into that snapshot; it does not copy its input tensor payloads to establish
+ownership. Host result reconstruction shares the same snapshot, and benchmarking
+retains separate optimized/reference snapshots. This establishes program lifetime
+independence from the caller's stack; execution is still synchronous. Completion
+events, cross-stream dependencies, deferred fault propagation and context-safe
+cleanup remain prerequisites for asynchronous submission.

@@ -91,6 +91,7 @@ struct Resources {
 // Allocation reuse can overwrite inputs, so every repetition must restore them.
 class DeviceRun {
     ModuleLease moduleLease; // Outlives stream draining and all execution resources.
+    std::shared_ptr<const Program> programOwner; // Includes borrowed device input owners.
     const Program &program;
     Api &api;
     Resources resources;
@@ -102,8 +103,10 @@ class DeviceRun {
     void *clearFault  = nullptr;
 
   public:
-    DeviceRun(const Program &p, Api &a, ModuleLease module)
-        : moduleLease(std::move(module)), program(p), api(a), resources(a) {
+    DeviceRun(std::shared_ptr<const Program> snapshot, Api &a, ModuleLease module)
+        : moduleLease(std::move(module)), programOwner(std::move(snapshot)), program(*programOwner),
+          api(a), resources(a) {
+        const auto &p = program;
         std::vector<CUdeviceptr> allocations;
         for (auto bytes : p.storage.bytes)
             allocations.push_back(resources.allocate(bytes));
@@ -323,7 +326,10 @@ bool available() {
     }
 }
 
-std::vector<std::byte> execute(const Program &p) {
+std::vector<std::byte> execute(std::shared_ptr<const Program> snapshot) {
+    if (!snapshot)
+        throw std::invalid_argument("missing Tiles program snapshot");
+    const auto &p = *snapshot;
     validatePlan(p);
     Backend &b = backend();
     std::lock_guard lock(b.mutex);
@@ -347,24 +353,31 @@ std::vector<std::byte> execute(const Program &p) {
         return result;
     }
     auto module = b.module(p.source);
-    DeviceRun run(p, b.api, module);
+    DeviceRun run(std::move(snapshot), b.api, module);
     run.upload();
     run.launch();
     return run.download();
 }
 
-std::vector<std::shared_ptr<DeviceValue>> executeResident(const Program &p) {
+std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program> snapshot) {
+    if (!snapshot)
+        throw std::invalid_argument("missing Tiles program snapshot");
+    const auto &p = *snapshot;
     validatePlan(p);
     auto b = sharedBackend();
     std::lock_guard lock(b->mutex);
     Current current(b->api, b->context);
-    DeviceRun run(p, b->api, b->module(p.source));
+    auto module = b->module(p.source);
+    DeviceRun run(std::move(snapshot), b->api, std::move(module));
     run.upload();
     run.launch();
     return run.retainOutputs(b);
 }
 
-std::string benchmark(const Program &program) {
+std::string benchmark(std::shared_ptr<const Program> snapshot) {
+    if (!snapshot)
+        throw std::invalid_argument("missing Tiles program snapshot");
+    const auto &program = *snapshot;
     using nlohmann::json;
     validatePlan(program);
     if (std::none_of(program.outputs.begin(), program.outputs.end(), [&](size_t id) {
@@ -413,8 +426,10 @@ std::string benchmark(const Program &program) {
     for (const auto &n : program.nodes)
         if (n.op == "input")
             report["input_shapes"].push_back(n.shape);
-    const Program *plans[] = {&program, &reference};
-    const char *names[]    = {"optimized", "unfused"};
+    const std::shared_ptr<const Program> plans[] = {
+        std::move(snapshot),
+        std::make_shared<const Program>(std::move(reference))};
+    const char *names[] = {"optimized", "unfused"};
     std::unique_ptr<DeviceRun> runs[2];
     for (size_t i = 0; i < 2; ++i) {
         const auto &p             = *plans[i];
@@ -427,7 +442,7 @@ std::string benchmark(const Program &program) {
         auto module               = b.module(p.source);
         r["compile_load_host_ms"] = elapsed(start);
         start                     = Clock::now();
-        runs[i]                   = std::make_unique<DeviceRun>(p, b.api, module);
+        runs[i]                   = std::make_unique<DeviceRun>(plans[i], b.api, module);
         r["allocation_setup_host_ms"] = elapsed(start);
         r["device_ms"]                = json::array();
         r["upload_host_ms"]           = json::array();
@@ -543,7 +558,7 @@ std::string deviceInfo() {
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
-std::vector<std::shared_ptr<DeviceValue>> executeResident(const Program &) {
+std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};
 }
@@ -555,11 +570,11 @@ std::vector<std::byte> downloadValue(const DeviceValue &) {
     (void)deviceInfo();
     return {};
 }
-std::vector<std::byte> execute(const Program &) {
+std::vector<std::byte> execute(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};
 }
-std::string benchmark(const Program &) {
+std::string benchmark(std::shared_ptr<const Program>) {
     (void)deviceInfo();
     return {};
 }

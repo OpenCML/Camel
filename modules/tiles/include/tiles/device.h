@@ -25,7 +25,7 @@ struct DeviceValue {
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
 std::vector<std::byte> downloadValue(const DeviceValue &value);
-std::vector<std::shared_ptr<DeviceValue>> executeResident(const Program &program);
+std::vector<std::shared_ptr<DeviceValue>> executeResident(std::shared_ptr<const Program> program);
 
 class DeviceType final : public core::type::OtherType {
   public:

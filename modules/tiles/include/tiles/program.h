@@ -82,8 +82,8 @@ void validate(const Program &program);
 void schedule(Program &program, ScheduleOptions options = {});
 void validatePlan(const Program &program);
 std::string inspect(const Program &program);
-std::vector<std::byte> execute(const Program &program);
-std::string benchmark(const Program &program);
+std::vector<std::byte> execute(std::shared_ptr<const Program> program);
+std::string benchmark(std::shared_ptr<const Program> program);
 std::string deviceInfo();
 bool available();
 
