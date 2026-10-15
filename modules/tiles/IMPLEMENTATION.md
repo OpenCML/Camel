@@ -84,3 +84,23 @@ The shared-result example uses two kernels and 15,544 allocated bytes versus
 not yet a wall-clock speedup. Native malformed-plan tests exercise the verifier.
 The updated host/GPU Tiles and tensor suite passes 34/34 tests, including ten
 native rejected-plan mutations and fusion tests across all three execution engines.
+
+## Measurement infrastructure
+
+`benchmark` now uses the production allocation/upload/launch/download path and
+compares it against the unfused schedule. It validates outputs before and after
+timing, restores inputs on every repetition, alternates variant order, and emits
+21 raw CUDA-event samples after five warmups. Compile/load, allocation, upload
+and download host costs are reported separately; graph extraction is excluded.
+The module cache now refreshes recency to keep consecutive measured variants live.
+
+The suite passes 35/35 checks, including the measurement protocol. Raw records and
+the reproducible runner are under `docs/performance/tiles/` and
+`test/tools/benchmark-tiles.py`. The committed/rebuilt desktop run shows elementwise
+speedups of 3.20–3.29x over unfused code; exploratory runs varied from 2.15–3.42x. Wider
+performance claims require the remote measurements and external baselines.
+
+Remote environment inspection found CUDA 12.3 and Node 20, but the default CMake
+3.22 and Clang 14 are older than the current project's build requirements.
+Remote compilation remains outstanding; a saved Conan Clang 23 profile points
+to a Conda toolchain that should be located before installing another toolchain.
