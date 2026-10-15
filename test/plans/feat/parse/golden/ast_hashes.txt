@@ -649,6 +649,10 @@ dda1aeee3afb3e77 no test/cases/compile/not_supported/spread_struct.cml
 3bbfee8144079958 ok test/cases/compile/not_supported/strict_not_equal.cml
 e4862de16dae3163 ok test/cases/compile/not_supported/struct_unpacking.cml
 9a04df74fb2e4efe ok test/cases/compile/not_supported/wait_ignored.cml
+13fbd71b37526793 ok test/cases/compile/numeric/cse.cml
+3a57b8f70254b82e ok test/cases/compile/numeric/fuse.cml
+6b10198c42173288 no test/cases/compile/numeric/invalid.cml
+3aa4f4ecc8325a37 ok test/cases/compile/numeric/permissions.cml
 193074d94ca4e26b ok test/cases/compile/operators/array_add_assign.cml
 871a37dae3d4cc51 ok test/cases/compile/operators/bool_add_assign.cml
 fe14d5cd23e17609 ok test/cases/compile/operators/contains_string.cml

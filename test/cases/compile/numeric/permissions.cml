@@ -1,0 +1,43 @@
+/**
+ * @numeric(...) grants numeric permissions to a function or a block, and to the code written
+ * in it: arms, loop bodies, lambdas (design principles 2.13). A function it calls does not
+ * inherit them. Permissions only allow other results; the CPU back ends compute the canonical
+ * results with or without them, so this program prints the same with every back end.
+ */
+module permissions
+
+/// No permissions: called from annotated code, it keeps none.
+func plain(a: float, b: float): float {
+    return a * b + 1.0
+}
+
+@numeric(reassociate, contract)
+func fused(a: float, b: float, c: float, d: float): float {
+    return a * b + c * d
+}
+
+@numeric(reassociate)
+func nested(k: float): float {
+    let f = (v: float) => v * k + 0.5
+    let z = if k > 0.0 then k * 2.0 else k / 2.0
+    @numeric(contract)
+    {
+        return f(z) + plain(k, 3.0)
+    }
+}
+
+func blocky(x: float): float {
+    let y = x * 3.0
+    @numeric(finite_math)
+    {
+        return y / 7.0 - 1.0
+    }
+}
+
+func main(): int sync {
+    println(fused(1.5, 2.0, 0.25, 4.0))
+    println(nested(1.25))
+    println(blocky(2.0))
+    println(plain(2.0, 2.5))
+    return 0
+}

@@ -1,0 +1,22 @@
+/**
+ * Two equal expressions are not merged when they were granted different numeric permissions
+ * (std::opt::cse, docs/design/op-semantics 6.4); equal expressions with equal permissions are.
+ */
+module cse
+
+func twice(a: float, b: float): float {
+    let p = a * b
+    let q = a * b
+    let r = 0.0
+    @numeric(contract)
+    {
+        let s = a * b
+        let t = a * b
+        return p + q + s + t + r
+    }
+}
+
+func main(): int sync {
+    println(twice(1.5, 3.0))
+    return 0
+}

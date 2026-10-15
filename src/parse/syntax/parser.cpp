@@ -404,7 +404,7 @@ void ParserImpl::parseDecl() {
 
 /// stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
 ///      | blockStmt
-/// blockStmt : 'wait'? stmtBlock
+/// blockStmt : 'wait'? stmtBlock | funcAnno+ stmtBlock
 /// Decided on the first token, except:
 ///   - modifiers (`sync`, `macro`, ...) are skipped to see what they modify: `func` (a
 ///     declaration), `{` after a lone `sync` (a block), anything else (a lambda expression);
@@ -430,8 +430,9 @@ void ParserImpl::parseStmt() {
     case TK::KwFunc:
     case TK::KwWith:
     case TK::KwExport:
-    case TK::At:
         return parseFuncDecl();
+    case TK::At:
+        return parseAnnotatedStmt();
     case TK::KwInner:
     case TK::KwOuter:
         return peek(1) == TK::KwType ? parseTypeDecl() : parseFuncDecl();
@@ -698,15 +699,36 @@ void ParserImpl::parseNamespaceDecl() {
     close(m, NK::NamespaceDecl);
 }
 
-/// funcAnno : '@' identRef angledValues?
+/// funcAnno : '@' identRef (angledValues | parentIdents)?
+/// `@name` and `@name<args>` are decorators; `@name(a, b)` is an annotation whose arguments are
+/// names, `@numeric(reassociate, contract)` (design principles 2.13). Which annotations exist,
+/// and where each may be written, is checked when the tree is built (AST builder).
 void ParserImpl::parseFuncAnno() {
     const size_t m = mark();
     bump();
     parseIdentRef(NK::IdentRef);
     if (cur_ == TK::LAngle) {
         parseAngledValues();
+    } else if (cur_ == TK::LParen) {
+        parseBracketedIdents(TK::RParen, NK::ParentIdents);
     }
     close(m, NK::FuncAnno);
+}
+
+/// A statement that starts with annotations: a function declaration, or an annotated block
+/// (blockStmt's second form; `@numeric(...)` on a block, design principles 2.13). The annotations are read first; a
+/// block follows when the next token is '{' or `sync {`, anything else continues the function
+/// declaration. After an annotation '{' is always a block, never a struct literal.
+void ParserImpl::parseAnnotatedStmt() {
+    const size_t m = mark();
+    while (cur_ == TK::At) {
+        parseFuncAnno();
+    }
+    if (cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace)) {
+        parseStmtBlock();
+        return close(m, NK::BlockStmt);
+    }
+    parseFuncDeclRest(m);
 }
 
 /// funcDecl : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
@@ -716,6 +738,11 @@ void ParserImpl::parseFuncDecl() {
     while (cur_ == TK::At) {
         parseFuncAnno();
     }
+    parseFuncDeclRest(m);
+}
+
+/// The part of funcDecl after its annotations; `m` marks where the declaration began.
+void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
         parseAngledParams();
     }

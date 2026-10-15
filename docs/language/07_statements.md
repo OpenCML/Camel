@@ -315,6 +315,42 @@ func main(): int sync {
 
 对带标注的函数的调用按标注返回的那个函数的形参检查。带标注的函数可以参与重载。
 
+### 7.6.1 `@numeric`：数值许可
+
+`@numeric(许可, ...)` 写在函数声明或块之前，授予那段代码改变浮点结果的许可（设计原则 2.13）。它不是函数的标注：不改变函数的值，只放宽规范算法（[3.2.1](03_data_model.md#321-浮点的数值契约)）。
+
+| 许可 | 允许 |
+|---|---|
+| `reassociate` | 改变归约（一串加、乘，`sum`、矩阵乘的内积）的次序或结合方式 |
+| `contract` | 把一次乘与一次加收缩为一次乘加融合 |
+| `approx_math` | 使用近似的数学函数（包括近似的除法与开方） |
+| `change_precision` | 降低或提高输入或累加的精度（如 TF32、bf16，或用 f64 累加 f32） |
+| `finite_math` | 假设没有 NaN、没有无穷、不区分零的符号、次正规数可以当作零；四项也可以分开写：`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` |
+
+```cml
+import { sqrt } from math
+
+@numeric(reassociate, contract)
+func dot(a: float, b: float, c: float, d: float): float {
+    return a * b + c * d          // 可以求值为 fma(a, b, c * d)
+}
+
+func norm(x: float, y: float): float {
+    let s = x * x
+    @numeric(approx_math)
+    {
+        return sqrt(s + y * y)    // 块里的代码可以用近似的开方
+    }
+}
+```
+
+- **作用范围是写下它的那段代码**：函数体或块，以及词法上嵌在其中的分支臂、循环体与 lambda。块上的许可与外面函数上的合起来。
+- **被调用的函数不继承**：`dot` 调用的函数仍按规范算法，除非它自己写了 `@numeric`。内联之后各节点仍带各自的许可。
+- **许可只是允许，不是要求**。CPU 后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::cpp`）总是给出规范结果；以后的后端（如 Tiles）可以在有许可的节点上用别的算法。
+- 没有模块级的默认许可，也没有命令行或流水线开关；后端的入口（如 `tiles.run`）不接受许可。
+- 许可记在图的每个节点上，`std::rgir`、`std::gir` 在有许可的节点上显示 `numeric="..."`；`camel inspect -a`、`-c` 在块上显示。公共子表达式合并与张量的融合不把许可不同的节点合在一起。
+- 不认识的许可名、别的名字后面跟圆括号（`@foo(x)`）、空的 `@numeric()`、写在块上的函数标注，都是编译期错误 `SemanticDiag::InvalidAnnotation`。
+
 ## 7.7 类型声明
 
 ```

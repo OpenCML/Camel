@@ -174,14 +174,20 @@ class StmtBlockLoad : public StmtLoad {
     void wait() { waited_ = true; }
     bool waited() const { return waited_; }
 
-    const std::string toString() const override {
-        return std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
-    }
+    /// The numeric permissions (camel/core/operator_semantics.h, PermissionMask) granted by a
+    /// `@numeric(...)` written on this block or on the function whose body it is (design
+    /// principles 2.13). Only this block's own grant: the GCT builder adds those of the
+    /// enclosing blocks. 0 when none.
+    void grantNumeric(uint8_t permissions) { numeric_ |= permissions; }
+    uint8_t numeric() const { return numeric_; }
+
+    const std::string toString() const override;
     const std::string geneCode() const override;
 
   private:
-    bool synced_ = false;
-    bool waited_ = false;
+    bool synced_     = false;
+    bool waited_     = false;
+    uint8_t numeric_ = 0;
 };
 
 } // namespace camel::parse::ast

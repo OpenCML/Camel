@@ -1,0 +1,134 @@
+id = "compile.numeric_permissions"
+order = 214
+tier = "feat"
+tags = ["feat", "compile", "numeric", "semantics"]
+desc = "`@numeric(...)` on a function or a block grants numeric permissions to the code written in it, arms, loop bodies and lambdas included, never to a function it calls (design principles 2.13; docs/design/op-semantics 6.3, 6.4). The graph keeps them in a per-node column beside the source positions; std::rgir shows them as a `numeric` attribute on the nodes that have any. Rewrites keep them, CSE and tensor::fuse do not merge nodes granted different ones, and the CPU back ends compute the canonical results with or without them."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "results.backends"
+desc = "Permissions only allow other results: the four back ends print the canonical ones."
+kind = "behavior"
+case = "../../../cases/compile/numeric/permissions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "4.0\n8.375\n-0.1428571428571429\n6.0\n"
+
+[[tests]]
+name = "graph"
+desc = "The OPER nodes of an annotated function have its permissions; those of a lambda and of the arms written in it too; a block's grant joins the function's for the code in the block; a function it calls (plain) and main have none."
+kind = "behavior"
+case = "../../../cases/compile/numeric/permissions.cml"
+args = ["${case}", "std::rgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+const opers = lines.filter((l) => l.includes('type="OPER"'))
+const at = (line) => opers.filter((l) => l.includes(`span="${line}:`))
+const numeric = (l) => { const m = l.match(/numeric="([^"]*)"/); return m ? m[1] : '' }
+const all = (line, value) => {
+  const nodes = at(line)
+  assert(nodes.length > 0, `no OPER node at line ${line}`)
+  for (const l of nodes) assert(numeric(l) === value, `line ${line}: numeric="${numeric(l)}", expected "${value}": ${l}`)
+}
+all(10, '')                          // plain: called from annotated code, keeps none
+all(15, 'reassociate, contract')     // fused
+all(20, 'reassociate')               // the lambda in nested
+all(21, 'reassociate')               // the condition and the arms of the if in nested
+all(24, 'reassociate, contract')     // the block of nested: its grant and the function's
+all(32, 'finite_math')               // the annotated block of blocky
+all(29, '')                          // blocky outside its block
+}
+"""
+
+[[tests]]
+name = "graph.inline"
+desc = "std::inline keeps each node's own permissions: the inlined body of plain has none in its annotated caller, the inlined lambda keeps reassociate."
+kind = "behavior"
+case = "../../../cases/compile/numeric/permissions.cml"
+args = ["${case}", "std::inline", "std::rgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
+const at = (line) => opers.filter((l) => l.includes(`span="${line}:`))
+assert(at(10).length > 0 && at(10).every((l) => !l.includes('numeric=')), 'inlined plain must have no permissions')
+assert(at(20).length > 0 && at(20).every((l) => l.includes('numeric="reassociate"')), 'the inlined lambda keeps reassociate')
+assert(at(24).every((l) => l.includes('numeric="reassociate, contract"')), 'the block keeps its permissions')
+}
+"""
+
+[[tests]]
+name = "cse"
+desc = "std::opt::cse merges `a * b` with `a * b` of the same permissions, and not across them: one product without permissions, one with contract."
+kind = "behavior"
+case = "../../../cases/compile/numeric/cse.cml"
+args = ["${case}", "std::opt::cse", "std::rgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const muls = input.normalized.stdout.split('\n').filter((l) => l.includes('label=":op/mul_d"'))
+assert(muls.length === 2, `expected 2 products after cse, got ${muls.length}`)
+assert(muls.filter((l) => l.includes('numeric="contract"')).length === 1, 'one product has contract')
+assert(muls.filter((l) => !l.includes('numeric=')).length === 1, 'one product has none')
+}
+"""
+
+[[tests]]
+name = "cse.result"
+desc = "The program after std::opt::cse prints the canonical result."
+kind = "behavior"
+case = "../../../cases/compile/numeric/cse.cml"
+args = ["${case}", "std::opt::cse", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "18.0\n"
+
+[[tests]]
+name = "fuse"
+desc = "tensor::fuse fuses `x @ w + b` when both nodes have the same permissions (the fused node keeps them) and not when they differ (a product inlined from an annotated function, an add without)."
+kind = "behavior"
+case = "../../../cases/compile/numeric/fuse.cml"
+args = ["${case}", "std::inline", "tensor::fuse", "std::rgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
+const fused = opers.filter((l) => l.includes('label="tensor:matmul_add"'))
+assert(fused.length >= 1 && fused.every((l) => l.includes('numeric="reassociate"')), 'the fused node keeps reassociate')
+const adds = opers.filter((l) => l.includes('label="tensor:add"'))
+assert(adds.length >= 1 && adds.every((l) => !l.includes('numeric=')), 'the add of split stays unfused')
+}
+"""
+
+[[tests]]
+name = "fuse.result"
+desc = "Fused or not, the results are the canonical ones."
+kind = "behavior"
+case = "../../../cases/compile/numeric/fuse.cml"
+args = ["${case}", "std::inline", "tensor::fuse"]
+expect_exit = 0
+expect_stdout_exact = "fuse split=-12.825000286102295 whole=-12.825000286102295\n"
+
+[[tests]]
+name = "trees"
+desc = "The AST shows a block's own grant, the GCT the permissions in force in every EXEC (the enclosing grants joined); nothing is shown where none is granted."
+kind = "behavior"
+case = "../../../cases/compile/numeric/permissions.cml"
+args = ["inspect", "-a", "-c", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["StmtBlock: numeric(reassociate, contract)", "StmtBlock: numeric(contract)", "StmtBlock: numeric(finite_math)", "EXEC: numeric(reassociate, contract)", "EXEC: numeric(finite_math)"]
+
+[[tests]]
+name = "invalid"
+desc = "An unknown permission, another annotation with names in parentheses, an empty @numeric() and a decorator on a block are SemanticDiag::InvalidAnnotation, each at its line."
+kind = "negative"
+case = "../../../cases/compile/numeric/invalid.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["'fast' is not a permission", "invalid.cml:11:1", "The annotation '@kernelish' is not accepted", "invalid.cml:14:1", "it names no permission", "invalid.cml:17:1", "The annotation '@twice' is not accepted: a decorator applies to a function", "invalid.cml:21:5"]

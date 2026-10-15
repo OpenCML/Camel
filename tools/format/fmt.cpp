@@ -340,10 +340,16 @@ any Formatter::visitUsingNamespaceDecl(cst::UsingNamespaceDecl context) {
 }
 
 /*
-blockStmt  : WAIT? stmtBlock ;
+blockStmt  : WAIT? stmtBlock | funcAnno+ stmtBlock ;
 */
 any Formatter::visitBlockStmt(cst::BlockStmt context) {
-    string result = context->tok(TK::KwWait) ? "wait " : "";
+    string result;
+    // `@numeric(...)` on a block: each annotation on a line of its own, at the start of a line
+    // (design principles 2.11: a line that starts with '@' annotates what follows).
+    for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
+        result += any_cast<string>(visitFuncAnno(funcAnno)) + lineEnd();
+    }
+    result += context->tok(TK::KwWait) ? "wait " : "";
     result += any_cast<string>(visitStmtBlock(context->get<cst::StmtBlock>()));
     return result;
 }
@@ -412,13 +418,15 @@ any Formatter::visitFuncData(cst::FuncData context) {
 }
 
 /*
-funcAnno   : '@' identRef angledValues? ;
+funcAnno   : '@' identRef (angledValues | parentIdents)? ;
 */
 any Formatter::visitFuncAnno(cst::FuncAnno context) {
     string result = "@";
     result += any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
     if (context->get<cst::AngledValues>()) {
         result += any_cast<string>(visitAngledValues(context->get<cst::AngledValues>()));
+    } else if (context->get<cst::ParentIdents>()) {
+        result += any_cast<string>(visitParentIdents(context->get<cst::ParentIdents>()));
     }
     return result;
 }

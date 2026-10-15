@@ -39,7 +39,8 @@
  *     CASE              payload: the name bound; tag: CaseType
  *     CAST              payload: the target type; flag: written on a declaration
  *     EXIT              tag: ExitType
- *     EXEC              flags: sync block, scope of operands
+ *     EXEC              flags: sync block, scope of operands; tag: the numeric permissions
+ *                       in force in it (design principles 2.13)
  *     EXPT              payload: the list of exported names
  *     VARI, WAIT, ANNO  nothing
  *
@@ -165,6 +166,21 @@ class Node {
     bool operands() const {
         check(NodeKind::EXEC);
         return (flags_ & kFlagB) != 0;
+    }
+
+    /// EXEC: the numeric permissions (camel/core/operator_semantics.h, PermissionMask) in
+    /// force in this scope: those `@numeric(...)` grants on it, on the function whose body it
+    /// is, and on every block and function it is lexically nested in (design principles 2.13:
+    /// an arm, a loop body or a lambda written in the code is part of the code). Every EXEC
+    /// the GCT builder makes carries them, so the graph builder reads them from the nearest
+    /// EXEC whatever order it builds graphs in. 0 when none is granted.
+    uint8_t numericPermissions() const {
+        check(NodeKind::EXEC);
+        return static_cast<uint8_t>(tag_);
+    }
+    void setNumericPermissions(uint8_t permissions) {
+        check(NodeKind::EXEC);
+        tag_ = permissions;
     }
 
     /// EXPT: the exported names.

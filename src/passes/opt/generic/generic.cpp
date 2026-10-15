@@ -756,12 +756,17 @@ size_t foldDraft(
 
 size_t cseDraft(GraphDraft &draft) {
     const auto regions = armRegions(draft);
+    // The numeric permissions are part of the key: two otherwise identical operations granted
+    // different permissions (design principles 2.13) may compute different bits, and merging
+    // them would give one of them permissions it was not granted, or take some away. They are
+    // not merged (docs/design/op-semantics 6.4).
     using Key          = std::tuple<
                  std::string,
                  type::Type *,
                  std::vector<gc_node_ref_t>,
                  std::vector<gc_node_ref_t>,
-                 std::vector<uint64_t>>;
+                 std::vector<uint64_t>,
+                 uint8_t>;
     std::map<Key, gc_node_ref_t> seen;
     size_t merged = 0;
 
@@ -811,7 +816,8 @@ size_t cseDraft(GraphDraft &draft) {
             draft.header(id)->dataType,
             std::vector<gc_node_ref_t>(norm.begin(), norm.end()),
             std::vector<gc_node_ref_t>(with.begin(), with.end()),
-            regions[id]};
+            regions[id],
+            draft.nodePermissions(id)};
         auto [it, inserted] = seen.try_emplace(std::move(key), id);
         if (!inserted && isReplaceable(draft, id) && !reaches(draft, id, it->second)) {
             replaceNode(draft, id, it->second);

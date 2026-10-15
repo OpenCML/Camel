@@ -419,6 +419,14 @@ it is a column of the frozen block parallel to the node records
 hash map per graph (node ref to origin), filled by a second payload plan at
 every encoding.
 
+Beside it, and only in a graph where some node has any, is the column of
+numeric permissions (`GCGraphNativePayload::permissions`, one byte per node;
+`GCGraph::nodePermissions(ref)`, 0 for a graph without the column): the
+permissions the program granted with `@numeric(...)` (design principles 2.13,
+`docs/design/op-semantics` 6.3). Like the origin, it comes from the draft
+header (`DraftNodeHeader::permissions`) and survives rewrites, inlining and
+cloning node by node.
+
 This centralized store may freely use:
 
 - `std::string`

@@ -138,6 +138,7 @@ struct GraphArenaLayout {
     size_t tupleBytes          = 0;
     size_t nodeBytes           = 0;
     size_t originBytes         = 0;
+    size_t permissionBytes     = 0;
     size_t payloadBytes        = 0;
     size_t inputBytes          = 0;
     size_t normPortBytes       = 0;
@@ -172,6 +173,12 @@ GraphArenaLayout planGraphArenaLayout(
         .originBytes = camel::core::mm::alignUp(
             sizeof(uint32_t) * static_cast<size_t>(payload.nodeCount),
             alignof(gc_payload_word_t)),
+        // The permission column, only when some node has permissions.
+        .permissionBytes = payload.permissions
+                               ? camel::core::mm::alignUp(
+                                     static_cast<size_t>(payload.nodeCount),
+                                     alignof(gc_payload_word_t))
+                               : 0,
         .payloadBytes = bytesForArray<gc_payload_word_t>(payload.payloadWordCount),
         .inputBytes   = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.edgeCount),
@@ -191,7 +198,7 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.nodeBytes + layout.originBytes + layout.payloadBytes + layout.inputBytes + layout.normPortBytes +
+        layout.nodeBytes + layout.originBytes + layout.permissionBytes + layout.payloadBytes + layout.inputBytes + layout.normPortBytes +
         layout.withPortBytes + layout.closureBytes + layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 2-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
@@ -649,6 +656,10 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .withPortCount    = narrowIntegral<gc_cnt_t>(draft.withPorts().size(), "'with' parameters"),
         .closureCount   = narrowIntegral<gc_cnt_t>(draft.closureNodes().size(), "captured values"),
         .branchArmCount = plan.branchArmCount,
+        .permissions    = std::any_of(
+            plan.nodes.begin(),
+            plan.nodes.end(),
+            [&](const auto &planned) { return draft.nodePermissions(planned.draftId) != 0; }),
     };
 }
 
@@ -713,6 +724,9 @@ void emitDraftPayload(
         const uint64_t origin = draft.nodeOrigin(planned.draftId);
         ASSERT(origin <= std::numeric_limits<uint32_t>::max(), "Origin id beyond 32 bits.");
         payload.origins[planned.ref] = static_cast<uint32_t>(origin);
+        if (payload.permissions) {
+            payload.permissions[planned.ref] = draft.nodePermissions(planned.draftId);
+        }
         const GCNode &header = record;
 
         const auto payloadBytes = draft.payloadOf(planned.draftId);
@@ -898,6 +912,13 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
             sizeof(uint32_t) * static_cast<size_t>(shape.nodeCount),
             alignof(gc_payload_word_t)),
         alignof(gc_payload_word_t)));
+    if (shape.permissions && shape.nodeCount > 0) {
+        payload.permissions = static_cast<uint8_t *>(arena.alloc(
+            camel::core::mm::alignUp(
+                static_cast<size_t>(shape.nodeCount),
+                alignof(gc_payload_word_t)),
+            alignof(gc_payload_word_t)));
+    }
     payload.payload          = arenaAllocArray<gc_payload_word_t>(arena, shape.payloadWordCount);
     payload.inputs           = arenaAllocArray<gc_node_ref_t>(arena, shape.edgeCount);
     payload.normPorts      = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
@@ -918,6 +939,7 @@ GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload) {
     return GCGraphPayloadArena{
         .nodes            = payload.nodes,
         .origins          = payload.origins,
+        .permissions      = payload.permissions,
         .inputs           = payload.inputs,
         .payload          = payload.payload,
         .normPorts        = payload.normPorts,
@@ -1244,6 +1266,11 @@ const std::string &GCGraph::name() const {
 std::span<const camel::core::SymId> GCGraph::captureNames() const {
     return debug_ ? std::span<const camel::core::SymId>(debug_->captureNames)
                   : std::span<const camel::core::SymId>();
+}
+
+uint8_t GCGraph::nodePermissions(gc_node_ref_t ref) const {
+    return containsNodeRef(ref) && nativePayload_.permissions ? nativePayload_.permissions[ref]
+                                                              : 0;
 }
 
 uint64_t GCGraph::nodeOrigin(gc_node_ref_t ref) const {

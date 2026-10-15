@@ -1015,9 +1015,22 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     return graph;
 }
 
+void Builder::stampPermissions(node_handle_t operNode) const {
+    if (operNode != nullptr) {
+        operNode->header.permissions = numericPermissions_;
+    }
+}
+
 void Builder::buildFuncBody(
     const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
     const std::string &name) {
+    // The function's graph has the permissions of its own body (which include those of the
+    // code it is written in), not those of the place that asked for it to be built (a call
+    // that instantiates a generic function, a block that declares it).
+    const GCT::node_ptr_t body = gct->size() > 1 ? gct->at(1) : nullptr;
+    NumericPermissionScope permissions(
+        numericPermissions_,
+        body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0);
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -3746,6 +3759,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     try {
         bodyStates_[graph.get()] = BodyState::Open;
         node_handle_t call       = graph->addOperNode(op, 0);
+        stampPermissions(call);
         if (opType->modifiers().macro()) {
             setNodeMacro(call, true);
         }
@@ -5105,6 +5119,7 @@ node_handle_t Builder::variableOperator(const std::string &group, node_handle_t 
     const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
     ASSERT(op.has_value(), "Variable operator rejected its operand.");
     node_handle_t node = currGraph_->addOperNode(*op, 0);
+    stampPermissions(node);
     linkNodes(LinkType::Norm, input, node);
     return node;
 }
@@ -5800,6 +5815,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
+            stampPermissions(targetNode);
             // An operator whose resolved type is macro runs in std::macro once its inputs are
             // static, like a call of a macro function.
             if (targetOperator->funcType()->modifiers().macro()) {
@@ -7478,6 +7494,9 @@ void Builder::checkDeclaredReturn(
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
+    // The permissions of this scope (they include those of the enclosing ones) are in force
+    // for everything built in it, arms and lambdas included.
+    NumericPermissionScope permissions(numericPermissions_, gct->numericPermissions());
     // The `using namespace` written in this block are in force in it (design principles 2.12).
     UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));
     bool old                  = synced_;

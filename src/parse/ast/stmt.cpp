@@ -18,6 +18,7 @@
  */
 
 #include "camel/parse/ast/stmt.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/utils/str.h"
 
 #include <algorithm>
@@ -195,6 +196,16 @@ const std::string ExitStmtLoad::geneCode() const {
         return "exit";
     }
 }
+const std::string StmtBlockLoad::toString() const {
+    std::string text = std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
+    if (numeric_ != 0) {
+        // Only when granted, so that the dump of a program without @numeric is unchanged.
+        text += std::string(text.back() == ' ' ? "" : " ") + "numeric(" +
+                camel::core::sem::permissionsText(numeric_) + ")";
+    }
+    return text;
+}
+
 const std::string StmtBlockLoad::geneCode() const {
     std::string result = "block";
     if (synced_) {
