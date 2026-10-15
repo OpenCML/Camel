@@ -2,7 +2,7 @@
 
 状态：**第 8 节六条已由语言作者裁定（2026-10-15），另定 `@kernel` 为 Tiles 模块提供的可选标注（第 6.5 节）。本稿不含源码改动。**
 日期：2026-10-15。
-依据：[设计原则](../../design-principles.cn.md)（尤其 2.9–2.13：纯度、`unordered_reduce`、命名维度 `constas`、`LOOP` 的 `do` 写法、浮点数值契约）；[索引计算、调度与资源图](../indexed-computation/README.md)（下称 IC 稿）；[图数据模型](../graph-model/README.cn.md)；算子语义与图事实（`docs/design/op-semantics/README.cn.md`，下称语义稿，与本稿同时编写）；[`modules/tiles`](../../../modules/tiles/README.md)。
+依据：[设计原则](../../design-principles.cn.md)（尤其 2.9–2.13：纯度、`unordered_reduce`、命名维度 `constas`、`LOOP` 的 `do` 写法、浮点数值契约）；[索引计算、调度与资源图](../indexed-computation/README.md)（下称 IC 稿）；[图数据模型](../graph-model/README.cn.md)；[算子语义与图事实](../op-semantics/README.cn.md)（下称语义稿）；[`modules/tiles`](../../../modules/tiles/README.md)。
 
 本稿回答两个问题：Tiles 以什么形式进入 Camel 的编译流水线；类似 Triton 的"由人写内核"在 Camel 里应当长什么样。它与语义稿分工：语义稿规定核心对外提供的算子语义、数值许可与图事实；本稿规定 Tiles 怎样使用它们，以及需要语言作者裁定的新写法。
 
