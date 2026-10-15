@@ -253,7 +253,6 @@ typeList           : typeExpr (',' typeExpr)*
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`T ? U`、`名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof`、`enum` | 语法错误 | 无 |
-| `loop s = 初值, t = 初值 (for x in xs)? (while 条件)? do 体` | `ConstructNotSupported`（语法、AST 与 GCT 已有，图上的 `LOOP` 节点尚未实现） | 递归；`map`/`filter`/`reduce`/`foreach` |
 | 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
 
 此外有几处“能写出来但目前用不了”：联合类型 `A | B`（成员类型的值不能进入它）、带函数类型的声明 `let f: (x: int) => int = g`。

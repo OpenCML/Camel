@@ -18,6 +18,7 @@
  */
 
 #include "fastvm.h"
+#include "camel/runtime/loop_lowering.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/core/module/module.h"
 #include "camel/runtime/graph.h"
@@ -473,6 +474,9 @@ void FastVMSchedPass::observeFault(const camel::core::error::RuntimeFault &fault
 camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     (void)os;
     ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
+    // Loops run as the tail recursion they mean, on a private copy of the program (the
+    // context's program keeps its LOOP nodes: camel/runtime/loop_lowering.h).
+    graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
 
     camel::runtime::GCGraph *runtimeRoot = graph;
     precompile(runtimeRoot);

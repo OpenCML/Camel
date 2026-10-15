@@ -1907,6 +1907,17 @@ void Backward::visit(gc_node_ref_t node) {
         // call in source order is the one reported.
         refused_.push_back(node);
         return;
+    case GCNodeKind::Loop:
+        // The derivative of a LOOP node is a forward loop that keeps each round's pullback and
+        // a backward loop over them (docs/design/loops 5.6), not yet written. Refused where
+        // the loop is, rather than lowered to the recursion whose gradient the recursion depth
+        // limits.
+        failAt(
+            forward_.nodeOrigin(node),
+            std::format(
+                "cannot differentiate through a 'loop' expression yet{}; write the loop as a "
+                "tail-recursive function, which is differentiated",
+                whereIs(forward_.nodeOrigin(node))));
     default:
         fail(
             std::format(

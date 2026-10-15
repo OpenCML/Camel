@@ -26,6 +26,7 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/loop.h"
 #include "camel/utils/log.h"
 
 #include "camel/core/context/frame.h"
@@ -778,6 +779,10 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 currFrame->set(n->dataIndex, result);
             } break;
 
+            case GCNodeKind::Loop:
+                evalLoop(currRuntimeGraph, nodeRef, *currFrame);
+                break;
+
             case GCNodeKind::Port:
                 [[fallthrough]];
             case GCNodeKind::Data:
@@ -1003,6 +1008,77 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         call(func->graph(), frame);
     }
     currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);
+}
+
+void NodeVMSchedPass::evalLoop(
+    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
+    const camel::runtime::LoopView loop(*graph, nodeRef);
+    const size_t k          = loop.stateCount();
+    const auto stateSlot    = dataIndexOf(graph, nodeRef);
+    const auto captures     = loop.captures();
+    const auto iterable     = loop.iterable();
+    GCGraph *const cond     = loop.condGraph();
+    GCGraph *const body     = loop.bodyGraph();
+    auto *const tupleType   = k > 1 ? static_cast<TupleType *>(loop.valueType()) : nullptr;
+
+    // The state: the value itself (k = 1) or a tuple of the k values, in the node's slot.
+    if (k == 1) {
+        currFrame.set(stateSlot, currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(0))));
+    } else {
+        Tuple *state = Tuple::create(k, mm::autoSpace());
+        for (size_t j = 0; j < k; ++j) {
+            state->set(
+                j,
+                currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(j))),
+                tupleType);
+        }
+        currFrame.set(stateSlot, state);
+    }
+    // The ports of a round: (the element,) the values of the state, the captures.
+    const auto bind = [&](Frame *frame, GCGraph *target, const slot_t *element) {
+        const auto norm = target->normPorts();
+        size_t port     = 0;
+        if (element != nullptr) {
+            frame->set(dataIndexOf(target, norm[port++]), *element);
+        }
+        if (k == 1) {
+            frame->set(dataIndexOf(target, norm[port]), currFrame.get<slot_t>(stateSlot));
+        } else {
+            Tuple *state = currFrame.get<Tuple *>(stateSlot);
+            for (size_t j = 0; j < k; ++j) {
+                frame->set(dataIndexOf(target, norm[port + j]), state->get<slot_t>(j));
+            }
+        }
+        const auto with = target->withPorts();
+        for (size_t c = 0; c < captures.size(); ++c) {
+            frame->set(
+                dataIndexOf(target, with[c]),
+                currFrame.get<slot_t>(dataIndexOf(graph, captures[c])));
+        }
+    };
+    for (size_t round = 0;; ++round) {
+        // Each round: the condition first, then the next element (camel/core/loop_kind.h).
+        if (cond != nullptr) {
+            requireRecursionRoom(graph);
+            Frame *frame = framePool_.acquire(cond);
+            bind(frame, cond, nullptr);
+            if (!fromSlot<Bool>(call(cond, frame))) {
+                break;
+            }
+        }
+        slot_t element = NullSlot;
+        if (iterable) {
+            Array *array = currFrame.get<Array *>(dataIndexOf(graph, *iterable));
+            if (round >= array->size()) {
+                break;
+            }
+            element = array->data()[round];
+        }
+        requireRecursionRoom(graph);
+        Frame *frame = framePool_.acquire(body);
+        bind(frame, body, iterable ? &element : nullptr);
+        currFrame.set(stateSlot, call(body, frame));
+    }
 }
 
 // The fault-isolation node (docs/technical/33_fault_isolation.md): a call of the function value

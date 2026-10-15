@@ -61,6 +61,8 @@ const char *kindName(GCNodeKind kind) {
         return "SYNC";
     case GCNodeKind::Gate:
         return "GATE";
+    case GCNodeKind::Loop:
+        return "LOOP";
     case GCNodeKind::Bind:
     case GCNodeKind::Dref:
         // Reserved kinds: never part of a frozen graph (see GCNodeKind).
@@ -334,6 +336,18 @@ void ProgramIndex::collect(
         if (g->hasNodePayload()) {
             for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
                 const GCNode *n = *it;
+                if (n != nullptr && n->kind == GCNodeKind::Loop && arms != nullptr) {
+                    // The condition and the body of a loop are code of the function the loop
+                    // is written in (design principles 2.11: they fold like arms).
+                    for (GCGraph *part : {g->loopCondGraphOf(it.ref()), g->loopBodyGraphOf(it.ref())}) {
+                        if (part != nullptr) {
+                            auto &owners = (*arms)[part];
+                            if (std::find(owners.begin(), owners.end(), g) == owners.end()) {
+                                owners.push_back(g);
+                            }
+                        }
+                    }
+                }
                 if (n != nullptr && n->kind == GCNodeKind::Brch && arms != nullptr) {
                     // An arm that is a call of a subgraph: that graph is the arm, and part of
                     // the graph that branches.
@@ -974,7 +988,22 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
     // frame of an arm is shown at all is the stack's business (DebugCore, 5.4): it folds into
     // the frame of the function unless the user asks for the subgraphs.
     info->display = info->name;
-    if (info->name.rfind("__g_", 0) == 0) {
+    // `f.loop1.cond`, `f.loop1.body`: the condition and the body of a loop written in `f`.
+    const bool loopPart = info->name.find(".loop") != std::string::npos &&
+                          (info->name.ends_with(".cond") || info->name.ends_with(".body"));
+    if (loopPart && armOwners_.contains(g)) {
+        info->role   = GraphRole::Arm;
+        info->owners = armOwners_.at(g);
+        int line     = 0;
+        for (const NodeInfo &n : info->nodes) {
+            if (n.loc.valid() && (line == 0 || n.loc.line < line)) {
+                line = n.loc.line;
+            }
+        }
+        const std::string owner = info->name.substr(0, info->name.rfind(".loop"));
+        info->display = owner + " [loop " + (info->name.ends_with(".cond") ? "condition" : "body") +
+                        (line > 0 ? " at line " + std::to_string(line) : std::string()) + "]";
+    } else if (info->name.rfind("__g_", 0) == 0) {
         std::string owner;
         for (GCGraph *outer = g->outerGraph(); outer != nullptr; outer = outer->outerGraph()) {
             if (outer->name().rfind("__", 0) != 0) {

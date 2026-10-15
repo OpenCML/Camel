@@ -1,0 +1,19 @@
+// A loop body that is a sync block runs its effects every round, in order; the value after the
+// last statement is the next state. A body that is not a sync block runs only what its value
+// needs. The condition sees the state, the body the state and the element.
+func countdown(n: int): int sync {
+    return loop k = n while k > 0 do sync {
+        println('tick', k)
+        k - 1
+    }
+}
+
+func main(): int sync {
+    let last = loop i = 0 for x in ['a', 'b', 'c'] do sync {
+        println(i, x)
+        i + 1
+    }
+    println('rounds', last)
+    println('countdown', countdown(3))
+    return 0
+}
