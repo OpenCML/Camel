@@ -125,6 +125,9 @@ enum class SemanticDiag : uint32_t {
     OperatorOverloadInvalid      = 0x0000F2,
     OperatorOverloadConflict     = 0x0000F3,
     AmbiguousOperatorCall        = 0x0000F4,
+    // Rulings of 2026-10-15 (design principles 2.13) and the defects found with them: 0x110
+    // and up.
+    DeclaredTypeMismatch         = 0x000110,
 
     // Warnings
     VarParamInAsyncFunction = 0x100001,

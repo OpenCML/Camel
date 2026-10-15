@@ -743,6 +743,8 @@ b5415a5a0dff0ad2 ok test/cases/consistency/comprehension/graph_comprehension.cml
 c9b03fe8ec99d6da ok test/cases/consistency/comprehension/graph_written_out.cml
 f79e8ead285be9fc ok test/cases/consistency/comprehension/shadowed.cml
 4452f8cec07c8705 ok test/cases/consistency/comprehension/values.cml
+5c122a487283ffc3 ok test/cases/consistency/declared_type/mismatch.cml
+9edc4a9d2bcbb6cc ok test/cases/consistency/declared_type/same_type.cml
 75883233dd95e8ca ok test/cases/consistency/entering/arms_folded.cml
 6fa20605b76648e2 ok test/cases/consistency/entering/empty_array.cml
 62e4bf813ec58f31 ok test/cases/consistency/entering/err_arg_reverse.cml

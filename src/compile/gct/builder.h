@@ -233,6 +233,13 @@ class Builder {
     /// elements are to be put into `T?` / `T!` is built with the conversions in place, and
     /// `entered` is set; anything else is visitData(ast).
     node_ptr_t visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered);
+    /// The initializer `value` of a declaration written with the type `type` (`let x: T = e`,
+    /// lowered from `ast`). A literal is converted to the type here; any other expression is
+    /// put under an annotation CAST, which the GIR builder resolves once the type of the value
+    /// is known: it puts the value into a declared `T?` / `T!`, says which function a
+    /// declared function type means, and otherwise checks that the value has the declared
+    /// type (a value of that very type passes; nothing is converted).
+    node_ptr_t declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast);
     node_ptr_t visitStructData(const AST::node_ptr_t &ast);
     node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncData(const AST::node_ptr_t &ast);

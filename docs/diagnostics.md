@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-140 diagnostics: 128 errors, 12 warnings.
+141 diagnostics: 129 errors, 12 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -114,6 +114,7 @@ prints one entry.
 | `0x030000F2` | [SemanticDiag::OperatorOverloadInvalid](#operatoroverloadinvalid) | Error |
 | `0x030000F3` | [SemanticDiag::OperatorOverloadConflict](#operatoroverloadconflict) | Error |
 | `0x030000F4` | [SemanticDiag::AmbiguousOperatorCall](#ambiguousoperatorcall) | Error |
+| `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -2745,6 +2746,34 @@ func operator +(a: string[], b: string): string[] { return [b] }
 
 func main(): int sync {
     println(['x'] + 'y')
+    return 0
+}
+```
+
+### DeclaredTypeMismatch
+
+`0x03000110` · Error · `SemanticDiag::DeclaredTypeMismatch`
+
+**Message**
+
+```text
+This value has type '{0}', which is not the declared type '{1}'.
+```
+
+**Help**
+
+```text
+A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself). Convert the value explicitly, e.g. 'float(n)' or 'v as T', or change the declared type.
+```
+
+**Example** (`test/cases/consistency/declared_type/mismatch.cml`, run as `camel -E short test/cases/consistency/declared_type/mismatch.cml`)
+
+```camel
+// Nothing is converted on the way into a declared type: an `int` is not a `float`.
+func main(): int sync {
+    let n = 3
+    let x: float = n
+    println(x)
     return 0
 }
 ```

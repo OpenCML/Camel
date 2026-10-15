@@ -789,6 +789,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::DeclaredTypeMismatch,
+            {
+                "DeclaredTypeMismatch",
+                "This value has type '{0}', which is not the declared type '{1}'.",
+                "A declaration written with a type takes a value of that type; nothing is "
+                "converted on the way (a number does not become a float by itself). Convert "
+                "the value explicitly, e.g. 'float(n)' or 'v as T', or change the declared "
+                "type.",
+            },
+        },
+        {
             SemanticDiag::IntegerLiteralTruncated,
             {
                 "IntegerLiteralTruncated",

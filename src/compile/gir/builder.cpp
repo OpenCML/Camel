@@ -3438,6 +3438,25 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
+    if (gct->annotation() && asTagged(targetType) == nullptr &&
+        gct->at(0)->type() != GCT::NodeKind::DATA) {
+        // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
+        // `e` must already have it. A value of that very type passes as it is (converting a
+        // value to its own type does nothing, design principles 2.12); one of a type the
+        // declared type accepts is cast to it, so that the name has the declared type; any
+        // other is refused, as numbers are not converted implicitly (design principles 2.7).
+        Type *have = valueTypeOf(sourceType);
+        if (targetType->equals(have)) {
+            LEAVE("CAST");
+            return valueNode;
+        }
+        if (!targetType->assignableFrom(have)) {
+            diags_->of(SemanticDiag::DeclaredTypeMismatch)
+                .atOrigin(gct->origin())
+                .commit(have->toString(), targetType->toString());
+            throw BuildAbortException();
+        }
+    }
     if (asTagged(targetType) != nullptr &&
         targetType->castSafetyFrom(sourceType) != CastSafety::Safe) {
         // Several levels at once (`let x: int?! = 5`): one CAST per level.

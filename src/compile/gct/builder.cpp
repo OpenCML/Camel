@@ -875,42 +875,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 }
 
                 if (i < typeNodes->size() && !enteredLiteral) {
-                    Type *type = declaredType;
-                    // Try a static type conversion first.
-                    // A declared function type says which function a name stands for
-                    // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
-                    // no node.
-                    if (asTagged(type) != nullptr ||
-                        (type->code() == TypeCode::Function &&
-                         dataNode->type() != NodeKind::DATA) ||
-                        (dataNode->type() == NodeKind::DATA && containsTypeVar(type))) {
-                        // Decided when the generic function is instantiated. A declared
-                        // `T?` / `T!` puts the value into that form (design principles
-                        // 2.10): a CAST, for any expression.
-                        node_ptr_t castNode = tree_->makeCast(type, true);
-                        *castNode << dataNode;
-                        setOriginFromAst(
-                            context_,
-                            castNode,
-                            ast,
-                            camel::source::OriginKind::GctNode,
-                            "gct.cast");
-                        dataNode = castNode;
-                    } else if (dataNode->type() == NodeKind::DATA) {
-                        const auto &data   = dataNode->data();
-                        auto convertedData = data->convertTo(type);
-                        if (convertedData) {
-                            dataNode = tree_->makeData(convertedData);
-                        } else {
-                            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, type);
-                            throw BuildAbortException();
-                        }
-                    } else {
-                        diags_->of(SemanticDiag::FeatureNotSupported)
-                            .at(ast->load()->tokenRange())
-                            .commit("dynamic type casting");
-                        throw BuildAbortException();
-                    }
+                    dataNode = declaredValue(dataNode, declaredType, ast);
                 }
 
                 // Ensure the data node is of type Data
@@ -947,41 +912,7 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                         TypePositionGuard position(*this, TypePosition::Annotation);
                         type = visitType(typeASTNode);
                     }
-                    // Try a static type conversion first.
-                    // A declared function type says which function a name stands for
-                    // (`let f: (x: int) => int = id`); the GIR builder resolves it and adds
-                    // no node.
-                    if (asTagged(type) != nullptr ||
-                        (type->code() == TypeCode::Function &&
-                         dataNode->type() != NodeKind::DATA) ||
-                        (dataNode->type() == NodeKind::DATA && containsTypeVar(type))) {
-                        // Decided when the generic function is instantiated. A declared
-                        // `T?` / `T!` puts the value into that form (design principles
-                        // 2.10): a CAST, for any expression.
-                        node_ptr_t castNode = tree_->makeCast(type, true);
-                        *castNode << dataNode;
-                        setOriginFromAst(
-                            context_,
-                            castNode,
-                            ast,
-                            camel::source::OriginKind::GctNode,
-                            "gct.cast");
-                        dataNode = castNode;
-                    } else if (dataNode->type() == NodeKind::DATA) {
-                        const auto &data   = dataNode->data();
-                        auto convertedData = data->convertTo(type);
-                        if (convertedData) {
-                            dataNode = tree_->makeData(convertedData);
-                        } else {
-                            reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, type);
-                            throw BuildAbortException();
-                        }
-                    } else {
-                        diags_->of(SemanticDiag::FeatureNotSupported)
-                            .at(ast->load()->tokenRange())
-                            .commit("dynamic type casting");
-                        throw BuildAbortException();
-                    }
+                    dataNode = declaredValue(dataNode, type, ast);
                 }
 
                 const string id     = std::to_string(idIndex_++);
@@ -2631,6 +2562,27 @@ Type *taggedElementTarget(Type *type) {
 }
 
 } // namespace
+
+node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast) {
+    // A literal of the declared type, converted now (`let x: float = 1`). A declared `T?` /
+    // `T!` and a type written with a type variable (decided when the generic function is
+    // instantiated) are left to the CAST, and so is a function type, which a literal cannot
+    // have.
+    if (value->type() == NodeKind::DATA && asTagged(type) == nullptr && !containsTypeVar(type)) {
+        if (data_ptr_t converted = value->data()->convertTo(type)) {
+            return tree_->makeData(converted);
+        }
+        reportLiteralCastFailure(diags_, ast->load()->tokenRange(), value->data(), type);
+        throw BuildAbortException();
+    }
+    // Any other expression: an annotation CAST (see the declaration). An expression of the
+    // declared type used to be refused here as "dynamic type casting" (`var acc: V = p`
+    // with `p: V`); converting a value to its own type does nothing (design principles 2.12).
+    node_ptr_t castNode = tree_->makeCast(type, true);
+    *castNode << value;
+    setOriginFromAst(context_, castNode, ast, camel::source::OriginKind::GctNode, "gct.cast");
+    return castNode;
+}
 
 node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered) {
     entered        = false;

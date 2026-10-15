@@ -1,0 +1,7 @@
+// Nothing is converted on the way into a declared type: an `int` is not a `float`.
+func main(): int sync {
+    let n = 3
+    let x: float = n
+    println(x)
+    return 0
+}

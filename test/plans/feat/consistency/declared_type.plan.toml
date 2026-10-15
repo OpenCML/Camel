@@ -1,0 +1,31 @@
+id = "consistency.declared_type"
+order = 365
+tier = "feat"
+tags = ["feat", "consistency", "compile", "types"]
+desc = "A declaration written with a type (`let x: T = e`, `var x: T = e`) takes a value of that type; a value of that very type passes as it is (design principles 2.12), and nothing is converted on the way (2.7)."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+timeout_ms = 20000
+
+[[tests]]
+name = "declared_type.same_type"
+desc = "`var acc: V = p` with `p: V` (it was refused as 'dynamic type casting'), a typed `let` from a call, from a name and from `map`, and a declared `T?` from an element. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/declared_type/same_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "{ x: 1.5, y: 5.0 }\n[6, 2, 4] 6\n"
+expect_output_not_contains = ["FeatureNotSupported", "[Warn]"]
+
+[[tests]]
+name = "declared_type.mismatch"
+desc = "An `int` value declared `float` is refused at the declaration (DeclaredTypeMismatch): numbers are not converted implicitly."
+kind = "negative"
+case = "../../../cases/consistency/declared_type/mismatch.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::DeclaredTypeMismatch", ".cml:4:5:", "This value has type 'int', which is not the declared type 'float'"]
