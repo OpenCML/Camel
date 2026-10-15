@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -101,14 +101,24 @@ std::string SiteTable::siteFor(
     if (auto it = index_.find(key); it != index_.end()) {
         return sites_[it->second].name;
     }
+    std::string name = makeSite(nodeOriginNear(graph, node), kind, args);
+    index_.emplace(key, sites_.size() - 1);
+    return name;
+}
 
+std::string SiteTable::siteAt(
+    uint64_t origin, RuntimeDiag kind, const std::vector<std::string> &args) {
+    return makeSite(origin, kind, args);
+}
+
+std::string SiteTable::makeSite(
+    uint64_t origin, RuntimeDiag kind, const std::vector<std::string> &args) {
     // The templates take up to ten arguments; those not given are empty.
     std::array<std::string, 10> a;
     for (size_t i = 0; i < args.size() && i < a.size(); ++i) {
         a[i] = args[i];
     }
     auto builder = DiagnosticBuilder::of(kind, nullptr);
-    const uint64_t origin = nodeOriginNear(graph, node);
     if (origin != camel::source::kInvalidOriginId) {
         builder.atOrigin(origin);
     }
@@ -142,7 +152,6 @@ std::string SiteTable::siteFor(
         .message  = d.message,
         .location = locationOf(d),
     };
-    index_.emplace(key, sites_.size());
     sites_.push_back(std::move(site));
     return sites_.back().name;
 }
