@@ -7,6 +7,32 @@ the [architecture proposal](../../docs/design/indexed-computation/README.md).
 Unresolved language semantics require an author decision. Backend policy and
 module operator contracts must be explicit; they do not redefine Camel syntax.
 
+## Core operator contract dependencies (2026-10-16)
+
+Tiles now consumes the core operator semantics registry while lowering each
+operator. Plans record stable keys and the immutable declaration revision, and
+lowered values point back to that contract. Missing declarations remain explicit
+opaque dependencies, not inferred capabilities. FMA selection requires both a
+lexical grant and the core's correctly rounded f32 contract sensitive to contraction.
+Compilation refuses unsupported semantic major versions (currently supports 1).
+
+Generation and execution validation reject stale declarations, including an
+absent declaration being installed, same-version replacement, minor updates and
+incompatible major versions. A declaration epoch check prevents observing a
+mixed revision set during validation. Source-template keys include stable keys,
+revision tokens and each value's originating contract. Tokens are process-local
+addresses of core-owned, process-lifetime immutable records, never GC pointers or
+persistent cache identities. Inspection lists stable identities and numeric classes.
+This is consumption of phase 1 metadata, not implementation of generic index-map
+lowering or a persistent semantic fingerprint.
+
+Native checks cover stale/replaced/incompatible contracts, revision-sensitive
+source caching, and conservative FMA selection for absent/opaque declarations.
+The native verifier now resolves libcamel through the standard out/latest library
+path because it calls the core registry. Windows RTX 4060 Ti passed 114/114;
+Linux RTX 3090 device 0 passed 98/98 main cases and 16/16 core checks. Raw logs are
+retained in docs/performance/tiles/2026-10-16-*-operator-contracts-*.txt.
+
 ## Lexical permissions and controlled contraction (2026-10-16)
 
 Integrated fsh-dev through 0017dcf7, including @numeric function/block syntax,
