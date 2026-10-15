@@ -258,3 +258,7 @@ This is not dynamic GPU control flow. Tensor-dependent conditions, scalar
 arithmetic needed to derive more specialization conditions, general matches and
 loop regions remain outstanding. The semantic branch itself is not converted
 into an eager elementwise select.
+
+The committed ea217b7d rebuild passes 55/55 host/GPU/tensor checks locally and
+on remote RTX 3090 device 7. Remote evidence is retained in
+`docs/performance/tiles/2026-10-15-rtx3090-branches-tests.txt`.
