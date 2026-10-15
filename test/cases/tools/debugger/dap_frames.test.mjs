@@ -155,7 +155,7 @@ await runTest(async (t) => {
             await dap.request('configurationDone')
 
             let stop = await dap.waitStop()
-            checkEq(stop?.reason, 'breakpoint', on('a function breakpoint stops'))
+            checkEq(stop?.reason, 'function breakpoint', on('a function breakpoint stops, with the reason DAP has for it'))
             checkEq(stop?.body?.hitBreakpointIds, [answers[1].id], on('with its id'))
             checkEq(
                 [stop?.name, stop?.line, stop?.top?.source?.name],

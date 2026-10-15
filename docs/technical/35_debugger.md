@@ -546,7 +546,7 @@ for a worker that crashed.
 | Event | | Notes |
 |---|---|---|
 | `initialized` | yes | after the launch response |
-| `stopped` | yes | reasons `breakpoint` (with `hitBreakpointIds`), `step`, `pause`, `entry`, `exception` (with the diagnostic's text) |
+| `stopped` | yes | reasons `breakpoint` and `function breakpoint` (with `hitBreakpointIds`), `step`, `pause`, `entry`, `exception` (with the diagnostic's text) |
 | `continued` | yes | |
 | `output` | yes | `stdout` and `stderr` of the program; `console` for notices of the debugger, the lines a step went past (4.2) and the breakpoints never hit (3.2) |
 | `breakpoint` | yes | reason `changed` |

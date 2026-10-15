@@ -349,8 +349,10 @@ class Adapter {
                     output("console", line.value("text", "") + "\n");
                 }
             }
+            // A function breakpoint has a reason of its own in DAP.
+            const bool atFunction = reason == "breakpoint" && e.contains("function");
             json body{
-                {"reason", reason},
+                {"reason", atFunction ? std::string("function breakpoint") : reason},
                 {"threadId", kThreadId},
                 {"allThreadsStopped", true}};
             if (auto ids = e.find("breakpointIds"); ids != e.end() && ids->is_array()) {
