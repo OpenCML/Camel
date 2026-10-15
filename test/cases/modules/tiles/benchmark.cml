@@ -1,0 +1,23 @@
+module tiles_benchmark
+import { Tensor, random, seed, exp, relu, sum, max } from tensor
+import { benchmark } from tiles
+func pipeline(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    return exp(relu((x + b) * 0.5 - 0.25))
+}
+func normalize(x: Tensor<f32>): Tensor<f32> {
+    let e = exp(x - max(x, 1, true))
+    return e / sum(e, 1, true)
+}
+func product(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> { return x @ y }
+func main(): int sync {
+    seed(61)
+    let x = random([1024, 1024], -1.0, 1.0)
+    let b = random([1, 1024], -1.0, 1.0)
+    println(benchmark<pipeline>((x, b)))
+    let rows = random([128, 257], -10.0, 10.0)
+    println(benchmark<normalize>(rows))
+    let a = random([127, 259], -1.0, 1.0)
+    let w = random([259, 131], -1.0, 1.0)
+    println(benchmark<product>((a, w)))
+    return 0
+}

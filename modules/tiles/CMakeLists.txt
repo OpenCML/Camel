@@ -3,7 +3,7 @@ add_camel_module(
   NAME tiles
   SOURCES src/module.cpp src/compiler.cpp src/codegen.cpp src/cuda.cpp src/schedule.cpp
   EXTRA_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include
-  EXTRA_LIBS tensor_cmo ${CMAKE_DL_LIBS}
+  EXTRA_LIBS tensor_cmo nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS}
 )
 
 # Native contract tests build with the standard build, without needing a CUDA device.

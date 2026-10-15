@@ -59,13 +59,14 @@ struct Program {
 
 size_t elements(const Shape &shape);
 Program compile(Function *function, const std::vector<Argument> &arguments);
-void generate(Program &program);
+void generate(Program &program, bool fuse = true);
 bool elementwise(const std::string &op);
 void validate(const Program &program);
-void schedule(Program &program);
+void schedule(Program &program, bool fuse = true);
 void validatePlan(const Program &program);
 std::string inspect(const Program &program);
 std::vector<float> execute(const Program &program);
+std::string benchmark(const Program &program);
 std::string deviceInfo();
 bool available();
 

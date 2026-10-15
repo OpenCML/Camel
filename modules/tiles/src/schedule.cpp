@@ -122,7 +122,7 @@ void validate(const Program &p) {
     }
 }
 
-void schedule(Program &p) {
+void schedule(Program &p, bool fuse) {
     validate(p);
     const size_t count = p.nodes.size();
     std::vector<size_t> users(count), consumer(count, SIZE_MAX), owner(count), groupSize(count, 1);
@@ -136,7 +136,7 @@ void schedule(Program &p) {
     // single-use elementwise nodes fuse; broadcasting stays on the boundary loads.
     for (size_t id = count; id-- > 0;) {
         size_t target = consumer[id];
-        if (id == p.output || users[id] != 1 || !elementwise(p.nodes[id].op) ||
+        if (!fuse || id == p.output || users[id] != 1 || !elementwise(p.nodes[id].op) ||
             !elementwise(p.nodes[target].op) || p.nodes[id].shape != p.nodes[target].shape)
             continue;
         size_t root = owner[target];

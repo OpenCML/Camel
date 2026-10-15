@@ -69,6 +69,11 @@ slot_t inspectKernel(ArgsView &with, ArgsView &norm, Context &) {
         return td::toSlot(::String::from(inspect(prepare(with, norm)), core::mm::autoSpace()));
     });
 }
+slot_t benchmarkKernel(ArgsView &with, ArgsView &norm, Context &) {
+    return checked([&] {
+        return td::toSlot(::String::from(benchmark(prepare(with, norm)), core::mm::autoSpace()));
+    });
+}
 slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
     return checked([&] {
         auto program = prepare(with, norm);
@@ -115,7 +120,7 @@ class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
-        for (const std::string name : {"run", "source", "inspect"}) {
+        for (const std::string name : {"run", "source", "inspect", "benchmark"}) {
             exportEntity(
                 name,
                 OperatorGroup::create(
@@ -151,6 +156,7 @@ class TilesModule final : public BuiltinModule {
                     {"run", &runKernel},
                     {"source", &sourceKernel},
                     {"inspect", &inspectKernel},
+                    {"benchmark", &benchmarkKernel},
                     {"available", &availableKernel},
                     {"device", &deviceKernel}});
         });
@@ -160,6 +166,7 @@ class TilesModule final : public BuiltinModule {
             {{"run", false},
              {"source", false},
              {"inspect", false},
+             {"benchmark", false},
              {"available", false},
              {"device", false}});
         loaded_ = true;

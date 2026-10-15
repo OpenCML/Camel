@@ -4,6 +4,35 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "benchmark_protocol"
+kind = "behavior"
+case = "../../cases/modules/tiles/benchmark.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const records = input.normalized.stdout.trim().split(String.fromCharCode(10)).map(JSON.parse)
+assert(records.length === 3, 'expected three benchmark workloads')
+for (const r of records) {
+  assert(r.schema === 1 && r.repetitions === 21 && r.warmups === 5, 'unexpected measurement protocol')
+  assert(r.device && r.driver_version > 0 && r.nvrtc_version, 'missing hardware/compiler provenance')
+  assert(r.correctness_before.mismatches === 0 && r.correctness_after.mismatches === 0, 'correctness gate failed')
+  for (const name of ['optimized', 'unfused']) {
+    const v = r[name]
+    assert(v.device_ms.length === 21 && v.upload_host_ms.length === 21, 'missing raw samples')
+    assert(v.device_ms.every(t => Number.isFinite(t) && t >= 0), 'invalid device timing')
+    assert(v.upload_host_ms.every(t => Number.isFinite(t) && t >= 0), 'invalid upload timing')
+    assert(v.device_min_ms <= v.device_median_ms && v.device_median_ms <= v.device_p90_ms, 'invalid quantiles')
+  }
+}
+assert(records[0].optimized.plan.kernels === 1 && records[0].unfused.plan.kernels === 5, 'missing unfused control')
+assert(records[2].identical_device_code === true, 'matmul must be the same-code noise control')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
 name = "fusion.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/fusion.cml"

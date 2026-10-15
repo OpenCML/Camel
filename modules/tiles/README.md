@@ -29,6 +29,10 @@ func main(): int sync {
 - `inspect<fn>(inputs)` returns a versioned JSON plan summary without CUDA:
   semantic values, kernel groups, materialized values, physical allocations,
   logical bytes and allocated bytes. These are plan metrics, not timings.
+- `benchmark<fn>(inputs)` compares the optimized and unfused schedules with
+  the same input snapshots. It returns JSON containing raw CUDA-event samples,
+  host compile/load/allocation/transfer times, hardware/compiler metadata, and
+  correctness comparisons. It requires a nonempty computed output.
 - `available()` reports whether driver/NVRTC initialization succeeds. A successful
   result does not guarantee a subsequent compilation or memory allocation succeeds.
 - `device()` reports the selected GPU, or raises a diagnostic explaining failure.
@@ -84,6 +88,21 @@ be installed alongside NVRTC.
   time. Linux uses the loader search path and the configured Toolkit library path.
 
 ## Verification
+
+Capture performance records with
+`python test/tools/benchmark-tiles.py --runs 3 --output results.jsonl`.
+The benchmark performs a correctness execution, five warmups, then 21 timed
+executions per variant with alternating order. Inputs are restored before every
+execution because storage reuse may overwrite them. Uploads are outside the
+CUDA-event interval, which includes kernel launch gaps and measures warmed
+resident data. Download time is reported separately. This is not a cold-memory
+bandwidth benchmark or end-to-end model throughput. Graph specialization and
+snapshot creation are outside the reported phase timings. No timing threshold
+is enforced by correctness tests.
+
+The unfused baseline uses the same compiler, arithmetic contract and storage
+planner with fusion disabled. It is not a Triton or vendor-library comparison.
+An `identical_device_code` result is a noise control, not an optimization result.
 
 Run host-only compiler checks with
 `node scripts/test.js test/plans/feat/modules/tiles.plan.toml`.

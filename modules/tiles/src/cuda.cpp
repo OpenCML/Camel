@@ -11,11 +11,14 @@
 // Lazy Driver/NVRTC loading, bounded compiled-module cache, and scoped device ownership.
 #include "tiles/program.h"
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <deque>
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -130,6 +133,7 @@ struct Api {
     Library rtc{nvrtcPaths()};
 #define DRIVER(fn) decltype(&::fn) fn = driver.symbol<decltype(&::fn)>(TILES_STR(fn))
     DRIVER(cuInit);
+    DRIVER(cuDriverGetVersion);
     DRIVER(cuDeviceGet);
     DRIVER(cuDeviceGetName);
     DRIVER(cuDeviceGetAttribute);
@@ -150,9 +154,15 @@ struct Api {
     DRIVER(cuStreamSynchronize);
     DRIVER(cuStreamDestroy);
     DRIVER(cuLaunchKernel);
+    DRIVER(cuEventCreate);
+    DRIVER(cuEventDestroy);
+    DRIVER(cuEventRecord);
+    DRIVER(cuEventSynchronize);
+    DRIVER(cuEventElapsedTime);
 #undef DRIVER
 #define RTC(fn) decltype(&::fn) fn = rtc.symbol<decltype(&::fn)>(#fn)
     RTC(nvrtcCreateProgram);
+    RTC(nvrtcVersion);
     RTC(nvrtcCompileProgram);
     RTC(nvrtcDestroyProgram);
     RTC(nvrtcGetPTXSize);
@@ -246,9 +256,15 @@ class Backend {
         }
     }
     CUmodule module(const std::string &source) {
-        for (const auto &item : cache)
-            if (item.source == source)
-                return item.module;
+        for (size_t i = 0; i < cache.size(); ++i) {
+            if (cache[i].source != source)
+                continue;
+            CUmodule found = cache[i].module;
+            // Refresh recency before loading another variant. A benchmark keeps two
+            // variants live under the same mutex; the second load must not evict the first.
+            std::rotate(cache.begin() + i, cache.begin() + i + 1, cache.end());
+            return found;
+        }
         nvrtcProgram program = nullptr;
         api.check(
             api.nvrtcCreateProgram(&program, source.c_str(), "camel_tiles.cu", 0, nullptr, nullptr),
@@ -322,6 +338,101 @@ struct Resources {
         return ptr;
     }
 };
+
+// Both normal execution and benchmarking use this exact upload/launch/download path.
+// Allocation reuse can overwrite inputs, so every repetition must restore them.
+class DeviceRun {
+    const Program &program;
+    Api &api;
+    Resources resources;
+    std::vector<CUdeviceptr> pointers;
+    std::vector<CUfunction> kernels;
+    CUdeviceptr table;
+
+  public:
+    DeviceRun(const Program &p, Api &a, CUmodule module) : program(p), api(a), resources(a) {
+        std::vector<CUdeviceptr> allocations;
+        for (auto bytes : p.storage.bytes)
+            allocations.push_back(resources.allocate(bytes));
+        pointers.assign(p.nodes.size(), 0);
+        for (size_t id = 0; id < p.nodes.size(); ++id)
+            if (p.storage.slots[id] != SIZE_MAX)
+                pointers[id] = allocations[p.storage.slots[id]];
+        table = resources.allocate(pointers.size() * sizeof(CUdeviceptr));
+        api.check(
+            api.cuMemcpyHtoD(table, pointers.data(), pointers.size() * sizeof(CUdeviceptr)),
+            "upload argument table");
+        for (const auto &launch : p.launches) {
+            CUfunction kernel;
+            api.check(
+                api.cuModuleGetFunction(&kernel, module, launch.name.c_str()),
+                "resolve kernel");
+            kernels.push_back(kernel);
+        }
+    }
+    CUstream stream() const { return resources.stream; }
+    void upload() {
+        for (size_t id = 0; id < program.nodes.size(); ++id) {
+            const auto &n = program.nodes[id];
+            if (!n.data.empty())
+                api.check(
+                    api.cuMemcpyHtoD(pointers[id], n.data.data(), n.data.size() * sizeof(float)),
+                    "upload input");
+        }
+    }
+    void launch() {
+        void *args[] = {&table};
+        for (size_t i = 0; i < program.launches.size(); ++i) {
+            const auto &s = program.launches[i];
+            if (!s.elements)
+                continue;
+            api.check(
+                api.cuLaunchKernel(
+                    kernels[i],
+                    s.gridX,
+                    s.gridY,
+                    1,
+                    s.blockX,
+                    s.blockY,
+                    1,
+                    0,
+                    resources.stream,
+                    args,
+                    nullptr),
+                "launch kernel");
+        }
+    }
+    void synchronize() {
+        api.check(api.cuStreamSynchronize(resources.stream), "complete GPU computation");
+    }
+    std::vector<float> download() {
+        synchronize();
+        std::vector<float> result(elements(program.nodes[program.output].shape));
+        if (!result.empty())
+            api.check(
+                api.cuMemcpyDtoH(
+                    result.data(),
+                    pointers[program.output],
+                    result.size() * sizeof(float)),
+                "download result");
+        return result;
+    }
+};
+struct Event {
+    Api &api;
+    CUevent handle = nullptr;
+    explicit Event(Api &a) : api(a) {
+        api.check(api.cuEventCreate(&handle, 0), "create timing event");
+    }
+    ~Event() {
+        if (handle)
+            api.cuEventDestroy(handle);
+    }
+};
+using Clock = std::chrono::steady_clock;
+double elapsed(Clock::time_point start) {
+    return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
+}
 } // namespace
 
 std::string deviceInfo() { return backend().description; }
@@ -346,53 +457,141 @@ std::vector<float> execute(const Program &p) {
     if (p.nodes[p.output].op == "input")
         return p.nodes[p.output].data;
     CUmodule module = b.module(p.source);
-    Resources resources(b.api);
-    std::vector<CUdeviceptr> allocations;
-    for (auto bytes : p.storage.bytes)
-        allocations.push_back(resources.allocate(bytes));
-    std::vector<CUdeviceptr> pointers(p.nodes.size(), 0);
-    for (size_t id = 0; id < p.nodes.size(); ++id) {
-        const auto &n = p.nodes[id];
-        if (p.storage.slots[id] == SIZE_MAX)
-            continue;
-        size_t bytes = elements(n.shape) * sizeof(float);
-        auto ptr     = allocations[p.storage.slots[id]];
-        pointers[id] = ptr;
-        if (!n.data.empty())
-            b.api.check(b.api.cuMemcpyHtoD(ptr, n.data.data(), bytes), "upload input");
+    DeviceRun run(p, b.api, module);
+    run.upload();
+    run.launch();
+    return run.download();
+}
+
+std::string benchmark(const Program &program) {
+    using nlohmann::json;
+    validatePlan(program);
+    if (!elements(program.nodes[program.output].shape) ||
+        program.nodes[program.output].op == "input")
+        throw std::runtime_error("benchmark requires a nonempty computed output");
+    Program reference = program;
+    generate(reference, false);
+    auto start              = Clock::now();
+    Backend &b              = backend();
+    double initializationMs = elapsed(start);
+    std::lock_guard lock(b.mutex);
+    Current current(b.api, b.context);
+    int driver = 0, major = 0, minor = 0;
+    b.api.check(b.api.cuDriverGetVersion(&driver), "query driver version");
+    b.api.check(b.api.nvrtcVersion(&major, &minor), "query compiler version");
+    json report = {
+        {"schema", 1},
+        {"device", b.description},
+        {"driver_version", driver},
+        {"nvrtc_version", std::to_string(major) + "." + std::to_string(minor)},
+        {"target", b.architecture},
+        {"dtype", "f32"},
+        {"fmad", false},
+        {"initialization_host_ms", initializationMs},
+        {"warmups", 5},
+        {"repetitions", 21},
+        {"timing", "CUDA event span including launch gaps; inputs restored before every sample"},
+        {"includes_graph_specialization", false},
+        {"identical_device_code", program.source == reference.source},
+        {"output_shape", program.nodes[program.output].shape}};
+    report["input_shapes"] = json::array();
+    for (const auto &n : program.nodes)
+        if (n.op == "input")
+            report["input_shapes"].push_back(n.shape);
+    const Program *plans[] = {&program, &reference};
+    const char *names[]    = {"optimized", "unfused"};
+    std::unique_ptr<DeviceRun> runs[2];
+    for (size_t i = 0; i < 2; ++i) {
+        const auto &p = *plans[i];
+        auto &r       = report[names[i]];
+        r["plan"]     = json::parse(inspect(p));
+        r["compile_cache_hit"] =
+            std::any_of(b.cache.begin(), b.cache.end(), [&](const Compiled &c) {
+                return c.source == p.source;
+            });
+        start                         = Clock::now();
+        CUmodule module               = b.module(p.source);
+        r["compile_load_host_ms"]     = elapsed(start);
+        start                         = Clock::now();
+        runs[i]                       = std::make_unique<DeviceRun>(p, b.api, module);
+        r["allocation_setup_host_ms"] = elapsed(start);
+        r["device_ms"]                = json::array();
+        r["upload_host_ms"]           = json::array();
     }
-    CUdeviceptr table = resources.allocate(pointers.size() * sizeof(CUdeviceptr));
-    b.api.check(
-        b.api.cuMemcpyHtoD(table, pointers.data(), pointers.size() * sizeof(CUdeviceptr)),
-        "upload argument table");
-    void *args[] = {&table};
-    for (const auto &launch : p.launches) {
-        if (!launch.elements)
-            continue;
-        CUfunction kernel;
-        b.api.check(
-            b.api.cuModuleGetFunction(&kernel, module, launch.name.c_str()),
-            "resolve kernel");
-        b.api.check(
-            b.api.cuLaunchKernel(
-                kernel,
-                launch.gridX,
-                launch.gridY,
-                1,
-                launch.blockX,
-                launch.blockY,
-                1,
-                0,
-                resources.stream,
-                args,
-                nullptr),
-            "launch kernel");
+    Event begin(b.api), end(b.api);
+    std::vector<float> results[2];
+    for (size_t i = 0; i < 2; ++i) {
+        start = Clock::now();
+        runs[i]->upload();
+        runs[i]->launch();
+        results[i]                                                = runs[i]->download();
+        report[names[i]]["first_upload_execute_download_host_ms"] = elapsed(start);
     }
-    b.api.check(b.api.cuStreamSynchronize(resources.stream), "complete GPU computation");
-    b.api.check(
-        b.api.cuMemcpyDtoH(result.data(), pointers[p.output], result.size() * sizeof(float)),
-        "download result");
-    return result;
+    auto compare = [&] {
+        double maxAbs = 0, maxRel = 0;
+        size_t mismatches = 0;
+        for (size_t i = 0; i < results[0].size(); ++i) {
+            double a = results[0][i], r = results[1][i];
+            if (!std::isfinite(a) || !std::isfinite(r)) {
+                if (!(a == r || (std::isnan(a) && std::isnan(r))))
+                    ++mismatches;
+                continue;
+            }
+            double diff = std::abs(a - r);
+            maxAbs      = std::max(maxAbs, diff);
+            maxRel      = std::max(maxRel, diff / std::max(1e-30, std::abs(r)));
+            if (diff > 1e-6 + 1e-5 * std::abs(r))
+                ++mismatches;
+        }
+        if (mismatches)
+            throw std::runtime_error("benchmark correctness gate failed against unfused execution");
+        return json{
+            {"max_abs_error", maxAbs},
+            {"max_rel_error", maxRel},
+            {"mismatches", mismatches}};
+    };
+    report["correctness_before"] = compare();
+    // Alternate ordering to reduce systematic clock/cache bias. Restoring inputs is
+    // essential: the production storage plan may reuse their allocation for results.
+    for (int sample = -5; sample < 21; ++sample) {
+        for (size_t order = 0; order < 2; ++order) {
+            size_t i  = (order + (sample + 5) % 2) % 2;
+            auto &run = *runs[i];
+            start     = Clock::now();
+            run.upload();
+            double uploadMs = elapsed(start);
+            b.api.check(b.api.cuEventRecord(begin.handle, run.stream()), "record timing start");
+            run.launch();
+            b.api.check(b.api.cuEventRecord(end.handle, run.stream()), "record timing end");
+            b.api.check(b.api.cuEventSynchronize(end.handle), "wait for timing end");
+            float ms = 0;
+            b.api.check(
+                b.api.cuEventElapsedTime(&ms, begin.handle, end.handle),
+                "read device time");
+            if (sample >= 0) {
+                report[names[i]]["device_ms"].push_back(ms);
+                report[names[i]]["upload_host_ms"].push_back(uploadMs);
+            }
+        }
+    }
+    for (size_t i = 0; i < 2; ++i) {
+        start                 = Clock::now();
+        results[i]            = runs[i]->download();
+        auto &r               = report[names[i]];
+        r["download_host_ms"] = elapsed(start);
+        auto samples          = r["device_ms"].get<std::vector<double>>();
+        std::sort(samples.begin(), samples.end());
+        r["device_min_ms"]    = samples.front();
+        r["device_median_ms"] = samples[samples.size() / 2];
+        r["device_p90_ms"]    = samples[(samples.size() - 1) * 9 / 10];
+    }
+    report["correctness_after"] = compare();
+    double optimized            = report["optimized"]["device_median_ms"];
+    if (optimized > 0)
+        report["median_speedup"] = report["unfused"]["device_median_ms"].get<double>() / optimized;
+    else
+        report["median_speedup"] = nullptr;
+    return report.dump();
 }
 } // namespace camel::tiles
 #else
@@ -403,6 +602,10 @@ std::string deviceInfo() {
 }
 bool available() { return false; }
 std::vector<float> execute(const Program &) {
+    (void)deviceInfo();
+    return {};
+}
+std::string benchmark(const Program &) {
     (void)deviceInfo();
     return {};
 }
