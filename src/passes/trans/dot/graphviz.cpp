@@ -154,7 +154,7 @@ string recordLabel(
     case camel::runtime::GCNodeKind::Copy:
         return "COPY";
     case camel::runtime::GCNodeKind::Fill:
-        return record.dataType ? record.dataType->toString() : "FILL";
+        return record.dataType() ? record.dataType()->toString() : "FILL";
     case camel::runtime::GCNodeKind::Accs: {
         const auto *body = graph->nodeBodyAs<camel::runtime::GCAccsBody>(nodeRef);
         ASSERT(
@@ -505,8 +505,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         if (!info.kind.empty())
             metadata +=
                 std::format(", param_kind=\"{}\", param_index=\"{}\"", info.kind, info.index);
-        if (port->dataType)
-            metadata += std::format(", value_type=\"{}\"", escape(port->dataType->toString()));
+        if (port->dataType())
+            metadata += std::format(", value_type=\"{}\"", escape(port->dataType()->toString()));
         metadata += debugOriginAttr(graph, ref);
         const string styling = config_.readableOnly
                                    ? ""
@@ -544,8 +544,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         string size    = recordSize(*node);
         string type    = recordType(*node);
         // FILL produces this concrete aggregate/function type; never infer it from input labels.
-        const string valueType = node->kind == camel::runtime::GCNodeKind::Fill && node->dataType
-                                     ? node->dataType->toString()
+        const string valueType = node->kind == camel::runtime::GCNodeKind::Fill && node->dataType()
+                                     ? node->dataType()->toString()
                                      : "";
         const string valueAttr =
             valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType));

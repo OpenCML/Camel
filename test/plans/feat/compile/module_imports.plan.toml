@@ -239,4 +239,4 @@ kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_literal.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_stdout_contains = ["N00 [label=\"k\", type=\"PORT\"];", "N01 [label=\"x\", type=\"PORT\"];", "F02 -> N00 [label=\"0\", type=\"WITH_PORT\"];", "F02 -> N01 [label=\"0\", type=\"NORM_PORT\"];"]
+expect_stdout_contains = ["N00 [label=\"k\", type=\"PORT\", param_name=\"k\", param_kind=\"capture\", param_index=\"0\", value_type=\"int\"];", "N01 [label=\"x\", type=\"PORT\", param_name=\"x\", param_kind=\"normal\", param_index=\"0\", value_type=\"int\"];", "F02 -> N00 [label=\"0\", type=\"WITH_PORT\"];", "F02 -> N01 [label=\"0\", type=\"NORM_PORT\"];"]

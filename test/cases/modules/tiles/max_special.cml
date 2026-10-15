@@ -7,13 +7,13 @@ with <width: int>
 func sample(i: int): float {
     let row = i / width
     let col = i % width
-    return if row == 0 then (if col == 0 then nan() else 4.0)
-        else if row == 1 then (if col == 1 then nan() else 4.0)
+    return if row == 0 then (if col == 0 then nan else 4.0)
+        else if row == 1 then (if col == 1 then nan else 4.0)
         else if row == 2 then (if col == 0 then 0.0 else -0.0)
         else if row == 3 then (if col == 1 then -0.0 else if col == width - 1 then 0.0 else -1.0)
-        else if row == 4 then -inf()
-        else if row == 5 then (if col == width - 1 then inf() else -inf())
-        else if row == 6 then nan()
+        else if row == 4 then -inf
+        else if row == 5 then (if col == width - 1 then inf else -inf)
+        else if row == 6 then nan
         else (if col == 1 || col == width - 1 then 9.0 else -2.0)
 }
 func maximum(x: Tensor<f32>): Tensor<f32> { return max(x, -1) }
