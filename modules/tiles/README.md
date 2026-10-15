@@ -196,7 +196,14 @@ boundaries; there is no storage aliasing. This representation
 separates logical indexing from thread placement and is a foundation for later
 map composition and view elimination, not the complete indexed-domain design.
 
-First-class index domains, masks, layouts, schedule/resource graphs, loop and
+Physical matrix tile loads use structured buffer accesses: an index expression
+and a Boolean validity mask travel together through coordinate substitution.
+Host evaluation short-circuits masks and skips invalid addresses; CUDA lowering
+prints conditional loads with exact fallback bits. The host evaluator is useful
+for checking mappings but is not a symbolic bounds proof. Kernel loops, stores,
+barriers and arithmetic still need migration to a complete structured kernel IR.
+
+First-class index domains, public masks, layouts, schedule/resource graphs, loop and
 branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning,
 asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR

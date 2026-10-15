@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -12,6 +12,7 @@
 #include "tiles/program.h"
 #include "tiles/device.h"
 #include "tiles/internal/index_expr.h"
+#include "tiles/internal/access.h"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -56,6 +57,29 @@ int main() {
         if ((IndexExpr(3) * IndexExpr(7)).cuda() != "21ULL")
             throw std::runtime_error("index constant folding mismatch");
         std::cout << "tiles index expressions: composition and checked evaluation passed\n";
+        using kernel::Predicate;
+        const auto bounded = Predicate::less(i, IndexExpr(3));
+        const kernel::Access access{0, transposed, bounded};
+        const auto tiled = access.substitute("i", IndexExpr::variable("base") + i);
+        for (uint64_t base = 0; base < 5; ++base) {
+            for (uint64_t lane = 0; lane < 4; ++lane) {
+                const auto actual = tiled.evaluate({{"base", base}, {"i", lane}});
+                if (actual.has_value() != (base + lane < 3) ||
+                    (actual && *actual != transposeExpected[base + lane]))
+                    throw std::runtime_error("masked access substitution mismatch");
+            }
+        }
+        const kernel::Access masked{0, i + IndexExpr(1), Predicate(false)};
+        if (masked.evaluate({{"i", UINT64_MAX}}))
+            throw std::runtime_error("masked address was evaluated");
+        const auto invalid = Predicate::less(IndexExpr(1) / i, IndexExpr(3));
+        if ((Predicate(false) && invalid).evaluate({{"i", 0}}) ||
+            !(Predicate(true) || invalid).evaluate({{"i", 0}}))
+            throw std::runtime_error("predicate short circuit mismatch");
+        rejected([&] { (void)invalid.evaluate({{"i", 0}}); });
+        if ((!Predicate::equal(i, IndexExpr(2))).evaluate({{"i", 2}}))
+            throw std::runtime_error("predicate equality mismatch");
+        std::cout << "tiles accesses: masked composition and lazy evaluation passed\n";
         Program p;
         p.nodes = {{.op="input", .shape={4}, .data={1,2,3,4}},
                    {.op="add", .shape={4}, .inputs={0,0}},
