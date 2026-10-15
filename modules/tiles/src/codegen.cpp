@@ -183,6 +183,32 @@ void generate(Program &p, ScheduleOptions options) {
                 code << load(id, "i") << "=t" << id << ";\n";
             } else if (n.op == "reindex") {
                 code << load(id, "i") << "=" << load(n.inputs[0], mappedIndex(n, "i")) << ";\n";
+            } else if (n.op == "sum_to") {
+                // Match tensor sum_to's row-major f32 accumulation, not sum_axis's f64 policy.
+                const auto &shape  = p.nodes[n.inputs[0]].shape;
+                const size_t shift = shape.size() - n.shape.size();
+                size_t inputStride = 1, outputStride = 1, reducedStride = 1, reductions = 1;
+                std::string base = "0ULL", reduced = "0ULL";
+                for (size_t d = shape.size(); d-- > 0;) {
+                    const bool reduce = d < shift || n.shape[d - shift] == 1;
+                    if (reduce) {
+                        reduced += "+((r/" + literal(reducedStride) + ")%" +
+                                   literal(std::max<int64_t>(shape[d], 1)) + ")*" +
+                                   literal(inputStride);
+                        reductions *= size_t(shape[d]);
+                        reducedStride *= size_t(std::max<int64_t>(shape[d], 1));
+                    } else {
+                        base += "+((i/" + literal(outputStride) + ")%" +
+                                literal(std::max<int64_t>(shape[d], 1)) + ")*" +
+                                literal(inputStride);
+                        outputStride *= size_t(std::max<int64_t>(shape[d], 1));
+                    }
+                    inputStride *= size_t(std::max<int64_t>(shape[d], 1));
+                }
+                code << "unsigned long long base=" << base << ";\nfloat acc=0.0f;\n"
+                     << "for(unsigned long long r=0;r<" << literal(reductions)
+                     << ";++r) acc+=" << load(n.inputs[0], "base+" + reduced) << ";\n"
+                     << load(id, "i") << "=acc;\n";
             } else if (n.op == "sum_axis" || n.op == "mean_axis" || n.op == "max_axis") {
                 const auto &shape = p.nodes[n.inputs[0]].shape;
                 size_t axis = n.attributes[0], width = shape[axis], inner = 1;

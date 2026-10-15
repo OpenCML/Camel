@@ -105,11 +105,15 @@ void validate(const Program &p) {
         require(n.data.empty(), "computed value has host payload");
         const bool reduction = n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis";
         require(
-            elementwise(n.op) || reduction || n.op == "reshape" || n.op == "matmul" ||
-                n.op == "reindex",
+            elementwise(n.op) || reduction || n.op == "sum_to" || n.op == "reshape" ||
+                n.op == "matmul" || n.op == "reindex",
             "unknown operation");
         require(n.inputs.size() == (binary(n.op) || n.op == "matmul" ? 2 : 1), "operation arity");
         const auto &a = p.nodes[n.inputs[0]].shape;
+        if (n.op == "sum_to")
+            require(
+                broadcast(n.shape, a) == a && n.shape.size() <= a.size(),
+                "sum_to broadcast domain");
         if (n.op == "reindex") {
             require(n.strides.size() == n.shape.size(), "index map rank");
             if (count) {

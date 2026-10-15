@@ -130,6 +130,16 @@ test executable stays in the build tree and is not a distributed runtime tool.
 
 ## Remaining architecture
 
+Autodiff-generated `grad` functions can be passed to `run` after `std::macro`.
+Supported derivative primitives include broadcast/expand, shape-matched casts,
+zero/one seeds, `sum_to` and rank-two matmul gradients. Broadcast/expand use index
+maps; matmul gradients use transpose maps and matmul. `sum_to` preserves the
+tensor implementation's row-major f32 accumulation order, distinct from the f64
+accumulation of `sum_axis`. This supports tested polynomial, row-reduction,
+broadcast and dense-layer gradients, not all derivative rules. Scalar loss
+outputs from `value_and_grad`, arbitrary pullback closures, control flow and
+unsupported derivative operators still require further lowering work.
+
 Static `transpose`, `permute` (including negative axes) and positive-step `slice`
 lower to a checked index map: source address equals an element offset plus the
 dot product of output coordinates and element strides. Bounds are checked before

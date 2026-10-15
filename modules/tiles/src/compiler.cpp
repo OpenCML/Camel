@@ -265,6 +265,71 @@ class Compiler {
             throw std::runtime_error(
                 "operator '" + uri + "' needs a statically known f32 tensor result");
         Node n{.op = std::string(def->name), .shape = *result->shape()};
+        if (n.op == "sum_to" || n.op == "cast_like") {
+            n.inputs = {tensorValue(args.at(0))};
+            if (program.nodes[n.inputs[0]].shape == n.shape)
+                return {.type = *inferred, .tensor = n.inputs[0]};
+            if (n.op == "cast_like")
+                throw std::runtime_error("cast_like shape mismatch");
+            return {.type = *inferred, .tensor = append(std::move(n))};
+        }
+        if (n.op == "broadcast_like" || n.op == "expand_axis" || n.op == "ones_like" ||
+            n.op == "zeros_like") {
+            size_t input;
+            if (n.op == "ones_like" || n.op == "zeros_like")
+                input = append(
+                    Node{.op = "input", .shape = {}, .data = {n.op == "ones_like" ? 1.0f : 0.0f}});
+            else
+                input = tensorValue(args.at(0));
+            Shape shape = program.nodes[input].shape;
+            if (n.op == "expand_axis") {
+                int64_t axis = integer(args.at(2));
+                if (axis < 0)
+                    axis += static_cast<int64_t>(n.shape.size());
+                if (axis < 0 || size_t(axis) >= n.shape.size())
+                    throw std::runtime_error("gradient axis out of bounds");
+                Shape kept = n.shape;
+                kept[axis] = 1;
+                if (elements(kept) != elements(shape))
+                    throw std::runtime_error("gradient reshape count mismatch");
+                if (kept != shape)
+                    input = append(Node{.op = "reshape", .shape = kept, .inputs = {input}});
+                shape = std::move(kept);
+            }
+            if (shape.size() > n.shape.size())
+                throw std::runtime_error("gradient broadcast rank");
+            n.strides.assign(n.shape.size(), 0);
+            size_t stride      = 1;
+            const size_t shift = n.shape.size() - shape.size();
+            for (size_t d = shape.size(); d-- > 0;) {
+                if (shape[d] != 1 && shape[d] != n.shape[d + shift])
+                    throw std::runtime_error("gradient broadcast extent");
+                n.strides[d + shift] = shape[d] == 1 ? 0 : stride;
+                stride *= size_t(shape[d]);
+            }
+            n.op     = "reindex";
+            n.inputs = {input};
+            return {.type = *inferred, .tensor = append(std::move(n))};
+        }
+        if (n.op == "matmul_grad_lhs" || n.op == "matmul_grad_rhs") {
+            size_t dy  = tensorValue(args.at(0));
+            size_t lhs = tensorValue(args.at(1)), rhs = tensorValue(args.at(2));
+            const auto a = program.nodes[lhs].shape, b = program.nodes[rhs].shape;
+            if (a.size() != 2 || b.size() != 2)
+                throw std::runtime_error("tiles matmul gradient requires rank 2");
+            const bool left   = n.op == "matmul_grad_lhs";
+            const auto &shape = left ? b : a;
+            size_t transposed = append(
+                Node{
+                    .op      = "reindex",
+                    .shape   = {shape[1], shape[0]},
+                    .inputs  = {left ? rhs : lhs},
+                    .strides = {1, size_t(shape[1])}});
+            n.op = "matmul";
+            n.inputs =
+                left ? std::vector<size_t>{dy, transposed} : std::vector<size_t>{transposed, dy};
+            return {.type = *inferred, .tensor = append(std::move(n))};
+        }
         const std::string unary  = "|neg|abs|exp|log|sqrt|rsqrt|relu|";
         const std::string binary = "|add|subtract|multiply|divide|maximum|minimum|";
         if (unary.find("|" + n.op + "|") != std::string::npos) {

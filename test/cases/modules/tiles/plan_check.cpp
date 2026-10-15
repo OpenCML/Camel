@@ -70,7 +70,12 @@ int main() {
         validatePlan(multi);
         if (multi.storage.slots[1] == SIZE_MAX || multi.storage.slots[0] == multi.storage.slots[4])
             throw std::runtime_error("returned intermediates must remain live through download");
-        std::cout << "tiles plan validation: 20 rejected mutations\n";
+        auto reduced = indexed;
+        reduced.nodes[1] = Node{.op="sum_to", .shape={1,3}, .inputs={0}};
+        schedule(reduced);
+        validatePlan(reduced);
+        rejects(reduced, [](auto &x) { x.nodes[1].shape = {1,2,3}; }, "sum_to broadcast domain");
+        std::cout << "tiles plan validation: 21 rejected mutations\n";
         return 0;
     } catch (const std::exception &e) { std::cerr << e.what() << '\n'; return 1; }
 }

@@ -219,3 +219,21 @@ Revision 6df012b6 was rebuilt through the standard command on Windows and Linux.
 Both local RTX 4060 Ti and remote RTX 3090 device 7 pass 47/47 host/GPU/tensor
 checks, including the three GC-stress aggregate cases. The remote log is
 `docs/performance/tiles/2026-10-15-rtx3090-outputs-tests.txt`.
+
+## Initial autodiff execution
+
+Functions produced by existing `grad` under `std::macro` now reach the CUDA path
+for arithmetic, broadcasting, row sums and rank-two dense layers. No derivative
+rules are duplicated in Tiles. Gradient broadcast/expand/seed operators lower to
+existing reindex/reshape nodes, and rank-two matmul derivatives lower to existing
+transpose maps and matmul. `sum_to` has a checked broadcast domain and retains
+ordered f32 accumulation; substituting the ordinary f64 sum-axis kernel would
+change its numeric contract. Same-shape sum-to/cast-like results reuse their value.
+
+An analytic multi-axis broadcast test exposed a CPU `sum_to` fast-path bug:
+preserved prefix axes were incorrectly reduced when a later axis was broadcast.
+This was fixed separately in ab2c1a2e and tested against analytic derivatives.
+The GPU tests cover square, row-reduction, dense parameter-struct gradients,
+multi-axis broadcasting, f32 cancellation and empty reductions. Scalar losses,
+general pullback closures, additional derivative rules and control flow remain
+outside the implemented subset; this is not the complete training stack.

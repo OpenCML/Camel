@@ -402,3 +402,45 @@ assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches =
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "gradients.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/gradients.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 8 && values.every(x => x === 0), 'GPU gradients differ from CPU, analytic derivative or ordered f32 contract')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gradients.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/gradients.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 8 && values.every(x => x === 0), 'GPU gradients differ from CPU, analytic derivative or ordered f32 contract')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "gradients.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/gradients.cml"
+args = ["${case}", "std::macro", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 8 && values.every(x => x === 0), 'GPU gradients differ from CPU, analytic derivative or ordered f32 contract')
+}
+"""
+timeout_ms = 60000
