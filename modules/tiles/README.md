@@ -57,6 +57,14 @@ Softmax is expressed as max/subtract/exp/sum/divide, not recognized by function 
 Unsupported graph nodes, effects, mutable parameters, dynamic attributes, other
 element types, and unsupported tensor operations produce diagnostics.
 
+Boolean `if` conditions already known at specialization (for example, a captured
+configuration flag) select exactly one arm. Only that arm is translated; an
+unselected effect is neither executed nor rejected. A selected effect is rejected
+without execution. Aggregate branch results are supported. This is specialization,
+not device-side dynamic branching: GPU-dependent conditions, `match` and loops
+still need additional lowering. Changing a captured flag specializes again; the
+generated-source cache cannot substitute the other arm's implementation.
+
 ## Execution and numerical behavior
 
 The compiler snapshots inputs into an owned IR, retaining no Camel GC pointers

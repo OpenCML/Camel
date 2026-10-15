@@ -53,3 +53,18 @@ assert(!input.stdout.includes('BODY MUST NOT EXECUTE'), 'compilation executed an
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "selected_branch_effect"
+kind = "negative"
+case = "../../../cases/modules/tiles/branch_effect.cml"
+args = ["${case}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["unsupported or effectful operator ':io/println'"]
+verify_script = """
+({ input, assert }) => {
+assert(!input.stdout.includes('effect must not run'), 'specialization executed a selected effect')
+}
+"""
+timeout_ms = 10000

@@ -243,3 +243,18 @@ The rebuilt 4a2756e7 passes 51/51 host/GPU/tensor checks on both the local RTX
 passed 121/121 locally after the CPU gradient fix and before the formatting-only
 Tiles commit hook. Logs are retained as `2026-10-15-rtx3090-gradients-tests.txt`
 and `2026-10-15-autodiff-regression.txt` in `docs/performance/tiles/`.
+
+## Boolean branch specialization
+
+The compiler now recognizes native BRCH/JOIN for boolean conditions known from
+the invocation's captured values. It visits only the selected JOIN arm, preserving
+Camel's conditional evaluation rule. This includes aggregate results and inlined
+arm bodies; it does not trace user code. The unselected arm may contain unsupported
+effects, while a selected effect still fails compilation without being executed.
+Tests alternate the same closure graph's true/false captures and fresh input data,
+exercise tuple outputs, and verify effect pruning and rejection separately.
+
+This is not dynamic GPU control flow. Tensor-dependent conditions, scalar
+arithmetic needed to derive more specialization conditions, general matches and
+loop regions remain outstanding. The semantic branch itself is not converted
+into an eager elementwise select.

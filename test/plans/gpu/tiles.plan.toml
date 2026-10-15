@@ -444,3 +444,45 @@ assert(values.length === 8 && values.every(x => x === 0), 'GPU gradients differ 
 }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "specialized_branches.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/branches.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'specialized branch, aggregate result or cache isolation failed')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "specialized_branches.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/branches.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'specialized branch, aggregate result or cache isolation failed')
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "specialized_branches.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/branches.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const values = input.stdout.trim().split(/\s+/).map(Number)
+assert(values.length === 6 && values.every(x => x === 0), 'specialized branch, aggregate result or cache isolation failed')
+}
+"""
+timeout_ms = 60000

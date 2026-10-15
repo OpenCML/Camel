@@ -181,6 +181,27 @@ class Compiler {
                 for (auto in : ins)
                     out = eval(f, in);
                 break;
+            case rt::GCNodeKind::Brch:
+                if (!g->withInputsOf(id).empty())
+                    throw std::runtime_error("tiles match lowering is not implemented");
+                out = eval(f, ins.front());
+                if (!out.constant || !std::holds_alternative<bool>(*out.constant))
+                    throw std::runtime_error(
+                        "tiles branch condition must be a boolean known when specializing");
+                break;
+            case rt::GCNodeKind::Join: {
+                const auto condition = eval(f, ins.front());
+                if (!condition.constant || !std::holds_alternative<bool>(*condition.constant))
+                    throw std::runtime_error("tiles join requires a specialized boolean branch");
+                const auto arms  = g->withInputsOf(id);
+                const size_t arm = std::get<bool>(*condition.constant) ? 0 : 1;
+                if (arms.size() != 2)
+                    throw std::runtime_error("tiles boolean branch needs two arms");
+                // Do not visit or lower the other arm: it may contain an effect,
+                // fault, or unsupported operation that is unreachable in this instance.
+                out = eval(f, arms[arm]);
+                break;
+            }
             case rt::GCNodeKind::Cast: {
                 out                = eval(f, ins.front());
                 const auto *target = tensor::asTensorType(node->dataType);
