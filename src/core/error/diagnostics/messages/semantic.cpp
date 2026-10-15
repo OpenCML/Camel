@@ -745,9 +745,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "OperatorNotOverloadable",
                 "'{0}' cannot be overloaded: {1}.",
                 "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', "
-                "'^', '@', '==', '!=', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the "
-                "unary '-', '!', '~'. '&&', '||', '?\?', '!!', '->', '?->', '..', 'as', "
-                "assignment and compound assignment are constructs of the language.",
+                "'^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the "
+                "unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '?\?', '!!', '->', '?->', "
+                "'..', 'as', assignment and compound assignment are constructs of the language.",
             },
         },
         {

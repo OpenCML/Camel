@@ -1,13 +1,14 @@
 /**
- * Two overloads of the program accept the operands, a generic one and a plain one: the call is
- * ambiguous (design principles 2.12 does not rank them).
+ * Two overloads of the program accept the operands and neither is more specific: two generic
+ * ones (design principles 2.13 prefers only an overload whose parameter types are exactly the
+ * operands). The call is ambiguous.
  */
 module ambiguous_generic
 
-func operator +(a: (typeas T)[], b: T): T[] { return a->append<b> }
-func operator +(a: string[], b: string): string[] { return [b] }
+func operator +(a: (typeas T)[], b: T[]): T[] { return a->extend<b> }
+func operator +(a: (typeas T)[], b: (typeas U)[]): T[] { return a }
 
 func main(): int sync {
-    println(['x'] + 'y')
+    println(['x'] + ['y'])
     return 0
 }

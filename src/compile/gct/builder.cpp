@@ -431,7 +431,10 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
             const auto &load = stmt->loadAs<AST::StmtLoad>();
             usings           = load->scopeUsings();
             if (load->stmtType() == AST::StmtType::Func) {
-                path = stmt->loadAs<AST::FuncDeclLoad>()->ref().paths();
+                // An operator is named without its namespaces (it belongs to the module,
+                // design principles 2.13); it is still lowered in the block it is written in.
+                const auto &func = stmt->loadAs<AST::FuncDeclLoad>();
+                path = func->operatorSymbol().empty() ? func->ref().paths() : func->declaredIn();
             } else if (load->stmtType() == AST::StmtType::Type) {
                 path = stmt->loadAs<AST::TypeDeclLoad>()->ref().paths();
             } else if (load->stmtType() == AST::StmtType::Data &&
@@ -462,6 +465,7 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         }
         node_ptr_t node = visitStmt(stmt);
         tree_->addUsings(node, usings);
+        tree_->setNamespaceOf(node, namespacePath_);
         return node;
     };
 

@@ -881,7 +881,7 @@ b323341d5c7b5c61 ok test/cases/consistency/new_values/unused_in_lambda.cml
 6e4dae588384e504 ok test/cases/consistency/new_values/unused_operator.cml
 60f40ed68a690d09 ok test/cases/consistency/new_values/unused_var.cml
 796bb0b42718763f ok test/cases/consistency/new_values/value_used.cml
-b6a2903e8d857f60 ok test/cases/consistency/operator_overloads/ambiguous_generic.cml
+5931bab049553a23 ok test/cases/consistency/operator_overloads/ambiguous_generic.cml
 93f146240e4234b8 ok test/cases/consistency/operator_overloads/arity.cml
 a3b0843d2de7f00f ok test/cases/consistency/operator_overloads/arity_unary.cml
 967f494300136e26 ok test/cases/consistency/operator_overloads/basic.cml
@@ -903,6 +903,13 @@ d24449b353ff70a7 ok test/cases/consistency/operator_overloads/mods/plus_b.cml
 cc65eaa45f2cfa14 ok test/cases/consistency/operator_overloads/mods/plus_c.cml
 a9f0c5aabe1e9af2 ok test/cases/consistency/operator_overloads/mods/use_named.cml
 e111d3e56526babc ok test/cases/consistency/operator_overloads/mods/use_namespace.cml
+7f451d6a08e8d1ff ok test/cases/consistency/operator_overloads/specific/eq_not_bool.cml
+ff5ed147d9f02d82 ok test/cases/consistency/operator_overloads/specific/generic_and_exact.cml
+05d5cf7a42d7dadb ok test/cases/consistency/operator_overloads/specific/neq_refused.cml
+0d2551fa1284f0bb ok test/cases/consistency/operator_overloads/specific/struct_equality.cml
+5ba2387a233900cc ok test/cases/consistency/operator_overloads/specific/ns/geo.cml
+2ae271767ffa51c3 ok test/cases/consistency/operator_overloads/specific/ns/in_module.cml
+efc05fc7d514913b ok test/cases/consistency/operator_overloads/specific/ns/use_geo.cml
 60a14c02f689fe6f ok test/cases/consistency/partial_application/err_ambiguous.cml
 80752f2bf55bf446 ok test/cases/consistency/partial_application/err_argument_type.cml
 6a974542e71f4455 ok test/cases/consistency/partial_application/err_configured_twice.cml

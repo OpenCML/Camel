@@ -78,6 +78,13 @@ std::optional<std::string_view> overloadableOperatorGroup(std::string_view symbo
 }
 
 std::optional<std::string_view> whyNotOverloadable(std::string_view symbol) {
+    // `!=` is an operator of the program, but it follows `==` (design principles 2.13):
+    // an overload of `==` gives it, so that the two cannot disagree. Its group stays in
+    // kForms, where the compiler looks it up to apply that overload.
+    if (symbol == "!=") {
+        return "it follows an overload of '==': 'a != b' is '!(a == b)' with that overload, so "
+               "the two cannot disagree";
+    }
     for (const OverloadableForm &form : kForms) {
         if (form.symbol == symbol) {
             return std::nullopt;

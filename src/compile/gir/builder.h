@@ -232,6 +232,9 @@ class Builder {
     node_handle_t exportedValueNode(ExportedValue &value);
     // Reports ModuleValueCycle: `declaration` is asked for while it is being built.
     [[noreturn]] void reportValueCycle(const TopLevelDeclaration &declaration);
+    // The namespaces a top-level declaration is built in: those of its name, or for an
+    // operator overload those of the block it is written in (GCT::Tree::namespaceOf).
+    std::vector<std::string> namespacesOf(const TopLevelDeclaration &declaration) const;
     // The name a top-level declaration is shown by in a diagnostic of the current module.
     std::string shownName(const TopLevelDeclaration &declaration) const;
     // Fills the export table of the current module from its export list `expt`: at step one
@@ -899,6 +902,9 @@ class Builder {
     /// The DREF of an operator (`__add__`) whose set has overloads of the program, with that
     /// set. A DREF of an operator without any is an ordinary DREF to the operator group.
     std::unordered_map<node_handle_t, OperatorOverloads> operatorOverloads_;
+    /// The `!=` operators whose overloads (in operatorOverloads_) are those of `==`: an
+    /// overload of `==` gives `!=`, the negation of its result (design principles 2.13).
+    std::unordered_set<node_handle_t> negatedEqualities_;
     /// The generic overloads of an operator declared in this module, each with the scope it
     /// was declared in (visible from that scope and the scopes inside it).
     std::unordered_map<std::string, std::vector<std::pair<template_scope_ptr_t, template_ptr_t>>>

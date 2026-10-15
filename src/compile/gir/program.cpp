@@ -150,6 +150,14 @@ std::vector<std::string> namespacesOf(const std::string &name) {
 }
 } // namespace
 
+std::vector<std::string> Builder::namespacesOf(const TopLevelDeclaration &declaration) const {
+    // An operator overload says its block apart from its name (GCT::Tree::namespaceOf).
+    if (const auto *path = declaration.unit->tree->namespaceOf(declaration.gct)) {
+        return *path;
+    }
+    return ::camel::compile::gir::namespacesOf(declaration.names.front());
+}
+
 namespace {
 
 /// The names a top-level value declaration binds: `let x = ...` (NREF), `var x = ...` (VARI of
@@ -370,7 +378,7 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
     buildStack_.push_back(&declaration);
     UnitContext context(*this, *declaration.unit);
     // Built in the namespace it is declared in, with the `using namespace` of its blocks.
-    namespacePath_ = namespacesOf(declaration.names.front());
+    namespacePath_ = namespacesOf(declaration);
     UsingScope usings(*this, declaration.unit->tree->usingsOf(declaration.gct));
     const size_t firstNode = rootGraph_->draft().nodeSlotCount();
     try {
@@ -419,7 +427,7 @@ void Builder::ensureFunctionBuilt(const compile_graph_ptr_t &graph) {
     buildStack_.push_back(&declaration);
     {
         UnitContext context(*this, *declaration.unit);
-        namespacePath_ = namespacesOf(declaration.names.front());
+        namespacePath_ = namespacesOf(declaration);
         UsingScope usings(*this, declaration.unit->tree->usingsOf(declaration.gct));
         try {
             (void)visitFuncNode(declaration.gct);

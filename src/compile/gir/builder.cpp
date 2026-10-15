@@ -3117,6 +3117,19 @@ bool Builder::hasProgramOperatorOverloads(const std::string &group) {
 
 node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_ptr_t &gct) {
     OperatorOverloads set = operatorOverloadsOf(group);
+    // `!=` is not overloaded itself: an overload of `==` gives it (design principles 2.13).
+    // Where one applies, `a != b` is the negation of the call of that overload; where none
+    // does, the built-in `!=` (the group of the DREF, which set.ops is not) is used as before.
+    bool negated = false;
+    if (group == "__neq__") {
+        if (OperatorOverloads equality = operatorOverloadsOf("__eq__");
+            !equality.graphs.empty() || !equality.templates.empty()) {
+            set.graphs    = std::move(equality.graphs);
+            set.templates = std::move(equality.templates);
+            set.moduleOf  = std::move(equality.moduleOf);
+            negated       = true;
+        }
+    }
     ASSERT(set.ops != nullptr, "An operator has no group.");
     node_handle_t drefNode{currGraph_->addDrefNode(
         std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{set.ops})};
@@ -3133,6 +3146,9 @@ node_handle_t Builder::operatorDrefOf(const std::string &group, const GCT::node_
     }
     if (!set.graphs.empty() || !set.templates.empty()) {
         operatorOverloads_[drefNode] = std::move(set);
+        if (negated) {
+            negatedEqualities_.insert(drefNode);
+        }
     }
     return drefNode;
 }
@@ -3176,6 +3192,31 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     }
     const bool builtinAccepts =
         set.ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+    // Design principles 2.13: an overload of the program is preferred where it is more
+    // specific than the others that take the arguments. "More specific" is exact: its
+    // parameter types are the argument types themselves (as written, without a value entering
+    // `T?` / `T!`), while the others take them only as members of a family of types: a
+    // built-in or C++ module operator whose type rule accepts several types (the comparison of
+    // arrays, tuples and structs by content, an arithmetic over tensors), or a generic
+    // overload. A built-in overload declared for exactly these types is as specific, and
+    // the two stay a conflict (rejectOperatorConflict) or an ambiguity.
+    const auto exactFor = [&](FunctionType *type) {
+        if (type == nullptr || type->withTypesCount() != 0 ||
+            type->normTypesCount() != normTypes.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < normTypes.size(); ++i) {
+            if (!type->normTypeAt(i)->equals(valueTypeOf(normTypes[i]))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const bool builtinExact = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+        const auto *fixed = dynamic_cast<const StaticFuncTypeResolver *>(entry.second.get());
+        return fixed != nullptr && exactFor(fixed->funcType()) &&
+               fixed->resolve(withTypes, normTypes, Modifier::None).has_value();
+    });
     const auto where = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
         return it == set.moduleOf.end() ? std::string(" (this module)")
@@ -3198,9 +3239,25 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
                 }
             }
         }
-        const size_t fits = graphs.size() + templates.size() + (builtinAccepts && !entering);
+        bool useBuiltin = builtinAccepts && !entering;
+        size_t fits     = graphs.size() + templates.size() + (useBuiltin ? 1 : 0);
         if (fits == 0) {
             continue;
+        }
+        if (fits > 1 && !entering && !builtinExact) {
+            // One exact overload of the program among several that fit: it wins (above).
+            std::vector<compile_graph_ptr_t> exact;
+            for (const auto &graph : graphs) {
+                if (exactFor(graph->funcType())) {
+                    exact.push_back(graph);
+                }
+            }
+            if (exact.size() == 1) {
+                graphs     = std::move(exact);
+                templates  = {};
+                useBuiltin = false;
+                fits       = 1;
+            }
         }
         if (fits > 1) {
             // One line, as every diagnostic message is: the overloads separated by `;`.
@@ -3238,7 +3295,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
                     strutil::join(overloads, "; ", [](const std::string &o) { return o; }));
             throw BuildAbortException();
         }
-        if (builtinAccepts && !entering) {
+        if (useBuiltin) {
             return nullptr;
         }
         if (!templates.empty()) {
@@ -3284,8 +3341,24 @@ void Builder::rejectOperatorConflict(
     const std::string types =
         strutil::join(params, ", ", [](Type *t) { return t->toString(); });
     const OperatorOverloads set = operatorOverloadsOf(group);
-    const std::vector<StaticArg> statics(params.size());
-    if (set.ops->resolve({}, params, statics, Modifier::None).has_value()) {
+    // A built-in (or C++ module) overload declared for exactly these parameter types is as
+    // specific as this one: the two cannot both be meant. One that takes them as members of a
+    // family of types (by content, a type rule over several types) is less specific, and this
+    // one is preferred where both apply (design principles 2.13; chooseOperatorOverload).
+    const bool sameAsBuiltin = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
+        const auto *fixed = dynamic_cast<const StaticFuncTypeResolver *>(entry.second.get());
+        if (fixed == nullptr || fixed->funcType()->withTypesCount() != 0 ||
+            fixed->funcType()->normTypesCount() != params.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < params.size(); ++i) {
+            if (!fixed->funcType()->normTypeAt(i)->equals(params[i])) {
+                return false;
+            }
+        }
+        return true;
+    });
+    if (sameAsBuiltin) {
         diags_->of(SemanticDiag::OperatorOverloadConflict)
             .atOrigin(gct->origin())
             .commit(symbol, types, " by the built-in operator or by an operator of a C++ module");
@@ -5267,7 +5340,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     };
 
     // An operator with overloads of the program: one of them, or the built-in group below.
+    // `a != b` by an overload of `==` is the negation of that call (`negateResult`).
     compile_graph_ptr_t operatorOverload = nullptr;
+    bool negateResult                    = false;
     if (auto overloads = operatorOverloads_.find(targetNode);
         overloads != operatorOverloads_.end()) {
         operatorOverload = chooseOperatorOverload(
@@ -5280,7 +5355,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             accepts);
     }
     if (operatorOverload != nullptr) {
-        targetGraph = operatorOverload;
+        negateResult = negatedEqualities_.contains(targetNode);
+        targetGraph  = operatorOverload;
         currGraph_->addDependencyGraph(targetGraph);
         targetNode     = createFuncDataNode(targetGraph, false, true);
         targetFuncType = targetGraph->funcType();
@@ -5791,6 +5867,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
         lastSyncedNode_ = targetNode;
         chainedNodes_.insert(targetNode);
+    }
+    if (negateResult) {
+        // `a != b` through an overload of `==`: `!(a == b)`, which needs a bool from it.
+        if (Type *equal = valueTypeOf(nodeTypeOf(targetNode));
+            equal == nullptr || equal->code() != TypeCode::Bool) {
+            diags_->of(SemanticDiag::OperatorOverloadInvalid)
+                .atOrigin(gct->origin())
+                .commit(
+                    "==",
+                    std::format(
+                        "'!=' is the negation of '==', and the overload of '==' for these "
+                        "operands returns '{}', not 'bool'",
+                        equal != nullptr ? equal->toString() : std::string("void")));
+            throw BuildAbortException();
+        }
+        node_handle_t negation = applyTagOperator("__not__", bindTemporary(targetNode), gct);
+        LEAVE("LINK");
+        return negation;
     }
     LEAVE("LINK");
     return targetNode;

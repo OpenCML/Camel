@@ -2657,7 +2657,7 @@ func main(): int sync {
 **Help**
 
 ```text
-The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '!=', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'. '&&', '||', '??', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.
+The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '??', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.
 ```
 
 **Example** (`test/cases/consistency/operator_overloads/not_overloadable_logical.cml`, run as `camel test/cases/consistency/operator_overloads/not_overloadable_logical.cml`)
@@ -2749,11 +2749,11 @@ More than one overload of the operator takes these arguments; make the parameter
 ```camel
 module ambiguous_generic
 
-func operator +(a: (typeas T)[], b: T): T[] { return a->append<b> }
-func operator +(a: string[], b: string): string[] { return [b] }
+func operator +(a: (typeas T)[], b: T[]): T[] { return a->extend<b> }
+func operator +(a: (typeas T)[], b: (typeas U)[]): T[] { return a }
 
 func main(): int sync {
-    println(['x'] + 'y')
+    println(['x'] + ['y'])
     return 0
 }
 ```

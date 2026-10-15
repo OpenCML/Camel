@@ -92,6 +92,11 @@ class FuncDeclLoad : public StmtLoad {
     /// overloaded with that many parameters, which the GCT builder reports.
     const std::string &operatorSymbol() const { return operatorSymbol_; }
     void setOperatorSymbol(std::string symbol) { operatorSymbol_ = std::move(symbol); }
+    /// For an operator overload: the namespaces of the block it is written in. Its name is not
+    /// qualified by them (the operator belongs to the module, design principles 2.13), but the
+    /// names in its signature and body are looked up there, as for any declaration of the block.
+    const std::vector<std::string> &declaredIn() const { return declaredIn_; }
+    void setDeclaredIn(std::vector<std::string> path) { declaredIn_ = std::move(path); }
 
     const std::string toString() const override {
         return "FuncDecl: " + ref_.toString() +
@@ -103,6 +108,7 @@ class FuncDeclLoad : public StmtLoad {
   private:
     Reference ref_;
     std::string operatorSymbol_;
+    std::vector<std::string> declaredIn_;
 };
 
 class TypeDeclLoad : public StmtLoad {
