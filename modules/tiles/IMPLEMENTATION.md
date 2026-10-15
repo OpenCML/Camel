@@ -430,3 +430,7 @@ under synchronous execution's lock. Completion events must also retain pointer
 tables, pinned staging, inputs, outputs and fault state until GPU completion.
 This split establishes the internal ownership boundary for that work; it does
 not advertise asynchronous execution yet.
+
+Committed b327286c rebuilds and passes the existing 81/81 relevant tests on local
+RTX 4060 Ti and remote RTX 3090 device 7. Remote results are retained in
+`docs/performance/tiles/2026-10-15-rtx3090-backend-split-tests.txt`.
