@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -216,8 +216,6 @@ Options (startup):
 REPL commands (after startup):
   serve [port]  (s)  Start API server (default 8765)
   file <path>   (f)  Load Camel source file to debug
-  run          (r)  Run the loaded file (options configurable in Web UI)
-  continue     (c)  Resume paused execution
   restart           Restart execution
   terminate         Terminate execution
   task [id]      (fg)  Show or set foreground task (default target for continue/restart/terminate/etc.)
@@ -233,12 +231,16 @@ REPL commands (after startup):
   version      (v)  Show version info
   quit         (q)  Exit debugger
 
+
 Examples:
   camel-db --serve
   camel-db --serve 9000 hello.cml
   camel-db hello.cml -s -r
   camel-db -f script.cml --serve --logfile debug.log
 )";
+    // After the examples of the startup options: the commands that debug the program.
+    std::cout << std::endl;
+    printDebugReplHelp(std::cout);
 }
 
 void printVersion() {
@@ -363,6 +365,11 @@ void repl() {
             }
             continue;
         }
+
+        // Breakpoints, steps, the stack and variables; also run and continue, which wait for
+        // the next stop (repl_debug.cpp).
+        if (handleDebugReplCommand(cmd, arg))
+            continue;
 
         auto it = kAliases.find(cmd);
         if (it != kAliases.end()) {
