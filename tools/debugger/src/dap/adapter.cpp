@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -342,6 +342,13 @@ class Adapter {
         const std::string type = e.value("type", "");
         if (type == "stopped") {
             const std::string reason = e.value("reason", "");
+            // The lines a line step went past without executing them, and why (4.2): said in
+            // the debug console, before the stop is shown.
+            if (auto skipped = e.find("skipped"); skipped != e.end() && skipped->is_array()) {
+                for (const json &line : *skipped) {
+                    output("console", line.value("text", "") + "\n");
+                }
+            }
             json body{
                 {"reason", reason},
                 {"threadId", kThreadId},
@@ -363,6 +370,9 @@ class Adapter {
             if (auto f = e.find("frame"); f != e.end()) {
                 camel["frame"] = *f;
             }
+            if (auto skipped = e.find("skipped"); skipped != e.end()) {
+                camel["skipped"] = *skipped;
+            }
             event("camel/stopped", std::move(camel));
             event("stopped", std::move(body));
         } else if (type == "continued") {
@@ -373,6 +383,8 @@ class Adapter {
                 json{
                     {"reason", "changed"},
                     {"breakpoint", breakpointOf(e.value("breakpoint", json::object()))}});
+        } else if (type == "note") {
+            output("console", e.value("text", "") + "\n");
         } else if (type == "started") {
             const std::string notice = e.value("notice", "");
             if (!notice.empty()) {
@@ -401,6 +413,7 @@ class Adapter {
     }
 
     json breakpointOf(const json &bp) const {
+        // A line breakpoint has a path and a line; a function breakpoint has neither.
         json out{{"id", bp.value("id", 0)}, {"verified", bp.value("verified", false)}};
         if (bp.contains("line")) {
             out["line"] = bp.value("line", 0) - lineOffset_;
@@ -440,8 +453,10 @@ class Adapter {
         if (command == "initialize") {
             lineOffset_   = args.value("linesStartAt1", true) ? 0 : 1;
             columnOffset_ = args.value("columnsStartAt1", true) ? 0 : 1;
+            invalidatedEvent_ = args.value("supportsInvalidatedEvent", false);
             ok(json{
                 {"supportsConfigurationDoneRequest", true},
+                {"supportsFunctionBreakpoints", true},
                 {"supportsTerminateRequest", true},
                 {"supportTerminateDebuggee", true},
                 {"supportsSteppingGranularity", true},
@@ -484,8 +499,8 @@ class Adapter {
             return false;
         }
         if (port_ == 0) {
-            if (command == "setBreakpoints" || command == "setExceptionBreakpoints" ||
-                command == "configurationDone") {
+            if (command == "setBreakpoints" || command == "setFunctionBreakpoints" ||
+                command == "setExceptionBreakpoints" || command == "configurationDone") {
                 fail(
                     command + " before launch: the adapter sends the initialized event when the "
                               "program is loaded and breakpoints can be set.");
@@ -526,6 +541,44 @@ class Adapter {
                 out.push_back(breakpointOf(bp));
             }
             ok(json{{"breakpoints", std::move(out)}});
+            return false;
+        }
+        if (command == "setFunctionBreakpoints") {
+            // By the full name of a function, or without its module when only one module has
+            // it (design principles 2.12); the program stops at the first line it executes.
+            json names = json::array();
+            if (auto b = args.find("breakpoints"); b != args.end() && b->is_array()) {
+                for (const json &bp : *b) {
+                    if (bp.is_object() && bp.contains("name") && bp["name"].is_string()) {
+                        names.push_back(bp["name"]);
+                    }
+                }
+            }
+            auto answer = ask("setFunctionBreakpoints", json{{"names", names}});
+            if (!answer) {
+                return false;
+            }
+            json out = json::array();
+            for (const json &bp : answer->value("breakpoints", json::array())) {
+                out.push_back(breakpointOf(bp));
+            }
+            ok(json{{"breakpoints", std::move(out)}});
+            return false;
+        }
+        if (command == "camel/setFrames") {
+            // The toggle of the editor: frames of functions, or the real subgraphs (5.4).
+            const std::string frames = args.value("frames", "");
+            if (frames != "functions" && frames != "subgraphs") {
+                fail("camel/setFrames: \"frames\" is \"functions\" or \"subgraphs\".");
+                return false;
+            }
+            if (ask("configure", json{{"frames", frames}})) {
+                ok(json{{"frames", frames}});
+                if (invalidatedEvent_) {
+                    // The stack and the variables the client shows are those of the other view.
+                    event("invalidated", json{{"areas", json::array({"stacks", "variables"})}});
+                }
+            }
             return false;
         }
         if (command == "setExceptionBreakpoints") {
@@ -724,7 +777,7 @@ class Adapter {
         static const char *const known[] = {
             "continue",   "next",          "stepIn",      "stepOut",  "pause",       "stackTrace",
             "scopes",     "variables",     "evaluate",    "terminate", "exceptionInfo",
-            "camel/graph"};
+            "camel/graph", "camel/setFrames"};
         for (const char *k : known) {
             if (command == k) {
                 return true;
@@ -801,6 +854,13 @@ class Adapter {
             return;
         }
         stepByNode_ = stepBy == "node";
+        // How the stack shows the arms of branches: folded into the frame of their function
+        // (the default, design principles 2.11), or as the subgraphs they are.
+        const std::string frames = args.value("frames", "functions");
+        if (frames != "functions" && frames != "subgraphs") {
+            fail("launch: \"frames\" is \"functions\" or \"subgraphs\".");
+            return;
+        }
 
         ProcessSpec spec;
         spec.exe  = exePath_;
@@ -869,6 +929,7 @@ class Adapter {
                 {"passes", passes},
                 {"args", entryArgs},
                 {"quiet", true},
+                {"frames", frames},
                 {"stopOnEntry", args.value("stopOnEntry", false)}},
             320);
         if (!answer.value("ok", false)) {
@@ -911,6 +972,7 @@ class Adapter {
     int lineOffset_   = 0; // added to a client line to get a 1-based line
     int columnOffset_ = 0;
     bool stepByNode_  = false; // launch "stepBy": "node"
+    bool invalidatedEvent_ = false; // the client takes the `invalidated` event
 
     std::mutex stateMutex_;
     std::shared_ptr<ChildProcess> worker_;
