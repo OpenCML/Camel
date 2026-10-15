@@ -9,6 +9,7 @@
  */
 
 // Shape-specialized CUDA lowering; all intermediate arrays remain on the device.
+#include "tiles/internal/index_expr.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <functional>
@@ -17,38 +18,40 @@
 
 namespace camel::tiles {
 namespace {
+using kernel::IndexExpr;
 std::string literal(size_t n) { return std::to_string(n) + "ULL"; }
-std::string broadcastIndex(const Shape &input, const Shape &output, const std::string &at = "i") {
+IndexExpr broadcastIndex(
+    const Shape &input, const Shape &output, const IndexExpr &at = IndexExpr::variable("i")) {
     if (input == output)
         return at;
     if (input.size() > output.size())
         throw std::runtime_error("invalid broadcast rank");
     size_t inStride = 1, outStride = 1;
-    std::string expr = "0ULL";
+    IndexExpr expr(0);
     for (size_t d = output.size(); d-- > 0;) {
         if (d >= output.size() - input.size()) {
             size_t j = d - (output.size() - input.size());
             if (input[j] != 1 && input[j] != output[d])
                 throw std::runtime_error("invalid broadcast shape");
             if (input[j] > 1)
-                expr += "+((" + at + "/" + literal(outStride) + ")%" + literal(input[j]) + ")*" +
-                        literal(inStride);
+                expr = expr +
+                       ((at / IndexExpr(outStride)) % IndexExpr(input[j])) * IndexExpr(inStride);
             inStride *= std::max<int64_t>(input[j], 1);
         }
         outStride *= std::max<int64_t>(output[d], 1);
     }
     return expr;
 }
-std::string mappedIndex(const Node &n, const std::string &at) {
-    size_t stride       = 1;
-    std::string address = literal(n.offset);
+IndexExpr mappedIndex(const Node &n, const IndexExpr &at) {
+    size_t stride = 1;
+    IndexExpr address(n.offset);
     for (size_t d = n.shape.size(); elements(n.shape) && d-- > 0;) {
         const size_t extent = std::max<size_t>(n.shape[d], 1);
-        address += "+((" + at + "/" + literal(stride) + ")%" + literal(extent) + ")*" +
-                   literal(n.strides[d]);
+        address =
+            address + ((at / IndexExpr(stride)) % IndexExpr(extent)) * IndexExpr(n.strides[d]);
         stride *= extent;
     }
-    return "(" + address + ")";
+    return address;
 }
 } // namespace
 
@@ -185,12 +188,15 @@ void generate(Program &p, ScheduleOptions options) {
                     const auto coordinate = "q" + std::to_string(member);
                     code << "unsigned long long " << coordinate << "=" << at << ";\n";
                     auto input = [&](size_t in) {
-                        const auto index =
-                            value.op == "reindex" ? mappedIndex(value, coordinate)
-                            : value.op == "reshape"
-                                ? coordinate
-                                : broadcastIndex(p.nodes[in].shape, value.shape, coordinate);
-                        return emit(in, index);
+                        const auto index = value.op == "reindex"
+                                               ? mappedIndex(value, IndexExpr::variable(coordinate))
+                                           : value.op == "reshape"
+                                               ? IndexExpr::variable(coordinate)
+                                               : broadcastIndex(
+                                                     p.nodes[in].shape,
+                                                     value.shape,
+                                                     IndexExpr::variable(coordinate));
+                        return emit(in, index.cuda());
                     };
                     const auto a = input(value.inputs[0]);
                     const auto b = value.inputs.size() == 2 ? input(value.inputs[1]) : "";
@@ -232,7 +238,8 @@ void generate(Program &p, ScheduleOptions options) {
                 emit(id, "i");
                 code << load(id, "i") << "=t" << id << ";\n";
             } else if (n.op == "reindex") {
-                code << load(id, "i") << "=" << load(n.inputs[0], mappedIndex(n, "i")) << ";\n";
+                code << load(id, "i") << "="
+                     << load(n.inputs[0], mappedIndex(n, IndexExpr::variable("i")).cuda()) << ";\n";
             } else if (n.op == "sum_to") {
                 // Match tensor sum_to's row-major f32 accumulation, not sum_axis's f64 policy.
                 const auto &shape  = p.nodes[n.inputs[0]].shape;
@@ -283,12 +290,15 @@ void generate(Program &p, ScheduleOptions options) {
             } else {
                 const auto a = load(
                     n.inputs[0],
-                    n.op == "reshape" ? "i" : broadcastIndex(p.nodes[n.inputs[0]].shape, n.shape));
+                    n.op == "reshape" ? "i"
+                                      : broadcastIndex(p.nodes[n.inputs[0]].shape, n.shape).cuda());
                 std::string expr;
                 if (n.op == "reshape")
                     expr = load(n.inputs[0], "i");
                 else if (n.inputs.size() == 2) {
-                    auto b = load(n.inputs[1], broadcastIndex(p.nodes[n.inputs[1]].shape, n.shape));
+                    auto b = load(
+                        n.inputs[1],
+                        broadcastIndex(p.nodes[n.inputs[1]].shape, n.shape).cuda());
                     if (n.op == "add")
                         expr = "a+b";
                     if (n.op == "subtract")

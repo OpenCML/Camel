@@ -27,7 +27,7 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles plan validation: 33 rejected mutations"]
+expect_stdout_contains = ["tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed"]
 timeout_ms = 10000
 
 [[tests]]

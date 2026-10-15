@@ -500,3 +500,22 @@ The remote checkout was updated to the merged core before this verification;
 its old core headers were incompatible with the updated graph accessor API.
 Public execution remains synchronous. Completion events, pending-output
 dependencies and deferred fault propagation are not implemented by this change.
+
+## Structured address expressions
+
+Broadcast and reindex address lowering now builds immutable unsigned expression
+trees instead of concatenating arithmetic source fragments. The representation
+supports constants, variables, addition, multiplication, division and remainder,
+substitution, checked host evaluation and final CUDA serialization. Constant
+arithmetic is checked for overflow and zero divisors; host evaluation also checks
+bindings and runtime arithmetic. Existing plan validation still establishes valid
+access domains before device execution; checked host evaluation is not a proof
+that arbitrary expressions are safe on a GPU.
+
+The native verifier exercises transpose/slice composition, constant folding,
+unbound variables, invalid variable names, zero divisors and overflow. Manual GPU
+index-map and mapped-fusion cases retain their expected results. This is the
+address-expression portion of the physical kernel representation, not a complete
+structured kernel IR: loops, masks, scalar operations, barriers and load/store
+statements still require migration. Core semantic access maps remain the intended
+source of truth; these expressions are a physical lowering representation.

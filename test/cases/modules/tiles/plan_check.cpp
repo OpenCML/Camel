@@ -11,7 +11,9 @@
 // Mutation tests for plan validation: failures must precede device execution.
 #include "tiles/program.h"
 #include "tiles/device.h"
+#include "tiles/internal/index_expr.h"
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 using namespace camel::tiles;
 
@@ -28,6 +30,32 @@ template<class F> void rejects(const Program &original, F mutate, const char *re
 
 int main() {
     try {
+        using kernel::IndexExpr;
+        const auto i = IndexExpr::variable("i");
+        // Transpose a 2x3 array, then apply a strided slice of the flattened view.
+        const auto transposed = (i % IndexExpr(2)) * IndexExpr(3) + i / IndexExpr(2);
+        const auto composed = transposed.substitute("i", IndexExpr(1) + i * IndexExpr(2));
+        const uint64_t transposeExpected[] = {0, 3, 1, 4, 2, 5};
+        const uint64_t sliceExpected[] = {3, 4, 5};
+        for (uint64_t at = 0; at < 6; ++at)
+            if (transposed.evaluate({{"i", at}}) != transposeExpected[at])
+                throw std::runtime_error("structured transpose mapping mismatch");
+        for (uint64_t at = 0; at < 3; ++at)
+            if (composed.evaluate({{"i", at}}) != sliceExpected[at])
+                throw std::runtime_error("structured composed mapping mismatch");
+        auto rejected = [](auto action) {
+            try { action(); } catch (const std::exception &) { return; }
+            throw std::runtime_error("accepted invalid index expression");
+        };
+        rejected([&] { (void)(i / IndexExpr(0)); });
+        rejected([&] { (void)(i % IndexExpr(0)); });
+        rejected([&] { (void)IndexExpr::variable("i;return"); });
+        rejected([&] { (void)i.evaluate({}); });
+        rejected([&] { (void)(i + IndexExpr(1)).evaluate({{"i", UINT64_MAX}}); });
+        rejected([&] { (void)(IndexExpr(UINT64_MAX) * IndexExpr(2)); });
+        if ((IndexExpr(3) * IndexExpr(7)).cuda() != "21ULL")
+            throw std::runtime_error("index constant folding mismatch");
+        std::cout << "tiles index expressions: composition and checked evaluation passed\n";
         Program p;
         p.nodes = {{.op="input", .shape={4}, .data={1,2,3,4}},
                    {.op="add", .shape={4}, .inputs={0,0}},
