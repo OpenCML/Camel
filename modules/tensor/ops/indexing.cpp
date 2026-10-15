@@ -326,15 +326,17 @@ std::optional<IndexedInstance> permuteIndexing(const InferContext &ctx) {
 
 /**
  * slice(x, axis, start, stop, step = 1), step > 0, with the bounds normalized as the kernel
- * does (a negative bound counts from the end, then both are clamped to [0, n]):
+ * does (a negative bound counts from the end). A bound still outside [0, n] is a fault (design
+ * principles 2.10): the call has no instance. A stop before the start is the empty range (2.11):
  *
  *   params   start = static(2), step = static(4), len = derived = max(0, ceil((stop - start) / step))
  *   domain   one dim per axis; on `axis` d < len
  *   norm 0   (..., start + step*d_axis, ...)        within [0, n) by construction (Unreachable)
  *   where    0 <= start, start <= n, 1 <= step
  *
- * Needs axis, start, stop and step constant and the extent of `axis` known (the clamp is not
- * quasi-affine); a step <= 0 is rejected by the kernel: no instance.
+ * Needs axis, start, stop and step constant and the extent of `axis` known (normalizing a
+ * negative bound needs the extent); a step <= 0 or a bound out of range is rejected by the
+ * kernel: no instance.
  */
 std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
     const auto in   = shapeOf(ctx, 0);
@@ -350,9 +352,12 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
     if (!a || !start || !stop || !step || *step <= 0 || (*in)[*a] == kUnknownDim) {
         return std::nullopt;
     }
-    const int64_t n = (*in)[*a];
-    auto clamp      = [n](int64_t v) { return std::clamp<int64_t>(v < 0 ? v + n : v, 0, n); };
-    const int64_t s = clamp(*start), e = clamp(*stop);
+    const int64_t n   = (*in)[*a];
+    const auto range  = kernels::normalizeSliceBounds(n, *start, *stop);
+    if (!range) {
+        return std::nullopt; // the operator faults with SliceOutOfRange
+    }
+    const int64_t s = range->start, e = range->end;
     const int64_t len = e > s ? (e - s + *step - 1) / *step : 0;
 
     IndexBuilder b;

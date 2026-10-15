@@ -1061,7 +1061,7 @@ bool any        = graph->hasNodePermissions();
 
 **CPU 的结果、图的转储、程序的输出都没有变**；只增加了声明与查询。已声明下标语义的张量算子的键升为 `@1.1`（次版本：只多了事实，4.1）；内建 `:op/` 仍是 `@1.0`；新声明的 `nn:max_pool2d`、`nn:avg_pool2d`、`:mark/unordered_reduce_arr` 是 `@1.0`。
 
-**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`slice`（正步长，越界的起止点按内核夹到 [0, n]）、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。每个实例由声明求值器（`tensor::test_index_eval`）在 2520 个随机调用上与 CPU 内核逐位比较过（第 12 节）。
+**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`slice`（正步长；负的起止点从末尾数，之后仍在 [0, n] 之外是故障 `SliceOutOfRange`、没有实例，与数组的 `slice` 一致，设计原则 2.10；起点在终点之后是空的范围，2.11）、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。每个实例由声明求值器（`tensor::test_index_eval`）在 2520 个随机调用上与 CPU 内核逐位比较过（第 12 节）。
 
 **取得一个实例：**
 
