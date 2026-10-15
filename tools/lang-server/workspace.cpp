@@ -95,8 +95,13 @@ json Server::workspaceRename(const json &params, bool prepare) {
     const auto offset         = offsetAt(*doc, params);
     const auto targets        = model.definition(offset);
     const std::string newName = prepare ? "" : params.at("newName").get<std::string>();
-    if (targets.empty())
+    if (targets.empty()) {
+        // Keep the precise local refusal for keywords, fields and library-only symbols.
+        const auto checked = model.rename(offset, newName);
+        if (!checked.refusal.empty())
+            throw RequestError{RequestFailed, checked.refusal};
         throw RequestError{RequestFailed, "No source declaration to rename"};
+    }
     const auto &target = targets.front();
     const auto &owner  = model.files()[target.file];
     const auto *decl   = owner.syntax.declAtName(target.range.start);
