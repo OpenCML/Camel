@@ -164,4 +164,7 @@ malformed maps. Map fusion, arbitrary masks and runtime-dependent gathers remain
 open; this stage does not claim a full layout or domain API.
 
 The local host/GPU/tensor plans pass 41/41 checks after adding the three engine
-variants. Remote validation of this new index-map stage remains pending.
+variants. The committed revision 4428c59a was rebuilt through `npm run build`
+locally and on the remote Clang 23/CUDA 12.3 environment. Both reruns passed
+41/41. Remote device 7 test output is retained in
+`docs/performance/tiles/2026-10-15-rtx3090-index-maps-tests.txt`.
