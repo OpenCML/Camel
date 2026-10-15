@@ -102,8 +102,8 @@ generated-source cache cannot substitute the other arm's implementation.
 The compiler snapshots inputs into an owned IR, retaining no Camel GC pointers
 across CUDA work. Shape inference reuses the tensor operation registry.
 Intermediates remain on the device. Single-use indexed scalar chains
-are fused into groups of at most 64 operations. Shared results and reductions
-retain materialization boundaries. Each fused node keeps an f32 rounding point;
+are fused into groups of at most 64 operations. Shared results retain materialization
+boundaries; axis sum/mean may absorb their single-use producers. Each fused node keeps an f32 rounding point;
 the scheduler does not reassociate expressions or reorder reductions. Allocation
 slots are reused only after their last reader on the ordered stream has finished;
 a kernel cannot overwrite storage it reads. Inputs start live at upload time.
@@ -191,8 +191,8 @@ CUDA execution, including arithmetic overflow. Empty domains do not dereference
 addresses. Transpose, permutation, slice and reshape can fuse with each other
 and with elementwise operations across different domains. Generated loads
 compose each edge's coordinates, including broadcasting, while preserving f32
-rounding points. Shared results and non-scalar operations remain materialization
-boundaries; there is no storage aliasing. This representation
+rounding points. Shared results remain materialization boundaries; supported
+axis reductions may consume mapped producers directly. There is no storage aliasing. This representation
 separates logical indexing from thread placement and is a foundation for later
 map composition and view elimination, not the complete indexed-domain design.
 
@@ -202,6 +202,16 @@ Host evaluation short-circuits masks and skips invalid addresses; CUDA lowering
 prints conditional loads with exact fallback bits. The host evaluator is useful
 for checking mappings but is not a symbolic bounds proof. Kernel loops, stores,
 barriers and arithmetic still need migration to a complete structured kernel IR.
+
+Single-use pointwise and index-map producers can fuse into axis sum/mean. Each
+output thread computes its producer values in f32 and folds them in increasing
+axis order with the existing f64 accumulator, then rounds the result to f32.
+This removes producer buffers without granting reassociation or contraction.
+The ordered reduction uses 32-thread blocks; expensive math is kept in a separate
+pointwise stage when fewer than 32 output rows exist, to avoid serializing it into
+too few lanes. Shared results and observable producer outputs remain boundaries.
+`reduction_benchmark.cml` measures three shapes against the unfused CUDA schedule;
+this heuristic is not an autotuner and does not guarantee every shape improves.
 
 First-class index domains, public masks, layouts, schedule/resource graphs, loop and
 branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning,

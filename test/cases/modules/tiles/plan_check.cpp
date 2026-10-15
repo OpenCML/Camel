@@ -80,6 +80,23 @@ int main() {
         if ((!Predicate::equal(i, IndexExpr(2))).evaluate({{"i", 2}}))
             throw std::runtime_error("predicate equality mismatch");
         std::cout << "tiles accesses: masked composition and lazy evaluation passed\n";
+        Program fusedReduction;
+        fusedReduction.nodes = {{.op="input", .shape={4,2}, .data={1,2,3,4,5,6,7,8}},
+                         {.op="input", .shape={}, .data={0.5}},
+                         {.op="multiply", .shape={4,2}, .inputs={0,1}},
+                         {.op="sum_axis", .shape={4}, .inputs={2}, .attributes={1}}};
+        fusedReduction.outputs = {3};
+        schedule(fusedReduction);
+        if (fusedReduction.launches.size() != 1 || fusedReduction.storage.slots[2] != SIZE_MAX ||
+            fusedReduction.launches[0].implementation != "ordered_reduce")
+            throw std::runtime_error("producer was not fused into ordered reduction");
+        rejects(fusedReduction, [](auto &x) { x.launches[0].blockX = 256; }, "ordered reduction operation or block");
+        rejects(fusedReduction, [](auto &x) { x.nodes[3].op = "max_axis"; }, "ordered reduction operation or block");
+        fusedReduction.outputs = {2,3};
+        schedule(fusedReduction);
+        if (fusedReduction.launches.size() != 2 || fusedReduction.storage.slots[2] == SIZE_MAX)
+            throw std::runtime_error("reduction fused an observable producer output");
+        std::cout << "tiles ordered reductions: fusion boundaries and plan mutations passed\n";
         Program p;
         p.nodes = {{.op="input", .shape={4}, .data={1,2,3,4}},
                    {.op="add", .shape={4}, .inputs={0,0}},

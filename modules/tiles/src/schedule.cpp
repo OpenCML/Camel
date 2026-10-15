@@ -4,7 +4,7 @@
  * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
  * Author: Camel Contributors
  * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -54,6 +54,7 @@ bool scalar64(const std::string &op) {
     return op == "constant64" || op == "scalar_add" || op == "scalar_sub" || op == "scalar_mul" ||
            op == "scalar_div" || op == "scalar_neg";
 }
+bool orderedAxis(const std::string &op) { return op == "sum_axis" || op == "mean_axis"; }
 void require(bool valid, const std::string &message) {
     if (!valid)
         throw std::runtime_error("invalid tiles plan: " + message);
@@ -234,10 +235,18 @@ void schedule(Program &p, ScheduleOptions options) {
         if (!options.fuseElementwise ||
             std::find(p.outputs.begin(), p.outputs.end(), id) != p.outputs.end() ||
             users[id] != 1 ||
-            !((indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[target].op)) ||
+            !((indexedScalar(p.nodes[id].op) &&
+               (indexedScalar(p.nodes[target].op) || orderedAxis(p.nodes[target].op))) ||
               (scalar64(p.nodes[id].op) && scalar64(p.nodes[target].op))))
             continue;
         size_t root = owner[target];
+        // Ordered reductions expose only output-row parallelism. Keep expensive
+        // math in its pointwise stage when fewer than one warp of rows exists.
+        // Cheap producer chains can still fuse on either side of this boundary.
+        const auto &op = p.nodes[id].op;
+        if (orderedAxis(p.nodes[root].op) && elements(p.nodes[root].shape) < 32 &&
+            (op == "exp" || op == "log" || op == "sqrt" || op == "rsqrt"))
+            continue;
         if (groupSize[root] == 64)
             continue;
         owner[id] = root;
@@ -256,6 +265,10 @@ void schedule(Program &p, ScheduleOptions options) {
                 launch.members.push_back(member);
         launch.implementation = "standard";
         const auto &n         = p.nodes[id];
+        if (orderedAxis(n.op) && launch.members.size() > 1) {
+            launch.implementation = "ordered_reduce";
+            launch.blockX         = 32;
+        }
         if (options.parallelMax && n.op == "max_axis") {
             const auto &shape = p.nodes[n.inputs[0]].shape;
             if (size_t(n.attributes[0]) + 1 == shape.size() && shape.back() >= 128)
@@ -307,8 +320,14 @@ void validatePlan(const Program &p) {
             "invalid stage root");
         require(launch.elements == elements(p.nodes[launch.node].shape), "launch extent");
         require(
-            launch.implementation == "standard" || launch.implementation == "parallel_max",
+            launch.implementation == "standard" || launch.implementation == "parallel_max" ||
+                launch.implementation == "ordered_reduce",
             "unknown implementation");
+        if (launch.implementation == "ordered_reduce")
+            require(
+                orderedAxis(p.nodes[launch.node].op) && launch.blockX == 32 && launch.blockY == 1 &&
+                    launch.members.size() > 1,
+                "ordered reduction operation or block");
         if (launch.implementation == "parallel_max") {
             const auto &root = p.nodes[launch.node];
             require(
@@ -333,6 +352,8 @@ void validatePlan(const Program &p) {
             require(
                 launch.members.size() == 1 ||
                     (indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[launch.node].op)) ||
+                    (launch.implementation == "ordered_reduce" &&
+                     (id == launch.node || indexedScalar(p.nodes[id].op))) ||
                     (scalar64(p.nodes[id].op) && scalar64(p.nodes[launch.node].op)),
                 "invalid fused domain");
             for (auto in : p.nodes[id].inputs) {

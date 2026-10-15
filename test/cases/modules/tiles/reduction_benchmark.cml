@@ -1,0 +1,13 @@
+module tiles_reduction_benchmark
+import { Tensor, exp, sum, random, seed } from tensor
+import { benchmark } from tiles
+func rows(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    return sum(exp((x + b) * 0.5), 1)
+}
+func main(): int sync {
+    seed(112)
+    println(benchmark<rows>((random([4, 513], -1.0, 1.0), random([1, 513], -1.0, 1.0))))
+    println(benchmark<rows>((random([512, 1025], -1.0, 1.0), random([1, 1025], -1.0, 1.0))))
+    println(benchmark<rows>((random([4096, 65], -1.0, 1.0), random([1, 65], -1.0, 1.0))))
+    return 0
+}

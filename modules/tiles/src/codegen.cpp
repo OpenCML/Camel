@@ -73,7 +73,88 @@ void generate(Program &p, ScheduleOptions options) {
         const size_t count = elements(n.shape);
         code << "// " << n.op << "\nextern \"C\" __global__ void " << launch.name
              << "(float** v) {\n";
-        if (n.op.starts_with("scalar_")) {
+        // Every node retains its f32 rounding point. NVRTC's --fmad=false
+        // prevents contraction across these assignments.
+        std::function<std::string(size_t, const std::string &)> emit;
+        emit = [&](size_t member, const std::string &at) -> std::string {
+            if (std::find(launch.members.begin(), launch.members.end(), member) ==
+                launch.members.end())
+                return load(member, at);
+            code << "float t" << member << ";\n";
+            const auto &value     = p.nodes[member];
+            const auto coordinate = "q" + std::to_string(member);
+            code << "unsigned long long " << coordinate << "=" << at << ";\n";
+            auto input = [&](size_t in) {
+                const auto index = value.op == "reindex"
+                                       ? mappedIndex(value, IndexExpr::variable(coordinate))
+                                   : value.op == "reshape" ? IndexExpr::variable(coordinate)
+                                                           : broadcastIndex(
+                                                                 p.nodes[in].shape,
+                                                                 value.shape,
+                                                                 IndexExpr::variable(coordinate));
+                return emit(in, index.cuda());
+            };
+            const auto a = input(value.inputs[0]);
+            const auto b = value.inputs.size() == 2 ? input(value.inputs[1]) : "";
+            code << "{ float a=" << a << ";\n";
+            if (value.inputs.size() == 2)
+                code << "float b=" << b << ";\n";
+            std::string expr;
+            if (value.op == "reshape" || value.op == "reindex")
+                expr = "a";
+            if (value.op == "add")
+                expr = "a+b";
+            if (value.op == "subtract")
+                expr = "a-b";
+            if (value.op == "multiply")
+                expr = "a*b";
+            if (value.op == "divide")
+                expr = "a/b";
+            if (value.op == "maximum")
+                expr = "a<b?b:a";
+            if (value.op == "minimum")
+                expr = "b<a?b:a";
+            if (value.op == "neg")
+                expr = "-a";
+            if (value.op == "abs")
+                expr = "fabsf(a)";
+            if (value.op == "exp")
+                expr = "expf(a)";
+            if (value.op == "log")
+                expr = "logf(a)";
+            if (value.op == "sqrt")
+                expr = "sqrtf(a)";
+            if (value.op == "rsqrt")
+                expr = "1.0f/sqrtf(a)";
+            if (value.op == "relu")
+                expr = "a<0.0f?0.0f:a";
+            code << "t" << member << "=" << expr << "; }\n";
+            return "t" + std::to_string(member);
+        };
+
+        if (launch.implementation == "ordered_reduce") {
+            const auto &shape = p.nodes[n.inputs[0]].shape;
+            const size_t axis = n.attributes[0], width = shape[axis];
+            size_t inner = 1;
+            for (size_t d = axis + 1; d < shape.size(); ++d)
+                inner *= shape[d];
+            const auto safeInner = std::max(inner, size_t(1));
+            launch.gridX = static_cast<unsigned>(std::clamp<size_t>((count + 31) / 32, 1, 65535));
+            // Parallelize independent output rows. Each thread preserves every
+            // f32 producer rounding point and the ordered f64 accumulation.
+            code << "for(unsigned long long row=(unsigned long "
+                    "long)blockIdx.x*blockDim.x+threadIdx.x;row<"
+                 << literal(count) << ";row+=(unsigned long long)gridDim.x*blockDim.x){\n"
+                 << "unsigned long long base=(row/" << literal(safeInner) << ")*"
+                 << literal(width * inner) << "+row%" << literal(safeInner) << ";\n"
+                 << "double acc=0.0;\nfor(unsigned long long r=0;r<" << literal(width)
+                 << ";++r){\n";
+            const auto value = emit(n.inputs[0], "base+r*" + literal(inner));
+            code << "acc+=(double)" << value << ";\n}\n" << load(id, "row") << "=(float)(acc";
+            if (n.op == "mean_axis")
+                code << "/" << (width ? std::to_string(width) + ".0" : "0.0");
+            code << ");\n}\n";
+        } else if (n.op.starts_with("scalar_")) {
             launch.blockX = launch.gridX = 1;
             auto operand                 = [&](size_t in) {
                 return std::find(launch.members.begin(), launch.members.end(), in) !=
@@ -186,66 +267,6 @@ void generate(Program &p, ScheduleOptions options) {
                     "long)blockIdx.x*blockDim.x+threadIdx.x; i<"
                  << literal(count) << "; i+=(unsigned long long)blockDim.x*gridDim.x) {\n";
             if (launch.members.size() > 1) {
-                for (auto member : launch.members)
-                    code << "float t" << member << ";\n";
-                // Every node retains its f32 rounding point. NVRTC's --fmad=false
-                // prevents contraction across these assignments.
-                std::function<std::string(size_t, const std::string &)> emit;
-                emit = [&](size_t member, const std::string &at) -> std::string {
-                    if (std::find(launch.members.begin(), launch.members.end(), member) ==
-                        launch.members.end())
-                        return load(member, at);
-                    const auto &value     = p.nodes[member];
-                    const auto coordinate = "q" + std::to_string(member);
-                    code << "unsigned long long " << coordinate << "=" << at << ";\n";
-                    auto input = [&](size_t in) {
-                        const auto index = value.op == "reindex"
-                                               ? mappedIndex(value, IndexExpr::variable(coordinate))
-                                           : value.op == "reshape"
-                                               ? IndexExpr::variable(coordinate)
-                                               : broadcastIndex(
-                                                     p.nodes[in].shape,
-                                                     value.shape,
-                                                     IndexExpr::variable(coordinate));
-                        return emit(in, index.cuda());
-                    };
-                    const auto a = input(value.inputs[0]);
-                    const auto b = value.inputs.size() == 2 ? input(value.inputs[1]) : "";
-                    code << "{ float a=" << a << ";\n";
-                    if (value.inputs.size() == 2)
-                        code << "float b=" << b << ";\n";
-                    std::string expr;
-                    if (value.op == "reshape" || value.op == "reindex")
-                        expr = "a";
-                    if (value.op == "add")
-                        expr = "a+b";
-                    if (value.op == "subtract")
-                        expr = "a-b";
-                    if (value.op == "multiply")
-                        expr = "a*b";
-                    if (value.op == "divide")
-                        expr = "a/b";
-                    if (value.op == "maximum")
-                        expr = "a<b?b:a";
-                    if (value.op == "minimum")
-                        expr = "b<a?b:a";
-                    if (value.op == "neg")
-                        expr = "-a";
-                    if (value.op == "abs")
-                        expr = "fabsf(a)";
-                    if (value.op == "exp")
-                        expr = "expf(a)";
-                    if (value.op == "log")
-                        expr = "logf(a)";
-                    if (value.op == "sqrt")
-                        expr = "sqrtf(a)";
-                    if (value.op == "rsqrt")
-                        expr = "1.0f/sqrtf(a)";
-                    if (value.op == "relu")
-                        expr = "a<0.0f?0.0f:a";
-                    code << "t" << member << "=" << expr << "; }\n";
-                    return "t" + std::to_string(member);
-                };
                 emit(id, "i");
                 code << load(id, "i") << "=t" << id << ";\n";
             } else if (n.op == "reindex") {

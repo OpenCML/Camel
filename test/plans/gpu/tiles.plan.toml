@@ -4,6 +4,16 @@ tier = "gpu"
 tags = ["gpu", "modules", "tiles"]
 
 [[tests]]
+name = "ordered_reduction_fusion"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/reduction_fusion.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: fused reduction bytes", "std::fvm: fused reduction bytes", "std::jit: fused reduction bytes"]
+timeout_ms = 180000
+
+[[tests]]
 name = "matmul_rounding.nvm"
 kind = "behavior"
 case = "../../cases/modules/tiles/matmul_rounding.cml"
