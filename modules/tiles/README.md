@@ -28,6 +28,13 @@ fixed for each cache owner's lifetime. Benchmark reports expose `compile_options
 These defaults do not grant numerical relaxation permissions. Explicit FMA
 operations are independent of the flag that disables implicit contraction.
 
+A separate process-local source-template LRU looks up the exact lowered plan
+before printing CUDA. Runtime scalar/tensor contents and device owners are excluded;
+graph literals, shapes, indexing and launch choices are included. Storage planning
+and validation run on every call. It retains at most 32 entries and 16 MiB of
+accounted entry payload (excluding allocator overhead), with synchronized access.
+This is not a persistent semantic fingerprint or a cache of graph compilation.
+
 - `run_device<fn>(inputs)` executes the same graph and returns `Device<Tensor<...>>` or `Device<float>`
   leaves in the result's original tuple/struct structure. Outputs retain their
   allocations instead of downloading; feed them directly into subsequent graph

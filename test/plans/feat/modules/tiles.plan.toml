@@ -27,7 +27,7 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed"]
+expect_stdout_contains = ["tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed"]
 timeout_ms = 10000
 
 [[tests]]

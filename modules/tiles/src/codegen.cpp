@@ -10,6 +10,7 @@
 
 // Shape-specialized CUDA lowering; all intermediate arrays remain on the device.
 #include "tiles/internal/access.h"
+#include "tiles/internal/codegen_cache.h"
 #include "tiles/internal/index_expr.h"
 #include "tiles/program.h"
 #include <algorithm>
@@ -56,8 +57,7 @@ IndexExpr mappedIndex(const Node &n, const IndexExpr &at) {
 }
 } // namespace
 
-void generate(Program &p, ScheduleOptions options) {
-    schedule(p, options);
+void kernel::emitCUDA(Program &p) {
     auto load = [&](size_t id, const std::string &at) {
         if (p.nodes[id].dtype == DType::F64)
             return "reinterpret_cast<double*>(v[" + std::to_string(id) + "])[" + at + "]";

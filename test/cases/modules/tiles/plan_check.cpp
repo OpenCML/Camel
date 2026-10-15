@@ -13,9 +13,13 @@
 #include "tiles/device.h"
 #include "tiles/internal/index_expr.h"
 #include "tiles/internal/access.h"
+#include "tiles/internal/codegen_cache.h"
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <atomic>
+#include <barrier>
+#include <thread>
 using namespace camel::tiles;
 
 template<class F> void rejects(const Program &original, F mutate, const char *reason) {
@@ -121,6 +125,76 @@ int main() {
         rejects(scalarInput, [](auto &x) { x.nodes[0].dtype = DType::F32; }, "invalid input payload");
         rejects(scalarInput, [](auto &x) { x.nodes[0].shape = {1}; }, "input payload dtype");
         std::cout << "tiles scalar inputs: typed payload and shape validation passed\n";
+        auto scalarCode = scalarInput;
+        scalarCode.nodes.push_back(Node{.op="constant64", .shape={}, .attributes={0x3ff0000000000000LL}, .dtype=DType::F64});
+        scalarCode.nodes.push_back(Node{.op="scalar_add", .shape={}, .inputs={0,1}, .dtype=DType::F64});
+        scalarCode.outputs = {2};
+        generate(scalarCode);
+        const auto firstSource = scalarCode.source;
+        const auto firstStats = kernel::generationCacheStats();
+        scalarCode.nodes[0].scalarBits = 0x4000000000000000ULL;
+        generate(scalarCode);
+        if (kernel::generationCacheStats().hits != firstStats.hits + 1 || scalarCode.source != firstSource)
+            throw std::runtime_error("runtime scalar changed source-template identity");
+        scalarCode.nodes[1].attributes[0] = 0x4000000000000000LL;
+        generate(scalarCode);
+        if (kernel::generationCacheStats().misses != firstStats.misses + 1 || scalarCode.source == firstSource)
+            throw std::runtime_error("graph literal reused incompatible source template");
+        std::weak_ptr<int> cacheOwner;
+        {
+            Program borrowed;
+            auto value = std::make_shared<DeviceValue>();
+            auto owner = std::make_shared<int>(1);
+            cacheOwner = owner;
+            value->owner = owner;
+            value->address = 1;
+            value->shape = {2};
+            borrowed.nodes = {{.op="input", .shape={2}, .resident=value},
+                              {.op="neg", .shape={2}, .inputs={0}}};
+            borrowed.outputs = {1};
+            generate(borrowed);
+            borrowed.nodes[0].resident.reset();
+            borrowed.nodes[0].data = {1,2};
+            const auto beforeHost = kernel::generationCacheStats();
+            generate(borrowed);
+            if (kernel::generationCacheStats().hits != beforeHost.hits + 1 || borrowed.storage.slots[0] == SIZE_MAX)
+                throw std::runtime_error("source cache reused borrowed storage plan");
+        }
+        if (!cacheOwner.expired())
+            throw std::runtime_error("source cache retained device input ownership");
+        for (int64_t bits = 0; bits < 40; ++bits) {
+            Program literal;
+            literal.nodes = {{.op="constant64", .shape={}, .attributes={bits}, .dtype=DType::F64}};
+            generate(literal);
+        }
+        const auto beforeEvicted = kernel::generationCacheStats();
+        generate(scalarCode);
+        const auto afterEvicted = kernel::generationCacheStats();
+        if (afterEvicted.entries > 32 || afterEvicted.retainedBytes > 16 * 1024 * 1024 ||
+            afterEvicted.misses != beforeEvicted.misses + 1)
+            throw std::runtime_error("source cache eviction failed");
+        auto expectedCode = scalarCode;
+        expectedCode.nodes[1].attributes[0] = 12345;
+        schedule(expectedCode);
+        kernel::emitCUDA(expectedCode);
+        std::barrier ready(4);
+        std::atomic<bool> concurrentFailure = false;
+        std::vector<std::thread> workers;
+        for (unsigned worker = 0; worker < 4; ++worker)
+            workers.emplace_back([&, worker] {
+                auto local = expectedCode;
+                ready.arrive_and_wait();
+                try {
+                    for (unsigned iteration = 0; iteration < 16; ++iteration) {
+                        local.nodes[0].scalarBits = worker * 16 + iteration;
+                        generate(local);
+                        if (local.source != expectedCode.source) concurrentFailure = true;
+                    }
+                } catch (const std::exception &) { concurrentFailure = true; }
+            });
+        for (auto &worker : workers) worker.join();
+        if (concurrentFailure) throw std::runtime_error("concurrent source cache generation failed");
+        std::cout << "tiles source cache: values, literals, storage ownership and eviction passed\n";
         Program p;
         p.nodes = {{.op="input", .shape={4}, .data={1,2,3,4}},
                    {.op="add", .shape={4}, .inputs={0,0}},
