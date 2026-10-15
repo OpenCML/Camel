@@ -237,3 +237,9 @@ The GPU tests cover square, row-reduction, dense parameter-struct gradients,
 multi-axis broadcasting, f32 cancellation and empty reductions. Scalar losses,
 general pullback closures, additional derivative rules and control flow remain
 outside the implemented subset; this is not the complete training stack.
+
+The rebuilt 4a2756e7 passes 51/51 host/GPU/tensor checks on both the local RTX
+4060 Ti and remote RTX 3090 device 7. The existing autodiff regression plan also
+passed 121/121 locally after the CPU gradient fix and before the formatting-only
+Tiles commit hook. Logs are retained as `2026-10-15-rtx3090-gradients-tests.txt`
+and `2026-10-15-autodiff-regression.txt` in `docs/performance/tiles/`.

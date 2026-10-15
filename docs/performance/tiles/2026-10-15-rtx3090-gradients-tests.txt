@@ -1,0 +1,63 @@
+[INFO] camel executable: /home/zjwei/camel-eval/tiles-75776da8/out/latest/bin/camel
+[INFO] discovered plans: 4
+
+[PLAN] feat.modules.tensor: modules.tensor
+[PASS] broadcast_ops                                         15.66 ms
+[PASS] reductions                                            11.85 ms
+[PASS] linalg_layout                                         13.63 ms
+[PASS] shape_error                                            9.25 ms
+[PASS] static_types                                          11.59 ms
+[PASS] gemm_consistency                                      12.71 ms
+[PASS] gc_tail_chain                                         16.17 ms
+[PASS] struct_covariance                                     14.93 ms
+[PASS] transcendentals                                       13.70 ms
+[PASS] fuse_linear_reference                                 11.93 ms
+[PASS] fuse_linear_pass                                       9.85 ms
+[PASS] fuse_linear_graph                                      7.23 ms
+[PASS] static_shape_error                                     6.78 ms
+[PASS] runtime_shape_column.nvm                              15.86 ms
+[PASS] runtime_shape_column.fvm                              13.04 ms
+[PASS] reshape_view_gc.nvm                                   17.16 ms
+[PASS] reshape_view_gc.fvm                                   19.27 ms
+[PASS] reshape_view_gc.jit                                   17.10 ms
+[PASS] gradient_broadcast_axes                               12.39 ms
+
+[PLAN] feat.modules.tiles: modules.tiles
+[PASS] plan                                                   9.55 ms
+[PASS] plan_validation                                       25.78 ms
+[PASS] source                                                 7.64 ms
+[PASS] reject_effect                                         10.19 ms
+
+[PLAN] gpu.tiles: gpu.tiles
+[PASS] max_special_values                                      1.92 s
+[PASS] max_grid_stride                                      568.68 ms
+[PASS] benchmark_protocol                                   774.35 ms
+[PASS] fusion.nvm                                           467.97 ms
+[PASS] fusion.fvm                                           456.60 ms
+[PASS] fusion.jit                                           438.48 ms
+[PASS] boundaries.nvm                                       522.31 ms
+[PASS] boundaries.fvm                                       557.57 ms
+[PASS] boundaries.jit                                       525.68 ms
+[PASS] vector_add                                           417.58 ms
+[PASS] softmax                                              545.44 ms
+[PASS] matmul                                               426.15 ms
+[PASS] consistency.nvm                                      548.63 ms
+[PASS] consistency.fvm                                      541.64 ms
+[PASS] consistency.jit                                      594.22 ms
+[PASS] index_maps.nvm                                       556.10 ms
+[PASS] index_maps.fvm                                       517.35 ms
+[PASS] index_maps.jit                                       511.77 ms
+[PASS] mapped_fusion.nvm                                    489.05 ms
+[PASS] mapped_fusion.fvm                                    504.27 ms
+[PASS] mapped_fusion.jit                                    493.61 ms
+[PASS] aggregate_outputs.nvm                                575.89 ms
+[PASS] aggregate_outputs.fvm                                560.60 ms
+[PASS] aggregate_outputs.jit                                570.63 ms
+[PASS] gradients.nvm                                        724.81 ms
+[PASS] gradients.fvm                                        631.68 ms
+[PASS] gradients.jit                                        665.36 ms
+
+[PLAN] gpu.tiles_transfer: gpu.tiles_transfer
+[PASS] large_upload_completion                                 1.39 s
+
+[SUMMARY] total: 51, pass: 51, fail: 0
