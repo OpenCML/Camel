@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Aug. 18, 2024
- * Updated: May. 01, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -70,6 +70,10 @@ struct EntryConfig {
     // environment variables and the defaults.
     size_t maxRecursionDepth = 0;
     size_t maxMacroDepth     = 0;
+
+    // Editor analysis can omit the executable entry and supply unsaved module texts.
+    bool requireEntry = true;
+    std::function<std::optional<std::string>(const std::string &)> sourceOverride;
 
     std::string toString() const;
 };
@@ -137,6 +141,10 @@ class Context : public std::enable_shared_from_this<Context> {
         const EntryConfig &entryConf       = EntryConfig(),
         const error::DiagsConfig &diagConf = error::DiagsConfig());
 
+    bool requireEntry() const { return entryConfig_.requireEntry; }
+    std::optional<std::string> sourceOverride(const std::string &path) const {
+        return entryConfig_.sourceOverride ? entryConfig_.sourceOverride(path) : std::nullopt;
+    }
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     size_t maxThreads() const { return entryConfig_.maxThreads; }
     size_t maxRecursionDepth() const { return entryConfig_.maxRecursionDepth; }

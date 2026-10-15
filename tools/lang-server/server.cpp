@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 12, 2026
- * Updated: Oct. 12, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -60,9 +60,8 @@ namespace {
 
 // Formats a source text; empty when it does not parse.
 std::optional<std::string> formatSource(const std::string &path, const std::string &content) {
-    auto diagnostics =
-        std::make_shared<camel::core::error::Diagnostics>("lsp-format", path);
-    auto parser = std::make_shared<camel::parse::CamelParser>(diagnostics);
+    auto diagnostics = std::make_shared<camel::core::error::Diagnostics>("lsp-format", path);
+    auto parser      = std::make_shared<camel::parse::CamelParser>(diagnostics);
     std::istringstream input(content);
     try {
         if (!parser->parseCST(input)) {
@@ -180,7 +179,10 @@ void Server::dispatch(const json &message) {
             transport_.respondError(id, RequestCancelled, "cancelled");
             return;
         }
-        transport_.respond(id, handleRequest(method, params));
+        activeRequest_    = id;
+        const auto result = handleRequest(method, params);
+        checkCancelled();
+        transport_.respond(id, result);
     } catch (const RequestError &e) {
         if (isRequest) {
             transport_.respondError(id, e.code, e.message);
@@ -213,7 +215,20 @@ void Server::handleNotification(const std::string &method, const json &params) {
     } else if (method == "textDocument/didClose") {
         didClose(params);
     }
-    // initialized, didSave, $/setTrace, workspace/didChange*: nothing to do.
+    if (method == "textDocument/didSave" || method == "workspace/didChangeWatchedFiles" ||
+        method == "workspace/didRenameFiles" || method == "workspace/didDeleteFiles" ||
+        method == "workspace/didCreateFiles")
+        invalidateModels();
+    if (method == "workspace/didChangeWorkspaceFolders") {
+        const auto &event = params.at("event");
+        for (const auto &folder : event.at("removed")) {
+            const auto path = uriToPath(folder.at("uri"));
+            std::erase(workspaceRoots_, path);
+        }
+        for (const auto &folder : event.at("added"))
+            workspaceRoots_.push_back(uriToPath(folder.at("uri")));
+        invalidateModels();
+    }
 }
 
 json Server::handleRequest(const std::string &method, const json &params) {
@@ -232,6 +247,14 @@ json Server::handleRequest(const std::string &method, const json &params) {
         }
         return json{{"kind", "full"}, {"items", items}};
     }
+    if (method == "textDocument/prepareCallHierarchy" || method == "callHierarchy/incomingCalls" ||
+        method == "callHierarchy/outgoingCalls")
+        return callHierarchy(method, params);
+    if (method == "textDocument/typeDefinition")
+        return readingSupport(method, params);
+    if (method == "textDocument/foldingRange" || method == "textDocument/selectionRange" ||
+        method == "textDocument/inlayHint" || method == "textDocument/codeAction")
+        return readingSupport(method, params);
     if (method == "textDocument/hover") {
         return hover(params);
     }
@@ -291,9 +314,7 @@ Server::Document *Server::document(const json &params) {
 
 const semantic::SemanticModel &Server::modelOf(Document &doc) {
     if (doc.stale || !doc.model) {
-        semantic::AnalysisOptions options;
-        options.path     = doc.path;
-        options.text     = doc.text;
+        auto options     = analysisOptions(doc.path, doc.text);
         options.previous = doc.lastCompiled;
         doc.model        = semantic::analyze(options);
         doc.stale        = false;
@@ -305,9 +326,40 @@ const semantic::SemanticModel &Server::modelOf(Document &doc) {
     return *doc.model;
 }
 
+semantic::AnalysisOptions
+Server::analysisOptions(const std::string &path, const std::string &text) const {
+    semantic::AnalysisOptions options;
+    options.path         = path;
+    options.text         = text;
+    options.requireEntry = false;
+    for (const auto &[uri, doc] : documents_) {
+        options.sourceOverrides[fs::absolute(doc.path).lexically_normal().generic_string()] =
+            doc.text;
+    }
+    return options;
+}
+
+void Server::invalidateModels() {
+    // Imports can change while a previous model is incomplete. Invalidate conservatively;
+    // models remain lazy and are rebuilt only for queries or pushed diagnostics.
+    for (auto &[uri, doc] : documents_) {
+        doc.stale = true;
+        doc.lastCompiled.reset();
+    }
+    workspaceCache_.clear();
+    projectModels_.clear();
+    if (refreshDiagnostics_)
+        transport_.send(
+            json{
+                {"jsonrpc", "2.0"},
+                {"id", "diagnostics-" + std::to_string(++refreshId_)},
+                {"method", "workspace/diagnostic/refresh"},
+                {"params", nullptr}});
+}
+
 void Server::refreshStale() {
     for (auto &[uri, doc] : documents_) {
-        if (doc.stale || !doc.model) {
+        if (pushDiagnostics_ && (doc.stale || !doc.model)) {
             modelOf(doc);
         }
         if (!doc.published && pushDiagnostics_) {
@@ -335,7 +387,7 @@ json Server::range(const FileModel &file, semantic::Range r) const {
 }
 
 json Server::location(Document &doc, const Location &loc) {
-    const auto &model    = modelOf(doc);
+    const auto &model     = modelOf(doc);
     const FileModel &file = model.files()[loc.file];
     return json{
         {"uri", loc.file == 0 ? doc.uri : pathToUri(file.path)},
@@ -393,6 +445,12 @@ json Server::diagnosticsOf(Document &doc) {
 // ---------------------------------------------------------------------------------------
 
 json Server::initialize(const json &params) {
+    const auto workspace =
+        params.value("capabilities", json::object()).value("workspace", json::object());
+    refreshDiagnostics_ =
+        workspace.value("diagnostics", json::object()).value("refreshSupport", false);
+    documentChanges_ =
+        workspace.value("workspaceEdit", json::object()).value("documentChanges", false);
     // A client that pulls diagnostics gets them only that way: pushing as well would show
     // every problem twice. `initializationOptions.diagnostics` ("push", "pull", "both")
     // overrides the choice.
@@ -427,20 +485,26 @@ json Server::initialize(const json &params) {
 
     json capabilities{
         {"positionEncoding", "utf-16"},
-        {"textDocumentSync",
-         json{{"openClose", true}, {"change", 2}, {"save", json::object()}}},
+        {"textDocumentSync", json{{"openClose", true}, {"change", 2}, {"save", json::object()}}},
         {"diagnosticProvider",
          json{{"interFileDependencies", true}, {"workspaceDiagnostics", false}}},
         {"documentFormattingProvider", true},
         {"hoverProvider", true},
+        {"callHierarchyProvider", true},
+        {"typeDefinitionProvider", true},
+        {"foldingRangeProvider", true},
+        {"selectionRangeProvider", true},
+        {"inlayHintProvider", true},
+        {"codeActionProvider", json{{"codeActionKinds", {"quickfix"}}}},
+        {"workspace",
+         json{{"workspaceFolders", json{{"supported", true}, {"changeNotifications", true}}}}},
         {"definitionProvider", true},
         {"referencesProvider", true},
         {"documentHighlightProvider", true},
         {"documentSymbolProvider", true},
         {"workspaceSymbolProvider", true},
         {"completionProvider", json{{"triggerCharacters", json::array({".", ":"})}}},
-        {"signatureHelpProvider",
-         json{{"triggerCharacters", json::array({"(", ","})}}},
+        {"signatureHelpProvider", json{{"triggerCharacters", json::array({"(", ","})}}},
         {"renameProvider", json{{"prepareProvider", true}}},
         {"semanticTokensProvider",
          json{
@@ -460,11 +524,12 @@ json Server::initialize(const json &params) {
 void Server::didOpen(const json &params) {
     const json &item = params.at("textDocument");
     Document doc;
-    doc.uri     = item.at("uri").get<std::string>();
-    doc.path    = uriToPath(doc.uri);
-    doc.text    = item.at("text").get<std::string>();
-    doc.version = item.contains("version") ? item["version"] : json(nullptr);
+    doc.uri             = item.at("uri").get<std::string>();
+    doc.path            = uriToPath(doc.uri);
+    doc.text            = item.at("text").get<std::string>();
+    doc.version         = item.contains("version") ? item["version"] : json(nullptr);
     documents_[doc.uri] = std::move(doc);
+    invalidateModels();
 }
 
 void Server::didChange(const json &params) {
@@ -495,10 +560,9 @@ void Server::didChange(const json &params) {
         }
         doc->text.replace(start, end - start, text);
     }
-    doc->version = params.at("textDocument").contains("version")
-                       ? params["textDocument"]["version"]
-                       : json(nullptr);
-    doc->stale = true;
+    doc->version = params.at("textDocument").contains("version") ? params["textDocument"]["version"]
+                                                                 : json(nullptr);
+    invalidateModels();
 }
 
 void Server::didClose(const json &params) {
@@ -508,6 +572,7 @@ void Server::didClose(const json &params) {
     }
     const std::string uri = doc->uri;
     documents_.erase(uri);
+    invalidateModels();
     if (pushDiagnostics_) {
         // The problems of a closed document are no longer the server's to show.
         transport_.notify(
@@ -567,14 +632,37 @@ json Server::definition(const json &params) {
 json Server::references(const json &params) {
     Document *doc = document(params);
     json result   = json::array();
-    if (doc == nullptr) {
+    if (!doc)
         return result;
-    }
-    const bool includeDeclaration =
+    const auto &model  = modelOf(*doc);
+    const auto targets = model.definition(offsetAt(*doc, params));
+    const bool include =
         params.contains("context") && params["context"].value("includeDeclaration", false);
-    for (const Location &loc :
-         modelOf(*doc).references(offsetAt(*doc, params), includeDeclaration)) {
-        result.push_back(location(*doc, loc));
+    std::set<std::string> seen;
+    const auto add = [&](const semantic::SemanticModel &m, const Location &loc) {
+        const auto &file = m.files()[loc.file];
+        json item{{"uri", pathToUri(file.path)}, {"range", range(file, loc.range)}};
+        if (seen.insert(item.dump()).second)
+            result.push_back(item);
+    };
+    for (const auto &loc : model.references(offsetAt(*doc, params), include))
+        add(model, loc);
+    if (targets.empty())
+        return result;
+    const auto &targetFile = model.files()[targets.front().file];
+    const auto name =
+        targetFile.text.substr(targets.front().range.start, targets.front().range.length());
+    for (const auto &[path, text] : workspaceSources()) {
+        checkCancelled();
+        if (text.find(name) == std::string::npos)
+            continue;
+        const auto other = projectModel(path, text);
+        std::vector<Location> mapped;
+        for (const auto &target : targets)
+            if (auto file = other->fileOf(model.files()[target.file].path))
+                mapped.push_back({*file, target.range});
+        for (const auto &loc : other->referencesTo(mapped, include))
+            add(*other, loc);
     }
     return result;
 }
@@ -623,15 +711,15 @@ json Server::documentSymbol(const json &params) {
 
 json Server::workspaceSymbol(const json &params) {
     const std::string query = lower(
-        params.contains("query") && params["query"].is_string()
-            ? params["query"].get<std::string>()
-            : std::string());
-    json result             = json::array();
-    const auto addFrom      = [&](const FileModel &file, const std::string &uri) {
+        params.contains("query") && params["query"].is_string() ? params["query"].get<std::string>()
+                                                                : std::string());
+    json result        = json::array();
+    const auto addFrom = [&](const FileModel &file, const std::string &uri) {
         for (const semantic::Decl &decl : file.syntax.decls) {
-            const bool listed = decl.kind == DeclKind::Function || decl.kind == DeclKind::Type ||
-                                ((decl.kind == DeclKind::Local || decl.kind == DeclKind::Variable) &&
-                                 decl.scope == 0);
+            const bool listed =
+                decl.kind == DeclKind::Function || decl.kind == DeclKind::Type ||
+                ((decl.kind == DeclKind::Local || decl.kind == DeclKind::Variable) &&
+                 decl.scope == 0);
             if (!listed || (!query.empty() && lower(decl.name).find(query) == std::string::npos)) {
                 continue;
             }
@@ -678,10 +766,10 @@ json Server::workspaceSymbol(const json &params) {
             }
             const std::string stamp =
                 // The tick count is __int128 with libc++, which std::to_string does not take.
-                std::to_string(static_cast<long long>(
-                    fs::last_write_time(path, ec).time_since_epoch().count())) +
-                ":" +
-                std::to_string(fs::file_size(path, ec));
+                std::to_string(
+                    static_cast<long long>(
+                        fs::last_write_time(path, ec).time_since_epoch().count())) +
+                ":" + std::to_string(fs::file_size(path, ec));
             auto &cached = workspaceCache_[normal];
             if (!cached.second || cached.first != stamp) {
                 std::ifstream in(path, std::ios::binary);
@@ -755,36 +843,9 @@ json Server::signatureHelp(const json &params) {
         {"activeParameter", help->activeParameter}};
 }
 
-json Server::prepareRename(const json &params) {
-    Document *doc = document(params);
-    if (doc == nullptr) {
-        return nullptr;
-    }
-    const auto &model = modelOf(*doc);
-    const auto result = model.rename(offsetAt(*doc, params), "");
-    if (!result.refusal.empty()) {
-        throw RequestError{RequestFailed, "Cannot rename: " + result.refusal};
-    }
-    return json{{"range", range(model.main(), result.range)}, {"placeholder", result.placeholder}};
-}
+json Server::prepareRename(const json &params) { return workspaceRename(params, true); }
 
-json Server::rename(const json &params) {
-    Document *doc = document(params);
-    if (doc == nullptr) {
-        return nullptr;
-    }
-    const auto &model         = modelOf(*doc);
-    const std::string newName = params.at("newName").get<std::string>();
-    const auto result         = model.rename(offsetAt(*doc, params), newName);
-    if (!result.refusal.empty()) {
-        throw RequestError{RequestFailed, "Cannot rename: " + result.refusal};
-    }
-    json edits = json::array();
-    for (const Location &loc : result.edits) {
-        edits.push_back(json{{"range", range(model.main(), loc.range)}, {"newText", newName}});
-    }
-    return json{{"changes", json{{doc->uri, edits}}}};
-}
+json Server::rename(const json &params) { return workspaceRename(params, false); }
 
 json Server::semanticTokens(const json &params) {
     Document *doc = document(params);
@@ -909,14 +970,15 @@ json Server::graph(const json &params) {
     if (executableDir_.empty() || !fs::exists(camel, ec)) {
         camel = exe; // from PATH
     }
-    const fs::path dir = fs::path(doc->path).parent_path();
-    const fs::path scratch =
-        dir / (".camel-ls-" + std::to_string(CAMEL_LS_GETPID()) + "-" +
-               fs::path(doc->path).filename().string());
+    const fs::path dir     = fs::path(doc->path).parent_path();
+    const fs::path scratch = dir / (".camel-ls-" + std::to_string(CAMEL_LS_GETPID()) + "-" +
+                                    fs::path(doc->path).filename().string());
     {
         std::ofstream out(scratch, std::ios::binary);
         if (!out) {
-            throw RequestError{RequestFailed, "cannot write beside the document: " + scratch.string()};
+            throw RequestError{
+                RequestFailed,
+                "cannot write beside the document: " + scratch.string()};
         }
         out << doc->text;
     }
