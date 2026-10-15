@@ -12,6 +12,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/module/builtin.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
@@ -23,6 +24,7 @@
 #include "modules/tensor/ops/registry.h"
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
+#include "tiles/device.h"
 #include "tiles/program.h"
 #include <cstring>
 
@@ -118,6 +120,43 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &) {
     });
 }
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
+slot_t uploadKernel(ArgsView &, ArgsView &norm, Context &) {
+    return checked([&] {
+        Shape shape;
+        std::vector<float> data;
+        {
+            core::mm::NoCollectionScope noCollection;
+            auto *tensor = norm.get<tensor::TensorObject *>(0);
+            if (tensor->dtype() != TypeCode::Float32)
+                throw std::runtime_error("upload currently requires f32 tensors");
+            shape              = tensor->shapeVector();
+            const size_t count = elements(shape);
+            if (count)
+                data.assign(tensor->dataAs<float>(), tensor->dataAs<float>() + count);
+        }
+        auto resident = uploadTensor(shape, data);
+        auto *owner   = new std::shared_ptr<DeviceTensor>(std::move(resident));
+        td::ForeignResourceDescriptor descriptor;
+        descriptor.kind    = "tiles.Device";
+        descriptor.deleter = [](void *p) {
+            delete static_cast<std::shared_ptr<DeviceTensor> *>(p);
+        };
+        return td::toSlot(
+            td::ForeignResourceObject::create(core::mm::autoSpace(), std::move(descriptor), owner));
+    });
+}
+slot_t downloadKernel(ArgsView &, ArgsView &norm, Context &) {
+    return checked([&] {
+        auto *wrapper = norm.get<td::ForeignResourceObject *>(0);
+        auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceTensor>>();
+        auto data     = downloadTensor(*resident);
+        auto *out =
+            tensor::TensorObject::create(TypeCode::Float32, resident->shape, core::mm::autoSpace());
+        if (!data.empty())
+            std::memcpy(out->rawData(), data.data(), data.size() * sizeof(float));
+        return td::toSlot(out);
+    });
+}
 slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
     return checked([] { return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())); });
 }
@@ -175,6 +214,35 @@ class TilesModule final : public BuiltinModule {
   public:
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
+        exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
+        for (const std::string name : {"upload", "download"}) {
+            exportEntity(
+                name,
+                OperatorGroup::create(
+                    name,
+                    {{"tiles:" + name,
+                      DynamicFuncTypeResolver::create(
+                          {{0, {}}, {1, {false}}},
+                          name == "upload" ? "(Tensor) => Device<Tensor>"
+                                           : "(Device<Tensor>) => Tensor",
+                          [upload = name == "upload"](
+                              const type_vec_t &with,
+                              const type_vec_t &norm,
+                              const ModifierSet &) -> std::optional<Type *> {
+                              if (!with.empty() || norm.size() != 1)
+                                  return std::nullopt;
+                              if (upload) {
+                                  const auto *tensor = tensor::asTensorType(norm[0]);
+                                  if (!tensor ||
+                                      (tensor->dtype() && *tensor->dtype() != TypeCode::Float32))
+                                      return std::nullopt;
+                                  return DeviceType::get(norm[0]);
+                              }
+                              const auto *device = asDeviceType(norm[0]);
+                              return device ? std::optional<Type *>(device->hostType())
+                                            : std::nullopt;
+                          })}}));
+        }
         for (const std::string name : {"run", "source", "inspect", "benchmark"}) {
             exportEntity(
                 name,
@@ -209,6 +277,8 @@ class TilesModule final : public BuiltinModule {
                 ctx,
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
+                    {"upload", &uploadKernel},
+                    {"download", &downloadKernel},
                     {"source", &sourceKernel},
                     {"inspect", &inspectKernel},
                     {"benchmark", &benchmarkKernel},
@@ -219,6 +289,8 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().declare(
             "tiles",
             {{"run", false},
+             {"upload", false},
+             {"download", false},
              {"source", false},
              {"inspect", false},
              {"benchmark", false},

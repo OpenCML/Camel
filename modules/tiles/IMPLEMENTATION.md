@@ -285,3 +285,22 @@ Committed fa7d71e5 rebuilds successfully on Windows and Linux. Both local RTX
 4060 Ti and remote RTX 3090 device 7 pass 59/59 checks, including GC-stress
 value-and-gradient reconstruction and 24 native invalid-plan mutations. Remote
 output is retained in `docs/performance/tiles/2026-10-15-rtx3090-scalars-tests.txt`.
+
+## Device-value ownership and transfers
+
+`Device<Tensor<...>>` is an interned module type preserving its host tensor's
+static refinements. Upload snapshots host f32 data, transfers via pinned storage
+on an ordered stream, and publishes the device value only after completion.
+Download produces a fresh host tensor without consuming or modifying the device
+value. Camel's existing ForeignResourceObject handles relocation, shared wrapper
+ownership, deferred finalization and end-of-run cleanup. Native allocations own
+the backend through shared ownership so their context and loaded driver remain
+available until the last allocation is freed. There are no Camel references in
+native storage and no raw global allocation registry.
+
+This stage adds transfer/residency values, not resident graph execution: `run`
+still accepts host values. Borrowed immutable device inputs, ownership of device
+outputs and cross-call completion dependencies must be integrated next. Async
+submission and multi-stream resource graphs remain later work. The GC-stress
+test keeps old device values across forty new round trips and checks independent
+uploads, repeated downloads, type annotations and empty tensors.

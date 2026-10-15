@@ -9,6 +9,7 @@
  */
 
 // Lazy Driver/NVRTC loading, bounded compiled-module cache, and scoped device ownership.
+#include "tiles/device.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <chrono>
@@ -308,10 +309,25 @@ class Backend {
     }
 };
 
-Backend &backend() {
-    static Backend instance;
+std::shared_ptr<Backend> sharedBackend() {
+    static auto instance = std::make_shared<Backend>();
     return instance;
 }
+Backend &backend() { return *sharedBackend(); }
+
+struct OwnedAllocation {
+    std::shared_ptr<Backend> backend;
+    CUdeviceptr pointer = 0;
+    ~OwnedAllocation() {
+        // No Camel references or allocator locks. The owner outlives every use;
+        // transfers are synchronous before publishing the value.
+        if (pointer && backend->api.cuCtxPushCurrent(backend->context) == CUDA_SUCCESS) {
+            backend->api.cuMemFree(pointer);
+            CUcontext popped;
+            backend->api.cuCtxPopCurrent(&popped);
+        }
+    }
+};
 
 // The stream is drained before buffers are freed, including on a failed launch.
 struct Resources {
@@ -479,6 +495,47 @@ double elapsed(Clock::time_point start) {
 } // namespace
 
 std::string deviceInfo() { return backend().description; }
+std::shared_ptr<DeviceTensor> uploadTensor(const Shape &shape, const std::vector<float> &data) {
+    if (elements(shape) != data.size())
+        throw std::runtime_error("device upload shape mismatch");
+    auto b = sharedBackend();
+    std::lock_guard lock(b->mutex);
+    Current current(b->api, b->context);
+    auto allocation     = std::make_shared<OwnedAllocation>();
+    allocation->backend = b;
+    b->api.check(
+        b->api.cuMemAlloc(&allocation->pointer, std::max(size_t(1), data.size() * sizeof(float))),
+        "allocate resident tensor");
+    Resources staging(b->api);
+    if (!data.empty()) {
+        const size_t size = data.size() * sizeof(float);
+        void *pinned      = staging.allocateHost(size);
+        std::memcpy(pinned, data.data(), size);
+        b->api.check(
+            b->api.cuMemcpyHtoDAsync(allocation->pointer, pinned, size, staging.stream),
+            "upload resident tensor");
+        b->api.check(b->api.cuStreamSynchronize(staging.stream), "complete resident upload");
+    }
+    auto result     = std::make_shared<DeviceTensor>();
+    result->shape   = shape;
+    result->address = allocation->pointer;
+    result->owner   = std::move(allocation);
+    return result;
+}
+std::vector<float> downloadTensor(const DeviceTensor &tensor) {
+    if (!tensor.owner || !tensor.address)
+        throw std::runtime_error("invalid resident tensor");
+    auto allocation = std::static_pointer_cast<OwnedAllocation>(tensor.owner);
+    auto b          = allocation->backend;
+    std::lock_guard lock(b->mutex);
+    Current current(b->api, b->context);
+    std::vector<float> result(elements(tensor.shape));
+    if (!result.empty())
+        b->api.check(
+            b->api.cuMemcpyDtoH(result.data(), allocation->pointer, result.size() * sizeof(float)),
+            "download resident tensor");
+    return result;
+}
 bool available() {
     try {
         (void)backend();
@@ -693,6 +750,14 @@ std::string deviceInfo() {
         "tiles was built without CUDA Toolkit headers; install CUDA and rebuild");
 }
 bool available() { return false; }
+std::shared_ptr<DeviceTensor> uploadTensor(const Shape &, const std::vector<float> &) {
+    (void)deviceInfo();
+    return {};
+}
+std::vector<float> downloadTensor(const DeviceTensor &) {
+    (void)deviceInfo();
+    return {};
+}
 std::vector<std::byte> execute(const Program &) {
     (void)deviceInfo();
     return {};

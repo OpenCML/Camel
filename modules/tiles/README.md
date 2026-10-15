@@ -45,6 +45,15 @@ func main(): int sync {
 - `available()` reports whether driver/NVRTC initialization succeeds. A successful
   result does not guarantee a subsequent compilation or memory allocation succeeds.
 - `device()` reports the selected GPU, or raises a diagnostic explaining failure.
+- `upload(tensor)` returns an immutable `Device<Tensor<...>>` owning f32 GPU
+  storage. Static dtype/shape refinements are retained. `download(deviceValue)`
+  returns a host tensor. Both transfers complete before returning; repeated
+  downloads preserve the device value. Empty tensors are supported.
+  Device storage is owned through Camel's foreign-resource control blocks and
+  released by finalization or end-of-run cleanup. The native allocation retains
+  its CUDA context and driver lifetime, and contains no moving-heap pointers.
+  These values are not yet accepted by graph `run`: resident graph execution is
+  the next integration step, not an implicit upload/download fallback.
 
 The function context is ordinary Camel context, not a compile-time modifier.
 The module inspects the supplied function graph at invocation. It never traces
