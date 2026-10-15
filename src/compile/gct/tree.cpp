@@ -23,6 +23,7 @@
  */
 
 #include "camel/compile/gct/tree.h"
+#include "camel/core/operator_semantics.h"
 
 #include <algorithm>
 #include <bit>
@@ -385,8 +386,14 @@ std::string Node::toString() const {
         return "CAST: " + targetType()->toString();
     case NodeKind::EXIT:
         return "EXIT: " + to_string(exitType());
-    case NodeKind::EXEC:
-        return synced() ? "SYNC" : "EXEC";
+    case NodeKind::EXEC: {
+        std::string text = synced() ? "SYNC" : "EXEC";
+        if (numericPermissions() != 0) {
+            // Only when granted, so that the dump of a program without @numeric is unchanged.
+            text += ": numeric(" + camel::core::sem::permissionsText(numericPermissions()) + ")";
+        }
+        return text;
+    }
     case NodeKind::EXPT: {
         std::string text = "EXPT: [";
         for (size_t i = 0; i < exportCount(); ++i) {

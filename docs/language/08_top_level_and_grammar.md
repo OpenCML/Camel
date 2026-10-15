@@ -96,7 +96,7 @@ decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usin
                      | dataDecl | funcDecl | typeDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt
-blockStmt          : 'wait'? stmtBlock
+blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
@@ -110,7 +110,7 @@ usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
                      | typeDecl | dataDecl
-funcAnno           : '@' identRef angledValues?
+funcAnno           : '@' identRef (angledValues | parentIdents)?
 funcDecl           : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
                      'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')

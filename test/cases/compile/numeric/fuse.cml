@@ -1,0 +1,31 @@
+/**
+ * tensor::fuse makes one matmul_add of `x @ w + b` only when the product and the sum were
+ * granted the same numeric permissions; the fused node keeps them.
+ */
+module fuse
+
+import { Tensor, reshape, sum } from tensor
+
+@numeric(reassociate)
+func product(x: Tensor, w: Tensor): Tensor {
+    return x @ w
+}
+
+/// The product (reassociate, once inlined) and the sum (none) differ: not fused.
+func split(x: Tensor, w: Tensor, b: Tensor): Tensor {
+    return product(x, w) + b
+}
+
+/// Both reassociate: fused.
+@numeric(reassociate)
+func whole(x: Tensor, w: Tensor, b: Tensor): Tensor {
+    return x @ w + b
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5], [2, 3])
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])
+    let b = reshape([0.1, -0.2], [2])
+    'fuse split={} whole={}'->format<sum(split(x, w, b)), sum(whole(x, w, b))>->println
+    return 0
+}

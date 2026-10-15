@@ -36,7 +36,9 @@
  * 4. Users (the reverse direction) are not stored: GCGraph::uses() builds the index the first
  *    time anything asks for it and keeps it for the graph's lifetime.
  * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
- *    32-bit origin id per node, 0 when the node has none.
+ *    32-bit origin id per node, 0 when the node has none. Beside it, only in a graph where some
+ *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
+ *    node (nodePermissions; design principles 2.13, docs/design/op-semantics 6.3).
  * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7): a
  *    FUNC node names its callee by an index into it (GCFuncRef), and the graphs the function
  *    constants of the static area point to, the graphs written inside this one and the graphs
@@ -296,6 +298,7 @@ struct GCGraphNativePayload {
     // with the graph.
     GCNode *nodes              = nullptr; // nodeCount + 1 records (the last is a sentinel)
     uint32_t *origins          = nullptr; // nodeCount source origins (0: none)
+    uint8_t *permissions       = nullptr; // nodeCount numeric permissions; null when all are 0
     gc_node_ref_t *inputs      = nullptr; // edgeCount entries
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
     gc_node_ref_t *normPorts   = nullptr;
@@ -353,6 +356,11 @@ class GCGraph : public camel::core::rtdata::Object {
     const std::string &name() const;
     /// Source origin (camel::source::origin_id_t) of node `ref`, 0 when unknown.
     uint64_t nodeOrigin(gc_node_ref_t ref) const;
+    /// Numeric permissions (camel/core/operator_semantics.h, PermissionMask) the program granted
+    /// to node `ref`, 0 when none; the graph has no permission column when no node has any.
+    uint8_t nodePermissions(gc_node_ref_t ref) const;
+    /// True when some node of the graph has numeric permissions.
+    bool hasNodePermissions() const { return nativePayload_.permissions != nullptr; }
     /// The names of the values the function captures from where it was written, in the order
     /// it captured them (symbols of camel/core/symbol.h). Compile and debug metadata: what a
     /// capture is bound to at run time is the closure tuple and the with-inputs of a call.

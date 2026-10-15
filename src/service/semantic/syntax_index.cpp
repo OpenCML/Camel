@@ -308,6 +308,11 @@ class Walker {
         case NK::FuncData:
             return funcData(cst::FuncData(node));
         case NK::FuncAnno:
+            // `@numeric(...)` names permissions, not values (design principles 2.13); only a
+            // decorator (`@name`, `@name<args>`) refers to a function.
+            if (node.get<cst::ParentIdents>()) {
+                return;
+            }
             addRef(node.get<cst::IdentRef>(), RefKind::Value, true);
             return walk(node.get<cst::AngledValues>());
         case NK::FuncDecl:

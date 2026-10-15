@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-143 diagnostics: 129 errors, 14 warnings.
+144 diagnostics: 130 errors, 14 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -116,6 +116,7 @@ prints one entry.
 | `0x030000F4` | [SemanticDiag::AmbiguousOperatorCall](#ambiguousoperatorcall) | Error |
 | `0x03000110` | [SemanticDiag::DeclaredTypeMismatch](#declaredtypemismatch) | Error |
 | `0x03000111` | [SemanticDiag::ModuleTypeCycle](#moduletypecycle) | Error |
+| `0x03000112` | [SemanticDiag::InvalidAnnotation](#invalidannotation) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -2808,6 +2809,52 @@ Each of these types needs the next one to be declared first, and the last needs 
 // Design principles 2.13: types that form a cycle across modules are reported with the cycle
 // (ModuleTypeCycle), not as names that are not resolved.
 import { A } from cycle_a
+
+func main(): int sync {
+    return 0
+}
+```
+
+### InvalidAnnotation
+
+`0x03000112` · Error · `SemanticDiag::InvalidAnnotation`
+
+**Message**
+
+```text
+The annotation '@{0}' is not accepted: {1}.
+```
+
+**Help**
+
+```text
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function; '@numeric(...)' grants numeric permissions to a function or a block (design principles 2.13).
+```
+
+**Example** (`test/cases/compile/numeric/invalid.cml`, run as `camel test/cases/compile/numeric/invalid.cml`)
+
+```camel
+module invalid
+
+func twice(f: (x: int) => int): (x: int) => int {
+    return (x: int) => f(f(x))
+}
+
+@numeric(reassociate, fast)
+func a(x: float): float { return x * 2.0 }
+
+@kernelish(reassociate)
+func b(x: float): float { return x * 2.0 }
+
+@numeric()
+func c(x: float): float { return x * 2.0 }
+
+func d(x: float): float {
+    @twice
+    {
+        return x * 2.0
+    }
+}
 
 func main(): int sync {
     return 0
