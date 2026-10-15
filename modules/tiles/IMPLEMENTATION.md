@@ -280,3 +280,8 @@ loss truncation, combine scalar/tensor/constant outputs, and cover empty sums.
 Mixed-result benchmarks expose output dtypes and require exact scalar f64
 agreement with the reference. Reductions remain serial to preserve their current
 ordered numerical contract; no new parallel arithmetic policy is implied.
+
+Committed fa7d71e5 rebuilds successfully on Windows and Linux. Both local RTX
+4060 Ti and remote RTX 3090 device 7 pass 59/59 checks, including GC-stress
+value-and-gradient reconstruction and 24 native invalid-plan mutations. Remote
+output is retained in `docs/performance/tiles/2026-10-15-rtx3090-scalars-tests.txt`.
