@@ -272,7 +272,7 @@ class Compiler {
                     throw std::runtime_error("operator context arguments are not supported yet");
                 for (auto in : ins)
                     args.push_back(eval(f, in));
-                out = operation(std::string(g->nodeBodyAs<rt::GCOperBody>(id)->uri()), args);
+                out = operation(g->nodeBodyAs<rt::GCOperBody>(id)->oper, args);
                 break;
             }
             default:
@@ -287,14 +287,18 @@ class Compiler {
         }
     }
 
-    Value operation(const std::string &uri, const std::vector<Value> &args) {
-        static const std::unordered_map<std::string, std::string> scalarOps = {
-            {":op/add_d", "scalar_add"},
-            {":op/sub_d", "scalar_sub"},
-            {":op/mul_d", "scalar_mul"},
-            {":op/div_d", "scalar_div"},
-            {":op/neg_d", "scalar_neg"}};
-        if (auto op = scalarOps.find(uri); op != scalarOps.end()) {
+    Value operation(core::OperId id, const std::vector<Value> &args) {
+        static const auto scalarOps = [] {
+            auto &table = core::OperatorTable::instance();
+            return std::unordered_map<core::OperId, std::string>{
+                {table.intern(":op/add_d"), "scalar_add"},
+                {table.intern(":op/sub_d"), "scalar_sub"},
+                {table.intern(":op/mul_d"), "scalar_mul"},
+                {table.intern(":op/div_d"), "scalar_div"},
+                {table.intern(":op/neg_d"), "scalar_neg"}};
+        }();
+        auto uri = [&] { return std::string(core::OperatorTable::instance().uri(id)); };
+        if (auto op = scalarOps.find(id); op != scalarOps.end()) {
             const size_t arity = op->second == "scalar_neg" ? 1 : 2;
             if (args.size() != arity)
                 throw std::runtime_error("scalar operation arity");
@@ -318,9 +322,9 @@ class Compiler {
             }
             return {.type = ty::Type::Float64(), .tensor = append(std::move(node))};
         }
-        const auto *def = tensor::ops::OpRegistry::instance().find(uri);
+        const auto *def = tensor::ops::OpRegistry::instance().find(id);
         if (!def || !def->traits.pure)
-            throw std::runtime_error("unsupported or effectful operator '" + uri + "'");
+            throw std::runtime_error("unsupported or effectful operator '" + uri() + "'");
         std::vector<ty::Type *> types;
         std::vector<std::optional<ConstArg>> constants;
         for (const auto &v : args) {
@@ -343,7 +347,7 @@ class Compiler {
         const auto *result = inferred ? tensor::asTensorType(*inferred) : nullptr;
         if (!result || result->dtype() != ty::TypeCode::Float32 || !result->isStaticShape())
             throw std::runtime_error(
-                "operator '" + uri + "' needs a statically known f32 tensor result");
+                "operator '" + uri() + "' needs a statically known f32 tensor result");
         Node n{.op = std::string(def->name), .shape = *result->shape()};
         if (n.op == "sum_to" || n.op == "cast_like") {
             n.inputs = {tensorValue(args.at(0))};
@@ -490,7 +494,7 @@ class Compiler {
             if (elements(program.nodes[n.inputs[0]].shape) != elements(n.shape))
                 throw std::runtime_error("reshape changes the number of elements");
         } else {
-            throw std::runtime_error("no CUDA lowering for '" + uri + "'");
+            throw std::runtime_error("no CUDA lowering for '" + uri() + "'");
         }
         return {.type = *inferred, .tensor = append(std::move(n))};
     }

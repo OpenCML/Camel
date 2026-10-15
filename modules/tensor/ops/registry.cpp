@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 15, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -190,7 +190,8 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
             camel::core::OperatorTable::instance().setTypeFolder(
                 uri,
                 [fold = def.foldFromTypes](
-                    std::span<Type *const> types,
+                    std::span<Type *const>
+                        types,
                     static_args_t statics,
                     mm::IAllocator &allocator) -> std::optional<slot_t> {
                     const StaticFacts facts(types, statics);
@@ -203,16 +204,20 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
                     }
                 });
         }
-        entries_.push_back(Entry{
-            std::string(protocol),
-            std::move(uri),
-            std::make_shared<const OpDef>(std::move(def))});
+        entries_.push_back(
+            Entry{
+                std::string(protocol),
+                std::move(uri),
+                std::make_shared<const OpDef>(std::move(def))});
         // An operator without an export name belongs to no operator group, which is what
         // publishes resolvers by URI. A rewrite that creates such an operator (tensor::fuse)
         // still needs its result type to follow its arguments when types are re-inferred
         // (specialization to an export's input shapes); otherwise everything downstream of it
         // loses its static shape.
         const Entry &entry = entries_.back();
+        byId_.emplace(
+            camel::core::OperatorTable::instance().intern(entry.uri),
+            entries_.size() - 1);
         if (entry.def->exports.empty() && entry.def->infer) {
             camel::core::OperatorTable::instance().setResolver(
                 entry.uri,
@@ -225,6 +230,11 @@ const OpDef *OpRegistry::find(std::string_view uri) const {
     std::lock_guard guard(mutex_);
     auto it = byUri_.find(std::string(uri));
     return it == byUri_.end() ? nullptr : entries_[it->second].def.get();
+}
+const OpDef *OpRegistry::find(core::OperId id) const {
+    std::lock_guard guard(mutex_);
+    auto it = byId_.find(id);
+    return it == byId_.end() ? nullptr : entries_[it->second].def.get();
 }
 
 std::vector<oper_group_ptr_t> OpRegistry::operatorGroups(std::string_view protocol) const {
@@ -259,7 +269,9 @@ std::unordered_map<std::string, operator_t> OpRegistry::kernelMap(std::string_vi
     for (const Entry &entry : entries_) {
         if (entry.protocol == protocol) {
             const std::string name(entry.def->name);
-            kernels.emplace(name, opStatsEnabled() ? timedKernel(name, entry.def->kernel) : entry.def->kernel);
+            kernels.emplace(
+                name,
+                opStatsEnabled() ? timedKernel(name, entry.def->kernel) : entry.def->kernel);
         }
     }
     return kernels;

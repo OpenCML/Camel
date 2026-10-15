@@ -456,3 +456,12 @@ Committed af5956ed rebuilds and passes 82/82 relevant tests on local RTX 4060 Ti
 and remote RTX 3090 device 7, including the native cache-eviction lifetime test.
 Remote output is retained in
 `docs/performance/tiles/2026-10-15-rtx3090-module-lease-tests.txt`.
+
+## Operator identity integration
+
+Tiles dispatches graph operators by the core table's process-local `OperId`.
+Scalar identities are interned once; tensor definitions expose a direct ID lookup
+alongside their existing registration/export URI interface. URI text is materialized
+only for diagnostics. This reuses the established core identity contract without
+introducing another identity space or changing operator semantics. Rich operation
+interfaces for indexing, numerics and resources remain separate design work.
