@@ -519,3 +519,8 @@ address-expression portion of the physical kernel representation, not a complete
 structured kernel IR: loops, masks, scalar operations, barriers and load/store
 statements still require migration. Core semantic access maps remain the intended
 source of truth; these expressions are a physical lowering representation.
+
+Commit 3b377edf rebuilds and passes 85/85 relevant cases on local RTX 4060 Ti and
+remote RTX 3090 device 7, including the added native expression checks and existing
+GPU mapping/fusion cases. Remote output is retained in
+`docs/performance/tiles/2026-10-15-rtx3090-index-expr-tests.txt`.
