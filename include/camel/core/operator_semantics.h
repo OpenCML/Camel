@@ -42,6 +42,7 @@
  *
  *   indexing           the instantiation function: for the facts known at one call, the
  *                      iteration domain, the access map of every operand and the write map
+ *   laws               the reduction laws (section 7) its instances combine contributions by
  *
  * The resources and the definition graph (sections 8 and 9) come in phase 4, each a new
  * optional member of OperatorSemantics, absent until then.
@@ -208,6 +209,10 @@ struct OperatorSemantics {
     /// not declared: the operator reads its operands whole and writes its result whole, and
     /// nothing is known about which elements depend on which.
     InstantiateFn indexing;
+    /// The reduction laws its instances name (IndexedInstance::law indexes this list): one
+    /// per element type the operator reduces over, since the same operation is a different law
+    /// on another type (design section 7).
+    std::vector<ReductionLaw> laws;
     NumericSemantics numeric;
     /// The faults the operator can raise. nullopt: not declared, the operator's mayFault trait
     /// decides ("may fault, anyhow"). An empty list: it never faults.

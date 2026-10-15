@@ -188,6 +188,40 @@ int main() {
             throw std::runtime_error("numeric permissions missing from source-template key");
         auto &operators = camel::core::OperatorTable::instance();
         namespace sem = camel::core::sem;
+        const std::string maximumUri = "tilestest:maximum";
+        const auto maximumId = operators.intern(maximumUri);
+        sem::ReductionLaw maximumLaw{
+            .name="maximum_f32", .kind=sem::LawKind::Max,
+            .input=camel::core::type::TypeCode::Float32,
+            .accumulator=camel::core::type::TypeCode::Float32,
+            .result=camel::core::type::TypeCode::Float32,
+            .initBits=0xff800000U, .exactAssociative=true, .exactCommutative=true,
+            .hasIdentity=true, .identityBits=0xff800000U};
+        sem::OperatorSemantics maximumDeclaration{.key=sem::OperatorKey::of(maximumUri), .laws={maximumLaw}};
+        operators.declareSemantics(maximumUri,maximumDeclaration);
+        Program maximumPlan;
+        maximumPlan.contracts.push_back({.uri=maximumUri, .key=maximumDeclaration.key, .declaration=operators.semantics(maximumId)});
+        maximumPlan.nodes = {{.op="input", .shape={1,128}, .data=std::vector<float>(128)},
+                             {.op="max_axis", .shape={1}, .inputs={0}, .attributes={1}, .semantic=0}};
+        maximumPlan.outputs={1};
+        sem::IndexedInstance instance;
+        const auto row=instance.exprs.dim(0), axis=instance.exprs.dim(1);
+        instance.domain.dims={{"row",instance.exprs.constant(1),sem::DimRole::Parallel},
+                              {"axis",instance.exprs.constant(128),sem::DimRole::Reduction}};
+        instance.norm={{.kind=sem::AccessKind::Affine, .coords={row,axis}}};
+        instance.output={.coords={row}, .mode=sem::WriteMode::Combine};
+        instance.law=0;
+        maximumPlan.nodes[1].indexing=instance;
+        generate(maximumPlan);
+        if (maximumPlan.launches[0].implementation != "parallel_max")
+            throw std::runtime_error("core maximum law did not authorize parallel reduction");
+        rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "parallel maximum lacks");
+        rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing->law=42; }, "invalid core index instance");
+        maximumPlan.nodes[1].indexing.reset();
+        generate(maximumPlan);
+        if (maximumPlan.launches[0].implementation != "standard")
+            throw std::runtime_error("undeclared reduction reused parallel source");
+        std::cout << "tiles reduction laws: declared freedom required for parallel maximum\n";
         const std::string contractUri = "tilestest:versioned";
         const auto contractId = operators.intern(contractUri);
         auto declaration = sem::OperatorSemantics{

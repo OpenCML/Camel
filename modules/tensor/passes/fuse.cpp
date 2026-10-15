@@ -23,12 +23,15 @@
 
 #include "fuse.h"
 
+#include "index_eval.h"
+
 #include "../ops/registry.h"
 
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <array>
 #include <format>
 #include <optional>
@@ -191,6 +194,13 @@ void registerTensorPasses() {
     registerModulePass("tensor::fuse", [](const core::context::context_ptr_t &ctx) {
         return std::make_unique<TensorFusePass>(ctx);
     });
+    // The declaration evaluator is a test (index_eval.h): it exists only when test passes are
+    // enabled, as the core's test passes do (CAMEL_ENABLE_TEST_PASSES).
+    if (std::getenv("CAMEL_ENABLE_TEST_PASSES") != nullptr) {
+        registerModulePass("tensor::test_index_eval", [](const core::context::context_ptr_t &ctx) {
+            return std::make_unique<IndexEvalTestPass>(ctx);
+        });
+    }
 }
 
 } // namespace camel::tensor::passes

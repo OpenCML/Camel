@@ -22,7 +22,8 @@ for passes in [['std::nvm'], ['std::fvm'], ['std::jit'], ['std::inline', 'std::f
     assert plans[3]['numeric_permissions'] == [0, 0, 0, 2, 0], plans
     assert all(p['kernels'] == 1 for p in plans), plans
     for plan in plans:
-        assert {c['identity'] for c in plan['operator_contracts']} == {'tensor:multiply@1.0', 'tensor:add@1.0'}, plan
+        assert plan["indexed_nodes"] == [3, 4], plan
+        assert {c['identity'] for c in plan['operator_contracts']} == {'tensor:multiply@1.1', 'tensor:add@1.1'}, plan
         assert all(c['declared'] and c['numeric'] == 'correctly_rounded' for c in plan['operator_contracts']), plan
     assert '\n'.join(lines[13:]).count('=fmaf(') == 1
     print(' '.join(passes) + ': numeric permission boundaries, broadcast FMA and strict reuse passed')

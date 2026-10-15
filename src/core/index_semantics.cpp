@@ -621,11 +621,16 @@ validate(const IndexedInstance &instance, const OperatorSemantics *semantics) {
         return "a domain with a reduction dim writes each result element more than once, not "
                "uniquely";
     }
-    if (instance.output.mode == WriteMode::Combine) {
-        if (instance.law == kNoLaw) {
-            return "a combining write names no reduction law";
+    if (instance.output.mode == WriteMode::Combine && instance.law == kNoLaw) {
+        return "a combining write names no reduction law";
+    }
+    if (instance.law != kNoLaw) {
+        if (instance.output.mode != WriteMode::Combine) {
+            return "an instance whose writes never meet names a reduction law";
         }
-        (void)semantics; // the laws are checked against the record from phase 2's laws on
+        if (semantics != nullptr && instance.law >= semantics->laws.size()) {
+            return std::format("law {} is not declared by the operator", instance.law);
+        }
     }
     return std::nullopt;
 }
@@ -761,7 +766,6 @@ std::string accessText(const Printer &pr, const Access &a) {
 } // namespace
 
 std::string toString(const IndexedInstance &instance, const OperatorSemantics *semantics) {
-    (void)semantics;
     const Printer pr(instance);
     std::string out;
     std::string params;
@@ -795,12 +799,160 @@ std::string toString(const IndexedInstance &instance, const OperatorSemantics *s
     out += "write    " + pr.tuple(w.coords, w.indirect, "norm") + " " +
            std::string(writeModeName(w.mode));
     if (instance.law != kNoLaw) {
-        out += std::format(" law {}", instance.law);
+        out += semantics != nullptr && instance.law < semantics->laws.size()
+                   ? " law " + semantics->laws[instance.law].name
+                   : std::format(" law {}", instance.law);
     }
     if (!w.valid.empty()) {
         out += " valid [" + pr.predicate(w.valid) + "]";
     }
-    return out + "\n";
+    out += "\n";
+    if (semantics != nullptr && instance.law < semantics->laws.size()) {
+        out += "law      " + toString(semantics->laws[instance.law]) + "\n";
+    }
+    return out;
+}
+
+// ---- Reduction laws -------------------------------------------------------------------------
+
+std::string_view lawKindName(LawKind kind) {
+    switch (kind) {
+    case LawKind::Add:
+        return "add";
+    case LawKind::Mul:
+        return "mul";
+    case LawKind::MulAdd:
+        return "mul_add";
+    case LawKind::FmaChain:
+        return "fma_chain";
+    case LawKind::Max:
+        return "max";
+    case LawKind::Min:
+        return "min";
+    case LawKind::ArgMax:
+        return "argmax";
+    case LawKind::ArgMin:
+        return "argmin";
+    case LawKind::And:
+        return "and";
+    case LawKind::Or:
+        return "or";
+    case LawKind::Custom:
+        return "custom";
+    }
+    return "?";
+}
+
+namespace {
+
+std::string_view typeShortName(type::TypeCode code) {
+    switch (code) {
+    case type::TypeCode::Float32:
+        return "f32";
+    case type::TypeCode::Float64:
+        return "f64";
+    case type::TypeCode::Int32:
+        return "i32";
+    case type::TypeCode::Int64:
+        return "i64";
+    case type::TypeCode::Bool:
+        return "bool";
+    case type::TypeCode::Void:
+        return "any";
+    default:
+        return "?";
+    }
+}
+
+bool isFloat(type::TypeCode code) {
+    return code == type::TypeCode::Float32 || code == type::TypeCode::Float64;
+}
+
+} // namespace
+
+std::string toString(const ReductionLaw &law) {
+    std::string out = std::format(
+        "{}: {} {} -> {} -> {}",
+        law.name,
+        lawKindName(law.kind),
+        typeShortName(law.input),
+        typeShortName(law.accumulator),
+        typeShortName(law.result));
+    switch (law.init) {
+    case LawInit::Constant:
+        out += std::format(", init 0x{:x}", law.initBits);
+        break;
+    case LawInit::FirstContribution:
+        out += ", init first";
+        break;
+    case LawInit::Operand:
+        out += std::format(", init with {}", law.initOperand);
+        break;
+    }
+    out += law.order == LawOrder::Ascending ? ", ascending" : ", unordered";
+    out += law.empty == LawEmpty::Initial ? ", empty initial" : ", empty fault";
+    if (law.finalize == LawFinalize::DivideByCount) {
+        out += ", divide by count";
+    }
+    if (law.exactAssociative) {
+        out += ", associative";
+    }
+    if (law.exactCommutative) {
+        out += ", commutative";
+    }
+    if (law.hasIdentity) {
+        out += std::format(", identity 0x{:x}", law.identityBits);
+    }
+    if (law.kind == LawKind::Custom) {
+        out += std::format(", combiner with {}", law.combinerOperand);
+    }
+    return out;
+}
+
+std::optional<std::string> checkLaw(const ReductionLaw &law) {
+    const bool narrow = law.accumulator == type::TypeCode::Float32 ||
+                        law.accumulator == type::TypeCode::Int32 ||
+                        law.accumulator == type::TypeCode::Bool;
+    if (narrow && ((law.init == LawInit::Constant && law.initBits > 0xFFFFFFFFu) ||
+                   (law.hasIdentity && law.identityBits > 0xFFFFFFFFu))) {
+        return std::format("law {}: a constant does not fit its 32-bit accumulator", law.name);
+    }
+    const bool floatArithmetic =
+        isFloat(law.accumulator) && (law.kind == LawKind::Add || law.kind == LawKind::Mul ||
+                                     law.kind == LawKind::MulAdd || law.kind == LawKind::FmaChain);
+    if (floatArithmetic && law.exactAssociative) {
+        return std::format(
+            "law {}: floating-point {} is not exactly associative", law.name, lawKindName(law.kind));
+    }
+    if (law.init == LawInit::FirstContribution && law.empty != LawEmpty::Fault) {
+        return std::format(
+            "law {}: it starts from its first contribution, so having none is a fault", law.name);
+    }
+    if (law.init == LawInit::Operand && law.initOperand == 0xFF) {
+        return std::format("law {}: it starts from an operand but names none", law.name);
+    }
+    if (law.kind == LawKind::Custom && law.combinerOperand == 0xFF) {
+        return std::format("law {}: a custom law names the operand of its combining function", law.name);
+    }
+    if (law.kind != LawKind::Custom &&
+        (law.input == type::TypeCode::Void || law.accumulator == type::TypeCode::Void ||
+         law.result == type::TypeCode::Void)) {
+        return std::format("law {}: it names its input, accumulator and result types", law.name);
+    }
+    return std::nullopt;
+}
+
+ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t granted) {
+    const PermissionMask g =
+        granted | (law.order == LawOrder::Unordered ? PermissionMask{kReassociate} : PermissionMask{0});
+    ReorderFreedom f;
+    f.regroup       = law.exactAssociative || (g & kReassociate) != 0;
+    f.permute       = law.exactCommutative && f.regroup;
+    f.blockIdentity = f.regroup && law.hasIdentity && law.init == LawInit::Constant &&
+                      law.initBits == law.identityBits;
+    f.contract = law.kind == LawKind::FmaChain || (law.kind == LawKind::MulAdd && (g & kContract) != 0);
+    f.changePrecision = isFloat(law.accumulator) && (g & kChangePrecision) != 0;
+    return f;
 }
 
 // ---- Transformations ------------------------------------------------------------------------

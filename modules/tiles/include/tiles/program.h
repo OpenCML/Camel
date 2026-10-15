@@ -51,6 +51,8 @@ struct Node {
     core::sem::PermissionMask permissions = core::sem::kNoPermissions;
     size_t semantic =
         SIZE_MAX; // Originating operator contract; absent for native/synthetic inputs.
+    // Owned core declaration instance, specialized to this call; no graph or GC pointers.
+    std::optional<core::sem::IndexedInstance> indexing;
     std::shared_ptr<const DeviceValue>
         resident; // Borrowed immutable input, retained through execution.
 };
