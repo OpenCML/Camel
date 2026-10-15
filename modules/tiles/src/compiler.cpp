@@ -279,7 +279,13 @@ class Compiler {
                     throw std::runtime_error("operator context arguments are not supported yet");
                 for (auto in : ins)
                     args.push_back(eval(f, in));
-                out = operation(g->nodeBodyAs<rt::GCOperBody>(id)->oper, args);
+                const auto first = program.nodes.size();
+                out              = operation(g->nodeBodyAs<rt::GCOperBody>(id)->oper, args);
+                // Only this operator's lowering inherits its lexical grant.
+                // Arguments and separately called functions have already been
+                // lowered with their own permissions and must remain unchanged.
+                for (size_t i = first; i < program.nodes.size(); ++i)
+                    program.nodes[i].permissions = g->nodePermissions(id);
                 break;
             }
             default:

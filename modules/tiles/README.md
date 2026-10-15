@@ -28,6 +28,22 @@ fixed for each cache owner's lifetime. Benchmark reports expose `compile_options
 These defaults do not grant numerical relaxation permissions. Explicit FMA
 operations are independent of the flag that disables implicit contraction.
 
+Tiles retains the core graph's lexical `@numeric` permission byte per lowered
+node, exposes it as `numeric_permissions` in `inspect`, and includes it in source
+cache identity. It emits explicit f32 FMA for an elementwise multiply/add pair
+only when both operations grant `contract` and the product is private to that
+launch. Broadcasting is preserved. Returned/shared products retain their rounding
+point, and a caller's grant never widens an unannotated callee's permissions.
+The other permission bits are retained but do not yet select relaxed algorithms;
+f64 scalar contraction is also not implemented. NVRTC implicit contraction stays
+disabled. Matmul's normative increasing-k FMA chain needs no relaxation grant.
+
+The benchmark's existing numerical gate compares against unfused execution with
+a tolerance. Contraction can legitimately exceed that tolerance for cancellation
+cases; such a benchmark still refuses to report a speedup. A reference for each
+selected relaxed algorithm is needed before relaxing this gate. `run` and
+`run_device` execute the granted contraction independently of that benchmark gate.
+
 A separate process-local source-template LRU looks up the exact lowered plan
 before printing CUDA. Runtime scalar/tensor contents and device owners are excluded;
 graph literals, shapes, indexing and launch choices are included. Storage planning

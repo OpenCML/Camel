@@ -926,3 +926,13 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: canonical extrema", "std::fvm: canonical extrema", "std::jit: canonical extrema"]
 timeout_ms = 60000
+
+[[tests]]
+name = "numeric_permission_boundaries"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/numeric_permissions.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::fvm: numeric permission boundaries", "std::jit: numeric permission boundaries", "std::inline std::fvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
+timeout_ms = 180000
