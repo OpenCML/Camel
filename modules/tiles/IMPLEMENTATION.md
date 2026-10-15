@@ -465,3 +465,17 @@ alongside their existing registration/export URI interface. URI text is material
 only for diagnostics. This reuses the established core identity contract without
 introducing another identity space or changing operator semantics. Rich operation
 interfaces for indexing, numerics and resources remain separate design work.
+
+## Strict matrix-product rounding
+
+Following the language author's numerical contract (design principles 2.13,
+verified on fsh-dev at d23d262d), matrix products now use separate explicitly
+rounded f32 multiplication and addition. No FMA permission is inferred from GPU
+execution. A cancellation regression produced -2^-46 before the correction and
+positive zero afterward. The local RTX 4060 Ti and remote RTX 3090 device 7 pass
+85/85 relevant cases, including this test under NVM, FVM and JIT. Remote evidence:
+`docs/performance/tiles/2026-10-15-rtx3090-strict-matmul-tests.txt`.
+
+This fixes one concrete contraction violation, not the entire numerical contract.
+See `notes/numerical-contract-audit.md` for the reproduced CPU/GPU subnormal exp
+difference and remaining error-bound and comparison-mode work.
