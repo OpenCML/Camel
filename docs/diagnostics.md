@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-135 diagnostics: 123 errors, 12 warnings.
+140 diagnostics: 128 errors, 12 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -109,6 +109,11 @@ prints one entry.
 | `0x030000E2` | [SemanticDiag::AnyNotAllowed](#anynotallowed) | Error |
 | `0x030000E3` | [SemanticDiag::ConditionNotBool](#conditionnotbool) | Error |
 | `0x030000E4` | [SemanticDiag::MatchCaseTypeMismatch](#matchcasetypemismatch) | Error |
+| `0x030000F0` | [SemanticDiag::UnusedPureResult](#unusedpureresult) | Error |
+| `0x030000F1` | [SemanticDiag::OperatorNotOverloadable](#operatornotoverloadable) | Error |
+| `0x030000F2` | [SemanticDiag::OperatorOverloadInvalid](#operatoroverloadinvalid) | Error |
+| `0x030000F3` | [SemanticDiag::OperatorOverloadConflict](#operatoroverloadconflict) | Error |
+| `0x030000F4` | [SemanticDiag::AmbiguousOperatorCall](#ambiguousoperatorcall) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -689,7 +694,7 @@ Identifiers starting and ending with double underscores are reserved for interna
 **Help**
 
 ```text
-Avoid using names like '__example__'; choose different identifiers.
+Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V): V'.
 ```
 
 **Example** (`test/cases/compile/surface/reserved_function_name.cml`, run as `camel -E short test/cases/compile/surface/reserved_function_name.cml`)
@@ -2597,6 +2602,149 @@ func main(): int sync {
         case _ => 'other'
     }
     println(r)
+    return 0
+}
+```
+
+### UnusedPureResult
+
+`0x030000F0` · Error · `SemanticDiag::UnusedPureResult`
+
+**Message**
+
+```text
+The result of '{0}' is not used, and '{0}' changes nothing: it returns a new value{1}.
+```
+
+**Help**
+
+```text
+The operations of the standard library return new values and leave their arguments as they were: after 'let ys = xs->append<5>', 'xs' is unchanged. To change a variable, bind it to the result, 'xs = xs->append<5>', as 'x = x + 1' does for a number.
+```
+
+**Example** (`test/cases/consistency/new_values/unused_var.cml`, run as `camel test/cases/consistency/new_values/unused_var.cml`)
+
+```camel
+module unused_var
+
+func main(): int sync {
+    var xs = [1, 2]
+    xs->append<5>
+    println(xs)
+    return 0
+}
+```
+
+### OperatorNotOverloadable
+
+`0x030000F1` · Error · `SemanticDiag::OperatorNotOverloadable`
+
+**Message**
+
+```text
+'{0}' cannot be overloaded: {1}.
+```
+
+**Help**
+
+```text
+The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '!=', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'. '&&', '||', '??', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.
+```
+
+**Example** (`test/cases/consistency/operator_overloads/not_overloadable_logical.cml`, run as `camel test/cases/consistency/operator_overloads/not_overloadable_logical.cml`)
+
+```camel
+module not_overloadable_logical
+
+type M = { v: int }
+
+func operator &&(a: M, b: M): M { return a }
+
+func main(): int { return 0 }
+```
+
+### OperatorOverloadInvalid
+
+`0x030000F2` · Error · `SemanticDiag::OperatorOverloadInvalid`
+
+**Message**
+
+```text
+This overload of operator '{0}' is not valid: {1}.
+```
+
+**Help**
+
+```text
+A binary operator takes two parameters and a unary one takes one ('-' may take one or two); indexing takes the indexed value and at least one index. An operator has no with-parameters and no var parameters.
+```
+
+**Example** (`test/cases/consistency/operator_overloads/arity.cml`, run as `camel test/cases/consistency/operator_overloads/arity.cml`)
+
+```camel
+module arity
+
+type M = { v: int }
+
+func operator +(a: M): M { return a }
+
+func main(): int { return 0 }
+```
+
+### OperatorOverloadConflict
+
+`0x030000F3` · Error · `SemanticDiag::OperatorOverloadConflict`
+
+**Message**
+
+```text
+Operator '{0}' is already defined for ({1}){2}.
+```
+
+**Help**
+
+```text
+The overloads of an operator from every module, the built-in ones included, are one set: each must take parameter types that no other one takes.
+```
+
+**Example** (`test/cases/consistency/operator_overloads/conflict_builtin.cml`, run as `camel test/cases/consistency/operator_overloads/conflict_builtin.cml`)
+
+```camel
+module conflict_builtin
+
+type M = { v: int }
+
+func operator +(a: int, b: int): int { return 99 }
+
+func main(): int { return 0 }
+```
+
+### AmbiguousOperatorCall
+
+`0x030000F4` · Error · `SemanticDiag::AmbiguousOperatorCall`
+
+**Message**
+
+```text
+Operator '{0}' applies to ({1}) in more than one way.
+```
+
+**Help**
+
+```text
+More than one overload of the operator takes these arguments; make the parameter types of one of them narrower, or convert an argument with 'as'. The overloads that take them: {2}
+```
+
+**Example** (`test/cases/consistency/operator_overloads/ambiguous_generic.cml`, run as `camel test/cases/consistency/operator_overloads/ambiguous_generic.cml`)
+
+```camel
+module ambiguous_generic
+
+func operator +(a: (typeas T)[], b: T): T[] { return a->append<b> }
+func operator +(a: string[], b: string): string[] { return [b] }
+
+func main(): int sync {
+    println(['x'] + 'y')
     return 0
 }
 ```
