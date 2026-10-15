@@ -441,6 +441,36 @@ class CamelDebugConfigurationProvider implements vscode.DebugConfigurationProvid
     }
 }
 
+/**
+ * What the call stack of a session shows (docs/debugging.en.md, 3.3): `functions`, the arms of
+ * branches folded into the frame of their function (the default), or `subgraphs`, every
+ * subgraph that runs as a frame. The launch attribute `frames` sets it; the toggle switches it
+ * with the custom request `camel/setFrames`, and the adapter tells VS Code to fetch the stack
+ * and the variables again.
+ */
+const framesBySession = new Map<string, string>();
+
+async function toggleSubgraphFrames(): Promise<void> {
+    const session = vscode.debug.activeDebugSession;
+    if (!session || session.type !== DEBUG_TYPE) {
+        await vscode.window.showInformationMessage('Camel: no Camel debug session is active.');
+        return;
+    }
+    const current = framesBySession.get(session.id) ?? (session.configuration.frames === 'subgraphs' ? 'subgraphs' : 'functions');
+    const next = current === 'functions' ? 'subgraphs' : 'functions';
+    try {
+        await session.customRequest('camel/setFrames', { frames: next });
+    } catch (err) {
+        await vscode.window.showErrorMessage(`Camel: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+    }
+    framesBySession.set(session.id, next);
+    vscode.window.setStatusBarMessage(
+        next === 'functions' ? 'Camel: arms of branches are part of their function\'s frame' : 'Camel: every subgraph is a frame',
+        4000
+    );
+}
+
 // ---------------------------------------------------------------------------------------------
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -456,6 +486,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.commands.registerCommand('camel.runWithPasses', () => runWithPasses(context)),
         vscode.debug.registerDebugAdapterDescriptorFactory(DEBUG_TYPE, new CamelDebugAdapterFactory()),
         vscode.debug.registerDebugConfigurationProvider(DEBUG_TYPE, new CamelDebugConfigurationProvider()),
+        vscode.commands.registerCommand('camel.debug.toggleSubgraphFrames', toggleSubgraphFrames),
+        vscode.debug.onDidTerminateDebugSession((session) => framesBySession.delete(session.id)),
         vscode.workspace.onDidSaveTextDocument((document) => {
             if (document.languageId === LANGUAGE_ID) {
                 graphProvider.refreshFor(document.uri.toString());
