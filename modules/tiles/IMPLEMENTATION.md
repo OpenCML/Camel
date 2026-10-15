@@ -187,3 +187,7 @@ on all three engines; local host/GPU/tensor plans pass 44/44, including 17 nativ
 rejected-plan mutations. This small case establishes allocation/launch removal,
 not representative throughput. Cross-reduction fusion and persistent device
 storage are still separate outstanding work.
+
+Committed revision 42863511 was rebuilt locally and on 88zjwei (RTX 3090 device
+7); both complete reruns passed 44/44. The remote log is retained at
+`docs/performance/tiles/2026-10-15-rtx3090-mapped-fusion-tests.txt`.
