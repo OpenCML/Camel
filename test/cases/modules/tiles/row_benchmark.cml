@@ -1,0 +1,21 @@
+module tiles_row_benchmark
+import { Tensor, random, seed, exp, sum, mean, max, sqrt } from tensor
+import { benchmark } from tiles
+func softmax(x: Tensor<f32>): Tensor<f32> {
+    let e = exp(x - max(x, 1, true))
+    return e / sum(e, 1, true)
+}
+func layernorm(x: Tensor<f32>): Tensor<f32> {
+    let c = x - mean(x, 1, true)
+    return c / sqrt(mean(c * c, 1, true) + 0.00001)
+}
+func main(): int sync {
+    seed(162)
+    let x = random([128,257], -3.0, 3.0)
+    let y = random([1024,1024], -3.0, 3.0)
+    println(benchmark<softmax>(x))
+    println(benchmark<softmax>(y))
+    println(benchmark<layernorm>(x))
+    println(benchmark<layernorm>(y))
+    return 0
+}

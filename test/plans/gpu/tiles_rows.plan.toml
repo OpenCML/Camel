@@ -1,0 +1,33 @@
+id = "gpu.tiles_rows"
+tier = "gpu"
+tags = ["gpu", "tiles"]
+[[tests]]
+name = "shared_row_regions"
+kind = "behavior"
+case = "../../cases/modules/tiles/row_regions.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+timeout_ms = 60000
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split(/\r?\n/)
+assert(lines.length === 12, 'expected three plans, nine boundary results')
+const plans = lines.slice(0,3).map(JSON.parse)
+for (const p of plans) assert(p.kernels === 1 && p.stages[0].implementation === 'row_region', 'expected one row region')
+assert(plans[0].materialized_values === 2 && plans[2].materialized_values === 2, 'shared intermediates escaped the block')
+assert(plans[1].materialized_values === 5, 'layernorm intermediates escaped the block')
+assert(Number(lines[3]) < 1e-5 && Number(lines[6]) < 1e-6, 'softmax differs beyond transcendental error')
+assert(Number(lines[10]) === 4 && Number(lines[11]) === 0, "wide-exponent sum did not preserve order")
+for (const i of [4,5,7,8,9]) assert(Number(lines[i]) === 0, `basic arithmetic or boundary mismatch at ${i}`)
+}
+"""
+
+[[tests]]
+name = "strict_sum_bits"
+kind = "behavior"
+tool = "python"
+case = "../../cases/modules/tiles/row_bits.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["row bits: signed zeros, subnormals, nonfinite values and wide exponent fallback passed"]
+timeout_ms = 60000
