@@ -115,6 +115,7 @@ void validateBlock(const KernelBody &kernel, const Block &block, Scope scope, bo
                         },
                         s.condition);
                     validateBlock(kernel, s.body, scope, uniform && u);
+                    validateBlock(kernel, s.otherwise, scope, uniform && u);
                 } else if constexpr (std::is_same_v<T, Barrier>) {
                     require(uniform, "barrier under divergent control flow");
                 } else if constexpr (std::is_same_v<T, ReportFault>) {
@@ -166,6 +167,10 @@ void printBlock(std::ostream &out, const KernelBody &kernel, const Block &block)
                                s.condition)
                         << "){\n";
                     printBlock(out, kernel, s.body);
+                    if (!s.otherwise.empty()) {
+                        out << "}else{\n";
+                        printBlock(out, kernel, s.otherwise);
+                    }
                     out << "}\n";
                 } else if constexpr (std::is_same_v<T, Barrier>)
                     out << "__syncthreads();\n";
@@ -190,6 +195,8 @@ void controlKinds(const Block &block, bool &returns, bool &barriers) {
                     barriers = true;
                 else if constexpr (std::is_same_v<T, Loop> || std::is_same_v<T, Conditional>)
                     controlKinds(s.body, returns, barriers);
+                if constexpr (std::is_same_v<T, Conditional>)
+                    controlKinds(s.otherwise, returns, barriers);
             },
             statement);
 }

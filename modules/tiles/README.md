@@ -325,6 +325,11 @@ and early-return statements. The validator rejects status-word aliasing, invalid
 fault ordinals, mistyped conditions and kernels mixing early exits with barriers
 without a reconvergence proof. Both signed zeros trigger scalar division faults;
 NaNs do not. Tensor division continues to use IEEE arithmetic without this check.
+Conditions carry two independently scoped arms. Both arms may assign existing
+accumulators; arm-local bindings never escape or become visible in the sibling
+arm. Barrier and early-exit checks traverse both arms, including empty-then
+branches. This supports mutually exclusive optimized and canonical reduction
+paths without re-evaluating a mutable condition after the first arm executes.
 Serial reduction bodies explicitly retain their accumulator type, initial value,
 ordered loop, mean finalization and output rounding. Fused producer and epilogue
 nodes use lexical scalar bindings, with contraction permitted only by both

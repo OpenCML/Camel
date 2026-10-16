@@ -62,6 +62,8 @@ struct Loop {
 struct Conditional {
     std::variant<Predicate, ScalarPredicate> condition;
     Block body;
+    // Both arms have independent lexical scopes and share the incoming bindings.
+    Block otherwise;
 };
 struct Barrier {};
 // Device faults use a separately declared unsigned status word. Smaller source

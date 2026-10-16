@@ -52,6 +52,26 @@ void checkKernelIR() {
     body.statements.push_back(Conditional{Predicate::equal(IndexExpr::variable("block_x"),IndexExpr(0)),{Barrier{}}});
     validateBody(body);
     const auto f64zero=ScalarExpr::literal(ScalarValue::f64(0));
+    KernelBody branches{{}, {ScalarBinding{"k_result",zero},
+        Conditional{Predicate::equal(IndexExpr::variable("thread_x"),IndexExpr(0)),
+            {ScalarBinding{"k_arm",zero},Assignment{"k_result",ScalarExpr::symbol("k_arm",DType::F32)}},
+            {ScalarBinding{"k_arm",ScalarExpr::literal(ScalarValue::f32(1))},Assignment{"k_result",ScalarExpr::symbol("k_arm",DType::F32)}}}}};
+    validateBody(branches);
+    if(emitBody(branches).find("}else{")==std::string::npos)
+        throw std::runtime_error("conditional lost alternative arm");
+    auto branchBad=branches;
+    std::get<Conditional>(branchBad.statements[1]).otherwise={Barrier{}};
+    rejected(branchBad,"divergent");
+    branchBad=branches;
+    std::get<Conditional>(branchBad.statements[1]).otherwise={Assignment{"k_result",ScalarExpr::symbol("k_arm",DType::F32)}};
+    rejected(branchBad,"unbound scalar");
+    branchBad=branches;
+    std::get<Conditional>(branchBad.statements[1]).otherwise={Return{}};
+    branchBad.statements.push_back(Barrier{});
+    rejected(branchBad,"reconvergence proof");
+    branchBad=branches;
+    branchBad.statements.push_back(Assignment{"k_result",ScalarExpr::symbol("k_arm",DType::F32)});
+    rejected(branchBad,"unbound scalar");
     const auto x=ScalarExpr::symbol("k_x",DType::F64);
     const ScalarPredicate isZero{ScalarCompare::Equal,x,f64zero};
     if(!isZero.evaluate({{"k_x",ScalarValue::f64(-0.0)}}) ||
