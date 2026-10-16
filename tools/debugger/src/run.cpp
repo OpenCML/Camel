@@ -33,6 +33,7 @@
 #include "server.h"
 #include "state.h"
 
+#include "camel/passes/trans/json/gir.h"
 #include "passes/trans/dot/graphviz.h"
 
 using namespace camel::core::error;
@@ -74,10 +75,15 @@ void passGraphSnapshotHandler(
     entry.index = collector->nextIndex++;
     entry.pass  = passName ? passName : "";
     entry.dot   = std::move(dot);
+    entry.gir   = dumpJsonRuntimeGraph(graph, collector->ctx);
     {
         std::lock_guard<std::mutex> lock(collector->store->mutex);
         collector->store->entries.push_back(std::move(entry));
     }
+    core::DebugCore::instance().pipelineBoundary(
+        collector->nextIndex - 1,
+        passName ? passName : "",
+        graph);
 }
 
 PassGraphCollector &passGraphCollector() {
@@ -293,10 +299,12 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
                 PassGraphEntry entry;
                 entry.index = 0;
                 entry.dot   = std::move(dot);
+                entry.gir   = dumpJsonRuntimeGraph(graph, st.ctx);
                 std::lock_guard<std::mutex> lock(passGraphStore.mutex);
                 passGraphStore.entries.push_back(std::move(entry));
             }
         }
+        core.pipelineBoundary(0, "", graph);
         auto &collector     = passGraphCollector();
         collector.store     = &passGraphStore;
         collector.ctx       = st.ctx;

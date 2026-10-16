@@ -370,8 +370,16 @@ class Adapter {
             } else if (e.contains("nodeBreakpoint")) {
                 body["description"] = "Paused on a node breakpoint";
             }
+            if (e.contains("pipeline")) {
+                const auto &stage   = e["pipeline"];
+                body["description"] = stage["pass"].is_null()
+                                          ? "Before compiler passes"
+                                          : "After " + stage["pass"].get<std::string>();
+            }
             // The graph-node view of the stop, for clients that know Camel.
             json camel{{"reason", reason}, {"threadId", kThreadId}};
+            if (e.contains("pipeline"))
+                camel["pipeline"] = e["pipeline"];
             if (auto f = e.find("frame"); f != e.end()) {
                 camel["frame"] = *f;
             }
@@ -776,6 +784,16 @@ class Adapter {
         }
         // Read immutable per-pass snapshots through this session's worker. The plugin
         // does not discover worker ports or choose a process by file name.
+        if (command == "camel/nextPass" || command == "camel/pipelineGraph" ||
+            command == "camel/setPassBreakpoints" || command == "camel/structuredGraph") {
+            const std::string action = command.substr(6);
+            auto answer              = ask(action, args);
+            if (answer) {
+                answer->erase("ok");
+                ok(std::move(*answer));
+            }
+            return false;
+        }
         if (command == "camel/passGraphs" || command == "camel/passGraph") {
             std::string url = "/api/pass-graphs";
             if (command == "camel/passGraph") {
@@ -840,7 +858,11 @@ class Adapter {
             "camel/setFrames",
             "camel/passGraphs",
             "camel/passGraph",
-            "camel/setNodeBreakpoints"};
+            "camel/setNodeBreakpoints",
+            "camel/nextPass",
+            "camel/pipelineGraph",
+            "camel/setPassBreakpoints",
+            "camel/structuredGraph"};
         for (const char *k : known) {
             if (command == k) {
                 return true;
@@ -927,6 +949,22 @@ class Adapter {
             return;
         }
 
+        if (args.contains("stopOnPassEntry") && !args["stopOnPassEntry"].is_boolean()) {
+            fail("stopOnPassEntry must be boolean.");
+            return;
+        }
+        if (auto points = args.find("passBreakpoints"); points != args.end()) {
+            if (!points->is_array()) {
+                fail("passBreakpoints must be an array.");
+                return;
+            }
+            for (const auto &point : *points) {
+                if (!point.is_number_integer() || point.get<int64_t>() < 0) {
+                    fail("passBreakpoints are nonnegative snapshot indices.");
+                    return;
+                }
+            }
+        }
         ProcessSpec spec;
         spec.exe       = exePath_;
         spec.args      = {"--run-worker", program.string()};
@@ -999,7 +1037,9 @@ class Adapter {
                 {"args", entryArgs},
                 {"quiet", true},
                 {"frames", frames},
-                {"stopOnEntry", args.value("stopOnEntry", false)}},
+                {"stopOnEntry", args.value("stopOnEntry", false)},
+                {"stopOnPassEntry", args.value("stopOnPassEntry", false)},
+                {"passBreakpoints", args.value("passBreakpoints", json::array())}},
             320);
         if (!answer.value("ok", false)) {
             giveUp("launch: " + errorOf(answer));

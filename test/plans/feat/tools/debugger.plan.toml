@@ -59,3 +59,8 @@ name = "debugger.loop_frames"
 desc = "A loop in the REPL on both back ends: its body is part of the frame of the function it is written in (design principles 2.11), a breakpoint in the body stops once per round with that round's element and state, and frames subgraphs shows the body as `squares [loop body at line N]`."
 case = "../../../cases/tools/debugger/loop_frames.test.mjs"
 timeout_ms = 300000
+
+[[tests]]
+name = "debugger.dap_pipeline"
+desc = "Release compiler boundary stops, live JSON GIR, pass stepping, repeated pass names, runtime handoff, invalid configuration and terminate/consumed graphs."
+case = "../../../cases/tools/debugger/dap_pipeline.test.mjs"

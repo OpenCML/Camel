@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -942,6 +942,7 @@ void DebuggerServer::httpServerLoop() {
                 j["pass"]     = entry.pass.empty() ? json(nullptr) : json(entry.pass);
                 j["consumed"] = entry.consumed;
                 j["dot"]      = entry.dot;
+                j["gir"]      = entry.gir;
                 res.set_content(j.dump(), "application/json");
                 return;
             }
@@ -1162,7 +1163,9 @@ void DebuggerServer::httpServerLoop() {
                 setGirBreakpointOrigins(origins);
                 // Node breakpoints are origins: the debug core stops before every node of
                 // the running graph that has one of them.
-                core::DebugCore::instance().command("setNodeBreakpoints", json{{"origins", origins}});
+                core::DebugCore::instance().command(
+                    "setNodeBreakpoints",
+                    json{{"origins", origins}});
                 res.set_content("{\"ok\":true}", "application/json");
             } catch (const std::exception &e) {
                 json j;
@@ -1426,7 +1429,7 @@ void DebuggerServer::httpServerLoop() {
                         "application/json");
                     return;
                 }
-                wrapped["command"] = command;
+                wrapped["command"]     = command;
                 httplib::Request inner = req;
                 inner.body             = wrapped.dump();
                 dispatchAndRespond("debug", inner, res);

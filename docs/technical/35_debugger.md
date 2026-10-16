@@ -690,3 +690,25 @@ passes an `origins` array to the same debug core that owns source and function b
 These requests do not create a second debug controller. The existing `camel/graph` inspects
 the actual stopped frame. The migration ledger lives in OpenCML-Ext's
 `docs/debugger-migration.md`; standalone UI retirement follows its acceptance gates.
+
+### Release compiler boundaries
+
+`launch.stopOnPassEntry` pauses at initial GIR, after binding main arguments and before the
+first pass. `launch.passBreakpoints` is an array of nonnegative snapshot indices: 0 is the
+initial graph; N identifies the Nth returned graph across the run, including fallback passes.
+Repeated pass names have distinct indices. These stops use DebugCore in every build mode,
+not the NDEBUG-only pipeline type hooks. The boundaries are explicitly initial / after;
+they are not instructions inside a pass and do not interrupt a pass halfway through.
+
+`camel/nextPass` advances to the next returned graph. If a scheduler is next, it hands off at
+execution entry instead of silently running the whole program. A consuming translation pass
+can end the session without another graph; failure has diagnostics and an exit status, not a
+fake snapshot. Continue resumes normally. Source/node stepping at a compiler stop is rejected
+with an explanation. Compiler stops have no runtime call frames or variables.
+
+The `camel/stopped` event includes `pipeline: {index, pass, boundary}` at compiler stops.
+`camel/structuredGraph` reads the current worker's graph as versioned GIR JSON (`gir` text),
+serialized on the stopped program thread; it works at a compiler boundary or runtime frame.
+`camel/pipelineGraph` additionally rejects runtime stops. `camel/setPassBreakpoints {indices}`
+updates the configured indices. Snapshot responses also include `gir` alongside DOT so the
+plugin's current and historical views share typed graph metadata.
