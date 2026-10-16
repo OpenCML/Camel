@@ -25,6 +25,7 @@
 #include "modules/tensor/tensor.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
+#include "tiles/internal/dispatch.h"
 #include "tiles/internal/regions.h"
 #include "tiles/program.h"
 #include <cstring>
@@ -134,6 +135,9 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     });
 }
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
+slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &) {
+    return checked([&] { return td::toSlot(gpuFunction(norm.get<::Function *>(0), &runKernel)); });
+}
 slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     auto *owner = new std::shared_ptr<DeviceValue>(std::move(resident));
     td::ForeignResourceDescriptor descriptor;
@@ -326,6 +330,28 @@ class TilesModule final : public BuiltinModule {
     explicit TilesModule(context_ptr_t ctx) : BuiltinModule("tiles", ctx) {
         tensor::ops::registerTensorOps();
         exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
+        exportEntity(
+            "gpu",
+            OperatorGroup::create(
+                "gpu",
+                {{"tiles:gpu",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {1, {false}}},
+                      "(fn: Function) => Function",
+                      [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (!with.empty() || norm.size() != 1 ||
+                              norm[0]->code() != TypeCode::Function)
+                              return std::nullopt;
+                          auto *fn = static_cast<FunctionType *>(norm[0]);
+                          if (fn->withTypesCount() || !fn->normTypesCount() ||
+                              !supportedLeaves(fn->exitType()))
+                              return std::nullopt;
+                          for (size_t i = 0; i < fn->normTypesCount(); ++i)
+                              if (fn->normIsVarAt(i) || !supportedLeaves(fn->normTypeAt(i)))
+                                  return std::nullopt;
+                          return fn;
+                      })}}));
         for (const std::string name : {"upload", "download"}) {
             exportEntity(
                 name,
@@ -415,6 +441,7 @@ class TilesModule final : public BuiltinModule {
                 ctx,
                 std::unordered_map<std::string, operator_t>{
                     {"run", &runKernel},
+                    {"gpu", &gpuKernel},
                     {"run_device", &runDeviceKernel},
                     {"upload", &uploadKernel},
                     {"download", &downloadKernel},
@@ -429,6 +456,7 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().declare(
             "tiles",
             {{"run", false},
+             {"gpu", false},
              {"run_device", false},
              {"upload", false},
              {"download", false},
@@ -442,7 +470,7 @@ class TilesModule final : public BuiltinModule {
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::inspectsGraphs; op-semantics 11.4).
         for (const char *name :
-             {"run", "run_device", "source", "inspect", "benchmark", "regions"}) {
+             {"run", "run_device", "source", "inspect", "benchmark", "regions", "gpu"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .inspectsGraphs = true});

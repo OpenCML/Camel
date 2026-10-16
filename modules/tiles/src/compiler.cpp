@@ -49,6 +49,8 @@ struct Value {
     std::optional<slot_t> staticSlot;
     size_t tensor = SIZE_MAX;
     std::vector<Value> fields;
+    // Borrowed function graph and captured values, used only while reading the graph.
+    rt::GCGraph *function = nullptr;
 };
 struct Frame {
     rt::GCGraph *graph;
@@ -62,6 +64,7 @@ class Compiler {
     rt::fact::FactStore &facts;
     explicit Compiler(rt::fact::FactStore &store) : facts(store) {}
     std::unordered_set<rt::GCGraph *> active;
+    std::unordered_set<::Function *> loadingFunctions;
     std::unordered_map<core::OperId, size_t> contracts;
 
     size_t contract(core::OperId id) {
@@ -91,6 +94,30 @@ class Compiler {
     }
 
     Value host(slot_t slot, ty::Type *type, bool runtimeInput = false) {
+        if (type->code() == ty::TypeCode::Function) {
+            auto *fn = td::fromSlot<::Function *>(slot);
+            if (!fn || !fn->graph())
+                throw std::runtime_error("missing function value");
+            if (loadingFunctions.size() >= 64 || !loadingFunctions.insert(fn).second)
+                throw std::runtime_error("cyclic or excessively deep captured function values");
+            struct CaptureScope {
+                std::unordered_set<::Function *> &active;
+                ::Function *function;
+                ~CaptureScope() { active.erase(function); }
+            } captureScope{loadingFunctions, fn};
+            Value value{.type = type, .function = fn->graph()};
+            if (auto *captures = fn->tuple()) {
+                for (size_t i = 0; i < captures->size(); ++i) {
+                    auto *fieldType  = fn->tupleType()->typeAt(i);
+                    const auto field = captures->get<slot_t>(i);
+                    value.fields.push_back(
+                        field == NullSlot && ty::isGCTraced(fieldType->code())
+                            ? Value{.type = fieldType}
+                            : host(field, fieldType, true));
+                }
+            }
+            return value;
+        }
         if (asDeviceType(type)) {
             auto *wrapper = td::fromSlot<td::ForeignResourceObject *>(slot);
             auto resident = *wrapper->resourceAs<std::shared_ptr<DeviceValue>>();
@@ -266,9 +293,25 @@ class Compiler {
                 out = call(g->directCalleeGraphOf(id), with, norm);
                 break;
             }
+            case rt::GCNodeKind::Call: {
+                const auto context = g->withInputsOf(id);
+                if (context.empty())
+                    throw std::runtime_error("function call has no callable value");
+                auto fn = eval(f, context.front());
+                if (!fn.function)
+                    throw std::runtime_error("call target must be known during GPU specialization");
+                std::vector<Value> with, norm;
+                for (size_t i = 1; i < context.size(); ++i)
+                    with.push_back(eval(f, context[i]));
+                for (auto input : ins)
+                    norm.push_back(eval(f, input));
+                out = call(fn.function, with, norm, fn.fields);
+                break;
+            }
             case rt::GCNodeKind::Fill: {
                 if (node->dataType()->code() != ty::TypeCode::Tuple &&
-                    node->dataType()->code() != ty::TypeCode::Struct)
+                    node->dataType()->code() != ty::TypeCode::Struct &&
+                    node->dataType()->code() != ty::TypeCode::Function)
                     throw std::runtime_error(
                         "tiles supports only tuple/struct aggregate construction");
                 out               = eval(f, ins.front());
@@ -298,13 +341,41 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Oper: {
+                const auto oper       = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
+                static const auto gpu = core::OperatorTable::instance().intern("tiles:gpu");
+                static const auto run = core::OperatorTable::instance().intern("tiles:run");
+                // Dispatch inside an already GPU-compiled graph is a call to the original
+                // computation. Read it structurally; never execute a decorator or launch CUDA.
+                if (oper == gpu) {
+                    if (ins.size() != 1 || !g->withInputsOf(id).empty())
+                        throw std::runtime_error("invalid GPU decorator arguments");
+                    out = eval(f, ins.front());
+                    if (!out.function)
+                        throw std::runtime_error("GPU decorator requires a known function");
+                    break;
+                }
+                if (oper == run) {
+                    const auto context = g->withInputsOf(id);
+                    if (context.size() != 1 || ins.size() != 1)
+                        throw std::runtime_error("invalid nested GPU dispatch arguments");
+                    const auto fn = eval(f, context.front());
+                    if (!fn.function)
+                        throw std::runtime_error("GPU dispatch requires a known function");
+                    auto args = eval(f, ins.front());
+                    out       = call(
+                        fn.function,
+                        {},
+                        fn.function->normPorts().size() == 1 ? std::vector<Value>{args}
+                                                             : args.fields,
+                        fn.fields);
+                    break;
+                }
                 std::vector<Value> args;
                 if (!g->withInputsOf(id).empty())
                     throw std::runtime_error("operator context arguments are not supported yet");
                 for (auto in : ins)
                     args.push_back(eval(f, in));
                 const auto first    = program.nodes.size();
-                const auto oper     = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
                 const auto semantic = contract(oper);
                 auto indexed        = graphInstance(*g, id, args);
                 out                 = operation(oper, args, indexed);

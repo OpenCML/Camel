@@ -21,6 +21,30 @@ func main(): int sync {
 
 ## API
 
+`gpu` is a function decorator for explicit automatic dispatch:
+
+```cml
+import { Tensor } from tensor
+import { gpu } from tiles
+
+@gpu
+func add(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> { return x + y }
+// add(x, y) now executes through Tiles and returns host tensors.
+```
+
+It preserves the function signature and wraps the original function as a traced
+capture. Unary and multiple arguments, function values, aggregate results and
+nested decorated calls are supported. Inside a GPU compilation, a nested dispatch
+is lowered as the underlying computation, without host execution or a nested GPU
+launch. Numeric permissions remain attached to the original operator nodes.
+The same supported computation subset and device errors as `run` apply; there is
+no CPU fallback. Functions with mutable parameters, unbound context parameters or
+no ordinary inputs are currently rejected. This is separate from the planned
+`@kernel` block-kernel validation annotation and from automatic region placement.
+Use the annotation on top-level functions for now. For a local captured function,
+use `gpu(lambda)` explicitly: a decorated local function declaration currently
+hits an unresolved compiler failure before dispatch.
+
 NVRTC always receives `--fmad=false`, `--prec-div=true`, `--prec-sqrt=true`
 and `--ftz=false`. The in-process module cache compares the source and all compiler
 options, including the target architecture; device/context and NVRTC library are
