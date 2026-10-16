@@ -115,6 +115,7 @@ DefinitionsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
             }
             table.declareDefinition(uri, std::move(d));
         };
+    const auto originalExp = *table.semantics(*table.lookup("tensor:exp"));
     declare("tensor:exp", "bad_definitions", "exp_through_softmax", 1);
     declare("tensor:abs", "bad_definitions", "abs_itself", 1);
     declare("tensor:neg", "bad_definitions", "two", 1);
@@ -137,6 +138,13 @@ DefinitionsTestPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
     }
     // softmax, built and accepted before exp had a definition, is on the cycle now too.
     os << "DEFINITION cycle_refuses_softmax " << answer(*context_, "tensor:softmax") << "\n";
+    auto restoredExp = originalExp;
+    restoredExp.key  = table.semantics(*table.lookup("tensor:exp"))->key;
+    table.declareSemantics("tensor:exp", restoredExp);
+    const bool cycleCleared = context_->definitions().definitionOf(softmax) != nullptr;
+    os << "DEFINITION removed_cycle_recovered " << (cycleCleared ? "yes" : "no") << "\n";
+    if (!cycleCleared)
+        throw std::runtime_error("definition refusal survived removal of its cycle");
     return graph;
 }
 

@@ -107,7 +107,11 @@ const DefinitionGraph *DefinitionStore::definitionOf(core::OperId oper, std::str
     // uses and their definitions. Checked again whenever the declarations changed since: a
     // definition declared later can close a cycle through ones built before.
     const uint64_t epoch = core::OperatorTable::instance().declarationEpoch();
-    if (entry.built && entry.problem.empty() && entry.checkedEpoch != epoch) {
+    if (entry.built && entry.checkedEpoch != epoch) {
+        // A prior cycle can disappear when a dependency's declaration changes.
+        // Built entries have passed the local checks; their remaining refusal is
+        // the epoch-dependent cycle check, which must be recomputed both ways.
+        entry.problem.clear();
         if (const auto cycle = cycleThrough(oper); !cycle.empty()) {
             std::string chain;
             for (core::OperId id : cycle) {
