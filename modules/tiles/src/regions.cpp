@@ -132,4 +132,67 @@ std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes) {
     }
     return result;
 }
+RegionTransfers
+planRegionTransfers(const std::vector<RegionNode> &nodes, const std::vector<Region> &regions) {
+    const size_t host = regions.size();
+    std::vector<size_t> owner(nodes.size(), host);
+    for (size_t r = 0; r < regions.size(); ++r)
+        for (auto id : regions[r].members) {
+            if (id >= nodes.size() || owner[id] != host)
+                throw std::runtime_error("invalid transfer region membership");
+            owner[id] = r;
+        }
+    std::vector<bool> live(nodes.size());
+    std::vector<size_t> pending;
+    for (size_t id = 0; id < nodes.size(); ++id)
+        if (nodes[id].output)
+            pending.push_back(id);
+    while (!pending.empty()) {
+        const auto id = pending.back();
+        pending.pop_back();
+        if (id >= nodes.size())
+            throw std::runtime_error("transfer dependency outside graph");
+        if (live[id])
+            continue;
+        live[id] = true;
+        pending.insert(pending.end(), nodes[id].inputs.begin(), nodes[id].inputs.end());
+    }
+    std::set<size_t> uploads, downloads;
+    RegionTransfers result;
+    for (size_t r = 0; r < regions.size(); ++r) {
+        for (auto id : regions[r].inputs) {
+            if (id >= nodes.size() || owner[id] == r)
+                throw std::runtime_error("invalid transfer region input");
+            if (nodes[id].embedded)
+                continue;
+            if (owner[id] == host)
+                uploads.insert(id);
+            else {
+                const auto &outputs = regions[owner[id]].outputs;
+                if (owner[id] >= r ||
+                    std::find(outputs.begin(), outputs.end(), id) == outputs.end())
+                    throw std::runtime_error("resident input lacks an earlier region output");
+                result.resident.push_back({id, owner[id], r});
+            }
+        }
+        for (auto id : regions[r].outputs) {
+            if (id >= nodes.size() || owner[id] != r)
+                throw std::runtime_error("invalid transfer region output");
+            if (nodes[id].output)
+                downloads.insert(id);
+        }
+    }
+    for (size_t id = 0; id < nodes.size(); ++id)
+        if (live[id] && owner[id] == host)
+            for (auto input : nodes[id].inputs)
+                if (owner[input] != host) {
+                    const auto &outputs = regions[owner[input]].outputs;
+                    if (std::find(outputs.begin(), outputs.end(), input) == outputs.end())
+                        throw std::runtime_error("host input lacks a region output");
+                    downloads.insert(input);
+                }
+    result.uploads.assign(uploads.begin(), uploads.end());
+    result.downloads.assign(downloads.begin(), downloads.end());
+    return result;
+}
 } // namespace camel::tiles

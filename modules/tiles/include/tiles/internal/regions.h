@@ -28,6 +28,7 @@ struct RegionNode {
     std::vector<size_t> inputs;
     bool eligible = false;
     bool output   = false;
+    bool embedded = false; // Static values embedded into extracted functions.
 };
 struct Region {
     std::vector<size_t> members; // In dependency order, independent of source node numbering.
@@ -38,6 +39,18 @@ struct Region {
 // all observable roots (including effect/control roots) and all dependency edge kinds.
 // The result contains node IDs only: no GC pointers or references to the source graph.
 std::vector<Region> partitionRegions(const std::vector<RegionNode> &nodes);
+struct ResidentEdge {
+    size_t value, producer, consumer;
+};
+struct RegionTransfers {
+    std::vector<size_t> uploads;
+    std::vector<size_t> downloads;
+    std::vector<ResidentEdge> resident;
+};
+// All regions share one target. IDs denote immutable source values; CPU consumers
+// can require a download while another region retains the same resident value.
+RegionTransfers
+planRegionTransfers(const std::vector<RegionNode> &nodes, const std::vector<Region> &regions);
 struct RegionDraft {
     std::unique_ptr<runtime::GraphDraft> graph;
     std::vector<size_t> parameters; // Source IDs; constant boundary values are embedded.
@@ -50,6 +63,7 @@ RegionDraft extractRegion(const runtime::GCGraph &source, const Region &region);
 struct RegionAnalysis {
     std::vector<Region> regions;
     std::vector<std::string> exclusions;
+    RegionTransfers transfers;
 };
 RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
 // Rewrites a reachable graph set; null executor produces ordinary CPU CALL nodes.

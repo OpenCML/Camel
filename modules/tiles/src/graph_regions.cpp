@@ -173,11 +173,15 @@ RegionAnalysis analyzeRegions(const rt::GCGraph &graph, rt::fact::FactStore &fac
     for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
         reasons[id]        = eligibility(graph, id, facts);
         nodes[id].eligible = reasons[id].empty();
+        nodes[id].embedded =
+            graph.node(id)->kind == rt::GCNodeKind::Data && graph.node(id)->dataIndex < 0;
         for (auto edges : {graph.normInputsOf(id), graph.withInputsOf(id), graph.ctrlInputsOf(id)})
             nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
     }
-    return {partitionRegions(nodes), std::move(reasons)};
+    auto regions   = partitionRegions(nodes);
+    auto transfers = planRegionTransfers(nodes, regions);
+    return {std::move(regions), std::move(reasons), std::move(transfers)};
 }
 std::string inspectRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts) {
     const auto analysis = analyzeRegions(graph, facts);
@@ -210,7 +214,20 @@ std::string inspectRegions(const rt::GCGraph &graph, rt::fact::FactStore &facts)
         }
         out << '}';
     }
-    out << "],\"excluded\":[";
+    out << "],\"transfers\":{\"uploads\":";
+    ids(out, analysis.transfers.uploads);
+    out << ",\"downloads\":";
+    ids(out, analysis.transfers.downloads);
+    out << ",\"resident\":[";
+    first = true;
+    for (const auto &edge : analysis.transfers.resident) {
+        if (!first)
+            out << ',';
+        first = false;
+        out << "{\"value\":" << edge.value << ",\"producer\":" << edge.producer
+            << ",\"consumer\":" << edge.consumer << '}';
+    }
+    out << "]},\"excluded\":[";
     first = true;
     for (size_t id = 0; id < reasons.size(); ++id)
         if (!reasons[id].empty()) {

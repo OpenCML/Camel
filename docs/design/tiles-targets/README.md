@@ -80,3 +80,10 @@ This component does not yet insert transfers or propagate resident buffers, and
 therefore is not the complete `std::tiles` pass. The production planner must add
 those boundaries and target decisions explicitly rather than hide transfers
 inside every extracted call.
+
+The single-target transfer planner computes deduplicated uploads, host-visible
+downloads and resident producer/consumer edges from the live graph. Embedded
+constants require no transfer. A value used by both a CPU node and another region
+has a host copy and a retained device copy; a CPU detour does not force its direct
+region-to-region edge through a redundant upload. `regions` exposes this candidate
+plan. Actual transfer nodes and cross-target routing are still pending.

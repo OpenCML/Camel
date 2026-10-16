@@ -360,6 +360,24 @@ void checkRegions() {
     regions=partitionRegions(detour);
     require(regions.size()==2 && regions[0].members==std::vector<size_t>{1} &&
             regions[1].members==std::vector<size_t>{3} && regions[1].inputs==std::vector<size_t>({1,2}));
+    auto transfers=planRegionTransfers(detour,regions);
+    require(transfers.uploads==std::vector<size_t>({0,2}) &&
+            transfers.downloads==std::vector<size_t>({1,3}) && transfers.resident.size()==1);
+    require(transfers.resident[0].value==1 && transfers.resident[0].producer==0 && transfers.resident[0].consumer==1);
+    auto invalidTransfers=[&](std::vector<Region> bad) {
+        try { (void)planRegionTransfers(detour,bad); }
+        catch(const std::exception&) { return; }
+        throw std::runtime_error("invalid transfer boundary accepted");
+    };
+    auto badRegions=regions; badRegions[0].outputs.clear(); invalidTransfers(badRegions);
+    badRegions=regions; badRegions[1].members.push_back(1); invalidTransfers(badRegions);
+    // Multiple regions share one host input; unused CPU consumers must not trigger downloads.
+    std::vector<RegionNode> split={{{},false,false},{{0},true,false},{{0,1},true,true},{{1},false,false}};
+    std::vector<Region> splitRegions={{{1},{0},{1}},{{2},{0,1},{2}}};
+    transfers=planRegionTransfers(split,splitRegions);
+    require(transfers.uploads==std::vector<size_t>{0} && transfers.downloads==std::vector<size_t>{2});
+    split[0].embedded=true;
+    require(planRegionTransfers(split,splitRegions).uploads.empty());
     // Shared intermediates exported to CPU remain exits even when the GPU chain fuses.
     std::vector<RegionNode> shared={{{},false,false},{{0},true,false},{{1},true,true},{{1},false,true}};
     regions=partitionRegions(shared);
