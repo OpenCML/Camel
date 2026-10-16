@@ -36,8 +36,11 @@ template<class F> void rejects(const Program &original, F mutate, const char *re
     throw std::runtime_error(std::string("accepted invalid plan: ") + reason);
 }
 
+void checkKernelIR();
+
 int main() {
     try {
+        checkKernelIR();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
         using kernel::ScalarOp;

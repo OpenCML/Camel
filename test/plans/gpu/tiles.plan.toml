@@ -947,3 +947,36 @@ envs = ["CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
 timeout_ms = 180000
+
+[[tests]]
+name = "matmul_edges.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_edges.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === Array(8).fill("0.0").join(","), "matrix panel boundaries and empty shapes must equal the canonical CPU result") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_edges.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_edges.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === Array(8).fill("0.0").join(","), "matrix panel boundaries and empty shapes must equal the canonical CPU result") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_edges.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/matmul_edges.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === Array(8).fill("0.0").join(","), "matrix panel boundaries and empty shapes must equal the canonical CPU result") }
+"""
+timeout_ms = 60000

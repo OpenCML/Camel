@@ -207,6 +207,18 @@ ScalarExpr ScalarExpr::substitute(const std::string &name, const ScalarExpr &rep
         input = input.substitute(name, replacement);
     return ScalarExpr(std::move(copy));
 }
+std::unordered_map<std::string, DType> ScalarExpr::symbols() const {
+    if (node->kind == Node::Kind::Symbol)
+        return {{node->name, type()}};
+    std::unordered_map<std::string, DType> result;
+    for (const auto &input : node->inputs)
+        for (const auto &[name, dtype] : input.symbols()) {
+            auto [it, inserted] = result.emplace(name, dtype);
+            if (!inserted && it->second != dtype)
+                throw std::invalid_argument("inconsistent scalar symbol type");
+        }
+    return result;
+}
 std::string ScalarExpr::cuda() const {
     const bool f32 = type() == DType::F32;
     if (node->kind == Node::Kind::Literal)

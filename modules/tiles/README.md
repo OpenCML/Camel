@@ -305,3 +305,17 @@ branch lowering, general region fusion, asynchronous memory planning,
 asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.
+
+### Structured kernel bodies
+
+Matrix multiplication lowers to a typed physical statement tree before CUDA
+serialization: lexical index/scalar bindings, masked loads and stores, loops,
+conditions, assignments and block barriers. Global and shared buffers have
+explicit element types and write permissions. The validator checks references,
+lexical scope and types, and rejects barriers under thread-dependent conditions
+or loops. There is no raw CUDA statement node. Address bounds, races and shared
+value initialization remain the lowering's proof obligations, checked by GPU
+edge-shape and canonical FMA-chain regressions rather than claimed by this validator.
+The accumulator survives across panels and padded K contributions are excluded.
+Other kernel families still use their existing emitters; moving them to the same
+statement representation is subsequent work.

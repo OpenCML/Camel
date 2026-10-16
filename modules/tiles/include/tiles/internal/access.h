@@ -16,6 +16,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace camel::tiles::kernel {
 class Predicate {
@@ -29,6 +30,7 @@ class Predicate {
     static Predicate equal(IndexExpr lhs, IndexExpr rhs);
     bool evaluate(const std::unordered_map<std::string, uint64_t> &bindings) const;
     Predicate substitute(const std::string &name, const IndexExpr &replacement) const;
+    std::unordered_set<std::string> symbols() const;
     std::string cuda() const;
     friend Predicate operator&&(Predicate lhs, Predicate rhs);
     friend Predicate operator||(Predicate lhs, Predicate rhs);
