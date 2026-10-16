@@ -318,8 +318,13 @@ or loops. There is no raw CUDA statement node. Address bounds, races and shared
 value initialization remain the lowering's proof obligations, checked by GPU
 edge-shape and canonical FMA-chain regressions rather than claimed by this validator.
 The accumulator survives across panels and padded K contributions are excluded.
-Row-region kernels and fault-reporting scalar chains still use their existing
-emitters; moving them to the same statement representation is subsequent work.
+Row-region kernels still use their existing emitter; moving them to the same
+statement representation is subsequent work. Fault-reporting scalar chains use
+typed IEEE comparison conditions, an explicit status-word resource, fault reports
+and early-return statements. The validator rejects status-word aliasing, invalid
+fault ordinals, mistyped conditions and kernels mixing early exits with barriers
+without a reconvergence proof. Both signed zeros trigger scalar division faults;
+NaNs do not. Tensor division continues to use IEEE arithmetic without this check.
 Serial reduction bodies explicitly retain their accumulator type, initial value,
 ordered loop, mean finalization and output rounding. Fused producer and epilogue
 nodes use lexical scalar bindings, with contraction permitted only by both

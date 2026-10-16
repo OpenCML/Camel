@@ -1,0 +1,11 @@
+module tiles_scalar_predicates
+import { nan, inf, is_nan, is_inf } from math
+import { run, run_device, download } from tiles
+func divide(a: float, b: float): float { return a / b }
+func main(): int sync {
+    println(is_nan(run<divide>((1.0, nan))))
+    println(is_inf(download(run_device<divide>((inf, 2.0)))))
+    println(run<divide>((1.0, inf)))
+    println(run<divide>((5e-324, 5e-324)))
+    return 0
+}

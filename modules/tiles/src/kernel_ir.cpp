@@ -99,10 +99,27 @@ void validateBlock(const KernelBody &kernel, const Block &block, Scope scope, bo
                         std::move(nested),
                         uniform && beginUniform && endUniform);
                 } else if constexpr (std::is_same_v<T, Conditional>) {
-                    const bool u = indices(s.condition, scope);
+                    const bool u = std::visit(
+                        [&](const auto &condition) {
+                            using C = std::decay_t<decltype(condition)>;
+                            if constexpr (std::is_same_v<C, Predicate>)
+                                return indices(condition, scope);
+                            else {
+                                scalar(condition.lhs, scope);
+                                scalar(condition.rhs, scope);
+                                (void)
+                                    condition.cuda(); // Validate operand types and comparison kind.
+                                return false;         // Mutable scalar data is conservatively
+                                                      // thread-dependent.
+                            }
+                        },
+                        s.condition);
                     validateBlock(kernel, s.body, scope, uniform && u);
-                } else {
+                } else if constexpr (std::is_same_v<T, Barrier>) {
                     require(uniform, "barrier under divergent control flow");
+                } else if constexpr (std::is_same_v<T, ReportFault>) {
+                    require(kernel.faultSlot.has_value(), "fault resource is not declared");
+                    require(s.source != UINT32_MAX, "reserved fault source");
                 }
             },
             statement);
@@ -143,11 +160,36 @@ void printBlock(std::ostream &out, const KernelBody &kernel, const Block &block)
                     printBlock(out, kernel, s.body);
                     out << "}\n";
                 } else if constexpr (std::is_same_v<T, Conditional>) {
-                    out << "if(" << s.condition.cuda() << "){\n";
+                    out << "if("
+                        << std::visit(
+                               [](const auto &condition) { return condition.cuda(); },
+                               s.condition)
+                        << "){\n";
                     printBlock(out, kernel, s.body);
                     out << "}\n";
-                } else
+                } else if constexpr (std::is_same_v<T, Barrier>)
                     out << "__syncthreads();\n";
+                else if constexpr (std::is_same_v<T, ReportFault>)
+                    out << "atomicMin(reinterpret_cast<unsigned*>(v[" << *kernel.faultSlot << "]),"
+                        << s.source << "U);\n";
+                else if constexpr (std::is_same_v<T, Return>)
+                    out << "return;\n";
+            },
+            statement);
+}
+// Without a reconvergence proof, any early exit may strand peers at a later
+// barrier (even when the return itself is nested in a different branch).
+void controlKinds(const Block &block, bool &returns, bool &barriers) {
+    for (const auto &statement : block)
+        std::visit(
+            [&](const auto &s) {
+                using T = std::decay_t<decltype(s)>;
+                if constexpr (std::is_same_v<T, Return>)
+                    returns = true;
+                else if constexpr (std::is_same_v<T, Barrier>)
+                    barriers = true;
+                else if constexpr (std::is_same_v<T, Loop> || std::is_same_v<T, Conditional>)
+                    controlKinds(s.body, returns, barriers);
             },
             statement);
 }
@@ -158,6 +200,16 @@ void validateBody(const KernelBody &body) {
         require(b.space == MemorySpace::Global || b.space == MemorySpace::Shared, "memory space");
         require(b.space != MemorySpace::Shared || b.extent > 0, "empty shared buffer");
     }
+    bool returns = false, barriers = false;
+    controlKinds(body.statements, returns, barriers);
+    require(
+        !(returns && barriers),
+        "early return in a barrier kernel requires reconvergence proof");
+    if (body.faultSlot)
+        for (const auto &buffer : body.buffers)
+            require(
+                buffer.space != MemorySpace::Global || buffer.slot != *body.faultSlot,
+                "fault resource aliases a value buffer");
     validateBlock(body, body.statements, builtins, true);
 }
 std::string emitBody(const KernelBody &body) {

@@ -51,6 +51,23 @@ void checkKernelIR() {
     bad.statements.push_back(Loop{"k_j",IndexExpr(0),IndexExpr::variable("k_lane"),1,{Barrier{}}}); rejected(bad,"divergent");
     body.statements.push_back(Conditional{Predicate::equal(IndexExpr::variable("block_x"),IndexExpr(0)),{Barrier{}}});
     validateBody(body);
+    const auto f64zero=ScalarExpr::literal(ScalarValue::f64(0));
+    const auto x=ScalarExpr::symbol("k_x",DType::F64);
+    const ScalarPredicate isZero{ScalarCompare::Equal,x,f64zero};
+    if(!isZero.evaluate({{"k_x",ScalarValue::f64(-0.0)}}) ||
+       isZero.evaluate({{"k_x",{DType::F64,0x7ff8000000000042ULL}}}))
+        throw std::runtime_error("floating fault predicate lost signed-zero or NaN rules");
+    KernelBody fault{{{MemorySpace::Global,DType::F64,0,1,false}},
+        {Load{"k_x",{0,IndexExpr(0),Predicate(true)},ScalarValue::f64(0)},
+         Conditional{isZero,{ReportFault{7},Return{}}}},1};
+    validateBody(fault);
+    auto faultBad=fault;faultBad.faultSlot.reset();rejected(faultBad,"fault resource is not declared");
+    faultBad=fault;faultBad.faultSlot=0;rejected(faultBad,"aliases a value buffer");
+    faultBad=fault;faultBad.statements.push_back(ReportFault{UINT32_MAX});rejected(faultBad,"reserved fault source");
+    faultBad=fault;faultBad.statements.push_back(Barrier{});rejected(faultBad,"reconvergence proof");
+    faultBad=fault;faultBad.statements.push_back(Conditional{ScalarPredicate{ScalarCompare::Equal,x,zero},{}});rejected(faultBad,"comparison type mismatch");
+    faultBad=fault;faultBad.statements.push_back(Conditional{ScalarPredicate{ScalarCompare::Less,ScalarExpr::symbol("k_missing",DType::F64),f64zero},{}});rejected(faultBad,"unbound scalar");
+    std::cout<<"tiles kernel faults: IEEE conditions, resources and early-exit convergence passed\n";
     std::cout<<"tiles kernel bodies: scopes, typed memory and uniform barriers passed\n";
 }
 

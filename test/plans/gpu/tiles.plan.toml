@@ -980,3 +980,36 @@ verify_script = """
 ({ input, assert }) => { assert(input.stdout.trim().split(/\s+/).join(",") === Array(8).fill("0.0").join(","), "matrix panel boundaries and empty shapes must equal the canonical CPU result") }
 """
 timeout_ms = 60000
+
+[[tests]]
+name = "scalar_predicates.nvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_predicates.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({input,assert}) => { assert(input.stdout.trim().split(/\s+/).join(",") === "true,true,0.0,1.0", "fault predicates must preserve NaNs, infinities and nonzero subnormal divisors") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_predicates.fvm"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_predicates.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({input,assert}) => { assert(input.stdout.trim().split(/\s+/).join(",") === "true,true,0.0,1.0", "fault predicates must preserve NaNs, infinities and nonzero subnormal divisors") }
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "scalar_predicates.jit"
+kind = "behavior"
+case = "../../cases/modules/tiles/scalar_predicates.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({input,assert}) => { assert(input.stdout.trim().split(/\s+/).join(",") === "true,true,0.0,1.0", "fault predicates must preserve NaNs, infinities and nonzero subnormal divisors") }
+"""
+timeout_ms = 60000
