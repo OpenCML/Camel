@@ -163,7 +163,7 @@ void DebuggerServer::start(int port, bool silent) {
 
     if (!silent) {
         std::string msg = "API http://127.0.0.1:" + std::to_string(port_) +
-                          " | Web UI: python tools/debugger/serve_ui.py";
+                          " | Graphical debugger: OpenCML-Ext in VS Code";
         std::cout << msg << std::endl;
         Logger::WriteToAllStreams(msg);
     }

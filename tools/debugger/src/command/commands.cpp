@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 25, 2026
- * Updated: Oct. 02, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -29,10 +29,10 @@
 #include "camel/core/debug_breakpoint.h"
 #include "core/debug_core.h"
 
-#include <httplib.h>
 #include "camel/utils/log.h"
 #include "spawn.h"
 #include "state.h"
+#include <httplib.h>
 
 #ifndef NDEBUG
 #include "camel/core/mm/debug_hook.h"
@@ -228,7 +228,7 @@ class StartServerCommand final : public Command {
         return CommandResult::ok(
             display,
             "API http://127.0.0.1:" + std::to_string(port) +
-                " | Web UI: python tools/debugger/serve_ui.py\n"
+                " | Graphical debugger: OpenCML-Ext in VS Code\n"
                 "API server started on port " +
                 std::to_string(port) + ". Debugger will keep running even if stdin is closed.");
     }
@@ -330,8 +330,8 @@ class DebugCommand final : public Command {
         const std::string command = args.value("command", "");
         // Queries are not echoed into the log: an editor asks them at every stop.
         const bool query = command == "status" || command == "stackTrace" || command == "scopes" ||
-                           command == "variables" || command == "evaluate" ||
-                           command == "graph" || command == "exceptionInfo";
+                           command == "variables" || command == "evaluate" || command == "graph" ||
+                           command == "exceptionInfo";
         const std::string display = query ? std::string() : "debug " + command;
         if (getServer().isWorkerProcess())
             return CommandResult::error(display, "Not available in a worker process.");

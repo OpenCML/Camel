@@ -2,7 +2,7 @@ id = "tools.debugger"
 order = 910
 tier = "feat"
 tags = ["feat", "tools", "debugger"]
-desc = "camel-db, the debugger. Each test is a script that starts camel-db and talks to it by protocol (test/tools/debugger/client.mjs): the HTTP API of the Web UI, or the Debug Adapter Protocol over stdio."
+desc = "camel-db, the debugger. Each test is a script that starts camel-db and talks to it by protocol (test/tools/debugger/client.mjs): the retained HTTP gateway API, or the Debug Adapter Protocol over stdio."
 
 [defaults]
 kind = "behavior"
