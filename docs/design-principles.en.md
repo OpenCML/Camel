@@ -474,7 +474,7 @@ At present all complicated type computation is implemented directly by operators
 - **The value of NaN**: a NaN produced by `max`, `min` or `relu` is always the canonical quiet NaN (printed `nan`). NaNs from ordinary arithmetic are not constrained by this.
 - **`argmax` and `argmin`** compare by IEEE 754-2019 `maximum` and `minimum`: with a NaN they return the position of the first NaN; on a tie the position of the first extreme, +0 being greater than -0.
 - **An exact operator may declare that the four `finite_math` assumptions change its result**; rounding permissions still do not apply to it. `@numeric` is not supported before a `wait` block for now. Max pooling and the maximum inside `log_softmax` follow the new `max` rule.
-- **Reductions**: a reduction over an empty domain is a fault, even when the result has no elements. The sum of an int64 tensor is to accumulate exactly in int64 (today it accumulates in f64, a defect to fix).
+- **Reductions**: a reduction over an empty domain is a fault, even when the result has no elements. The sum of an int64 tensor accumulates exactly in int64, wrapping on overflow like integer arithmetic.
 - **Loops**: a loop header needs `for` or `while`; `for … while` tests the condition before taking the next element each round; a loop runs at most 1,000,000 rounds in `std::macro` (adjustable like the recursion limit); `for` iterates arrays only for now, strings, maps and tensors later; the state has the type of its initial value, tensor shapes are not widened, a type annotation is written when needed.
 
 ---
