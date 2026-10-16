@@ -391,4 +391,9 @@ map, with the same bounds checks as pointwise and matrix accesses. Canonical
 maps retain the compact row/axis address. Noncanonical affine reads are supported
 by those kernels but excluded from row regions, whose shared-memory accesses
 assume canonical rows. Guarded, indirect and negative-stride reads are rejected.
-This does not yet generalize full-tensor or sum-to reductions to arbitrary maps.
+Full-tensor sum/mean and sum-to use the same traversal and mapping checks.
+Reduction dimensions are traversed lexicographically in domain order, preserving
+the canonical row-major contribution sequence even for nonadjacent sum-to axes.
+Full sums retain f64 results and accumulators; sum-to retains its f32 accumulator.
+Only direct output projections and unconditional nonnegative affine reads are
+supported; symbolic or guarded domains still require further lowering.

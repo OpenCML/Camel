@@ -39,7 +39,7 @@ KernelBody parallelMaxBody(const Program &p, Launch &launch) {
             256,
             {Load{
                  "k_input",
-                 {0, axisReductionAddress(p, n, row, r), Predicate(true)},
+                 {0, reductionAccess(p, n, row, r).address, Predicate(true)},
                  negativeInfinity},
              Assignment{
                  "k_best",

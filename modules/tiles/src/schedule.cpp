@@ -204,6 +204,7 @@ void validate(const Program &p) {
             require(
                 n.op != "mean_all" || elements(p.nodes[n.inputs[0]].shape),
                 "mean of empty tensor");
+            (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
             continue;
         }
         if (n.op == "constant64") {
@@ -265,6 +266,8 @@ void validate(const Program &p) {
             require(a[1] == b[0] && n.shape == Shape{a[0], b[1]}, "matmul dimensions");
             kernel::validateMatmulContract(p, n);
         }
+        if (n.op == "sum_to")
+            (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         if (reduction) {
             require(
                 n.attributes.size() == 1 && n.attributes[0] >= 0 &&
@@ -276,7 +279,7 @@ void validate(const Program &p) {
             kept[axis] = 1;
             removed.erase(removed.begin() + axis);
             require(n.shape == kept || n.shape == removed, "reduction output shape");
-            (void)kernel::axisReductionAddress(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
+            (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
         }
     }
 }

@@ -20,10 +20,12 @@ using namespace camel::tiles::kernel;
 
 void checkPointwiseContracts();
 void checkReductionContracts();
+void checkGeneralReductions();
 
 void checkKernelIR() {
     checkPointwiseContracts();
     checkReductionContracts();
+    checkGeneralReductions();
     const auto integer = [](uint32_t value) { return ScalarExpr::literal(ScalarValue::u32(value)); };
     const auto signedInteger = [](int32_t value) { return ScalarExpr::literal(ScalarValue::i32(value)); };
     const auto bits = ScalarExpr::bitcast(ScalarType::U32, ScalarExpr::symbol("x",DType::F32));
@@ -272,7 +274,7 @@ void checkReductionContracts() {
         throw std::runtime_error("reduction access map ignored by source or row eligibility");
     for(size_t output=0;output<2;++output)
         for(size_t r=0;r<2;++r)
-            if(axisReductionAddress(transposed,transposed.nodes[1],IndexExpr(output),IndexExpr(r)).evaluate({})!=r*2+output)
+            if(reductionAccess(transposed,transposed.nodes[1],IndexExpr(output),IndexExpr(r)).address.evaluate({})!=r*2+output)
                 throw std::runtime_error("reduction mapped traversal is incorrect");
     auto rejected=[](Program bad,const char *message) {
         try { validatePlan(bad); } catch(const std::exception &e) {
@@ -283,14 +285,62 @@ void checkReductionContracts() {
     };
     auto bad=p;bad.nodes[1].indexing->norm[0].coords[0]=bad.nodes[1].indexing->exprs.add(row,two);
     rejected(bad,"outside operand domain");
-    bad=p;bad.nodes[1].indexing->output.coords={zero,row};rejected(bad,"axis projection");
+    bad=p;bad.nodes[1].indexing->output.coords={zero,row};rejected(bad,"reduction projection");
     bad=p;bad.nodes[1].indexing->norm[0].valid.push_back({row,sem::Constraint::Rel::Lt,two});
     rejected(bad,"unconditional affine");
     auto otherLaw=declaration;otherLaw.laws[0].accumulator=f32;
     bad=p;bad.contracts[0].declaration=&otherLaw;
     bool lawRejected=false;
-    try { (void)axisReductionAddress(bad,bad.nodes[1],IndexExpr(0),IndexExpr(0)); }
+    try { (void)reductionAccess(bad,bad.nodes[1],IndexExpr(0),IndexExpr(0)); }
     catch(const std::exception &e) { lawRejected=std::string(e.what()).find("unsupported numerical law")!=std::string::npos; }
     if(!lawRejected) throw std::runtime_error("accepted incompatible accumulator law");
     std::cout<<"tiles axis contracts: mapped traversal, numerical law and row eligibility passed\n";
+}
+
+void checkGeneralReductions() {
+    namespace sem=camel::core::sem;
+    const auto f32=camel::core::type::TypeCode::Float32, f64=camel::core::type::TypeCode::Float64;
+    auto &table=camel::core::OperatorTable::instance();
+    auto make=[&](bool to) {
+        const std::string uri=to ? "tilestest:sum_to_map" : "tilestest:sum_all_map";
+        const auto id=table.intern(uri);
+        sem::OperatorSemantics decl{.key=sem::OperatorKey::of(uri)};
+        decl.laws={{.name="sum",.kind=sem::LawKind::Add,.input=f32,.accumulator=to?f32:f64,.result=to?f32:f64}};
+        table.declareSemantics(uri,decl);
+        Program p;
+        p.contracts={{.uri=uri,.key=decl.key,.declaration=table.semantics(id)}};
+        p.nodes={{.op="input",.shape={2,3,2},.data=std::vector<float>(12)},
+                 {.op=to?"sum_to":"sum_all",.shape=to?Shape{3,1}:Shape{},.inputs={0},.dtype=to?DType::F32:DType::F64,.semantic=0}};
+        p.outputs={1};
+        sem::IndexedInstance inst;
+        const auto a=inst.exprs.dim(0), b=inst.exprs.dim(1), c=inst.exprs.dim(2);
+        const auto two=inst.exprs.constant(2), three=inst.exprs.constant(3), zero=inst.exprs.constant(0);
+        inst.domain.dims={{"a",two,sem::DimRole::Reduction},{"b",three,to?sem::DimRole::Parallel:sem::DimRole::Reduction},{"c",two,sem::DimRole::Reduction}};
+        inst.norm={{.kind=sem::AccessKind::Affine,.coords={a,b,c}}};
+        if(to) inst.norm.push_back({.kind=sem::AccessKind::None});
+        inst.output={.coords=to?std::vector<sem::ExprId>{b,zero}:std::vector<sem::ExprId>{},.mode=sem::WriteMode::Combine};
+        inst.law=0;p.nodes[1].indexing=inst;
+        return p;
+    };
+    for(bool to:{false,true}) {
+        auto p=make(to);generate(p);
+        auto changed=p;
+        auto &inst=*changed.nodes[1].indexing;
+        std::swap(inst.norm[0].coords[0],inst.norm[0].coords[2]);
+        const auto before=generationCacheStats();generate(changed);
+        if(p.source==changed.source || generationCacheStats().misses!=before.misses+1)
+            throw std::runtime_error("general reduction maps not represented in CUDA/cache");
+        const size_t width=to?4:12, rows=to?3:1;
+        for(size_t row=0;row<rows;++row) for(size_t r=0;r<width;++r) {
+            const auto ordinary=reductionAccess(p,p.nodes[1],IndexExpr(row),IndexExpr(r));
+            const auto mapped=reductionAccess(changed,changed.nodes[1],IndexExpr(row),IndexExpr(r));
+            const auto i=to?r/2:r/6, j=to?row:(r/2)%3, k=r%2;
+            if(ordinary.count!=width || mapped.count!=width || ordinary.address.evaluate({})!=i*6+j*2+k || mapped.address.evaluate({})!=k*6+j*2+i)
+                throw std::runtime_error("general reduction traversal lost row-major contribution order");
+        }
+        auto bad=p;bad.nodes[1].indexing->domain.dims[0].role=sem::DimRole::Parallel;
+        bool rejected=false;try { validatePlan(bad); } catch(const std::exception &) { rejected=true; }
+        if(!rejected) throw std::runtime_error("general reduction accepted incompatible dimension roles");
+    }
+    std::cout<<"tiles general reductions: scalar and sum-to core maps preserve contribution order\n";
 }
