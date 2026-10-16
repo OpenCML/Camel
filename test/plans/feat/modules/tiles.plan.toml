@@ -4,6 +4,16 @@ tier = "feat"
 tags = ["feat", "modules", "tiles"]
 
 [[tests]]
+name = "slice_bounds_rejected_before_cuda"
+kind = "negative"
+case = "../../../cases/modules/tiles/slice_bounds.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["slice bounds 0..9 are outside axis 0 of extent 3"]
+timeout_ms = 10000
+
+[[tests]]
 name = "plan"
 kind = "behavior"
 case = "../../../cases/modules/tiles/plan.cml"
