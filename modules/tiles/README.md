@@ -282,8 +282,26 @@ too few lanes. Shared results and observable producer outputs remain boundaries.
 `reduction_benchmark.cml` measures three shapes and two affine epilogues against the unfused CUDA schedule;
 this heuristic is not an autotuner and does not guarantee every shape improves.
 
-First-class index domains, public masks, layouts, schedule/resource graphs, loop and
-branch lowering, parallel reductions, cross-reduction fusion, asynchronous memory planning,
+Rank-two row-local DAGs can now share intermediate values across multiple reductions
+inside one CUDA block. This covers softmax and small layernorm expressions, including
+row/column broadcasts and multiply-used intermediates. A structured row plan owns
+typed arithmetic stages, core reduction laws and inclusive shared-memory lifetimes;
+the launch validator reconstructs and checks that plan before execution.
+Maximum uses its declared exact reduction freedom. Sum/mean retain the f64
+accumulator: a runtime exponent-range proof allows a parallel tree only when every
+addition is exact in f64. Wide ranges and nonfinite inputs execute the canonical
+ascending chain instead. This grants no extra numerical permission.
+
+The initial row scheduler supports one full-graph output, 2–2048 columns, at most
+64 stages and 48 KiB of static shared memory. It selects row fusion only when the
+sum of additive reduction widths is at most 1024: larger strict reductions can
+serialize heavily when cancellation defeats the exactness proof. Other graphs use
+the existing stages. This is a measured heuristic, not an autotuner. Row programs
+are tested with signed zeros, subnormals, nonfinite values, cancellation and random
+finite bit patterns on NodeVM, FastVM and JIT (`gpu/tiles_rows.plan.toml`).
+
+First-class public index domains, masks, layouts, schedule/resource graphs, loop and
+branch lowering, general region fusion, asynchronous memory planning,
 asynchronous transfers, Tensor Core lowering, autotuning, broader autodiff
 integration, and additional backends remain future work. The current private IR
 is an implementation detail, not a new normative Camel graph semantics.

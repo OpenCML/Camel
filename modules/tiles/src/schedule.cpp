@@ -11,6 +11,7 @@
 // Checked tensor schedules and interval-based storage reuse for one ordered stream.
 #include "camel/core/operator_table.h"
 #include "tiles/device.h"
+#include "tiles/internal/row_kernel.h"
 #include "tiles/program.h"
 #include <algorithm>
 #include <cstdint>
@@ -358,6 +359,20 @@ void schedule(Program &p, ScheduleOptions options) {
         }
         p.launches.push_back(std::move(launch));
     }
+    if (options.fuseElementwise && options.parallelMax) {
+        // Bound the serial fallback cost. Wide, multi-reduction rows measured slower
+        // than separate stages when cancellation defeats the exact-sum proof.
+        if (const auto region = kernel::rowKernel(p); region && region->orderedElements <= 1024) {
+            p.launches = {Launch{
+                .node           = p.outputs[0],
+                .members        = region->members(),
+                .elements       = elements(p.nodes[p.outputs[0]].shape),
+                .name           = "tiles_rows",
+                .implementation = "row_region",
+                .blockX         = 32,
+                .gridX          = static_cast<unsigned>(std::min<size_t>(region->rows, 65535))}};
+        }
+    }
     const auto life = lifetimes(p);
     p.storage       = {};
     p.storage.slots.assign(count, SIZE_MAX);
@@ -403,8 +418,16 @@ void validatePlan(const Program &p) {
         require(launch.elements == elements(p.nodes[launch.node].shape), "launch extent");
         require(
             launch.implementation == "standard" || launch.implementation == "parallel_max" ||
-                launch.implementation == "ordered_reduce",
+                launch.implementation == "ordered_reduce" || launch.implementation == "row_region",
             "unknown implementation");
+        if (launch.implementation == "row_region") {
+            const auto region = kernel::rowKernel(p);
+            require(
+                region && p.launches.size() == 1 && launch.members == region->members() &&
+                    launch.blockX == 32 && launch.blockY == 1 && launch.gridY == 1 &&
+                    launch.gridX == std::min<size_t>(region->rows, 65535),
+                "invalid row region plan");
+        }
         size_t reduction = SIZE_MAX, reductions = 0;
         for (auto member : launch.members)
             if (member < p.nodes.size() && orderedAxis(p.nodes[member].op)) {
@@ -446,7 +469,7 @@ void validatePlan(const Program &p) {
                 id < p.nodes.size() && stageOf[id] == SIZE_MAX,
                 "duplicate/invalid scheduled value");
             require(
-                launch.members.size() == 1 ||
+                launch.implementation == "row_region" || launch.members.size() == 1 ||
                     (indexedScalar(p.nodes[id].op) && indexedScalar(p.nodes[launch.node].op)) ||
                     (launch.implementation == "ordered_reduce" &&
                      (id == reduction || indexedScalar(p.nodes[id].op))) ||
@@ -466,7 +489,9 @@ void validatePlan(const Program &p) {
             stageOf[id] = stage + 1;
         }
         for (auto id : launch.members)
-            require(id == launch.node || internalUses[id] == 1, "fused value must have one use");
+            require(
+                launch.implementation == "row_region" || id == launch.node || internalUses[id] == 1,
+                "fused value must have one use");
     }
     for (auto stage : stageOf)
         require(stage != SIZE_MAX, "unscheduled value");

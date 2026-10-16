@@ -217,6 +217,20 @@ int main() {
             throw std::runtime_error("core maximum law did not authorize parallel reduction");
         rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "parallel maximum lacks");
         rejects(maximumPlan, [](auto &x){ x.nodes[1].indexing->law=42; }, "invalid core index instance");
+        auto rowPlan = maximumPlan;
+        rowPlan.nodes[1].shape = {1,1};
+        rowPlan.nodes[1].indexing->output.coords.push_back(rowPlan.nodes[1].indexing->exprs.constant(0));
+        rowPlan.nodes.push_back(Node{.op="subtract", .shape={1,128}, .inputs={0,1}});
+        rowPlan.nodes.push_back(Node{.op="multiply", .shape={1,128}, .inputs={2,2}});
+        rowPlan.outputs = {3};
+        generate(rowPlan);
+        if (rowPlan.launches.size()!=1 || rowPlan.launches[0].implementation!="row_region" ||
+            rowPlan.storage.slots[1]!=SIZE_MAX || rowPlan.storage.slots[2]!=SIZE_MAX)
+            throw std::runtime_error("shared row values must stay inside one block");
+        rejects(rowPlan, [](auto &x){ x.launches[0].blockX=64; }, "invalid row region plan");
+        rejects(rowPlan, [](auto &x){ x.launches[0].members.erase(x.launches[0].members.begin()); }, "invalid row region plan");
+        rejects(rowPlan, [](auto &x){ x.nodes[1].indexing.reset(); }, "invalid row region plan");
+        std::cout << "tiles row region: shared values and invalid launch mutations checked\n";
         maximumPlan.nodes[1].indexing.reset();
         generate(maximumPlan);
         if (maximumPlan.launches[0].implementation != "standard")
