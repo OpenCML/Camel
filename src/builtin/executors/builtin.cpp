@@ -28,6 +28,7 @@ using namespace camel::core::context;
 using namespace camel::core::rtdata;
 
 #include "../operators/cast.h"
+#include "../operators/graph.h"
 #include "../operators/io.h"
 #include "../operators/macro.h"
 #include "../operators/ops.h"
@@ -265,6 +266,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // macro
         {"macro/cmp", __cmp__},
 
+        // Inserted by the runtime, never written by a program (operators/graph.h).
+        {"graph/original", __graph_original__},
+
         // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
         {"op/tag_is_null", __is_null__},
         {"op/tag_null_value", __null_value__},
@@ -321,6 +325,7 @@ void registerBuiltinOperatorTraits() {
         "struct/extend_arr",
         "struct/contains_arr",
         "struct/contains_str",
+        "graph/original",
     };
     // Declared never to fault, where the implementation has no fault path at all: integer
     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
@@ -331,6 +336,7 @@ void registerBuiltinOperatorTraits() {
         "op/sub_d", "op/lt_i",  "op/lt_l",  "op/lt_f",  "op/lt_d",  "op/le_i",  "op/le_l",
         "op/le_f",  "op/le_d",  "op/gt_i",  "op/gt_l",  "op/gt_f",  "op/gt_d",  "op/ge_i",
         "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",
+        "graph/original",
     };
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
@@ -366,6 +372,11 @@ void registerBuiltinOperatorTraits() {
     registry.set(":var/peek", {.stateOnly = true});
     registry.set(":var/take", {.stateOnly = true});
     declareBuiltinOperatorSemantics();
+    std::vector<std::string_view> names;
+    for (const auto &[name, op] : getOpsImplMap()) {
+        names.push_back(name);
+    }
+    declareBuiltinOperatorResources(names);
 }
 
 BasicBuiltinExecutor::BasicBuiltinExecutor(context_ptr_t ctx) : Executor(ctx, getOpsImplMap()) {}

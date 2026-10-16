@@ -156,7 +156,7 @@ ATOMS = {"lit", "ref", "call", "conv", "arr", "tup", "rec", "idx", "fld", "range
 
 
 # Forms the grammar does not accept bare as the test of an `if` or the right side of an assignment.
-LOW = {"if", "match", "lam", "wait", "assign"}
+LOW = {"if", "match", "lam", "wait", "assign", "loop"}
 
 
 def ex(n: N, ind: int, top: bool = False) -> str:
@@ -192,6 +192,18 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         # `[e for x in xs if c]`: filter then map (design principles 2.10).
         cond = "" if n.c[2] is None else " if " + arg(n.c[2])
         return f"[{arg(n.c[1])} for {n.a['var']} in {arg(n.c[0])}{cond}]"
+    if k == "loop":
+        # `loop s = a, t = b (for x in xs)? (while c)? do body` (design principles 2.13). The
+        # first values, the array and the condition are operands (an `if` among them takes
+        # parentheses); what follows `do` reads as after `then`.
+        inits, seq, cond, body = n.c
+        head = ", ".join(f"{name} = {sub(x)}" for name, x in zip(n.a["names"], inits))
+        text = "loop " + head
+        if seq is not None:
+            text += f" for {n.a['var']} in {sub(seq)}"
+        if cond is not None:
+            text += f" while {sub(cond)}"
+        return wrap(text + " do " + arm(body, ind))
     if k == "papp":
         # `f<w>`: the function `f` with its context arguments given (a partial application).
         return n.a["name"] + "<" + ", ".join(arg(x) for x in n.c) + ">"
@@ -619,6 +631,33 @@ class Evaluator:
                 break
         return v
 
+    def e_loop(self, n, env):
+        # The state is given by the head; each round: the condition (it sees the state), then
+        # the next element, then the body (it sees the state and the element); its value is the
+        # next state, the tuple of the values when there are several (design principles 2.13).
+        inits, seq, cond, body = n.c
+        names = n.a["names"]
+        state = [self.ev(x, env) for x in inits]
+        items = None if seq is None else self.ev(seq, env)
+        rounds = 0
+        while True:
+            self.steps += 1
+            if self.steps > MAX_STEPS:
+                raise Reject("too many steps")
+            inner = Env(env)
+            for name, v in zip(names, state):
+                inner.d[name] = v
+            if cond is not None and not self.ev(cond, inner):
+                break
+            if items is not None:
+                if rounds >= len(items):
+                    break
+                inner.d[n.a["var"]] = items[rounds]
+            nxt = self.arm(body, inner)
+            state = list(nxt) if len(names) > 1 else [nxt]
+            rounds += 1
+        return tuple(state) if len(names) > 1 else state[0]
+
     def e_comp(self, n, env):
         out = []
         for x in self.ev(n.c[0], env):
@@ -986,6 +1025,17 @@ def effect_violations(prog: N) -> list:
             # Both operands, in order, like the arguments of a call statement.
             expr(e.c[0], pos)
             expr(e.c[1], pos)
+        elif k == "loop":
+            # The first values, the array and the condition are values; the body runs every
+            # round the loop runs, so it passes the position on (when it is a sync block).
+            inits, seq, cond, b = e.c
+            for x in inits:
+                expr(x, False)
+            if seq is not None:
+                expr(seq, False)
+            if cond is not None:
+                arm(cond, False)
+            arm(b, pos)
         elif k == "lam":
             body(e.c[0])
         else:
@@ -1044,6 +1094,13 @@ def heavy_graphs(prog: N) -> int:
                 graph(x.c[1])
                 if x.c[2] is not None:
                     graph(x.c[2])
+            elif x.k == "loop":
+                stack.extend(x.c[0])
+                if x.c[1] is not None:
+                    stack.append(x.c[1])
+                if x.c[2] is not None:
+                    graph(x.c[2])
+                graph(x.c[3])
             else:
                 stack.extend(x.c)
         count += heavy

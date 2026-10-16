@@ -1,0 +1,16 @@
+// The four shapes of the `do` form (design principles 2.13): one state over an array, two
+// states under a condition (the loop's value is their tuple), a struct as the state, and
+// `for ... while` with an `if` as the body.
+func main(): int sync {
+    let n  = 4
+    let xs = [1, 2, 3]
+    let ds = [5, 6]
+    let ys = [3, 12, 7, 15]
+    let total    = loop acc = 0 for x in xs do acc + x * x
+    let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
+    let p        = loop p = { x: 0 } for d in ds do { x: p.x + d }
+    let found    = loop hit = -1 for x in ys while hit < 0 do if x > 9 then x else hit
+    let none     = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else hit
+    println(total, i, acc, p.x, found, none)
+    return 0
+}

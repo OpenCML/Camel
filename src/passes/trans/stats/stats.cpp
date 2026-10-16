@@ -36,7 +36,7 @@ using camel::runtime::GCNodeKind;
 std::string GraphStats::toJson() const {
     return std::format(
         "{{\"graphs\":{},\"nodes\":{},\"edges\":{},\"opers\":{},\"direct_calls\":{},"
-        "\"indirect_calls\":{},\"closures\":{},\"branches\":{}}}",
+        "\"indirect_calls\":{},\"closures\":{},\"branches\":{},\"loops\":{}}}",
         graphs,
         nodes,
         edges,
@@ -44,7 +44,8 @@ std::string GraphStats::toJson() const {
         directCalls,
         indirectCalls,
         closures,
-        branches);
+        branches,
+        loops);
 }
 
 GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context, GCGraph *root) {
@@ -73,6 +74,9 @@ GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context,
                 break;
             case GCNodeKind::Brch:
                 ++stats.branches;
+                break;
+            case GCNodeKind::Loop:
+                ++stats.loops;
                 break;
             case GCNodeKind::Fill:
                 if (graph->nodeBodyAs<GCFillBody>(ref)->fillKind == GCFillKind::FunctionClosure) {

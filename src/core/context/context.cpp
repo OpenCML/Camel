@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <mutex>
 #include <tuple>
 #include <unordered_set>
 
@@ -31,6 +32,9 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
+#include "camel/runtime/core_facts.h"
+#include "camel/runtime/definitions.h"
+#include "camel/runtime/facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -91,6 +95,8 @@ Context::~Context() {
     // closure metadata during teardown. Release module-owned runtime data before
     // dropping the graph closure so those metadata pointers stay valid for the
     // whole object destruction cascade.
+    facts_.reset();
+    definitions_.reset();
     mainModule_.reset();
     modules_.clear();
     graphBuildSession_.reset();
@@ -100,6 +106,27 @@ Context::~Context() {
         camel::core::mm::autoSpace().setObjectRootSet(nullptr);
     }
     runtimeGraphMgr_.reset();
+}
+
+camel::runtime::DefinitionStore &Context::definitions() {
+    // As facts(): created once, on the thread that first asks.
+    static std::mutex creation;
+    std::lock_guard lock(creation);
+    if (!definitions_) {
+        definitions_ = std::make_unique<camel::runtime::DefinitionStore>(*this);
+    }
+    return *definitions_;
+}
+
+camel::runtime::fact::FactStore &Context::facts() {
+    // Created once, on the thread that first asks: back ends may ask from worker threads.
+    static std::mutex creation;
+    std::lock_guard lock(creation);
+    if (!facts_) {
+        (void)camel::runtime::fact::coreKinds(); // the core's kinds exist before any fact
+        facts_ = std::make_unique<camel::runtime::fact::FactStore>();
+    }
+    return *facts_;
 }
 
 std::string EntryConfig::toString() const {
@@ -712,6 +739,11 @@ void Context::clearRuntimeGraphs() {
 void Context::trackDetachedRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->trackDetached(graphs);
+}
+
+void Context::pinRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->pin(graphs);
 }
 
 void Context::releaseDetachedRuntimeGraphs() {

@@ -787,7 +787,11 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t nargs = bc->nargs();
         const data_arr_t wargs = bc->wargs();
         auto mark              = bc->extra()->mark;
-        evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+        if (isLoopMark(mark)) {
+            evalLoop(*bc, *currFrame);
+        } else {
+            evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+        }
 
         NEXT();
     }

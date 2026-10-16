@@ -324,14 +324,14 @@ TensorObject *sliceGrad(
         throw std::invalid_argument("slice axis out of range");
     }
     const int64_t extent = shape[static_cast<size_t>(axis)];
-    auto clampIndex      = [extent](int64_t v) {
-        if (v < 0) {
-            v += extent;
-        }
-        return std::clamp<int64_t>(v, 0, extent);
-    };
-    start                   = clampIndex(start);
-    end                     = clampIndex(end);
+    // The forward slice's bounds, normalized the same way (the forward slice faulted when they
+    // were out of range, so they are in range here unless the gradient was built by hand).
+    const auto range = normalizeSliceBounds(extent, start, end);
+    if (!range) {
+        throw std::out_of_range("slice bounds out of range");
+    }
+    start = range->start;
+    end   = range->end;
     const int64_t count     = end > start ? (end - start + step - 1) / step : 0;
     const TensorObject *src = asFloat(dy, allocator);
     if (src->rank() != shape.size() || src->dim(static_cast<size_t>(axis)) != count) {

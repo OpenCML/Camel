@@ -35,6 +35,11 @@
  * 3. Link: the captures of every direct call (linkCaptureSites, a least fixpoint), the call of
  *    the entry module's `main`, the summaries of effects (another fixpoint) and the warnings
  *    that need them, per module.
+ *
+ * A library (buildLibrary) is built the same way by a builder of its own, from the library
+ * module instead of the entry module and without a call of `main`: the definition libraries
+ * of operators (docs/design/op-semantics, section 9), compiled when a definition is first
+ * asked for, after the program itself is built.
  */
 
 #include "builder.h"
@@ -517,7 +522,19 @@ bool Builder::buildProgram() {
     if (entryIt == units_.end()) {
         return false;
     }
-    ModuleUnit &entry = *entryIt->second;
+    return buildFrom(*entryIt->second, true);
+}
+
+bool Builder::buildLibrary(const module_ptr_t &module) {
+    ensureRootGraph();
+    const auto it = units_.find(module.get());
+    if (it == units_.end()) {
+        return false;
+    }
+    return buildFrom(*it->second, false);
+}
+
+bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
 
     // The modules in the order of their imports: a module after those it imports, except
     // around a cycle of imports, where one of them comes first (its uses of the others build
@@ -591,8 +608,10 @@ bool Builder::buildProgram() {
             // once `main` has all of its captures (its value holds them); then the captures
             // that call needed.
             linkCaptureSites();
-            buildEntryCall();
-            linkCaptureSites();
+            if (callEntry) {
+                buildEntryCall();
+                linkCaptureSites();
+            }
         } catch (const BuildAbortException &) {
             ok = false;
         } catch (Diagnostic &d) {

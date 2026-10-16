@@ -18,6 +18,7 @@
  */
 
 #include "taskflow.h"
+#include "camel/runtime/loop_lowering.h"
 #include "handoff.h"
 
 #include "camel/core/effect_trace.h"
@@ -1051,6 +1052,9 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
 camel::runtime::GCGraph *
 TaskflowExecSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream & /*os*/) {
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
+    // Loops run as the tail recursion they mean, on a private copy of the program (the
+    // context's program keeps its LOOP nodes: camel/runtime/loop_lowering.h).
+    graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
 
     forceLinear_ = envSwitch("CAMEL_TF_LINEAR");
     fanOutAll_   = envSwitch("CAMEL_TF_FANOUT_ALL");

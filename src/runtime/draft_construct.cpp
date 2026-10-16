@@ -272,6 +272,19 @@ gc_node_ref_t GraphDraft::addFuncNode(
         });
 }
 
+gc_node_ref_t GraphDraft::addLoopNode(
+    const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    dataIndex          = ensureValueSlot(*this, type, dataIndex);
+    const auto payload = bytesForStruct(body);
+    return addNode(
+        DraftNodeInit{
+            .dataIndex = dataIndex,
+            .dataType  = type,
+            .kind      = GCNodeKind::Loop,
+            .payload   = payload,
+        });
+}
+
 gc_node_ref_t GraphDraft::addOperNode(
     camel::core::type::Type *type, operator_t op, std::string_view uri, gc_slot_idx_t dataIndex) {
     dataIndex          = ensureValueSlot(*this, type, dataIndex);

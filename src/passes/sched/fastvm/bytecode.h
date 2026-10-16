@@ -148,7 +148,18 @@ enum class MarkOpCode {
     FilterArr,
     ForeachArr,
     Isolate, // the fault-isolation node (camel/execute/fault_isolation.h)
+    // A LOOP node (camel/runtime/loop.h), one mark per form. The SCHD instruction of a loop has
+    // three extra words: the condition graph (null for For), the body graph, then the mark (the
+    // word extra() reads); see loopGraphsOf.
+    LoopWhile,
+    LoopFor,
+    LoopForWhile,
 };
+
+inline bool isLoopMark(MarkOpCode mark) {
+    return mark == MarkOpCode::LoopWhile || mark == MarkOpCode::LoopFor ||
+           mark == MarkOpCode::LoopForWhile;
+}
 
 // 0 means null; positive values are dynamic data indices, negative values are the negated static
 // data indices.

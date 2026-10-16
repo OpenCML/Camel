@@ -1,0 +1,11 @@
+// Ten million rounds of a two-value loop (sub-step 4 of the loop work: LOOP against the
+// equivalent tail recursion, bench_tail.cml). N rounds from the environment, default 10000000.
+import { get_env } from sys
+
+func main(): int sync {
+    let text = get_env('N')
+    let n    = if text == '' then 10000000 else int(text)
+    let r    = loop s = 0, i = 0 while i < n do (s + i % 7, i + 1)
+    println(r.0)
+    return 0
+}

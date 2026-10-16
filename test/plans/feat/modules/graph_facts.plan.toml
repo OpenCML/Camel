@@ -1,0 +1,189 @@
+id = "modules.graph_facts"
+order = 372
+tier = "feat"
+tags = ["feat", "modules", "facts", "semantics"]
+desc = "Graph facts (camel/runtime/facts.h, docs/design/op-semantics section 10, docs/technical/40_graph_facts.md): the registry of kinds and its rules, the store and its stamps checked on every read, the core's kinds as `camel inspect --facts` prints them, how rewrites make facts stale and nothing stale is reused, and the persistence hooks."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "registry_and_store"
+desc = "test::facts: each registration rule rejects one kind (owner prefix, core. and tiles. reserved to their owners, print, class (i) needs compute, class (iii) is never persisted, encode with decode, Cone needs its hash, the same key as another kind); tiles may register tiles.*. Typed access, scopes, a GraphContent fact read from the graph and not storable, a Target fact needs and checks its hash, a cross-graph fact, the validator. A commit that asks to edit main without changing it keeps its serial and its facts; one that changes main makes the facts on main and on the root (which refers to it) stale, keeps those on f, and revalidates a Cone fact whose node did not change; a new declaration makes the facts that read declarations stale and keeps the others; invalidation."
+kind = "behavior"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::facts"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const [check, why] of [
+  ['key_without_owner', "the key must be '<owner>.<name>'"],
+  ['key_of_the_core', "the key must be '<owner>.<name>'"],
+  ['tiles_prefix_by_another_owner', "the key must be '<owner>.<name>'"],
+  ['no_print', 'a kind must say how its values are printed'],
+  ['content_without_compute', "a fact of class (i) is the graph's content"],
+  ['target_persisted', 'a fact of class (iii) is never persisted by the core'],
+  ['encode_without_decode', 'encode and decode come together'],
+  ['cone_without_hash', 'Dependency::Cone needs the hash'],
+  ['register_again_other_version', 'registered before as another kind'],
+  ['get_as_another_type', 'its values are'],
+  ['node_fact_on_a_graph', 'a Node fact has one anchor, a node'],
+  ['node_out_of_range', 'node 60000 is not a node of'],
+  ['store_graph_content', 'it is written with the graph'],
+  ['target_without_hash', 'is stored with the hash of its target'],
+]) {
+  assert(out.includes(`FACTS ${check} rejected: `) && out.split(`FACTS ${check} rejected: `)[1].split('\n')[0].includes(why), `${check}: ${why}`)
+}
+for (const l of [
+  'FACTS tiles_kind_by_tiles accepted', 'FACTS register_again same id', 'FACTS get 11',
+  "FACTS content is the graph's", 'FACTS target_same valid', 'FACTS target_other stale',
+  'FACTS cross_graph valid', 'FACTS cross_graph_other_anchors absent',
+  'FACTS verify_wrong differs', 'FACTS verify_right equal',
+  'FACTS unchanged_serial_main kept', 'FACTS unchanged_main valid',
+  'FACTS lineage_main kept', 'FACTS serial_main new', 'FACTS serial_f kept', 'FACTS serial_root new',
+  'FACTS after_commit_main stale', 'FACTS after_commit_root stale', 'FACTS after_commit_f valid',
+  'FACTS after_commit_cross_graph stale', 'FACTS after_commit_cone revalidated',
+  'FACTS after_declaration_reads_declarations stale', 'FACTS after_declaration_reads_none valid',
+  'FACTS invalidated absent', 'FACTS invalidated_graph absent', '41',
+]) line(l)
+}
+"""
+
+[[tests]]
+name = "test_passes_need_the_environment"
+desc = "test::facts is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
+kind = "negative"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::facts"]
+expect_exit = 1
+expect_output_not_contains = ["FACTS"]
+
+[[tests]]
+name = "inspect_facts"
+desc = "camel inspect --facts computes every core kind for the program and prints each fact with its stamp: shapes from types (matmul's [2, 4]; an open shape as rank ?), the index instance of matmul with its fma_f32 law and of a full sum, 'none' where the facts give no instance, reorder freedom (in-order contract for matmul, regroup and permute for the sum under @numeric(reassociate)), effect summaries through loops, a For loop over a constant array of 2 and a While loop, the resources of the nodes that touch any (println writes the console; pure tensor code touches none), and the granted permission (class i, no stamp)."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["inspect", "--facts", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const facts = input.normalized.stdout.split('\n').filter(l => l.startsWith('FACT ')).map(l => JSON.parse(l.slice(5)))
+const find = (kind, graph, node) => facts.find(f => f.kind === kind && f.anchors[0].graph === graph && (node === undefined || f.anchors[0].node === node))
+const value = (kind, graph, node) => { const f = find(kind, graph, node); assert(f, `no ${kind} at ${graph} ${node}`); return f.value }
+assert(value('core.shape', 'layer', 2) === 'f32 [2, 4]', 'matmul shape')
+assert(value('core.shape', 'twice', 0) === 'f32 [rank ?]', 'open shape')
+assert(value('core.instance', 'layer', 2).includes('law      fma_f32: fma_chain f32 -> f32 -> f32'), 'matmul instance')
+assert(value('core.instance', 'total', 1).includes('d0 < s0_0 reduction; d1 < s0_1 reduction'), 'sum instance')
+assert(facts.some(f => f.kind === 'core.instance' && f.value === 'none'), 'an instance-less node')
+assert(value('core.reorder', 'layer', 2) === 'contract', 'matmul freedom')
+assert(value('core.reorder', 'total', 1) === 'regroup, permute', 'sum freedom under reassociate')
+assert(value('core.effects', 'count') === 'may fault, may not terminate', 'loop effects')
+assert(value('core.effects', 'count.loop1.cond') === 'none', 'pure condition')
+const loopFor = find('core.loopDomain', 'twice')
+assert(loopFor && loopFor.anchors[1].graph === 'twice.loop1.body' && loopFor.value.includes('= 2; element port 0 reads xs(t)'), 'for domain')
+assert(value('core.loopDomain', 'count') === 'while: rounds unbounded (no sequence)', 'while domain')
+const p = find('core.permissions', 'total', 1)
+assert(p && p.value === 'reassociate' && p.class === 'content' && p.stamp === null, 'permissions')
+const s = find('core.shape', 'layer', 2).stamp
+assert(s.revisions[0].graph === 'layer' && s.epoch === 0 && /^[0-9a-f]{16}$/.test(s.cone), 'shape stamp')
+assert(find('core.instance', 'layer', 2).stamp.epoch > 0, 'instance stamp has the epoch')
+assert(facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'main' && f.value === 'write ambient io:stdout; external'), 'println writes the console')
+assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'layer'), 'pure tensor code touches no resource')
+}
+"""
+
+[[tests]]
+name = "rewrite_inline"
+desc = "Facts computed before std::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the shapes whose node types did not change (Cone: revalidated); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the loops' own graphs and the others keep their facts."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["${case}", "test::facts_seed", "std::inline", "test::facts_check"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const l of [
+  'FACTS seeded core.shape 14', 'FACTS seeded core.instance 5', 'FACTS seeded core.reorder 2',
+  'FACTS seeded core.effects 9', 'FACTS seeded core.loopDomain 2', 'FACTS seeded core.resources 4',
+  'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
+  'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice.loop1.body valid=5 revalidated=0 stale=0',
+  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
+  'FACTS gone 0',
+  'FACTS lowered count valid=0 revalidated=0 stale=2', 'FACTS lowered count.loop1.body valid=1 revalidated=0 stale=0',
+  'FACTS lowered layer valid=6 revalidated=0 stale=0', 'FACTS lowered twice.loop1.body valid=5 revalidated=0 stale=0',
+  '60.0',
+]) line(l)
+assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
+assert(!out.includes('shared lineage'), 'one graph per lineage')
+}
+"""
+
+[[tests]]
+name = "rewrite_opt"
+desc = "The same across std::opt: its passes ask to edit every graph, but only the graphs whose content changed get a new revision; nothing stale is reused."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["${case}", "test::facts_seed", "std::opt", "test::facts_check"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const l of [
+  'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
+  'FACTS graph count.loop1.cond valid=1 revalidated=0 stale=0',
+  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS gone 0', '60.0',
+]) line(l)
+assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
+}
+"""
+
+[[tests]]
+name = "rewrite_macro_simplify"
+desc = "The same across std::macro and std::opt::simplify."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["${case}", "test::facts_seed", "std::macro", "std::opt::simplify", "test::facts_check"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const l of ['FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS gone 0', '60.0']) line(l)
+assert(/FACTS graph main valid=0 revalidated=\d+ stale=[1-9]/.test(out), 'main changed')
+assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
+}
+"""
+
+[[tests]]
+name = "persistence_round_trip"
+desc = "test::facts_persist: every encodable fact (shapes, reorder freedom, effects: class ii; permissions: class i) is exported in a process-independent form whose text reads back to the same fact; loaded into an empty store against the same program, each is stored (or matches the graph) and equals a fresh computation; after main changes, the facts about main and the root (which refers to it) are refused as 'graph changed' and the others are stored."
+kind = "behavior"
+case = "../../../cases/facts/tensors_and_loops.cml"
+args = ["${case}", "test::facts_persist"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const l of [
+  'FACTS exported core.shape 14', 'FACTS exported core.reorder 2', 'FACTS exported core.effects 9',
+  'FACTS exported core.permissions 1', 'FACTS text round trip 26/26',
+  'FACTS imported stored 25', 'FACTS imported matches the graph 1',
+  'FACTS loaded equal to a fresh computation 25/25',
+  'FACTS reloaded main graph changed 6', 'FACTS reloaded __root__ graph changed 1',
+  'FACTS reloaded layer stored 5', 'FACTS reloaded total stored 3', 'FACTS reloaded total matches the graph 1',
+  '60.0',
+]) line(l)
+assert(!/FACTS reloaded (layer|total|twice|count)\S* graph changed/.test(out), 'unchanged graphs load')
+}
+"""

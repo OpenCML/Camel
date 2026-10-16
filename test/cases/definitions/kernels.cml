@@ -1,0 +1,60 @@
+// The kernels of the operators that have a definition (stdlib/definitions/tensor.cml), on
+// inputs with special values, several shapes and axes, and pseudo-random values. Run as it is,
+// the kernels compute; run after test::expand_definitions, the definitions do: the two outputs
+// must be the same text, every element printed exactly (the shortest decimal that reads back to
+// the same float; a NaN prints without its sign or payload).
+import { Tensor, reshape, zeros, softmax, log_softmax, mean, relu, sigmoid, numel, random, seed } from tensor
+
+func elems(t: Tensor<f32>): float[] {
+    let v = reshape(t, [numel(t)])
+    return range(0, numel(t))->map<(i: int): float => v[i]>
+}
+
+func show(name: string, t: Tensor<f32>): int sync {
+    println(format<name, elems(t)>("{} {}"))
+    return 0
+}
+
+func main(): int sync {
+    // NaN (0/0 at index 11), infinities (3e38 * 10 at 6 and 7), signed zeros, subnormals.
+    let base = reshape([1.5, -2.25, 0.0, -0.0, 1.0e-40, -1.0e-40, 3.0e38, -3.0e38, 88.7, -103.9, 0.5, 7.0], [12])
+    let k = reshape([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 10.0, 10.0, 1.0, 1.0, 1.0, 1.0], [12])
+    let z = reshape([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0], [12])
+    let specials = base * k * (z / z)
+    let clean = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4, -0.7, 0.2, -0.5, 0.9, 1.3, -0.1], [3, 4])
+    let large = reshape([1000.0, 1001.0, 999.5, -1000.0, 88.0, 89.0, -87.0, 0.0], [2, 4])
+    seed(7)
+    let r = random([4, 5], -10.0, 10.0)
+    let cube = reshape(r, [2, 2, 5])
+    let empty = zeros([0, 4])
+
+    show("relu specials", relu(specials))
+    show("relu random", relu(r))
+    show("sigmoid specials", sigmoid(specials))
+    show("sigmoid random", sigmoid(r))
+    show("sigmoid large", sigmoid(large))
+    show("softmax clean", softmax(clean))
+    show("softmax clean 0", softmax(clean, 0))
+    show("softmax clean -2", softmax(clean, -2))
+    show("softmax large", softmax(large, 1))
+    show("softmax random", softmax(r, 1))
+    show("softmax cube 1", softmax(cube, 1))
+    show("softmax cube 2", softmax(cube, 2))
+    show("softmax specials", softmax(reshape(specials, [3, 4]), 1))
+    show("softmax specials 0", softmax(reshape(specials, [3, 4]), 0))
+    show("softmax empty", softmax(empty, 1))
+    show("log_softmax clean", log_softmax(clean))
+    show("log_softmax clean 0", log_softmax(clean, 0))
+    show("log_softmax large", log_softmax(large, 1))
+    show("log_softmax random", log_softmax(r, 1))
+    show("log_softmax random 0", log_softmax(r, 0))
+    show("log_softmax cube 1", log_softmax(cube, 1))
+    show("log_softmax specials", log_softmax(reshape(specials, [3, 4]), 1))
+    show("log_softmax empty", log_softmax(empty, 1))
+    println(mean(clean))
+    println(mean(r))
+    println(mean(large))
+    println(mean(specials))
+    println(mean(reshape(base, [3, 4])))
+    return 0
+}

@@ -61,6 +61,8 @@ class UserDefinedModule : public Module {
     // Set while compile() runs: a module imported back by a module it imports is not compiled
     // again from inside its own compilation.
     bool compiling_ = false;
+    // compileAsLibrary(): the graph builder of its own the module was built by, kept with it.
+    std::shared_ptr<void> libraryBuilder_;
 
   public:
     UserDefinedModule(
@@ -78,6 +80,16 @@ class UserDefinedModule : public Module {
     bool compile(CompileStage till = CompileStage::Done);
     /// Whether compile() is running for this module.
     bool compiling() const { return compiling_; }
+    /**
+     * Compiles the module as a library of its own (docs/design/op-semantics, section 9): parsed,
+     * declared and built by a graph builder that is not the program's, without an entry
+     * function, so that it can be compiled after the program that uses it was built (the
+     * definition libraries of operators). It imports modules written in C++ only: a module
+     * written in Camel it imported would be declared to the program's builder, so such an
+     * import is refused. Done at once when the module is done already (the program imported
+     * and built it). False when it is in error; its diagnostics say why.
+     */
+    bool compileAsLibrary();
     /// Called by the program's graph builder once the program is built: `root` is its root
     /// graph, and the module is done.
     void setProgramGraph(const std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root);

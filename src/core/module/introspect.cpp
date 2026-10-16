@@ -112,6 +112,33 @@ std::string semanticsJson(const sem::OperatorSemantics &s) {
         }
         out += ",\"laws\":" + jsonList(laws);
     }
+    if (s.resources) {
+        out += ",\"resources\":" + jsonString(sem::toString(*s.resources));
+    }
+    if (s.definition) {
+        // "library::function(norm 0, norm 1 = -1)": the function and how operands bind it.
+        std::string params;
+        for (const sem::DefinitionParam &p : s.definition->params) {
+            params += std::format(
+                "{}{} {}",
+                params.empty() ? "" : ", ",
+                p.kind == sem::DefinitionParam::Kind::Norm ? "norm" : "with",
+                p.operand);
+            if (p.fallback) {
+                params += " = " + std::visit(
+                                      [](const auto &v) {
+                                          if constexpr (std::is_same_v<std::decay_t<decltype(v)>, bool>) {
+                                              return std::string(v ? "true" : "false");
+                                          } else {
+                                              return std::format("{}", v);
+                                          }
+                                      },
+                                      *p.fallback);
+            }
+        }
+        out += ",\"definition\":" +
+               jsonString(std::format("{}::{}({})", s.definition->module, s.definition->function, params));
+    }
     return out + ",\"algorithm\":" + jsonString(n.algorithm) + "}";
 }
 

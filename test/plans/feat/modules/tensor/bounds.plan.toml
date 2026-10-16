@@ -64,13 +64,24 @@ timeout_ms = 4000
 
 [[tests]]
 name = "unknown_runtime"
-desc = "With an unknown extent (a tensor loaded at run time) nothing changes: slice clamps (shape [0]) and an index outside the extent is a run-time error of the idx operator."
+desc = "With an unknown extent (a tensor loaded at run time) the checks move to run time: an empty slice inside the extent is shape [0], and an index outside the extent is a run-time error of the idx operator."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/bounds/unknown_runtime.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["ran", "[0]", "idx: tensor index out of bounds"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "slice_runtime"
+desc = "With an unknown extent, a slice bound outside the axis is a located run-time fault, SliceOutOfRange, as for an array (design principles 2.10; the kernel used to clamp). A negative bound still counts from the end, and an end before the start is the empty range (2.11): slice(b, 0, -2, 0) is shape [0]."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/bounds/slice_runtime.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["ran", "[0]", "SliceOutOfRange", "The range 8 to 9 is out of range for axis 0 of a tensor of length 3", "slice_runtime.cml:7:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]

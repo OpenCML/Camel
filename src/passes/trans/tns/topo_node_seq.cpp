@@ -202,6 +202,25 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
                 }
                 return res;
             }
+            case GCNodeKind::Loop: {
+                const auto *cond = runtimeGraph->loopCondGraphOf(nodeRef);
+                const auto *body = runtimeGraph->loopBodyGraphOf(nodeRef);
+                string res       = format(
+                    "LOOP: {} cond={} body={} slot={}",
+                    camel::core::loopKindName(runtimeGraph->loopKindOf(nodeRef)),
+                    cond ? cond->name() : string("-"),
+                    body ? body->name() : string("<null>"),
+                    node.dataIndex);
+                const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
+                const auto withInputs = runtimeGraph->withInputsOf(nodeRef);
+                if (!normInputs.empty()) {
+                    res += format(", nargs=[{}]", formatInputs(normInputs));
+                }
+                if (!withInputs.empty()) {
+                    res += format(", wargs=[{}]", formatInputs(withInputs));
+                }
+                return res;
+            }
             default:
                 return format("NODE: kind={} slot={}", static_cast<int>(node.kind), node.dataIndex);
             }

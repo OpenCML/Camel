@@ -77,6 +77,8 @@ std::string_view kindName(GCNodeKind kind) {
         return "GATE";
     case GCNodeKind::Dref:
         return "DREF";
+    case GCNodeKind::Loop:
+        return "LOOP";
     default:
         return "node";
     }

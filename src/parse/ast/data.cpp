@@ -204,14 +204,8 @@ namespace camel::parse::ast {
 
 const std::string LoopExprLoad::toString() const {
     std::string result = "LoopExpr: ";
-    if (tuple_) {
-        result += "(";
-    }
     for (size_t i = 0; i < state_.size(); ++i) {
         result += (i ? ", " : "") + state_[i].toString();
-    }
-    if (tuple_) {
-        result += ")";
     }
     if (hasFor()) {
         result += " for " + binder_.toString();

@@ -1419,12 +1419,8 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
         dataNode = visitTryExpr(ast);
         break;
     case AST::DataType::LoopExpr:
-        // The syntax and the AST node (AST::LoopExprLoad) are in place; the LOOP node of the
-        // graph is not yet.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("loop", "loops are not implemented yet");
-        throw BuildAbortException();
+        dataNode = visitLoopExpr(ast);
+        break;
     case AST::DataType::Literal:
         dataNode = visitLiteral(ast);
         break;
@@ -2247,6 +2243,62 @@ node_ptr_t Builder::visitIfExpr(const AST::node_ptr_t &ast) {
         {nodeOrigin(condNode), nodeOrigin(trueCase), nodeOrigin(elseCase)});
     LEAVE("IfExpr");
     return brchNode;
+}
+
+/*
+LoopExpr(state, binder) : Repeated Data inits, Optional Data sequence, Optional Data condition,
+                          StmtBlock body ;
+A loop (design principles 2.10, 2.13) becomes one LOOP node (camel/compile/gct/node.h,
+Node::loopKind): the first values and the sequence are expressions where the loop is; the
+condition and the body are scopes of their own, the way the arms of an `if` are, each with
+the numeric permissions in force here (2.13: a loop body written in a block or a function
+under @numeric is part of it). The names of the state and of the element are declared by the
+graph builder, which gives the condition and the body their own graphs.
+*/
+node_ptr_t Builder::visitLoopExpr(const AST::node_ptr_t &ast) {
+    ENTER("LoopExpr");
+    const auto &load = ast->loadAs<AST::LoopExprLoad>();
+    const auto &condAst = ast->optAtAs<AST::DataLoad>(2);
+    const bool hasFor   = load->hasFor();
+    const auto kind     = hasFor ? (condAst ? camel::core::LoopKind::ForWhile
+                                            : camel::core::LoopKind::For)
+                                 : camel::core::LoopKind::While;
+    std::vector<std::string> state;
+    for (const Reference &name : load->state()) {
+        state.push_back(name.toString());
+    }
+    node_ptr_t loopNode =
+        tree_->makeLoop(kind, state, hasFor ? load->binder().toString() : std::string());
+    setOriginFromAst(context_, loopNode, ast, camel::source::OriginKind::GctNode, "gct.loop");
+    const ValueUseScope valueUseScope(*this);
+    valueUse_ = {};
+
+    // The first values, then the sequence: evaluated once, where the loop is.
+    for (const auto &init : *ast->atAs<AST::RepeatedLoad>(0)) {
+        *loopNode << visitData(init);
+    }
+    if (hasFor) {
+        *loopNode << visitData(ast->optAtAs<AST::DataLoad>(1));
+    }
+    // The condition: a scope of its own whose one statement is the condition.
+    if (condAst) {
+        node_ptr_t condExec = makeExec();
+        setOriginFromAst(
+            context_,
+            condExec,
+            condAst,
+            camel::source::OriginKind::GctNode,
+            "gct.loop.condition");
+        *condExec << visitData(condAst);
+        *loopNode << condExec;
+    }
+    // The body: its value is the next state, so a `return` in it ends the body with that
+    // value, as in an arm whose value is used.
+    enterArmOf(ast, false);
+    *loopNode << visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(3));
+    registerGctSemantic(context_, loopNode, ast);
+    LEAVE("LoopExpr");
+    return loopNode;
 }
 
 /*

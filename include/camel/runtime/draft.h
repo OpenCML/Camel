@@ -321,6 +321,10 @@ class GraphDraft {
     gc_node_ref_t addFuncNode(
         GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0);
+    /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
+    /// caller links its inputs and keeps the two graphs among the draft's dependencies.
+    gc_node_ref_t addLoopNode(
+        const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addOperNode(
         camel::core::type::Type *type, operator_t op, std::string_view uri,
         gc_slot_idx_t dataIndex = 0);

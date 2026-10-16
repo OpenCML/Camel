@@ -1,0 +1,30 @@
+// The program the fact tests read: tensor shapes, index instances, a reduction, effects, two
+// loops (one over a constant array, one with a condition) and granted permissions.
+module tensors_and_loops
+import { Tensor, reshape, sum, matmul } from tensor
+
+func layer(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 4]>): Tensor<f32, const [2, 4]> {
+    return matmul(x, w)
+}
+
+@numeric(reassociate)
+func total(x: Tensor<f32, const [2, 4]>): float {
+    return sum(x)
+}
+
+func twice(a: Tensor<f32>): Tensor<f32> {
+    return loop y = a for k in [1, 2] do y + a
+}
+
+func count(n: int): int {
+    return loop i = 0 while i < n do i + 1
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let w = reshape([1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0], [3, 4])
+    println(total(layer(x, w)))
+    println(twice(x))
+    println(count(5))
+    return 0
+}

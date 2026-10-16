@@ -1,12 +1,14 @@
-// The three forms of the provisional `loop` expression (design principles 2.10). The syntax and
-// the AST are in place; the graph is not, so the compiler stops at the first loop.
+// The four shapes of the `do` form of a loop (design principles 2.13): one state over an array,
+// two states under a condition (the value is their tuple), a struct as the state (`{` after
+// `do` is read as after `then`), and `for ... while` with an `if` as the body.
 func main(): int sync {
     let n = 4
     let xs = [1, 2, 3]
-    let (i, acc) = loop (i, acc) = (1, 0) while i <= n { (i + 1, acc + i) }
-    let total = loop acc = 0 for x in xs { acc + x * x }
-    loop found = -1 for x in xs while found < 0 {
-        if x > 9 then x else found
-    }
+    let ds = [5, 6]
+    let total    = loop acc = 0 for x in xs do acc + x * x
+    let (i, acc) = loop i = 1, acc = 0 while i <= n do (i + 1, acc + i)
+    let p        = loop p = { x: 0 } for d in ds do { x: p.x + d }
+    let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else hit
+    println(total, i, acc, p.x, found)
     return 0
 }
