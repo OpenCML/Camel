@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Mar. 17, 2024
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cctype>
 #include <charconv>
+#include <chrono>
 #include <cstdlib>
 #include <string_view>
 #include <vector>
@@ -301,17 +302,17 @@ string configFilePath = "";    // Configuration file path
 } // namespace Check
 
 namespace Inspect {
-bool dumpTokens = false; // Whether to dump tokens
-bool dumpCST    = false; // Whether to dump Concrete Syntax Tree
-bool dumpAST    = false; // Whether to dump Abstract Syntax Tree
-bool dumpGCT    = false; // Whether to dump Graph Construction Tree
-bool dumpGIR    = false; // Whether to dump Graph Intermediate Representation
-bool dumpTNS    = false; // Whether to dump Topological Node Sequence
-bool dumpOps    = false; // Whether to dump the operators of the imported modules
+bool dumpTokens    = false; // Whether to dump tokens
+bool dumpCST       = false; // Whether to dump Concrete Syntax Tree
+bool dumpAST       = false; // Whether to dump Abstract Syntax Tree
+bool dumpGCT       = false; // Whether to dump Graph Construction Tree
+bool dumpGIR       = false; // Whether to dump Graph Intermediate Representation
+bool dumpTNS       = false; // Whether to dump Topological Node Sequence
+bool dumpOps       = false; // Whether to dump the operators of the imported modules
 bool dumpInstances = false; // Whether to dump the index semantics of every operator node
 bool dumpFacts     = false; // Whether to compute and dump the graph facts of the program
-bool geneCode   = false; // Whether to generate code from GIR
-int passUntil   = -1;    // Pass until the given pass
+bool geneCode      = false; // Whether to generate code from GIR
+int passUntil      = -1;    // Pass until the given pass
 } // namespace Inspect
 
 } // namespace CmdLineArgs
@@ -341,7 +342,7 @@ std::vector<char *> takeWarningArguments(int argc, char *argv[]) {
 
 /// Turns the diagnostics options into the process-wide render configuration and warning
 /// policy. Returns false (after printing why) on a value or a warning name that does not exist.
-bool applyDiagnosticOptions(bool configureRuntime) {
+bool applyDiagnosticOptions() {
     using namespace camel::core::error;
 
     // Format: -E/--error-format (run) or -O/--output-format (check), else the environment.
@@ -370,9 +371,7 @@ bool applyDiagnosticOptions(bool configureRuntime) {
                   << "'. Expected auto, always or never." << std::endl;
         return false;
     }
-    if (configureRuntime) {
-        setDiagnosticRenderConfig(format == "short" ? DiagFormat::Short : DiagFormat::Rich, color);
-    }
+    setDiagnosticRenderConfig(format == "short" ? DiagFormat::Short : DiagFormat::Rich, color);
 
     if (Diag::maxErrors < 0 || Diag::maxWarnings < 0) {
         std::cerr << "Error: --max-errors and --max-warning take a non-negative number."
@@ -383,14 +382,12 @@ bool applyDiagnosticOptions(bool configureRuntime) {
     // Warning names are checked against the catalog: a misspelt -Wno-<name> that silently did
     // nothing would be worse than no option.
     std::vector<std::string> known;
-    auto checkName = [&](const std::string &spec, const std::string &name) {
-        if (known.empty()) {
-            for (const DiagCatalogEntry &entry : diagnosticCatalog()) {
-                if (entry.severity == Severity::Warn) {
-                    known.push_back(normalizeDiagnosticName(entry.name));
-                }
-            }
+    for (const DiagCatalogEntry &entry : diagnosticCatalog()) {
+        if (entry.severity == Severity::Warn) {
+            known.push_back(normalizeDiagnosticName(entry.name));
         }
+    }
+    auto checkName = [&](const std::string &spec, const std::string &name) {
         const std::string key = normalizeDiagnosticName(name);
         if (std::find(known.begin(), known.end(), key) != known.end()) {
             return true;
@@ -429,9 +426,7 @@ bool applyDiagnosticOptions(bool configureRuntime) {
             return false;
         }
     }
-    if (configureRuntime) {
-        setWarningPolicy(std::move(policy));
-    }
+    setWarningPolicy(std::move(policy));
     return true;
 }
 
@@ -533,6 +528,16 @@ void printCliArgs(Command selected) {
 }
 
 bool parseArgs(int argc, char *argv[]) {
+    const bool startupProfile = std::getenv("CAMEL_STARTUP_PROFILE") != nullptr;
+    auto startupLast          = std::chrono::steady_clock::now();
+    auto startupMark          = [&](const char *stage) {
+        if (!startupProfile)
+            return;
+        const auto now = std::chrono::steady_clock::now();
+        std::cerr << "ARGS " << stage << " "
+                  << std::chrono::duration<double, std::micro>(now - startupLast).count() << "us\n";
+        startupLast = std::chrono::steady_clock::now();
+    };
     bool showVersion = false; // Version information
     bool showHelp    = false; // Help information
     bool showDocs    = false; // Documentation information
@@ -669,10 +674,12 @@ bool parseArgs(int argc, char *argv[]) {
          values("input", targetFiles) % "input file");
 
     auto cli = run | info | check | inspect;
+    startupMark("construct");
 
     std::vector<char *> args = takeWarningArguments(argc, argv);
     argc                     = static_cast<int>(args.size());
     argv                     = args.data();
+    startupMark("warnings");
 
     if (!parse(argc, argv, cli)) {
         cout << "Usage: " << endl;
@@ -682,16 +689,14 @@ bool parseArgs(int argc, char *argv[]) {
         return false;
     }
 
-    // Informational text lives in the CLI. Validate its options without loading libcamel;
-    // explaining a diagnostic or checking a warning name still needs the catalog.
-    const bool configureRuntime = selectedCommand != Command::Info || !Diag::explain.empty();
-    if (configureRuntime) {
-        applyCamelCliLogging(argc, argv);
-    }
-    if (!applyDiagnosticOptions(configureRuntime)) {
+    startupMark("parse");
+    applyCamelCliLogging(argc, argv);
+    startupMark("logging");
+    if (!applyDiagnosticOptions()) {
         exitCode = 1;
         return false;
     }
+    startupMark("diagnostics");
 
     if (!Diag::explain.empty()) {
         exitCode = explainDiagnostic(Diag::explain) ? 0 : 1;

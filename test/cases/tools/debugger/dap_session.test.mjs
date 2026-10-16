@@ -39,17 +39,6 @@ await runTest(async (t) => {
         )
         check(s.configurationDone.success, on('configurationDone starts the program'), s.configurationDone)
 
-        const snapshots = await dap.request('camel/passGraphs');
-        check(snapshots.success && snapshots.body?.graphs?.[0]?.pass === null,
-            on('native DAP exposes the initial GIR snapshot'), snapshots);
-        const initialGraph = await dap.request('camel/passGraph', { index: 0 });
-        check(initialGraph.success && initialGraph.body?.dot?.includes('origin='),
-            on('snapshot preserves source origins'), initialGraph);
-        const invalidSnapshot = await dap.request('camel/passGraph', { index: -1 });
-        check(!invalidSnapshot.success, on('negative snapshot index is rejected'));
-        check((await dap.request('camel/setNodeBreakpoints', { origins: [] })).success,
-            on('node breakpoint configuration uses native DAP'));
-
         // ---- the stop ----------------------------------------------------------------
         const stop = await dap.waitStop()
         check(stop, on('the program stops'))
@@ -63,6 +52,18 @@ await runTest(async (t) => {
         checkEq(stop.names, ['main', '__root__'], on('the stack is main called from the entry graph'))
         checkEq(stop.top.source?.path, CALLS, on('the frame names the source file'))
         check(stop.top.column > 1, on('with the column of the node about to run'), stop.top)
+
+        const snapshots = await dap.request('camel/passGraphs');
+        check(snapshots.success && snapshots.body?.graphs?.[0]?.pass === null,
+            on('native DAP exposes the initial GIR snapshot'), snapshots);
+        const initialGraph = await dap.request('camel/passGraph', { index: 0 });
+        check(initialGraph.success && initialGraph.body?.dot?.includes('origin='),
+            on('snapshot preserves source origins'), initialGraph);
+        const invalidSnapshot = await dap.request('camel/passGraph', { index: -1 });
+        check(!invalidSnapshot.success, on('negative snapshot index is rejected'));
+        check((await dap.request('camel/setNodeBreakpoints', { origins: [] })).success,
+            on('node breakpoint configuration uses native DAP'));
+
 
         const threads = await dap.request('threads')
         checkEq(threads.body?.threads, [{ id: 1, name: 'main' }], on('there is one thread'))

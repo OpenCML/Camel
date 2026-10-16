@@ -244,10 +244,17 @@ int runWorkerMode(int argc, char *argv[]) {
     EXEC_WHEN_DEBUG({
         camel::DebugBreakpoint::RegisterType("alloc");
         camel::DebugBreakpoint::RegisterType("alloc_before");
+        camel::DebugBreakpoint::RegisterType("alloc_boundary");
         camel::DebugBreakpoint::RegisterType("gir_node");
         camel::DebugBreakpoint::SetHandler([](const char *type, const void *ctx) {
             if (!type)
                 return;
+            if (std::strcmp(type, "alloc_boundary") == 0) {
+                auto *evt = static_cast<const mm::AllocEvent *>(ctx);
+                if (evt)
+                    core::DebugCore::instance().allocationEvent(evt->size, evt->space, evt->ptr);
+                return;
+            }
             if (std::strcmp(type, "alloc_before") == 0) {
                 auto *evt = static_cast<const mm::PreAllocEvent *>(ctx);
                 if (evt &&

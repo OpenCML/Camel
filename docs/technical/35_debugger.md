@@ -429,7 +429,7 @@ Two exception filters:
   breakpoints, the stack, stepping, stops, variables, events. It knows neither HTTP nor DAP.
   It is the `ExecutionObserver` of the scheduler in the worker.
 - **The HTTP API** of the worker exposes the core as `/api/debug/<command>` (JSON in, JSON out)
-  and `/api/debug/events` (long poll). The existing endpoints the Vue front end uses
+  and `/api/debug/events` (long poll). The retained HTTP endpoints for REPL and automation
   (`gir-breakpoints`, `step`, `continue`, `step-paused`) are now implemented by the core.
 - **The DAP adapter** (`camel-db --dap`) speaks DAP on stdin/stdout, spawns one worker, forwards
   the worker's standard output and error as `output` events, and translates requests to
@@ -642,14 +642,14 @@ been run since), macOS, and the VS Code user interface (the tests speak DAP to t
 | DAP adapter (7.3) | implemented, tested |
 | `std::jit`, `std::prl` | run as `std::fvm` with a notice; tested |
 | After `std::inline` / `std::opt` | positions kept, breakpoints re-answered, inlined code labelled; tested for no crash and for the surviving positions |
-| Graph view over DAP (`camel/graph`) | implemented, one check; no editor front end uses it yet |
-| Web UI: line breakpoints, source view, a call stack | not done: the Vue front end still offers node breakpoints and node steps only, so it has no frames to fold (the HTTP API takes `configure {frames}` like the other clients) |
+| Graph view over DAP | OpenCML-Ext uses `camel/structuredGraph` and immutable pass snapshots; source/type and hierarchy UI tested |
+| Graphical debugger | OpenCML-Ext + native VS Code debugging; standalone Web frontend retired after migration acceptance |
 | Conditional breakpoints, hit counts, logpoints, set value, restart, attach | not done |
 | Stop at an error value that reaches the exit of `main` unhandled | not done: reported as without a debugger (stderr, exit code 1) |
 | A frame per inlined call (4.3), the names of `let`s bound to inlined calls | not done: needs the inliner to record call sites |
 
 **Tests** (`test/plans/feat/tools/debugger.plan.toml`, in the default set): `http_gateway` (the
-Web UI's API), `dap_session`, `dap_stepping`, `dap_frames` (folded arms, the switch, lines that
+retained HTTP API), `dap_session`, `dap_stepping`, `dap_frames` (folded arms, the switch, lines that
 did not execute, full names, function breakpoints), `dap_faults`, `dap_protocol`, and
 `cli_session` (the REPL, through its standard input). The DAP tests start
 `camel-db --dap` and speak the protocol on its pipes (`test/tools/debugger/client.mjs`); every
@@ -732,6 +732,11 @@ byte/object paging currently uses the profiler's contiguous bump-region API. Inv
 requests while running and requests after termination fail explicitly.
 
 Allocation stops require a build without NDEBUG. Release reports `supported:false` and refuses
-enabling them. The native hook stops before allocation on the program thread, filters named
-spaces and skips index maintenance/reentrant hooks. `camel/stopped.allocation` identifies the
-space, requested size and `phase:"before"`; inspection uses that same stopped worker.
+enabling them. The native hook stops after the outermost allocator has released its locks on the program
+thread, filters named spaces and skips index maintenance/reentrant hooks. Nested allocators
+report one completed allocation at that boundary, so heap inspection cannot wait on a lock
+held by its own paused allocation. `camel/stopped.allocation` identifies the
+space, requested size and `phase:"after"`; inspection uses that same stopped worker.
+
+The standalone debugger frontend and Python static proxy/embed scripts have been retired.
+OpenCML-Ext owns graph and memory UX; backend HTTP and REPL remain supported and tested.

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 16, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,10 +23,14 @@
 
 #include "camel/core/debug_breakpoint.h"
 #include <atomic>
+#include <exception>
 
 namespace camel::core::mm {
 
 namespace {
+
+thread_local unsigned allocationDepth = 0;
+thread_local AllocEvent completedAllocation{};
 
 using HookFn = void (*)(const AllocEvent *);
 std::atomic<HookFn> &getPostAllocHook() {
@@ -35,6 +39,20 @@ std::atomic<HookFn> &getPostAllocHook() {
 }
 
 } // namespace
+
+AllocationDebugScope::AllocationDebugScope() {
+    if (allocationDepth++ == 0)
+        completedAllocation = {};
+}
+
+AllocationDebugScope::~AllocationDebugScope() noexcept(false) {
+    if (--allocationDepth != 0)
+        return;
+    const auto event    = completedAllocation;
+    completedAllocation = {};
+    if (event.ptr && std::uncaught_exceptions() == 0)
+        camel::DebugBreakpoint::Hit("alloc_boundary", &event);
+}
 
 void setPostAllocDebugHook(void (*fn)(const AllocEvent *evt)) { getPostAllocHook().store(fn); }
 
@@ -45,6 +63,8 @@ void invokePreAllocHook(const PreAllocEvent &evt) {
 }
 
 void invokePostAllocHook(const AllocEvent &evt) {
+    if (allocationDepth)
+        completedAllocation = evt;
     camel::DebugBreakpoint::Hit("alloc", &evt);
     auto *h = getPostAllocHook().load(std::memory_order_relaxed);
     if (h)

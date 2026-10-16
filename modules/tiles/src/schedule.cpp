@@ -600,8 +600,11 @@ std::string inspect(const Program &p) {
             << std::quoted(
                    core::sem::numericClassName(
                        contract.declaration ? contract.declaration->numeric.cls
-                                            : core::sem::NumericClass::Opaque))
-            << '}';
+                                            : core::sem::NumericClass::Opaque));
+        if (contract.declaration &&
+            contract.declaration->numeric.cls == core::sem::NumericClass::Bounded)
+            out << ",\"ulp_bound\":" << contract.declaration->numeric.ulpBound;
+        out << '}';
     }
     out << "]}";
     return out.str();

@@ -141,16 +141,10 @@ std::string dumpJsonRuntimeGraph(GCGraph *root, const camel::core::context::cont
                 for (size_t i = 0; i < inputs.size(); ++i) {
                     const auto source  = inputs[i];
                     const auto outputs = outputsOf(source);
-                    auto at            = outputs.begin();
-                    // The same source can occupy several input slots of one target.
-                    // Match its occurrence, not always the first outgoing connection.
-                    size_t occurrence =
-                        static_cast<size_t>(std::count(inputs.begin(), inputs.begin() + i, source));
-                    while (at != outputs.end()) {
-                        if (*at == ref && occurrence-- == 0)
-                            break;
-                        ++at;
-                    }
+                    // The runtime use index lists each consumer once per edge class,
+                    // even when it reads this source in several ordered input slots.
+                    // Keep every input edge, sharing its consumer's source-side index.
+                    const auto at = std::find(outputs.begin(), outputs.end(), ref);
                     ASSERT(
                         at != outputs.end(),
                         "GIR JSON edge is missing its outgoing connection.");

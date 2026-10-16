@@ -90,6 +90,16 @@ std::string lineStateMessage(const LineResolution &r) {
 
 } // namespace
 
+void DebugCore::IndexMutex::lock() {
+    mutex_.lock();
+    held_.store(true, std::memory_order_release);
+}
+void DebugCore::IndexMutex::unlock() {
+    held_.store(false, std::memory_order_release);
+    mutex_.unlock();
+}
+bool DebugCore::IndexMutex::busy() const { return held_.load(std::memory_order_acquire); }
+
 DebugCore &DebugCore::instance() {
     static DebugCore core;
     return core;
@@ -139,7 +149,7 @@ json DebugCore::events(uint64_t after, int timeoutMs) {
 
 void DebugCore::beginCompile(const camel::core::context::context_ptr_t &ctx) {
     {
-        std::lock_guard<std::mutex> lock(indexMutex_);
+        std::lock_guard lock(indexMutex_);
         index_.begin(ctx);
     }
     ctx->setSemanticRecorder(index_.recorder());
@@ -152,7 +162,7 @@ void DebugCore::endCompile(GCGraph *root) {
         ctx->setSemanticRecorder(nullptr);
     }
     {
-        std::lock_guard<std::mutex> lock(indexMutex_);
+        std::lock_guard lock(indexMutex_);
         index_.compiled(root);
     }
     {
@@ -245,7 +255,7 @@ json DebugCore::breakpointJson(const FunctionBreakpoint &bp) const {
 void DebugCore::verify(LineBreakpoint &bp) {
     // mutex_ is held by the caller; the index has its own lock.
     bp.origins.clear();
-    std::lock_guard<std::mutex> lock(indexMutex_);
+    std::lock_guard lock(indexMutex_);
     if (!index_.isCompiled()) {
         bp.verified = false;
         bp.message  = "The program has not been compiled yet.";
@@ -267,7 +277,7 @@ void DebugCore::verify(FunctionBreakpoint &bp) {
     // mutex_ is held by the caller; the index has its own lock.
     bp.graphs.clear();
     bp.fullName.clear();
-    std::lock_guard<std::mutex> lock(indexMutex_);
+    std::lock_guard lock(indexMutex_);
     if (!index_.isCompiled()) {
         bp.verified = false;
         bp.message  = "The program has not been compiled yet.";
@@ -442,7 +452,7 @@ void DebugCore::tailCall() { pending_ = Pending::Tail; }
 void DebugCore::firstNodeOfRun(GCGraph *root) {
     runIndexed_ = true;
     {
-        std::lock_guard<std::mutex> lock(indexMutex_);
+        std::lock_guard lock(indexMutex_);
         index_.running(root);
     }
     // The graph the scheduler was given is known now: breakpoints are answered again.
@@ -458,7 +468,7 @@ DebugCore::ShadowFrame &DebugCore::pushFrame(GCGraph *graph, Frame *frame) {
     f.graph = graph;
     f.frame = frame;
     {
-        std::lock_guard<std::mutex> lock(indexMutex_);
+        std::lock_guard lock(indexMutex_);
         f.info = &index_.graph(graph);
     }
     f.lastFunction = f.info->function;
@@ -577,7 +587,7 @@ void DebugCore::beforeInstruction(const camel::execute::InstructionSite &site) {
         Arrival arrival;
         arrival.origin = site.origin;
         {
-            std::lock_guard<std::mutex> lock(indexMutex_);
+            std::lock_guard lock(indexMutex_);
             arrival.loc      = &index_.loc(site.origin);
             arrival.function = index_.functionOf(*arrival.loc);
         }
@@ -1065,7 +1075,7 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
     std::unordered_map<std::string, bool> armGraphs; // by stable id: a running arm
     std::unordered_set<origin_t> built;              // nodes in the graph before the passes
     {
-        std::lock_guard<std::mutex> lock(indexMutex_);
+        std::lock_guard lock(indexMutex_);
         bindings = index_.bindingsOfFunction(folded ? function->function : inner.info->function);
         for (const Binding *b : bindings) {
             armGraphs.emplace(b->graph, index_.isArm(b->graph));
@@ -1201,7 +1211,7 @@ std::vector<DebugCore::Variable> DebugCore::inlinedOf(const Chain &chain) {
             std::vector<const Binding *> bindings;
             std::string owner;
             {
-                std::lock_guard<std::mutex> lock(indexMutex_);
+                std::lock_guard lock(indexMutex_);
                 bindings = index_.bindingsOfNode(n.origin);
                 for (const Binding *b : bindings) {
                     if (b->function != f.info->function && b->function >= 0) {
@@ -1506,13 +1516,13 @@ json DebugCore::graphJson(uint64_t frameId) {
             {"slot", n.slot},
             {"state", state}};
         if (n.loc.valid()) {
-            std::lock_guard<std::mutex> lock(indexMutex_);
+            std::lock_guard lock(indexMutex_);
             j["path"] = index_.filePath(n.loc.file);
             j["line"] = n.loc.line;
         }
         json names = json::array();
         {
-            std::lock_guard<std::mutex> lock(indexMutex_);
+            std::lock_guard lock(indexMutex_);
             for (const Binding *b : index_.bindingsOfNode(n.origin)) {
                 names.push_back(b->name);
             }

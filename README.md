@@ -90,6 +90,10 @@ npm run build        # the executable is out/latest/bin/camel
 
 Put `out/latest/bin` on your `PATH` (and set `CAMEL_HOME` to `out/latest`). A Python wheel named `camel-lang` can be built from the same tree; see [docs/pypi-packaging.md](docs/pypi-packaging.md).
 
+### VS Code
+
+Install [OpenCML-Ext from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=Kogler7.open-cml-extension) for syntax highlighting, language services, interactive GIR browsing, and debugging. Configure `opencmlLanguageServer.camelPath` to point to your built `camel` executable; the extension discovers `camel-ls` and `camel-db` alongside it. Recent runtime builds also support stepping through compiler passes, inspecting the paused GIR, and viewing memory. See the [extension README](https://github.com/OpenCML/OpenCML-Ext#readme) for setup and the [debugging guide](docs/debugging.en.md) for runtime capabilities.
+
 ### Hello, Camel
 
 ```camel

@@ -24,6 +24,7 @@
 #include <barrier>
 #include <thread>
 using namespace camel::tiles;
+static const float hostSentinel = 0.0f;
 
 template<class F> void rejects(const Program &original, F mutate, const char *reason) {
     auto p = original;
@@ -41,6 +42,23 @@ void checkMatrixContracts();
 
 int main() {
     try {
+        {
+            std::vector<float> input{1.0f, -0.0f};
+            const auto expected = std::as_bytes(std::span(input));
+            const std::vector<std::byte> copy(expected.begin(), expected.end());
+            auto host = retainHostValue({2}, DType::F32, expected);
+            input[0] = 99.0f;
+            if (downloadValue(*host) != copy)
+                throw std::runtime_error("host resident storage must own an immutable snapshot");
+            auto invalid = *host;
+            invalid.shape = {3};
+            bool rejected = false;
+            try { (void)downloadValue(invalid); }
+            catch (const std::runtime_error &) { rejected = true; }
+            if (!rejected) throw std::runtime_error("host resident storage accepted invalid extent");
+            if (!downloadValue(*retainHostValue({0}, DType::F32, {})).empty())
+                throw std::runtime_error("empty resident host storage");
+        }
         checkKernelIR();
         checkMatrixContracts();
         using kernel::ScalarExpr;
@@ -319,11 +337,11 @@ int main() {
         if (guarded.source.find("=fmaf(") == std::string::npos)
             throw std::runtime_error("ignored the supported arithmetic declaration");
         std::cout << "tiles operator contracts: absent, replaced and incompatible declarations rejected\n";
-        std::weak_ptr<int> cacheOwner;
+        std::weak_ptr<DeviceStorage> cacheOwner;
         {
             Program borrowed;
             auto value = std::make_shared<DeviceValue>();
-            auto owner = std::make_shared<int>(1);
+            auto owner = retainHostValue({1}, DType::F32, std::as_bytes(std::span(&hostSentinel, 1)))->owner;
             cacheOwner = owner;
             value->owner = owner;
             value->address = 1;
@@ -433,7 +451,7 @@ int main() {
         auto resident = std::make_shared<DeviceValue>();
         resident->shape = {2,3};
         resident->address = 1; // Validator-only sentinel, never passed to CUDA.
-        resident->owner = std::make_shared<int>(0);
+        resident->owner = retainHostValue({1}, DType::F32, std::as_bytes(std::span(&hostSentinel, 1)))->owner;
         borrowed.nodes[0].resident = resident;
         borrowed.nodes[0].data.clear();
         schedule(borrowed);

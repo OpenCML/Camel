@@ -77,7 +77,7 @@ Camel 的程序是一张图，调试器不把它伪装成别的东西。"下一�
 | `print <名字>`（`p`） | 一个名字的值，可带成员访问（`p.x`、`t.0`、`xs[2]`） |
 | `frames [functions\|subgraphs]` | 显示或切换分支的臂怎样显示（[3.3](#33-调用栈是函数调用的链)） |
 
-让程序运行的命令会等到程序停下或结束，途中打印程序的输出。`help` 列出全部命令（其余的是 Web 界面任务
+让程序运行的命令会等到程序停下或结束，途中打印程序的输出。`help` 列出全部命令（其余的是网关任务
 用的命令）；Ctrl+C 结束等待，不结束程序。用
 [`folded.cml`](../test/cases/tools/debugger/fixtures/folded.cml) 的一次会话（每条命令会以它发出的核心命令
 回显一行 `(camel-db) debug ...`，这里略去）：
@@ -171,7 +171,11 @@ node test/tools/debugger/dap_session.mjs test/cases/tools/debugger/fixtures/recu
 
 其他编辑器：把 DAP 客户端配置为运行 `camel-db --dap`，`launch` 请求带上表中的属性。
 
-`camel-db` 另有一个 Web 界面，带图视图与内存查看，见
+OpenCML-Ext 通过原生适配器提供 GIR 和内存界面。配合 pass 序列设置
+`stopOnPassEntry: true`、`passBreakpoints: [2]`，可在初始图或返回图的遍后边界暂停。
+GIR 调试栏区分真实执行位置与历史快照，选择历史不会继续执行。“查看调试内存”命令
+提供暂停区域用量、字节/对象分页与显式刷新；分配断点需 Debug 构建，在 allocator
+释放锁后暂停。详见
 [`tools/debugger/README.md`](../tools/debugger/README.md)。
 
 ## 3. 你看到的是什么，为什么
@@ -312,4 +316,5 @@ node test/tools/debugger/dap_session.mjs test/cases/tools/debugger/fixtures/recu
 - 未经处理就到达 `main` 出口的错误值（`main(): T!`）不是一次停顿：那时已经没有栈帧了。它与不带调试器时
   一样被报告：标准错误上的 `UnhandledError`，退出码 1；想看它在哪里产生，在 `throw` 处设断点。
 - `std::inline` 之后，绑定到被内联调用的名字不按名字显示（见第 4 节）。
-- 未验证：Windows（适配器的进程处理已移植但未测试）、macOS，以及 VS Code 界面本身的表现。
+- 已验证 Windows Release、Linux Debug 协议和 Windows VS Code 界面；macOS 尚未验证。
+- Windows Debug 当前遇到 PE DLL 导出符号数量上限，属于构建限制；不能据此把分配断点显示为可用。

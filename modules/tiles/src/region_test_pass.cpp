@@ -16,6 +16,7 @@
 #include "tiles/internal/regions.h"
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <utility>
@@ -42,10 +43,13 @@ slot_t testNativeCall(ArgsView &with, ArgsView &norm, core::context::Context &co
 namespace {
 class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
     operator_t run_;
+    std::optional<RegionDeviceOps> device_;
 
   public:
-    RegionOutlineTestPass(const core::context::context_ptr_t &context, operator_t run = nullptr)
-        : RuntimeGraphRewritePass(context), run_(run) {}
+    RegionOutlineTestPass(
+        const core::context::context_ptr_t &context, operator_t run = nullptr,
+        std::optional<RegionDeviceOps> device = {})
+        : RuntimeGraphRewritePass(context), run_(run), device_(device) {}
     runtime::GCGraph *apply(runtime::GCGraph *root, std::ostream &os) override {
         size_t count = 0;
         auto *result = outlineRegions(
@@ -53,14 +57,31 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
             root,
             run_,
             run_ == &testNativeCall ? "tiles:test_call" : "tiles:run",
-            count);
+            count,
+            device_ ? &*device_ : nullptr);
         os << "TILES_OUTLINED " << count << '\n';
         return result;
     }
 };
 } // namespace
-void registerRegionTestPasses(operator_t run) {
+void registerRegionTestPasses(
+    operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred) {
     if (std::getenv("CAMEL_ENABLE_TEST_PASSES")) {
+        registerModulePass(
+            "tiles::test_outline_preferred",
+            [preferred](const core::context::context_ptr_t &ctx) {
+                return std::make_unique<RegionOutlineTestPass>(ctx, preferred.execute, preferred);
+            });
+        registerModulePass(
+            "tiles::test_outline_host_resident",
+            [host](const core::context::context_ptr_t &ctx) {
+                return std::make_unique<RegionOutlineTestPass>(ctx, host.execute, host);
+            });
+        registerModulePass(
+            "tiles::test_outline_resident",
+            [device](const core::context::context_ptr_t &ctx) {
+                return std::make_unique<RegionOutlineTestPass>(ctx, device.execute, device);
+            });
         core::OperatorTable::instance().set(
             "tiles:test_call",
             {.pure = false, .callsGraphs = true});
