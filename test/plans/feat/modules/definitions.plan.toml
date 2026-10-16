@@ -156,3 +156,41 @@ for (const [uri, text] of [
 assert(!byUri.get('tensor:matmul').semantics.definition, 'matmul has none')
 }
 """
+
+[[tests]]
+name = "mean_empty_fault"
+desc = "mean of a tensor without elements faults like its definition (sum(x) / (numel(x) as float), a float division by zero): the kernel raises DivisionByZero with the same message the expanded definition gives (mean_empty_fault_expanded), located at the call; the fault kinds agree, not only the fact of a fault (design principles 2.13)."
+kind = "behavior"
+case = "../../../cases/definitions/mean_empty.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.startsWith('0.0\n'), out)
+assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(name=RuntimeDiag::DivisionByZero,'), out)
+assert(out.includes('mean_empty.cml:8:13'), `located at the call: ${out}`)
+}
+"""
+
+[[tests]]
+name = "mean_empty_fault_expanded"
+desc = "The same program after test::expand_definitions: the definition's division faults with DivisionByZero and the same message as the kernel (mean_empty_fault), located at the division in the definition."
+kind = "behavior"
+case = "../../../cases/definitions/mean_empty.cml"
+args = ["${case}", "test::expand_definitions", "${backend}"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(input.normalized.stderr.includes('EXPANDED tensor:mean 2\n'), input.normalized.stderr)
+assert(out.startsWith('0.0\n'), out)
+assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(name=RuntimeDiag::DivisionByZero,'), out)
+assert(out.includes('tensor_definitions.cml:52:'), `located at the division of the definition: ${out}`)
+}
+"""
